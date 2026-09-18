@@ -304,11 +304,14 @@ async function login() {
   console.error(`   Token saved to ${AUTH_FILE}`);
 }
 
+// Identifies makaron-cli to the API so credit usage is recorded with source=cli.
+const CLIENT_HEADER = { 'X-Makaron-Client': `makaron-cli/${getCliVersion()}` };
+
 function getAuth() {
   const apiKey = process.env.MAKARON_API_KEY;
   if (apiKey) {
     return {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
+      headers: { ...CLIENT_HEADER, 'Authorization': `Bearer ${apiKey}` },
       baseUrl: process.env.MAKARON_URL || DEFAULT_URL,
     };
   }
@@ -322,14 +325,57 @@ function getAuth() {
   // Registered via `register --verify` (saved as _apiKey)
   if (auth._apiKey) {
     return {
-      headers: { 'Authorization': `Bearer ${auth._apiKey}` },
+      headers: { ...CLIENT_HEADER, 'Authorization': `Bearer ${auth._apiKey}` },
       baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL,
     };
   }
   return {
-    headers: { 'Cookie': buildCookie(auth) },
+    headers: { ...CLIENT_HEADER, 'Cookie': buildCookie(auth) },
     baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL,
   };
+}
+
+// ─── Credit usage ───────────────────────────────────────────────────────────
+
+/** One-line credit summary for a run's `usage` object (null when nothing was charged). */
+function formatRunUsage(usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  const entries = Array.isArray(usage.entries) ? usage.entries : [];
+  const net = Number(usage.credits_net ?? 0);
+  const refunded = Number(usage.credits_refunded ?? 0);
+  if (net === 0 && refunded === 0 && entries.length === 0) return null;
+  const parts = entries.filter(e => Number(e.credits) !== 0).map(e => `${e.tool_name} ${e.credits}`);
+  let line = `${net} credits used`;
+  if (parts.length) line += ` (${parts.join(' · ')})`;
+  if (refunded > 0) line += ` · ${refunded} refunded`;
+  if (typeof usage.balance === 'number') line += ` · balance ${usage.balance}`;
+  return line;
+}
+
+function printRunUsage(usage) {
+  const line = formatRunUsage(usage);
+  if (line) process.stderr.write(`💳  ${line}\n`);
+}
+
+/** Fetch the usage summary of a run (used after legacy --stream chats). */
+async function fetchRunUsage(baseUrl, headers, runId) {
+  if (!runId) return null;
+  try {
+    const res = await fetch(`${baseUrl}/api/agent/run/${runId}?usage=true`, { headers });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.usage || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Print credits charged by a direct MCP tool call (edit / video / music / analyze). */
+function printMcpCharge(res) {
+  const charged = Number(res.headers.get('X-Credits-Charged'));
+  if (!Number.isFinite(charged) || charged <= 0) return;
+  const remaining = Number(res.headers.get('X-Credits-Remaining'));
+  process.stderr.write(`💳  ${charged} credits used${Number.isFinite(remaining) ? ` · balance ${remaining}` : ''}\n`);
 }
 
 function normalizeRunResponse(data) {
@@ -467,7 +513,7 @@ Options:
                             gpt-5.6-*-codex-subscription or
                             grok-4.6-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.
-  --json                    Output structured JSON.
+  --json                    Output structured JSON (includes per-run "usage" credits).
   --stream                  Legacy live SSE stream.
   --help, -h                Show this help.
 
@@ -811,6 +857,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
           if (data.result.error) process.stderr.write(`❌  ${data.result.error}\n`);
         }
         process.stderr.write(`🔗  ${APP_URL}/projects/${data.projectId}\n`);
+        printRunUsage(data.usage);
       }
 
       if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
@@ -844,6 +891,8 @@ function applyPick(data, field) {
     case 'studio_run': return [...(data.output || [])].reverse().find(o => o.type === 'studio_run') || null;
     case 'studio_recipe': return [...(data.output || [])].reverse().find(o => o.type === 'studio_run')?.recipe || null;
     case 'project_url': return data.project_url || data.projectUrl || null;
+    case 'usage': return data.usage || null;
+    case 'credits_used': return typeof data.usage?.credits_net === 'number' ? data.usage.credits_net : null;
     case 'output': return data.output || [];
     case 'text': return data.output?.find(o => o.type === 'text')?.content || null;
     case 'status': return data.status;
@@ -895,7 +944,8 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
 
     // Check terminal status
     if (!data.incomplete && (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted')) {
-      if (jsonl) console.log(JSON.stringify({ event: 'done', status: data.status }));
+      if (jsonl) console.log(JSON.stringify({ event: 'done', status: data.status, ...(data.usage ? { usage: data.usage } : {}) }));
+      else printRunUsage(data.usage);
       if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
       process.exit(0);
     }
@@ -1473,6 +1523,7 @@ async function callMcpTool(baseUrl, headers, toolName, args) {
     console.error('MCP tool failed:', data.result.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || 'Unknown tool error');
     process.exit(1);
   }
+  printMcpCharge(res);
   return data.result;
 }
 
@@ -1982,6 +2033,7 @@ Commands:
   claim                              Get claim URL for human to link account
   login                              Log in to Makaron (human interactive)
   credits                            Show current credit balance
+  usage [--run <id>] [--project <id>] Credit usage history (chat prints per-run usage)
   list (ls)                          List all projects
   project media <projectId> --json    List timeline media for a project
   project media add <projectId> --type image --source-url <url>
@@ -2097,7 +2149,7 @@ function printHelp(topic, subtopic) {
     else console.log(`Responses commands:
   responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
-  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output, usage, credits_used
   responses get <runId> --export-compositions --wait --pick first_video_url
                                             Export animated compositions before picking video URL
   responses get <runId> --materialize --wait --pick first_video_url
@@ -2109,6 +2161,16 @@ function printHelp(topic, subtopic) {
     console.log('Usage: makaron list');
   } else if (topic === 'credits' || topic === 'credit' || topic === 'balance') {
     console.log('Usage: makaron credits [--json]');
+  } else if (topic === 'usage') {
+    console.log(`Usage: makaron usage [--run <runId>] [--project <projectId>] [--limit <n>] [--offset <n>] [--json]
+
+Lists credit usage rows for the current account (newest first).
+  --run <runId>        Only rows charged by one Agent run, with a summary total
+  --project <id>       Only rows charged inside one project
+  --json               Raw rows plus summary
+
+Every makaron chat prints its own credit usage when it finishes; the same data
+is available as responses get <runId> --pick usage (or --pick credits_used).`);
   } else if (topic === 'project' || topic === 'projects') {
     if (subtopic === 'media') console.log(`Usage: makaron project media <projectId> [--json]
   makaron project media add <projectId> --type image --source-url <url> [--description <text>] [--json]
@@ -2242,6 +2304,50 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       console.log(`Subscription: ${plan}${status}`);
     } else {
       console.log('Subscription: none');
+    }
+  }
+} else if (command === 'usage') {
+  const { headers, baseUrl } = getAuth();
+  const params = new URLSearchParams();
+  let jsonOutput = false;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--json') jsonOutput = true;
+    else if (args[i] === '--run' && args[i + 1]) params.set('run_id', args[++i]);
+    else if (args[i] === '--project' && args[i + 1]) params.set('project_id', args[++i]);
+    else if (args[i] === '--limit' && args[i + 1]) params.set('limit', args[++i]);
+    else if (args[i] === '--offset' && args[i + 1]) params.set('offset', args[++i]);
+    else {
+      process.stderr.write(`Unknown option: ${args[i]}\n`);
+      printHelp('usage');
+      process.exit(1);
+    }
+  }
+  const res = await fetch(`${baseUrl}/api/billing/usage${params.size ? `?${params}` : ''}`, { headers });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data) {
+    const message = data?.error || data?.message || (res.ok ? 'Invalid response' : `HTTP ${res.status}`);
+    process.stderr.write(`Failed to get usage: ${message}\n`);
+    process.exit(1);
+  }
+  if (jsonOutput) {
+    console.log(JSON.stringify(data));
+  } else {
+    const rows = data.usage || [];
+    if (!rows.length) {
+      console.log('No usage yet.');
+    } else {
+      const pad = (v, n, right = false) => { const t = String(v ?? ''); return right ? t.padStart(n) : t.padEnd(n); };
+      console.log(`${pad('Date', 16)} ${pad('Credits', 8, true)}  ${pad('Tool', 24)} ${pad('Model', 28)} ${pad('Source', 6)} Run`);
+      for (const row of rows) {
+        const when = row.created_at ? new Date(row.created_at).toISOString().slice(0, 16).replace('T', ' ') : '';
+        const run = row.run_id ? String(row.run_id).slice(0, 8) : '';
+        console.log(`${pad(when, 16)} ${pad(row.credits_charged, 8, true)}  ${pad(row.tool_name, 24)} ${pad(row.model_used || '', 28)} ${pad(row.source || '', 6)} ${run}`);
+      }
+    }
+    const total = formatRunUsage(data.summary);
+    if (total) console.log(`\nTotal: ${total}`);
+    if (data.attribution_available === false) {
+      process.stderr.write('Per-run attribution is not enabled on this server yet.\n');
     }
   }
 } else if (command === 'create') {
@@ -2544,7 +2650,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (useStream) {
     // Legacy SSE mode
-    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
+    const { runId: streamRunId, results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
       agentModel,
       uploadedVideoCount: uploadedTurnVideoCount,
       turnMediaCount: uploadedTurnMediaCount,
@@ -2553,6 +2659,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
     for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
     process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
+    printRunUsage(await fetchRunUsage(baseUrl, headers, streamRunId));
     for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId, task.snapshotId);
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
@@ -2673,7 +2780,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.log(`Responses commands:
   responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
-  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output, usage, credits_used
   responses get <runId> --export-compositions --wait --pick first_video_url
                                             Export animated compositions before picking video URL
   responses get <runId> --materialize --wait --pick first_video_url
