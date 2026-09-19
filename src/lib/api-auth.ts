@@ -6,6 +6,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export interface AuthResult {
   userId: string
   supabase: SupabaseClient
+  /** Set when the request authenticated with an mk_live_… API key. */
+  apiKeyId?: string
 }
 
 export async function authenticateRequest(
@@ -19,7 +21,7 @@ export async function authenticateRequest(
     if (!result) {
       return { error: new Response(JSON.stringify({ error: 'Invalid API key' }), { status: 401, headers: { 'Content-Type': 'application/json' } }) }
     }
-    return { auth: { userId: result.userId, supabase: getSupabaseAdmin() } }
+    return { auth: { userId: result.userId, supabase: getSupabaseAdmin(), apiKeyId: result.keyId } }
   }
 
   const supabase = await createClient()

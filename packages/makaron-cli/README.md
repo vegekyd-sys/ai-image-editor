@@ -54,6 +54,15 @@ npx makaron-cli credits
 npx makaron-cli credits --json
 ```
 
+Every `chat` prints the credits it used when it finishes (on stderr, e.g.
+`💳  43 credits used (agent 24 · generate_image 19) · balance 1157`), and
+`--json` results carry the same numbers in a `usage` object. To look it up later:
+```bash
+npx makaron-cli responses get <runId> --pick credits_used   # net credits of one run
+npx makaron-cli usage --run <runId>                         # per-tool breakdown of one run
+npx makaron-cli usage --limit 20                            # recent usage rows (all sources)
+```
+
 ### Let a human claim your account
 
 After registering, generate a link for a human to link your API key to their account:
@@ -348,6 +357,8 @@ npx makaron-cli responses get <runId> --pick project_url
 npx makaron-cli responses get <runId> --pick text              # agent's text reply
 npx makaron-cli responses get <runId> --pick output            # full output array
 npx makaron-cli responses get <runId> --pick status
+npx makaron-cli responses get <runId> --pick credits_used      # net credits this run cost
+npx makaron-cli responses get <runId> --pick usage             # per-tool credit breakdown
 ```
 
 ## Fallback: Direct tool calls (no project context)
@@ -445,6 +456,17 @@ type MakaronRunResponse = {
   project_url: string
   next_poll_after_ms?: number        // suggested poll interval
   output: MakaronOutput[]
+  usage?: MakaronRunUsage            // credits this run cost; present once the agent has stopped
+}
+
+type MakaronRunUsage = {
+  credits_charged: number            // sum of debits
+  credits_refunded: number           // e.g. a failed video reservation
+  credits_net: number                // what the run actually cost (1 credit = $0.01)
+  input_tokens: number
+  output_tokens: number
+  entries: { tool_name: string; model: string | null; calls: number; credits: number }[]
+  balance?: number                   // account balance after this run
 }
 
 type MakaronOutput =
