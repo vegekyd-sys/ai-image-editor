@@ -1,8 +1,10 @@
 # CLI per-run billing (2026-09-19)
 
 Branch: `claude/makaron-cli-billing-tracking-9e7791` (based on `dev`). Status: migration **applied to
-the shared Supabase project on 2026-09-19**, real end-to-end run verified, merged into `dev`.
-**Not yet deployed to production and CLI 0.15.0 not published.**
+the shared Supabase project on 2026-09-19**, real end-to-end run verified, merged into `dev` (`ee0de3fe`), **deployed to production with
+`npm run release:prod` and makaron-cli 0.15.0 published to npm on 2026-09-19**. Production smoke: a real
+`makaron chat` on www.makaron.app printed `💳  12 credits used (agent 12) · balance 10721`; a fresh
+registry install of 0.15.0 returned the same per-run numbers from production.
 
 ## What the user sees
 
