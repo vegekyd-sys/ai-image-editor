@@ -205,6 +205,8 @@ export interface VideoMeta {
   aspectRatio?: VideoAspectRatio;
   providerModel?: string;
   providerMode?: string;
+  /** Actual transport used when a product model can route through a subscription or API. */
+  provider?: string;
   /** Provider operation used to create this snapshot. */
   operation?: 'generate' | 'edit' | 'extend';
   providerCostUsd?: number;
@@ -215,6 +217,7 @@ export interface VideoMeta {
   width?: number;
   height?: number;
   creditsCharged?: number;
+  billingQuote?: import('@/lib/billing/media-pricing').MediaQuote;
   refunded?: boolean;
   transcript?: VideoTranscript;
   completionActions?: ArtifactCompletionAction[];

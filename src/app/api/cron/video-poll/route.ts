@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { handleVideoFailure } from '@/lib/video-lifecycle'
 import type { VideoMeta } from '@/types'
+import { reconcileMcpVideos } from '@/lib/billing/mcp-video'
 
 export const maxDuration = 1800
 
@@ -36,6 +37,10 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = getSupabaseAdmin()
+  const mcpReconciliation = reconcileMcpVideos().catch(error => {
+    console.error('[cron/video-poll] MCP billing reconciliation failed:', error)
+    return 0
+  })
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
 
   const { data: stale } = await admin
@@ -51,6 +56,7 @@ export async function GET(req: NextRequest) {
   for (const snap of stale || []) {
     const vm = snap.video_meta as VideoMeta
     if (!vm?.taskId) continue
+    const ownerUserId = getProjectInfo(snap.projects as SnapshotProject)?.user_id
     const createdAt = vm.createdAt || snap.created_at
     const createdAtMs = new Date(createdAt).getTime()
     const age = Number.isFinite(createdAtMs) ? Date.now() - createdAtMs : 0
@@ -72,13 +78,16 @@ export async function GET(req: NextRequest) {
         result = await getKlingMotionControlTask(vm.taskId.slice(3))
       } else if (vm.taskId.startsWith('xai-')) {
         const { getXaiVideoTask } = await import('@/lib/xai-video')
-        result = await getXaiVideoTask(vm.taskId)
+        result = await getXaiVideoTask(vm.taskId, ownerUserId)
       } else if (vm.taskId.startsWith('google-omni-')) {
         const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
         result = await getGoogleOmniVideoTask(vm.taskId, vm.videoUrl || vm.providerUrl)
       } else if (vm.taskId.startsWith('minimax-h3-')) {
         const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
         result = await getMinimaxVideoTask(vm.taskId)
+      } else if (vm.taskId.startsWith('fal-h3max-')) {
+        const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+        result = await getFalH3MaxVideoTask(vm.taskId)
       } else if (vm.taskId.startsWith('sync3-')) {
         const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
         result = await getSyncLipsyncTask(vm.taskId)
@@ -94,7 +103,6 @@ export async function GET(req: NextRequest) {
         await admin.from('snapshots').update({
           video_meta: updatedMeta,
         }).eq('id', snap.id)
-        const ownerUserId = getProjectInfo(snap.projects as SnapshotProject)?.user_id
         if (ownerUserId) {
           const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair')
           await ensureVideoPosterForSnapshot({
@@ -157,6 +165,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     processed,
+    mcpProcessed: await mcpReconciliation,
     total: stale?.length || 0,
     remotionProcessed,
     ...(remotionError ? { remotionError } : {}),

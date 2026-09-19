@@ -21,7 +21,7 @@ describe('Explainer Video built-in skill', () => {
   })
 
   it('uses the current Remotion composition architecture', () => {
-    const agent = read('src/lib/prompts/agent.md')
+    const agent = read('src/lib/prompts/agent.md') + read('src/lib/prompts/video-workflow.md')
     const compositionPrompt = read('src/lib/prompts/remotion-composition.md')
     const rawSkill = read('src/skills/explainer-video/SKILL.md')
     const skill = parseSkillMd(rawSkill)

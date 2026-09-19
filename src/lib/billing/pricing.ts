@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { PricingUnavailableError } from './media-pricing'
 
 interface ToolPricing {
   tool_name: string
@@ -7,31 +8,18 @@ interface ToolPricing {
   is_free: boolean
 }
 
-const DEFAULT_TOOL_PRICING: Record<string, { credits: number; isFree: boolean }> = {
-  create_seed_audio: { credits: 10, isFree: false },
-  create_voiceover: { credits: 2, isFree: false },
-  // GPT Image 2 low-quality generation/edit fallback when the provider does
-  // not return token usage. 1 credit = $0.01; includes the standard 2x markup.
-  edit_image_openai: { credits: 4, isFree: false },
-}
-
-// In-memory cache with TTL
-let cache: { data: ToolPricing[]; ts: number } | null = null
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-
 export async function getAllPricing(): Promise<ToolPricing[]> {
-  if (cache && Date.now() - cache.ts < CACHE_TTL) return cache.data
   const admin = getSupabaseAdmin()
-  const { data } = await admin.from('credit_pricing').select('*')
+  const { data, error } = await admin.from('credit_pricing').select('*')
+  if (error) throw new PricingUnavailableError('Tool pricing unavailable. Please retry.')
   const pricing = (data ?? []) as ToolPricing[]
-  cache = { data: pricing, ts: Date.now() }
   return pricing
 }
 
 export async function getToolPrice(toolName: string): Promise<{ credits: number; isFree: boolean } | null> {
   const all = await getAllPricing()
   const entry = all.find(p => p.tool_name === toolName)
-  if (!entry) return DEFAULT_TOOL_PRICING[toolName] ?? null
+  if (!entry) return null
   return { credits: entry.credits, isFree: entry.is_free }
 }
 
@@ -51,5 +39,5 @@ export function resolveToolName(mcpToolName: string, model?: string): string {
 
 /** Invalidate cache (called after admin updates pricing) */
 export function invalidatePricingCache() {
-  cache = null
+  // Kept for callers; prices are read fresh across all server instances.
 }

@@ -147,6 +147,18 @@ describe('video duration guards', () => {
     expect(error).toBeNull()
   })
 
+  it('allows provider-managed duration for Seedance 2.5 reference repainting', () => {
+    const error = validateVideoScript({
+      prompt: 'Use <<<media_1>>> as the new character and <<<media_2>>> as the source motion reference.',
+      imageCount: 2,
+      availableMediaIndices: [1, 2],
+      model: 'seedance-2.5',
+      duration: -1,
+    })
+
+    expect(error).toBeNull()
+  })
+
   it('allows a normal short script', () => {
     const error = validateVideoScript({
       prompt: [

@@ -23,14 +23,13 @@ export const geminiLiteBackend: ModelBackend = {
         ...req.references,
       ];
       const thinkingEffort = req.thinkingEffort === 'high' ? 'high' : 'minimal';
-      const image = await generateImageWithReferences(
+      return generateImageWithReferences(
         allRefs,
         req.prompt,
         req.aspectRatio,
         thinkingEffort,
         GEMINI_LITE_IMAGE_MODEL,
       );
-      return { image };
     }
 
     const result = await generatePreviewImageOpenRouter(

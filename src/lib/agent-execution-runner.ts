@@ -1,15 +1,16 @@
+import { canRunAgentExecution, normalizeAgentExecutionOrigin } from './agent-execution-origin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runMakaronAgent, type AgentStreamEvent } from './agent';
 import { AgentDualWriter } from './agentDualWriter';
 import { AgentPerf } from './agent-perf';
 import { buildPromptContext } from './agent-context';
 import { getSupabaseAdmin } from './supabase/service';
-import { deductByTokens } from './billing/credits';
+import { recordAgentTokenUsage } from './billing/credits';
+import { billingAttributionFromRunMetadata, enterBillingAttribution } from './billing/attribution';
 import {
   resolveAgentModelSpec,
   resolveAgentModelSpecForUser,
   resolveCodexSubscriptionFallbackProvider,
-  shouldRequireAgentCredits,
   type AgentModelPreference,
 } from './agent-models';
 import {
@@ -22,9 +23,10 @@ import {
   DEFAULT_MAX_ATTEMPTS,
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
-  isSafeToEnterCodexSubscriptionApiFallback,
+  isSafeToEnterSubscriptionApiFallback,
   MAX_SAME_PROVIDER_ATTEMPTS,
   shouldFailoverCodexSubscriptionToApi,
+  shouldFailoverGrokSubscriptionToApi,
   shouldFailoverAzureGPT56ToOpenRouter,
   normalizeExecutionSnapshot,
   shouldScheduleNextAttempt,
@@ -55,6 +57,7 @@ interface ExecutionRequest {
   referenceImageCount?: number;
   uploadedVideoCount?: number;
   turnMediaCount?: number;
+  turnMediaSnapshotIds?: string[];
   isNsfw?: boolean;
   audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
   codexSubscriptionAllowed?: boolean;
@@ -327,6 +330,20 @@ export async function runAgentExecutionAttempt(
   endRunLoad({ found: !!runData });
   const run = runData as AgentRunRecord | null;
   if (!run || run.status !== 'running') return { claimed: false, runId };
+  // Every credit debit/refund performed by this attempt (Agent tokens, tools,
+  // video reservations) is attributed to the run for per-run usage reporting.
+  enterBillingAttribution(billingAttributionFromRunMetadata(
+    run.metadata as Record<string, unknown> | null,
+    { runId, projectId: run.project_id },
+  ));
+  const workerOrigin = normalizeAgentExecutionOrigin(options.origin);
+  const taskOrigin = typeof run.metadata?.executionOwnerOrigin === 'string'
+    ? run.metadata.executionOwnerOrigin
+    : (run.metadata?.executionRequest as ExecutionRequest | undefined)?.origin;
+  if (!canRunAgentExecution(taskOrigin, workerOrigin)) {
+    perf.mark('execution_origin_mismatch', { taskOrigin: taskOrigin || null, workerOrigin });
+    return { claimed: false, runId };
+  }
   const inputVersionAtAttemptStart = run.input_version || 0;
 
   const policy = normalizeExecutionPolicy(run.execution_policy);
@@ -361,7 +378,8 @@ export async function runAgentExecutionAttempt(
     perf.mark('claim_execution_preclaimed', { workerId: options.initialClaim.workerId });
   } else {
     const endClaim = perf.span('claim_execution');
-    const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution', {
+    const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution_for_origin', {
+      p_origin: workerOrigin,
       p_run_id: runId,
       p_worker_id: workerId,
       p_lease_seconds: policy.leaseSeconds,
@@ -506,7 +524,7 @@ export async function runAgentExecutionAttempt(
       && 'from' in failover
       && failover.from === requestedModel.id
       && (
-        requestedModel.provider !== 'codex-subscription'
+        !['codex-subscription', 'grok-subscription'].includes(requestedModel.provider)
         || fromProvider === requestedModel.provider
       ),
     );
@@ -518,12 +536,24 @@ export async function runAgentExecutionAttempt(
     ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
     : Boolean(process.env.OPENROUTER_API_KEY?.trim());
   const latestFailureDetail = latestRequestedProviderAttempt?.metadata?.terminalDetail;
-  const subscriptionFallbackSafe = isSafeToEnterCodexSubscriptionApiFallback(
-    typedPreviousAttempts,
-    inputVersionAtAttemptStart,
-  );
+  const subscriptionFallbackSafe = requestedModel.provider === 'codex-subscription'
+    || requestedModel.provider === 'grok-subscription'
+    ? isSafeToEnterSubscriptionApiFallback(
+        typedPreviousAttempts,
+        inputVersionAtAttemptStart,
+        requestedModel.provider,
+      )
+    : false;
   const providerFailover = requestedModel.provider === 'codex-subscription'
     ? shouldFailoverCodexSubscriptionToApi({
+        requestedProvider: requestedModel.provider,
+        hasApiFallback: hasFailoverCredential && subscriptionFallbackSafe,
+        previousProviderFailover,
+        retryableFailureCount: requestedProviderFailureCount,
+        latestFailureDetail,
+      })
+    : requestedModel.provider === 'grok-subscription'
+    ? shouldFailoverGrokSubscriptionToApi({
         requestedProvider: requestedModel.provider,
         hasApiFallback: hasFailoverCredential && subscriptionFallbackSafe,
         previousProviderFailover,
@@ -537,14 +567,17 @@ export async function runAgentExecutionAttempt(
         retryableFailureCount: requestedProviderFailureCount,
       });
   const providerRetry = (requestedModel.provider === 'azure-openai'
-    || requestedModel.provider === 'codex-subscription')
+    || requestedModel.provider === 'codex-subscription'
+    || requestedModel.provider === 'grok-subscription')
     && !providerFailover
     && requestedProviderFailureCount > 0;
   const sameProviderAttempt = Math.min(
     MAX_SAME_PROVIDER_ATTEMPTS,
     requestedProviderFailureCount + 1,
   );
-  const effectiveAgentModel = request.requestedAgentModel;
+  const effectiveAgentModel = providerFailover
+    ? requestedModel.id
+    : request.requestedAgentModel;
   const resolvedModel = providerFailover
     ? resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)
     : requestedModel;
@@ -598,6 +631,7 @@ export async function runAgentExecutionAttempt(
     referenceImageCount: request.referenceImageCount,
     uploadedVideoCount: request.uploadedVideoCount,
     turnMediaCount: request.turnMediaCount,
+    turnMediaSnapshotIds: request.turnMediaSnapshotIds,
     audioAttachments: request.audioAttachments,
     currentRunId: runId,
     // Attempt 1 already has the original objective in userMessage. Keep the
@@ -607,6 +641,7 @@ export async function runAgentExecutionAttempt(
     contextPolicy: getAgentContextPolicy(resolvedModel.id),
     agentModelId: resolvedModel.id,
     agentModelProvider: resolvedModel.provider,
+    supportsImageInput: resolvedModel.supportsImageInput,
     durableContinuation: continuation,
     executionObjective: run.objective || claim.objective || run.prompt || undefined,
     executionAcceptanceCriteria: run.acceptance_criteria,
@@ -620,6 +655,9 @@ export async function runAgentExecutionAttempt(
     input_token_estimate: ctx.contextStats.estimatedTokens,
     metadata: {
       context: ctx.contextStats,
+      executionOrigin: workerOrigin,
+      workerId,
+      deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
       model: resolvedModel.id,
       provider: resolvedModel.provider,
       requestedModel: requestedModel.id,
@@ -749,6 +787,7 @@ export async function runAgentExecutionAttempt(
   let cacheWriteTokens = 0;
   let providerCostUsd: number | undefined;
   let billingModel = resolvedModel.billingModelId;
+  let billingProvider = resolvedModel.provider;
   let attemptHadVisibleOutput = false;
   let attemptDeliveredArtifact = false;
   const attemptCommittedTools = new Set<string>();
@@ -784,6 +823,14 @@ export async function runAgentExecutionAttempt(
         audioAttachments: ctx.audioAttachments,
         snapshotImages: attemptSnapshotImages,
         explicitMediaIndices: ctx.explicitMediaIndices,
+        nativeVisionImages: request.image && resolvedModel.supportsImageInput
+          ? [{
+              source: request.image,
+              ...(!request.hasAnnotation && !request.isDraft
+                ? { mediaIndex: attemptCurrentSnapshotIndex + 1 }
+                : {}),
+            }]
+          : ctx.nativeVisionImages,
         currentSnapshotIndex: attemptCurrentSnapshotIndex,
         isNsfw: request.isNsfw,
         supabase: admin,
@@ -872,6 +919,7 @@ export async function runAgentExecutionAttempt(
         cacheWriteTokens += event.cacheWriteTokens || 0;
         providerCostUsd = event.providerCostUsd;
         billingModel = event.model || billingModel;
+        billingProvider = event.provider as typeof billingProvider;
         continue;
       }
       await writer.processAndEnqueue(event);
@@ -894,19 +942,17 @@ export async function runAgentExecutionAttempt(
     await writer.flush();
   }
 
-  if (shouldRequireAgentCredits(resolvedModel.provider)
-    && (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens)) {
-    void deductByTokens(
-      run.user_id,
-      'agent',
-      billingModel,
+  if (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens) {
+    await recordAgentTokenUsage({
+      userId: run.user_id,
+      provider: billingProvider,
+      modelId: billingModel,
       inputTokens,
       outputTokens,
-      undefined,
-      undefined,
-      { cacheRead: cacheReadTokens, cacheWrite: cacheWriteTokens },
+      cacheReadTokens,
+      cacheWriteTokens,
       providerCostUsd,
-    ).catch(error => console.error('[agent-execution] billing failed:', error));
+    }).catch(error => console.error('[agent-execution] usage logging failed:', error));
   }
   await admin.from('agent_runs').update({
     total_input_tokens: (run.total_input_tokens || 0) + inputTokens + cacheReadTokens + cacheWriteTokens,
@@ -1055,7 +1101,7 @@ export async function runAgentExecutionAttempt(
         },
       },
     }).eq('id', runId).eq('status', 'running').eq('lease_token', claim.lease_token);
-    void dispatchAgentExecutionAttempt(runId, options.origin || request.origin);
+    void dispatchAgentExecutionAttempt(runId, workerOrigin!);
     return {
       claimed: true,
       runId,

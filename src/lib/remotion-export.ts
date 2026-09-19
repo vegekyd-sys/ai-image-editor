@@ -18,6 +18,11 @@ import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import type { RemotionLambdaOutputDestination } from '@/lib/remotion-lambda-renderer'
 import { normalizeCompositionAnimation } from '@/lib/composition-duration'
 import { measureAudioLoudness } from '@/lib/ffmpeg-runtime'
+import {
+  DEFAULT_REMOTION_EXPORT_LEGACY_JOB_SLOTS,
+  estimateRemotionExportLambdaSlots,
+  resolveRemotionExportCapacityLimit,
+} from '@/lib/remotion-export-capacity'
 
 export type RemotionExportStatus = 'queued' | 'rendering' | 'completed' | 'failed'
 export type RemotionExportOutputType = 'video' | 'image'
@@ -74,6 +79,13 @@ export interface RemotionExportResult {
 export interface RemotionExportQueueReadiness {
   ready: boolean
   error?: string
+}
+
+export interface RemotionExportQueueDrainResult {
+  processed: number
+  completed: number
+  failed: number
+  errors: string[]
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -138,17 +150,12 @@ function remotionExportStaleMs(): number {
   return readPositiveIntegerEnv('REMOTION_EXPORT_STALE_MS', 2 * 60 * 1000)
 }
 
-function remotionWorkspaceMirrorMaxBytes(): number {
-  return readPositiveIntegerEnv('REMOTION_WORKSPACE_MIRROR_MAX_BYTES', 500 * 1024 * 1024)
+export function shouldRunRemotionExportInline(): boolean {
+  return process.env.REMOTION_EXPORT_INLINE_AFTER !== 'false'
 }
 
-function isStaleRenderingJob(job: Pick<RemotionExportJob, 'status' | 'heartbeat_at' | 'started_at'>): boolean {
-  if (job.status !== 'rendering') return false
-  const stamp = job.heartbeat_at || job.started_at
-  if (!stamp) return true
-  const timestamp = Date.parse(stamp)
-  if (!Number.isFinite(timestamp)) return true
-  return Date.now() - timestamp > remotionExportStaleMs()
+function remotionWorkspaceMirrorMaxBytes(): number {
+  return readPositiveIntegerEnv('REMOTION_WORKSPACE_MIRROR_MAX_BYTES', 500 * 1024 * 1024)
 }
 
 function remotionExportStaleCutoffIso(): string {
@@ -559,6 +566,7 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
   }
   if (input.studioRunId) metadata.studioRunId = input.studioRunId
   metadata.renderProfile = renderProfile
+  Object.assign(metadata, estimateRemotionExportLambdaSlots(fingerprintSource, outputType))
 
   const { data, error } = await admin.from('remotion_export_jobs').insert({
     project_id: input.projectId,
@@ -658,6 +666,14 @@ export async function checkRemotionExportQueueReady(): Promise<RemotionExportQue
       .select('id')
       .limit(1)
     if (error) return { ready: false, error: error.message }
+    const { error: claimError } = await admin.rpc('claim_remotion_export_job_with_capacity', {
+      p_worker_id: `${remotionWorkerId()}-readiness`,
+      p_capacity_limit: resolveRemotionExportCapacityLimit(),
+      p_stale_cutoff: remotionExportStaleCutoffIso(),
+      p_job_id: '00000000-0000-0000-0000-000000000000',
+      p_legacy_job_slots: DEFAULT_REMOTION_EXPORT_LEGACY_JOB_SLOTS,
+    })
+    if (claimError) return { ready: false, error: claimError.message }
     return { ready: true }
   } catch (err) {
     return { ready: false, error: err instanceof Error ? err.message : String(err) }
@@ -666,87 +682,28 @@ export async function checkRemotionExportQueueReady(): Promise<RemotionExportQue
 
 async function claimRemotionExportJob(jobId: string): Promise<RemotionExportJob | null> {
   const admin = getSupabaseAdmin()
-  const claimedAt = nowIso()
-  const { data, error } = await admin
-    .from('remotion_export_jobs')
-    .update({
-      status: 'rendering',
-      progress: 0,
-      started_at: claimedAt,
-      completed_at: null,
-      error: null,
-      worker_id: remotionWorkerId(),
-      heartbeat_at: claimedAt,
-    })
-    .eq('id', jobId)
-    .eq('status', 'queued')
-    .select('*')
-    .maybeSingle()
+  const { data, error } = await admin.rpc('claim_remotion_export_job_with_capacity', {
+    p_worker_id: remotionWorkerId(),
+    p_capacity_limit: resolveRemotionExportCapacityLimit(),
+    p_stale_cutoff: remotionExportStaleCutoffIso(),
+    p_job_id: jobId,
+    p_legacy_job_slots: DEFAULT_REMOTION_EXPORT_LEGACY_JOB_SLOTS,
+  }).maybeSingle()
   if (error) throw new Error(error.message)
-  if (data) return data as RemotionExportJob
-
-  const current = await getRemotionExportJob(jobId)
-  if (!current) throw new Error('Export job not found')
-  if (current.status === 'completed') return current
-  if (current.status === 'rendering') {
-    if (!isStaleRenderingJob(current)) return null
-    const reclaimedAt = nowIso()
-    const { data: reclaimed, error: reclaimError } = await admin
-      .from('remotion_export_jobs')
-      .update({
-        status: 'rendering',
-        progress: 0,
-        started_at: reclaimedAt,
-        completed_at: null,
-        error: null,
-        worker_id: remotionWorkerId(),
-        heartbeat_at: reclaimedAt,
-        metadata: {
-          ...(current.metadata || {}),
-          reclaimedAt,
-          reclaimedFromWorkerId: current.worker_id || null,
-          reclaimedPreviousHeartbeatAt: current.heartbeat_at || null,
-        },
-      })
-      .eq('id', jobId)
-      .eq('status', 'rendering')
-      .select('*')
-      .maybeSingle()
-    if (reclaimError) throw new Error(reclaimError.message)
-    return reclaimed as RemotionExportJob | null
-  }
-  throw new Error(`Export job is ${current.status}`)
+  return data as RemotionExportJob | null
 }
 
-export async function claimNextRemotionExportJob(limit = 5): Promise<RemotionExportJob | null> {
+export async function claimNextRemotionExportJob(): Promise<RemotionExportJob | null> {
   const admin = getSupabaseAdmin()
-  const { data, error } = await admin
-    .from('remotion_export_jobs')
-    .select('id')
-    .eq('status', 'queued')
-    .order('created_at', { ascending: true })
-    .limit(limit)
+  const { data, error } = await admin.rpc('claim_remotion_export_job_with_capacity', {
+    p_worker_id: remotionWorkerId(),
+    p_capacity_limit: resolveRemotionExportCapacityLimit(),
+    p_stale_cutoff: remotionExportStaleCutoffIso(),
+    p_job_id: null,
+    p_legacy_job_slots: DEFAULT_REMOTION_EXPORT_LEGACY_JOB_SLOTS,
+  }).maybeSingle()
   if (error) throw new Error(error.message)
-
-  for (const candidate of data || []) {
-    const claimed = await claimRemotionExportJob(candidate.id)
-    if (claimed) return claimed
-  }
-  const staleCutoff = remotionExportStaleCutoffIso()
-  const { data: staleData, error: staleError } = await admin
-    .from('remotion_export_jobs')
-    .select('id')
-    .eq('status', 'rendering')
-    .or(`heartbeat_at.is.null,heartbeat_at.lt.${staleCutoff}`)
-    .order('heartbeat_at', { ascending: true, nullsFirst: true })
-    .limit(limit)
-  if (staleError) throw new Error(staleError.message)
-
-  for (const candidate of staleData || []) {
-    const claimed = await claimRemotionExportJob(candidate.id)
-    if (claimed) return claimed
-  }
-  return null
+  return data as RemotionExportJob | null
 }
 
 async function loadJobDesign(job: RemotionExportJob, supabase: SupabaseClient): Promise<{ design: DesignPayload; designPath?: string }> {
@@ -1144,7 +1101,19 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
 
 export async function runRemotionExportJob(jobId: string): Promise<RemotionExportResult> {
   const claimed = await claimRemotionExportJob(jobId)
-  if (!claimed) throw new Error(`Export job is already rendering: ${jobId}`)
+  if (!claimed) {
+    const current = await getRemotionExportJob(jobId)
+    if (!current) throw new Error(`Export job not found: ${jobId}`)
+    if (current.status === 'completed') {
+      const admin = getSupabaseAdmin()
+      const { design } = await loadJobDesign(current, admin)
+      return { job: current, design }
+    }
+    if (current.status === 'queued') {
+      throw new Error(`Export queue capacity is currently full: ${jobId}`)
+    }
+    throw new Error(`Export job is already rendering: ${jobId}`)
+  }
   if (claimed.status === 'completed') {
     const admin = getSupabaseAdmin()
     const { design } = await loadJobDesign(claimed, admin)
@@ -1181,7 +1150,11 @@ export async function runRemotionExportJobAndWait(
     if (job.status === 'failed') {
       throw new Error(job.error || `Export job failed: ${jobId}`)
     }
-    if (localExecution?.error && job.status === 'queued') {
+    if (
+      localExecution?.error
+      && job.status === 'queued'
+      && !(localExecution.error instanceof Error && localExecution.error.message.includes('capacity is currently full'))
+    ) {
       throw localExecution.error
     }
 
@@ -1193,4 +1166,41 @@ export async function runNextRemotionExportJob(): Promise<RemotionExportResult |
   const claimed = await claimNextRemotionExportJob()
   if (!claimed) return null
   return executeRemotionExportJob(claimed)
+}
+
+export async function drainRemotionExportQueue(options: {
+  maxJobs?: number
+  source?: string
+} = {}): Promise<RemotionExportQueueDrainResult> {
+  const maxJobs = Math.max(
+    1,
+    Math.round(options.maxJobs ?? readPositiveIntegerEnv('REMOTION_EXPORT_DISPATCH_MAX_JOBS', 25)),
+  )
+  const result: RemotionExportQueueDrainResult = {
+    processed: 0,
+    completed: 0,
+    failed: 0,
+    errors: [],
+  }
+
+  while (result.processed < maxJobs) {
+    const claimed = await claimNextRemotionExportJob()
+    if (!claimed) break
+    result.processed += 1
+    try {
+      await executeRemotionExportJob(claimed)
+      result.completed += 1
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      result.failed += 1
+      result.errors.push(message)
+      console.error('[remotion-export] queued job failed:', {
+        source: options.source || 'unknown',
+        jobId: claimed.id,
+        error: message,
+      })
+    }
+  }
+
+  return result
 }

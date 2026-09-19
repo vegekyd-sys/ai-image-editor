@@ -3,6 +3,7 @@ export interface VideoModelCapability {
   label: string
   minOutputDuration: number
   maxOutputDuration: number
+  supportedDurations?: number[]
   maxReferenceVideoDuration: number
   maxCombinedReferenceAndOutputDuration?: number
   referenceVideoDurationTolerance?: number
@@ -21,17 +22,17 @@ export interface VideoModelCapability {
   maxTotalReferences?: number
   /**
    * Image inputs are feature references by default across Makaron. Models that
-   * do not accept images must say `none`; first-frame/image-to-video is never a
-   * valid default and requires a separate, explicit product contract.
+   * do not accept images must say `none`. A model may declare image-to-video
+   * only through an explicit product contract and capability entry.
    */
-  defaultImageWorkflow: 'reference-to-video' | 'none'
+  defaultImageWorkflow: 'reference-to-video' | 'image-to-video' | 'none'
   supportsExplicitImageToVideo?: boolean
   supportsVideoExtend?: boolean
   supportedResolutions?: VideoResolution[]
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
-  provider?: 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-sync' | 'piapi'
+  provider?: 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-h3-max' | 'fal-sync' | 'piapi'
   providerModel?: string
 }
 
@@ -67,12 +68,15 @@ export interface VideoReferenceSizeCapability {
 }
 
 export interface VideoReferenceMeta {
+  durationSec?: number | null
   width?: number | null
   height?: number | null
   fileSizeBytes?: number | null
 }
 
-const DEFAULT_MODEL_ID = 'seedance-fast'
+const DEFAULT_MODEL_ID = 'fal-h3-max'
+export const DEFAULT_VIDEO_REPLICATION_MODEL_ID = 'wan-3.0-prime'
+export const DEFAULT_VIDEO_REPLICATION_RESOLUTION: VideoResolution = '720p'
 
 const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   kling: {
@@ -271,23 +275,25 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 5,
     maxAudioReferences: 5,
     maxTotalReferences: 20,
-    // MuleRouter W3.0 pricing, verified 2026-09-01. Audio is included at the
-    // same rate; references do not add a separate input charge.
-    estimatedCostPerSecondUsd: 0.2,
+    // MuleRouter Standard contracted pricing (60% of list), confirmed 2026-09-03.
+    // 1080p is native; only 2K/4K use FlashVSR Pro. Audio/references add no charge.
+    estimatedCostPerSecondUsd: 0.12,
     estimatedCostPerSecondUsdByResolution: {
-      '480p': 0.05,
-      '720p': 0.1,
-      '1080p': 0.2,
+      '480p': 0.03,
+      '720p': 0.06,
+      '1080p': 0.12,
+      '2k': 0.12,
+      '4k': 0.138,
     },
-    supportedResolutions: ['480p', '720p', '1080p'],
+    supportedResolutions: ['480p', '720p', '1080p', '2k', '4k'],
     defaultResolution: '1080p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
     provider: 'mulerouter',
     providerModel: 'carrothub/w3.0-video',
   },
-  'wan-3.0-pro': {
-    id: 'wan-3.0-pro',
-    label: 'Wan 3.0 Pro',
+  'wan-3.0-prime': {
+    id: 'wan-3.0-prime',
+    label: 'Wan 3.0 Prime',
     minOutputDuration: 2,
     maxOutputDuration: 30,
     maxReferenceVideoDuration: 15,
@@ -312,19 +318,21 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 5,
     maxAudioReferences: 5,
     maxTotalReferences: 20,
-    // MuleRouter Berry 1.0 Pro pricing, verified 2026-09-01. Audio is included
-    // at the same rate; references do not add a separate input charge.
-    estimatedCostPerSecondUsd: 0.18,
+    // MuleRouter Prime contracted pricing (70% of list), confirmed 2026-09-03.
+    // 1080p is native; only 2K/4K use FlashVSR Prime Pro. Audio/references add no charge.
+    estimatedCostPerSecondUsd: 0.196,
     estimatedCostPerSecondUsdByResolution: {
-      '1080p': 0.18,
-      '2k': 0.2,
-      '4k': 0.23,
+      '480p': 0.0476,
+      '720p': 0.098,
+      '1080p': 0.196,
+      '2k': 0.196,
+      '4k': 0.217,
     },
-    supportedResolutions: ['1080p', '2k', '4k'],
+    supportedResolutions: ['480p', '720p', '1080p', '2k', '4k'],
     defaultResolution: '1080p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
     provider: 'mulerouter',
-    providerModel: 'carrothub/berry-1.0-pro',
+    providerModel: 'carrothub/w3.0-video-prime',
   },
   'sync-lipsync-v3': {
     id: 'sync-lipsync-v3',
@@ -459,6 +467,53 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     provider: 'minimax',
     providerModel: 'MiniMax-H3',
   },
+  'minimax-h3-max': {
+    id: 'minimax-h3-max',
+    label: 'fal H3 Turbo',
+    minOutputDuration: 5,
+    maxOutputDuration: 15,
+    supportedDurations: [5, 10, 15],
+    maxReferenceVideoDuration: 0,
+    supportsVideoReference: false,
+    supportsBaseVideoEdit: false,
+    // H3 Max Turbo currently exposes only native T2V and single-start-frame I2V.
+    // This is the one deliberate exception to Makaron's reference-image default.
+    defaultImageWorkflow: 'image-to-video',
+    supportsExplicitImageToVideo: true,
+    longVideoChunkSeconds: 15,
+    maxImageReferences: 1,
+    maxVideoReferences: 0,
+    maxAudioReferences: 0,
+    maxTotalReferences: 1,
+    // Verified against fal's H3 Max Turbo rate card on 2026-09-03. The
+    // temporary launch promo is $0.00625/s at 480p and $0.01/s at 768p through
+    // 2026-09-07; customer billing uses the post-promo list rates below so it
+    // stays stable when the discount expires.
+    estimatedCostPerSecondUsd: 0.04,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.025,
+      '768p': 0.04,
+    },
+    supportedResolutions: ['480p', '768p'],
+    defaultResolution: '768p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    provider: 'fal-h3-max',
+    providerModel: 'minimax/h3-max-turbo/text-to-video',
+  },
+  'fal-h3-max': {
+    id: 'fal-h3-max', label: 'fal H3 Max',
+    minOutputDuration: 5, maxOutputDuration: 15,
+    maxReferenceVideoDuration: 15,
+    supportsVideoReference: true, supportsBaseVideoEdit: false,
+    defaultImageWorkflow: 'reference-to-video',
+    longVideoChunkSeconds: 15,
+    maxImageReferences: 9, maxVideoReferences: 3, maxAudioReferences: 3, maxTotalReferences: 12,
+    supportedResolutions: ['480p', '768p', '1080p'], defaultResolution: '768p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    estimatedCostPerSecondUsd: 0.08,
+    estimatedCostPerSecondUsdByResolution: { '480p': 0.05, '768p': 0.08, '1080p': 0.16 },
+    provider: 'fal-h3-max', providerModel: 'minimax/h3-max/reference-to-video',
+  },
   piapi: {
     id: 'piapi',
     label: 'PiAPI Kling',
@@ -504,6 +559,8 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
 export function normalizeVideoModelId(model?: string | null): string {
   if (!model) return DEFAULT_MODEL_ID
   const normalized = String(model).trim().toLowerCase()
+  if (['fal-h3-max', 'fal h3 max'].includes(normalized)) return 'fal-h3-max'
+  if (['fal h3 turbo'].includes(normalized)) return 'minimax-h3-max'
   if (normalized === 'seedance2-fast' || normalized === 'seedance-2.0-fast' || normalized === 'seedance_fast') {
     return 'seedance-fast'
   }
@@ -516,14 +573,20 @@ export function normalizeVideoModelId(model?: string | null): string {
   if (normalized === 'minimax' || normalized === 'h3' || normalized === 'hailuo-h3' || normalized === 'minimax-h3') {
     return 'minimax-h3'
   }
+  if (normalized === 'h3 max' || normalized === 'h3-max' || normalized === 'h3max' || normalized === 'h3 max turbo' || normalized === 'h3-max-turbo' || normalized === 'h3maxturbo' || normalized === 'minimax-h3-max' || normalized === 'minimax-h3max' || normalized === 'minimax-h3-max-turbo') {
+    return 'minimax-h3-max'
+  }
   if (normalized === 'seedance25' || normalized === 'seedance_2_5' || normalized === 'seedance-2-5') {
     return 'seedance-2.5'
   }
   if (normalized === 'wan3' || normalized === 'wan30' || normalized === 'wan3.0' || normalized === 'wan-3' || normalized === 'wan_3_0') {
     return 'wan-3.0'
   }
-  if (normalized === 'wan3-pro' || normalized === 'wan30-pro' || normalized === 'wan3.0-pro' || normalized === 'wan-3-pro' || normalized === 'wan_3_0_pro' || normalized === 'berry-1.0-pro') {
-    return 'wan-3.0-pro'
+  if (normalized === 'wan3-prime' || normalized === 'wan30-prime' || normalized === 'wan3.0-prime' || normalized === 'wan-3-prime' || normalized === 'wan_3_0_prime' || normalized === 'w3.0-video-prime' || normalized === 'w3.0-video-prime-pro' || normalized === 'wan-3.0-prime-pro' || normalized === 'prime') {
+    return 'wan-3.0-prime'
+  }
+  if (normalized === 'wan3-pro' || normalized === 'wan30-pro' || normalized === 'wan3.0-pro' || normalized === 'wan-3-pro' || normalized === 'wan_3_0_pro' || normalized === 'berry-1.0-pro' || normalized === 'w3.0-video-pro') {
+    return 'wan-3.0'
   }
   if (normalized === 'sync3' || normalized === 'sync-v3' || normalized === 'lipsync' || normalized === 'lip-sync') {
     return 'sync-lipsync-v3'
@@ -533,6 +596,21 @@ export function normalizeVideoModelId(model?: string | null): string {
 
 export function getDefaultVideoModelId(): string {
   return DEFAULT_MODEL_ID
+}
+
+export function resolveVideoReplicationModelId(model?: string | null): string {
+  const requested = String(model ?? '').trim()
+  return requested
+    ? normalizeVideoModelId(requested)
+    : DEFAULT_VIDEO_REPLICATION_MODEL_ID
+}
+
+export function resolveVideoReplicationResolution(
+  resolution?: VideoResolutionInput,
+): VideoResolution {
+  return !resolution || resolution === 'auto'
+    ? DEFAULT_VIDEO_REPLICATION_RESOLUTION
+    : resolution
 }
 
 export function getVideoModelCapability(model?: string | null): VideoModelCapability {
@@ -547,10 +625,9 @@ export function listVideoModelCapabilities(): VideoModelCapability[] {
 /**
  * Resolve how image inputs are interpreted before selecting a provider.
  *
- * One image is still a feature reference. Image count must never implicitly
- * switch generation into a first-frame/image-to-video route. A future model
- * may expose that workflow only through both an explicit request and an
- * explicit capability opt-in.
+ * One image is still a feature reference unless the selected model carries an
+ * explicit image-to-video capability contract. Image count alone must never
+ * switch an otherwise reference-capable model into first-frame mode.
  */
 export function resolveVideoImageWorkflow(options: {
   model?: string | null
@@ -621,6 +698,11 @@ export function resolveVideoGenerationRoute(options: {
   const resolution = normalizeVideoResolution(model, options.resolution)
   const perSecond = capability.estimatedCostPerSecondUsdByResolution?.[resolution] ?? capability.estimatedCostPerSecondUsd
   const provider = capability.provider ?? model
+  const providerModel = model === 'wan-3.0' && (resolution === '2k' || resolution === '4k')
+    ? 'carrothub/w3.0-video-pro'
+    : model === 'wan-3.0-prime' && (resolution === '2k' || resolution === '4k')
+      ? 'carrothub/w3.0-video-prime-pro'
+      : capability.providerModel
   const providerMode =
     provider === 'kling'
       ? resolution === '4k'
@@ -634,7 +716,7 @@ export function resolveVideoGenerationRoute(options: {
     model,
     label: capability.label,
     provider,
-    providerModel: capability.providerModel,
+    providerModel,
     providerMode,
     resolution,
     estimatedCostPerSecondUsd: perSecond,
@@ -653,7 +735,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
   const id = normalizeVideoModelId(model)
-  return getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-pro' || id === 'minimax-h3' || id === 'google-omni' || id === 'grok'
+  return getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'minimax-h3-max' || id === 'fal-h3-max' || id === 'google-omni' || id === 'grok'
 }
 
 export function resolveVideoProviderModel(options: {
@@ -679,6 +761,14 @@ export function resolveVideoProviderModel(options: {
     return 'grok-imagine-video-1.5'
   }
 
+  if (route.model === 'fal-h3-max') return hasReferenceMedia ? 'minimax/h3-max/reference-to-video' : 'minimax/h3-max/text-to-video'
+
+  if (route.model === 'minimax-h3-max') {
+    return (options.imageReferenceCount ?? 0) > 0
+      ? 'minimax/h3-max-turbo/image-to-video'
+      : 'minimax/h3-max-turbo/text-to-video'
+  }
+
   if (route.model === 'seedance-2.5') {
     if (options.operation === 'edit') return 'seedance-2.5-video-edit'
     if (options.operation === 'extend') return 'seedance-2.5-video-extend'
@@ -686,7 +776,7 @@ export function resolveVideoProviderModel(options: {
     return 'seedance-2.5-reference-to-video'
   }
 
-  if (route.model === 'wan-3.0' || route.model === 'wan-3.0-pro') {
+  if (route.model === 'wan-3.0' || route.model === 'wan-3.0-prime') {
     return route.providerModel
   }
 
@@ -771,11 +861,14 @@ export function resolveClosestSupportedAspectRatio(
   return best
 }
 
+/** Seed/migration estimate only. Live charging and UI quotes must use billing/quoteVideo. */
 export function estimateVideoProviderCostUsd(options: {
   model?: string | null
   durationSec: number
   imageCount?: number
   referenceVideoDurationSec?: number
+  referenceImagePixels?: number
+  referenceAudioDurationSec?: number
   resolution?: VideoResolutionInput
   operation?: VideoGenerationOperation
   contentFilter?: boolean
@@ -801,7 +894,13 @@ export function estimateVideoProviderCostUsd(options: {
     : capability.estimatedInputCostUsdPerVideoSecondByResolution?.[route.resolution]
     ?? capability.estimatedInputCostUsdPerVideoSecond
     ?? 0
+  // Live fal billing 2026-09-08: 1080p refinement charged output only for video references.
+  // Keep image/audio token rates from the published rate card.
+  const referenceTokens = normalizedModel === 'fal-h3-max'
+    ? Math.max(0, (options.referenceImagePixels ?? 0) / 1024 + (options.referenceVideoDurationSec ?? 0) * (route.resolution === '1080p' ? 0 : route.resolution === '480p' ? 2886 : 7459.2) + (options.referenceAudioDurationSec ?? 0) * 80 - 4096)
+    : 0
   const standardCost = options.durationSec * perSecond
+    + referenceTokens * 0.02 / 1000
     + billableImages * (capability.estimatedInputCostUsdPerImage ?? 0)
     + Math.max(0, options.referenceVideoDurationSec ?? 0) * inputVideoPerSecond
   return normalizeVideoModelId(options.model) === 'seedance-2.5' && options.contentFilter === false
@@ -814,6 +913,8 @@ export function estimateVideoCredits(options: {
   durationSec: number
   imageCount?: number
   referenceVideoDurationSec?: number
+  referenceImagePixels?: number
+  referenceAudioDurationSec?: number
   resolution?: VideoResolutionInput
   operation?: VideoGenerationOperation
   contentFilter?: boolean
@@ -824,6 +925,7 @@ export function estimateVideoCredits(options: {
   return Math.ceil(costUsd * 100 * (options.markup ?? 2) - 1e-9)
 }
 
+/** Legacy seed helper; do not use for live billing. */
 export function getRequiredVideoCredits(
   options: Parameters<typeof estimateVideoCredits>[0],
 ): number {
@@ -842,7 +944,7 @@ export function getRequiredVideoCredits(
 
 export function isFastVideoRenderModel(model?: string | null): boolean {
   const normalized = normalizeVideoModelId(model)
-  return normalized === 'grok' || normalized === 'google-omni'
+  return normalized === 'grok' || normalized === 'google-omni' || normalized === 'minimax-h3-max' || normalized === 'fal-h3-max'
 }
 
 export function resolveVideoOutputDuration(options: {
@@ -860,6 +962,7 @@ export function resolveVideoOutputDuration(options: {
     return options.requestedDuration ?? 6
   }
   if (options.requestedDuration != null) return options.requestedDuration
+  if (normalizedModel === 'minimax-h3-max') return 5
   if (options.operation === 'extend' && normalizeVideoModelId(options.model) === 'google-omni') {
     return capability.maxOutputDuration
   }
@@ -959,7 +1062,7 @@ export function validateVideoModelRequest(options: {
     }
   }
 
-  if ((normalizedModel === 'wan-3.0' || normalizedModel === 'wan-3.0-pro') && options.operation && options.operation !== 'generate') {
+  if ((normalizedModel === 'wan-3.0' || normalizedModel === 'wan-3.0-prime') && options.operation && options.operation !== 'generate') {
     return 'Wan 3.0 supports generation with multimodal references, but does not expose typed video edit or extend operations. Use video_operation="generate" with feature references.'
   }
 
@@ -973,6 +1076,16 @@ export function validateVideoModelRequest(options: {
 
   if (options.operation !== 'edit' && options.outputDuration != null && options.outputDuration > capability.maxOutputDuration) {
     return `${capability.label} duration must be ${capability.maxOutputDuration} seconds or less.`
+  }
+
+  if (
+    options.operation !== 'edit'
+    && options.outputDuration != null
+    && options.outputDuration !== -1
+    && capability.supportedDurations?.length
+    && !capability.supportedDurations.includes(options.outputDuration)
+  ) {
+    return `${capability.label} duration must be one of ${capability.supportedDurations.join(', ')} seconds.`
   }
 
   if (options.hasVideoReference && !capability.supportsVideoReference) {

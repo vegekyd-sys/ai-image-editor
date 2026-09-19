@@ -10,6 +10,7 @@ const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
 const previousLegacy = process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS;
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
   else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
@@ -62,5 +63,33 @@ describe('dynamic Codex subscription allowlist', () => {
       key: CODEX_SUBSCRIPTION_ALLOWLIST_SETTING_KEY,
       value: '["user-b","user-a"]',
     }), { onConflict: 'key' });
+  });
+
+  it('shares membership and protects both owners without reviving static Grok entries', async () => {
+    vi.stubEnv('CODEX_SUBSCRIPTION_OWNER_USER_ID', 'codex-owner');
+    vi.stubEnv('GROK_SUBSCRIPTION_OWNER_USER_ID', 'grok-owner');
+    vi.stubEnv('GROK_SUBSCRIPTION_ALLOWED_USER_IDS', 'removed-user');
+    const stored = readClient({ data: { value: '["shared-user"]' }, error: null });
+    await expect(getDynamicCodexSubscriptionAllowedUserIds(stored.client))
+      .resolves.toEqual(['shared-user', 'codex-owner', 'grok-owner']);
+    const missing = readClient({ data: null, error: null });
+    expect(await getDynamicCodexSubscriptionAllowedUserIds(missing.client)).toContain('removed-user');
+  });
+
+  it('prevents administrative writes based on unreadable or corrupt storage', async () => {
+    const failed = readClient({ data: null, error: new Error('offline') });
+    await expect(getDynamicCodexSubscriptionAllowedUserIds(failed.client, { strict: true })).rejects.toThrow('offline');
+    for (const value of ['not json', '{}', '["user",123]']) {
+      const corrupt = readClient({ data: { value }, error: null });
+      await expect(getDynamicCodexSubscriptionAllowedUserIds(corrupt.client, { strict: true })).rejects.toThrow('invalid');
+      expect(await getDynamicCodexSubscriptionAllowedUserIds(corrupt.client)).not.toContain('user');
+    }
+  });
+
+  it('fails closed when the storage request rejects rather than returning an error', async () => {
+    vi.stubEnv('CODEX_SUBSCRIPTION_OWNER_USER_ID', 'owner-id');
+    const failed = readClient({ data: null, error: null });
+    failed.maybeSingle.mockRejectedValue(new Error('network disconnected'));
+    await expect(getDynamicCodexSubscriptionAllowedUserIds(failed.client)).resolves.toEqual(['owner-id']);
   });
 });

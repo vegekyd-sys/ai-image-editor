@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildTurnMediaInspectionContext } from '@/lib/agent-context';
+import { buildTurnMediaInspectionContext, selectTurnMediaBatch } from '@/lib/agent-context';
 import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const read = (path: string) => readAgentAwareSource(process.cwd(), path);
 
 describe('current upload batch inspection', () => {
-  it('maps the complete trailing upload batch without attaching raw media to the main model', () => {
+  it('tells multimodal Agents that still images are attached to the same request', () => {
     const context = buildTurnMediaInspectionContext([
       { type: 'image' },
       { type: 'composition' },
@@ -14,15 +14,26 @@ describe('current upload batch inspection', () => {
       { type: 'video' },
       { type: 'image' },
       { type: 'video' },
-    ], 5);
+    ], 5, true);
 
     expect(context).not.toContain('<<<media_1>>>');
     expect(context).not.toContain('<<<media_2>>>');
     expect(context).toContain('<<<media_3>>>: image');
     expect(context).toContain('<<<media_5>>>: video');
     expect(context).toContain('<<<media_7>>>: video');
+    expect(context).toContain('Every still image below is attached to this same Agent request');
+    expect(context).toContain('Videos are not image attachments');
+    expect(context).not.toContain('A verified evidence block for this exact batch follows below');
+  });
+
+  it('keeps verified bridge evidence for text-only Agents', () => {
+    const context = buildTurnMediaInspectionContext([
+      { type: 'image' },
+      { type: 'video' },
+    ], 2, false);
+
     expect(context).toContain('A verified evidence block for this exact batch follows below');
-    expect(context).not.toContain('attached directly');
+    expect(context).not.toContain('attached to this same Agent request');
   });
 
   it('does not add an inspection pass when this turn uploaded no media', () => {
@@ -41,6 +52,29 @@ describe('current upload batch inspection', () => {
     expect(context).toContain('<<<media_2>>>');
   });
 
+  it('uses exact snapshot ids when sort-order collisions mean the turn is not the trailing slice', () => {
+    const snapshots = [
+      { id: 'old-image', type: 'image' },
+      { id: 'new-video-a', type: 'video' },
+      { id: 'old-reference', type: 'image' },
+      { id: 'new-video-b', type: 'video' },
+    ];
+    expect(selectTurnMediaBatch(snapshots, 2, ['new-video-a', 'new-video-b']))
+      .toEqual([
+        { snapshot: snapshots[1], mediaIndex: 2 },
+        { snapshot: snapshots[3], mediaIndex: 4 },
+      ]);
+    const context = buildTurnMediaInspectionContext(
+      snapshots,
+      2,
+      true,
+      ['new-video-a', 'new-video-b'],
+    );
+    expect(context).toContain('<<<media_2>>>: video');
+    expect(context).toContain('<<<media_4>>>: video');
+    expect(context).not.toContain('<<<media_3>>>');
+  });
+
   it('carries the batch contract through every entry and durable retry', () => {
     const editor = read('src/components/Editor.tsx');
     const stream = read('src/lib/agentStream.ts');
@@ -54,19 +88,28 @@ describe('current upload batch inspection', () => {
     expect(editor).toContain('turnMediaCount: (imgs?.length || 0) + (videos?.length || 0)');
     expect(editor).toContain('turnMediaCount: workSnapshots.length');
     expect(stream).toContain('turnMediaCount: body.turnMediaCount');
+    expect(stream).toContain('turnMediaSnapshotIds: body.turnMediaSnapshotIds');
     expect(route).toContain('turnMediaCount');
     expect(runner).toContain('turnMediaCount: request.turnMediaCount');
+    expect(runner).toContain('turnMediaSnapshotIds: request.turnMediaSnapshotIds');
     expect(cli).toContain('uploadedTurnMediaCount += addedCount');
     expect(cli).toContain('turnMediaCount: uploadedTurnMediaCount');
-    expect(context).toContain('await Promise.all(batch.map(async (snapshot, offset) =>');
+    expect(context).toContain('options.supportsImageInput === true');
+    expect(context).toContain(".filter(({ snapshot }) => !supportsImageInput || snapshot.type === 'video')");
     expect(context).toContain('analyzeImageContent(');
     expect(context).toContain('analyzeVideoContent(');
-    expect(context).toContain('[Verified current upload batch — ${count} items]');
-    expect(context).toContain('[turn-media-preflight] completed ${count} items');
+    expect(context).toContain("[Verified current upload ${supportsImageInput ? 'video ' : ''}evidence");
+    expect(context).toContain('[turn-media-preflight] completed ${evidenceBatch.length} items');
+    expect(context).toContain('nativeVisionImages');
+    expect(context).toContain('selectNativeVisionImages');
     expect(context).toContain('uploadedVideoCount && !options.turnMediaCount');
-    expect(agent).not.toContain('inspectionImages?: string[]');
-    expect(agent).toContain('A current upload batch is pre-analyzed in parallel');
+    expect(agent).toContain('nativeVisionImages?: NativeVisionImageInput[]');
+    expect(agent).toContain('buildNativeVisionUserContent(');
+    expect(agent).toContain('nativeImageAnalysis');
     expect(agent).toContain("return { mode: 'batch_describe', analyses }");
+    expect(editor).toContain('First-turn media understanding (no user prompt)');
+    expect(editor).toContain('turnMediaCount: workSnapshots.length');
+    expect(editor).not.toContain('workSnapshots.map(snap => runAutoAnalysis');
     expect(execution).toContain(".eq('run_id', runId)");
   });
 });

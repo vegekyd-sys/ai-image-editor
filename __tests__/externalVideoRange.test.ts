@@ -86,6 +86,7 @@ describe('external Media List publishing', () => {
     ].join('\n');
     const [published] = await publishExternalVideoRanges({
       supabase: supabase as never,
+      userId: 'user-1',
       projectId: 'project-1',
       ranges: [{
         source_url: 'https://cdn.example.com/source.mp4?capability=stable',
@@ -120,13 +121,14 @@ describe('external Media List publishing', () => {
     const supabase = emptyMediaListSupabase();
     const [published] = await publishExternalVideoRanges({
       supabase: supabase.client as never,
+      userId: 'user-1',
       projectId: 'project-1',
       ranges: [{
         source_url: 'https://scenes-ai.com/v1/assets/photo/media',
         type: 'image',
         description: 'AFF Tokyo product photo',
       }],
-      fetchImpl: (() => { throw new Error('declared type must not be fetched'); }) as typeof fetch,
+      fetchImpl: (async () => new Response(new Uint8Array([0xff, 0xd8, 0xff]), { headers: { 'content-type': 'image/jpeg' } })) as typeof fetch,
     });
 
     expect(published).toMatchObject({
@@ -155,6 +157,7 @@ describe('external Media List publishing', () => {
     )) as typeof fetch;
     const [published] = await publishExternalVideoRanges({
       supabase: supabase.client as never,
+      userId: 'user-1',
       projectId: 'project-legacy-cli',
       ranges: [{
         source_url: 'https://scenes-ai.com/v1/assets/extensionless/media',

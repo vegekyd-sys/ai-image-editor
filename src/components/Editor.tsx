@@ -1563,11 +1563,12 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayText?: string; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number; skillLaunchContext?: SkillLaunchContext }) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayText?: string; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number; turnMediaSnapshotIds?: string[]; skillLaunchContext?: SkillLaunchContext }) => {
     const userVisibleText = options?.displayText ?? stripAgentInternalContextForDisplay(text);
     // Freeze the selected LLM at submit time. Upload waits below must not let a
     // later selector change mutate an already-submitted request.
     const agentModelForRequest = agentModelRef.current;
+    const turnMediaSnapshotIds = [...(options?.turnMediaSnapshotIds || [])];
     // CUI reference images → append as new snapshots (so agent sees them in Media Index)
     if (attachedImages?.length && !overrideImage) {
       const newSnaps: Snapshot[] = [];
@@ -1577,6 +1578,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         newSnaps.push(snap);
       }
       if (newSnaps.length > 0) {
+        turnMediaSnapshotIds.push(...newSnaps.map((snap) => snap.id));
         const baseOrder = snapshotsRef.current.length;
         setSnapshots(prev => {
           const updated = [...prev, ...newSnaps];
@@ -1753,7 +1755,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, ...(hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}), currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0 },
+        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, ...(hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}), currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0, turnMediaSnapshotIds },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1875,9 +1877,9 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }
 
     // Step 1: Create video snapshots (use snapshotsRef for accurate current length)
+    const newVideoSnaps: Snapshot[] = [];
     if (videos?.length) {
       const { createVideoDesign } = await import('@/lib/video-design');
-      const newVideoSnaps: Snapshot[] = [];
       for (const v of videos) {
         const snapId = generateId();
         const design = createVideoDesign(v.url, v.width, v.height, v.duration);
@@ -1929,6 +1931,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       displayImages: displayAttachments.length > 0 ? displayAttachments : undefined,
       uploadedVideoCount: videos?.length,
       turnMediaCount: (imgs?.length || 0) + (videos?.length || 0),
+      turnMediaSnapshotIds: newVideoSnaps.map((snap) => snap.id),
     });
   };
 
@@ -2521,39 +2524,31 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         }
       }
 
-      // ── Step 6: Analysis (if images, no prompt) ──
-      if (hasImages && !hasPrompt) {
-        if (isMulti) {
-          // Multi-image: silent analysis → greeting
-          const analyzingMsgId = generateId();
-          const analyzingText = t('editor.multiImageAnalyzing').replace('{count}', String(workSnapshots.length));
-          setMessages(prev => [...prev, { id: analyzingMsgId, role: 'assistant' as const, content: analyzingText, timestamp: Date.now() }]);
-          setIsAgentActive(true);
-          Promise.all(
-            workSnapshots.map(snap => runAutoAnalysis(snap.id, snap.image, 'initial', { silent: true }))
-          ).then(() => {
-            setIsAgentActive(false);
-            handleAgentRequest(
-              `[System] User uploaded ${workSnapshots.length} images. All images have been analyzed (see Media Index descriptions). Briefly greet the user and mention what you see in each image in 1 sentence each.`,
-              undefined, undefined, { silent: true }
-            );
-          });
-        } else {
-          // Single image: non-silent analysis (shows in CUI)
-          runAutoAnalysis(workSnapshots[0].id, workSnapshots[0].image, 'initial');
-        }
-      }
-
-      // ── Step 6b: Video analysis (if videos, no prompt) ──
-      if (hasVideos && !hasPrompt) {
-        const count = pendingVideos!.length;
-        const firstVideoIndex = Math.max(1, workSnapshots.length - count + 1);
-        const lastVideoIndex = workSnapshots.length;
-        const videoRange = count === 1
-          ? `<<<media_${firstVideoIndex}>>>`
-          : `<<<media_${firstVideoIndex}>>> to <<<media_${lastVideoIndex}>>>`;
-        const videoAnalysisPrompt = `[System] User uploaded ${count === 1 ? 'a video' : `${count} videos`} at ${videoRange}. First call analyze_video for each uploaded video media_index. Then summarize the duration, key subjects/actions, and mood in 2-3 conversational sentences.`;
-        handleAgentRequest(videoAnalysisPrompt, undefined, undefined, { silent: true, uploadedVideoCount: count });
+      // ── Step 6: First-turn media understanding (no user prompt) ──
+      if (!hasPrompt && hasImages && workSnapshots.length === 1 && !hasVideos) {
+        // Keep the single-image fast path on the lightweight analysis prompt.
+        runAutoAnalysis(workSnapshots[0].id, workSnapshots[0].image, 'initial');
+      } else if (!hasPrompt && workSnapshots.length > 0) {
+        // Multi-image, mixed image/video, and multi-video starts use one Agent
+        // request. Multimodal Agents receive every still image directly while
+        // buildPromptContext pre-analyzes missing video evidence in parallel.
+        const imageCount = workSnapshots.filter(s => s.type !== 'video').length;
+        const videoCount = workSnapshots.filter(s => s.type === 'video').length;
+        const mediaSummary = [
+          imageCount ? `${imageCount} image${imageCount === 1 ? '' : 's'}` : '',
+          videoCount ? `${videoCount} video${videoCount === 1 ? '' : 's'}` : '',
+        ].filter(Boolean).join(' and ');
+        handleAgentRequest(
+          `[System] The user just uploaded ${mediaSummary}. Inspect every attached still image and consume every verified video-evidence line in the Media Index. Briefly greet the user, then summarize each item in one concise sentence. Do not call analyze_image for attached images. Call analyze_video only if a video's verified evidence explicitly failed or cannot answer the request.`,
+          undefined,
+          undefined,
+          {
+            silent: true,
+            uploadedVideoCount: videoCount,
+            turnMediaCount: workSnapshots.length,
+            turnMediaSnapshotIds: workSnapshots.map((snap) => snap.id),
+          },
+        );
       }
 
       // ── Step 7: Agent request (if prompt) ──
@@ -2570,6 +2565,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             displayText: pendingPrompt!,
             uploadedVideoCount: pendingVideos?.length || 0,
             turnMediaCount: workSnapshots.length,
+            turnMediaSnapshotIds: workSnapshots.map((snap) => snap.id),
             skillLaunchContext: pendingSkillLaunchContext,
           });
         }
@@ -2663,23 +2659,25 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     if (!isV2) return;
     const processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing' && s.videoMeta.taskId);
     if (processing.length === 0) return;
-    const interval = setInterval(async () => {
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const pollingStartedAt = Date.now();
+    const poll = async () => {
       for (const snap of processing) {
+        if (cancelled) return;
         try {
           const res = await fetch(`/api/video-snapshot/${snap.id}`);
           const data = await res.json();
           if (data.status === 'completed' && data.videoUrl) {
-            const { createVideoDesign, probeVideoDimensions } = await import('@/lib/video-design');
-            const dims = await probeVideoDimensions(data.videoUrl);
-            const design = createVideoDesign(data.videoUrl, dims.width, dims.height, dims.duration);
+            // Expose the playable provider URL immediately. Metadata probing is
+            // useful for the editable Remotion wrapper, but must not block the
+            // native player from leaving the processing state.
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? {
                 ...s,
                 image: data.imageUrl || s.image,
                 imageUrl: data.imageUrl || s.imageUrl,
                 videoMeta: { ...s.videoMeta!, status: 'completed' as const, videoUrl: data.videoUrl },
-                design,
-                designPath: `code/${snap.id}.json`,
               } : s
             ));
             // Reset animationState if this was the task being polled
@@ -2700,6 +2698,20 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               onSaveMessage?.(videoMsg);
               return [...prev, videoMsg];
             });
+            void (async () => {
+              try {
+                const { createVideoDesign, probeVideoDimensions } = await import('@/lib/video-design');
+                const dims = await probeVideoDimensions(data.videoUrl);
+                const design = createVideoDesign(data.videoUrl, dims.width, dims.height, dims.duration);
+                setSnapshots(prev => prev.map(s =>
+                  s.id === snap.id && s.videoMeta?.videoUrl === data.videoUrl
+                    ? { ...s, design, designPath: `code/${snap.id}.json` }
+                    : s
+                ));
+              } catch {
+                // Native playback is already available; design metadata repair is best-effort.
+              }
+            })();
           } else if (data.status === 'failed') {
             const actionLines = serializeCompletionActions(data.completionActions);
             const reason = data.error ? `\n${data.error}` : '';
@@ -2720,8 +2732,18 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           }
         } catch { /* ignore */ }
       }
-    }, 4000);
-    return () => clearInterval(interval);
+      if (cancelled) return;
+      const { getVideoSnapshotPollIntervalMs } = await import('@/lib/video-snapshot-polling');
+      timeoutId = setTimeout(
+        poll,
+        getVideoSnapshotPollIntervalMs(processing, Date.now(), pollingStartedAt),
+      );
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [snapshots, isV2, inactive]);
 
 

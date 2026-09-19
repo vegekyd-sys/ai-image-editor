@@ -7,7 +7,7 @@ import { useLocale } from '@/lib/i18n';
 import MediaRefText from '@/components/MediaRefText';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { getModelInfo, getVideoModels } from '@/lib/model-registry';
-import { estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
+import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
 
 interface AnimateSheetProps {
   snapshots: Snapshot[];
@@ -36,8 +36,9 @@ export default function AnimateSheet({
   const videoModels = getVideoModels();
   const videoCapability = getVideoModelCapability(videoModel);
   const resolutionOptions = videoCapability.supportedResolutions ?? [];
-  const durationOptions = [3, 4, 5, 7, 10, 15, 20, 30]
-    .filter(seconds => seconds >= videoCapability.minOutputDuration && seconds <= videoCapability.maxOutputDuration);
+  const durationOptions = videoCapability.supportedDurations
+    ?? [3, 4, 5, 7, 10, 15, 20, 30]
+      .filter(seconds => seconds >= videoCapability.minOutputDuration && seconds <= videoCapability.maxOutputDuration);
   const resolvedResolution = videoResolution === 'auto'
     ? videoCapability.defaultResolution
     : normalizeVideoResolution(videoModel, videoResolution);
@@ -60,6 +61,18 @@ export default function AnimateSheet({
   const allSnapshots = snapshots.filter(s => s.imageUrl?.startsWith('http'));
   const activeSnapshots = allSnapshots.filter((_, i) => !excludedIndices.has(i));
   const activeUrls = activeSnapshots.map(s => s.imageUrl!);
+  const imageCount = activeUrls.length;
+  const [quote, setQuote] = useState<{ key: string; credits: number } | null>(null);
+  const quoteKey = JSON.stringify({ model: videoModel, resolution: videoResolution, durationSec: duration, imageCount, ...(videoModel === 'fal-h3-max' ? { imageUrls: activeUrls } : {}) });
+  useEffect(() => {
+    if (isDetail || duration == null) return;
+    const controller = new AbortController();
+    fetch('/api/billing/video-quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: quoteKey, signal: controller.signal })
+      .then(async response => { if (!response.ok) throw new Error(); return response.json(); })
+      .then(result => setQuote({ key: quoteKey, credits: result.credits }))
+      .catch(() => { if (!controller.signal.aborted) setQuote(null); });
+    return () => controller.abort();
+  }, [isDetail, duration, quoteKey]);
 
   // ── Drag-to-dismiss (mobile only) ──
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -686,10 +699,9 @@ export default function AnimateSheet({
                       fontSize: '0.82rem', color: 'rgba(255,255,255,0.4)',
                     }}>
                       {duration != null
-                        ? (() => {
-                          const cost = estimateVideoProviderCostUsd({ model: videoModel, resolution: videoResolution, durationSec: duration, imageCount: activeUrls.length });
-                          return cost != null ? `~$${cost.toFixed(2)}` : t('animate.costByDuration');
-                        })()
+                        ? quote?.key === quoteKey
+                          ? t('mediaPricing.quoteCredits').replace('{credits}', String(quote.credits))
+                          : t('mediaPricing.quoteUnavailable')
                         : t('animate.costByDuration')}
                     </div>
                   </div>

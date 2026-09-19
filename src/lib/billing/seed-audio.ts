@@ -1,4 +1,5 @@
 import { deductFixedCredits } from './credits'
+import { quoteSeedAudio } from './media-pricing'
 
 const MAKARON_CREDIT_USD = 0.01
 const DEFAULT_MARKUP = 2
@@ -25,6 +26,7 @@ export function seedAudioProviderCredits(input: SeedAudioUsageInput): number {
   return durationSeconds * EVOLINK_SEED_AUDIO_CREDITS_PER_SECOND
 }
 
+/** Legacy seed calculator. Runtime quotes and settlement use quoteSeedAudio. */
 export function seedAudioMakaronCredits(input: SeedAudioUsageInput): number {
   const providerCredits = seedAudioProviderCredits(input)
   if (providerCredits <= 0) return 0
@@ -39,8 +41,7 @@ export async function deductSeedAudioCredits(
   userId: string,
   input: SeedAudioUsageInput & { model?: string | null; generationSeconds?: number | null; apiKeyId?: string | null },
 ): Promise<{ charged: number; remaining: number }> {
-  const credits = seedAudioMakaronCredits(input)
-  if (credits <= 0) return { charged: 0, remaining: 0 }
+  const { credits } = await quoteSeedAudio(input)
 
   const durationMs = input.generationSeconds ? Math.round(input.generationSeconds * 1000) : undefined
   return deductFixedCredits(

@@ -1,10 +1,6 @@
 ---
 name: photo-to-video
-description: >
-  Turn photos into a wild, imaginative video. Single photo: evolve it
-  into a 3-act story. Multiple photos: pick the most interesting ones
-  and weave them into a cinematic sequence. Activate when user wants
-  to create a video from photos.
+description: Use when the user explicitly selects Photo-to-Video or asks to create progressive story images before making a video. Single photo evolves into a wild 3-act visual story; multiple photos are selected and sequenced. Ordinary photo animation or requests for an interesting, stylish video do not by themselves activate this workflow.
 allowed-tools: generate_image analyze_image generate_animation
 metadata:
   makaron:

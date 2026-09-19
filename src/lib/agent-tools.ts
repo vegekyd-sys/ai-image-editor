@@ -1,19 +1,27 @@
+import { isFalImage25, resolveImageModel } from './models/types';
+import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
 import { after } from 'next/server';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ImageBackground, ModelId } from './models/types';
+import { IMAGE_MODEL_IDS } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { estimateVideoProviderCostUsd, getRequiredVideoCredits, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { quoteVideo } from './billing/media-pricing';
 import {
+  deductCredits,
   deductFixedCredits,
+  isBillingEnabled,
   isInsufficientCreditsError,
+  recordSubscriptionUsage,
   refundCredits,
   requireCredits,
 } from './billing/credits';
+import { getToolPrice, resolveToolName } from './billing/pricing';
 import { deductSeedAudioCredits } from './billing/seed-audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
@@ -44,6 +52,7 @@ import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import {
   rebuildAgentSnapshotUrls,
   type AgentSnapshotIndexRow,
+  partitionCompositionMediaRefs,
 } from './agent-media-index';
 import { mergePatchProps } from './patch-props';
 import { persistCompositionDraft } from './composition-draft';
@@ -70,7 +79,6 @@ import {
   studioCreativePacketSchema,
 } from './studio-run/creative-packet';
 import {
-  getReplyLanguageInstruction,
   normalizeLocale,
   translate,
 } from './locales';
@@ -78,19 +86,28 @@ import { stableDraftPromotionSnapshotId } from './draft-promotion';
 import { sourceRangeFromVideoMeta } from './media-source-range';
 import { materializeSeedAudioReference } from './seed-audio-reference';
 import { resolveAudioRefs } from './audio-reference-resolver';
+import { isGrokSubscriptionAllowedUser } from './grok-subscription';
+import { compileVideoReplicationPrompt } from './video-replication-prompt';
+import { preserveOptionalToolFields } from './agent-tool-schema';
+import { createVideoValidationReporter } from './video-submission-validation';
+import { bundleAgentPrompt } from './agent-prompt-bundles';
+import type { CorePromptMode } from './core-prompt-mode';
+import legacyVideoTool from './prompts/legacy/video-tool.md';
+import legacyCodingTool from './prompts/legacy/coding-tool.md';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
 function runRemotionExportAfterResponse(jobId: string) {
   after(async () => {
     try {
-      const { runRemotionExportJob } = await import('@/lib/remotion-export');
-      await runRemotionExportJob(jobId);
+      const {
+        drainRemotionExportQueue,
+        shouldRunRemotionExportInline,
+      } = await import('@/lib/remotion-export');
+      if (!shouldRunRemotionExportInline()) return;
+      await drainRemotionExportQueue({ source: `agent:${jobId}` });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes('already rendering')) {
-        console.error(`[agent] Remotion export worker failed for ${jobId}:`, error);
-      }
+      console.error(`[agent] Remotion export queue drain failed after ${jobId}:`, error);
     }
   });
 }
@@ -188,6 +205,8 @@ function modelFileContent(base64Data: string, mediaType: string) {
 // ---------------------------------------------------------------------------
 
 export interface AgentContext {
+  /** Pinned with the system prompt for this invocation, including model retries. */
+  corePromptMode?: CorePromptMode;
   currentImage: string;       // base64 data URL – updated after each generation
   referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
@@ -204,7 +223,7 @@ export interface AgentContext {
   preferredModel?: ModelId;
   /** Supabase Storage URLs for animation (set when in animation mode) */
   animationImageUrls?: string[];
-  /** User/app selected video model. Defaults to seedance-fast when absent. */
+  /** User/app selected video model. Defaults to fal-h3-max when absent. */
   videoModel?: VideoModel;
   /** User/app selected video resolution. Defaults to auto. */
   videoResolution?: import('@/types').VideoResolution;
@@ -345,7 +364,7 @@ export type AgentStreamEvent =
       };
       inputTokens?: number;
     }
-  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cacheWriteTelemetryComplete?: boolean; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
+  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cacheWriteTelemetryComplete?: boolean; providerCostUsd?: number; model: string; provider: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
   | {
       type: 'error';
@@ -663,11 +682,23 @@ async function createTranscriptArtifact(input: {
 async function validateCompositionMediaAspect(
   ctx: AgentContext,
   result: { code: string; props?: Record<string, unknown>; width?: number; height?: number },
+  targetAspectRatio?: string,
 ): Promise<string | null> {
   const outputWidth = Number(result.width || 1080);
   const outputHeight = Number(result.height || 1350);
   if (!Number.isFinite(outputWidth) || !Number.isFinite(outputHeight) || outputWidth <= 0 || outputHeight <= 0) {
     return null;
+  }
+  // An explicit output target owns the canvas, independently of source shape.
+  // This is a semantic tool argument, not a keyword guess from the user prompt.
+  if (targetAspectRatio !== undefined) {
+    const parts = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(targetAspectRatio);
+    const targetRatio = parts ? Number(parts[1]) / Number(parts[2]) : NaN;
+    if (!Number.isFinite(targetRatio) || targetRatio <= 0) {
+      return 'Invalid target_aspect_ratio. Use a positive width:height ratio such as "9:16".';
+    }
+    if (Math.abs((outputWidth / outputHeight) / targetRatio - 1) <= 0.01) return null;
+    return `Composition rejected: returned canvas ${Math.round(outputWidth)}x${Math.round(outputHeight)} does not match the requested target_aspect_ratio ${targetAspectRatio}. Keep the requested target, preserve source pixels with proportional scaling and contain/background (crop only when authorized), and repair the saved composition; do not switch to Node/FFmpeg.`;
   }
   if (!ctx.supabase || !ctx.projectId) return null;
 
@@ -734,7 +765,7 @@ async function validateCompositionMediaAspect(
         ? '1920x1080'
         : '1080x1080';
 
-    return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition".`;
+    return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition". If the user explicitly requested a different output aspect, keep that canvas and pass target_aspect_ratio (for example "9:16"); fit the source proportionally with contain/background or authorized cropping. Repair the saved composition, not a Node/FFmpeg replacement.`;
   } catch {
     return null;
   }
@@ -1352,11 +1383,11 @@ function createGenerateImageTool(
   return tool({
       description: generateImageToolPrompt,
       inputSchema: z.object({
-        editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
+        editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai" or "nano banana lite", or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
+        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Honor other explicitly named/selected models. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for normal auto routing.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
-        background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
+        background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2.5 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
@@ -1388,6 +1419,24 @@ function createGenerateImageTool(
 
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
+        const billingModel = resolveImageModel(resolvedModel, background);
+        if (ctx.userId && billingModel && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
+          if (isFalImage25(billingModel)) {
+            const rate = await getTokenRate(billingModel);
+            if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'GPT Image 2.5 pricing is not configured.', error: 'pricing_unavailable' };
+            const check = await requireCredits(ctx.userId, 5);
+            if (!check.ok) return { success: false, message: 'Insufficient credits.', error: 'insufficient_credits' };
+          }
+          const price = isFalImage25(billingModel) ? null : await getToolPrice(resolveToolName('edit_image', billingModel));
+          if (!price && billingModel === 'wan2.7-image') {
+            return { success: false, message: 'Tool pricing is not configured: edit_image_wan2.7-image', error: 'pricing_unavailable' };
+          }
+          if (price && !price.isFree) {
+            const check = await requireCredits(ctx.userId, price.credits);
+            if (!check.ok) return { success: false, message: `Insufficient credits. Need ${price.credits}, have ${check.balance}.`, error: 'insufficient_credits' };
+          }
+        }
+        const imageStartedAt = Date.now();
         const skillResult = await editImage(
           { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, background, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           {
@@ -1403,9 +1452,24 @@ function createGenerateImageTool(
           },
         );
         // Bill for image generation (separate from Agent LLM tokens)
-        if (skillResult.usage && skillResult.provider !== 'codex-subscription') {
-          import('./billing/credits').then(({ deductByTokens }) =>
-            deductByTokens(
+        if (skillResult.usage && skillResult.provider === 'codex-subscription' && ctx.userId) {
+          try {
+            await recordSubscriptionUsage(
+              ctx.userId,
+              'codex-subscription',
+              'generate_image',
+              skillResult.usage.modelId,
+              {
+                inputTokens: skillResult.usage.inputTokens,
+                outputTokens: skillResult.usage.outputTokens,
+              },
+            );
+          } catch (error) {
+            console.error('[billing] generate_image subscription usage logging error:', error);
+          }
+        } else if (skillResult.usage && skillResult.provider !== 'codex-subscription') {
+          const { deductByTokens } = await import('./billing/credits');
+          await deductByTokens(
               ctx.userId ?? '',
               'generate_image',
               skillResult.usage!.modelId,
@@ -1415,19 +1479,16 @@ function createGenerateImageTool(
               undefined,
               undefined,
               skillResult.usage!.providerCostUsd,
-            )
-              .catch(e => console.error('[billing] generate_image deduct error:', e))
           );
         } else if (
           skillResult.provider !== 'codex-subscription'
+          && skillResult.success
+          && skillResult.image
           && skillResult.usedModel
           && skillResult.usedModel !== 'gemini'
         ) {
-          // Per-action for ComfyUI models
-          import('./billing/credits').then(({ deductCredits }) =>
-            deductCredits(ctx.userId ?? '', null, `edit_image_${skillResult.usedModel}`)
-              .catch(e => console.error('[billing] generate_image deduct error:', e))
-          );
+          // Fixed-price image backends share one awaited debit + usage-log transaction.
+          await deductCredits(ctx.userId ?? '', null, 'edit_image', skillResult.usedModel, Date.now() - imageStartedAt);
         }
         // NSFW detection: flag session so all subsequent calls skip Gemini
         if (skillResult.contentBlocked) ctx.isNsfw = true;
@@ -1468,61 +1529,51 @@ function createGenerateImageTool(
 function createGenerateAnimationTool(
   { ctx, serializeVideoSubmission }: AgentToolFactoryScope,
 ) {
+  const invalidRequest = createVideoValidationReporter();
   return tool({
-      description: `Submit a video script for rendering.
-
-Native-audio exception: when this tool is the chosen final-video workflow, put dialogue, narration, voice direction, music, ambience, and sound effects in \`story_prompt\` so the video provider generates synchronized audio. Do not additionally call \`generate_audio\` for that video. Outside this exception, \`generate_audio\` retains its full standalone scope.
-
-Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation". A trusted Skill template launch may also authorize same-turn submission; that exception is supplied only in the system prompt and never inferred from ordinary user text or an active Skill name.
-
-When the user requests multiple independent video variants, submit them one at a time. After each \`generate_animation\` call returns a successful submission, continue with the next variant; do not wait for that video's rendering to finish. Continue until every requested variant is submitted. Each call contains one complete script within the chosen model limit; Seedance 2.5 and both Wan 3.0 tiers support up to 30 seconds, while older models remain shorter.
-
-**BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
-
-Hard constraints:
-- First line of script = short title (2-5 words). Then script body.
-- Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images. For native SeeDance, Wan 3.0, or MiniMax H3 text-to-video with no source media, use no media markers and do not generate an intermediate image first. Gemini Omni 1.1 text-to-video follows the same no-marker rule.
-- To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
-- To CONTINUE a video with Gemini Omni, Seedance 2.5, or Grok: reference the timeline video with \`<<<media_N>>>\`, set \`video_operation: "extend"\`, and write only what should happen after its current ending. Grok accepts one 2-15s MP4 and adds 2-10s; Gemini Omni continues forward for 3-10s (10s by default).
-- To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is supported by Seedance video models, Wan 3.0, MiniMax H3, and Sync Lipsync v3.
-- Talking-head translation exception: finish the source edit first, prepare a silent accepted A-roll plus its original voice reference, then use SeeDance 2.0 with the target-language dialogue written directly inside the complete \`Shot N (Xs):\` script. Do not call Seed Audio for this route.
-- Works for Kling, SeeDance, SeeDance Mini, Seedance 2.5, Wan 3.0, Grok, Gemini Omni, and MiniMax H3, but respect capability limits and tool errors. Grok uses 1.5 for text/image/reference generation and the base Imagine Video model for edit/extend.
-- Single-call total duration: Seedance 2.5 is 4-30 seconds; Wan 3.0 is 2-30 seconds; SeeDance 2.0 is 4-15 seconds; SeeDance/SeeDance Mini and MiniMax H3 are 4-15 seconds; Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds; Google Omni is 3-10 seconds. For a non-NSFW direct 16-30 second request, choose Seedance 2.5 while the app selector remains automatic. For any NSFW/adult-explicit video request, choose Wan 3.0 instead; this semantic route has higher priority than the duration route, analogous to choosing Qwen for NSFW image requests.
-- If a complete script fits the selected model's single-call limit, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
-- If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
-- Total duration must fit the selected model's capability. Do not shrink a long source just to bypass a limit; split first.
-- Long source video rule: if a timeline/reference video is longer than the selected model's input limit (15 seconds for SeeDance 2.0, MiniMax H3, or Wan 3.0; 30 seconds for Seedance 2.5), use \`skills/long-video-director/SKILL.md\`, analyze/split it into model-sized self-contained segments, and submit one script per segment after approval.
-- Reference video input limit: for one SeeDance generation, combined source duration must be at most 15 seconds for SeeDance 2.0 or 30 seconds for SeeDance 2.5. Google Omni edit/extend accepts one source video up to 10 seconds when uploaded; a Google-generated result can continue statefully to 40 seconds cumulatively. Grok edit accepts one MP4 up to 8.7 seconds; Grok extend accepts one MP4 from 2 to 15 seconds and adds 2 to 10 seconds. For one MiniMax H3 generation, up to 3 reference videos may be used and their combined source duration must be 15 seconds or less.
-- Wan 3.0 reference limit: use generation mode with up to 10 images, 5 videos, and 5 audio files (20 total). MuleRouter accepts provider-readable MP4/MOV references up to 100MB each, enforces a 15-second combined input budget, and requires reference-video duration + requested output duration <= 30 seconds. For example, a 5.04s reference permits at most duration=24 because output duration is submitted in whole seconds. Compute this before calling the tool; the runtime harness also rejects an invalid combination before credits or provider submission.
-- Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. MiniMax H3 reference videos must each be .mp4/.mov, <=50MB, width and height each 256-5760px, and aspect ratio 0.4-2.5. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented.
-- Reference image input limit: EvoLink Seedance requires JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB per image. The runtime returns a specific errorReason such as too_small or too_large. If repairable=true, decide whether to prepare a new compliant image URL or ask the user for a better source; never resubmit the same rejected URL.
-- Reference image input limit: MiniMax H3 accepts up to 9 reference images. The first 5 are free provider inputs; images 6-9 incur per-image provider cost. H3 also accepts up to 3 reference audio files, but audio cannot be the only reference input.
-- Video edit duration lock: when editing timeline videos within the selected model's input limit, output duration should match the combined source duration from Media Index, clamped to 4-15s for SeeDance 2.0 or 4-30s for SeeDance 2.5. Dedicated Seedance 2.5 edit may use adaptive duration.
-- Default model follows app selection, usually SeeDance 2.0 Fast (\`seedance-fast\`) at 720p; do not silently change it except for semantic capability routing. Use \`seedance-2.5\` when the user asks for Seedance 2.5, a non-NSFW single 16-30 second generation, more than the older reference limits, or its dedicated edit/extend features. Use \`wan-3.0\` when the selector/user asks for Wan 3.0 Standard or when the request is NSFW/adult-explicit; the NSFW route overrides the 16-30 second Seedance 2.5 route. Use \`wan-3.0-pro\` for explicit Pro, super-resolution, 2K, or 4K requests; it supports 1080p/2K/4K. Both Wan tiers generate 2-30s with up to 10 image + 5 video + 5 audio references and do not expose typed edit/extend or a content-filter toggle. Use \`minimax-h3\` only when the selector or user explicitly asks for MiniMax/H3/Hailuo H3; it supports public 768p and native 2K multimodal generation, defaulting to 768p. Use 2K only when explicitly requested or when the user asks for maximum/final quality.
-- Grok modes: text-to-video supports 480p/720p/native 1080p. Any image or preset voice input uses reference-to-video and is capped at 720p, including a single image. Reference prompts must map every image to a role and may use a supported \`aspect_ratio\`. Optional \`reference_voice_ids\` accepts up to three xAI preset voices such as eve/leo; do not put uploaded audio URLs there.
-- \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
-- If the generated video is an intermediate artifact, pass \`completion_actions\` so CUI/CLI can show the next step after rendering finishes. These actions are user-confirmed by default; do not rely on the user remembering what to do next. For local video repair, include exact replaceStart/replaceEnd/replacementDuration and say to trim/fit the patch to that duration before merging so the final video keeps the original duration.
-- The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation or the system prompt supplies the trusted Skill template launch exception.`,
+      description: "Submit one complete video script for rendering. Before writing the script or calling this tool, read prompts/animate.md once; it returns the full workflow, creative guide, and submission contract. Submit only after visible script confirmation, explicit direct-submit authorization in the current request, or a trusted Skill template launch supplied by the system. A skill name alone is not authorization. Native audio belongs in story_prompt, not separate audio calls. Timeline images/videos use <<<media_N>>>; external workspace assets use URL parameters. Ordinary generation/edits/extensions omit replication_contract; exact source-led replication reads skills/video-edit/SKILL.md and supplies video_intent=\"replicate\" plus measured mappings. Use the schema for arguments and the loaded submission contract for model-specific preparation, full-script submission, reference limits, variants, and continuation.",
       inputSchema: z.object({
-        story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers; Gemini Omni 1.1 follows the same rule. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
-        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s accepted source; Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; for Seedance 2.5 video_operation="edit", omit duration or pass -1 because Makaron follows the source duration automatically. SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
+        story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers. Gemini Omni 1.1 and H3 Max text-to-video follow the same no-marker rule; fal H3 Turbo image-to-video uses exactly one media marker; FAL H3 Max accepts image/video/audio references. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
+        video_intent: z.enum(['generate', 'replicate']).nullish().describe('Default generate: ordinary new videos, photo animation, lookbooks, loose references, edits and extensions. Set replicate ONLY when the user wants to reproduce a supplied video\'s measured timing, action and camera with replaced content; requires replication_contract and an actual source video. Never select replicate merely to preserve a face.'),
+        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max accepts integer 5–15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can honor it. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive. Grok reference-to-video accepts supported fixed ratios.'),
-        model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, wan-3.0, wan-3.0-pro, kling, grok, google-omni, minimax-h3, and sync-lipsync-v3. Choose seedance-2.5 for non-NSFW direct 16-30s requests. Choose wan-3.0 for every NSFW/adult-explicit video request, even at 16-30s; use wan-3.0-pro only for Pro/super-resolution/2K/4K. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
-        video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Output resolution. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
+        model: z.string().optional().describe('Video model/provider id. Defaults to fal-h3-max at 768p. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, wan-3.0, wan-3.0-prime, kling, grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Default to seedance-2.5 for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
+        video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. fal H3 Max supports 480p/768p/1080p (1080p uses latent refinement from 768p), default 768p. fal H3 Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
-        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, and MiniMax H3.'),
+        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, MiniMax H3, and FAL H3 Max.'),
         reference_voice_ids: z.array(z.string()).max(3).optional().describe('Grok Imagine Video 1.5 preset xAI voice ids, e.g. ["eve"] or ["eve","leo"]. Reference them as <AUDIO_0>, <AUDIO_1> in story_prompt. Do not use Audio Index labels or uploaded URLs here.'),
         video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance 2.0 video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Seedance 2.5 accepts .mp4/.mov <=200MB, width/height 300-6000px, frame pixels 409,600-8,295,044, 4-30s each and <=30s total. MiniMax H3 video references must be <=50MB, width/height 256-5760px, aspect ratio 0.4-2.5, with at most 3 videos totaling <=15s. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok edit accepts one MP4 up to 8.7 seconds; Grok extend accepts one MP4 from 2 to 15 seconds.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use an external reference video. feature (default): reference motion/style. base: direct edit. For Gemini Omni or Seedance 2.5 continuation, also set video_operation="extend". Timeline videos are auto-routed from <<<media_N>>>.'),
-        keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
+        keep_original_sound: z.boolean().optional().describe('Provider-native source-sound toggle. Use only when the selected model explicitly supports it, currently Kling video reference and Motion Control. For other models, describe the sound request naturally in story_prompt.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
         character_orientation: z.enum(['image', 'video']).optional().describe('For motion_control: match photo orientation (image, ≤10s) or video orientation (video, ≤30s). Default: image.'),
         video_operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed video operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require a video reference. Grok edit preserves source duration/aspect and caps output at 720p; Grok extend adds 2-10s.'),
         extend_direction: z.enum(['forward', 'backward']).optional().describe('Direction for Seedance 2.5 video extension. Gemini Omni only extends forward.'),
-        generate_audio: z.boolean().optional().describe('Generate synchronized native audio; Seedance 2.5 defaults to true.'),
-        content_filter: z.boolean().optional().describe('Seedance 2.5 output content filter. Default true. Set false only after explicit user confirmation, including the Mature Mode recovery action; it costs 10% more. Never infer or auto-enable Mature Mode from prompt wording.'),
+        generate_audio: z.boolean().optional().describe('Generate synchronized model-native audio. Supported providers default to true. Set false only when the user explicitly requests a silent video; otherwise describe the desired sound naturally in story_prompt and let the video model render it.'),
+        content_filter: z.boolean().optional().describe('Seedance 2.5-only output content filter. Omit it for every other model. Seedance 2.5 defaults to true; set false only after explicit user confirmation, including the Mature Mode recovery action, because it costs 10% more. Never infer or auto-enable Mature Mode from prompt wording.'),
         output_format: z.enum(['mp4', 'mov']).optional().describe('MP4 for playback or MOV for grading.'),
         web_search: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web grounding.'),
+        replication_contract: z.object({
+          reference_video_media_index: z.number().int().positive().describe('Timeline Media Index of the complete source video that controls time, action, editing, and camera.'),
+          source_duration_seconds: z.number().positive().max(30).describe('Measured source duration from media metadata, not the last timestamp in a visual summary or the requested output duration.'),
+          characters: z.array(z.object({
+            replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement character image.'),
+            source_actor_anchor: z.string().min(12).describe('Stable source performer evidence: appearance/costume plus an opening or distinctive action. Left/right alone is invalid.'),
+            replacement_identity: z.string().min(8).describe('Exact replacement face, hair, body, clothing, colors, footwear, and accessories. Whole-person replacement includes clothing unless the user explicitly narrows it.'),
+          })).max(8).optional().describe('Character replacements only. Omit or use [] for object-only or environment-only replication; never put an object in a character role.'),
+          objects: z.array(z.object({
+            replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement object image.'),
+            source_object_anchor: z.string().min(8).describe('Stable source object evidence, including who handles it and its initial/final state or distinctive motion.'),
+            replacement_object: z.string().min(8).describe('Exact replacement object shape, material, color, construction, surface details, and distinctive features.'),
+          })).max(12).optional(),
+          environment: z.object({
+            replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement environment image.'),
+            source_environment_anchor: z.string().min(8).describe('Visible source environment features to remove.'),
+            replacement_environment: z.string().min(8).describe('Replacement environment and its required stable details.'),
+          }).optional().describe('Use only when replacing the environment with a separate image. Omit it to preserve the source environment; never pass the reference video itself as replacement_media_index.'),
+          style_direction: z.string().optional(),
+          additional_exclusions: z.array(z.string()).max(12).optional(),
+        }).nullish().describe('Only used with video_intent="replicate" after complete source-video understanding. Omit or pass null in every other scene; never fabricate placeholder values. Runtime compiles the invariant-heavy provider prompt. Sound remains natural language in story_prompt.'),
         completion_actions: z.array(z.object({
           label: z.string().describe('Short button label shown when the video finishes, e.g. "合入原视频" or "加入剪辑".'),
           prompt: z.string().describe('Natural-language instruction to send back to the agent if the user chooses this action. Include concrete media refs/timing when known. For video segment replacement, include replaceStart, replaceEnd, replacementDuration, and require trimming/fitting the patch before FFmpeg merge so the final duration matches the original.'),
@@ -1530,7 +1581,7 @@ Hard constraints:
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, completion_actions }) => serializeVideoSubmission(async () => {
+      execute: async ({ story_prompt, video_intent, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, replication_contract: suppliedReplicationContract, completion_actions }) => serializeVideoSubmission(async () => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1541,24 +1592,97 @@ Hard constraints:
         if (media_refs?.length) {
           imageUrls = [...(imageUrls || []), ...media_refs.filter(u => u.startsWith('http'))];
         }
+        // Intent is explicit, never inferred from an optional object's presence.
+        // This also makes old all-fields/placeholder calls safe for ordinary I2V.
+        const replication_contract = video_intent === 'replicate' ? suppliedReplicationContract : undefined;
+        let measuredSourceDuration: number | undefined;
+        if (video_intent === 'replicate' && !replication_contract) {
+          return invalidRequest(model, 'video_intent="replicate" requires replication_contract with a real source video. For ordinary generation use video_intent="generate" and omit the contract.');
+        }
+        if (replication_contract && video_operation && video_operation !== 'generate') {
+          return invalidRequest(model, 'replication_contract uses reference-to-video generation. Do not combine it with typed video edit or extend.');
+        }
+        if (replication_contract) {
+          // A poster/photo cannot become a temporal video authority just because
+          // an Agent filled reference_video_media_index. Verify project metadata.
+          const sourceResult = ctx.supabase && await ctx.supabase.from('snapshots')
+            .select('id, type, video_meta').eq('project_id', ctx.projectId).order('sort_order');
+          if (!sourceResult || sourceResult.error) {
+            return invalidRequest(model, 'Could not verify the source video for replication. Resolve the project source video before submitting; do not invent a contract.');
+          }
+          const source = sourceResult.data?.[replication_contract.reference_video_media_index - 1];
+          if (source?.type !== 'video' || !source.video_meta?.videoUrl) {
+            return invalidRequest(model, 'replication_contract.reference_video_media_index must point to a real, ready video, not an image or poster. For photo animation use video_intent="generate" and omit replication_contract.');
+          }
+          const { probeVideoMetadataFromUrl } = await import('./video-metadata');
+          const measured = await probeVideoMetadataFromUrl(source.video_meta.videoUrl);
+          if (!measured?.duration) {
+            return invalidRequest(model, 'Could not measure the source video duration. Provide a readable MP4/MOV source before replication; do not estimate seconds from a visual description.');
+          }
+          // Accept normal container/frame rounding, not a different measured timeline.
+          if (Math.abs(replication_contract.source_duration_seconds - measured.duration) > 0.25) {
+            return invalidRequest(model, `Source duration is ${measured.duration}s from the media container, not ${replication_contract.source_duration_seconds}s. Correct source_duration_seconds and any conflicting shot timing, then resubmit once. Keep the requested output duration separate.`);
+          }
+          measuredSourceDuration = measured.duration;
+        }
+        const effectiveStoryPrompt = replication_contract
+          ? compileVideoReplicationPrompt(story_prompt || 'Exact Video Replication', {
+              referenceVideoMediaIndex: replication_contract.reference_video_media_index,
+              sourceDurationSeconds: measuredSourceDuration!,
+              characters: (replication_contract.characters || []).map(character => ({
+                replacementMediaIndex: character.replacement_media_index,
+                sourceActorAnchor: character.source_actor_anchor,
+                replacementIdentity: character.replacement_identity,
+              })),
+              objects: replication_contract.objects?.map(object => ({
+                replacementMediaIndex: object.replacement_media_index,
+                sourceObjectAnchor: object.source_object_anchor,
+                replacementObject: object.replacement_object,
+              })),
+              environment: replication_contract.environment
+                ? {
+                    replacementMediaIndex: replication_contract.environment.replacement_media_index,
+                    sourceEnvironmentAnchor: replication_contract.environment.source_environment_anchor,
+                    replacementEnvironment: replication_contract.environment.replacement_environment,
+                  }
+                : undefined,
+              styleDirection: replication_contract.style_direction,
+              additionalExclusions: replication_contract.additional_exclusions,
+            })
+          : story_prompt;
         const requestedModel = normalizeVideoModelId(model);
-        const videoSelection = requestedModel === 'sync-lipsync-v3'
+        const replicationAwareToolModel = replication_contract
+          ? resolveVideoReplicationModelId(model)
+          : model;
+        const replicationAwareToolResolution = replication_contract
+          ? resolveVideoReplicationResolution(video_resolution)
+          : video_resolution;
+        const selectedVideoRoute = requestedModel === 'sync-lipsync-v3'
           ? { model: requestedModel, resolution: video_resolution ?? 'auto', locked: false }
           : resolveAgentVideoSelection({
             appModel: (ctx as any).videoModel,
             appResolution: (ctx as any).videoResolution,
             appAuto: (ctx as any).videoAuto,
-            toolModel: model,
-            toolResolution: video_resolution,
+            toolModel: replicationAwareToolModel,
+            toolResolution: replicationAwareToolResolution,
           });
+        const videoSelection = replication_contract
+          ? {
+              ...selectedVideoRoute,
+              resolution: resolveVideoReplicationResolution(selectedVideoRoute.resolution),
+            }
+          : selectedVideoRoute;
         const videoModel = videoSelection.model;
         const isSeedance25Edit = videoModel === 'seedance-2.5' && video_operation === 'edit';
         const videoRoute = resolveVideoGenerationRoute({
           model: videoModel,
           resolution: videoSelection.resolution,
         });
+        if (replication_contract && !getVideoModelCapability(videoModel).supportsVideoReference) {
+          return invalidRequest(videoModel, `${videoRoute.label} cannot replicate a source video. Keep the user's selected model; request a compatible model or use ordinary generation without replication constraints.`);
+        }
         if (!imageUrls?.length && !video_ref_url && !supportsNativeTextToVideo(videoModel)) {
-          return { success: false as const, message: `${videoRoute.label} requires an image or video reference. Use SeeDance, Wan 3.0, Grok Imagine Video, Gemini Omni, or MiniMax H3 for native text-to-video.` };
+          return { success: false as const, message: `${videoRoute.label} requires an image or video reference. Use SeeDance, Wan 3.0, Grok Imagine Video, Gemini Omni, MiniMax H3, or MiniMax H3 Max for native text-to-video.` };
         }
         let reservedVideoCredits = 0;
         const reservationToolName = videoModel === 'grok' ? 'create_video_grok' : 'create_video';
@@ -1568,19 +1692,19 @@ Hard constraints:
           if (resolvedAudioRefs.error) {
             return { success: false as const, message: resolvedAudioRefs.error };
           }
-          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'mulerouter' && videoRoute.provider !== 'minimax' && videoRoute.provider !== 'fal-sync') {
+          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'mulerouter' && videoRoute.provider !== 'minimax' && videoRoute.provider !== 'fal-sync' && videoModel !== 'fal-h3-max') {
             return {
               success: false as const,
               message: videoRoute.provider === 'google-omni'
                 ? 'Google Omni can generate native audio from the prompt, but uploaded audio_refs are not enabled in the current API. Choose seedance-fast, seedance-mini, or seedance for audio_refs, or remove audio_refs and describe the soundtrack for Omni.'
-                : 'Reference audio is only supported by Seedance video models, Wan 3.0, or MiniMax H3, except exact replacement audio with Sync Lipsync v3. Choose a compatible model or remove audio_refs.',
+                : 'Reference audio is only supported by Seedance video models, Wan 3.0, MiniMax H3, or FAL H3 Max, except exact replacement audio with Sync Lipsync v3. Choose a compatible model or remove audio_refs.',
             };
           }
 
           // Video harness: validate before calling API
           const { validateVideoScript } = await import('./video-harness');
           const harnessError = validateVideoScript({
-            prompt: story_prompt,
+            prompt: effectiveStoryPrompt,
             imageCount: imageUrls.length,
             availableMediaIndices: imageUrls.flatMap((url, index) =>
               url && url !== '/video-placeholder.png' ? [index + 1] : [],
@@ -1596,7 +1720,12 @@ Hard constraints:
             operation: video_operation,
           });
           if (harnessError) {
-            return { success: false as const, message: harnessError };
+            return invalidRequest(videoModel, harnessError, {
+              mediaIndices: [...new Set(Array.from(effectiveStoryPrompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), match => Number(match[1])))],
+              videoIntent: video_intent || 'generate',
+              replicationEnabled: Boolean(replication_contract),
+              repair: 'Change the conflicting arguments, not just the prose. For H3 Max use exactly one chosen media marker. Never switch to the original image or a different model merely to bypass validation.',
+            });
           }
 
           // Save first valid image URL (not video) for poster
@@ -1605,7 +1734,7 @@ Hard constraints:
           // Auto-route video references: query DB for snapshot types
           const originalImageUrlsByIndex = [...imageUrls];
           const scriptRefs = [...new Set(
-            Array.from(story_prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), m => Number(m[1]))
+            Array.from(effectiveStoryPrompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), m => Number(m[1]))
           )];
           const autoVideoUrls: string[] = [];
           const sourceVideoSnapshotIds: string[] = [];
@@ -1668,7 +1797,7 @@ Hard constraints:
             };
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
-          if (video_ref_url && autoVideoUrls.length > 0 && videoModel !== 'seedance-2.5' && videoModel !== 'wan-3.0' && videoModel !== 'wan-3.0-pro') {
+          if (video_ref_url && autoVideoUrls.length > 0 && videoModel !== 'seedance-2.5' && videoModel !== 'wan-3.0' && videoModel !== 'wan-3.0-prime') {
             return {
               success: false as const,
               message: 'Do not mix video_ref_url with timeline video markers in one generation. For a local segment edit, pass only the extracted segment as video_ref_url and remove any <<<media_N>>> markers that point to timeline videos.',
@@ -1705,10 +1834,7 @@ Hard constraints:
             operation: video_operation,
           });
           if (modelError) {
-            return {
-              success: false as const,
-              message: modelError,
-            };
+            return invalidRequest(videoModel, modelError);
           }
           const effectiveDuration = resolveVideoOutputDuration({
             requestedDuration: isSeedance25Edit ? undefined : duration,
@@ -1739,8 +1865,8 @@ Hard constraints:
             providerAutoVideoUrls = [];
           }
 
-          const createVideoInput = {
-            script: story_prompt,
+          const createVideoInput: Parameters<typeof createVideo>[0] = {
+            script: effectiveStoryPrompt,
             images: imageUrls,
             duration: effectiveDuration,
             aspectRatio: selectedAspectRatio,
@@ -1763,6 +1889,7 @@ Hard constraints:
             contentFilter: content_filter,
             outputFormat: output_format,
             webSearch: web_search,
+            userId: ctx.userId,
           };
           const isGoogleOmniAsync = videoRoute.provider === 'google-omni';
           if (isGoogleOmniAsync && !ctx.userId) {
@@ -1773,8 +1900,10 @@ Hard constraints:
             .filter(ref => !videoRefIndices.has(ref))
             .map(ref => originalImageUrlsByIndex[ref - 1])
             .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'));
-          const videoSec = effectiveDuration || 10;
-          const creditsRequired = getRequiredVideoCredits({
+          const videoSec = effectiveDuration === -1
+            ? referenceVideoDuration ?? 10
+            : effectiveDuration || 10;
+          let billingQuote = await quoteVideo({
             model: videoModel,
             resolution: videoRoute.resolution,
             durationSec: videoSec,
@@ -1786,13 +1915,12 @@ Hard constraints:
             contentFilter: content_filter,
           });
 
-          if (ctx.userId) {
+          let creditsRequired = billingQuote.credits;
+          const reserveGrokApiCredits = async () => {
+            if (!ctx.userId || reservedVideoCredits > 0) return;
             const creditCheck = await requireCredits(ctx.userId, creditsRequired);
             if (!creditCheck.ok) {
-              return {
-                success: false as const,
-                message: `Insufficient credits. This video needs ${creditsRequired} credits, but the current balance is ${creditCheck.balance}.`,
-              };
+              throw new Error(`Insufficient credits. This video needs ${creditsRequired} credits, but the current balance is ${creditCheck.balance}.`);
             }
             try {
               const reservation = await deductFixedCredits(
@@ -1805,12 +1933,26 @@ Hard constraints:
               reservedVideoCredits = reservation.charged;
             } catch (error) {
               if (isInsufficientCreditsError(error)) {
-                return {
-                  success: false as const,
-                  message: `Insufficient credits. This video needs ${error.required} credits, but the current balance is ${error.balance}.`,
-                };
+                throw new Error(`Insufficient credits. This video needs ${error.required} credits, but the current balance is ${error.balance}.`);
               }
               throw error;
+            }
+          };
+          const grokSubscriptionPreferred = videoModel === 'grok'
+            && await isGrokSubscriptionAllowedUser(ctx.userId);
+          if (grokSubscriptionPreferred) {
+            createVideoInput.onBeforeGrokApiFallback = reserveGrokApiCredits;
+          } else if (videoRoute.provider === 'fal-h3-max' && ctx.userId) {
+            createVideoInput.onBeforeProviderSubmit = async usage => {
+              billingQuote = await quoteVideo(usage);
+              creditsRequired = billingQuote.credits;
+              await reserveGrokApiCredits();
+            };
+          } else if (ctx.userId) {
+            try {
+              await reserveGrokApiCredits();
+            } catch (error) {
+              return { success: false as const, message: error instanceof Error ? error.message : String(error) };
             }
           }
 
@@ -1868,14 +2010,14 @@ Hard constraints:
           const videoMeta: import('@/types').VideoMeta = {
             taskId,
             videoUrl: skillResult.videoUrl || null,
-            prompt: story_prompt,
+            prompt: effectiveStoryPrompt,
             sourceSnapshotIds: sourceVideoSnapshotIds,
             sourceUrls: sourceUrls.length > 0 ? sourceUrls : (originalFirstUrl ? [originalFirstUrl] : []),
             status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
             duration: resolvePersistedVideoDuration({
               model: actualVideoModel,
               operation: video_operation,
-              outputDuration: effectiveDuration,
+              outputDuration: effectiveDuration === -1 ? referenceVideoDuration : effectiveDuration,
               referenceVideoDuration,
             }) || null,
             model: actualVideoModel as import('@/types').VideoModel,
@@ -1883,11 +2025,13 @@ Hard constraints:
             aspectRatio: selectedAspectRatio,
             providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
             providerMode: actualVideoRoute.providerMode,
+            provider: skillResult.provider,
             operation: video_operation || 'generate',
             contentFilter: actualVideoModel === 'seedance-2.5' ? content_filter !== false : undefined,
             providerUrl: skillResult.videoUrl,
             createdAt: new Date().toISOString(),
             creditsCharged: reservedVideoCredits,
+            ...(reservedVideoCredits > 0 ? { billingQuote } : {}),
             ...(completion_actions?.length ? {
               completionActions: completion_actions.slice(0, 4).map(action => ({
                 label: action.label,
@@ -1916,15 +2060,7 @@ Hard constraints:
           }
           reservedVideoCredits = 0;
 
-          const providerCostUsd = estimateVideoProviderCostUsd({
-            model: actualVideoModel,
-            resolution: actualVideoRoute.resolution,
-            durationSec: videoSec,
-            imageCount: referencedImageUrls.length,
-            referenceVideoDurationSec: referenceVideoDuration,
-            operation: video_operation,
-            contentFilter: content_filter,
-          });
+          const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote.supplierCostUsd;
           if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd;
 
           if (!isGoogleOmniAsync && skillResult.status === 'completed' && skillResult.videoUrl && ctx.userId && !isPermanentUrl(skillResult.videoUrl)) {
@@ -1948,6 +2084,19 @@ Hard constraints:
           }
           await supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId);
 
+          if (skillResult.provider === 'grok-subscription' && ctx.userId) {
+            try {
+              await recordSubscriptionUsage(
+                ctx.userId,
+                'grok-subscription',
+                reservationToolName,
+                skillResult.providerModel || actualVideoRoute.providerModel || actualVideoModel,
+              );
+            } catch (error) {
+              console.error('[billing] generate_animation subscription usage logging error:', error);
+            }
+          }
+
           if (isGoogleOmniAsync && ctx.userId) {
             runGoogleOmniVideoSnapshotAfterResponse({
               userId: ctx.userId,
@@ -1965,7 +2114,13 @@ Hard constraints:
             ? 'Grok is usually around 30-40 seconds.'
             : actualVideoModel === 'google-omni'
               ? 'Google Omni is usually around 30-70 seconds, then a short Storage handoff.'
-              : 'Rendering usually takes 3-5 minutes.';
+              : actualVideoModel === 'fal-h3-max'
+                ? (createVideoInput.videoUrl || createVideoInput.videoUrls?.length
+                  ? 'fal H3 Max with video references may take around 1-2 minutes; shorter references can finish in tens of seconds. Queue and saving time can vary.'
+                  : 'fal H3 Max usually finishes in tens of seconds. Queue and saving time can vary.')
+                : actualVideoModel === 'minimax-h3-max'
+                  ? 'fal H3 Turbo usually finishes in tens of seconds. Queue and saving time can vary.'
+                  : 'Rendering usually takes 3-5 minutes.';
           return {
             success: true as const,
             taskId,
@@ -1989,7 +2144,7 @@ function createAnalyzeImageTool(
   { ctx, runtime, locale }: AgentToolFactoryScope,
 ) {
   return tool({
-      description: 'See and analyze one timeline photo. Before calling, read that item\'s Media Index description: a specific description is existing media understanding regardless of which pipeline or Agent supplied it. Do not call this tool merely to restate covered content. Use it only when the description/evidence is missing, generic, failed, uncertain, or a concrete visual detail required by the user is not covered. A current upload batch is pre-analyzed in parallel into the Verified current upload batch block; consume that evidence instead of spending one tool round per image. This tool remains appropriate for red annotations, uncertain target regions, identity/detail inspection, ambiguous edits, or deeper questions. Do not call it before clear direct generate_image edits; generate_image already receives selected media. Use media_index to look at any snapshot in the timeline.',
+      description: 'See and analyze one timeline photo that was not already attached to the current Agent request. Before calling, read that item\'s Media Index description and the current-request image markers. A multimodal Agent receives relevant current/uploaded images directly with the user text, so inspect those pixels without calling this tool. A text-only Agent receives verified Gemini bridge evidence for current upload batches. Use this tool only for a different Timeline image whose pixels were not attached and whose evidence is missing, generic, failed, uncertain, or insufficient for a concrete visual question. Do not call it before clear direct generate_image edits; generate_image already receives selected media. Use media_index to look at any snapshot in the timeline.',
       inputSchema: z.object({
         question: z.string().optional().describe('Optional focus area for the analysis'),
         media_index: z.number().optional().describe('1-based index of the snapshot to analyze (<<<media_1>>> = 1, etc.). Omit to analyze the current image.'),
@@ -2029,12 +2184,11 @@ function createAnalyzeImageTool(
 
       toModelOutput({ output }: { output: any }) {
         if (output.analysis) {
-          const languageRule = getReplyLanguageInstruction(locale).replace(/^Reply/, 'Answer the user');
           return {
             type: 'content' as const,
             value: [{
               type: 'text' as const,
-              text: `${output.analysis}\n\nUse the analysis above as visual evidence. ${languageRule}`,
+              text: `${output.analysis}\n\nUse the analysis above as visual evidence.`,
             }],
           };
         }
@@ -3295,8 +3449,8 @@ function createPreviewFrameTool(
       description: `Capture one visual frame or a 2-6 frame contact sheet.
 Use media_index to target any timeline snapshot. Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg.
 When design_path is provided it is authoritative; media_index is ignored. Do not combine them to identify the same composition.
-For raw video snapshots: use timestamp to see specific moments in the actual MP4/MOV/WebM.
-For understanding video content (what happens, scenes, pacing), use analyze_video instead.
+For raw video snapshots: use timestamp for one moment, or timestamps/frames for a 2-6 frame contact sheet from the actual MP4/MOV/WebM.
+For understanding complete video content, use analyze_video first. If it fails or lacks temporal evidence, use one representative raw-video contact sheet as the deterministic visual fallback.
 Omit media_index to use the current (last edited) composition.
 For Studio Run review, prefer one call with frames or timestamps for hook/body/end. It renders the frames concurrently and returns one labeled contact sheet plus the individual workspace paths.
 Returns the rendered image so you can see it with your vision.`,
@@ -3305,12 +3459,12 @@ Returns the rendered image so you can see it with your vision.`,
         design_path: z.string().optional().describe('Workspace path of an autosaved or persisted Remotion composition. Use the exact path returned by run_code or shown in Recoverable Composition Draft.'),
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
-        frames: z.array(z.number()).min(2).max(6).optional().describe('For a composition contact sheet: 2-6 frame numbers rendered in one call. Prefer three representative hook/body/end frames for Studio Run review.'),
-        timestamps: z.array(z.number()).min(2).max(6).optional().describe('For a composition contact sheet: 2-6 timestamps in seconds. Use instead of frames.'),
+        frames: z.array(z.number()).min(2).max(6).optional().describe('For a composition or raw-video contact sheet: 2-6 frame numbers rendered/extracted in one call.'),
+        timestamps: z.array(z.number()).min(2).max(6).optional().describe('For a composition or raw-video contact sheet: 2-6 timestamps in seconds. Prefer representative opening/action/impact/ending moments.'),
         question: z.string().optional().describe('What to focus on when viewing this frame.'),
       }),
       execute: async ({ media_index, design_path, frame, timestamp, frames, timestamps, question }) => {
-        const analyzeDurablePreview = async (image: Buffer, fallback: string) => {
+        const analyzeDurablePreview = async (image: Buffer, _fallback: string) => {
           if (!durableVisionBridge) return undefined;
           try {
             const { analyzeImageContent } = await import('./gemini');
@@ -3321,7 +3475,7 @@ Returns the rendered image so you can see it with your vision.`,
             );
           } catch (error) {
             console.warn('[preview_frame] durable vision bridge failed:', error);
-            return fallback;
+            return undefined;
           }
         };
         let design = (ctx as any).__lastDesignPayload;
@@ -3392,7 +3546,111 @@ Returns the rendered image so you can see it with your vision.`,
 
         const batchRequested = Boolean(frames?.length || timestamps?.length);
         if (batchRequested && rawVideo) {
-          return { error: 'Batch contact sheets currently target Remotion compositions. For raw video understanding use analyze_video, or call preview_frame once per required timestamp.' };
+          if (!rawVideo.url) return { error: `No video URL found at <<<media_${targetMediaIndex}>>>.` };
+          const videoFps = rawVideo.fps || 30;
+          const maxTimestamp = rawVideo.duration && rawVideo.duration > 0
+            ? Math.max(0, rawVideo.duration - (1 / videoFps))
+            : undefined;
+          const requestedTimestamps = frames?.length
+            ? frames.map(value => Math.max(0, Math.round(value)) / videoFps)
+            : (timestamps || []);
+          const targetTimestamps = [...new Set(requestedTimestamps.map(value => {
+            const clamped = Math.max(0, maxTimestamp !== undefined ? Math.min(value, maxTimestamp) : value);
+            return Number(clamped.toFixed(3));
+          }))];
+          if (targetTimestamps.length < 2) {
+            return { error: 'Contact sheet timestamps collapse to fewer than two unique in-range moments.' };
+          }
+
+          try {
+            const { extractVideoFrame } = await import('./video-frame');
+            const { createContactSheet } = await import('./contact-sheet');
+            const sourceStart = rawVideo.sourceRange?.start_sec || 0;
+            const sourceTimestamps = targetTimestamps.map(value => sourceStart + value);
+            const rendered = await Promise.all(sourceTimestamps.map(value =>
+              extractVideoFrame(rawVideo.url, { timestamp: value })
+            ));
+            const firstMetadata = await sharp(rendered[0]).metadata();
+            const sourceWidth = firstMetadata.width || 1280;
+            const sourceHeight = firstMetadata.height || 720;
+            const targetFrames = targetTimestamps.map(value => Math.max(0, Math.round(value * videoFps)));
+            const stamp = Date.now();
+            const framePaths = targetTimestamps.map(value =>
+              `${ctx.projectId}/drafts/video-media${targetMediaIndex || 'current'}-t${value.toFixed(2).replace('.', '-')}-${stamp}.jpg`
+            );
+            const frameUrls: string[] = [];
+            const userId = ctx.userId;
+            if (ctx.supabase && userId) {
+              const writes = await Promise.all(rendered.map((jpegBuffer, index) =>
+                workspace.writeFile(framePaths[index]!, jpegBuffer, ctx.supabase!, userId, 'image/jpeg')
+              ));
+              writes.forEach((write, index) => {
+                if (!write.storageUrl) return;
+                const storageUrl = toPublicStorageUrl(write.storageUrl);
+                frameUrls[index] = storageUrl;
+                rememberWorkspaceMediaOutputs(ctx, [{
+                  path: framePaths[index],
+                  storageUrl,
+                  contentType: 'image/jpeg',
+                  description: `raw video frame at ${targetTimestamps[index]?.toFixed(2)}s`,
+                  updatedAt: new Date().toISOString(),
+                }]);
+              });
+            }
+
+            const contactSheet = await createContactSheet(
+              rendered.map((image, index) => ({
+                image,
+                label: `#${index + 1} ${targetTimestamps[index]?.toFixed(1)}s`,
+              })),
+              sourceWidth,
+              sourceHeight,
+            );
+            const contactSheetPath = `${ctx.projectId}/drafts/video-media${targetMediaIndex || 'current'}-contact-${stamp}.jpg`;
+            let workspaceUrl = '';
+            if (ctx.supabase && userId) {
+              const write = await workspace.writeFile(contactSheetPath, contactSheet, ctx.supabase, userId, 'image/jpeg');
+              if (write.storageUrl) {
+                workspaceUrl = toPublicStorageUrl(write.storageUrl);
+                rememberWorkspaceMediaOutputs(ctx, [{
+                  path: contactSheetPath,
+                  storageUrl: workspaceUrl,
+                  contentType: 'image/jpeg',
+                  description: `raw video contact sheet at ${targetTimestamps.join(', ')}s`,
+                  updatedAt: new Date().toISOString(),
+                }]);
+              }
+            }
+
+            console.log(`🖼️ [agent] preview_frame: raw video contact sheet ${targetTimestamps.join(',')}s (${(contactSheet.length / 1024).toFixed(0)} KB)`);
+            const analysis = await analyzeDurablePreview(
+              contactSheet,
+              'The raw-video contact sheet rendered successfully. Use its attached pixels as temporal evidence.',
+            );
+            return {
+              base64Data: contactSheet.toString('base64'),
+              mimeType: 'image/jpeg',
+              analysis,
+              source: 'video-contact-sheet',
+              frames: targetFrames,
+              timestamps: targetTimestamps,
+              sourceTimestamps,
+              sourceRange: rawVideo.sourceRange,
+              framePaths,
+              frameUrls,
+              totalFrames: rawVideo.duration && rawVideo.duration > 0
+                ? Math.max(1, Math.round(rawVideo.duration * videoFps))
+                : undefined,
+              fps: videoFps,
+              question,
+              workspaceUrl,
+              workspacePath: contactSheetPath,
+            };
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`⚠️ [agent] preview_frame raw video contact sheet failed: ${msg}`);
+            return { error: `Failed to extract raw-video contact sheet: ${msg}` };
+          }
         }
 
         if (batchRequested && design) {
@@ -3787,7 +4045,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
           return { base64Data: raw, mimeType: result.contentType, path: filePath };
         }
 
-        return { content: result.content, type: result.contentType, path: filePath };
+        return { content: ctx.corePromptMode === 'legacy' ? result.content : bundleAgentPrompt(filePath, result.content), type: result.contentType, path: filePath };
       },
 
       toModelOutput({ output }: { output: any }) {
@@ -3899,7 +4157,7 @@ Path is auto-generated from the current project and output type. Just provide a 
           start: z.number().nonnegative().optional(),
           end: z.number().positive().optional(),
           description: z.string().min(1).optional(),
-        })).max(20).optional().describe('Publish external image or video media directly to the current Media List without uploading derivatives. Preserve Scene type="image" or type="video" when available. Images need source_url + type + description; videos also require start + end. Older callers may omit type, in which case the server detects it once from MIME/file bytes. Put known media analysis into description so later Agent turns can use it without repeating Analyze.'),
+        })).max(20).optional().describe('Publish external image or video media to the current Media List. HEIC images are converted to durable JPEG URLs; compatible images and video ranges retain source URLs. Preserve Scene type="image" or type="video" when available. Images need source_url + type + description; videos also require start + end. Older callers may omit type, in which case the server detects it once from MIME/file bytes. Put known media analysis into description so later Agent turns can use it without repeating Analyze.'),
         workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
         limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),
@@ -3941,16 +4199,17 @@ Path is auto-generated from the current project and output type. Just provide a 
             const published = await publishExternalVideoRanges({
               supabase: ctx.supabase,
               projectId: ctx.projectId,
+              userId: ctx.userId,
               ranges: sourceRanges,
             });
             await refreshSnapshotUrls(ctx);
             if (published.length) ctx.currentSnapshotIndex = published[published.length - 1].mediaIndex - 1;
             return {
               success: true,
-              message: `Published ${published.length} external media item${published.length === 1 ? '' : 's'} to the current Media List without uploading derivatives:\n${published.map((item, index) => item.sourceRange
+              message: `Published ${published.length} external media item${published.length === 1 ? '' : 's'} to the current Media List:\n${published.map((item, index) => item.sourceRange
                 ? `${index + 1}. ${item.ref} [video] source_url=${item.sourceRange.source_url} start=${item.sourceRange.start_sec} end=${item.sourceRange.end_sec}\n   Media description: ${item.description}`
                 : `${index + 1}. ${item.ref} [image] source_url=${item.url}\n   Media description: ${item.description}`
-              ).join('\n')}\nThese refs are available immediately to later tools in this same Agent session. Video refs are bounded to their source ranges; image refs use their source URL directly. Their Media List descriptions are existing media understanding; consume covered content directly and call Analyze only for missing or uncovered details.`,
+              ).join('\n')}\nThese refs are available immediately to later tools in this same Agent session. Video refs are bounded to their source ranges; image refs use browser-compatible URLs (HEIC images are converted to JPEG). Their Media List descriptions are existing media understanding; consume covered content directly and call Analyze only for missing or uncovered details.`,
               published,
             };
           } catch (error) {
@@ -4212,37 +4471,7 @@ function createRunCodeTool(
   { ctx }: AgentToolFactoryScope,
 ) {
   return tool({
-      description: `Execute JavaScript.
-
-Before first use, read \`prompts/agent-coding.md\`, plus \`prompts/remotion-composition.md\` for Remotion/editable compositions. For new compositions or major visual/timing patches, follow \`skills/_shared/remotion-director-contract.md\` and its required references. Studio Run uses the same original Composition and Director guidance; it does not replace them with a compact creative prompt. For real file-level MP4 splitting, exact trimming/export, transcode, frames, audio muxing, long-video preparation, or final assembly of generated chunks, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
-
-Runtimes:
-- \`runtime: "composition"\`: Remotion/editable composition draft, animated template, overlay, sharp utility.
-- \`runtime: "design"\` or omitted: legacy alias for \`runtime: "composition"\`.
-- \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real file-level media operations. Never use node as a fallback for ordinary editable timeline splicing of existing videos.
-
-Return exactly one supported shape:
-- \`{ type: 'render', code, width, height, props?, animation?, fontSubstitutions? }\`
-- \`{ type: 'composition', code, width, height, props?, animation?, fontSubstitutions? }\` — alias for \`render\`
-- \`{ type: 'patch', edits?, props?, fontSubstitutions?, code_path? }\`
-- \`{ type: 'image', data, mimeType }\`
-- \`{ type: 'video', path, contentType?, description?, duration?, width?, height? }\`
-- \`{ type: 'files', outputs: [{ path, contentType, description? }] }\`
-- \`{ type: 'text', content }\`
-- \`{ type: 'error', message }\`
-
-For substantial normal Agent Run coding, prefer \`write_code_file\` followed by \`run_code({ code_path })\`. This exposes real source progress, persists the program before execution, and keeps it patchable across turns. For a small patch or utility, inline \`code\` remains available. The top-level \`composition\` input remains available for direct first-draft payloads.
-
-When \`write_code_file\` uses \`runtime: "composition"\`, it may contain a natural JS/TS/JSX/TSX Remotion module with imports/exports and a top-level Composition, or the legacy outer JavaScript body. For a new natural module, provide width/height/animation through the optional \`composition\` metadata on run_code; code_path supplies the source, so do not repeat it.
-
-For durable Composition work, use \`write_file\` to author numbered source parts. Every file MUST be under \`<project-id>/drafts/composition-parts/\` and use a numeric prefix of at least two digits plus a lowercase slug. Each file has a hard transport limit of 12000 source characters. There is no aggregate source-size or part-count limit. Files are concatenated by numeric prefix into one scope, so do not use import/export. Preserve approved narration, subtitles, scenes, animation, and visual detail; never trim creative content to satisfy a source-size target. Saving a part automatically assembles, validates, and autosaves the workspace. The legacy composition_parts input remains available for recovery and explicit subsets, but do not call it merely to assemble a directory that write_file has already compiled.
-
-For a 30s+ first composition, author numbered composition parts until write_file reports compositionWorkspace.status="ready". Use scene data arrays and shared components where they help, but do not impose an aggregate source-size target or trim approved creative detail. Preview or patch the returned designPath directly; no assembly-only run_code call is needed.
-
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; the props-first editable text/image/video/trim contract lives in \`prompts/remotion-composition.md\` and applies by default to composition render/patch outputs. New composition output should omit explicit editables metadata; the runtime infers and persists it from natural prop reads. Do not add editables to \`runtime:"node"\` media exports or external image/video tool outputs. Use only the pinned font catalog in \`prompts/remotion-composition.md\`; never use Apple/local/system font names. \`fontSubstitutions\` is only for an explicit persisted migration of an old composition, never for silently choosing a lookalike. Keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
-For legacy first-draft calls without \`composition\`, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
-
-Node media runtime provides a standard isolated Node environment with \`require\`, ESM/CommonJS, JS/TS/JSX/TSX compilation, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Normal Node built-ins are available. Bare npm packages may be required directly; a missing package is installed inside the disposable Sandbox on first use. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If execution reports a real code or dependency error, inspect it and keep repairing the same saved program until it succeeds; do not abandon the user-visible result. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition and continue.`,
+      description: "Execute JavaScript. Before writing or executing code, read prompts/agent-coding.md once; it returns the full execution, persistence, runtime, and verification contracts. For editable Remotion also read prompts/remotion-composition.md and, for new or major visuals, skills/_shared/remotion-director-contract.md. For file-level MP4 work read skills/video-ffmpeg-lab/SKILL.md. Substantial code: write_code_file then run_code(code_path). Short patches/utilities may use inline code. Use composition for editable work (design is its legacy alias); node for file operations. Pass timeline indices in media_refs and workspace files in workspace_paths. Return one supported result object as documented by the coding guide. Do not fall back to node for imperfect editable previews; repair the saved composition.",
       inputSchema: z.object({
         code: z.string().optional().describe('JavaScript code to execute. Required for node, patch, image, and legacy calls. For a first Remotion draft prefer the direct composition input instead.'),
         code_path: z.string().optional().describe('Workspace code file created by write_code_file. Preferred for substantial normal Agent Run coding; run_code reads and executes the saved source without repeating it in tool history.'),
@@ -4292,11 +4521,15 @@ Node media runtime provides a standard isolated Node environment with \`require\
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
         media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
+        target_aspect_ratio: z.string().regex(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/).refine(value => {
+          const [width, height] = value.split(':').map(Number);
+          return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 && Number.isFinite(width / height);
+        }, 'Use a positive width:height ratio').optional().describe('Composition only: output aspect explicitly requested by the user, e.g. "9:16", "16:9", "1:1", or "4:5". Pass on every run/patch when reframing source footage. Overrides the default source-aspect constraint and validates the returned canvas against this target. Keep sources proportional using contain/background; crop only when authorized. Omit when no output aspect/reframe was requested; do not invent a target just to bypass a validation error.'),
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }).refine(value => Boolean(value.code || value.code_path || value.composition?.code || value.composition_parts), {
         message: 'Provide executable code, a code_path, a direct composition payload, or durable composition parts.',
       }),
-      execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime }) => {
+      execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime, target_aspect_ratio }) => {
         let executableCode = code || '';
         if (code_path) {
           if (!ctx.supabase || !ctx.userId) {
@@ -4496,8 +4729,13 @@ Node media runtime provides a standard isolated Node environment with \`require\
               const v = validateImageIndex(ctx.snapshotImages, ref);
               if (v.error) return { type: 'text' as const, content: v.error };
             }
-            const stillMediaRefs = media_refs.filter(ref => !isVideoUrl(ctx.snapshotImages[ref - 1]));
-            const skippedVideoRefs = media_refs.filter(ref => isVideoUrl(ctx.snapshotImages[ref - 1]));
+            const snapshotRows = await refreshSnapshotUrls(ctx);
+            if (ctx.supabase && ctx.projectId && !snapshotRows.length) {
+              throw new Error('Unable to load timeline media types for composition inputs.');
+            }
+            const { stillMediaRefs, skippedVideoRefs } = partitionCompositionMediaRefs(
+              media_refs, ctx.snapshotImages, snapshotRows,
+            );
             preloadedImages = await Promise.all(
               stillMediaRefs.map(ref => fetchImageBuffer(ctx.snapshotImages[ref - 1]))
             );
@@ -4709,7 +4947,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
               props: resolvedProps,
               width: result.width,
               height: result.height,
-            });
+            }, target_aspect_ratio);
             if (aspectError) {
               return { type: 'text' as const, content: aspectError };
             }
@@ -5061,7 +5299,7 @@ export function createTools(ctx: AgentContext, runtime: AgentModelRuntime, local
     serializeVideoSubmission,
   };
 
-return {
+const tools = preserveOptionalToolFields({
     generate_image: createGenerateImageTool(scope),
 
     generate_animation: createGenerateAnimationTool(scope),
@@ -5102,7 +5340,12 @@ return {
 
     generate_audio: createGenerateAudioTool(scope),
 
-  };
+  }, runtime.spec.provider);
+  if (ctx.corePromptMode === 'legacy') {
+    tools.generate_animation.description = legacyVideoTool;
+    tools.run_code.description = legacyCodingTool;
+  }
+  return tools;
 }
 
 /** Keep tool prompt telemetry independent from the Agent runner module. */

@@ -59,9 +59,11 @@ function loadAllowedUserIds() {
     try {
       const parsed = JSON.parse(readFileSync(ALLOWLIST_PATH, 'utf8'));
       if (Array.isArray(parsed?.userIds)) return normalizeAllowedUserIds(parsed.userIds);
+      throw new Error('invalid persisted allowlist');
     } catch (error) {
       if (error?.code !== 'ENOENT') {
         console.error(`[makaron-codex-relay] unable to read persisted allowlist: ${safeError(error)}`);
+        return normalizeAllowedUserIds([]);
       }
     }
   }
@@ -149,6 +151,9 @@ export function verifyRelayRequest({ method, pathname, headers, body, now = Date
   }
   if (!allowedUserIds.has(userId)) {
     return { ok: false, status: 403, error: 'not_allowlisted' };
+  }
+  if (pathname === '/v1/allowlist' && userId !== OWNER_USER_ID) {
+    return { ok: false, status: 403, error: 'owner_required' };
   }
   const numericTimestamp = Number(timestamp);
   if (!Number.isFinite(numericTimestamp) || Math.abs(now - numericTimestamp) > SIGNATURE_WINDOW_MS) {
@@ -398,12 +403,13 @@ export function createRelayServer() {
       sendJson(res, 200, { ok: true });
       return;
     }
-    if (req.method !== 'POST' || !['/v1/responses', '/v1/usage', '/v1/allowlist'].includes(url.pathname)) {
+    const isAllowlistRead = req.method === 'GET' && url.pathname === '/v1/allowlist';
+    if (!isAllowlistRead && (req.method !== 'POST' || !['/v1/responses', '/v1/usage', '/v1/allowlist'].includes(url.pathname))) {
       sendJson(res, 404, { error: 'not_found' });
       return;
     }
     try {
-      const body = await readBody(req);
+      const body = isAllowlistRead ? Buffer.alloc(0) : await readBody(req);
       const verified = verifyRelayRequest({
         method: req.method,
         pathname: url.pathname,
@@ -415,8 +421,12 @@ export function createRelayServer() {
         return;
       }
       if (url.pathname === '/v1/allowlist') {
+        if (isAllowlistRead) {
+          sendJson(res, 200, { userIds: [...allowedUserIds] });
+          return;
+        }
         const payload = JSON.parse(body.toString('utf8'));
-        if (!Array.isArray(payload?.userIds)) {
+        if (!Array.isArray(payload?.userIds) || !payload.userIds.every(id => typeof id === 'string')) {
           sendJson(res, 400, { error: 'invalid_allowlist' });
           return;
         }

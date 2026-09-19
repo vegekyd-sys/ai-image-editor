@@ -3,8 +3,9 @@ import { after } from 'next/server'
 import { authenticateRequest } from '@/lib/api-auth'
 import {
   createRemotionExportJob,
+  drainRemotionExportQueue,
   resolveRemotionExportDownloadUrl,
-  runRemotionExportJob,
+  shouldRunRemotionExportInline,
   type RemotionExportOutputType,
   type RemotionRenderProfile,
 } from '@/lib/remotion-export'
@@ -13,10 +14,6 @@ export const maxDuration = 1800
 
 function appUrl(req: NextRequest): string {
   return process.env.MAKARON_APP_URL || new URL(req.url).origin
-}
-
-function shouldRunInlineExportFallback(): boolean {
-  return process.env.REMOTION_EXPORT_INLINE_AFTER !== 'false'
 }
 
 export async function POST(req: NextRequest) {
@@ -62,12 +59,12 @@ export async function POST(req: NextRequest) {
       name,
     })
 
-    if (shouldRunInlineExportFallback()) {
+    if (shouldRunRemotionExportInline()) {
       after(async () => {
         try {
-          await runRemotionExportJob(job.id)
+          await drainRemotionExportQueue({ source: 'api/remotion/export' })
         } catch (err) {
-          console.error('[remotion/export] job failed:', err)
+          console.error('[remotion/export] queue drain failed:', err)
         }
       })
     }

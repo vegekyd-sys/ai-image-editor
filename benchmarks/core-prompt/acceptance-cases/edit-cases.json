@@ -1,0 +1,36 @@
+[
+  {
+    "id": "accept-video-edit",
+    "domain": "video",
+    "video": true,
+    "prompt": "给 @1 原视频里的橘猫加一条蓝色针织围巾，保留同一只猫、全部动作、镜头、房间、原时长。使用 Grok 视频编辑，480p，直接生成不用确认。",
+    "mediaDescription": "<<<media_1>>> original video: orange cat walking toward window in warm sunlit room, 5.0s, 1280x720. Current selection media_1.",
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md",
+      "skills/video-edit/SKILL.md"
+    ],
+    "args": {
+      "model": "grok",
+      "video_resolution": "480p",
+      "video_operation": "edit"
+    },
+    "videoUrls": [
+      "REPLACE_WITH_UPLOADED_QA_SOURCE_VIDEO_URL"
+    ],
+    "referenceVideoMetas": [
+      {
+        "width": 1280,
+        "height": 720,
+        "durationSec": 5.0,
+        "fileSizeBytes": 2124219
+      }
+    ],
+    "quality": [
+      "scarf tracks cat",
+      "same motion timing",
+      "same room and camera",
+      "same duration"
+    ]
+  }
+]

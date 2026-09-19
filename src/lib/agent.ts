@@ -2,6 +2,9 @@ import { streamText } from 'ai';
 import type { ModelMessage } from 'ai';
 import type { ModelId } from './models/types';
 import agentPrompt from './prompts/agent.md';
+import legacyAgentPrompt from './prompts/legacy/agent.md';
+import legacyWorkspaceAuthoring from './prompts/legacy/workspace-authoring.md';
+import { getCorePromptMode, type CorePromptMode } from './core-prompt-mode';
 import type { VideoModel } from '@/types';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
@@ -9,8 +12,8 @@ import { normalizeAgentErrorMessage } from './agent-error';
 import { compositionPartsPrefix } from './composition-parts';
 import {
   resolveCodexSubscriptionFallbackProvider,
+  type AgentModelProvider,
   type AgentModelPreference,
-  type GPT56AgentProvider,
 } from './agent-models';
 import {
   createAgentModelRuntime,
@@ -24,6 +27,7 @@ import {
 } from './agent-terminal';
 import {
   isCodexSubscriptionTerminalFailure,
+  isGrokSubscriptionTerminalFailure,
   isRetryableProviderOutage,
   type DurableExecutionRef,
 } from './agent-execution';
@@ -35,6 +39,10 @@ import {
 } from './locales';
 import { getSkillLaunchSystemDirective, type SkillLaunchContext } from './skill-launch-context';
 import { buildAgentOutputLanguageDirective } from './agent-response-policy';
+import {
+  buildNativeVisionUserContent,
+  type NativeVisionImageInput,
+} from './agent-image-analysis';
 import * as workspace from './workspace';
 import {
   createTools,
@@ -56,8 +64,8 @@ export type { AgentStreamEvent } from './agent-tools';
 // System prompt (bundled via webpack asset/source)
 // ---------------------------------------------------------------------------
 
-function getAgentSystemPrompt(): string {
-  return agentPrompt;
+function getAgentSystemPrompt(mode: CorePromptMode): string {
+  return mode === 'legacy' ? legacyAgentPrompt : agentPrompt;
 }
 
 function* flushPendingImageSnapshots(ctx: AgentContext): Generator<AgentStreamEvent> {
@@ -91,8 +99,8 @@ function estTokens(chars: number): number {
 
 /** Build system prompt with lightweight skill manifest (not full templates) */
 
-async function buildSystemPrompt(supabase?: any, userId?: string, projectId?: string): Promise<string> {
-  const base = getAgentSystemPrompt();
+export async function buildSystemPrompt(supabase?: any, userId?: string, projectId?: string, mode: CorePromptMode = 'layered'): Promise<string> {
+  const base = getAgentSystemPrompt(mode);
   const manifest = await workspace.getSkillManifest(supabase, userId);
   const projectPath = projectId ? `${projectId}/` : '';
   const workspaceSection = `
@@ -108,19 +116,7 @@ Tools: \`list_files\`, \`read_file\`, \`write_code_file\`, \`write_file\`, \`del
 - **Project-level** (current project): \`${projectPath}code/\`${projectId ? ` — save composition/code files here` : ''}
 - **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
 
-### run_code
-Execute JavaScript in two modes:
-- \`runtime: "composition"\` for Remotion/editable composition drafts, animated templates, overlays, and sharp utilities. \`runtime: "design"\` is a legacy alias.
-- \`runtime: "node"\` for real file-level MP4 work with FFmpeg/FFprobe: split, exact trim/export, transcode, extract frames, mux audio, long-video preparation, and final assembly of generated chunks.
-For finished single images, posters, infographics, and marketing graphics, use \`generate_image\` instead unless the user asks for editable or animated code.
-For substantial normal Agent Run code, write the complete program with \`write_code_file\`, then execute its returned workspace path with \`run_code({ code_path })\`. The user sees the real source as it streams, and the file remains available for recovery and later edits. Inline code is for short patches and utilities; Studio Run may use numbered composition parts for long compositions.
-For composition files, either save a natural JS/TS/JSX/TSX Remotion module (imports/exports and a top-level Composition are accepted) or the legacy executable body that returns \`{ type: 'render', code, width, height, ... }\`. When a natural module is new and has no existing composition dimensions to inherit, pass its width/height/animation as \`run_code.composition\` metadata without repeating the source.
-Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
-
-### Creating skills
-Before writing a new skill, read \`skills/SKILL_README.md\` first — it has the exact format (YAML frontmatter + markdown body). Also read an existing skill (e.g. \`skills/makaron-mascot/SKILL.md\`) as a reference.
-
-A good skill is **reusable across any project** — it describes a style, technique, or character, not a specific photo.
+${mode === 'legacy' ? legacyWorkspaceAuthoring : 'Before coding, read `prompts/agent-coding.md` once. Before creating a reusable skill, read `skills/SKILL_README.md` and an existing skill (for example `skills/makaron-mascot/SKILL.md`). Skills must work across projects; describe a style, technique, or character, not one photo.'}
 
 ${manifest}
 `;
@@ -148,7 +144,7 @@ ${manifest}
   const memLen = memorySection.length;
   const total = full.length;
   console.log(
-    `[agent-prompt] system base=${baseLen} workspace=${wsLen} memory=${memLen} total=${total} chars (~${estTokens(total)} tokens)`
+    `[agent-prompt] mode=${mode} system base=${baseLen} workspace=${wsLen} memory=${memLen} total=${total} chars (~${estTokens(total)} tokens)`
   );
 
   return full;
@@ -239,10 +235,12 @@ export interface RunMakaronAgentOptions {
   referenceImages?: string[];
   animationImageUrls?: string[];
   animationImages?: string[];
+  /** Still images to send with the current user text in one multimodal request. */
+  nativeVisionImages?: NativeVisionImageInput[];
   locale?: string;
   preferredModel?: ModelId;
   agentModel?: AgentModelPreference;
-  agentProvider?: GPT56AgentProvider;
+  agentProvider?: AgentModelProvider;
   videoModel?: string;
   videoResolution?: import('@/types').VideoResolution;
   videoAuto?: boolean;
@@ -279,6 +277,8 @@ export async function* runMakaronAgent(
   options?: RunMakaronAgentOptions,
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
+  const corePromptMode = await getCorePromptMode();
+  perf?.mark('core_prompt_mode', { mode: corePromptMode });
   const runtime = createAgentModelRuntime(
     options?.agentModel,
     projectId,
@@ -287,6 +287,7 @@ export async function* runMakaronAgent(
     options?.codexSubscriptionAllowed,
   );
   const ctx: AgentContext = {
+    corePromptMode,
     currentImage,
     referenceImages: options?.referenceImages,
     projectId,
@@ -343,28 +344,38 @@ export async function* runMakaronAgent(
   const analysisPrompt = isVideoAnalysis ? ANALYSIS_PROMPT_VIDEO_TEMPLATE(videoMediaIndex)
     : options?.analysisContext === 'post-edit' ? ANALYSIS_PROMPT_POSTEDIT : ANALYSIS_PROMPT_INITIAL;
 
+  const nativeImageAnalysis = analysisOnly
+    && !isVideoAnalysis
+    && runtime.spec.supportsImageInput
+    && Boolean(currentImage);
+
   // Determine which tools to expose
   // tipReactionOnly: no tools (text-only response)
-  // analysisOnly: only analyze_image or analyze_video (agent uses tool to see the content)
+  // analysisOnly: multimodal Agents see the image in their first request;
+  // text-only image Agents and all video analysis retain their analyzer tool.
   // normal chat / animation: all tools including workspace (agent.md controls behavior)
   const tools = tipReactionOnly ? undefined : analysisOnly
-    ? (isVideoAnalysis ? { analyze_video: allTools.analyze_video } : { analyze_image: allTools.analyze_image })
+    ? nativeImageAnalysis
+      ? undefined
+      : (isVideoAnalysis ? { analyze_video: allTools.analyze_video } : { analyze_image: allTools.analyze_image })
     : allTools;
 
-  // Build user message content — animation mode includes all snapshot images as visual content
+  // Build user message content. Visual Agents receive the relevant still images
+  // in the same first request as the user's text. DeepSeek V4 Pro remains text-only and
+  // reaches images through analyze_image's Gemini fallback.
   const animImages = options?.animationImages;
+  const directVisionImages: NativeVisionImageInput[] = nativeImageAnalysis
+    ? [{ source: currentImage }]
+    : animImages?.length
+      ? animImages.map((source) => ({ source }))
+      : (options?.nativeVisionImages ?? []);
 
   let userContent: any;
-  if (animImages?.length && runtime.spec.supportsImageInput && !analysisOnly && !tipReactionOnly) {
-    // Multi-image user message: text + all snapshot images
-    userContent = [
-      { type: 'text' as const, text: prompt },
-      ...animImages.map((img: string) =>
-        img.startsWith('data:')
-          ? { type: 'image' as const, image: img }
-          : { type: 'image' as const, image: new URL(img) }
-      ),
-    ];
+  if (directVisionImages.length && runtime.spec.supportsImageInput && !tipReactionOnly) {
+    userContent = buildNativeVisionUserContent(
+      analysisOnly ? analysisPrompt : prompt,
+      directVisionImages,
+    );
   } else {
     // Inject only the pointer/metadata, never full composition code. The agent
     // must pass code_path explicitly in run_code patch mode for persisted compositions.
@@ -389,7 +400,7 @@ export async function* runMakaronAgent(
   });
   const baseSystemPrompt = (analysisOnly || tipReactionOnly)
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
-    : await buildSystemPrompt(options?.supabase, options?.userId, projectId);
+    : await buildSystemPrompt(options?.supabase, options?.userId, projectId, corePromptMode);
   const continuationExecution = durableContinuation ? options?.execution : undefined;
   const durableExecutionDirective = continuationExecution
     ? `\n\n## Durable execution contract\nThis is attempt ${continuationExecution.attemptNo} of Agent Run ${continuationExecution.runId}. A later attempt may continue in a fresh model context only after a technical interruption, provider failure, context handoff, or newer user input. Preserve decisions and durable artifact pointers with execution_checkpoint after meaningful progress and before a long, risky generation step. Do not repeat expensive side effects whose tool result is already present. A Studio Run is only a persisted workflow that you follow with studio_run; its stage never decides whether this Agent Run ends or retries. Finish normally when you have completed the current user-facing turn, even if the workflow remains at Review or another stage. If this attempt advances the workflow into Composition, switch to numbered composition parts immediately and never begin a monolithic run_code payload. A newer queued user instruction has precedence over an older delivery target.`
@@ -401,7 +412,7 @@ export async function* runMakaronAgent(
     ? buildDurableCompositionGuidance()
     : '';
   const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
-  const languageDirective = buildAgentOutputLanguageDirective(options?.locale);
+  const languageDirective = buildAgentOutputLanguageDirective(options?.locale, analysisOnly || tipReactionOnly ? 'ui' : 'user');
   const skillLaunchDirective = getSkillLaunchSystemDirective(options?.skillLaunchContext);
   const systemPrompt = `${executionSystemPrompt}${languageDirective}${skillLaunchDirective}`;
   const responseLocale = normalizeLocale(options?.locale, 'en');
@@ -415,7 +426,9 @@ export async function* runMakaronAgent(
       ? userContent.reduce((s: number, p: { type?: string; text?: string }) => s + (p?.type === 'text' ? (p.text?.length ?? 0) : 0), 0)
       : 0;
   const userImagesCount = Array.isArray(userContent)
-    ? userContent.filter((p: { type?: string }) => p?.type === 'image').length
+    ? userContent.filter((p: { type?: string; mediaType?: string }) => (
+        p?.type === 'image' || (p?.type === 'file' && p.mediaType?.startsWith('image/'))
+      )).length
     : 0;
   // analysis / tipReaction modes intentionally skip history to keep
   // the request single-turn (matches prior behavior). Normal chat and video
@@ -450,7 +463,11 @@ export async function* runMakaronAgent(
       const userContentDump = typeof userContent === 'string'
         ? userContent
         : Array.isArray(userContent)
-          ? userContent.map((p: { type?: string; text?: string }) => p?.type === 'image' ? { type: 'image', omitted: true } : p)
+          ? userContent.map((p: { type?: string; text?: string; mediaType?: string }) => (
+              p?.type === 'image' || (p?.type === 'file' && p.mediaType?.startsWith('image/'))
+                ? { type: p.type, mediaType: p.mediaType, omitted: true }
+                : p
+            ))
           : userContent;
       await fs.writeFile(dumpPath, JSON.stringify({
         ts, mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
@@ -547,6 +564,7 @@ export async function* runMakaronAgent(
         cacheWriteTelemetryComplete,
         providerCostUsd,
         model: modelId,
+        provider: runtime.spec.provider,
       };
     };
 
@@ -1338,17 +1356,23 @@ export async function* runMakaronAgent(
       const subscriptionFailureDetail = streamError
         ? describeModelStreamError(streamError)
         : assessment.detail;
-      const canFallbackFromSubscription = runtime.spec.provider === 'codex-subscription'
+      const canFallbackFromSubscription = (runtime.spec.provider === 'codex-subscription'
+        || runtime.spec.provider === 'grok-subscription')
         && !options?.execution
         && !firstContentAt
         && !attemptDeliveredArtifact
         && attemptCommittedTools.size === 0
         && (
-          isCodexSubscriptionTerminalFailure(subscriptionFailureDetail)
+          (runtime.spec.provider === 'codex-subscription'
+            ? isCodexSubscriptionTerminalFailure(subscriptionFailureDetail)
+            : isGrokSubscriptionTerminalFailure(subscriptionFailureDetail))
           || isRetryableProviderOutage(subscriptionFailureDetail)
         );
       if (canFallbackFromSubscription) {
-        const fallbackProvider = resolveCodexSubscriptionFallbackProvider();
+        const subscriptionProvider = runtime.spec.provider;
+        const fallbackProvider = subscriptionProvider === 'codex-subscription'
+          ? resolveCodexSubscriptionFallbackProvider()
+          : 'openrouter';
         const hasFallbackCredential = fallbackProvider === 'azure-openai'
           ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
           : Boolean(process.env.OPENROUTER_API_KEY?.trim());
@@ -1364,12 +1388,12 @@ export async function* runMakaronAgent(
             recoveryAttempt++;
             yield { type: 'status', text: translate(responseLocale, 'agent.status.resuming') };
             console.warn(
-              `[agent] Codex subscription unavailable before output; retrying ${runtime.spec.id} through ${fallbackProvider}`,
+              `[agent] ${subscriptionProvider} unavailable before output; retrying ${runtime.spec.id} through ${fallbackProvider}`,
             );
             continue;
           } catch (fallbackError) {
             console.warn(
-              `[agent] Codex subscription API fallback unavailable: ${describeModelStreamError(fallbackError)}`,
+              `[agent] ${subscriptionProvider} API fallback unavailable: ${describeModelStreamError(fallbackError)}`,
             );
           }
         }

@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import path from 'path'
-import { readAgentAwareSource } from './helpers/agentRuntimeSource'
+import { readAgentContractSource } from './helpers/agentRuntimeSource'
 
 const root = path.resolve(__dirname, '..')
 
-function read(rel: string) {
-  return readAgentAwareSource(root, rel)
-}
+const read = (rel: string) => readAgentContractSource(root, rel)
 
 describe('agent prompt policy guards', () => {
   it('keeps image work on generate_image unless editable runtime is explicit', () => {
@@ -132,12 +130,14 @@ describe('agent prompt policy guards', () => {
     expect(reconnect).toContain('callbacks.onMusicTask?.')
   })
 
-  it('keeps uploaded video auto-analysis in the tool-aware history path', () => {
+  it('keeps later video uploads tool-aware while batching first-turn media', () => {
     const editor = read('src/components/Editor.tsx')
     const agentRoute = read('src/app/api/agent/route.ts')
 
     expect(editor).toContain('First call analyze_video with media_index')
-    expect(editor).toContain('First call analyze_video for each uploaded video media_index')
+    expect(editor).toContain('First-turn media understanding (no user prompt)')
+    expect(editor).toContain('consume every verified video-evidence line')
+    expect(editor).toContain('turnMediaCount: workSnapshots.length')
     expect(editor).toContain("analyze_video's result is persisted in agent_tool_history")
     expect(editor).not.toContain("handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount")
     expect(agentRoute).toContain('const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly')
@@ -192,7 +192,7 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('prompts/captions.md')
     expect(agent).toContain('skill: "captions"')
 
-    expect(tool).toContain('read only that one skill prompt file once')
+    expect(tool).toContain('read only the selected skill once')
     expect(tool).toContain('Do not read `prompts/image.md` just to route the skill')
     expect(tool).not.toContain('prompts/enhance.md')
     expect(image).toContain('backend no longer injects the full template automatically')
@@ -204,10 +204,10 @@ describe('agent prompt policy guards', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('Video routes by duration and requested operation before platform packaging')
-    expect(agent).toContain('read `prompts/animate.md` before any platform or content Skill')
-    expect(agent).toContain('TikTok, Douyin, Reels, exact copy, subtitles, branding, multiple shots')
-    expect(agent).toContain('Exercise this routing judgment in the Agent')
+    expect(agent).toContain('Before any `generate_animation` request')
+    expect(agent).toContain('indexes supplied-video work into `skills/video-edit/SKILL.md`')
+    expect(agent).toContain('Without source authority')
+    expect(agent).toContain('Exercise routing judgment in the Agent')
     expect(agent).toContain('do not wait for backend keyword rules')
     expect(agentTs).not.toContain('getImplicitSkillSystemDirective')
     expect(agentTs).not.toContain('implicit-skill-routing')
@@ -250,7 +250,7 @@ describe('agent prompt policy guards', () => {
 
     expect(agent).toContain('Hard duration range: a single SeeDance 2.0 script/call must be 4-15s; SeeDance 2.5 must be 4-30s')
     expect(agent).toContain('A non-NSFW direct 16-30 second request defaults to `seedance-2.5`')
-    expect(agent).toContain('any NSFW/adult-explicit video request uses `wan-3.0` instead')
+    expect(agent).toContain('any NSFW/adult-explicit video request defaults to `wan-3.0-prime` instead')
     expect(agent).toContain('just as NSFW image requests use Qwen')
     expect(agent).toContain('If requested/source duration is shorter than the model minimum, use the minimum')
     expect(agent).toContain('If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`')
@@ -264,7 +264,7 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('Kling accepts one .mp4/.mov, <=200MB, <=2K')
     expect(agent).toContain('Google Omni continuation uses the same Refs mental model as Seedance')
     expect(agent).toContain('set `video_operation: "extend"`')
-    expect(agent).toContain('keep the output duration aligned with the combined source duration shown in Media Index')
+    expect(agent).toContain('keep output duration aligned with the combined source duration shown in Media Index')
     expect(agent).toContain('Clamp to the selected SeeDance range: 4-15s for 2.0, 4-30s for 2.5')
 
     expect(animate).toContain('Every SeeDance 2.0 script must be **4 to 15 seconds**')
@@ -291,8 +291,16 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('**Gemini Omni continuation**: use the same reference flow')
     expect(animate).toContain('set `video_operation: "extend"`')
     expect(animate).toContain('Never write or submit a SeeDance generated video duration below 4s')
-    expect(animate).toContain('When the user explicitly selects Wan 3.0 or the request is NSFW/adult-explicit')
-    expect(animate).toContain('NSFW routing has priority over the 16-30 second Seedance 2.5 duration default')
+    expect(agent).toContain('Resolution is one shared video setting')
+    expect(agent).toContain('infer `video_resolution` from the full request for any model')
+    expect(agent).not.toContain('Wan Prime/Fast ->')
+    expect(agent).not.toContain('Wan Pro/2K/4K ->')
+    expect(animate).toContain('`video_resolution` is the shared resolution control for every video service')
+    expect(animate).toContain('Do not create provider-specific natural-language keyword routing for resolution')
+    expect(animate).toContain('Both accept the shared `video_resolution` field')
+    expect(animate).toContain('The NSFW semantic route defaults to `wan-3.0-prime`')
+    expect(animate).not.toContain('preserve an explicit user or app selection')
+    expect(animate).not.toContain('while the selector remains automatic')
     expect(animate).toContain('Wan 3.0 scripts may be **2 to 30 seconds**')
     expect(animate).toContain('reference-video duration + requested output duration must be 30 seconds or less')
 
@@ -302,11 +310,11 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('MiniMax H3 reference videos must each be .mp4/.mov, <=50MB, width and height each 256-5760px')
     expect(agentTs).toContain('MiniMax H3 accepts up to 9 reference images')
     expect(agentTs).toContain('Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers')
-    expect(agentTs).toContain('Reference audio is only supported by Seedance video models, Wan 3.0, or MiniMax H3')
+    expect(agentTs).toContain('Reference audio is only supported by Seedance video models, Wan 3.0, MiniMax H3, or FAL H3 Max')
     expect(agentTs).toContain('Seedance 2.5 is 4-30 seconds; Wan 3.0 is 2-30 seconds')
-    expect(agentTs).toContain('For any NSFW/adult-explicit video request, choose Wan 3.0 instead')
+    expect(agentTs).toContain('An NSFW/adult-explicit video request defaults to Wan 3.0 Prime')
     expect(agentTs).toContain('analogous to choosing Qwen for NSFW image requests')
-    expect(agentTs).toContain('the NSFW route overrides the 16-30 second Seedance 2.5 route')
+    expect(agentTs).toContain('overrides the 16-30 second Seedance 2.5 route')
     expect(agentTs).toContain('reference-video duration + requested output duration <= 30 seconds')
     expect(agentTs).toContain('Kling is 5-15 seconds')
     expect(agentTs).toContain("If a complete script fits the selected model's single-call limit, submit it as one video generation call")
@@ -330,7 +338,7 @@ describe('agent prompt policy guards', () => {
     expect(createVideo).not.toContain('NSFW intent route')
   })
 
-  it('routes video by duration before activating semantic production skills', () => {
+  it('routes video generation through animate and then one supplied-video Skill', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
     const workspace = read('src/lib/workspace.ts')
@@ -340,20 +348,25 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('The skill manifest routes clear matches')
     expect(agent).toContain('read `skills/NAME/SKILL.md`')
     expect(agent).toContain('that Skill owns its workflow')
-    expect(agent).toContain('Video routes by duration and requested operation before platform packaging')
+    expect(agent).toContain('Before any `generate_animation` request')
+    expect(agent).toContain('read `prompts/animate.md`')
+    expect(agent).toContain('indexes supplied-video work into `skills/video-edit/SKILL.md`')
+    expect(agent).toContain('`source-edit`')
+    expect(agent).toContain('`replication`')
     expect(agent).toContain('SeeDance 2.0 supports up to 15s')
     expect(agent).toContain('explicitly selected SeeDance 2.5 generation supports up to 30s')
     expect(agent).toContain('read `prompts/animate.md` and use `generate_animation`')
-    expect(agent).toContain('read `prompts/animate.md` before any platform or content Skill')
-    expect(agent).toContain('TikTok, Douyin, Reels, exact copy, subtitles, branding, multiple shots')
-    expect(agent).toContain('Select a Composition Skill only for explicit Studio/Remotion/editability')
+    expect(agent).toContain('Without source authority')
+    expect(agent).toContain('Platform, copy, subtitles, branding, or shot count do not override')
     expect(agent).toContain('Model selection happens after workflow routing')
     expect(agent).not.toContain('matched built-in Composition requests route to that editable workflow')
     expect(agentTs).toContain('A video up to and including 15 seconds stays on direct \\`generate_animation\\`')
     expect(agentTs).not.toContain('resolveVideoWorkflowRoute')
     expect(agentTs).not.toContain('videoWorkflowRoute')
     expect(workspace).toContain('This is the semantic routing index')
-    expect(workspace).toContain('Video routes by duration and operation before semantic packaging')
+    expect(workspace).toContain('Every video-model generation reads')
+    expect(workspace).toContain('skills/video-edit/SKILL.md')
+    expect(workspace).toContain('source-preserving edits from shot-grammar replication')
     expect(normalizedWorkspace).toContain('reads `prompts/animate.md` first')
     expect(workspace).toContain('extras.push(`Studio Run recipe:')
     expect(workspace).toContain('extras.push(`profile:')
@@ -392,18 +405,22 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Outside this exception, \\`generate_audio\\` retains its full standalone scope')
   })
 
-  it('keeps SeeDance Fast as the default video model unless user or app selects another model', () => {
+  it('keeps model-selector enforcement in runtime instead of prompt context', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('usually SeeDance 2.0 Fast')
-    expect(agent).toContain('`seedance-fast`')
+    expect(agent).toContain('Default video model is FAL H3 Max')
+    expect(agent).toContain('`fal-h3-max`')
+    expect(agent).not.toContain('app selector')
+    expect(agent).not.toContain('app selection')
     expect(agentTs).toContain('resolveAgentVideoSelection')
     expect(agentTs).toContain('appAuto: (ctx as any).videoAuto')
-    expect(agentTs).toContain('toolModel: model')
-    expect(agentTs).toContain('toolResolution: video_resolution')
-    expect(agentTs).toContain('Default model follows app selection, usually SeeDance 2.0 Fast')
-    expect(agentTs).toContain('when the user asks for Seedance 2.5')
+    expect(agentTs).toContain('const replicationAwareToolModel = replication_contract')
+    expect(agentTs).toContain('toolModel: replicationAwareToolModel')
+    expect(agentTs).toContain('const replicationAwareToolResolution = replication_contract')
+    expect(agentTs).toContain('toolResolution: replicationAwareToolResolution')
+    expect(agentTs).toContain('resolveVideoReplicationResolution(selectedVideoRoute.resolution)')
+    expect(agentTs).toContain('Default model is FAL H3 Max')
   })
 
   it('uses path-based composition patching instead of full currentDesign code injection', () => {
@@ -482,8 +499,8 @@ describe('agent prompt policy guards', () => {
     expect(skill).toContain('Do not enter Gate 4 until the user approves the reviewed anchors')
     expect(skill).toContain('Do not enter Gate 7 until the user approves the reviewed storyboards')
     expect(skill).toContain('beat board approved')
-    expect(agentTs).toContain('active long-video-director workflow is generating director storyboard images')
-    expect(read('src/lib/prompts/generate_image_tool.md')).toContain('director storyboard images required by `long-video-director`')
+    expect(agentTs).toContain('director storyboard images required by long-video-director')
+    expect(read('src/lib/prompts/generate_image_tool.md')).toContain('`long-video-director` storyboards')
     expect(skill).toContain('review')
     expect(skill).toContain('every approved asset is referenced where needed')
     expect(skill).toContain('If a required storyboard or anchor ref is missing from the exact `story_prompt`, stop and rewrite')
@@ -520,7 +537,7 @@ describe('agent prompt policy guards', () => {
     expect(anchor).toContain('Scene and prop cards must not drift into 2D illustration when the character anchor is 3D cartoon')
     expect(anchor).toContain('any scene or prop anchor drifts into a different render family')
     expect(anchor).toContain('Use "passed self-check" rather than "approved"')
-    expect(storyboard).toContain('Generate exactly one storyboard image per segment with `generate_image` using `model: "openai"`')
+    expect(storyboard).toContain('Generate exactly one storyboard image per segment with `generate_image` using `model: "gpt-image-2.5-flare"`')
     expect(storyboard).toContain('Always pass `aspectRatio` to `generate_image` using the approved target aspect ratio')
     expect(storyboard).toContain('Do not create one full-video storyboard sheet')
     expect(storyboard).toContain('Generate storyboards sequentially in segment order')

@@ -1,14 +1,49 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { createVideo, prepareSeedance20References } from '@/lib/skills/create-video'
+import { DEFAULT_VIDEO_REPLICATION_MODEL_ID, DEFAULT_VIDEO_REPLICATION_RESOLUTION, estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
-  it('defaults every image-capable provider to reference-to-video', () => {
+  it('maps mixed timeline image/video indices to Seedance 2.0 provider markers', () => {
+    const prepared = prepareSeedance20References({
+      prompt: 'Use <<<media_4>>> for motion, replace actors with <<<media_5>>> and <<<media_6>>>, background <<<media_7>>>.',
+      images: [
+        'https://example.com/original-a.webp',
+        'https://example.com/original-b.webp',
+        'https://example.com/original-bg.webp',
+        '',
+        'https://example.com/prepared-a.png',
+        'https://example.com/prepared-b.png',
+        'https://example.com/prepared-bg.png',
+      ],
+      videoUrls: ['https://example.com/source.mp4'],
+    })
+
+    expect(prepared.images).toEqual([
+      'https://example.com/prepared-a.png',
+      'https://example.com/prepared-b.png',
+      'https://example.com/prepared-bg.png',
+    ])
+    expect(prepared.prompt).toContain('@video1 for motion')
+    expect(prepared.prompt).toContain('@image1 and @image2')
+    expect(prepared.prompt).toContain('background @image3')
+    expect(prepared.prompt).not.toContain('<<<media_')
+  })
+
+  it('keeps reference-to-video as the global default with one explicit H3 Max I2V exception', () => {
     const imageCapableModels = listVideoModelCapabilities()
       .filter(capability => capability.maxImageReferences !== 0)
 
     expect(imageCapableModels.length).toBeGreaterThan(0)
     for (const capability of imageCapableModels) {
+      if (capability.id === 'minimax-h3-max') {
+        expect(capability.defaultImageWorkflow).toBe('image-to-video')
+        expect(capability.supportsExplicitImageToVideo).toBe(true)
+        expect(resolveVideoImageWorkflow({
+          model: capability.id,
+          imageReferenceCount: 1,
+        })).toBe('image-to-video')
+        continue
+      }
       expect(capability.defaultImageWorkflow, capability.id).toBe('reference-to-video')
       expect(resolveVideoImageWorkflow({
         model: capability.id,
@@ -56,8 +91,8 @@ describe('video model reference limits', () => {
   })
 
   it('defaults video generation to SeeDance 2.0 Fast', () => {
-    expect(getDefaultVideoModelId()).toBe('seedance-fast')
-    expect(normalizeVideoModelId()).toBe('seedance-fast')
+    expect(getDefaultVideoModelId()).toBe('fal-h3-max')
+    expect(normalizeVideoModelId()).toBe('fal-h3-max')
     expect(normalizeVideoModelId('seedance')).toBe('seedance')
     expect(normalizeVideoModelId('seedance-fast')).toBe('seedance-fast')
     expect(normalizeVideoModelId('seedance-2.0-mini')).toBe('seedance-mini')
@@ -127,6 +162,51 @@ describe('video model reference limits', () => {
 
   it('accepts MiniMax H3 768p without a server-side preview gate', () => {
     expect(validateVideoResolutionRequest({ model: 'minimax-h3', resolution: '768p' })).toBeNull()
+  })
+
+  it('registers H3 Max Turbo as the only T2V/single-image-I2V fast route', () => {
+    expect(normalizeVideoModelId('H3 Max')).toBe('minimax-h3-max')
+    expect(normalizeVideoModelId('H3 Max Turbo')).toBe('minimax-h3-max')
+    expect(normalizeVideoResolution('minimax-h3-max', 'auto')).toBe('768p')
+    expect(resolveVideoGenerationRoute({ model: 'minimax-h3-max', resolution: '768p' })).toMatchObject({
+      model: 'minimax-h3-max',
+      provider: 'fal-h3-max',
+      resolution: '768p',
+    })
+    expect(getVideoModelCapability('minimax-h3-max')).toMatchObject({
+      supportedDurations: [5, 10, 15],
+      maxImageReferences: 1,
+      maxVideoReferences: 0,
+      maxAudioReferences: 0,
+      defaultImageWorkflow: 'image-to-video',
+      supportsExplicitImageToVideo: true,
+      supportsVideoReference: false,
+      supportedResolutions: ['480p', '768p'],
+      defaultResolution: '768p',
+    })
+    expect(resolveVideoProviderModel({ model: 'minimax-h3-max', imageReferenceCount: 0 })).toBe('minimax/h3-max-turbo/text-to-video')
+    expect(resolveVideoProviderModel({ model: 'minimax-h3-max', imageReferenceCount: 1 })).toBe('minimax/h3-max-turbo/image-to-video')
+    expect(resolveVideoOutputDuration({ model: 'minimax-h3-max' })).toBe(5)
+    expect(estimateVideoProviderCostUsd({ model: 'minimax-h3-max', resolution: 'auto', durationSec: 5 })).toBe(0.2)
+    expect(estimateVideoCredits({ model: 'minimax-h3-max', resolution: 'auto', durationSec: 5 })).toBe(40)
+    const creditCases = [
+      ['480p', 5, 25],
+      ['480p', 10, 50],
+      ['480p', 15, 75],
+      ['768p', 5, 40],
+      ['768p', 10, 80],
+      ['768p', 15, 120],
+    ] as const
+    for (const [resolution, durationSec, expectedCredits] of creditCases) {
+      expect(estimateVideoCredits({
+        model: 'minimax-h3-max',
+        resolution,
+        durationSec,
+      })).toBe(expectedCredits)
+    }
+    expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 7 })).toContain('one of 5, 10, 15 seconds')
+    expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 5, imageReferenceCount: 2 })).toContain('at most 1 reference images')
+    expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 5, hasVideoReference: true })).toContain('does not support reference videos')
   })
 
   it('models Seedance 2.5 as an explicit 30-second Evolink route', () => {
@@ -731,13 +811,42 @@ describe('video model reference limits', () => {
     expect(validateVideoModelRequest({ ...request, outputDuration: 30 })).toContain('duration=24')
   })
 
-  it('charges Wan 3.0 from MuleRouter resolution pricing with the standard 2x markup', () => {
-    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '480p', durationSec: 5 })).toBe(50)
-    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '720p', durationSec: 5 })).toBe(100)
-    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '1080p', durationSec: 5 })).toBe(200)
-    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '1080p', durationSec: 5 })).toBe(180)
-    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '2k', durationSec: 5 })).toBe(200)
-    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '4k', durationSec: 5 })).toBe(230)
+  it.each([
+    ['wan-3.0', '480p', 0.03, 30],
+    ['wan-3.0', '720p', 0.06, 60],
+    ['wan-3.0', '1080p', 0.12, 120],
+    ['wan-3.0', '2k', 0.12, 120],
+    ['wan-3.0', '4k', 0.138, 138],
+    ['wan-3.0-prime', '480p', 0.0476, 48],
+    ['wan-3.0-prime', '720p', 0.098, 98],
+    ['wan-3.0-prime', '1080p', 0.196, 196],
+    ['wan-3.0-prime', '2k', 0.196, 196],
+    ['wan-3.0-prime', '4k', 0.217, 217],
+  ] as const)('charges %s %s from discounted MuleRouter cost with the standard 2x markup', (model, resolution, costPerSecond, credits) => {
+    const request = { model, resolution, durationSec: 5 }
+    expect(estimateVideoProviderCostUsd(request)).toBeCloseTo(costPerSecond * 5, 8)
+    expect(estimateVideoCredits(request)).toBe(credits)
+    expect(getRequiredVideoCredits(request)).toBe(credits)
+    // Reference inputs are still included in the supplier's output-second price.
+    expect(estimateVideoCredits({ ...request, imageCount: 3, referenceVideoDurationSec: 5 })).toBe(credits)
+  })
+
+  it.each([
+    ['wan-3.0', 0.12, 120, 'carrothub/w3.0-video'],
+    ['wan-3.0-prime', 0.196, 196, 'carrothub/w3.0-video-prime'],
+  ] as const)('keeps %s default pricing and routing on native 1080p', (model, costPerSecond, credits, providerModel) => {
+    expect(getVideoModelCapability(model)?.estimatedCostPerSecondUsd).toBe(costPerSecond)
+    expect(resolveVideoGenerationRoute({ model })).toMatchObject({ resolution: '1080p', providerModel })
+    expect(estimateVideoCredits({ model, durationSec: 5 })).toBe(credits)
+    expect(estimateVideoCredits({ model, resolution: 'auto', durationSec: 5 })).toBe(credits)
+  })
+
+  it('rounds discounted Wan credits once per task, not once per second', () => {
+    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '480p', durationSec: 15 })).toBe(143)
+    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '720p', durationSec: 15 })).toBe(294)
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '720p', durationSec: 15 })).toBe(180)
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '4k', durationSec: 5 })).toBe(138)
+    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '480p', durationSec: 5, markup: 1 })).toBe(24)
   })
 
   it('requires explicit provider pricing for every registered video model', () => {
@@ -887,6 +996,31 @@ describe('video model reference limits', () => {
       toolModel: 'grok',
       toolResolution: '480p',
     })).toEqual({ model: 'seedance-fast', resolution: '720p', locked: true })
+  })
+
+  it('defaults replication to Wan 3.0 Prime without overriding explicit model choices', () => {
+    expect(DEFAULT_VIDEO_REPLICATION_MODEL_ID).toBe('wan-3.0-prime')
+    expect(DEFAULT_VIDEO_REPLICATION_RESOLUTION).toBe('720p')
+    expect(resolveVideoReplicationModelId()).toBe('wan-3.0-prime')
+    expect(resolveVideoReplicationModelId('seedance-fast')).toBe('seedance-fast')
+    expect(resolveVideoReplicationResolution()).toBe('720p')
+    expect(resolveVideoReplicationResolution('auto')).toBe('720p')
+    expect(resolveVideoReplicationResolution('1080p')).toBe('1080p')
+
+    expect(resolveAgentVideoSelection({
+      appModel: 'seedance-fast',
+      appResolution: 'auto',
+      appAuto: true,
+      toolModel: resolveVideoReplicationModelId(),
+      toolResolution: resolveVideoReplicationResolution(),
+    })).toEqual({ model: 'wan-3.0-prime', resolution: '720p', locked: false })
+
+    expect(resolveAgentVideoSelection({
+      appModel: 'seedance',
+      appResolution: '1080p',
+      appAuto: false,
+      toolModel: resolveVideoReplicationModelId(),
+    })).toEqual({ model: 'seedance', resolution: '1080p', locked: true })
   })
 
   it('distinguishes video auto from explicit default SeedDance Fast 720p', () => {

@@ -7,7 +7,11 @@ import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
 import type { VideoMeta } from '@/types'
 import { buildVideoFailureActions } from '@/lib/artifact-actions'
-import { getRemotionExportJob, runRemotionExportJob } from '@/lib/remotion-export'
+import {
+  drainRemotionExportQueue,
+  getRemotionExportJob,
+  shouldRunRemotionExportInline,
+} from '@/lib/remotion-export'
 import { getRequestLocale } from '@/lib/server-locale'
 
 export const maxDuration = 1800
@@ -21,12 +25,10 @@ function getProjectInfo(projects: SnapshotProject | null | undefined) {
 function runRemotionExportAfterResponse(jobId: string) {
   after(async () => {
     try {
-      await runRemotionExportJob(jobId)
+      if (!shouldRunRemotionExportInline()) return
+      await drainRemotionExportQueue({ source: `video-snapshot:${jobId}` })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      if (!message.includes('already rendering')) {
-        console.error(`[video-snapshot] Remotion export worker failed for ${jobId}:`, err)
-      }
+      console.error(`[video-snapshot] Remotion export queue drain failed after ${jobId}:`, err)
     }
   })
 }
@@ -164,8 +166,9 @@ export async function GET(
         providerVideoUrl: videoMeta.videoUrl,
         currentImageUrl: snap.image_url,
       })
-      // Provider URL still in DB — persist hasn't finished yet, tell caller to keep polling
-      return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
+      // The provider asset is already playable. Return it while Makaron Storage
+      // persistence continues in after(), matching the provider-first App contract.
+      return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
     }
     if (videoMeta.status === 'failed') {
       return NextResponse.json({
@@ -240,6 +243,7 @@ export async function GET(
     const isXai = videoMeta.taskId.startsWith('xai-')
     const isGoogleOmni = videoMeta.taskId.startsWith('google-omni-')
     const isMinimax = videoMeta.taskId.startsWith('minimax-h3-')
+    const isFalH3Max = videoMeta.taskId.startsWith('fal-h3max-')
     const isSyncLipsync = videoMeta.taskId.startsWith('sync3-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
@@ -260,7 +264,7 @@ export async function GET(
       result.taskId = videoMeta.taskId
     } else if (isXai) {
       const { getXaiVideoTask } = await import('@/lib/xai-video')
-      result = await getXaiVideoTask(videoMeta.taskId)
+      result = await getXaiVideoTask(videoMeta.taskId, ownerUserId)
     } else if (isGoogleOmni) {
       if (videoMeta.taskId.startsWith('google-omni-job-') && !videoMeta.videoUrl && !videoMeta.providerUrl) {
         const {
@@ -290,6 +294,12 @@ export async function GET(
     } else if (isMinimax) {
       const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
       result = await getMinimaxVideoTask(videoMeta.taskId)
+    } else if (isFalH3Max) {
+      const { waitForFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+      // H3 Max Turbo usually finishes a 5s/768p clip in roughly the time one normal
+      // provider poll takes end-to-end. Keep this request open briefly so the
+      // App receives the Fal playback URL without several authenticated round trips.
+      result = await waitForFalH3MaxVideoTask(videoMeta.taskId)
     } else if (isSyncLipsync) {
       const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
       result = await getSyncLipsyncTask(videoMeta.taskId)

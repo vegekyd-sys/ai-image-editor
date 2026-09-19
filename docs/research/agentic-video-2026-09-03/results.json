@@ -1,0 +1,268 @@
+{
+  "checkedAt": "2026-09-03T12:03:19.887Z",
+  "source": "https://storage.googleapis.com/cloud-samples-data/generative-ai/video/pixel8.mp4",
+  "prompt": "Describe the entire video chronologically for a creative editor. Cover subjects, setting, actions, scene changes, notable text, framing, mood, and the most useful moments. Be concise but specific.",
+  "candidateModel": "gemini-3.7-flash",
+  "purpose": "Availability and one short-video smoke; not a quality benchmark",
+  "runs": [
+    {
+      "arm": "current-static",
+      "model": "gemini-3-flash-preview",
+      "api": "generateContent",
+      "httpStatus": 200,
+      "elapsedMs": 22279,
+      "attempts": [
+        {
+          "transport": "url",
+          "httpStatus": 200,
+          "elapsedMs": 22279
+        }
+      ],
+      "text": "This video showcases the \"Video Boost\" and \"Night Sight\" features on the Pixel 8 Pro through the eyes of a Tokyo-based photographer.\n\n**00:00 - 00:12: Introduction to Tokyo at Night.** \nThe video opens with a cinematic aerial shot of a train passing through a dark Tokyo street. We're introduced to Saeka Shimada, a local photographer, who shares her perspective on the city's multifaceted nature, specifically how its character transforms at night.\n\n**00:13 - 00:23: Introducing Video Boost.**\nSaeka walks through a narrow, neon-lit alleyway. She introduces the \"Video Boost\" feature on her smartphone, explaining how it automatically activates \"Night Sight\" in low-light conditions to enhance video quality.\n\n**00:24 - 00:37: Exploring Sancha.**\nSaeka visits Sancha, a neighborhood where she once lived. She's seen exploring its narrow, atmospheric alleys, using her phone to capture the local charm. The framing focuses on her creative process and the vibrant urban environment.\n\n**00:38 - 00:52: Showcasing the Results.**\nA montage of high-quality night shots captured with the phone follows. We see detailed images of street signs, reflections in puddles, colorful lanterns, and the unique textures of the Tokyo night. This segment highlights the effectiveness of the \"Video Boost\" feature.\n\n**00:53 - 00:58: Nightlife in Shibuya.**\nThe scene shifts to the bustling Shibuya district. An aerial shot shows a busy street filled with taxis. Saeka is then shown on a pedestrian bridge with friends, enjoying the vibrant nightlife and cheering. \n\nThe overall mood of the video is creative and energetic, emphasizing the phone's ability to capture professional-looking footage in challenging low-light settings.",
+      "completedWithText": true,
+      "usage": {
+        "promptTokenCount": 5238,
+        "candidatesTokenCount": 401,
+        "totalTokenCount": 6203,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 45
+          },
+          {
+            "modality": "VIDEO",
+            "tokenCount": 5193
+          }
+        ],
+        "thoughtsTokenCount": 564,
+        "serviceTier": "standard"
+      },
+      "finishReason": "STOP"
+    },
+    {
+      "arm": "candidate-static",
+      "model": "gemini-3.7-flash",
+      "api": "interactions",
+      "transport": "inline",
+      "config": {
+        "thinking_level": "medium",
+        "max_output_tokens": 4096,
+        "store": false
+      },
+      "httpStatus": 200,
+      "elapsedMs": 18479,
+      "status": "completed",
+      "text": "Here is a chronological description of the video:\n\n* **0:00–0:05**: Opens with an overhead wide shot of a Tokyo train and nighttime street. It cuts to a tracking medium shot of Saeka Shimada walking down a vibrant, bokeh-lit street. Text overlays identify her as *Saeka Shimada, Photographer*.\n* **0:05–0:13**: Follow tracking shots of Saeka walking through illuminated Tokyo streets at night, setting a contemplative, artistic urban mood.\n* **0:13–0:21**: Saeka enters a narrow, atmospheric alley lined with lanterns and izakayas. An over-the-shoulder medium close-up shows her framing a shot using the Google Pixel 8 Pro. Disclaimer text appears at the bottom regarding Pixel 8 Pro features.\n* **0:21–0:37**: Various medium and wide shots show Saeka capturing different details in the alley—pointing the camera up at signs, crouching low to frame a puddle reflection, and happily reviewing the footage on her phone screen.\n* **0:37–0:51**: A visual montage of her captured footage, showcasing crisp low-light capabilities:\n  * A full alleyway shot lined with signs and lanterns.\n  * Hanging decorations and storefront signage.\n  * A cozy, warm-toned bar interior seen through a window.\n  * A mirror-like puddle reflection with neon lights.\n  * Rapid photo cutaways featuring architectural textures, parked bicycles, and yellow hanging lanterns.\n* **0:51–0:56**: An elevated wide shot of a Shibuya roadway at night transitions to a wide tracking shot on an urban pedestrian bridge, where Saeka waves enthusiastically to a group of friends.",
+      "completedWithText": true,
+      "processingObserved": false,
+      "stepTypes": [
+        "thought",
+        "model_output"
+      ],
+      "usage": {
+        "total_tokens": 6027,
+        "total_input_tokens": 5227,
+        "input_tokens_by_modality": [
+          {
+            "modality": "video",
+            "tokens": 5187
+          },
+          {
+            "modality": "text",
+            "tokens": 40
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 370,
+        "total_tool_use_tokens": 0,
+        "total_thought_tokens": 430,
+        "raw_prompt_token": 6056,
+        "model_invocation_token_counts": [
+          {
+            "prompt_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 299
+              },
+              {
+                "modality": "video",
+                "tokens": 5187
+              }
+            ],
+            "candidates_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 374
+              }
+            ],
+            "thoughts_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 430
+              }
+            ]
+          }
+        ]
+      },
+      "responseKeys": [
+        "status",
+        "usage",
+        "created",
+        "updated",
+        "service_tier",
+        "steps",
+        "object",
+        "model"
+      ]
+    },
+    {
+      "arm": "candidate-agentic",
+      "model": "gemini-3.7-flash",
+      "api": "interactions",
+      "transport": "inline",
+      "config": {
+        "thinking_level": "medium",
+        "max_output_tokens": 4096,
+        "store": false
+      },
+      "httpStatus": 200,
+      "elapsedMs": 36387,
+      "status": "completed",
+      "text": "Here is a chronological breakdown of the video tailored for a creative editor:\n\n---\n\n### **Overview & Mood**\n* **Tone/Mood:** Urban, energetic, cinematic, tech-forward, and artistic.\n* **Core Subject:** Tokyo-based photographer Saeka Shimada demonstrating the low-light capabilities (Video Boost / Night Sight) of the Google Pixel 8 Pro in Tokyo nightlife spots (Sangenjaya and Shibuya).\n\n---\n\n### **Chronological Breakdown**\n\n#### **1. Introduction & Street Walk (00:00 – 00:12)**\n* **Visuals & Framing:** \n  * Opens with a high-angle, top-down shot of a train rushing through Tokyo at night.\n  * Cuts to medium profile and over-the-shoulder tracking shots of Saeka Shimada walking along illuminated urban streets with bokeh light circles in the background.\n* **Text / Lower Thirds:** \n  * Animated pill badges: *\"Saeka Shimada She/Her\"* and *\"Photographer\"*.\n  * Disclaimer along the bottom: *\"Person shown is a real Pixel owner and was paid by Google for this video\"*.\n  * Subtitles of her dialogue introducing herself and Tokyo's night atmosphere.\n\n#### **2. Feature Introduction in Sangenjaya Alleyways (00:13 – 00:30)**\n* **Visuals & Framing:** \n  * Wide framing establishes a narrow, atmospheric alley (yokocho) in Sangenjaya with lanterns and glowing shop fronts.\n  * Over-the-shoulder and close-up cutaways showing Saeka holding up a light-blue Pixel 8 Pro to record.\n  * Medium-to-wide shots capture her framing shots, walking past traditional storefronts, and crouching low to film near the wet pavement.\n* **Notable Text:** \n  * Subtitles explaining *“Video Boost”* and *“Night Sight”*.\n  * Legal line: *\"Coming soon. Pixel 8 Pro only. Requires Google Photos app.\"*\n\n#### **3. Reviewing & Reacting (00:31 – 00:37)**\n* **Visuals & Framing:** \n  * Close-up handheld reaction shots of Saeka smiling and admiring the results on her phone screen.\n  * Medium shot of her reviewing footage handheld in the dark alleyway.\n\n#### **4. Pixel Night Footage Showcase Montage (00:38 – 00:51)**\n* **Visuals & Framing:** \n  * A fast-paced showcase cut of stylized, vibrant low-light B-roll:\n    * **00:38 – 00:40:** Deep alley perspective with warm lanterns and neon signs.\n    * **00:41 – 00:43:** Foreground focus on an illustrated hanging tag with neon signs softly blurred in the background.\n    * **00:44 – 00:45:** Looking inside a cozy izakaya/bar with eclectic decorative lamps.\n    * **00:46 – 00:48:** Crisp puddle reflection shot revealing neon signage through water droplets.\n    * **00:49 – 00:51:** Fast-paced multi-frame split/slide transitions showing urban textures, parked bicycles, and yellow glowing lanterns.\n\n#### **5. Transition to Shibuya (00:52 – 00:57)**\n* **Visuals & Framing:** \n  * High-angle overhead shot of Shibuya’s multilane highway with light trails from taxis.\n  * Wide shot on an elevated pedestrian bridge as Saeka approaches and waves to a group of friends waiting against the Shibuya city skyline.\n\n---\n\n### **Most Useful Shots for Editing**\n* **Hero Feature Shot (00:18 – 00:20):** Crisp over-the-shoulder view of the phone interface recording the alley in real time.\n* **Artistic Cutaways (00:46 – 00:48):** Puddle neon reflection shot (high aesthetic and color contrast value).\n* **Location/B-roll Openers & Enders (00:00 & 00:53):** Top-down transit shots ideal for location establishing cues.",
+      "completedWithText": true,
+      "processingObserved": true,
+      "stepTypes": [
+        "processing_call",
+        "processing_result",
+        "processing_call",
+        "processing_result",
+        "thought",
+        "model_output"
+      ],
+      "usage": {
+        "total_tokens": 6137,
+        "total_input_tokens": 116,
+        "input_tokens_by_modality": [
+          {
+            "modality": "text",
+            "tokens": 116
+          }
+        ],
+        "total_cached_tokens": 0,
+        "total_output_tokens": 971,
+        "total_tool_use_tokens": 4101,
+        "tool_use_tokens_by_modality": [
+          {
+            "modality": "image",
+            "tokens": 3762
+          },
+          {
+            "modality": "text",
+            "tokens": 339
+          }
+        ],
+        "total_thought_tokens": 949,
+        "raw_prompt_token": 4951,
+        "model_invocation_token_counts": [
+          {
+            "prompt_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 442
+              }
+            ],
+            "candidates_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 31
+              }
+            ],
+            "thoughts_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 63
+              }
+            ]
+          },
+          {
+            "prompt_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 563
+              }
+            ],
+            "candidates_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 35
+              }
+            ],
+            "thoughts_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 13
+              }
+            ]
+          },
+          {
+            "prompt_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 750
+              },
+              {
+                "modality": "image",
+                "tokens": 3762
+              }
+            ],
+            "candidates_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 921
+              }
+            ],
+            "thoughts_tokens_details": [
+              {
+                "modality": "text",
+                "tokens": 662
+              }
+            ]
+          }
+        ]
+      },
+      "responseKeys": [
+        "status",
+        "usage",
+        "created",
+        "updated",
+        "service_tier",
+        "steps",
+        "object",
+        "model"
+      ]
+    }
+  ],
+  "discovery": {
+    "httpStatus": 200,
+    "flashModels": [
+      "models/gemini-3-flash-preview",
+      "models/gemini-3.1-flash-lite-preview",
+      "models/gemini-3.1-flash-lite",
+      "models/gemini-3.1-flash-image-preview",
+      "models/gemini-3.1-flash-image",
+      "models/gemini-3.1-flash-lite-image",
+      "models/gemini-3.5-flash",
+      "models/gemini-3.5-flash-lite",
+      "models/gemini-3.6-flash",
+      "models/gemini-3.7-flash",
+      "models/gemini-3.8-flash",
+      "models/gemini-3.1-flash-tts-preview",
+      "models/gemini-3.1-flash-live-preview"
+    ]
+  },
+  "sourceDownload": {
+    "elapsedMs": 3488,
+    "bytes": 4951975,
+    "sha256": "a9a5f28a7bd32bc58ad68e9f7b86efebc95bb7441afae537b006dfea6c87d7c3"
+  }
+}

@@ -3,6 +3,10 @@ import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
+import {
+  DEFAULT_REMOTION_LAMBDA_FRAMES_PER_LAMBDA,
+  resolveFramesPerLambda,
+} from '@/lib/remotion-export-capacity'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
 import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver'
 import { REMOTION_EDITABLE_RUNTIME_VERSION } from '@/lib/editor/editable-react-runtime'
@@ -200,20 +204,7 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
   return Math.max(1, Math.round(readPositiveNumber(value, fallback)))
 }
 
-// Cross-composition benchmark default. Keep experiments behind the env override
-// instead of retuning the product default from a single composition.
-const DEFAULT_FRAMES_PER_LAMBDA = 20
-const MAX_LAMBDAS_PER_RENDER = 200
-
-export function resolveFramesPerLambda(
-  durationInFrames: number,
-  configuredFramesPerLambda = DEFAULT_FRAMES_PER_LAMBDA,
-): number {
-  return Math.max(
-    Math.max(1, Math.round(configuredFramesPerLambda)),
-    Math.ceil(Math.max(1, durationInFrames) / MAX_LAMBDAS_PER_RENDER),
-  )
-}
+export { resolveFramesPerLambda } from '@/lib/remotion-export-capacity'
 
 function readBooleanEnv(name: string): boolean {
   const value = readEnv(name)
@@ -297,6 +288,54 @@ async function retryTransient<T>(
       await sleep(delayMs * attempt)
     }
   }
+  throw lastError
+}
+
+const RETRYABLE_LAMBDA_SUBMISSION_ERRORS = [
+  /AWS Concurrency limit reached/i,
+  /ConcurrentInvocationLimitExceeded/i,
+  /TooManyRequestsException/i,
+  /Rate Exceeded/i,
+  /Runtime\.TruncatedResponse/i,
+  /Lambda function .* failed with an unhandled error/i,
+  /ECONNRESET/i,
+  /ETIMEDOUT/i,
+  /socket hang up/i,
+]
+
+export function isRetryableRemotionLambdaSubmissionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return RETRYABLE_LAMBDA_SUBMISSION_ERRORS.some((pattern) => pattern.test(message))
+}
+
+export async function retryRemotionLambdaSubmission<T>(
+  submit: () => Promise<T>,
+  options: {
+    attempts?: number
+    delayMs?: number
+    sleepFn?: (ms: number) => Promise<void>
+    randomFn?: () => number
+    onRetry?: (input: { attempt: number; nextAttempt: number; error: unknown }) => void | Promise<void>
+  } = {},
+): Promise<T> {
+  const attempts = Math.max(1, Math.round(options.attempts ?? 3))
+  const delayMs = Math.max(0, Math.round(options.delayMs ?? 1000))
+  const sleepFn = options.sleepFn || sleep
+  const randomFn = options.randomFn || Math.random
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await submit()
+    } catch (error) {
+      lastError = error
+      if (attempt === attempts || !isRetryableRemotionLambdaSubmissionError(error)) throw error
+      await options.onRetry?.({ attempt, nextAttempt: attempt + 1, error })
+      const jitter = 0.75 + Math.min(1, Math.max(0, randomFn())) * 0.5
+      await sleepFn(Math.round(delayMs * attempt * jitter))
+    }
+  }
+
   throw lastError
 }
 
@@ -484,7 +523,10 @@ export async function renderDesignVideoLambdaToUrl(
     ? undefined
     : resolveFramesPerLambda(
         durationInFrames,
-        readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), DEFAULT_FRAMES_PER_LAMBDA),
+        readPositiveInteger(
+          readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'),
+          DEFAULT_REMOTION_LAMBDA_FRAMES_PER_LAMBDA,
+        ),
       )
   const pollMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_POLL_MS'), 1000)
   const x264Preset = readX264Preset()
@@ -509,65 +551,85 @@ export async function renderDesignVideoLambdaToUrl(
   const t0 = Date.now()
   const submitStartMs = Date.now()
 
-  const started = await withRemotionAwsCredentials(async () => {
-    const { renderMediaOnLambda } = await import('@remotion/lambda-client')
-    return renderMediaOnLambda({
-      region: region as LambdaRenderInput['region'],
-      functionName,
-      rendererFunctionName,
-      serveUrl,
-      composition: 'dynamic-design',
-      inputProps: {
-        code: preparedCode,
-        designProps: normalizeRemotionTextValue(design.props || {}),
-        fps,
-        durationInFrames,
-        width: design.width || 1080,
-        height: design.height || 1920,
-        fontManifestUrl,
-        fontSubstitutions: design.fontSubstitutions || {},
-        fontTelemetryId,
-        useOffthreadVideo: videoFlags.useOffthreadVideo,
-        useNativeVideo: videoFlags.useNativeVideo,
+  const submissionAttempts = readPositiveInteger(readEnv('REMOTION_LAMBDA_SUBMISSION_ATTEMPTS'), 3)
+  const submissionRetryDelayMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_SUBMISSION_RETRY_DELAY_MS'), 1000)
+  const started = await retryRemotionLambdaSubmission(
+    () => withRemotionAwsCredentials(async () => {
+      const { renderMediaOnLambda } = await import('@remotion/lambda-client')
+      return renderMediaOnLambda({
+        region: region as LambdaRenderInput['region'],
+        functionName,
+        rendererFunctionName,
+        serveUrl,
+        composition: 'dynamic-design',
+        inputProps: {
+          code: preparedCode,
+          designProps: normalizeRemotionTextValue(design.props || {}),
+          fps,
+          durationInFrames,
+          width: design.width || 1080,
+          height: design.height || 1920,
+          fontManifestUrl,
+          fontSubstitutions: design.fontSubstitutions || {},
+          fontTelemetryId,
+          useOffthreadVideo: videoFlags.useOffthreadVideo,
+          useNativeVideo: videoFlags.useNativeVideo,
+        },
+        codec: 'h264',
+        imageFormat: 'jpeg',
+        scale,
+        crf,
+        videoBitrate: encoding.videoBitrate,
+        audioBitrate,
+        x264Preset,
+        framesPerLambda,
+        concurrency,
+        concurrencyPerLambda: readPositiveInteger(readEnv('REMOTION_LAMBDA_CONCURRENCY_PER_LAMBDA'), 1),
+        chromiumOptions: { disableWebSecurity: true, gl: null },
+        muted: !hasAudioSources,
+        audioCodec: hasAudioSources ? 'aac' : null,
+        jpegQuality,
+        maxRetries: readPositiveInteger(readEnv('REMOTION_LAMBDA_MAX_RETRIES'), 1),
+        timeoutInMilliseconds,
+        logLevel: logLevel as LambdaRenderInput['logLevel'],
+        deleteAfter: deleteAfter as LambdaRenderInput['deleteAfter'],
+        privacy: options.outputDestination?.privacy,
+        outName: options.outputDestination ? {
+          bucketName: options.outputDestination.bucketName,
+          key: options.outputDestination.key,
+          s3OutputProvider: options.outputDestination.s3OutputProvider,
+        } : undefined,
+        metadata: {
+          renderer: 'makaron-remotion-lambda',
+          rendererFunctionName: rendererFunctionName || functionName,
+          x264Preset: String(x264Preset),
+          crf: crf === undefined ? '' : String(crf),
+          videoBitrate: encoding.videoBitrate || '',
+          audioBitrate: audioBitrate || '',
+          framesPerLambda: framesPerLambda ? String(framesPerLambda) : '',
+          concurrency: concurrency ? String(concurrency) : '',
+          chunkingMode: concurrency ? 'concurrency' : 'framesPerLambda',
+          videoMode: videoFlags.mode,
+        },
+      })
+    }),
+    {
+      attempts: submissionAttempts,
+      delayMs: submissionRetryDelayMs,
+      onRetry: async ({ attempt, nextAttempt, error }) => {
+        await options.onProgress?.({
+          progress: 0,
+          renderer: 'lambda',
+          phase: 'submission-retry',
+          submissionAttempt: attempt,
+          nextSubmissionAttempt: nextAttempt,
+          submissionAttempts,
+          error: error instanceof Error ? error.message : String(error),
+          elapsedSeconds: (Date.now() - t0) / 1000,
+        })
       },
-      codec: 'h264',
-      imageFormat: 'jpeg',
-      scale,
-      crf,
-      videoBitrate: encoding.videoBitrate,
-      audioBitrate,
-      x264Preset,
-      framesPerLambda,
-      concurrency,
-      concurrencyPerLambda: readPositiveInteger(readEnv('REMOTION_LAMBDA_CONCURRENCY_PER_LAMBDA'), 1),
-      chromiumOptions: { disableWebSecurity: true, gl: null },
-      muted: !hasAudioSources,
-      audioCodec: hasAudioSources ? 'aac' : null,
-      jpegQuality,
-      maxRetries: readPositiveInteger(readEnv('REMOTION_LAMBDA_MAX_RETRIES'), 1),
-      timeoutInMilliseconds,
-      logLevel: logLevel as LambdaRenderInput['logLevel'],
-      deleteAfter: deleteAfter as LambdaRenderInput['deleteAfter'],
-      privacy: options.outputDestination?.privacy,
-      outName: options.outputDestination ? {
-        bucketName: options.outputDestination.bucketName,
-        key: options.outputDestination.key,
-        s3OutputProvider: options.outputDestination.s3OutputProvider,
-      } : undefined,
-      metadata: {
-        renderer: 'makaron-remotion-lambda',
-        rendererFunctionName: rendererFunctionName || functionName,
-        x264Preset: String(x264Preset),
-        crf: crf === undefined ? '' : String(crf),
-        videoBitrate: encoding.videoBitrate || '',
-        audioBitrate: audioBitrate || '',
-        framesPerLambda: framesPerLambda ? String(framesPerLambda) : '',
-        concurrency: concurrency ? String(concurrency) : '',
-        chunkingMode: concurrency ? 'concurrency' : 'framesPerLambda',
-        videoMode: videoFlags.mode,
-      },
-    })
-  })
+    },
+  )
   const submitEndMs = Date.now()
   const pollDurationsMs: number[] = []
 

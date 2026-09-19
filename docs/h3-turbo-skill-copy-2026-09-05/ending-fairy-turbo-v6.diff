@@ -1,0 +1,10 @@
+--- SKILL.md
++++ SKILL.md
+@@ -3 +3 @@
+-description: Analyze one person's portrait and tailor their stage styling and ending-fairy performance, then generate one identity-faithful 10-second video with MiniMax H3 Max Turbo.
++description: Analyze one person's portrait and tailor their stage styling and ending-fairy performance, then generate one identity-faithful 10-second video with fal H3 Turbo.
+@@ -51,0 +52,4 @@
++
++## Video model
++
++Use **fal H3 Turbo**, with `model: "minimax-h3-max"` for `generate_animation` or `--video-model minimax-h3-max` for the CLI. This skill uses one source image as the video start frame.

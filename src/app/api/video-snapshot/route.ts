@@ -3,20 +3,40 @@ import { authenticateRequest } from '@/lib/api-auth'
 import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
 import {
-  deductFixedCredits,
   isInsufficientCreditsError,
+  recordSubscriptionUsage,
   refundCredits,
-  requireCredits,
+  reserveFixedCredits,
 } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
-import { estimateVideoProviderCostUsd, getRequiredVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { getVideoModelCapability, normalizeVideoModelId, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { quoteVideo } from '@/lib/billing/media-pricing'
 import type { VideoMeta } from '@/types'
+import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 
 export const maxDuration = 1800
 
+function durationMs(startedAt: number): number {
+  return Math.max(0, performance.now() - startedAt)
+}
+
+function serverTimingHeader(timings: Record<string, number>): string {
+  return Object.entries(timings)
+    .map(([name, duration]) => `${name};dur=${duration.toFixed(1)}`)
+    .join(', ')
+}
+
 export async function POST(req: NextRequest) {
+  const requestStartedAt = performance.now()
+  let authDuration = 0
+  let preflightDbDuration = 0
+  let billingDuration = 0
+  let providerDuration = 0
+  let persistDuration = 0
   try {
+    const authStartedAt = performance.now()
     const authResult = await authenticateRequest(req)
+    authDuration = durationMs(authStartedAt)
     if ('error' in authResult) return authResult.error
     const { userId, supabase } = authResult.auth
 
@@ -49,11 +69,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const { data: project } = await supabase
+    const preflightDbStartedAt = performance.now()
+    const projectQuery = supabase
       .from('projects')
       .select('id, user_id')
       .eq('id', projectId)
       .maybeSingle()
+
+    const snapshotsQuery = supabase
+      .from('snapshots')
+      .select('id, type, video_meta, image_url, sort_order')
+      .eq('project_id', projectId)
+      .order('sort_order')
+
+    const [projectResult, snapshotsResult] = await Promise.all([projectQuery, snapshotsQuery])
+    preflightDbDuration = durationMs(preflightDbStartedAt)
+    const project = projectResult.data
+    const dbSnaps = snapshotsResult.data
 
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     if (project.user_id !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -63,11 +95,6 @@ export async function POST(req: NextRequest) {
     const originalFirstUrl = inputImageUrls.find((u: string) => u?.startsWith('http') && !u.endsWith('.mp4')) || ''
 
     // Auto-route video references: detect video snapshots in imageUrls
-    const { data: dbSnaps } = await supabase
-      .from('snapshots')
-      .select('id, type, video_meta, image_url')
-      .eq('project_id', projectId)
-      .order('sort_order')
     const autoVideoUrls: string[] = []
     const autoVideoSnapshotIds: string[] = []
     const videoRefIndices = new Set<number>()
@@ -127,9 +154,9 @@ export async function POST(req: NextRequest) {
       providerAutoVideoUrls = inputVideoUrl ? prepared.urls.slice(1) : prepared.urls
     }
 
-    const videoSec = effectiveDuration || 10
+    const videoSec = effectiveDuration === -1 ? referenceVideoDuration ?? 10 : effectiveDuration || 10
     const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
-    const creditsRequired = getRequiredVideoCredits({
+    const billingQuote = await quoteVideo({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
@@ -138,33 +165,30 @@ export async function POST(req: NextRequest) {
       operation: videoOperation,
       contentFilter,
     })
+    const creditsRequired = billingQuote.credits
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
-    const creditCheck = await requireCredits(userId, creditsRequired)
-    if (!creditCheck.ok) return creditCheck.response
-
     let reservedCredits = 0
-    try {
-      const reservation = await deductFixedCredits(
-        userId,
-        creditsRequired,
-        toolName,
-        selectedVideoModel,
-        undefined,
-      )
+    const reserveApiCredits = async () => {
+      if (reservedCredits > 0) return
+      const reservation = await reserveFixedCredits(userId, creditsRequired, toolName, selectedVideoModel, undefined)
       reservedCredits = reservation.charged
-    } catch (error) {
-      if (isInsufficientCreditsError(error)) {
-        return NextResponse.json({
-          error: 'insufficient_credits',
-          balance: error.balance,
-          needed: error.required,
-          action: 'topup',
-        }, { status: 402 })
+    }
+    const grokSubscriptionPreferred = selectedVideoModel === 'grok' && await isGrokSubscriptionAllowedUser(userId)
+    if (!grokSubscriptionPreferred) {
+      try {
+        const billingStartedAt = performance.now()
+        await reserveApiCredits()
+        billingDuration = durationMs(billingStartedAt)
+      } catch (error) {
+        if (isInsufficientCreditsError(error)) {
+          return NextResponse.json({ error: 'insufficient_credits', balance: error.balance, needed: error.required, action: 'topup' }, { status: 402 })
+        }
+        throw error
       }
-      throw error
     }
 
     try {
+      const providerStartedAt = performance.now()
       const skillResult = await createVideo({
         script: prompt,
         images: inputImageUrls,
@@ -184,7 +208,10 @@ export async function POST(req: NextRequest) {
         contentFilter,
         outputFormat,
         webSearch,
+        userId,
+        onBeforeGrokApiFallback: grokSubscriptionPreferred ? reserveApiCredits : undefined,
       })
+      providerDuration = durationMs(providerStartedAt)
 
       if (!skillResult.success || !skillResult.taskId) {
         if (reservedCredits > 0) {
@@ -212,15 +239,7 @@ export async function POST(req: NextRequest) {
         .map(ref => originalImageUrlsByIndex[ref - 1])
         .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'))
       const sourceUrls = [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
-      const providerCostUsd = estimateVideoProviderCostUsd({
-        model: actualVideoModel,
-        resolution: actualVideoRoute.resolution,
-        durationSec: videoSec,
-        imageCount: filteredImages.length,
-        referenceVideoDurationSec: referenceVideoDuration,
-        operation: videoOperation,
-        contentFilter,
-      })
+      const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote.supplierCostUsd
 
       const videoMeta: VideoMeta = {
         taskId,
@@ -243,32 +262,85 @@ export async function POST(req: NextRequest) {
         providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
         providerUrl: skillResult.videoUrl,
         providerMode: actualVideoRoute.providerMode,
+        provider: skillResult.provider,
         operation: videoOperation || 'generate',
         contentFilter: actualVideoModel === 'seedance-2.5' ? contentFilter !== false : undefined,
         createdAt: new Date().toISOString(),
         creditsCharged: reservedCredits,
+        ...(reservedCredits > 0 ? { billingQuote } : {}),
         ...(providerCostUsd != null ? { providerCostUsd } : {}),
       }
 
-      const { data: sortData } = await supabase.rpc('next_sort_order', { p_project_id: projectId })
-      const sortOrder = sortData ?? 0
-      const { error } = await supabase.from('snapshots').insert({
-        id: snapshotId,
-        project_id: projectId,
-        image_url: VIDEO_PLACEHOLDER_IMAGE,
-        tips: [],
-        message_id: '',
-        sort_order: sortOrder,
-        type: 'video',
-        video_meta: videoMeta,
+      const persistStartedAt = performance.now()
+      let { error } = await supabase.rpc('insert_video_snapshot_atomic', {
+        p_snapshot_id: snapshotId,
+        p_project_id: projectId,
+        p_image_url: VIDEO_PLACEHOLDER_IMAGE,
+        p_tips: [],
+        p_message_id: '',
+        p_type: 'video',
+        p_video_meta: videoMeta,
       })
 
+      // Preview/local code can run before its database migration is promoted.
+      // Reuse the preflight sort data for a bounded one-insert compatibility path.
+      if (error?.code === 'PGRST202') {
+        console.warn('[video-snapshot] insert_video_snapshot_atomic is unavailable; using legacy insert path')
+        const sortOrder = (dbSnaps || []).reduce(
+          (next, snapshot) => Math.max(next, Number(snapshot.sort_order ?? -1) + 1),
+          0,
+        )
+        const legacyInsert = await supabase.from('snapshots').insert({
+          id: snapshotId,
+          project_id: projectId,
+          image_url: VIDEO_PLACEHOLDER_IMAGE,
+          tips: [],
+          message_id: '',
+          sort_order: sortOrder,
+          type: 'video',
+          video_meta: videoMeta,
+        })
+        error = legacyInsert.error
+      }
+      persistDuration = durationMs(persistStartedAt)
+
       if (error) throw error
+
+      if (skillResult.provider === 'grok-subscription') {
+        try {
+          await recordSubscriptionUsage(
+            userId,
+            'grok-subscription',
+            toolName,
+            skillResult.providerModel || actualVideoRoute.providerModel || actualVideoModel,
+          )
+        } catch (usageError) {
+          console.error('[billing] video-snapshot subscription usage logging error:', usageError)
+        }
+      }
+
       reservedCredits = 0
-      return NextResponse.json({ snapshotId, taskId, videoMeta })
+      const response = NextResponse.json({ snapshotId, taskId, videoMeta })
+      response.headers.set('Server-Timing', serverTimingHeader({
+        auth: authDuration,
+        preflight_db: preflightDbDuration,
+        billing: billingDuration,
+        provider_submit: providerDuration,
+        persist: persistDuration,
+        total: durationMs(requestStartedAt),
+      }))
+      return response
     } catch (error) {
       if (reservedCredits > 0) {
         await refundCredits(userId, reservedCredits, toolName)
+      }
+      if (isInsufficientCreditsError(error)) {
+        return NextResponse.json({
+          error: 'insufficient_credits',
+          balance: error.balance,
+          needed: error.required,
+          action: 'topup',
+        }, { status: 402 })
       }
       throw error
     }

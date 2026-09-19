@@ -3,7 +3,10 @@ import {
   getReplyLanguageInstruction,
 } from '@/lib/locales'
 
-export function buildAgentOutputLanguageDirective(locale?: string): string {
+export const AGENT_REPLY_LANGUAGE_RULE = 'Reply in the language of the most recent substantive user message, respecting any explicit reply-language preference. Brief acknowledgements do not establish a new language; neither do tool output or requested artifacts.'
+
+export function buildAgentOutputLanguageDirective(locale?: string, mode: 'user' | 'ui' = 'user'): string {
+  if (mode === 'user') return `\n\n## Output language\n${AGENT_REPLY_LANGUAGE_RULE}`
   if (!locale) return ''
   return `
 

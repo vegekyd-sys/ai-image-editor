@@ -19,8 +19,8 @@ import { createHash } from 'crypto';
 import { mkdir, open, readFile as readLocalFile, stat, writeFile as writeLocalFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
-import { Readable } from 'stream';
-import { pipeline } from 'stream/promises';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { parseSkillMd, type ParsedSkill } from './skill-registry';
 import builtInSkillManifest from '../generated/built-in-skill-manifest.json';
 
@@ -393,7 +393,7 @@ async function hydrateLocalMirror(file: WorkspaceFile, userId: string): Promise<
 function extToContentType(ext: string): string {
   const map: Record<string, string> = {
     '.md': 'text/markdown', '.txt': 'text/plain', '.json': 'application/json',
-    '.js': 'text/javascript', '.jsx': 'text/javascript',
+    '.js': 'text/javascript', '.mjs': 'text/javascript', '.cjs': 'text/javascript', '.jsx': 'text/javascript',
     '.ts': 'text/typescript', '.tsx': 'text/typescript', '.css': 'text/css',
     '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
     '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf',
@@ -1070,7 +1070,7 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
     if (s.studioRunProfile) extras.push(`profile: ${s.studioRunProfile}`);
     if (s.sourceMediaRequired) extras.push('requires source media');
     const suffix = extras.length ? ` [${extras.join(', ')}]` : '';
-    return `- **${s.name}**: ${s.description.trim().split('\n')[0]}${suffix}`;
+    return `- **${s.name}**: ${s.description.trim().replace(/\s+/g, ' ')}${suffix}`;
   });
   const builtInNames = new Set(builtIn.map(s => s.name));
 
@@ -1093,7 +1093,7 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
     return '';
   }
 
-  const manifest = `\n## Available Skills\n\nThis is the semantic routing index. Select a skill when the user request clearly matches its name, description, or trigger, then read \`skills/{name}/SKILL.md\` before planning or choosing tools. The selected Skill owns its workflow; a Studio recipe shown here is metadata, not permission to skip the Skill instructions. Video routes by duration and operation before semantic packaging: a finished video within the selected model's single-generation limit reads \`prompts/animate.md\` first and stays on direct Agent video generation regardless of platform, copy, subtitles, branding, or shot count. A named platform is not by itself a workflow override. Explicit Studio/Remotion/editability and source-led assembly remain Composition routes; longer requests may activate the best matching production Skill.\n\n${lines.join('\n')}\n`;
+  const manifest = `\n## Available Skills\n\nThis is the semantic routing index. Select a skill when the user request clearly matches its name, description, or trigger, then read \`skills/{name}/SKILL.md\` before planning or choosing tools. The selected Skill owns its workflow. Every video-model generation reads \`prompts/animate.md\` first; that guide indexes any supplied-video work into \`skills/video-edit/SKILL.md\`, which distinguishes source-preserving edits from shot-grammar replication internally. Without source authority, continue direct generation within the selected model's limit regardless of platform, copy, subtitles, branding, or shot count. A named platform is not by itself a workflow override. Explicit Studio/Remotion/editability and source-led assembly remain Composition routes; longer requests may activate the best matching production Skill.\n\n${lines.join('\n')}\n`;
   setCache(cacheKey, manifest);
   return manifest;
 }

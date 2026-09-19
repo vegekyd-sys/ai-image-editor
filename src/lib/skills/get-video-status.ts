@@ -1,5 +1,6 @@
 export interface GetVideoStatusInput {
   taskId: string;
+  userId?: string;
 }
 
 export interface GetVideoStatusResult {
@@ -7,6 +8,7 @@ export interface GetVideoStatusResult {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   videoUrl?: string;
   error?: string;
+  queryFailed?: boolean;
   message: string;
 }
 
@@ -29,6 +31,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
     const isXai = taskId.startsWith('xai-');
     const isGoogleOmni = taskId.startsWith('google-omni-');
     const isMinimax = taskId.startsWith('minimax-h3-');
+    const isFalH3Max = taskId.startsWith('fal-h3max-');
     const isSyncLipsync = taskId.startsWith('sync3-');
 
     if (isSyncLipsync) {
@@ -65,7 +68,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
 
     if (isXai) {
       const { getXaiVideoTask } = await import('../xai-video');
-      const result = await getXaiVideoTask(taskId);
+      const result = await getXaiVideoTask(taskId, input.userId);
 
       let message: string;
       switch (result.status) {
@@ -92,6 +95,9 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
         status: result.status,
         videoUrl: result.videoUrl,
         error: result.error,
+        // This synchronous API cannot retrieve a task by ID alone. Missing
+        // local output is not evidence of a failed (and refundable) generation.
+        queryFailed: result.status === 'failed',
         message: result.status === 'completed'
           ? 'Gemini Omni video completed.'
           : `Gemini Omni standalone task cannot be re-fetched from taskId alone: ${result.error || 'missing provider URL'}`,
@@ -111,6 +117,23 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
           : result.status === 'failed'
             ? `MiniMax H3 video rendering failed: ${result.error || 'Unknown error'}`
             : 'MiniMax H3 video is rendering.',
+      };
+    }
+
+    if (isFalH3Max) {
+      const { getFalH3MaxVideoTask } = await import('../fal-h3-max-video');
+      const result = await getFalH3MaxVideoTask(taskId);
+      const label = taskId.startsWith('fal-h3max-reference-') ? 'FAL H3 Max' : 'fal H3 Turbo';
+      return {
+        success: result.status !== 'failed',
+        status: result.status,
+        videoUrl: result.videoUrl,
+        error: result.error,
+        message: result.status === 'completed'
+          ? `${label} video rendering completed!`
+          : result.status === 'failed'
+            ? `${label} video rendering failed: ${result.error || 'Unknown error'}`
+            : `${label} video is rendering.`,
       };
     }
 
@@ -229,6 +252,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
       success: false,
       status: 'failed',
       message: `Failed to query video status: ${msg}`,
+      queryFailed: true,
     };
   }
 }

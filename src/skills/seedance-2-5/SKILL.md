@@ -21,11 +21,10 @@ metadata:
 
 # Seedance 2.5
 
-Use `generate_animation` with `model: "seedance-2.5"`. Keep the app default on
-`seedance-fast` unless the user explicitly selects 2.5 or requests a capability
-that requires it. A non-NSFW direct 16-30 second request uses this model by
-default, but NSFW/adult-explicit intent has higher priority and routes to Wan
-3.0 instead.
+Use `generate_animation` with `model: "seedance-2.5"` for its longer duration,
+higher reference limits, or edit/extend capabilities. A non-NSFW direct 16-30
+second request uses this model by default, but NSFW/adult-explicit intent has
+higher priority and defaults to Wan 3.0 Prime instead.
 
 ## Provider contract
 

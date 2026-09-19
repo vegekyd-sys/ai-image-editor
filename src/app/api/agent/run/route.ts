@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { AgentPerf } from '@/lib/agent-perf';
-import { requireCredits, deductByTokens } from '@/lib/billing/credits';
+import { requireCredits, recordAgentTokenUsage } from '@/lib/billing/credits';
+import { enterBillingAttribution, resolveRequestBillingSource } from '@/lib/billing/attribution';
 import { getRequestLocale } from '@/lib/server-locale';
 import { translate } from '@/lib/locales';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
@@ -46,8 +47,9 @@ export async function POST(req: NextRequest) {
     ]);
     endRequestRead({ authenticated: !('error' in authResult) });
     if ('error' in authResult) return authResult.error;
-    const { userId, supabase } = authResult.auth;
+    const { userId, supabase, apiKeyId } = authResult.auth;
     cleanupSupabase = supabase;
+    const billingSource = resolveRequestBillingSource(req, { apiKeyId });
 
     const {
       projectId,
@@ -58,6 +60,7 @@ export async function POST(req: NextRequest) {
       referenceImageCount,
       uploadedVideoCount,
       turnMediaCount,
+      turnMediaSnapshotIds,
       preferredModel,
       agentModel,
       isNsfw,
@@ -170,7 +173,11 @@ export async function POST(req: NextRequest) {
       isNsfw,
       headless: true,
       firstMessageId,
+      // Read back by the execution runner so every credit debit inside this
+      // run is attributed to it (usage_logs.run_id / source).
+      billing: { source: billingSource, apiKeyId: apiKeyId ?? null },
       ...(durableExecution ? {
+        executionOwnerOrigin: req.nextUrl.origin,
         executionRequest: {
           locale,
           preferredModel,
@@ -185,6 +192,7 @@ export async function POST(req: NextRequest) {
           referenceImageCount,
           uploadedVideoCount,
           turnMediaCount,
+          turnMediaSnapshotIds,
           isNsfw,
           audioAttachments,
           codexSubscriptionAllowed,
@@ -217,6 +225,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: runCreateError?.message || 'Failed to create run' }, { status: 500 });
     }
     createdRunId = runId;
+    enterBillingAttribution({ runId, projectId, source: billingSource, apiKeyId: apiKeyId ?? null });
 
     // Write user message to DB (frontend does this itself, headless mode must do it here)
     await persistHeadlessUserMessage();
@@ -230,7 +239,7 @@ export async function POST(req: NextRequest) {
           // initialization path. The durable worker loads it after the browser
           // already has the run id and can begin its lightweight event watch.
           const { runAgentExecutionAttempt } = await import('@/lib/agent-execution-runner');
-          await runAgentExecutionAttempt(runId, { admin: supabase as any, workerId: `initial-${crypto.randomUUID()}` });
+          await runAgentExecutionAttempt(runId, { admin: supabase as any, workerId: `initial-${crypto.randomUUID()}`, origin: req.nextUrl.origin });
         } catch (executionError) {
           console.error(`[agent/run] durable attempt failed for ${runId}:`, executionError);
           // Leave the execution running with its due timestamp. Cron recovery
@@ -266,10 +275,12 @@ export async function POST(req: NextRequest) {
       referenceImageCount,
       uploadedVideoCount,
       turnMediaCount,
+      turnMediaSnapshotIds,
       audioAttachments,
       currentRunId: runId,
       agentModelId: resolvedAgentModel.id,
       agentModelProvider: resolvedAgentModel.provider,
+      supportsImageInput: resolvedAgentModel.supportsImageInput,
     });
     // Run agent after response is sent — next/server after() keeps the function alive
     after(async () => {
@@ -298,6 +309,7 @@ export async function POST(req: NextRequest) {
       let cacheWriteTelemetryComplete = true;
       let providerCostUsd: number | undefined;
       let agentModel = '';
+      let agentProvider = resolvedAgentModel.provider;
       let sawDone = false;
       let sawError = false;
       let wasStopped = false;
@@ -314,6 +326,7 @@ export async function POST(req: NextRequest) {
           audioAttachments: ctx.audioAttachments,
           snapshotImages: ctx.snapshotImages,
           explicitMediaIndices: ctx.explicitMediaIndices,
+          nativeVisionImages: ctx.nativeVisionImages,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,
           supabase,
@@ -346,6 +359,7 @@ export async function POST(req: NextRequest) {
             }
             providerCostUsd = event.providerCostUsd;
             if (event.model) agentModel = event.model;
+            if (event.provider) agentProvider = event.provider as typeof agentProvider;
           }
           await writer.processAndEnqueue(event);
           if (await shouldStop()) {
@@ -368,19 +382,18 @@ export async function POST(req: NextRequest) {
         } catch (persistError) {
           console.error(`[agent/run] Run ${runId} terminal error persistence failed:`, persistError);
         }
-        if (shouldRequireAgentCredits(resolvedAgentModel.provider)
-          && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0)) {
-          deductByTokens(
-            userId, 'agent', agentModel || 'unknown',
-            totalInputTokens, totalOutputTokens,
-            undefined, undefined,
-            {
-              cacheRead: totalCacheReadTokens,
-              cacheWrite: totalCacheWriteTokens,
-              cacheWriteTelemetryComplete,
-            },
+        if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+          await recordAgentTokenUsage({
+            userId,
+            provider: agentProvider,
+            modelId: agentModel || 'unknown',
+            inputTokens: totalInputTokens,
+            outputTokens: totalOutputTokens,
+            cacheReadTokens: totalCacheReadTokens,
+            cacheWriteTokens: totalCacheWriteTokens,
+            cacheWriteTelemetryComplete,
             providerCostUsd,
-          ).catch(e => console.error('[agent/run] billing error:', e));
+          }).catch(e => console.error('[agent/run] usage logging error:', e));
         }
         const { data: failedRun } = await supabase.from('agent_runs')
           .select('metadata').eq('id', runId).single();
@@ -414,20 +427,19 @@ export async function POST(req: NextRequest) {
       }
 
       await writer.flush();
-      // Deduct agent LLM tokens
-      if (shouldRequireAgentCredits(resolvedAgentModel.provider)
-        && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0)) {
-        deductByTokens(
-          userId, 'agent', agentModel || 'unknown',
-          totalInputTokens, totalOutputTokens,
-          undefined, undefined,
-          {
-            cacheRead: totalCacheReadTokens,
-            cacheWrite: totalCacheWriteTokens,
-            cacheWriteTelemetryComplete,
-          },
+      // Charge API providers or record personal-plan usage at zero cost.
+      if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+        await recordAgentTokenUsage({
+          userId,
+          provider: agentProvider,
+          modelId: agentModel || 'unknown',
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          cacheReadTokens: totalCacheReadTokens,
+          cacheWriteTokens: totalCacheWriteTokens,
+          cacheWriteTelemetryComplete,
           providerCostUsd,
-        ).catch(e => console.error('[agent/run] billing error:', e));
+        }).catch(e => console.error('[agent/run] usage logging error:', e));
       }
       const { data: finalRun } = await supabase.from('agent_runs')
         .select('status, metadata').eq('id', runId).single();

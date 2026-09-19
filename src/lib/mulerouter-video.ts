@@ -1,18 +1,25 @@
 /**
- * MuleRouter CarrotHub video client for Wan 3.0 Standard and Pro.
+ * MuleRouter CarrotHub video client for Wan 3.0 and Wan 3.0 Prime.
+ * 2K/4K resolutions switch to each model's FlashVSR/Pro endpoint.
  *
  * Official contracts:
  * https://www.mulerouter.ai/docs/api-reference/endpoint/carrothub/w3.0-video/generation
- * https://www.mulerouter.ai/docs/api-reference/endpoint/carrothub/berry-1.0-pro/generation
+ * https://www.mulerouter.ai/docs/api-reference/endpoint/carrothub/w3.0-video-prime/generation
+ * https://www.mulerouter.ai/docs/api-reference/endpoint/carrothub/w3.0-video-pro/generation
+ * https://www.mulerouter.ai/docs/api-reference/endpoint/carrothub/w3.0-video-prime-pro/generation
  */
 
 const BASE_URL = 'https://api.mulerouter.ai'
 const STANDARD_PATH = '/vendors/carrothub/v1/w3.0-video/generation'
-const PRO_PATH = '/vendors/carrothub/v1/berry-1.0-pro/generation'
+const PRIME_PATH = '/vendors/carrothub/v1/w3.0-video-prime/generation'
+const PRO_PATH = '/vendors/carrothub/v1/w3.0-video-pro/generation'
+const PRIME_PRO_PATH = '/vendors/carrothub/v1/w3.0-video-prime-pro/generation'
 const STANDARD_TASK_PREFIX = 'mr-wan30-'
+const PRIME_TASK_PREFIX = 'mr-wan30-prime-'
 const PRO_TASK_PREFIX = 'mr-wan30-pro-'
+const PRIME_PRO_TASK_PREFIX = 'mr-wan30-prime-pro-'
 
-export type MuleRouterWanModel = 'standard' | 'pro'
+export type MuleRouterWanModel = 'standard' | 'prime' | 'pro' | 'prime-pro'
 
 export interface MuleRouterVideoTaskInput {
   model: MuleRouterWanModel
@@ -42,14 +49,30 @@ function getApiKey(): string {
 }
 
 function getPath(model: MuleRouterWanModel): string {
-  return model === 'pro' ? PRO_PATH : STANDARD_PATH
+  if (model === 'prime') return PRIME_PATH
+  if (model === 'pro') return PRO_PATH
+  if (model === 'prime-pro') return PRIME_PRO_PATH
+  return STANDARD_PATH
 }
 
 function wrapTaskId(model: MuleRouterWanModel, providerTaskId: string): string {
-  return `${model === 'pro' ? PRO_TASK_PREFIX : STANDARD_TASK_PREFIX}${providerTaskId}`
+  const prefix = model === 'prime-pro'
+    ? PRIME_PRO_TASK_PREFIX
+    : model === 'prime'
+      ? PRIME_TASK_PREFIX
+      : model === 'pro'
+        ? PRO_TASK_PREFIX
+        : STANDARD_TASK_PREFIX
+  return `${prefix}${providerTaskId}`
 }
 
 function parseTaskId(taskId: string): { model: MuleRouterWanModel; providerTaskId: string } {
+  if (taskId.startsWith(PRIME_PRO_TASK_PREFIX)) {
+    return { model: 'prime-pro', providerTaskId: taskId.slice(PRIME_PRO_TASK_PREFIX.length) }
+  }
+  if (taskId.startsWith(PRIME_TASK_PREFIX)) {
+    return { model: 'prime', providerTaskId: taskId.slice(PRIME_TASK_PREFIX.length) }
+  }
   if (taskId.startsWith(PRO_TASK_PREFIX)) {
     return { model: 'pro', providerTaskId: taskId.slice(PRO_TASK_PREFIX.length) }
   }
@@ -76,7 +99,7 @@ async function readResponseData(response: Response): Promise<any> {
 }
 
 export function isMuleRouterVideoTask(taskId?: string | null): boolean {
-  return !!taskId && (taskId.startsWith(STANDARD_TASK_PREFIX) || taskId.startsWith(PRO_TASK_PREFIX))
+  return !!taskId && taskId.startsWith(STANDARD_TASK_PREFIX)
 }
 
 export async function createMuleRouterVideoTask(input: MuleRouterVideoTaskInput): Promise<string> {

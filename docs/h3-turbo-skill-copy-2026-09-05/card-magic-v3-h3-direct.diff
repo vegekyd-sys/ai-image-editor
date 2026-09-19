@@ -1,0 +1,13 @@
+--- SKILL.md
++++ SKILL.md
+@@ -16 +16 @@
+-用户上传一张人物照片，直接由 MiniMax H3 Max Turbo 生成一条 15 秒连续纸牌魔术变身视频。**用户原图直接进入视频模型；禁止生成、编辑或确认任何中间首帧。**
++用户上传一张人物照片，直接由 fal H3 Turbo 生成一条 15 秒连续纸牌魔术变身视频。**用户原图直接进入视频模型；禁止生成、编辑或确认任何中间首帧。**
+@@ -43 +43 @@
+-- 单次 MiniMax H3 Max Turbo，15 秒，768p，优先 9:16；不自动付费重试。
++- 单次 fal H3 Turbo，15 秒，768p，优先 9:16；不自动付费重试。
+@@ -49,0 +50,4 @@
++
++## Video model
++
++Use **fal H3 Turbo**, with `model: "minimax-h3-max"` for `generate_animation` or `--video-model minimax-h3-max` for the CLI. This skill uses one source image as the video start frame.

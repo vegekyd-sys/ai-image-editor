@@ -1,0 +1,27 @@
+--- SKILL.md
++++ SKILL.md
+@@ -11 +11 @@
+-    models: [minimax-h3-max-turbo, seedance-2.0, seedance-fast]
++    models: [minimax-h3-max, seedance-2.0, seedance-fast]
+@@ -20 +20 @@
+-The default is deliberately one-step: do not create an OpenAI first frame, a storyboard, or separately rendered clips. Generate one finished video from the uploaded image in one bound Makaron project with **MiniMax H3 Max Turbo, 768p**.
++The default is deliberately one-step: do not create an OpenAI first frame, a storyboard, or separately rendered clips. Generate one finished video from the uploaded image in one bound Makaron project with **fal H3 Turbo, 768p**.
+@@ -24 +24 @@
+-- **Model:** MiniMax H3 Max Turbo, 768p.
++- **Model:** fal H3 Turbo, 768p.
+@@ -103,2 +103,2 @@
+-| 1 | MiniMax H3 Max Turbo, 768p | Default one-step render. |
+-| 2 | MiniMax H3 Max Turbo, 768p | One focused reroll only when `allow_reroll: true` and QC finds a repairable visual defect. |
++| 1 | fal H3 Turbo, 768p | Default one-step render. |
++| 2 | fal H3 Turbo, 768p | One focused reroll only when `allow_reroll: true` and QC finds a repairable visual defect. |
+@@ -154 +154 @@
+-Render the actual video now with MiniMax H3 Max Turbo at 768p. Use <<<image_1>>> as the sole visual identity source for one recognizable authorized adult subject. Generate one complete {duration_seconds}-second vertical 9:16 retro-surreal music-video render. Do not return a plan, a storyboard, separate clips, an image, or external edits.
++Render the actual video now with fal H3 Turbo at 768p. Use <<<image_1>>> as the sole visual identity source for one recognizable authorized adult subject. Generate one complete {duration_seconds}-second vertical 9:16 retro-surreal music-video render. Do not return a plan, a storyboard, separate clips, an image, or external edits.
+@@ -186 +186 @@
+-- [ ] Default is MiniMax H3 Max Turbo, 768p, 9:16, 10 seconds, one video render.
++- [ ] Default is fal H3 Turbo, 768p, 9:16, 10 seconds, one video render.
+@@ -191,0 +192,4 @@
++
++## Video model
++
++Use **fal H3 Turbo**, with `model: "minimax-h3-max"` for `generate_animation` or `--video-model minimax-h3-max` for the CLI. This skill uses one source image as the video start frame.

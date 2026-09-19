@@ -77,6 +77,7 @@ describe('xAI video submission modes', () => {
       taskId: 'xai-request-1',
       providerModel: 'grok-imagine-video-1.5',
       mode: 'text-to-video',
+      provider: 'xai-api',
     })
 
     const [url, init] = fetchMock.mock.calls[0]
@@ -144,6 +145,7 @@ describe('xAI video submission modes', () => {
       taskId: 'xai-edit-1',
       providerModel: 'grok-imagine-video',
       mode: 'edit-video',
+      provider: 'xai-api',
     })
 
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.x.ai/v1/videos/edits')

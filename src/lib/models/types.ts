@@ -1,4 +1,5 @@
-export type ModelId = 'gemini' | 'gemini-lite' | 'qwen' | 'pony' | 'wai' | 'openai';
+export const IMAGE_MODEL_IDS = ['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'wan2.7-image'] as const;
+export type ModelId = typeof IMAGE_MODEL_IDS[number];
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type ImageBackground = 'auto' | 'opaque' | 'transparent';
 
@@ -8,7 +9,7 @@ export interface GenerateImageRequest {
   model?: ModelId;          // explicit model choice (agent tool param or UI selector)
   category?: string;        // tip category (for auto-routing)
   aspectRatio?: string;
-  /** Output background contract. Transparent output is currently GPT Image 2 only. */
+  /** Output background contract. Transparent output defaults to GPT Image 2.5 Flare. */
   background?: ImageBackground;
   thinkingEffort?: ReasoningEffort;
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)
@@ -46,4 +47,17 @@ export interface ModelBackend {
   id: ModelId;
   canHandle(req: GenerateImageRequest): boolean;
   generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage; provider?: string }>;
+}
+
+export const FAL_IMAGE25_IDS = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] as const;
+export type FalImage25Id = typeof FAL_IMAGE25_IDS[number];
+export function isFalImage25(model?: string | null): model is FalImage25Id {
+  return FAL_IMAGE25_IDS.some(id => id === model);
+}
+
+export function resolveImageModel(model?: ModelId, background?: ImageBackground): ModelId | undefined {
+  // Persisted selections and older clients used "openai" for Image 2.
+  // Migrate those requests before pricing and provider selection.
+  if (model === 'openai') return 'gpt-image-2.5-flare';
+  return background === 'transparent' && !isFalImage25(model) ? 'gpt-image-2.5-flare' : model;
 }

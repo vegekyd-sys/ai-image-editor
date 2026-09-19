@@ -8,6 +8,8 @@ import { dispatchAgentExecutionAttempt } from '@/lib/agent-execution-dispatch';
 import { extractStudioDeliveryVideo } from '@/lib/agent-run-artifacts';
 import { resolveWorkspaceFile } from '@/lib/workspace';
 import { normalizeLocale, translate } from '@/lib/locales';
+import { getRunUsage } from '@/lib/billing/run-usage';
+import { getBalance } from '@/lib/billing/credits';
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
 
@@ -65,7 +67,7 @@ function dedupeLegacyVideos<T extends { videoUrl?: string; taskId?: string }>(it
   return result;
 }
 
-async function pollVideoProvider(taskId: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
+async function pollVideoProvider(taskId: string, userId?: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
   const isEvolink = taskId.startsWith('task-unified-');
   const isMuleRouter = taskId.startsWith('mr-wan30-');
   const isSeedance = taskId.startsWith('cgt-');
@@ -73,6 +75,7 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
   const isXai = taskId.startsWith('xai-');
   const isGoogleOmni = taskId.startsWith('google-omni-');
   const isMinimax = taskId.startsWith('minimax-h3-');
+  const isFalH3Max = taskId.startsWith('fal-h3max-');
   const isSyncLipsync = taskId.startsWith('sync3-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
@@ -91,13 +94,16 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
     return { ...result, taskId };
   } else if (isXai) {
     const { getXaiVideoTask } = await import('@/lib/xai-video');
-    return getXaiVideoTask(taskId);
+    return getXaiVideoTask(taskId, userId);
   } else if (isGoogleOmni) {
     const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video');
     return getGoogleOmniVideoTask(taskId);
   } else if (isMinimax) {
     const { getMinimaxVideoTask } = await import('@/lib/minimax-video');
     return getMinimaxVideoTask(taskId);
+  } else if (isFalH3Max) {
+    const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video');
+    return getFalH3MaxVideoTask(taskId);
   } else if (isSyncLipsync) {
     const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync');
     return getSyncLipsyncTask(taskId);
@@ -128,6 +134,7 @@ export async function GET(
     const admin = getSupabaseAdmin();
     const url = new URL(req.url);
     const wantEvents = url.searchParams.get('events') === 'true';
+    const wantUsage = url.searchParams.get('usage') === 'true';
     const streamView = wantEvents && url.searchParams.get('view') === 'stream';
     const afterSeq = url.searchParams.has('after') ? parseInt(url.searchParams.get('after')!) : undefined;
 
@@ -576,7 +583,7 @@ export async function GET(
               // Actively poll provider API
               try {
                 const taskId = videoMeta.taskId as string;
-                const pollResult = await pollVideoProvider(taskId);
+                const pollResult = await pollVideoProvider(taskId, ownerUserId);
                 if (pollResult.status === 'completed' && pollResult.videoUrl) {
                   const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl };
                   await admin.from('snapshots')
@@ -660,7 +667,7 @@ export async function GET(
             if (anim.status === 'processing') {
               try {
                 const taskId = v.task_id as string;
-                const result = await pollVideoProvider(taskId);
+                const result = await pollVideoProvider(taskId, ownerUserId);
                 if (result.status === 'completed' && result.videoUrl) {
                   const admin = getSupabaseAdmin();
                   await admin.from('project_animations')
@@ -812,6 +819,17 @@ export async function GET(
       events = data ?? [];
     }
 
+    // Per-run credit usage. Included once the Agent has stopped (charges are
+    // awaited before the run turns terminal) or on request with ?usage=true.
+    let usage: Awaited<ReturnType<typeof getRunUsage>> | undefined;
+    if (agentDone || wantUsage) {
+      const [summary, balance] = await Promise.all([
+        getRunUsage(admin, runId),
+        getBalance(run.user_id).then(result => result.balance).catch(() => undefined),
+      ]);
+      usage = typeof balance === 'number' ? { ...summary, balance } : summary;
+    }
+
     return NextResponse.json({
       id: run.id,
       status: effectiveStatus,
@@ -831,6 +849,7 @@ export async function GET(
       output: finalOutput,
       eventCount: eventCount ?? 0,
       result, // legacy
+      ...(usage ? { usage } : {}),
       ...(errorMsg ? { error: { code: 'agent_error', message: errorMsg } } : {}),
       ...(events ? { events } : {}),
     });

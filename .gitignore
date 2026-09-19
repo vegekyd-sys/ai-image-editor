@@ -94,6 +94,7 @@ marketing/meta-ads/
 !/scripts/benchmark-google-omni-1-1.mjs
 !/scripts/check-ui-i18n.mjs
 !/scripts/check-video-reference-workflow.mjs
+!/scripts/test-media-pricing-db.mjs
 !/scripts/ui-i18n-baseline.json
 !/scripts/studio-run-golden.ts
 !/scripts/sticker-bridge-acceptance.ts
@@ -137,6 +138,7 @@ test-kling.mjs
 .claude/worktrees/
 .codex/
 
-# local agent instructions and experimental infra
+# Local nested agent instructions and experimental infra
 AGENTS.md
+!/AGENTS.md
 infra/

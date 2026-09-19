@@ -1,0 +1,205 @@
+{
+  "schema_version": "0.1.0",
+  "reference": {
+    "source_name": "makaron-intro_2026-05-07_02-05-55.mp4",
+    "duration_sec": 15,
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "video_codec": "h264",
+    "audio": {
+      "present": false,
+      "codec": null,
+      "sample_rate": null
+    }
+  },
+  "analysis": {
+    "boundary_method": "adaptive_scene_plus_black",
+    "asr_status": "not_applicable",
+    "beat_status": "not_applicable",
+    "model_review_status": "required",
+    "scene_score_threshold": 0.00152,
+    "scene_candidate_count": 7,
+    "black_candidate_count": 2,
+    "unresolved_boundary_candidates": [
+      {
+        "time_sec": 1.133,
+        "kind": "unknown",
+        "confidence": 0.45,
+        "evidence": [
+          {
+            "method": "adaptive_scene_score",
+            "time_sec": 1.133,
+            "score": 0.00152
+          }
+        ]
+      }
+    ],
+    "warnings": [
+      "Boundaries are adaptive candidates, not semantic ground truth.",
+      "Smooth motion graphics and dark scenes require frame-level model review."
+    ]
+  },
+  "global_dna": {
+    "aspect_ratio": "9:16",
+    "shot_duration_curve_sec": [
+      5.017,
+      5.5,
+      4.483
+    ],
+    "cut_rate_per_min": 8,
+    "style": null,
+    "audio_arc": null
+  },
+  "boundaries": [
+    {
+      "time_sec": 5.017,
+      "kind": "fade_or_black",
+      "confidence": 0.7,
+      "evidence": [
+        {
+          "method": "blackdetect",
+          "time_sec": 5.017,
+          "start_sec": 4.167,
+          "end_sec": 5.867,
+          "score": 1
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 3.833,
+          "score": 0.005336
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 4.833,
+          "score": 0.001919
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 5.333,
+          "score": 0.001557
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 6.333,
+          "score": 0.001542
+        }
+      ]
+    },
+    {
+      "time_sec": 10.517,
+      "kind": "fade_or_black",
+      "confidence": 0.7,
+      "evidence": [
+        {
+          "method": "blackdetect",
+          "time_sec": 10.517,
+          "start_sec": 10.133,
+          "end_sec": 10.9,
+          "score": 0.511111
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 9.833,
+          "score": 0.003868
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 10.833,
+          "score": 0.003267
+        }
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "id": "shot-001",
+      "order": 1,
+      "source_range": {
+        "start_sec": 0,
+        "end_sec": 5.017
+      },
+      "duration_sec": 5.017,
+      "narrative_role": null,
+      "subject_action": null,
+      "composition": null,
+      "camera_motion": null,
+      "transition_in": null,
+      "transition_out": null,
+      "text_layers": [],
+      "audio": null,
+      "style": null,
+      "preserve": [
+        "duration",
+        "order"
+      ],
+      "replace": [
+        "subject",
+        "brand",
+        "copy"
+      ],
+      "confidence": 0.55,
+      "needs_model_review": true
+    },
+    {
+      "id": "shot-002",
+      "order": 2,
+      "source_range": {
+        "start_sec": 5.017,
+        "end_sec": 10.517
+      },
+      "duration_sec": 5.5,
+      "narrative_role": null,
+      "subject_action": null,
+      "composition": null,
+      "camera_motion": null,
+      "transition_in": null,
+      "transition_out": null,
+      "text_layers": [],
+      "audio": null,
+      "style": null,
+      "preserve": [
+        "duration",
+        "order"
+      ],
+      "replace": [
+        "subject",
+        "brand",
+        "copy"
+      ],
+      "confidence": 0.5,
+      "needs_model_review": true
+    },
+    {
+      "id": "shot-003",
+      "order": 3,
+      "source_range": {
+        "start_sec": 10.517,
+        "end_sec": 15
+      },
+      "duration_sec": 4.483,
+      "narrative_role": null,
+      "subject_action": null,
+      "composition": null,
+      "camera_motion": null,
+      "transition_in": null,
+      "transition_out": null,
+      "text_layers": [],
+      "audio": null,
+      "style": null,
+      "preserve": [
+        "duration",
+        "order"
+      ],
+      "replace": [
+        "subject",
+        "brand",
+        "copy"
+      ],
+      "confidence": 0.55,
+      "needs_model_review": true
+    }
+  ],
+  "route": null,
+  "qa_targets": null
+}

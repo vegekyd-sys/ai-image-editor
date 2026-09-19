@@ -1,5 +1,5 @@
 interface AgentProviderGroupHeaderProps {
-  provider: 'azure' | 'codex' | 'other';
+  provider: 'azure' | 'codex' | 'grok' | 'other';
   label: string;
   detail: string;
   remainingLabel?: string;
@@ -17,15 +17,19 @@ export default function AgentProviderGroupHeader({
   progress,
   usageTestId,
 }: AgentProviderGroupHeaderProps) {
-  const hasCodexQuota = provider === 'codex' && remainingLabel && resetLabel;
+  const hasPersonalQuota = (provider === 'codex' || provider === 'grok')
+    && remainingLabel
+    && resetLabel;
 
   return (
     <div className="mkr-agent-model-group-header" data-agent-provider-group={provider}>
       <span className="mkr-agent-model-group-identity">
-        {provider === 'codex' && <span className="mkr-agent-model-group-signal" aria-hidden="true" />}
+        {(provider === 'codex' || provider === 'grok') && (
+          <span className="mkr-agent-model-group-signal" aria-hidden="true" />
+        )}
         <span className="mkr-agent-model-group-title">{label}</span>
       </span>
-      {hasCodexQuota ? (
+      {hasPersonalQuota ? (
         <>
           <span
             className="mkr-agent-model-group-quota"

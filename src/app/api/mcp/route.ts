@@ -1,12 +1,16 @@
+import { isFalImage25 } from '@/lib/models/types';
+import { getTokenRate } from '@/lib/billing/token-rates';
 import { createMakaronMcpServer } from '@/mcp/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { validateApiKey } from '@/lib/billing/api-keys';
-import { checkBalance, deductCredits, deductByTokens } from '@/lib/billing/credits';
+import { enterBillingAttribution, resolveRequestBillingSource } from '@/lib/billing/attribution';
+import { checkBalance, deductCredits, deductByTokens, isBillingEnabled, recordSubscriptionUsage, requireCredits } from '@/lib/billing/credits';
 import { resolveToolName } from '@/lib/billing/pricing';
 import { deductSeedAudioCredits } from '@/lib/billing/seed-audio';
-import { getRequiredVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities';
+import { submitMcpVideo, settleMcpVideoStatus } from '@/lib/billing/mcp-video';
+import { quoteSeedAudio } from '@/lib/billing/media-pricing';
 
-export const maxDuration = 180;
+export const maxDuration = 300;
 
 interface AuthResult {
   type: 'user' | 'legacy' | 'none';
@@ -51,11 +55,44 @@ async function checkAuth(req: Request): Promise<{ error?: Response; auth: AuthRe
 async function handleMcp(req: Request): Promise<Response> {
   const { error: authError, auth } = await checkAuth(req);
   if (authError) return authError;
+  let creditsCharged = 0;
+  const trackCharge = (result: { charged: number } | void) => {
+    if (result && Number.isFinite(result.charged)) creditsCharged += result.charged;
+  };
+  if (auth.type === 'user') {
+    // makaron-cli announces itself; other API-key callers stay 'mcp'.
+    enterBillingAttribution({
+      source: resolveRequestBillingSource(req, { apiKeyId: auth.keyId }) === 'cli' ? 'cli' : 'mcp',
+      apiKeyId: auth.keyId ?? null,
+    });
+  }
 
   const server = createMakaronMcpServer({
+    userId: auth.userId,
+    submitVideo: auth.type === 'user' ? (input, toolName) => submitMcpVideo(input, { userId: auth.userId!, apiKeyId: auth.keyId!, toolName }) : undefined,
+    onVideoStatus: auth.type === 'user' ? (taskId, status, queryFailed) => settleMcpVideoStatus(auth.userId!, taskId, status, queryFailed) : undefined,
     // Pre-check: ensure user has enough credits
-    onToolStart: auth.type === 'user' ? async (toolName) => {
-      const pricingName = resolveToolName(toolName, undefined); // model unknown at start, use base name
+    onToolStart: auth.type === 'user' ? async (toolName, model) => {
+      if (!(await isBillingEnabled())) return { allowed: true };
+      if (toolName === 'makaron_edit_image' && isFalImage25(model)) {
+        const rate = await getTokenRate(model);
+        if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'GPT Image 2.5 pricing is not configured.' };
+      }
+      // Video is atomically reserved after resolving provider inputs.
+      if (toolName === 'makaron_create_video' || toolName === 'makaron_edit_video') {
+        return { allowed: true };
+      }
+      if (toolName === 'makaron_create_seed_audio') {
+        const quote = await quoteSeedAudio({ durationSeconds: 20 });
+        const check = await requireCredits(auth.userId!, quote.credits);
+        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
+      }
+      if (['makaron_write_video_script', 'makaron_analyze_video'].includes(toolName)
+        || (toolName === 'makaron_edit_image' && !['qwen', 'pony', 'wai', 'wan2.7-image'].includes(model ?? ''))) {
+        const check = await requireCredits(auth.userId!, 5);
+        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
+      }
+      const pricingName = resolveToolName(toolName, model);
       const { ok, balance, cost } = await checkBalance(auth.userId!, pricingName);
       if (!ok) {
         return { allowed: false, message: `Insufficient credits. Need ${cost}, have ${balance}. Top up at https://www.makaron.app/dashboard` };
@@ -65,43 +102,65 @@ async function handleMcp(req: Request): Promise<Response> {
 
     // Post-complete: deduct credits (token-based if usage available, else per-action)
     onToolComplete: auth.type === 'user' ? async (toolName, model, durationMs, usage, meta) => {
-      if (usage) {
+      // Video is already reserved; analysis charges inside its shared analyzer.
+      if (['makaron_create_video', 'makaron_edit_video', 'makaron_analyze_video'].includes(toolName)) return;
+      const usageSubscriptionProvider = usage?.provider === 'codex-subscription'
+        || usage?.provider === 'grok-subscription'
+        ? usage.provider
+        : undefined;
+      if (usage && usageSubscriptionProvider) {
+        try {
+          await recordSubscriptionUsage(
+            auth.userId!,
+            usageSubscriptionProvider,
+            toolName,
+            usage.modelId,
+            {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              durationMs,
+              apiKeyId: auth.keyId,
+            },
+          );
+        } catch (error) {
+          console.error('[billing] MCP subscription usage logging error:', error);
+        }
+      } else if (meta?.provider === 'grok-subscription') {
+        try {
+          await recordSubscriptionUsage(
+            auth.userId!,
+            'grok-subscription',
+            toolName,
+            model || meta.videoModel || 'grok',
+            { durationMs, apiKeyId: auth.keyId },
+          );
+        } catch (error) {
+          console.error('[billing] MCP subscription usage logging error:', error);
+        }
+      } else if (usage) {
         // Token-based billing — Gemini/OpenRouter tools that return usage
-        await deductByTokens(
+        trackCharge(await deductByTokens(
           auth.userId!,
           toolName,
           usage.modelId,
-          usage.inputTokens,
+          usage.inputTokens - (usage.cacheReadTokens ?? 0),
           usage.outputTokens,
           durationMs,
           auth.keyId,
-          undefined,
+          usage.cacheReadTokens == null ? undefined : { cacheRead: usage.cacheReadTokens, cacheWrite: 0 },
           usage.providerCostUsd,
-        );
-      } else if (meta?.videoDurationSec) {
-        const videoModel = normalizeVideoModelId(meta.videoModel || model);
-        const videoCredits = getRequiredVideoCredits({
-          model: videoModel,
-          resolution: meta.videoResolution as any,
-          durationSec: meta.videoDurationSec,
-          imageCount: meta.imageCount ?? 0,
-          referenceVideoDurationSec: meta.referenceVideoDurationSec,
-          operation: meta.videoOperation,
-          contentFilter: meta.contentFilter,
-        });
-        const { deductFixedCredits } = await import('@/lib/billing/credits');
-        await deductFixedCredits(auth.userId!, videoCredits, toolName, videoModel, durationMs, auth.keyId);
+        ));
       } else if (meta?.seedAudioDurationSec || meta?.seedAudioProviderCredits) {
-        await deductSeedAudioCredits(auth.userId!, {
+        trackCharge(await deductSeedAudioCredits(auth.userId!, {
           durationSeconds: meta.seedAudioDurationSec,
           providerCreditsUsed: meta.seedAudioProviderCredits,
           model,
           generationSeconds: meta.seedAudioGenerationSec ?? (durationMs ? durationMs / 1000 : undefined),
           apiKeyId: auth.keyId,
-        });
+        }));
       } else {
         // Per-action billing — ComfyUI, Suno etc.
-        await deductCredits(auth.userId!, auth.keyId!, toolName, model, durationMs);
+        trackCharge(await deductCredits(auth.userId!, auth.keyId!, toolName, model, durationMs));
       }
     } : undefined,
   });
@@ -117,7 +176,9 @@ async function handleMcp(req: Request): Promise<Response> {
   // Add billing headers for user keys
   if (auth.type === 'user') {
     const headers = new Headers(response.headers);
-    // Get updated balance (after deduction)
+    // Credits charged by this request (video reservations are reported by
+    // the tool result itself) plus the balance after deduction.
+    headers.set('X-Credits-Charged', String(creditsCharged));
     try {
       const { getBalance } = await import('@/lib/billing/credits');
       const { balance } = await getBalance(auth.userId!);

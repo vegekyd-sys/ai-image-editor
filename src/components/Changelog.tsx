@@ -17,12 +17,22 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-09-19', localeKey: 'cliRunCredits' },
+  { date: '2026-09-15', localeKey: 'sceneImportReliability' },
+  { date: '2026-09-10', en: { title: 'DeepSeek V4.1 Flash', items: ['DeepSeek V4.1 Flash is now available in Agent: a fast, lower-cost option that understands images and turns a simple prompt into an editable project or finished video.'] }, zh: { title: 'DeepSeek V4.1 Flash 上线', items: ['Agent 现已支持 DeepSeek V4.1 Flash：更快、更省成本，也能看懂图片，把一句话变成可编辑项目或成片。'] } },
+  { date: '2026-09-10', localeKey: 'gptImage25' },
+  { date: '2026-09-06', localeKey: 'creativeSpeedUpgrade' },
+  { date: '2026-09-04', localeKey: 'wan27Image' },
+  { date: '2026-09-03', localeKey: 'fasterVideoAnalysis' },
+  { date: '2026-09-03', localeKey: 'videoReplication' },
+  { date: '2026-09-02', localeKey: 'minimaxH3Max' },
+  { date: '2026-09-01', en: { title: 'Personal Grok Plans for Test Accounts', items: ['Admins can now add registered test accounts to the Grok allowlist so their Agent chats and Grok Imagine videos use the owner’s personal SuperGrok plan.'] }, zh: { title: '测试账号可用个人 Grok 套餐', items: ['管理员现在可以把已注册的测试账号加入 Grok 名单，让这些账号的 Agent 对话和 Grok Imagine 视频使用 owner 的个人 SuperGrok 套餐。'] } },
   { date: '2026-09-01', localeKey: 'fastDurableAgent' },
   { date: '2026-09-01', localeKey: 'wan30' },
   { date: '2026-08-31', en: { title: 'Grok 1.5 Video Editing', items: ['Edit an existing video with Grok 1.5 to change clothing, backgrounds, materials, or atmosphere while keeping the original motion and sound.', 'Generate with up to seven reference images, or use one source video for editing and extension with limits checked automatically.'] }, zh: { title: 'Grok 1.5 视频编辑', items: ['现在可以用 Grok 1.5 直接编辑现有视频，更换服装、背景、材质或整体氛围，同时保留原有动作与声音。', '生成视频最多支持 7 张参考图；编辑或续写支持 1 条源视频，并会自动检查不同模式的素材上限。'] } },
@@ -989,6 +999,34 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  gptImage25: {
+    title: 'changelog.gptImage25.title',
+    items: ['changelog.gptImage25.item1', 'changelog.gptImage25.item2', 'changelog.gptImage25.item3'],
+  },
+  creativeSpeedUpgrade: {
+    title: 'changelog.creativeSpeedUpgrade.title',
+    items: ['changelog.creativeSpeedUpgrade.item1', 'changelog.creativeSpeedUpgrade.item2', 'changelog.creativeSpeedUpgrade.item3'],
+  },
+  wan27Image: {
+    title: 'changelog.wan27Image.title',
+    items: ['changelog.wan27Image.item1', 'changelog.wan27Image.item2'],
+  },
+  fasterVideoAnalysis: {
+    title: 'changelog.fasterVideoAnalysis.title',
+    items: ['changelog.fasterVideoAnalysis.item1'],
+  },
+  videoReplication: {
+    title: 'changelog.videoReplication.title',
+    items: [
+      'changelog.videoReplication.item1',
+      'changelog.videoReplication.item2',
+      'changelog.videoReplication.item3',
+    ],
+  },
+  minimaxH3Max: {
+    title: 'changelog.minimaxH3Max.title',
+    items: ['changelog.minimaxH3Max.item1'],
+  },
   fastDurableAgent: {
     title: 'changelog.fastDurableAgent.title',
     items: ['changelog.fastDurableAgent.item1'],
@@ -1006,6 +1044,14 @@ const LOCALIZED_CHANGELOG_KEYS = {
       'changelog.googleOmni11.item1',
       'changelog.googleOmni11.item2',
     ],
+  },
+  cliRunCredits: {
+    title: 'changelog.cliRunCredits.title',
+    items: ['changelog.cliRunCredits.item1', 'changelog.cliRunCredits.item2'],
+  },
+  sceneImportReliability: {
+    title: 'changelog.sceneImportReliability.title',
+    items: ['changelog.sceneImportReliability.item1', 'changelog.sceneImportReliability.item2'],
   },
   externalImages: {
     title: 'changelog.externalImages.title',

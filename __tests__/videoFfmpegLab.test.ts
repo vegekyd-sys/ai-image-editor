@@ -8,12 +8,34 @@ import { join } from 'path'
 import { promisify } from 'util'
 import { MAX_ACCEPTED_DURATION, MAX_DURATION } from '@/lib/video-upload'
 import { findFfmpeg } from '@/lib/ffmpeg-runtime'
-import { buildMediaItems, runNodeMediaCode } from '@/lib/media-sandbox'
+import { buildMediaItems, normalizeOutputs, runNodeMediaCode } from '@/lib/media-sandbox'
 import { readAgentRuntimeSource } from './helpers/agentRuntimeSource'
 
 const exec = promisify(execFile)
 
 describe('Agent FFmpeg video lab', () => {
+  it('accepts a saveOutput descriptor accidentally returned as an output path', () => {
+    const outputs = normalizeOutputs({
+      type: 'files',
+      outputs: [{
+        path: {
+          workspacePath: 'prepared/fighter-a.png',
+          storageUrl: 'https://example.com/fighter-a.png',
+          contentType: 'image/png',
+        },
+        contentType: 'image/png',
+        description: 'Prepared fighter A',
+      }],
+    }, '/tmp/media-output')
+
+    expect(outputs).toEqual([expect.objectContaining({
+      workspacePath: 'prepared/fighter-a.png',
+      storageUrl: 'https://example.com/fighter-a.png',
+      contentType: 'image/png',
+      description: 'Prepared fighter A',
+    })])
+  })
+
   it('allows long uploads for Agent-side FFmpeg workflows', () => {
     expect(MAX_DURATION).toBe(900)
     expect(MAX_ACCEPTED_DURATION).toBeGreaterThan(38.776)

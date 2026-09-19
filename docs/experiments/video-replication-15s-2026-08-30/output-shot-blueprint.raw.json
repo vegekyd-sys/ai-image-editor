@@ -1,0 +1,192 @@
+{
+  "schema_version": "0.1.0",
+  "reference": {
+    "source_name": "seedance-2.5-replica-attempt-1.mp4",
+    "duration_sec": 15.042,
+    "width": 480,
+    "height": 854,
+    "fps": 24,
+    "video_codec": "h264",
+    "audio": {
+      "present": false,
+      "codec": null,
+      "sample_rate": null
+    }
+  },
+  "analysis": {
+    "boundary_method": "adaptive_scene_plus_black",
+    "asr_status": "not_applicable",
+    "beat_status": "not_applicable",
+    "model_review_status": "required",
+    "scene_score_threshold": 0.005257,
+    "scene_candidate_count": 6,
+    "black_candidate_count": 2,
+    "unresolved_boundary_candidates": [],
+    "warnings": [
+      "Boundaries are adaptive candidates, not semantic ground truth.",
+      "Smooth motion graphics and dark scenes require frame-level model review."
+    ]
+  },
+  "global_dna": {
+    "aspect_ratio": "240:427",
+    "shot_duration_curve_sec": [
+      4.75,
+      5.729,
+      4.563
+    ],
+    "cut_rate_per_min": 7.98,
+    "style": null,
+    "audio_arc": null
+  },
+  "boundaries": [
+    {
+      "time_sec": 4.75,
+      "kind": "fade_or_black",
+      "confidence": 0.7,
+      "evidence": [
+        {
+          "method": "blackdetect",
+          "time_sec": 4.75,
+          "start_sec": 4.208,
+          "end_sec": 5.292,
+          "score": 0.722222
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 3.833,
+          "score": 0.006984
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 4.208,
+          "score": 0.005478
+        }
+      ]
+    },
+    {
+      "time_sec": 10.479,
+      "kind": "fade_or_black",
+      "confidence": 0.7,
+      "evidence": [
+        {
+          "method": "blackdetect",
+          "time_sec": 10.479,
+          "start_sec": 10.167,
+          "end_sec": 10.792,
+          "score": 0.416667
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 9.958,
+          "score": 0.005286
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 10.042,
+          "score": 0.005777
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 10.833,
+          "score": 0.00741
+        },
+        {
+          "method": "adaptive_scene_score",
+          "time_sec": 11.167,
+          "score": 0.005257
+        }
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "id": "shot-001",
+      "order": 1,
+      "source_range": {
+        "start_sec": 0,
+        "end_sec": 4.75
+      },
+      "duration_sec": 4.75,
+      "narrative_role": null,
+      "subject_action": null,
+      "composition": null,
+      "camera_motion": null,
+      "transition_in": null,
+      "transition_out": null,
+      "text_layers": [],
+      "audio": null,
+      "style": null,
+      "preserve": [
+        "duration",
+        "order"
+      ],
+      "replace": [
+        "subject",
+        "brand",
+        "copy"
+      ],
+      "confidence": 0.55,
+      "needs_model_review": true
+    },
+    {
+      "id": "shot-002",
+      "order": 2,
+      "source_range": {
+        "start_sec": 4.75,
+        "end_sec": 10.479
+      },
+      "duration_sec": 5.729,
+      "narrative_role": null,
+      "subject_action": null,
+      "composition": null,
+      "camera_motion": null,
+      "transition_in": null,
+      "transition_out": null,
+      "text_layers": [],
+      "audio": null,
+      "style": null,
+      "preserve": [
+        "duration",
+        "order"
+      ],
+      "replace": [
+        "subject",
+        "brand",
+        "copy"
+      ],
+      "confidence": 0.5,
+      "needs_model_review": true
+    },
+    {
+      "id": "shot-003",
+      "order": 3,
+      "source_range": {
+        "start_sec": 10.479,
+        "end_sec": 15.042
+      },
+      "duration_sec": 4.563,
+      "narrative_role": null,
+      "subject_action": null,
+      "composition": null,
+      "camera_motion": null,
+      "transition_in": null,
+      "transition_out": null,
+      "text_layers": [],
+      "audio": null,
+      "style": null,
+      "preserve": [
+        "duration",
+        "order"
+      ],
+      "replace": [
+        "subject",
+        "brand",
+        "copy"
+      ],
+      "confidence": 0.55,
+      "needs_model_review": true
+    }
+  ],
+  "route": null,
+  "qa_targets": null
+}

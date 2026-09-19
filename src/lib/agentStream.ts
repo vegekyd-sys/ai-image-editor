@@ -59,6 +59,7 @@ export async function streamAgent(
     referenceImageCount?: number;
     uploadedVideoCount?: number;
     turnMediaCount?: number;
+    turnMediaSnapshotIds?: string[];
     audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
     durable?: boolean;
   },
@@ -128,6 +129,7 @@ async function streamDurableAgent(
       referenceImageCount: body.referenceImageCount,
       uploadedVideoCount: body.uploadedVideoCount,
       turnMediaCount: body.turnMediaCount,
+      turnMediaSnapshotIds: body.turnMediaSnapshotIds,
       isNsfw: body.isNsfw,
       audioAttachments: body.audioAttachments,
       clientPersistedUserMessage: true,

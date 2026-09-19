@@ -39,10 +39,22 @@ export async function GET(
     const isXai = taskId.startsWith('xai-')
     const isGoogleOmni = taskId.startsWith('google-omni-')
     const isMinimax = taskId.startsWith('minimax-h3-')
+    const isFalH3Max = taskId.startsWith('fal-h3max-')
     const isSyncLipsync = taskId.startsWith('sync3-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? taskId.slice(3) : taskId
+    let grokOwnerUserId: string | undefined
+    if (taskId.startsWith('xai-sub-')) {
+      const admin = getSupabaseAdmin()
+      const { data: ownerRow } = await admin
+        .from('project_animations')
+        .select('projects(user_id)')
+        .eq('piapi_task_id', taskId)
+        .maybeSingle()
+      const projects = ownerRow?.projects as any
+      grokOwnerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id
+    }
 
     if (isMuleRouter) {
       const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
@@ -59,7 +71,7 @@ export async function GET(
       result.taskId = taskId // preserve mc- prefix for frontend
     } else if (isXai) {
       const { getXaiVideoTask } = await import('@/lib/xai-video')
-      result = await getXaiVideoTask(taskId)
+      result = await getXaiVideoTask(taskId, grokOwnerUserId)
     } else if (isGoogleOmni) {
       const admin = getSupabaseAdmin()
       const { data: anim } = await admin
@@ -72,6 +84,9 @@ export async function GET(
     } else if (isMinimax) {
       const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
       result = await getMinimaxVideoTask(taskId)
+    } else if (isFalH3Max) {
+      const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+      result = await getFalH3MaxVideoTask(taskId)
     } else if (isSyncLipsync) {
       const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
       result = await getSyncLipsyncTask(taskId)

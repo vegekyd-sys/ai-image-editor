@@ -9,6 +9,7 @@ import fs from 'fs';
 import { getPromptLanguage, getTipsLanguageInstruction, normalizeLocale } from './locales';
 import { DEFAULT_IMAGE_EDIT_SYSTEM_PROMPT, getChatSystemPrompt } from './chat-response-policy';
 import { getTipsPromptTemplate } from './tips-response-policy';
+import type { TokenUsage } from './models/types';
 
 const LOG_FILE = '/tmp/tips-timing.log';
 function tlog(msg: string) {
@@ -702,7 +703,7 @@ export async function generateImageWithReferences(
   aspectRatio?: string,
   thinkingEffort?: 'minimal' | 'high',
   modelOverride?: string,
-): Promise<string | null> {
+): Promise<{ image: string | null; usage?: TokenUsage }> {
   // Build a prompt that labels each image by its role
   const imageLabels = images
     .map((img, i) => `[图片${i + 1}: ${img.role}]`)
@@ -717,15 +718,15 @@ export async function generateImageWithReferences(
   }
   if (result.image) {
     console.log('✅ [generateImageWithReferences] multi-image generation succeeded');
-    return result.image;
+    return { image: result.image, usage: result.usage };
   }
   // Fallback: if multi-image failed, use single-image on the first image (edit base = images[0])
   console.warn('⚠️ [generateImageWithReferences] multi-image failed, falling back to single image');
   const base = images[0].url;
-  const fallback = PROVIDER === 'openrouter'
+  const fallback = PROVIDER === 'openrouter' || modelOverride
     ? await generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort, modelOverride)
     : await generatePreviewImageGoogle(base, editPrompt, aspectRatio);
-  return fallback.image;
+  return fallback;
 }
 
 // ── Multi-Image Generation (for experiments) ─────────────────────
@@ -736,8 +737,8 @@ export async function generateWithMultipleImages(
   wantImage: boolean,
   thinkingEffort?: 'minimal' | 'high',
   modelOverride?: string,
-): Promise<{ text?: string; image?: string }> {
-  if (PROVIDER === 'openrouter') {
+): Promise<{ text?: string; image?: string; usage?: TokenUsage }> {
+  if (PROVIDER === 'openrouter' || modelOverride) {
     return generateMultiImageOpenRouter(images, prompt, wantImage, thinkingEffort, modelOverride);
   } else {
     return generateMultiImageGoogle(images, prompt, wantImage);
@@ -748,7 +749,7 @@ async function generateMultiImageGoogle(
   images: string[],
   prompt: string,
   wantImage: boolean,
-): Promise<{ text?: string; image?: string }> {
+): Promise<{ text?: string; image?: string; usage?: TokenUsage }> {
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
 
   for (const img of images) {
@@ -770,10 +771,16 @@ async function generateMultiImageGoogle(
   });
 
   checkBlockReason(result, 'Google-Multi');
+  const meta = result.usageMetadata;
+  const usage: TokenUsage | undefined = meta ? {
+    inputTokens: meta.promptTokenCount ?? 0,
+    outputTokens: (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0),
+    modelId: MODEL,
+  } : undefined;
   const resultParts = result.candidates?.[0]?.content?.parts;
   if (!resultParts) {
     console.warn('[Google-Multi] No parts in response — model returned empty');
-    return {};
+    return { usage };
   }
 
   let text: string | undefined;
@@ -792,7 +799,7 @@ async function generateMultiImageGoogle(
   if (image) console.log(`[Google-Multi] Image generated: ${(image.length/1024).toFixed(0)}KB`);
   else if (wantImage) console.warn('[Google-Multi] No image in response');
 
-  return { text, image };
+  return { text, image, usage };
 }
 
 async function generateMultiImageOpenRouter(
@@ -801,7 +808,7 @@ async function generateMultiImageOpenRouter(
   wantImage: boolean,
   thinkingEffort?: 'minimal' | 'high',
   modelOverride?: string,
-): Promise<{ text?: string; image?: string }> {
+): Promise<{ text?: string; image?: string; usage?: TokenUsage }> {
   const modelId = modelOverride ? normalizeOpenRouterModel(modelOverride) : OPENROUTER_MODEL;
   const content: Array<Record<string, unknown>> = [];
 
@@ -837,8 +844,15 @@ async function generateMultiImageOpenRouter(
   }
 
   const data = await res.json();
+  const usage: TokenUsage | undefined = data.usage ? {
+    inputTokens: data.usage.prompt_tokens ?? 0,
+    outputTokens: data.usage.completion_tokens ?? 0,
+    modelId,
+    ...(typeof data.usage.cost === 'number' && Number.isFinite(data.usage.cost) && data.usage.cost >= 0
+      ? { providerCostUsd: data.usage.cost } : {}),
+  } : undefined;
   const choice = data.choices?.[0]?.message;
-  if (!choice) return {};
+  if (!choice) return { usage };
 
   const text: string | undefined = choice.content || undefined;
   let image: string | undefined;
@@ -855,7 +869,7 @@ async function generateMultiImageOpenRouter(
   if (image) console.log(`[OpenRouter-Multi] Image generated: ${(image.length/1024).toFixed(0)}KB`);
   else if (wantImage) console.warn('[OpenRouter-Multi] No image in response');
 
-  return { text, image };
+  return { text, image, usage };
 }
 
 // ── Streaming All Tips (single call for all 6) ─────────────────
@@ -1631,54 +1645,32 @@ Return strict JSON only:
   }
 }
 
+export async function analyzeVideoContentWithUsage(
+  videoUrl: string,
+  question?: string,
+  userId?: string,
+) {
+  const { analyzeVideoWithProvider } = await import('./video-analysis');
+  const result = await analyzeVideoWithProvider(videoUrl, question);
+  if (userId) {
+    const { deductByTokens } = await import('./billing/credits');
+    const usage = result.usage;
+    await deductByTokens(
+      userId, 'analyze_video', usage.modelId,
+      usage.inputTokens - usage.cacheReadTokens, usage.outputTokens,
+      result.elapsedMs, undefined,
+      { cacheRead: usage.cacheReadTokens, cacheWrite: 0 },
+    ).catch(error => console.error('[billing] analyze_video deduct error:', error));
+  }
+  return result;
+}
+
 export async function analyzeVideoContent(
   videoUrl: string,
   question?: string,
   userId?: string,
 ): Promise<string> {
-  console.log(`[analyzeVideoContent] url=${videoUrl.substring(0, 100)}`);
-  const ai = getAI();
-  const prompt = question || 'Describe this video in detail: scenes, actions, pacing, visual style, audio/dialogue if any.';
-  const model = 'gemini-3-flash-preview';
-
-  const billUsage = (inputTokens: number, outputTokens: number) => {
-    if (!userId) return;
-    import('./billing/credits').then(({ deductByTokens }) =>
-      deductByTokens(userId, 'analyze_video', model, inputTokens, outputTokens)
-        .catch(e => console.error('[billing] analyze_video deduct error:', e))
-    );
-  };
-
-  // Default: URL mode (no download needed)
-  try {
-    const result = await ai.models.generateContent({
-      model,
-      contents: [{ role: 'user', parts: [
-        { fileData: { mimeType: 'video/mp4', fileUri: videoUrl } },
-        { text: prompt },
-      ] }],
-    });
-    const usage = result.usageMetadata;
-    if (usage) billUsage(usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
-    return result.text || '';
-  } catch {
-    // Fallback: download → base64 (if URL mode fails)
-    const res = await fetch(videoUrl);
-    if (!res.ok) throw new Error(`Failed to fetch video: ${res.status}`);
-    const buffer = await res.arrayBuffer();
-    if (buffer.byteLength > 38_500_000) throw new Error('Video too large for analysis (>38.5MB). Use preview_frame to check specific frames instead.');
-    const base64 = Buffer.from(buffer).toString('base64');
-    const result = await ai.models.generateContent({
-      model,
-      contents: [{ role: 'user', parts: [
-        { inlineData: { mimeType: 'video/mp4', data: base64 } },
-        { text: prompt },
-      ] }],
-    });
-    const usage = result.usageMetadata;
-    if (usage) billUsage(usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
-    return result.text || '';
-  }
+  return (await analyzeVideoContentWithUsage(videoUrl, question, userId)).analysis;
 }
 
 /**

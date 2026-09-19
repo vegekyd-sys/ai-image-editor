@@ -96,6 +96,11 @@ export function isCodexSubscriptionTerminalFailure(detail: unknown): boolean {
   return /(?:CODEX_SUBSCRIPTION_AUTH_UNAVAILABLE|UsageLimitExceeded|usage[_ -]?limit|usage_not_included|insufficient_quota|\b(?:401|403|429)\b)/i.test(detail);
 }
 
+export function isGrokSubscriptionTerminalFailure(detail: unknown): boolean {
+  if (typeof detail !== 'string' || !detail.trim()) return false;
+  return /(?:GROK_SUBSCRIPTION_(?:RELAY|AUTH|USER)|UsageLimitExceeded|usage[_ -]?limit|usage_not_included|insufficient_quota|\b(?:401|403|429)\b)/i.test(detail);
+}
+
 export function shouldFailoverCodexSubscriptionToApi(input: {
   requestedProvider: string;
   hasApiFallback: boolean;
@@ -112,27 +117,42 @@ export function shouldFailoverCodexSubscriptionToApi(input: {
     );
 }
 
-export function isSafeToEnterCodexSubscriptionApiFallback(
+export function shouldFailoverGrokSubscriptionToApi(input: {
+  requestedProvider: string;
+  hasApiFallback: boolean;
+  previousProviderFailover: boolean;
+  retryableFailureCount: number;
+  latestFailureDetail?: unknown;
+}): boolean {
+  return input.requestedProvider === 'grok-subscription'
+    && input.hasApiFallback
+    && (
+      input.previousProviderFailover
+      || isGrokSubscriptionTerminalFailure(input.latestFailureDetail)
+      || input.retryableFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS
+    );
+}
+
+export function isSafeToEnterSubscriptionApiFallback(
   attempts: Array<{ metadata?: Record<string, unknown> | null }>,
   inputEpoch: number,
+  provider: Extract<AgentModelProvider, 'codex-subscription' | 'grok-subscription'>,
 ): boolean {
   return !attempts.some((attempt) => {
     const metadata = attempt.metadata;
-    if (
-      metadata?.provider !== 'codex-subscription'
-      || Number(metadata.inputEpoch) !== inputEpoch
-    ) {
-      return false;
-    }
-
-    // `pending` also covers a process kill before the attempt could persist its
-    // terminal safety state. Fail closed: an unknown attempt may already have
-    // streamed copy or committed a paid tool result.
+    if (metadata?.provider !== provider || Number(metadata.inputEpoch) !== inputEpoch) return false;
     return metadata.fallbackSafety !== 'safe'
       || metadata.hadVisibleOutput === true
       || metadata.deliveredArtifact === true
       || (Array.isArray(metadata.committedTools) && metadata.committedTools.length > 0);
   });
+}
+
+export function isSafeToEnterCodexSubscriptionApiFallback(
+  attempts: Array<{ metadata?: Record<string, unknown> | null }>,
+  inputEpoch: number,
+): boolean {
+  return isSafeToEnterSubscriptionApiFallback(attempts, inputEpoch, 'codex-subscription');
 }
 
 export function shouldFailoverAzureGPT56ToOpenRouter(input: {

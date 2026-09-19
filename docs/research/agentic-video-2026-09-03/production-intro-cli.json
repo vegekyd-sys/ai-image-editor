@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-09-03T12:21:10.148Z",
+  "endpoint": "https://www.makaron.app",
+  "video": "https://storage.googleapis.com/cloud-samples-data/generative-ai/video/pixel8.mp4",
+  "cases": [
+    {
+      "id": "editor-overview",
+      "question": "Describe the entire video chronologically for a creative editor. Cover subjects, setting, actions, scene changes, notable text, framing, mood, and the most useful moments. Be concise but specific."
+    },
+    {
+      "id": "visual-moment",
+      "question": "What is visibly shown around 00:46 to 00:48? Describe the camera composition and objects in this moment in at most three sentences. Do not infer from dialogue."
+    },
+    {
+      "id": "visible-text",
+      "question": "Read the person introduction labels visible near the beginning of this video, including the person name and pronouns if visible. Give only the visible labels, and say uncertain if you cannot read them."
+    },
+    {
+      "id": "makaron-intro",
+      "video": "/Users/tianyicai/ai-image-editor/makaron-intro/renders/makaron-intro_2026-05-07_02-05-55.mp4",
+      "question": "Describe the major sections of this short product video in chronological order, including the prominent text in each section and approximate transition times. Say whether any spoken dialogue or music is present. Be concise and do not invent text that is not legible."
+    }
+  ],
+  "runs": [
+    {
+      "id": "makaron-intro",
+      "elapsedMs": 19025,
+      "ok": true,
+      "stdout": "Video analysis completed.\n\nThe video is silent, featuring no music or spoken dialogue. It consists of the following sections:\n\n* **00:01 - 00:04**: Introduction featuring the text \"**Makaron**\" and \"**one man creative studio**.\"\n* **00:05 - 00:10**: A list of features including \"**AI Photo Editing**,\" \"**One-Click Video**,\" \"**AI Soundtrack**,\" and \"**Creative Agent**.\"\n* **00:11 - 00:14**: Final call to action with the text \"**Your Photos Deserve More**,\" \"**makaron.app**,\" and \"**Try it free**.\"\n",
+      "stderr": "📹 Uploading makaron-intro_2026-05-07_02-05-55.mp4 (1.4MB)...\n📹 Uploaded: makaron-intro_2026-05-07_02-05-55.mp4\n🔎 Analyzing video...\n"
+    }
+  ]
+}

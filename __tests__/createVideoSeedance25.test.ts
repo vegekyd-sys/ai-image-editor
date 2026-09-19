@@ -129,6 +129,44 @@ describe('createVideo Seedance 2.5 integration', () => {
     expect(String(providerBody?.prompt)).toContain('@image1 as the sole identity reference')
   })
 
+  it('locks adaptive duration and aspect ratio for a full-source reference repaint', async () => {
+    let providerBody: Record<string, unknown> | undefined
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method !== 'POST') {
+        return new Response(Uint8Array.from(image), {
+          status: 200,
+          headers: { 'content-type': 'image/png', 'content-length': String(image.length) },
+        })
+      }
+      providerBody = JSON.parse(String(init.body || '{}'))
+      return new Response(JSON.stringify({ id: 'task-unified-seedance25-reference-repaint' }), { status: 200 })
+    }))
+
+    const { createVideo } = await import('@/lib/skills/create-video')
+    const result = await createVideo({
+      script: 'Use <<<media_1>>> as the replacement character and <<<media_2>>> as the exact source motion.',
+      images: ['https://example.com/character.png', ''],
+      videoUrls: ['https://example.com/motion.mp4'],
+      referenceVideoDuration: 10.08,
+      referenceVideoMetas: [{ width: 1920, height: 1080, fileSizeBytes: 1_000_000 }],
+      duration: -1,
+      aspectRatio: '16:9',
+      videoOperation: 'generate',
+      videoModel: 'seedance-2.5',
+      videoResolution: '720p',
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      providerModel: 'seedance-2.5-reference-to-video',
+    })
+    expect(providerBody).toMatchObject({
+      model: 'seedance-2.5-reference-to-video',
+      duration: -1,
+      aspect_ratio: 'adaptive',
+    })
+  })
+
   it('uses the dedicated typed video-edit route with locked provider parameters', async () => {
     let providerBody: Record<string, unknown> | undefined
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {

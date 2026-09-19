@@ -1,17 +1,19 @@
 import { createHash } from 'node:crypto';
+import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel, ModelMessage } from 'ai';
 import {
   resolveAgentModelSpecForUser,
   type AgentModelPreference,
-  type GPT56AgentProvider,
+  type AgentModelProvider,
   type AgentReasoningEffort,
   type AgentModelSpec,
 } from './agent-models';
 import { normalizeToolCallInputs } from './tool-inputs';
 import { createAzureOpenAIResponsesModel } from './azure-openai-responses';
 import { createCodexSubscriptionResponsesModel } from './codex-subscription';
+import { createGrokSubscriptionFetch } from './grok-subscription';
 
 export interface AgentModelRuntime {
   spec: AgentModelSpec;
@@ -32,7 +34,7 @@ export function createAzureAgentPromptCacheKey(
 export function createAgentModelRuntime(
   preference: AgentModelPreference | undefined,
   projectId: string,
-  configuredGPT56Provider?: GPT56AgentProvider,
+  configuredGPT56Provider?: AgentModelProvider,
   userId?: string,
   codexSubscriptionAllowed?: boolean,
 ): AgentModelRuntime {
@@ -67,10 +69,29 @@ export function createAgentModelRuntime(
     };
   }
 
+  if (spec.provider === 'grok-subscription') {
+    if (!userId) throw new Error('GROK_SUBSCRIPTION_USER_REQUIRED');
+    const grokSubscription = createOpenAI({
+      name: 'grok-subscription',
+      baseURL: 'https://grok-subscription-relay.invalid/v1',
+      apiKey: 'relay-auth-is-hmac-signed-server-side',
+      fetch: createGrokSubscriptionFetch(userId),
+    });
+    return {
+      spec,
+      model: grokSubscription.chat(spec.providerModelId),
+      normalizeMessages: normalizeToolCallInputs,
+    };
+  }
+
   if (spec.provider === 'deepseek') {
     const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
     if (!apiKey) {
-      throw new Error('DEEPSEEK_API_KEY is required for DeepSeek V4 Pro');
+      throw new Error('DEEPSEEK_API_KEY is required for DeepSeek Agent models');
+    }
+    if (spec.id === 'deepseek-flash') {
+      const deepseek = createDeepSeek({ apiKey });
+      return { spec, model: deepseek.chat(spec.providerModelId), normalizeMessages: normalizeToolCallInputs };
     }
     const deepseek = createOpenAI({
       name: 'deepseek',
@@ -171,7 +192,19 @@ export function getAgentProviderOptions(
     };
   }
 
+  if (runtime.spec.id === 'deepseek-flash') {
+    return { deepseek: { thinking: { type: 'enabled' }, reasoningEffort: 'high' } };
+  }
+
   if (runtime.spec.provider === 'deepseek') {
+    return {
+      openai: {
+        parallelToolCalls: false,
+      },
+    };
+  }
+
+  if (runtime.spec.provider === 'grok-subscription') {
     return {
       openai: {
         parallelToolCalls: false,

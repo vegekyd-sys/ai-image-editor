@@ -1,0 +1,30 @@
+--- SKILL.md
++++ SKILL.md
+@@ -16 +16 @@
+-用户上传自拍，**全程零交互**生成 KBO 棒球直播中被转播摄像机意外捕捉的观众画面。长焦压缩感、转播比分条 UI、MiniMax H3 Max Turbo 直接图生视频——一步到位。
++用户上传自拍，**全程零交互**生成 KBO 棒球直播中被转播摄像机意外捕捉的观众画面。长焦压缩感、转播比分条 UI、fal H3 Turbo 直接图生视频——一步到位。
+@@ -22 +22 @@
+-Pipeline: 随机变量 → generate_animation(MiniMax H3 Max Turbo，以用户照片直接图生视频，10s) → QC → 交付
++Pipeline: 随机变量 → generate_animation(fal H3 Turbo，以用户照片直接图生视频，10s) → QC → 交付
+@@ -69,2 +69,2 @@
+-| 1 | minimax-h3-max | H3 Max Turbo 直接图生视频（10s，768p） |
+-| 2 | seedance-mini | 视频降级（H3 Max Turbo 失败时） |
++| 1 | minimax-h3-max | fal H3 Turbo 直接图生视频（10s，768p） |
++| 2 | seedance-mini | 视频降级（fal H3 Turbo 失败时） |
+@@ -132 +132 @@
+-Step 2 — generate_animation (MiniMax H3 Max Turbo, directly from person_photo)
++Step 2 — generate_animation (fal H3 Turbo, directly from person_photo)
+@@ -143 +143 @@
+-### Step 2 — 生成 MiniMax H3 Max Turbo 直接图生视频
++### Step 2 — 生成 fal H3 Turbo 直接图生视频
+@@ -146 +146 @@
+-- `model`: `"minimax-h3-max"` —— H3 Max Turbo 主模型
++- `model`: `"minimax-h3-max"` —— fal H3 Turbo 主模型
+@@ -153 +153 @@
+-MiniMax H3 Max Turbo 失败 → 降级 `model: "seedance-mini"`，同参数重试。再失败 → BLOCKED。
++fal H3 Turbo 失败 → 降级 `model: "seedance-mini"`，同参数重试。再失败 → BLOCKED。
+@@ -262,0 +263,4 @@
++
++## Video model
++
++Use **fal H3 Turbo**, with `model: "minimax-h3-max"` for `generate_animation` or `--video-model minimax-h3-max` for the CLI. This skill uses one source image as the video start frame.

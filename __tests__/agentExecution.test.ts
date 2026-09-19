@@ -8,11 +8,14 @@ import {
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
   isCodexSubscriptionTerminalFailure,
+  isGrokSubscriptionTerminalFailure,
+  isSafeToEnterSubscriptionApiFallback,
   isSafeToEnterCodexSubscriptionApiFallback,
   isRetryableProviderOutage,
   MAX_SAME_PROVIDER_ATTEMPTS,
   shouldFailoverAzureGPT56ToOpenRouter,
   shouldFailoverCodexSubscriptionToApi,
+  shouldFailoverGrokSubscriptionToApi,
   selectModelHistoryWithinBudget,
   shouldScheduleNextAttempt,
   stableOperationKey,
@@ -379,6 +382,35 @@ describe('durable Agent execution', () => {
         committedTools: ['generate_image'],
       },
     }], 3)).toBe(true);
+  });
+
+  it('applies the same fail-closed boundary to the SuperGrok API fallback', () => {
+    expect(isGrokSubscriptionTerminalFailure('GROK_SUBSCRIPTION_RELAY_ERROR: HTTP 429')).toBe(true);
+    expect(shouldFailoverGrokSubscriptionToApi({
+      requestedProvider: 'grok-subscription',
+      hasApiFallback: true,
+      previousProviderFailover: false,
+      retryableFailureCount: 1,
+      latestFailureDetail: 'GROK_SUBSCRIPTION_RELAY_ERROR: HTTP 429',
+    })).toBe(true);
+    expect(isSafeToEnterSubscriptionApiFallback([{
+      metadata: {
+        provider: 'grok-subscription',
+        inputEpoch: 4,
+        fallbackSafety: 'safe',
+        hadVisibleOutput: false,
+        deliveredArtifact: false,
+        committedTools: [],
+      },
+    }], 4, 'grok-subscription')).toBe(true);
+    expect(isSafeToEnterSubscriptionApiFallback([{
+      metadata: {
+        provider: 'grok-subscription',
+        inputEpoch: 4,
+        fallbackSafety: 'blocked',
+        hadVisibleOutput: true,
+      },
+    }], 4, 'grok-subscription')).toBe(false);
   });
 
   it('counts consecutive retryable failures for the requested provider', () => {

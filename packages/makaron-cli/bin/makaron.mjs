@@ -37,7 +37,9 @@ const CHAT_AGENT_MODELS = [
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
   'grok-4.6',
+  'grok-4.6-grok-subscription',
   'deepseek-v4-pro',
+  'deepseek-flash',
 ];
 
 // Public anon key (safe to embed — only enables auth, not data access)
@@ -302,11 +304,14 @@ async function login() {
   console.error(`   Token saved to ${AUTH_FILE}`);
 }
 
+// Identifies makaron-cli to the API so credit usage is recorded with source=cli.
+const CLIENT_HEADER = { 'X-Makaron-Client': `makaron-cli/${getCliVersion()}` };
+
 function getAuth() {
   const apiKey = process.env.MAKARON_API_KEY;
   if (apiKey) {
     return {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
+      headers: { ...CLIENT_HEADER, 'Authorization': `Bearer ${apiKey}` },
       baseUrl: process.env.MAKARON_URL || DEFAULT_URL,
     };
   }
@@ -320,14 +325,57 @@ function getAuth() {
   // Registered via `register --verify` (saved as _apiKey)
   if (auth._apiKey) {
     return {
-      headers: { 'Authorization': `Bearer ${auth._apiKey}` },
+      headers: { ...CLIENT_HEADER, 'Authorization': `Bearer ${auth._apiKey}` },
       baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL,
     };
   }
   return {
-    headers: { 'Cookie': buildCookie(auth) },
+    headers: { ...CLIENT_HEADER, 'Cookie': buildCookie(auth) },
     baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL,
   };
+}
+
+// ─── Credit usage ───────────────────────────────────────────────────────────
+
+/** One-line credit summary for a run's `usage` object (null when nothing was charged). */
+function formatRunUsage(usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  const entries = Array.isArray(usage.entries) ? usage.entries : [];
+  const net = Number(usage.credits_net ?? 0);
+  const refunded = Number(usage.credits_refunded ?? 0);
+  if (net === 0 && refunded === 0 && entries.length === 0) return null;
+  const parts = entries.filter(e => Number(e.credits) !== 0).map(e => `${e.tool_name} ${e.credits}`);
+  let line = `${net} credits used`;
+  if (parts.length) line += ` (${parts.join(' · ')})`;
+  if (refunded > 0) line += ` · ${refunded} refunded`;
+  if (typeof usage.balance === 'number') line += ` · balance ${usage.balance}`;
+  return line;
+}
+
+function printRunUsage(usage) {
+  const line = formatRunUsage(usage);
+  if (line) process.stderr.write(`💳  ${line}\n`);
+}
+
+/** Fetch the usage summary of a run (used after legacy --stream chats). */
+async function fetchRunUsage(baseUrl, headers, runId) {
+  if (!runId) return null;
+  try {
+    const res = await fetch(`${baseUrl}/api/agent/run/${runId}?usage=true`, { headers });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.usage || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Print credits charged by a direct MCP tool call (edit / video / music / analyze). */
+function printMcpCharge(res) {
+  const charged = Number(res.headers.get('X-Credits-Charged'));
+  if (!Number.isFinite(charged) || charged <= 0) return;
+  const remaining = Number(res.headers.get('X-Credits-Remaining'));
+  process.stderr.write(`💳  ${charged} credits used${Number.isFinite(remaining) ? ` · balance ${remaining}` : ''}\n`);
 }
 
 function normalizeRunResponse(data) {
@@ -461,16 +509,19 @@ Options:
   --media-manifest <file|-> Import typed image/video media before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --agent-model <id>        Agent LLM only: auto, gpt-5.6-terra, gpt-5.6-sol,
-                            gpt-5.6-luna, grok-4.6, deepseek-v4-pro, or a
-                            gpt-5.6-*-codex-subscription personal-plan route.
+                            gpt-5.6-luna, grok-4.6, deepseek-v4-pro, deepseek-flash, or a
+                            gpt-5.6-*-codex-subscription or
+                            grok-4.6-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.
-  --json                    Output structured JSON.
+  --json                    Output structured JSON (includes per-run "usage" credits).
   --stream                  Legacy live SSE stream.
   --help, -h                Show this help.
 
 Agent LLM defaults to auto (GPT-5.6 Terra; the account owner uses the personal
 Codex plan). Base GPT-5.6 ids select Azure API; append -codex-subscription to
-select the personal plan explicitly. Image/video model routing stays automatic in chat.
+select the personal plan explicitly. Base grok-4.6 selects OpenRouter API;
+grok-4.6-grok-subscription selects the personal SuperGrok plan. Image/video
+model routing stays automatic in chat.
 
 What you can ask:
   Image edit
@@ -504,6 +555,9 @@ What you can ask:
 
   Force the personal Codex plan
     makaron chat --project auto --agent-model gpt-5.6-sol-codex-subscription -b --json "reply with the active model"
+
+  Force the personal SuperGrok plan
+    makaron chat --project auto --agent-model grok-4.6-grok-subscription -b --json "reply with the active model"
 
   Music
     makaron chat --project <id> "add calm piano background music"
@@ -803,6 +857,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
           if (data.result.error) process.stderr.write(`❌  ${data.result.error}\n`);
         }
         process.stderr.write(`🔗  ${APP_URL}/projects/${data.projectId}\n`);
+        printRunUsage(data.usage);
       }
 
       if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
@@ -836,6 +891,8 @@ function applyPick(data, field) {
     case 'studio_run': return [...(data.output || [])].reverse().find(o => o.type === 'studio_run') || null;
     case 'studio_recipe': return [...(data.output || [])].reverse().find(o => o.type === 'studio_run')?.recipe || null;
     case 'project_url': return data.project_url || data.projectUrl || null;
+    case 'usage': return data.usage || null;
+    case 'credits_used': return typeof data.usage?.credits_net === 'number' ? data.usage.credits_net : null;
     case 'output': return data.output || [];
     case 'text': return data.output?.find(o => o.type === 'text')?.content || null;
     case 'status': return data.status;
@@ -887,7 +944,8 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
 
     // Check terminal status
     if (!data.incomplete && (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted')) {
-      if (jsonl) console.log(JSON.stringify({ event: 'done', status: data.status }));
+      if (jsonl) console.log(JSON.stringify({ event: 'done', status: data.status, ...(data.usage ? { usage: data.usage } : {}) }));
+      else printRunUsage(data.usage);
       if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
       process.exit(0);
     }
@@ -1461,6 +1519,11 @@ async function callMcpTool(baseUrl, headers, toolName, args) {
   if (!res.ok) { console.error(`MCP error ${res.status}:`, await res.text()); process.exit(1); }
   const data = await res.json();
   if (data.error) { console.error(`MCP error:`, data.error.message); process.exit(1); }
+  if (data.result?.isError) {
+    console.error('MCP tool failed:', data.result.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || 'Unknown tool error');
+    process.exit(1);
+  }
+  printMcpCharge(res);
   return data.result;
 }
 
@@ -1859,6 +1922,106 @@ function hasHelpFlag(values) {
   return values.includes('--help') || values.includes('-h');
 }
 
+function printEditHelp() {
+  console.log(`Makaron edit — generate or edit an image directly
+
+Usage:
+  makaron edit [options] "prompt"
+
+Options:
+  --image <file|url>        Base image to edit. Omit for text-to-image.
+  --ref <file|url>          Additional reference image. Repeatable, up to 3.
+  --image-model <id>        gemini, gemini-lite, qwen, openai, gpt-image-2.5-flare, gpt-image-2.5-sunburst, wan2.7-image, pony, or wai.
+  --skill <id>              enhance, creative, wild, or captions.
+  --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
+  --background <mode>       auto, opaque, or transparent.
+  --out <file>              Save the generated image to this path.
+  --help, -h                Show this help.
+
+Notes:
+  Model selection is optional. Transparent output routes strictly to GPT Image 2.5 Flare
+  and fails instead of returning an opaque fallback.
+
+Examples:
+  makaron edit --image portrait.jpg --image-model qwen --out result.jpg "cinematic warm light"
+  makaron edit --image product.jpg --ref style.png --aspect 1:1 "use this visual style"
+  makaron edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
+`);
+}
+
+function printVideoCreateHelp() {
+  console.log(`Makaron video create — call a video model directly
+
+Usage:
+  makaron video create --script "..." [media options] [generation options]
+
+Inputs:
+  --script <text>           Video prompt or shot script.
+  --script-file <file>      Read the script from a UTF-8 file.
+  --image <file|url>        Image input. Repeatable where the model supports it.
+  --video <file|url>        Video input. Repeatable where the model supports it.
+  --audio <file|url>        Audio input. Repeatable where the model supports it.
+  --voice <preset-id>       Grok preset voice. Repeatable, up to 3.
+
+Generation options:
+  --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5,
+                            wan-3.0, wan-3.0-prime, kling, grok, google-omni,
+                            minimax-h3, minimax-h3-max, fal-h3-max, or sync-lipsync-v3.
+  --duration <seconds>      Output duration supported by the selected model.
+  --video-resolution <res> auto, 480p, 720p, 768p, 1080p, 2k, or 4k.
+  --aspect <ratio>          9:16, 16:9, 1:1, or another supported ratio.
+  --video-operation <mode> generate, edit, or extend (Seedance 2.5 / Grok).
+  --extend-direction <dir> forward or backward.
+  --output-format <format>  mp4 or mov.
+  --generated-audio        Ask the provider to generate audio.
+  --no-generated-audio     Disable provider-generated audio.
+  --keep-original-sound    Preserve source-video sound where supported.
+  --web-search             Enable Seedance 2.5 web search.
+  --relaxed-content-filter Seedance 2.5 only.
+  --help, -h                Show this help.
+
+Recent model choices:
+  fal-h3-max     FAL H3 Max (default, 768p) reference-to-video: images, videos and audio;
+                 integer 5–15s, 480p/768p/1080p, default 768p. Reference inputs cost extra.
+  minimax-h3-max  fal H3 Turbo faster-than-real-time T2V or one-start-image I2V;
+                  5/10/15s; native 768p default or 480p; no video/audio/multi-image references.
+  wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
+  wan-3.0         Wan standard tier with the same public duration/resolution range.
+  seedance-2.5    4-30s; 480p/720p; generate/edit/extend and multimodal refs.
+  minimax-h3      4-15s; 768p default or 2k; image/video/audio feature refs.
+  grok            T2V/reference generation plus typed edit/extend.
+  sync-lipsync-v3 Exactly one video plus one MP3/WAV replacement track.
+
+Examples:
+  makaron video create --script "A tiny robot runs through a sunlit studio" --duration 5 --video-model minimax-h3-max
+  makaron video create --script "The subject turns toward camera" --image start.jpg --duration 5 --video-model minimax-h3-max --video-resolution 768p
+  makaron video create --script "A crystal city wakes at dawn" --duration 5 --video-model wan-3.0-prime --video-resolution 4k
+  makaron video create --script "Continue the camera move" --video clip.mp4 --duration 4 --video-model grok --video-operation extend
+  makaron video create --script "Use the supplied audio" --video talk.mp4 --audio voice.wav --video-model sync-lipsync-v3
+
+This command returns a provider task ID and does not write to a project timeline.
+Use "makaron chat --project <id|auto> ..." for Agent-routed project work, then
+"makaron responses get <runId> --wait" to collect the result.
+`);
+}
+
+function printVideoHelp() {
+  console.log(`Video commands:
+  video script --image <file> [--image <file>] "direction"   Write video script
+  video create --script "..." --video-model minimax-h3-max   H3 Max Turbo (native 768p default)
+  video create --script "..." --video-model wan-3.0-prime    Fast Wan tier, up to 4k
+  video create --script "..." --video-model seedance-2.5     4-30s multimodal generation/edit/extend
+  video create --script "..." --video <file|url> --video-model grok --video-operation extend
+                                                               Edit or extend one MP4 with Grok
+  video create --script "..." --video <url> --audio <url> --video-model sync-lipsync-v3
+                                                               Lip-sync exact replacement audio
+  video status <taskId>                                      Check video status
+  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
+
+Run "makaron video create --help" for every model, option, example, and limit.
+`);
+}
+
 function printRootHelp() {
   console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
 
@@ -1870,6 +2033,7 @@ Commands:
   claim                              Get claim URL for human to link account
   login                              Log in to Makaron (human interactive)
   credits                            Show current credit balance
+  usage [--run <id>] [--project <id>] Credit usage history (chat prints per-run usage)
   list (ls)                          List all projects
   project media <projectId> --json    List timeline media for a project
   project media add <projectId> --type image --source-url <url>
@@ -1881,6 +2045,7 @@ Commands:
   create --title "name"              Create empty project (text-to-image)
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
+  chat --project <id> --image <file> Attach an image or visual reference
   chat --project <id> --skill <id>   Use a built-in or marketplace skill
   chat --project <id> --agent-model <id> "message"
                                      Select only the Agent LLM (strict allowlist)
@@ -1904,17 +2069,18 @@ Commands:
   abort <runId>                      Abort a running Agent
   skills list|search|show|install    Browse built-in and marketplace skills
 
-  edit [--image <file>] "prompt"     AI image edit / text-to-image
+  edit [--image <file>] "prompt"     Image edit, text-to-image, or transparent PNG
   analyze --video <file|url>         Analyze video content
-  video script|create|status         Video generation
+  video script|create|status         H3 Max, Wan, Seedance, Grok, lip-sync, and more
   music create|status                Music generation
 
   admin                              Admin commands (skills, credits, upload, set-admin)
 
 Examples:
-  makaron chat --project auto "plan a launch poster"
-  makaron chat --project <id> "make it cinematic"
-  makaron chat --project <id> "turn this into a short video"
+  makaron chat --project auto --image product.jpg "plan a launch poster"
+  makaron chat --project <id> --skill "Football Captain" "make this cinematic"
+  makaron chat --project <id> "use H3 Max Turbo to make a 5-second 768p video"
+  makaron edit --background transparent --out sticker.png "a magenta star sticker"
 
 Run makaron <command> --help for command-specific options.
 Chat defaults the Agent LLM automatically; --agent-model can select an exact
@@ -1983,7 +2149,7 @@ function printHelp(topic, subtopic) {
     else console.log(`Responses commands:
   responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
-  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output, usage, credits_used
   responses get <runId> --export-compositions --wait --pick first_video_url
                                             Export animated compositions before picking video URL
   responses get <runId> --materialize --wait --pick first_video_url
@@ -1995,6 +2161,16 @@ function printHelp(topic, subtopic) {
     console.log('Usage: makaron list');
   } else if (topic === 'credits' || topic === 'credit' || topic === 'balance') {
     console.log('Usage: makaron credits [--json]');
+  } else if (topic === 'usage') {
+    console.log(`Usage: makaron usage [--run <runId>] [--project <projectId>] [--limit <n>] [--offset <n>] [--json]
+
+Lists credit usage rows for the current account (newest first).
+  --run <runId>        Only rows charged by one Agent run, with a summary total
+  --project <id>       Only rows charged inside one project
+  --json               Raw rows plus summary
+
+Every makaron chat prints its own credit usage when it finishes; the same data
+is available as responses get <runId> --pick usage (or --pick credits_used).`);
   } else if (topic === 'project' || topic === 'projects') {
     if (subtopic === 'media') console.log(`Usage: makaron project media <projectId> [--json]
   makaron project media add <projectId> --type image --source-url <url> [--description <text>] [--json]
@@ -2042,25 +2218,14 @@ Not sure which built-in skill to use? Start with:
   composition status <jobId> [--wait] [--json]
 `);
   } else if (topic === 'edit') {
-    console.log('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--skill enhance|creative|wild|captions] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"');
+    printEditHelp();
   } else if (topic === 'analyze') {
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--voice <xai-preset-id> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|wan-3.0|wan-3.0-pro|kling|grok|google-omni|minimax-h3|sync-lipsync-v3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') printVideoCreateHelp();
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
-    else console.log(`Video commands:
-  video script --image <file> [--image <file>] "direction"   Write video script
-  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
-  video create --script "..." --video-model wan-3.0          Wan 3.0 Standard via MuleRouter
-  video create --script "..." --video-model wan-3.0-pro      Wan 3.0 Pro super-resolution via MuleRouter
-  video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
-  video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <file|url> --video-model grok [--operation edit|extend]  Edit or extend one MP4 with Grok
-  video create --script "Use the supplied audio" --video <url> --audio <url> --video-model sync-lipsync-v3  Lip-sync exact replacement audio
-  video status <taskId>                                      Check video status
-  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
-`);
+    else printVideoHelp();
   } else if (topic === 'music') {
     if (subtopic === 'create') console.log('Usage: makaron music create [--vocals] [--style "genre"] "description"');
     else if (subtopic === 'status') console.log('Usage: makaron music status <taskId>');
@@ -2139,6 +2304,50 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       console.log(`Subscription: ${plan}${status}`);
     } else {
       console.log('Subscription: none');
+    }
+  }
+} else if (command === 'usage') {
+  const { headers, baseUrl } = getAuth();
+  const params = new URLSearchParams();
+  let jsonOutput = false;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--json') jsonOutput = true;
+    else if (args[i] === '--run' && args[i + 1]) params.set('run_id', args[++i]);
+    else if (args[i] === '--project' && args[i + 1]) params.set('project_id', args[++i]);
+    else if (args[i] === '--limit' && args[i + 1]) params.set('limit', args[++i]);
+    else if (args[i] === '--offset' && args[i + 1]) params.set('offset', args[++i]);
+    else {
+      process.stderr.write(`Unknown option: ${args[i]}\n`);
+      printHelp('usage');
+      process.exit(1);
+    }
+  }
+  const res = await fetch(`${baseUrl}/api/billing/usage${params.size ? `?${params}` : ''}`, { headers });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data) {
+    const message = data?.error || data?.message || (res.ok ? 'Invalid response' : `HTTP ${res.status}`);
+    process.stderr.write(`Failed to get usage: ${message}\n`);
+    process.exit(1);
+  }
+  if (jsonOutput) {
+    console.log(JSON.stringify(data));
+  } else {
+    const rows = data.usage || [];
+    if (!rows.length) {
+      console.log('No usage yet.');
+    } else {
+      const pad = (v, n, right = false) => { const t = String(v ?? ''); return right ? t.padStart(n) : t.padEnd(n); };
+      console.log(`${pad('Date', 16)} ${pad('Credits', 8, true)}  ${pad('Tool', 24)} ${pad('Model', 28)} ${pad('Source', 6)} Run`);
+      for (const row of rows) {
+        const when = row.created_at ? new Date(row.created_at).toISOString().slice(0, 16).replace('T', ' ') : '';
+        const run = row.run_id ? String(row.run_id).slice(0, 8) : '';
+        console.log(`${pad(when, 16)} ${pad(row.credits_charged, 8, true)}  ${pad(row.tool_name, 24)} ${pad(row.model_used || '', 28)} ${pad(row.source || '', 6)} ${run}`);
+      }
+    }
+    const total = formatRunUsage(data.summary);
+    if (total) console.log(`\nTotal: ${total}`);
+    if (data.attribution_available === false) {
+      process.stderr.write('Per-run attribution is not enabled on this server yet.\n');
     }
   }
 } else if (command === 'create') {
@@ -2441,7 +2650,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (useStream) {
     // Legacy SSE mode
-    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
+    const { runId: streamRunId, results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
       agentModel,
       uploadedVideoCount: uploadedTurnVideoCount,
       turnMediaCount: uploadedTurnMediaCount,
@@ -2450,6 +2659,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
     for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
     process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
+    printRunUsage(await fetchRunUsage(baseUrl, headers, streamRunId));
     for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId, task.snapshotId);
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
@@ -2570,7 +2780,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.log(`Responses commands:
   responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
-  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output, usage, credits_used
   responses get <runId> --export-compositions --wait --pick first_video_url
                                             Export animated compositions before picking video URL
   responses get <runId> --materialize --wait --pick first_video_url
@@ -2828,7 +3038,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else promptParts.push(args[i]);
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image|pony|wai] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);
@@ -2900,23 +3110,30 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       }
       else if (args[i] === '--wait') wait = true;
     }
-    const selectedVideoModel = ['wan3', 'wan3.0', 'wan30', 'wan-3'].includes(videoModel)
+    const selectedVideoModel = ['fal h3 turbo', 'h3 max', 'h3-max', 'h3max', 'h3 max turbo', 'h3-max-turbo', 'h3maxturbo', 'minimax-h3max', 'minimax-h3-max-turbo'].includes(videoModel)
+      ? 'minimax-h3-max'
+      : ['fal h3 max'].includes(videoModel) ? 'fal-h3-max'
+      : ['wan3', 'wan3.0', 'wan30', 'wan-3', 'wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro', 'w3.0-video-pro'].includes(videoModel)
       ? 'wan-3.0'
-      : ['wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro'].includes(videoModel)
-        ? 'wan-3.0-pro'
-        : (videoModel || 'seedance-fast');
+      : ['wan3-prime', 'wan3.0-prime', 'wan30-prime', 'wan-3-prime', 'w3.0-video-prime', 'w3.0-video-prime-pro', 'wan-3.0-prime-pro', 'prime'].includes(videoModel)
+        ? 'wan-3.0-prime'
+        : (videoModel || 'fal-h3-max');
     const isSeedance25 = selectedVideoModel === 'seedance-2.5';
-    const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-pro';
+    const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
+    const isFalH3Max = selectedVideoModel === 'minimax-h3-max';
+    const isFalReference = selectedVideoModel === 'fal-h3-max';
     const isGrok = selectedVideoModel === 'grok';
     const isGoogleOmni = selectedVideoModel === 'google-omni';
     const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
-    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isGrok || isGoogleOmni;
+    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
     if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
-      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-pro|minimax-h3]');
+      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|minimax-h3|minimax-h3-max]');
       process.exit(1);
     }
+    if (isFalReference && (images.length > 9 || videos.length > 3 || audios.length > 3 || images.length + videos.length + audios.length > 12)) { console.error('FAL H3 Max accepts at most 9 images, 3 videos, 3 audios, 12 total.'); process.exit(1); }
+    if (isFalReference && duration != null && (!Number.isInteger(duration) || duration < 5 || duration > 15)) { console.error('FAL H3 Max output duration must be an integer from 5 to 15 seconds.'); process.exit(1); }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
     if (isSeedance25 && videos.length > 10) { console.error('Seedance 2.5 supports at most 10 video references.'); process.exit(1); }
     if (isSeedance25 && audios.length > 10) { console.error('Seedance 2.5 supports at most 10 audio references.'); process.exit(1); }
@@ -2926,6 +3143,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (isMinimaxH3 && images.length > 9) { console.error('MiniMax H3 supports at most 9 image references.'); process.exit(1); }
     if (isMinimaxH3 && videos.length > 3) { console.error('MiniMax H3 supports at most 3 video references.'); process.exit(1); }
     if (isMinimaxH3 && audios.length > 3) { console.error('MiniMax H3 supports at most 3 audio references.'); process.exit(1); }
+    if (isFalH3Max && images.length > 1) { console.error('MiniMax H3 Max Turbo supports at most one start image.'); process.exit(1); }
+    if (isFalH3Max && (videos.length || audios.length)) { console.error('MiniMax H3 Max Turbo currently supports only text-to-video or one-image-to-video; remove video/audio references.'); process.exit(1); }
+    if (isFalH3Max && duration != null && ![5, 10, 15].includes(duration)) { console.error('MiniMax H3 Max Turbo duration must be 5, 10, or 15 seconds.'); process.exit(1); }
+    if (isFalH3Max && videoResolution && !['auto', '480p', '768p'].includes(videoResolution.toLowerCase())) { console.error('MiniMax H3 Max Turbo resolution must be auto, 480p, or 768p.'); process.exit(1); }
     if (isGrok && images.length > 7) { console.error('Grok Imagine Video 1.5 supports at most 7 image references.'); process.exit(1); }
     if (isGrok && videos.length > 1) { console.error('Grok video edit/extend accepts exactly one source video.'); process.exit(1); }
     if (isGrok && referenceVoices.length > 3) { console.error('Grok Imagine Video 1.5 supports at most 3 preset voices.'); process.exit(1); }
@@ -3012,8 +3233,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
       : isSeedance25 || isWan30 || isGrok
       ? { script, images, videoUrls, audioUrls, referenceVoiceIds: referenceVoices, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
-      : isMinimaxH3
+      : isMinimaxH3 || isFalReference
         ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
+      : isFalH3Max
+        ? { script, images, videoModel: selectedVideoModel, videoResolution }
       : videoUrls[0]
         ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
         : { script, images, videoModel: selectedVideoModel, videoResolution };
@@ -3022,7 +3245,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
     if (keepOriginalSound && videoUrls.length && !isSeedance25) vArgs.keepOriginalSound = true;
-    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isWan30 && !isGrok && !isMinimaxH3 && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
+    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isWan30 && !isGrok && !isMinimaxH3 && !isFalReference && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) {
       console.log(text);
@@ -3063,18 +3286,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
 
   } else {
-    console.log(`Video commands:
-  video script --image <file> [--image <file>] "direction"   Write video script
-  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
-  video create --script "..." --video-model wan-3.0          Wan 3.0 Standard via MuleRouter
-  video create --script "..." --video-model wan-3.0-pro      Wan 3.0 Pro super-resolution via MuleRouter
-  video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
-  video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <file|url> --video-model grok [--operation edit|extend]  Edit or extend one MP4 with Grok
-  video create --script "Use the supplied audio" --video <url> --audio <url> --video-model sync-lipsync-v3  Lip-sync exact replacement audio
-  video status <taskId>                                      Check video status
-  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
-`);
+    printVideoHelp();
   }
 
 } else if (command === 'music') {

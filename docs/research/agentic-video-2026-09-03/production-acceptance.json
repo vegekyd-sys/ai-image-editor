@@ -1,0 +1,30 @@
+{
+  "checkedAt": "2026-09-03T12:51:24.229Z",
+  "aliases": [
+    {
+      "alias": "https://www.makaron.app",
+      "id": "dpl_FyBtE7Eig5J6Ar3etJCCnxMYvS6R",
+      "url": "ai-image-editor-5isphjgev-vegekyd-sys-projects.vercel.app",
+      "state": "READY"
+    },
+    {
+      "alias": "https://makaron.app",
+      "id": "dpl_FyBtE7Eig5J6Ar3etJCCnxMYvS6R",
+      "url": "ai-image-editor-5isphjgev-vegekyd-sys-projects.vercel.app",
+      "state": "READY"
+    }
+  ],
+  "homepage": {
+    "status": 200,
+    "url": "https://www.makaron.app/home"
+  },
+  "health": {
+    "httpStatus": 200,
+    "status": "healthy",
+    "summary": {
+      "healthy": 13,
+      "unhealthy": 0,
+      "unavailable": 0
+    }
+  }
+}
