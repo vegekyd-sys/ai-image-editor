@@ -1,7 +1,8 @@
 # CLI per-run billing (2026-09-19)
 
-Branch: `claude/makaron-cli-billing-tracking-9e7791` (based on `dev`). Status: implemented and
-tested locally, **not merged, migration not applied, CLI 0.15.0 not published**.
+Branch: `claude/makaron-cli-billing-tracking-9e7791` (based on `dev`). Status: migration **applied to
+the shared Supabase project on 2026-09-19**, real end-to-end run verified, merged into `dev`.
+**Not yet deployed to production and CLI 0.15.0 not published.**
 
 ## What the user sees
 
@@ -68,7 +69,18 @@ lost. `/api/billing/usage` returns 501 for run/project filters in that state.
   pre-created: the old overloads are dropped, both the new 13-arg call and the legacy positional call
   resolve, a refund without run id inherits `run_id` / `project_id` from the reservation, and the
   per-run sum is correct.
-- Not yet verified: a real `makaron chat` against a deployment with the migration applied.
+- Before applying: the live `deduct_and_log` / `refund_credits_and_log` bodies were compared with the
+  repo's latest definitions (`20260817101334_ios_direct_trial_credits.sql`) and matched exactly. The
+  migration was applied inside one transaction, followed by `NOTIFY pgrst, 'reload schema'`.
+- Real end-to-end run (2026-09-19, test account, local dev server on this branch against the shared
+  database): `makaron chat --project auto "…red apple…"` printed
+  `💳  30 credits used (generate_image 18 · agent 12) · balance 10745`; the balance moved 10775 → 10745;
+  `usage_logs` holds exactly those two rows with `source=cli`, the API key id, `run_id` and
+  `project_id`; `responses get --pick credits_used` → `30`; `usage --run` and `usage --project` totals
+  agree.
+- Production (still on the previous code, calling the RPC with the 11 legacy named parameters) was
+  exercised after the migration with a text-only chat: charged 12 credits, row written with
+  `source=app` and `run_id` NULL as expected. Un-upgraded callers keep billing correctly.
 
 ## Known gaps
 
