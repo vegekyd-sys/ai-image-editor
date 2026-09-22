@@ -1,4 +1,4 @@
-export const IMAGE_MODEL_IDS = ['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'wan2.7-image'] as const;
+export const IMAGE_MODEL_IDS = ['gemini', 'gemini-lite', 'qwen', 'qwen-spicy', 'pony', 'wai', 'openai', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'wan2.7-image'] as const;
 export type ModelId = typeof IMAGE_MODEL_IDS[number];
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type ImageBackground = 'auto' | 'opaque' | 'transparent';

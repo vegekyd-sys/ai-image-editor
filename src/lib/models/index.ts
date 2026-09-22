@@ -2,6 +2,7 @@ import type { ModelBackend, ModelId } from './types';
 import { geminiBackend } from './gemini';
 import { geminiLiteBackend } from './gemini-lite';
 import { qwenBackend } from './qwen';
+import { qwenSpicyBackend } from './qwen-spicy';
 import { ponyBackend } from './pony';
 import { waiBackend } from './wai';
 import { openaiBackend } from './openai';
@@ -12,6 +13,7 @@ const backends: Map<ModelId, ModelBackend> = new Map([
   ['gemini', geminiBackend],
   ['gemini-lite', geminiLiteBackend],
   ['qwen', qwenBackend],
+  ['qwen-spicy', qwenSpicyBackend],
   ['pony', ponyBackend],
   ['wai', waiBackend],
   ['openai', openaiBackend],

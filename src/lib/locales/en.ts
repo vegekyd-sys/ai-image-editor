@@ -128,6 +128,9 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.qwenSpicy.title': 'Qwen Spicy Is Live',
+  'changelog.qwenSpicy.item1': 'Qwen Spicy is now available as an independent image model for bold, high-resolution edits using one to three source images.',
+  'changelog.qwenSpicy.item2': 'Choose it in the image model picker, ask Agent to use Qwen Spicy, or select qwen-spicy from makaron-cli. The existing Qwen Edit model remains available separately.',
   'changelog.gptImage25.title': 'GPT Image 2.5 Is Here: From Product Images to Infographics',
   'changelog.gptImage25.item1': 'Create product ads, e-commerce images, posters, and infographics from a short brief, bringing branding, text, and visuals together. Explore static app and website concepts or storyboard images, too.',
   'changelog.gptImage25.item2': 'Upload product or portrait references to change backgrounds, adjust a composition, or combine multiple reference images into a new scene and get more from your existing assets.',
@@ -459,6 +462,8 @@ const en = {
   'model.geminiLite.desc': 'Lower-cost path for fast drafts.',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': 'Best face preservation. Handles NSFW content.',
+  'model.qwenSpicy.name': 'Qwen Spicy',
+  'model.qwenSpicy.desc': 'Independent 1–3 image editor with bold, high-resolution results.',
   'model.image25Flare.name': 'GPT Image 2.5 Flare',
   'model.image25Flare.desc': 'Fast generation for everyday creation',
   'model.image25Sunburst.name': 'GPT Image 2.5 Sunburst',

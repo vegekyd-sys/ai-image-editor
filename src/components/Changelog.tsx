@@ -17,12 +17,13 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-09-22', localeKey: 'qwenSpicy' },
   { date: '2026-09-19', localeKey: 'cliRunCredits' },
   { date: '2026-09-15', localeKey: 'sceneImportReliability' },
   { date: '2026-09-10', en: { title: 'DeepSeek V4.1 Flash', items: ['DeepSeek V4.1 Flash is now available in Agent: a fast, lower-cost option that understands images and turns a simple prompt into an editable project or finished video.'] }, zh: { title: 'DeepSeek V4.1 Flash 上线', items: ['Agent 现已支持 DeepSeek V4.1 Flash：更快、更省成本，也能看懂图片，把一句话变成可编辑项目或成片。'] } },
@@ -999,6 +1000,10 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  qwenSpicy: {
+    title: 'changelog.qwenSpicy.title',
+    items: ['changelog.qwenSpicy.item1', 'changelog.qwenSpicy.item2'],
+  },
   gptImage25: {
     title: 'changelog.gptImage25.title',
     items: ['changelog.gptImage25.item1', 'changelog.gptImage25.item2', 'changelog.gptImage25.item3'],
