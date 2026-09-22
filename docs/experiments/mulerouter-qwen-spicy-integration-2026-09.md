@@ -1,7 +1,7 @@
 # MuleRouter Qwen Image Edit Spicy integration
 
-Status: production integration in progress. The original 2026-09-01 experiment
-was rebased onto current `dev` on 2026-09-22.
+Status: released to production on 2026-09-22. The original 2026-09-01
+experiment was rebased onto current `dev` before release.
 
 ## Product boundary
 
@@ -33,7 +33,7 @@ commit the key.
 The live 2026-09-22 official documentation lists `$0.040` for one input image,
 `$0.043` for two, and `$0.046` for three. The earlier `$0.034` sales-sheet price
 is stale. The Z-Image prompt-extension call is separate, so Makaron leaves it
-off by default. `credit_pricing.edit_image_qwen` must cover the current provider
+off by default. `credit_pricing.edit_image_qwen-spicy` must cover the current provider
 cost plus Makaron markup before traffic is switched.
 
 An API task reaching `completed` is not sufficient acceptance. Compare against
@@ -107,6 +107,16 @@ background-person/object cleanup and strong requested bokeh. Spicy was about
 Decision: ship Spicy as an independent model, but do not replace Nano Banana 2
 Lite as the Enhance Tips preview default. The quality difference is too small
 to justify the current latency and cost regression.
+
+## Release evidence
+
+- Production deploy: `dev` commit `092f42c5`, aliased to
+  `https://www.makaron.app` on 2026-09-22.
+- Health after deploy: `13` healthy, `0` unhealthy, `0` unavailable.
+- Real production CLI edit explicitly returned `model: qwen-spicy`, charged
+  `8 credits`, and produced a decoded `1809x2560` PNG.
+- `makaron-cli@0.15.1` is published with `qwen-spicy` in `edit --help`.
+- The release was merged to `main` at `88252a5a`.
 
 Artifacts (ignored, local):
 
