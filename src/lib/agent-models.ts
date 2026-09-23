@@ -239,7 +239,7 @@ export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
     billingModelId: 'gpt-6-luna',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
-    defaultReasoningEffort: 'low',
+    defaultReasoningEffort: 'high',
   },
   'gpt-6-sol': {
     id: 'gpt-6-sol',
