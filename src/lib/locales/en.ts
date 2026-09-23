@@ -128,6 +128,9 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.gpt6AgentModels.title': 'GPT-6 Luna and Sol Are Here',
+  'changelog.gpt6AgentModels.item1': 'Agent now selects GPT-6 Luna by default. Choose GPT-6 Sol for more complex work.',
+  'changelog.gpt6AgentModels.item2': 'Both models are also available through Codex subscriptions. GPT-5.6 is hidden from the page picker; existing projects can still use it.',
   'changelog.qwenSpicy.title': 'Qwen Spicy Is Live',
   'changelog.qwenSpicy.item1': 'Qwen Spicy is now available as an independent image model for bold, high-resolution edits using one to three source images.',
   'changelog.qwenSpicy.item2': 'Choose it in the image model picker, ask Agent to use Qwen Spicy, or select qwen-spicy from makaron-cli. The existing Qwen Edit model remains available separately.',

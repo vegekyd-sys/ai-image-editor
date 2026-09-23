@@ -166,6 +166,9 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.gpt6AgentModels.title': 'GPT-6 Luna と Sol が登場',
+  'changelog.gpt6AgentModels.item1': 'Agent の既定モデルは GPT-6 Luna になりました。複雑な作業には GPT-6 Sol も選べます。',
+  'changelog.gpt6AgentModels.item2': 'どちらも Codex サブスクリプションで利用できます。GPT-5.6 は画面の選択肢から非表示になりますが、既存のプロジェクトでは引き続き使えます。',
   'changelog.qwenSpicy.title': 'Qwen Spicy を公開',
   'changelog.qwenSpicy.item1': 'Qwen Spicy を独立した画像モデルとして公開しました。1〜3枚の元画像を使った大胆な高解像度編集に対応します。',
   'changelog.qwenSpicy.item2': '画像モデル選択、Agentへの指定、または makaron-cli の qwen-spicy から利用できます。既存の Qwen Edit は別モデルとして引き続き利用できます。',

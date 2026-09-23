@@ -169,6 +169,9 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
+  'changelog.gpt6AgentModels.title': 'GPT-6 Luna 與 Sol 登場',
+  'changelog.gpt6AgentModels.item1': 'Agent 現在預設選用 GPT-6 Luna；處理更複雜的任務時，也可以選擇 GPT-6 Sol。',
+  'changelog.gpt6AgentModels.item2': '兩款模型都可透過 Codex 訂閱使用。GPT-5.6 已從頁面選擇器隱藏，既有專案仍可繼續使用。',
   'changelog.qwenSpicy.title': 'Qwen Spicy 上線',
   'changelog.qwenSpicy.item1': 'Qwen Spicy 現已作為獨立圖片模型上線，支援用 1–3 張原圖進行更大膽的高解析度編輯。',
   'changelog.qwenSpicy.item2': '可在圖片模型選擇器中選擇、直接讓 Agent 使用 Qwen Spicy，或在 makaron-cli 中指定 qwen-spicy；原有 Qwen Edit 繼續獨立保留。',

@@ -17,12 +17,13 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-09-23', localeKey: 'gpt6AgentModels' },
   { date: '2026-09-22', localeKey: 'qwenSpicy' },
   { date: '2026-09-19', localeKey: 'cliRunCredits' },
   { date: '2026-09-15', localeKey: 'sceneImportReliability' },
@@ -1000,6 +1001,10 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  gpt6AgentModels: {
+    title: 'changelog.gpt6AgentModels.title',
+    items: ['changelog.gpt6AgentModels.item1', 'changelog.gpt6AgentModels.item2'],
+  },
   qwenSpicy: {
     title: 'changelog.qwenSpicy.title',
     items: ['changelog.qwenSpicy.item1', 'changelog.qwenSpicy.item2'],
