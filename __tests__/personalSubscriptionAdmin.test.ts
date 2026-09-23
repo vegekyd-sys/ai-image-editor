@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   readDb: vi.fn(), saveDb: vi.fn(), codexRead: vi.fn(), grokRead: vi.fn(),
-  codexWrite: vi.fn(), grokWrite: vi.fn(),
+  codexWrite: vi.fn(), grokWrite: vi.fn(), eligible: vi.fn(),
 }));
 vi.mock('@/lib/codex-subscription-allowlist', async importOriginal => ({
   ...await importOriginal<typeof import('@/lib/codex-subscription-allowlist')>(),
   getDynamicCodexSubscriptionAllowedUserIds: mocks.readDb,
+  getCodexSubscriptionEligibleUserIds: mocks.eligible,
   saveDynamicCodexSubscriptionAllowedUserIds: mocks.saveDb,
 }));
 vi.mock('@/lib/codex-subscription', () => ({
@@ -18,14 +19,15 @@ vi.mock('@/lib/grok-subscription', () => ({
   readGrokSubscriptionRelayAllowlist: mocks.grokRead,
   syncGrokSubscriptionRelayAllowlist: mocks.grokWrite,
 }));
-import { getPersonalPlanSyncStatus, updatePersonalSubscriptionAllowlist } from '@/lib/personal-subscription-admin';
+import { getPersonalPlanSyncStatus, syncCodexAdminAllowlist, updatePersonalSubscriptionAllowlist } from '@/lib/personal-subscription-admin';
 
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv('CODEX_SUBSCRIPTION_OWNER_USER_ID', 'owner');
   vi.stubEnv('GROK_SUBSCRIPTION_OWNER_USER_ID', 'owner');
   mocks.readDb.mockResolvedValue(['owner', 'existing']);
-  mocks.codexRead.mockResolvedValue(['owner', 'existing']);
+  mocks.eligible.mockImplementation(async (ids: string[]) => [...ids, 'admin-only']);
+  mocks.codexRead.mockResolvedValue(['owner', 'existing', 'admin-only']);
   mocks.grokRead.mockResolvedValue(['owner']); // historical Grok roster is a subset
   mocks.codexWrite.mockResolvedValue(undefined);
   mocks.grokWrite.mockResolvedValue(undefined);
@@ -37,7 +39,7 @@ describe('one personal-plan roster, two independently synchronized relays', () =
   it('adds to both relays before committing the shared setting', async () => {
     const next = await updatePersonalSubscriptionAllowlist(ids => [...ids, 'new', 'new']);
     expect(next).toEqual(['owner', 'existing', 'new']);
-    expect(mocks.codexWrite).toHaveBeenCalledWith(next, 'owner');
+    expect(mocks.codexWrite).toHaveBeenCalledWith([...next, 'admin-only'], 'owner');
     expect(mocks.grokWrite).toHaveBeenCalledWith(next, 'owner');
     expect(mocks.saveDb).toHaveBeenCalledWith(next);
     expect(mocks.saveDb.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.grokWrite.mock.invocationCallOrder[0]);
@@ -69,7 +71,7 @@ describe('one personal-plan roster, two independently synchronized relays', () =
   it('rolls back to each actual snapshot after a possibly-applied Grok timeout', async () => {
     mocks.grokWrite.mockRejectedValueOnce(new Error('timeout'));
     await expect(updatePersonalSubscriptionAllowlist(ids => [...ids, 'new'])).rejects.toThrow('timeout');
-    expect(mocks.codexWrite).toHaveBeenLastCalledWith(['owner', 'existing'], 'owner');
+    expect(mocks.codexWrite).toHaveBeenLastCalledWith(['owner', 'existing', 'admin-only'], 'owner');
     expect(mocks.grokWrite).toHaveBeenLastCalledWith(['owner'], 'owner');
     expect(mocks.saveDb).not.toHaveBeenCalled();
   });
@@ -77,7 +79,7 @@ describe('one personal-plan roster, two independently synchronized relays', () =
   it('restores both relays if saving membership fails', async () => {
     mocks.saveDb.mockRejectedValueOnce(new Error('DB write failed'));
     await expect(updatePersonalSubscriptionAllowlist(ids => [...ids, 'new'])).rejects.toThrow('DB write failed');
-    expect(mocks.codexWrite).toHaveBeenLastCalledWith(['owner', 'existing'], 'owner');
+    expect(mocks.codexWrite).toHaveBeenLastCalledWith(['owner', 'existing', 'admin-only'], 'owner');
     expect(mocks.grokWrite).toHaveBeenLastCalledWith(['owner'], 'owner');
   });
 
@@ -104,6 +106,14 @@ describe('one personal-plan roster, two independently synchronized relays', () =
     mocks.grokRead.mockRejectedValueOnce(new Error('offline'));
     expect(await getPersonalPlanSyncStatus(['owner', 'existing']))
       .toEqual({ codex: 'synced', grok: 'unavailable' });
+  });
+
+  it('syncs new admins to Codex without changing Grok or shared membership', async () => {
+    mocks.codexRead.mockResolvedValueOnce(['owner', 'existing']);
+    await syncCodexAdminAllowlist();
+    expect(mocks.codexWrite).toHaveBeenCalledWith(['owner', 'existing', 'admin-only'], 'owner');
+    expect(mocks.grokWrite).not.toHaveBeenCalled();
+    expect(mocks.saveDb).not.toHaveBeenCalled();
   });
 
   it('rejects oversized membership before writing', async () => {

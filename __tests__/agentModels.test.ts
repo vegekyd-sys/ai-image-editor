@@ -265,16 +265,20 @@ describe('agent model catalog', () => {
     }
   });
 
-  it('routes the GPT-6 Auto default through Azure for an allowlisted owner', () => {
+  it('keeps the GPT-6 Auto subscription route when an old configured model is retired', () => {
     const previousDefault = process.env.AGENT_MODEL;
+    const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
     try {
       process.env.AGENT_MODEL = 'us.anthropic.claude-sonnet-5';
-      expect(defaultsToCodexSubscription('auto', 'owner-id', 'owner-id')).toBe(false);
+      process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
+      expect(defaultsToCodexSubscription('auto', 'owner-id', 'owner-id')).toBe(true);
       expect(resolveAgentModelSpecForUser('auto', process.env.AGENT_MODEL, 'owner-id', 'azure-openai', true))
-        .toMatchObject({ id: 'gpt-6-luna', provider: 'azure-openai' });
+        .toMatchObject({ id: 'gpt-6-luna', provider: 'codex-subscription' });
     } finally {
       if (previousDefault === undefined) delete process.env.AGENT_MODEL;
       else process.env.AGENT_MODEL = previousDefault;
+      if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+      else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
     }
   });
 

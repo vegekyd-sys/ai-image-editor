@@ -13,25 +13,25 @@ describe('agent model preference persistence', () => {
   it('stores only the versioned per-project agent preference', () => {
     saveAgentModelPreference('project-a', 'gpt-5.6-sol');
     expect(loadAgentModelPreference('project-a')).toBe('gpt-6-sol');
-    expect(loadAgentModelPreference('project-b')).toBe('gpt-6-luna');
+    expect(loadAgentModelPreference('project-b')).toBe('auto');
     expect(JSON.parse(window.localStorage.getItem(
       getAgentModelPreferenceStorageKey('project-a'),
-    ) || '{}')).toEqual({ v: 1, agentModel: 'gpt-5.6-sol' });
+    ) || '{}')).toEqual({ v: 2, agentModel: 'gpt-5.6-sol' });
   });
 
   it('rejects stale, malformed, and non-allowlisted values', () => {
     const key = getAgentModelPreferenceStorageKey('project-a');
-    window.localStorage.setItem(key, JSON.stringify({ v: 1, agentModel: 'evil/model' }));
+    window.localStorage.setItem(key, JSON.stringify({ v: 2, agentModel: 'evil/model' }));
     expect(loadAgentModelPreference('project-a')).toBe('auto');
     window.localStorage.setItem(key, JSON.stringify({ v: 0, agentModel: 'gpt-5.6-luna' }));
-    expect(loadAgentModelPreference('project-a')).toBe('gpt-6-luna');
+    expect(loadAgentModelPreference('project-a')).toBe('auto');
     window.localStorage.setItem(key, '{broken');
-    expect(loadAgentModelPreference('project-a')).toBe('gpt-6-luna');
+    expect(loadAgentModelPreference('project-a')).toBe('auto');
   });
 
   it('retains Auto and maps hidden GPT-5.6 choices to GPT-6', () => {
     const key = getAgentModelPreferenceStorageKey('project-a');
-    window.localStorage.setItem(key, JSON.stringify({ v: 1, agentModel: 'sonnet-5' }));
+    window.localStorage.setItem(key, JSON.stringify({ v: 2, agentModel: 'sonnet-5' }));
     expect(loadAgentModelPreference('project-a')).toBe('auto');
 
     window.localStorage.setItem('makaron:create-agent-model:v1', 'opus-4.8');
@@ -46,10 +46,22 @@ describe('agent model preference persistence', () => {
 
   it('upgrades persisted Grok 4.5 selections to Grok 4.6', () => {
     const key = getAgentModelPreferenceStorageKey('project-a');
-    window.localStorage.setItem(key, JSON.stringify({ v: 1, agentModel: 'grok-4.5' }));
+    window.localStorage.setItem(key, JSON.stringify({ v: 2, agentModel: 'grok-4.5' }));
     expect(loadAgentModelPreference('project-a')).toBe('grok-4.6');
 
     window.localStorage.setItem('makaron:create-agent-model:v1', 'grok-4.5');
     expect(loadCreateAgentModelPreference()).toBe('grok-4.6');
+  });
+
+  it('migrates the old implicit Azure Luna default to account-aware Auto', () => {
+    window.localStorage.setItem('makaron:model-preferences:v1:project-a', JSON.stringify({ v: 1, agentModel: 'gpt-6-luna' }));
+    window.localStorage.setItem('makaron:create-agent-model:v1', 'gpt-6-luna');
+    expect(loadAgentModelPreference('project-a')).toBe('auto');
+    expect(loadCreateAgentModelPreference()).toBe('auto');
+
+    saveAgentModelPreference('project-a', 'gpt-6-luna');
+    saveCreateAgentModelPreference('gpt-6-luna');
+    expect(loadAgentModelPreference('project-a')).toBe('gpt-6-luna');
+    expect(loadCreateAgentModelPreference()).toBe('gpt-6-luna');
   });
 });

@@ -179,7 +179,7 @@ export function defaultsToCodexSubscription(
   // Auto uses the personal plan only while its configured default is a GPT
   // model that the subscription selector actually offers.
   const configuredModel = configuredDefault?.trim()
-    ? matchConfiguredModel(configuredDefault)
+    ? matchConfiguredModel(configuredDefault) ?? DEFAULT_AGENT_MODEL_ID
     : DEFAULT_AGENT_MODEL_ID;
   return (preference === undefined || preference === 'auto')
     && configuredModel !== undefined

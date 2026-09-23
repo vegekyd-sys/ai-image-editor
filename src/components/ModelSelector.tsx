@@ -457,7 +457,7 @@ export default function ModelSelector({
   onVideoModelChange,
   videoResolution = 'auto',
   onVideoResolutionChange,
-  agentModel = 'gpt-6-luna',
+  agentModel = 'auto',
   onAgentModelChange,
   onOpenChange,
 }: ModelSelectorProps) {
