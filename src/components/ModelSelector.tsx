@@ -457,7 +457,7 @@ export default function ModelSelector({
   onVideoModelChange,
   videoResolution = 'auto',
   onVideoResolutionChange,
-  agentModel = 'auto',
+  agentModel = 'gpt-6-luna',
   onAgentModelChange,
   onOpenChange,
 }: ModelSelectorProps) {
@@ -626,7 +626,7 @@ export default function ModelSelector({
       return;
     }
     if (activeTab === 'agent') {
-      onAgentModelChange?.(on ? 'auto' : 'gpt-5.6-terra');
+      onAgentModelChange?.(on ? 'auto' : 'gpt-6-luna');
       return;
     }
     if (on) {
@@ -664,7 +664,7 @@ export default function ModelSelector({
   const subscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.codexAvailable !== false)
     || isCodexSubscriptionAgentModelPreference(agentModel);
   const baseAgentModels = getAgentModels();
-  const azureAgentModels = baseAgentModels.filter(model => model.id.startsWith('gpt-5.6-'));
+  const azureAgentModels = baseAgentModels.filter(model => model.id.startsWith('gpt-6-'));
   const codexSubscriptionAgentModels: ModelInfo[] = subscriptionVisible
     ? azureAgentModels.map(model => ({
         ...model,
@@ -686,7 +686,7 @@ export default function ModelSelector({
       });
     }
   }
-  const otherAgentModels = baseAgentModels.filter(model => !model.id.startsWith('gpt-5.6-'));
+  const otherAgentModels = baseAgentModels.filter(model => !model.id.startsWith('gpt-6-'));
   const agentModels = [
     ...azureAgentModels,
     ...codexSubscriptionAgentModels,
@@ -709,7 +709,7 @@ export default function ModelSelector({
     : preferredModel;
   const selectedAgentModel = agentModels.find(model => model.id === agentModel);
   const selectedAgentLabel = selectedAgentModel
-    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : selectedAgentModel.id.startsWith('gpt-5.6-') ? ` · ${t('model.azureApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
+    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : /^gpt-(?:5\.6|6)-/.test(selectedAgentModel.id) ? ` · ${t('model.azureApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
     : agentModel;
   const selectedVideoCapability = getVideoModelCapability(videoModel);
   const selectedVideoResolution = videoResolution === 'auto'
@@ -929,7 +929,7 @@ export default function ModelSelector({
                 const isGrokSubscription = activeTab === 'agent'
                   && isGrokSubscriptionAgentModelPreference(model.id);
                 const isAzureAgent = activeTab === 'agent'
-                  && model.id.startsWith('gpt-5.6-')
+                  && /^gpt-(?:5\.6|6)-/.test(model.id)
                   && !isCodexSubscription;
                 const modelIndex = models.indexOf(model);
                 const previousModel = modelIndex > 0 ? models[modelIndex - 1] : undefined;
@@ -948,7 +948,7 @@ export default function ModelSelector({
                     ? 'codex'
                     : isGrokSubscriptionAgentModelPreference(previousModel.id)
                       ? 'grok'
-                    : previousModel.id.startsWith('gpt-5.6-')
+                    : /^gpt-(?:5\.6|6)-/.test(previousModel.id)
                       ? 'azure'
                       : 'other';
                 const showProviderHeader = providerGroup && providerGroup !== previousProviderGroup;

@@ -87,9 +87,9 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     : isGrokSubscriptionAgentModelPreference(value) && selected
     ? `${t(selected.nameKey as Parameters<typeof t>[0])} · ${t('model.grokSubscription.suffix')}`
     : value === 'auto'
-    ? `Auto · ${t('model.gpt56Terra.name')} · ${ownerDefaultsToCodex ? t('model.codexSubscription.suffix') : t('model.azureApiBadge')}`
+    ? `Auto · ${t('model.gpt6Luna.name')} · ${ownerDefaultsToCodex ? t('model.codexSubscription.suffix') : t('model.azureApiBadge')}`
     : selected
-      ? `${t(selected.nameKey as Parameters<typeof t>[0])}${selected.id.startsWith('gpt-5.6-') ? ` · ${t('model.azureApiBadge')}` : selected.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
+      ? `${t(selected.nameKey as Parameters<typeof t>[0])}${/^gpt-(?:5\.6|6)-/.test(selected.id) ? ` · ${t('model.azureApiBadge')}` : selected.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
       : value;
 
   useEffect(() => {
@@ -216,7 +216,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
   }).format(new Date(seconds * 1_000));
 
   const azureOptions = models
-    .filter(model => model.id.startsWith('gpt-5.6-'))
+    .filter(model => model.id.startsWith('gpt-6-'))
     .map((model) => ({
       id: model.id as AgentModelPreference,
       name: t(model.nameKey as Parameters<typeof t>[0]),
@@ -226,7 +226,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     || isCodexSubscriptionAgentModelPreference(value);
   const codexSubscriptionOptions: Array<{ id: AgentModelPreference; name: string; desc: string }> = codexSubscriptionVisible
     ? models
-      .filter(model => model.id.startsWith('gpt-5.6-'))
+      .filter(model => model.id.startsWith('gpt-6-'))
       .map(model => ({
         id: getCodexSubscriptionAgentModelPreference(model.id as GPT56AgentModelId),
         name: `${t(model.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`,
@@ -247,7 +247,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     }
   }
   const otherOptions = models
-    .filter(model => !model.id.startsWith('gpt-5.6-'))
+    .filter(model => !model.id.startsWith('gpt-6-'))
     .map(model => ({
       id: model.id as AgentModelPreference,
       name: model.id === 'grok-4.6'
@@ -285,7 +285,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
       options: [
         ...(!ownerDefaultsToCodex ? [{
           id: 'auto' as AgentModelPreference,
-          name: `Auto · ${t('model.gpt56Terra.name')}`,
+          name: `Auto · ${t('model.gpt6Luna.name')}`,
           desc: t('model.agentAutoDesc'),
         }] : []),
         ...azureOptions,
@@ -301,7 +301,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
       options: [
         ...(ownerDefaultsToCodex ? [{
           id: 'auto' as AgentModelPreference,
-          name: `Auto · ${t('model.gpt56Terra.name')}`,
+          name: `Auto · ${t('model.gpt6Luna.name')}`,
           desc: t('model.agentAutoCodexDesc'),
         }] : []),
         ...codexSubscriptionOptions,
@@ -418,7 +418,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
                           ? 'codex-subscription'
                           : isGrokSubscription
                           ? 'grok-subscription'
-                          : model.id.startsWith('gpt-5.6-') || model.id === 'auto'
+                          : model.id.startsWith('gpt-6-') || model.id === 'auto'
                           ? 'azure-openai'
                           : model.id === 'grok-4.6'
                           ? 'openrouter'

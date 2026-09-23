@@ -123,7 +123,7 @@ function HomePageInner() {
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const createInput = useCreateInput()
-  const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
+  const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('gpt-6-luna')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)

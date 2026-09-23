@@ -692,7 +692,7 @@ try {
     const result = await expectHelp(['chat', '--help'], /Agent LLM defaults to auto/);
     assert.match(result.stdout, /^\s+--agent-model <id>/m);
     assert.match(result.stdout, /deepseek-v4-pro/);
-    assert.match(result.stdout, /account owner uses the personal\s+Codex plan/);
+    assert.match(result.stdout, /GPT-6 Luna through Azure API/);
     assert.match(result.stdout, /gpt-5\.6-\*-codex-subscription/);
     assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
@@ -718,7 +718,7 @@ try {
       'app Agent model catalog',
     );
     const subscriptionModels = [
-      'gpt-5.6-terra-codex-subscription',
+      'gpt-6-luna-codex-subscription',
       ...extractQuotedValues(
       appCatalogSource,
       /export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = \[([\s\S]*?)\] as const;/,
@@ -734,11 +734,11 @@ try {
       cliModels,
       [
         'auto',
-        ...appModels.slice(0, 3),
+        ...appModels.slice(0, 5),
         ...subscriptionModels,
-        appModels[3],
+        appModels[5],
         ...grokSubscriptionModel,
-        ...appModels.slice(4),
+        ...appModels.slice(6),
       ],
       'CLI Agent LLM allowlist must stay in sync with the app catalog',
     );
@@ -882,12 +882,12 @@ try {
     const requestStart = requests.length;
     await expectSuccess([
       'chat', '--project', 'project-models-1', '--agent-model',
-      'gpt-5.6-sol-codex-subscription', '--json', '-b',
+      'gpt-6-sol-codex-subscription', '--json', '-b',
       'use the personal Codex plan explicitly',
     ]);
     const runRequest = requests.slice(requestStart)
       .find(request => request.pathname === '/api/agent/run');
-    assert.equal(runRequest?.body?.agentModel, 'gpt-5.6-sol-codex-subscription');
+    assert.equal(runRequest?.body?.agentModel, 'gpt-6-sol-codex-subscription');
   }
 
   {

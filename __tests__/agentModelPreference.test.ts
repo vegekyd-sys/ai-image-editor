@@ -12,8 +12,8 @@ describe('agent model preference persistence', () => {
 
   it('stores only the versioned per-project agent preference', () => {
     saveAgentModelPreference('project-a', 'gpt-5.6-sol');
-    expect(loadAgentModelPreference('project-a')).toBe('gpt-5.6-sol');
-    expect(loadAgentModelPreference('project-b')).toBe('auto');
+    expect(loadAgentModelPreference('project-a')).toBe('gpt-6-sol');
+    expect(loadAgentModelPreference('project-b')).toBe('gpt-6-luna');
     expect(JSON.parse(window.localStorage.getItem(
       getAgentModelPreferenceStorageKey('project-a'),
     ) || '{}')).toEqual({ v: 1, agentModel: 'gpt-5.6-sol' });
@@ -24,12 +24,12 @@ describe('agent model preference persistence', () => {
     window.localStorage.setItem(key, JSON.stringify({ v: 1, agentModel: 'evil/model' }));
     expect(loadAgentModelPreference('project-a')).toBe('auto');
     window.localStorage.setItem(key, JSON.stringify({ v: 0, agentModel: 'gpt-5.6-luna' }));
-    expect(loadAgentModelPreference('project-a')).toBe('auto');
+    expect(loadAgentModelPreference('project-a')).toBe('gpt-6-luna');
     window.localStorage.setItem(key, '{broken');
-    expect(loadAgentModelPreference('project-a')).toBe('auto');
+    expect(loadAgentModelPreference('project-a')).toBe('gpt-6-luna');
   });
 
-  it('retires stale Claude selections to auto while preserving GPT-5.6 create choices', () => {
+  it('retains Auto and maps hidden GPT-5.6 choices to GPT-6', () => {
     const key = getAgentModelPreferenceStorageKey('project-a');
     window.localStorage.setItem(key, JSON.stringify({ v: 1, agentModel: 'sonnet-5' }));
     expect(loadAgentModelPreference('project-a')).toBe('auto');
@@ -38,7 +38,10 @@ describe('agent model preference persistence', () => {
     expect(loadCreateAgentModelPreference()).toBe('auto');
 
     saveCreateAgentModelPreference('gpt-5.6-luna');
-    expect(loadCreateAgentModelPreference()).toBe('gpt-5.6-luna');
+    expect(loadCreateAgentModelPreference()).toBe('gpt-6-luna');
+
+    saveCreateAgentModelPreference('gpt-5.6-terra-codex-subscription');
+    expect(loadCreateAgentModelPreference()).toBe('gpt-6-luna-codex-subscription');
   });
 
   it('upgrades persisted Grok 4.5 selections to Grok 4.6', () => {

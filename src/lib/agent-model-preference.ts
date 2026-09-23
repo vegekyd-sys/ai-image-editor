@@ -7,6 +7,21 @@ const STORAGE_VERSION = 1;
 const STORAGE_PREFIX = 'makaron:model-preferences:v1:';
 const CREATE_STORAGE_KEY = 'makaron:create-agent-model:v1';
 
+const HIDDEN_MODEL_REPLACEMENTS: Record<string, AgentModelPreference> = {
+  'gpt-5.6-terra': 'gpt-6-luna',
+  'gpt-5.6-sol': 'gpt-6-sol',
+  'gpt-5.6-luna': 'gpt-6-luna',
+  'gpt-5.6-terra-codex-subscription': 'gpt-6-luna-codex-subscription',
+  'gpt-5.6-sol-codex-subscription': 'gpt-6-sol-codex-subscription',
+  'gpt-5.6-luna-codex-subscription': 'gpt-6-luna-codex-subscription',
+};
+
+function normalizeVisibleAgentModelPreference(value: unknown): AgentModelPreference {
+  return typeof value === 'string' && HIDDEN_MODEL_REPLACEMENTS[value]
+    ? HIDDEN_MODEL_REPLACEMENTS[value]
+    : normalizeAgentModelPreference(value);
+}
+
 interface StoredModelPreferences {
   v: 1;
   agentModel: AgentModelPreference;
@@ -17,15 +32,15 @@ export function getAgentModelPreferenceStorageKey(projectId: string): string {
 }
 
 export function loadAgentModelPreference(projectId: string): AgentModelPreference {
-  if (typeof window === 'undefined' || !projectId) return 'auto';
+  if (typeof window === 'undefined' || !projectId) return 'gpt-6-luna';
   try {
     const raw = window.localStorage.getItem(getAgentModelPreferenceStorageKey(projectId));
-    if (!raw) return 'auto';
+    if (!raw) return 'gpt-6-luna';
     const stored = JSON.parse(raw) as Partial<StoredModelPreferences>;
-    if (stored.v !== STORAGE_VERSION) return 'auto';
-    return normalizeAgentModelPreference(stored.agentModel);
+    if (stored.v !== STORAGE_VERSION) return 'gpt-6-luna';
+    return normalizeVisibleAgentModelPreference(stored.agentModel);
   } catch {
-    return 'auto';
+    return 'gpt-6-luna';
   }
 }
 
@@ -49,11 +64,12 @@ export function saveAgentModelPreference(
 }
 
 export function loadCreateAgentModelPreference(): AgentModelPreference {
-  if (typeof window === 'undefined') return 'auto';
+  if (typeof window === 'undefined') return 'gpt-6-luna';
   try {
-    return normalizeAgentModelPreference(window.localStorage.getItem(CREATE_STORAGE_KEY));
+    const saved = window.localStorage.getItem(CREATE_STORAGE_KEY);
+    return saved === null ? 'gpt-6-luna' : normalizeVisibleAgentModelPreference(saved);
   } catch {
-    return 'auto';
+    return 'gpt-6-luna';
   }
 }
 

@@ -26,7 +26,7 @@ export function createAzureAgentPromptCacheKey(
   modelId: string,
   projectId: string,
 ): string {
-  const modelTier = modelId.replace(/^gpt-5\.6-/, '').replace(/[^a-z0-9-]/gi, '-');
+  const modelTier = modelId.replace(/^gpt-(?:5\.6|6)-/, '').replace(/[^a-z0-9-]/gi, '-');
   const projectHash = createHash('sha256').update(projectId).digest('hex').slice(0, 40);
   return `mk-${modelTier}-${projectHash}`;
 }
@@ -139,11 +139,15 @@ export function getAgentProviderOptions(
     const configuredEffort = process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT
       ?.trim()
       .toLowerCase() as AgentReasoningEffort | undefined;
-    const reasoningEffort = configuredEffort && allowedEfforts.has(configuredEffort)
-      ? configuredEffort
-      : runtime.spec.defaultReasoningEffort;
+    const reasoningEffort = runtime.spec.id === 'gpt-6-luna'
+      ? 'high'
+      : (configuredEffort && allowedEfforts.has(configuredEffort)
+        ? configuredEffort
+        : runtime.spec.defaultReasoningEffort);
     return {
       azure: {
+        // The pinned AI SDK predates GPT-6 and otherwise drops reasoning.effort.
+        ...(runtime.spec.id.startsWith('gpt-6-') ? { forceReasoning: true } : {}),
         parallelToolCalls: false,
         store: false,
         promptCacheKey: runtime.promptCacheKey,
@@ -171,11 +175,14 @@ export function getAgentProviderOptions(
     const configuredEffort = process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT
       ?.trim()
       .toLowerCase() as AgentReasoningEffort | undefined;
-    const reasoningEffort = configuredEffort && allowedEfforts.has(configuredEffort)
-      ? configuredEffort
-      : runtime.spec.defaultReasoningEffort;
+    const reasoningEffort = runtime.spec.id === 'gpt-6-luna'
+      ? 'high'
+      : (configuredEffort && allowedEfforts.has(configuredEffort)
+        ? configuredEffort
+        : runtime.spec.defaultReasoningEffort);
     return {
       openai: {
+        ...(runtime.spec.id.startsWith('gpt-6-') ? { forceReasoning: true } : {}),
         parallelToolCalls: false,
         store: false,
         promptCacheKey: runtime.promptCacheKey,
