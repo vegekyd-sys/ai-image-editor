@@ -173,7 +173,7 @@ function ProjectsPageInner() {
   const [visibleProjectCount, setVisibleProjectCount] = useState(INITIAL_PROJECT_CARD_COUNT)
   const projectLoadMoreRef = useRef<HTMLDivElement | null>(null)
   const createInput = useCreateInput()
-  const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
+  const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('gpt-6-luna')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const extractedMetadataRef = useRef<import('@/types').PhotoMetadata | undefined>(undefined)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)

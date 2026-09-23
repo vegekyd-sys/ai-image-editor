@@ -718,7 +718,7 @@ try {
       'app Agent model catalog',
     );
     const subscriptionModels = [
-      'gpt-5.6-terra-codex-subscription',
+      'gpt-6-luna-codex-subscription',
       ...extractQuotedValues(
       appCatalogSource,
       /export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = \[([\s\S]*?)\] as const;/,
@@ -882,12 +882,12 @@ try {
     const requestStart = requests.length;
     await expectSuccess([
       'chat', '--project', 'project-models-1', '--agent-model',
-      'gpt-5.6-sol-codex-subscription', '--json', '-b',
+      'gpt-6-sol-codex-subscription', '--json', '-b',
       'use the personal Codex plan explicitly',
     ]);
     const runRequest = requests.slice(requestStart)
       .find(request => request.pathname === '/api/agent/run');
-    assert.equal(runRequest?.body?.agentModel, 'gpt-5.6-sol-codex-subscription');
+    assert.equal(runRequest?.body?.agentModel, 'gpt-6-sol-codex-subscription');
   }
 
   {

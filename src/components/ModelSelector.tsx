@@ -457,7 +457,7 @@ export default function ModelSelector({
   onVideoModelChange,
   videoResolution = 'auto',
   onVideoResolutionChange,
-  agentModel = 'auto',
+  agentModel = 'gpt-6-luna',
   onAgentModelChange,
   onOpenChange,
 }: ModelSelectorProps) {
@@ -664,9 +664,9 @@ export default function ModelSelector({
   const subscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.codexAvailable !== false)
     || isCodexSubscriptionAgentModelPreference(agentModel);
   const baseAgentModels = getAgentModels();
-  const azureAgentModels = baseAgentModels.filter(model => /^gpt-(?:5\.6|6)-/.test(model.id));
+  const azureAgentModels = baseAgentModels.filter(model => model.id.startsWith('gpt-6-'));
   const codexSubscriptionAgentModels: ModelInfo[] = subscriptionVisible
-    ? azureAgentModels.filter(model => model.id.startsWith('gpt-5.6-')).map(model => ({
+    ? azureAgentModels.map(model => ({
         ...model,
         id: getCodexSubscriptionAgentModelPreference(model.id as GPT56AgentModelId),
         speedLabel: undefined,
@@ -686,7 +686,7 @@ export default function ModelSelector({
       });
     }
   }
-  const otherAgentModels = baseAgentModels.filter(model => !/^gpt-(?:5\.6|6)-/.test(model.id));
+  const otherAgentModels = baseAgentModels.filter(model => !model.id.startsWith('gpt-6-'));
   const agentModels = [
     ...azureAgentModels,
     ...codexSubscriptionAgentModels,

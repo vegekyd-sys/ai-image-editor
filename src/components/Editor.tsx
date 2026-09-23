@@ -279,10 +279,10 @@ export default function Editor({
   const [videoAuto, setVideoAuto] = useState(true);
   const videoAutoRef = useRef(true);
   useEffect(() => { videoAutoRef.current = videoAuto; }, [videoAuto]);
-  const [agentModel, setAgentModel] = useState<AgentModelPreference>('auto');
-  const agentModelRef = useRef<AgentModelPreference>('auto');
+  const [agentModel, setAgentModel] = useState<AgentModelPreference>('gpt-6-luna');
+  const agentModelRef = useRef<AgentModelPreference>('gpt-6-luna');
   useEffect(() => {
-    const next = projectId ? loadAgentModelPreference(projectId) : 'auto';
+    const next = projectId ? loadAgentModelPreference(projectId) : 'gpt-6-luna';
     agentModelRef.current = next;
     setAgentModel(next);
   }, [projectId]);

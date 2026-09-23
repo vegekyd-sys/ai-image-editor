@@ -53,7 +53,7 @@ export function getVideoModels(): ModelInfo[] {
 }
 
 export function getAgentModels(): ModelInfo[] {
-  return MODEL_REGISTRY.filter(m => m.category === 'agent');
+  return MODEL_REGISTRY.filter(m => m.category === 'agent' && !m.id.startsWith('gpt-5.6-'));
 }
 
 export function getModelInfo(id: string): ModelInfo | undefined {

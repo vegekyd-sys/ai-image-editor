@@ -10,9 +10,11 @@ export const AGENT_MODEL_IDS = [
 ] as const;
 
 export type AgentModelId = (typeof AGENT_MODEL_IDS)[number];
-export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'gpt-5.6-terra-codex-subscription' as const;
+export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'gpt-6-luna-codex-subscription' as const;
 export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = [
   CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
+  'gpt-6-sol-codex-subscription',
+  'gpt-5.6-terra-codex-subscription',
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
 ] as const;
@@ -174,10 +176,14 @@ export function defaultsToCodexSubscription(
   dynamicallyAllowed?: boolean,
   configuredDefault: string | undefined = process.env.AGENT_MODEL,
 ): boolean {
-  // Auto uses the personal plan only while its configured default is one of
-  // the GPT-5.6 models that the subscription selector actually offers.
+  // Auto uses the personal plan only while its configured default is a GPT
+  // model that the subscription selector actually offers.
+  const configuredModel = configuredDefault?.trim()
+    ? matchConfiguredModel(configuredDefault)
+    : DEFAULT_AGENT_MODEL_ID;
   return (preference === undefined || preference === 'auto')
-    && (matchConfiguredModel(configuredDefault) ?? DEFAULT_AGENT_MODEL_ID).startsWith('gpt-5.6-')
+    && configuredModel !== undefined
+    && isGPT56AgentModelId(configuredModel)
     && (dynamicallyAllowed
       ?? isCodexSubscriptionAllowedUser(userId, ownerUserId, configuredAllowedUserIds));
 }

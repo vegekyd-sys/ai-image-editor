@@ -79,11 +79,43 @@ describe('agent model catalog', () => {
       const runtime = createAgentModelRuntime('gpt-6-luna', 'project-gpt6');
       expect(runtime.spec).toMatchObject({ provider: 'azure-openai', providerModelId: 'gpt-6-luna' });
       expect(getAgentProviderOptions(runtime)).toMatchObject({
-        azure: { forceReasoning: true, reasoningEffort: 'low' },
+        azure: { forceReasoning: true, reasoningEffort: 'high' },
       });
     } finally {
       if (previousKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
       else process.env.AZURE_OPENAI_API_KEY = previousKey;
+    }
+  });
+
+  it('keeps Luna at high on both API and subscription routes', () => {
+    const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+    const previousAzureKey = process.env.AZURE_OPENAI_API_KEY;
+    const previousAzureEffort = process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
+    const previousCodexEffort = process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT;
+    process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
+    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT = 'low';
+    process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT = 'low';
+    try {
+      const api = createAgentModelRuntime('gpt-6-luna', 'project-api');
+      const subscription = createAgentModelRuntime(
+        'gpt-6-luna-codex-subscription', 'project-plan', undefined, 'owner-id', true,
+      );
+      expect(getAgentProviderOptions(api)).toMatchObject({
+        azure: { forceReasoning: true, reasoningEffort: 'high' },
+      });
+      expect(getAgentProviderOptions(subscription)).toMatchObject({
+        openai: { forceReasoning: true, reasoningEffort: 'high' },
+      });
+    } finally {
+      if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+      else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
+      if (previousAzureKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
+      else process.env.AZURE_OPENAI_API_KEY = previousAzureKey;
+      if (previousAzureEffort === undefined) delete process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
+      else process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT = previousAzureEffort;
+      if (previousCodexEffort === undefined) delete process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT;
+      else process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT = previousCodexEffort;
     }
   });
 
@@ -135,9 +167,11 @@ describe('agent model catalog', () => {
         provider: 'azure-openai',
       });
       for (const [preference, modelId] of [
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[0], 'gpt-5.6-terra'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[1], 'gpt-5.6-sol'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[2], 'gpt-5.6-luna'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[0], 'gpt-6-luna'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[1], 'gpt-6-sol'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[2], 'gpt-5.6-terra'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[3], 'gpt-5.6-sol'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[4], 'gpt-5.6-luna'],
       ] as const) {
         expect(resolveAgentModelSpecForUser(
           preference,

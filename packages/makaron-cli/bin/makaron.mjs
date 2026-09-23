@@ -35,6 +35,8 @@ const CHAT_AGENT_MODELS = [
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
+  'gpt-6-luna-codex-subscription',
+  'gpt-6-sol-codex-subscription',
   'gpt-5.6-terra-codex-subscription',
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
@@ -512,7 +514,7 @@ Options:
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --agent-model <id>        Agent LLM only: auto, gpt-6-luna, gpt-6-sol, gpt-5.6-terra, gpt-5.6-sol,
                             gpt-5.6-luna, grok-4.6, deepseek-v4-pro, deepseek-flash, or a
-                            gpt-5.6-*-codex-subscription or
+                            gpt-6-*-codex-subscription, gpt-5.6-*-codex-subscription or
                             grok-4.6-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON (includes per-run "usage" credits).
@@ -556,7 +558,7 @@ What you can ask:
     makaron chat --project auto --agent-model deepseek-v4-pro -b --json "make a 20s badminton video"
 
   Force the personal Codex plan
-    makaron chat --project auto --agent-model gpt-5.6-sol-codex-subscription -b --json "reply with the active model"
+    makaron chat --project auto --agent-model gpt-6-luna-codex-subscription -b --json "reply with the active model"
 
   Force the personal SuperGrok plan
     makaron chat --project auto --agent-model grok-4.6-grok-subscription -b --json "reply with the active model"
