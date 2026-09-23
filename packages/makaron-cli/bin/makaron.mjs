@@ -30,6 +30,8 @@ const UPDATE_CHECK_TIMEOUT_MS = 400;
 const AGENT_WAIT_TIMEOUT_SECONDS = Math.max(900, Number(process.env.MAKARON_AGENT_WAIT_TIMEOUT_SECONDS || 10_800));
 const CHAT_AGENT_MODELS = [
   'auto',
+  'gpt-6-luna',
+  'gpt-6-sol',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
@@ -508,7 +510,7 @@ Options:
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --media-manifest <file|-> Import typed image/video media before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
-  --agent-model <id>        Agent LLM only: auto, gpt-5.6-terra, gpt-5.6-sol,
+  --agent-model <id>        Agent LLM only: auto, gpt-6-luna, gpt-6-sol, gpt-5.6-terra, gpt-5.6-sol,
                             gpt-5.6-luna, grok-4.6, deepseek-v4-pro, deepseek-flash, or a
                             gpt-5.6-*-codex-subscription or
                             grok-4.6-grok-subscription personal-plan route.
@@ -517,8 +519,8 @@ Options:
   --stream                  Legacy live SSE stream.
   --help, -h                Show this help.
 
-Agent LLM defaults to auto (GPT-5.6 Terra; the account owner uses the personal
-Codex plan). Base GPT-5.6 ids select Azure API; append -codex-subscription to
+Agent LLM defaults to auto (GPT-6 Luna through Azure API). GPT-5.6 and GPT-6
+base ids select Azure API; append -codex-subscription to
 select the personal plan explicitly. Base grok-4.6 selects OpenRouter API;
 grok-4.6-grok-subscription selects the personal SuperGrok plan. Image/video
 model routing stays automatic in chat.

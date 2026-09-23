@@ -26,7 +26,7 @@ export function createAzureAgentPromptCacheKey(
   modelId: string,
   projectId: string,
 ): string {
-  const modelTier = modelId.replace(/^gpt-5\.6-/, '').replace(/[^a-z0-9-]/gi, '-');
+  const modelTier = modelId.replace(/^gpt-(?:5\.6|6)-/, '').replace(/[^a-z0-9-]/gi, '-');
   const projectHash = createHash('sha256').update(projectId).digest('hex').slice(0, 40);
   return `mk-${modelTier}-${projectHash}`;
 }
@@ -144,6 +144,8 @@ export function getAgentProviderOptions(
       : runtime.spec.defaultReasoningEffort;
     return {
       azure: {
+        // The pinned AI SDK predates GPT-6 and otherwise drops reasoning.effort.
+        ...(runtime.spec.id.startsWith('gpt-6-') ? { forceReasoning: true } : {}),
         parallelToolCalls: false,
         store: false,
         promptCacheKey: runtime.promptCacheKey,

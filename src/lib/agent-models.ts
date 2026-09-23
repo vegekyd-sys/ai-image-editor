@@ -1,4 +1,6 @@
 export const AGENT_MODEL_IDS = [
+  'gpt-6-luna',
+  'gpt-6-sol',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
@@ -34,10 +36,12 @@ export interface AgentModelSpec {
   defaultReasoningEffort?: AgentReasoningEffort;
 }
 
-export const DEFAULT_AGENT_MODEL_ID: AgentModelId = 'gpt-5.6-terra';
+export const DEFAULT_AGENT_MODEL_ID: AgentModelId = 'gpt-6-luna';
 export const DEFAULT_GPT56_AGENT_PROVIDER: GPT56AgentProvider = 'azure-openai';
 
 const GPT56_AGENT_MODEL_IDS = [
+  'gpt-6-luna',
+  'gpt-6-sol',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
@@ -49,6 +53,16 @@ export const GPT56_PROVIDER_MODEL_IDS: Record<
   GPT56AgentModelId,
   Record<GPT56AgentProvider, string>
 > = {
+  'gpt-6-luna': {
+    openrouter: 'openai/gpt-6-luna',
+    'azure-openai': 'gpt-6-luna',
+    'codex-subscription': 'gpt-6-luna',
+  },
+  'gpt-6-sol': {
+    openrouter: 'openai/gpt-6-sol',
+    'azure-openai': 'gpt-6-sol',
+    'codex-subscription': 'gpt-6-sol',
+  },
   'gpt-5.6-terra': {
     openrouter: 'openai/gpt-5.6-terra',
     'azure-openai': 'gpt-5.6-terra',
@@ -158,8 +172,12 @@ export function defaultsToCodexSubscription(
   ownerUserId: string | undefined = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
   configuredAllowedUserIds: string | undefined = process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS,
   dynamicallyAllowed?: boolean,
+  configuredDefault: string | undefined = process.env.AGENT_MODEL,
 ): boolean {
+  // Auto uses the personal plan only while its configured default is one of
+  // the GPT-5.6 models that the subscription selector actually offers.
   return (preference === undefined || preference === 'auto')
+    && (matchConfiguredModel(configuredDefault) ?? DEFAULT_AGENT_MODEL_ID).startsWith('gpt-5.6-')
     && (dynamicallyAllowed
       ?? isCodexSubscriptionAllowedUser(userId, ownerUserId, configuredAllowedUserIds));
 }
@@ -214,6 +232,24 @@ export function resolveGPT56AgentProviderForUser(options: {
 }
 
 export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
+  'gpt-6-luna': {
+    id: 'gpt-6-luna',
+    provider: 'azure-openai',
+    providerModelId: 'gpt-6-luna',
+    billingModelId: 'gpt-6-luna',
+    cacheStrategy: 'automatic',
+    supportsImageInput: true,
+    defaultReasoningEffort: 'low',
+  },
+  'gpt-6-sol': {
+    id: 'gpt-6-sol',
+    provider: 'azure-openai',
+    providerModelId: 'gpt-6-sol',
+    billingModelId: 'gpt-6-sol',
+    cacheStrategy: 'automatic',
+    supportsImageInput: true,
+    defaultReasoningEffort: 'high',
+  },
   'gpt-5.6-terra': {
     id: 'gpt-5.6-terra',
     provider: 'openrouter',
@@ -396,7 +432,7 @@ export function resolveAgentModelSpec(
 
 export function resolveAgentModelSpecForUser(
   preference: AgentModelPreference | undefined,
-  configuredDefault: string | undefined,
+  configuredDefault: string | undefined = process.env.AGENT_MODEL,
   userId: string | undefined,
   configuredGPT56Provider: string | undefined = process.env.GPT56_AGENT_PROVIDER,
   codexSubscriptionAllowed?: boolean,
@@ -417,6 +453,7 @@ export function resolveAgentModelSpecForUser(
     undefined,
     undefined,
     codexSubscriptionAllowed,
+    configuredDefault,
   );
   const selected = resolveAgentModelSpec(
     preference,

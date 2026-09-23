@@ -46,7 +46,7 @@ describe('ModelSelector Agent tab', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows the GPT-5.6 lineup with no Claude choices and emits allowlisted Agent preferences', async () => {
+  it('shows the GPT-6 and GPT-5.6 lineup with no Claude choices and emits allowlisted Agent preferences', async () => {
     const onAgentModelChange = vi.fn();
     render(
       <LocaleProvider>
@@ -77,13 +77,14 @@ describe('ModelSelector Agent tab', () => {
     expect(agentTab.getAttribute('aria-controls')).toBe(agentPanel.id);
     expect(agentPanel.getAttribute('aria-labelledby')).toBe(agentTab.id);
 
-    for (const id of ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'grok-4.6', 'deepseek-v4-pro', 'deepseek-flash']) {
+    for (const id of ['gpt-6-luna', 'gpt-6-sol', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'grok-4.6', 'deepseek-v4-pro', 'deepseek-flash']) {
       expect(await screen.findByTestId(`agent-model-${id}`)).not.toBeNull();
     }
     expect(screen.queryByTestId('agent-model-grok-4.5')).toBeNull();
     for (const id of ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna']) {
       expect(await screen.findByTestId(`agent-model-${id}-codex-subscription`)).not.toBeNull();
     }
+    expect(screen.queryByTestId('agent-model-gpt-6-luna-codex-subscription')).toBeNull();
     expect(await screen.findByTestId('agent-model-grok-4.6-grok-subscription')).not.toBeNull();
     expect(screen.getByTestId('agent-model-grok-4.6-grok-subscription').getAttribute('data-agent-provider'))
       .toBe('grok-subscription');
@@ -108,7 +109,7 @@ describe('ModelSelector Agent tab', () => {
     expect(screen.getByTestId('model-auto-agent').getAttribute('aria-pressed')).toBe('true');
 
     fireEvent.click(screen.getByTestId('model-auto-agent'));
-    expect(onAgentModelChange).toHaveBeenCalledWith('gpt-5.6-terra');
+    expect(onAgentModelChange).toHaveBeenCalledWith('gpt-6-luna');
 
     fireEvent.click(screen.getByTestId('agent-model-gpt-5.6-sol'));
     expect(onAgentModelChange).toHaveBeenCalledWith('gpt-5.6-sol');

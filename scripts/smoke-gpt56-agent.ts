@@ -39,7 +39,7 @@ async function main() {
     ? configuredModel
     : 'auto';
   const runtime = createAgentModelRuntime(agentModel, 'gpt56-live-smoke');
-  if (agentModel === 'auto') assert.equal(runtime.spec.id, 'gpt-5.6-terra');
+  if (agentModel === 'auto') assert.equal(runtime.spec.id, 'gpt-6-luna');
 
   const streamStartedAt = Date.now();
   const stream = streamText({
@@ -78,8 +78,8 @@ async function main() {
 
   const redPng = await sharp({
     create: {
-      width: 96,
-      height: 96,
+      width: 512,
+      height: 512,
       channels: 3,
       background: { r: 255, g: 0, b: 0 },
     },

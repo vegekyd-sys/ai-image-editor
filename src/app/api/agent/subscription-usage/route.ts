@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
+import { resolveAgentModelSpecForUser } from '@/lib/agent-models';
 import {
   getCodexSubscriptionUsage,
   type CodexSubscriptionUsage,
@@ -64,12 +65,15 @@ export async function GET(req: NextRequest) {
     isDynamicCodexSubscriptionUserAllowed(userId),
     isGrokSubscriptionAllowedUser(userId),
   ]);
+  const defaultProvider = resolveAgentModelSpecForUser(
+    'auto', process.env.AGENT_MODEL, userId, process.env.GPT56_AGENT_PROVIDER, codexAvailable,
+  ).provider === 'codex-subscription' ? 'codex-subscription' : 'azure-openai';
   if (!codexAvailable && !grokAvailable) {
     return NextResponse.json(
       {
         available: false,
         grokAvailable: false,
-        defaultProvider: 'azure-openai',
+        defaultProvider,
         codex: { available: false },
         grok: { available: false },
       },
@@ -95,7 +99,7 @@ export async function GET(req: NextRequest) {
       // Keep legacy Codex fields for older clients while exposing provider-scoped data.
       available: codexAvailable,
       grokAvailable,
-      defaultProvider: codexAvailable ? 'codex-subscription' : 'azure-openai',
+      defaultProvider,
       ...(codexUsage ?? {}),
       codex: {
         available: codexAvailable,

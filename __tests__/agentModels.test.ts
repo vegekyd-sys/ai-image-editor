@@ -24,6 +24,8 @@ import {
 describe('agent model catalog', () => {
   it('exposes the product model ids in selector order', () => {
     expect(AGENT_MODEL_IDS).toEqual([
+      'gpt-6-luna',
+      'gpt-6-sol',
       'gpt-5.6-terra',
       'gpt-5.6-sol',
       'gpt-5.6-luna',
@@ -68,6 +70,21 @@ describe('agent model catalog', () => {
       .toBe('x-ai/grok-4.6');
     expect(resolveAgentModelSpec('deepseek-v4-pro').providerModelId)
       .toBe('deepseek-v4-pro');
+  });
+
+  it('sends GPT-6 reasoning options through the pinned Azure SDK', () => {
+    const previousKey = process.env.AZURE_OPENAI_API_KEY;
+    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    try {
+      const runtime = createAgentModelRuntime('gpt-6-luna', 'project-gpt6');
+      expect(runtime.spec).toMatchObject({ provider: 'azure-openai', providerModelId: 'gpt-6-luna' });
+      expect(getAgentProviderOptions(runtime)).toMatchObject({
+        azure: { forceReasoning: true, reasoningEffort: 'low' },
+      });
+    } finally {
+      if (previousKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
+      else process.env.AZURE_OPENAI_API_KEY = previousKey;
+    }
   });
 
   it('keeps OpenRouter GPT-5.6 routes available as the explicit backup', () => {
@@ -142,8 +159,10 @@ describe('agent model catalog', () => {
   it('defaults only the configured allowlist Auto route to the Codex subscription', () => {
     const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
     const previousAllowed = process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS;
+    const previousDefault = process.env.AGENT_MODEL;
     process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
     process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS = ' test-user-id, second-test-id, test-user-id ';
+    process.env.AGENT_MODEL = 'gpt-5.6-terra';
     try {
       expect([...getCodexSubscriptionAllowedUserIds()].sort()).toEqual([
         'owner-id',
@@ -207,6 +226,21 @@ describe('agent model catalog', () => {
       else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
       if (previousAllowed === undefined) delete process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS;
       else process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS = previousAllowed;
+      if (previousDefault === undefined) delete process.env.AGENT_MODEL;
+      else process.env.AGENT_MODEL = previousDefault;
+    }
+  });
+
+  it('routes the GPT-6 Auto default through Azure for an allowlisted owner', () => {
+    const previousDefault = process.env.AGENT_MODEL;
+    try {
+      process.env.AGENT_MODEL = 'us.anthropic.claude-sonnet-5';
+      expect(defaultsToCodexSubscription('auto', 'owner-id', 'owner-id')).toBe(false);
+      expect(resolveAgentModelSpecForUser('auto', process.env.AGENT_MODEL, 'owner-id', 'azure-openai', true))
+        .toMatchObject({ id: 'gpt-6-luna', provider: 'azure-openai' });
+    } finally {
+      if (previousDefault === undefined) delete process.env.AGENT_MODEL;
+      else process.env.AGENT_MODEL = previousDefault;
     }
   });
 
@@ -383,11 +417,11 @@ describe('agent model catalog', () => {
     }
   });
 
-  it('defaults auto to Terra and ignores retired Claude AGENT_MODEL values', () => {
-    expect(resolveAgentModelSpec('auto').id).toBe('gpt-5.6-terra');
+  it('defaults auto to GPT-6 Luna and ignores retired Claude AGENT_MODEL values', () => {
+    expect(resolveAgentModelSpec('auto').id).toBe('gpt-6-luna');
     expect(resolveAgentModelSpec('auto', 'gpt-5.6-luna').id).toBe('gpt-5.6-luna');
     expect(resolveAgentModelSpec(undefined, 'us.anthropic.claude-sonnet-5').id)
-      .toBe('gpt-5.6-terra');
+      .toBe('gpt-6-luna');
   });
 
   it('falls invalid client preferences back to auto', () => {
@@ -404,13 +438,13 @@ describe('agent model catalog', () => {
     expect(resolveAgentModelSpec('auto', 'x-ai/grok-4.5').id).toBe('grok-4.6');
   });
 
-  it('rolls retired Claude requests to Auto/Terra but still rejects unknown API ids', () => {
+  it('rolls retired Claude requests to Auto/Luna but still rejects unknown API ids', () => {
     expect(normalizeRequestedAgentModelPreference('sonnet-5')).toBe('auto');
     expect(normalizeRequestedAgentModelPreference('us.anthropic.claude-opus-4-6-v1')).toBe('auto');
     expect(normalizeRequestedAgentModelPreference('arbitrary/provider-model')).toBeNull();
     expect(resolveAgentModelSpec(
       normalizeRequestedAgentModelPreference('sonnet-5') ?? undefined,
-    ).id).toBe('gpt-5.6-terra');
+    ).id).toBe('gpt-6-luna');
   });
 
   it('marks DeepSeek as text-only so image analysis uses the vision helper', () => {
@@ -555,6 +589,6 @@ describe('DeepSeek V4.1 Flash', () => {
   it('selects the official multimodal model without changing Auto', () => {
     expect(normalizeRequestedAgentModelPreference('deepseek-flash')).toBe('deepseek-flash');
     expect(resolveAgentModelSpec('deepseek-flash')).toMatchObject({provider: 'deepseek', providerModelId: 'deepseek-flash', billingModelId: 'deepseek/deepseek-flash', supportsImageInput: true});
-    expect(resolveAgentModelSpec('auto').id).toBe('gpt-5.6-terra');
+    expect(resolveAgentModelSpec('auto').id).toBe('gpt-6-luna');
   });
 });
