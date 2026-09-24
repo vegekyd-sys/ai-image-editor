@@ -521,7 +521,8 @@ Options:
   --stream                  Legacy live SSE stream.
   --help, -h                Show this help.
 
-Agent LLM defaults to auto (GPT-6 Luna through Azure API). GPT-5.6 and GPT-6
+Agent LLM defaults to auto (GPT-6 Luna through the Codex subscription for
+eligible accounts, including admins, or Azure API otherwise). GPT-5.6 and GPT-6
 base ids select Azure API; append -codex-subscription to
 select the personal plan explicitly. Base grok-4.6 selects OpenRouter API;
 grok-4.6-grok-subscription selects the personal SuperGrok plan. Image/video
