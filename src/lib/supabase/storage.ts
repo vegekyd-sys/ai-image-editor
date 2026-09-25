@@ -120,8 +120,8 @@ export function getPublicUrl(supabase: SupabaseClient, path: string): string {
  * width/quality params.
  */
 /** High-quality image via Image Transformations — triggers PNG→WebP format negotiation.
- *  width=2000 triggers the transform pipeline without visible downscale
- *  (our uploads are max 2048px, 2.3% smaller is imperceptible). quality=95 is visually lossless. */
+ *  Workspace media can exceed 2000px. Supabase's default cover mode crops a
+ *  width-only transform instead of scaling the whole image, so request contain. */
 export function getOptimizedUrl(url: string, quality = 95): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
   // Local Supabase Storage does not expose the hosted /render/image route.
@@ -131,7 +131,7 @@ export function getOptimizedUrl(url: string, quality = 95): string {
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',
   )
-  return base + `?width=2000&quality=${quality}`
+  return base + `?width=2000&quality=${quality}&resize=contain`
 }
 
 /**
