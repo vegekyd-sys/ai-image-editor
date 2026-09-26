@@ -1,7 +1,5 @@
 /**
- * Qwen Image Edit Spicy — independent MuleRouter image model.
- * Existing self-hosted Qwen remains a separate backend for rotation/LoRA and
- * as an independently selectable model.
+ * Qwen Image Edit Spicy — MuleRouter image backend replacing the Vast Qwen route.
  */
 import type { GenerateImageRequest, ModelBackend } from './types'
 import {

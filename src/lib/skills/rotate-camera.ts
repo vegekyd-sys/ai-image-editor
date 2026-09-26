@@ -1,6 +1,5 @@
-import { ensureJpeg } from '../gemini';
-import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from '../camera-utils';
-import { InferenceClient } from '@huggingface/inference';
+import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest } from '../camera-utils';
+import { generateWithFalQwenRotate } from '../fal-qwen-rotate';
 import type { SkillContext, SkillResult } from './index';
 
 export interface RotateCameraInput {
@@ -9,59 +8,22 @@ export interface RotateCameraInput {
   distance: number;   // 0.6 to 1.4
 }
 
-export async function rotateCamera(
-  input: RotateCameraInput,
-  ctx: SkillContext,
-): Promise<SkillResult> {
-  const { azimuth, elevation, distance } = input;
-  const image = ctx.currentImage;
-  if (!image) return { success: false, message: 'No image available' };
+export async function rotateCamera(input: RotateCameraInput, ctx: SkillContext): Promise<SkillResult> {
+  if (!ctx.currentImage) return { success: false, message: 'No image available' };
 
-  const prompt = buildCameraPrompt(azimuth, elevation, distance);
-  const azName = AZIMUTH_MAP[snapToNearest(azimuth, AZIMUTH_STEPS)];
-  const elName = ELEVATION_MAP[snapToNearest(elevation, ELEVATION_STEPS)];
-  const dsName = DISTANCE_MAP[snapToNearest(distance, DISTANCE_STEPS)];
-
-  // Qwen primary (ComfyUI tunnel or Vast serverless)
-  const { isQwenAvailable, generateWithQwenRotate } = await import('../comfyui-qwen');
-  if (isQwenAvailable()) {
-    const result = await generateWithQwenRotate(image, prompt);
-    if (result) {
-      return { success: true, message: `Camera rotated: ${azName}, ${elName}, ${dsName}`, image: result };
-    }
-    console.log('[rotate] Qwen failed, falling back to fal.ai...');
-  }
-
-  // fal.ai fallback
-  const hfToken = process.env.HF_TOKEN;
-  if (!hfToken) return { success: false, message: 'Neither Qwen nor HF_TOKEN configured' };
+  const azName = AZIMUTH_MAP[snapToNearest(input.azimuth % 360, AZIMUTH_STEPS)];
+  const elName = ELEVATION_MAP[snapToNearest(input.elevation, ELEVATION_STEPS)];
+  const dsName = DISTANCE_MAP[snapToNearest(input.distance, DISTANCE_STEPS)];
 
   try {
-    let imgBytes: Uint8Array;
-    if (image.startsWith('http')) {
-      const res = await fetch(image);
-      imgBytes = new Uint8Array(await res.arrayBuffer());
-    } else {
-      const raw = image.replace(/^data:image\/\w+;base64,/, '');
-      const buf = Buffer.from(raw, 'base64');
-      imgBytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-    }
-    const blob = new Blob([imgBytes as BlobPart], { type: 'image/jpeg' });
-
-    const client = new InferenceClient(hfToken);
-    const result = await client.imageToImage({
-      provider: 'fal-ai',
-      model: 'fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA',
-      inputs: blob,
-      parameters: { prompt },
-    });
-
-    const resultBuf = Buffer.from(await result.arrayBuffer());
-    const rawBase64 = `data:image/png;base64,${resultBuf.toString('base64')}`;
-    const resultBase64 = await ensureJpeg(rawBase64);
-
-    return { success: true, message: `Camera rotated: ${azName}, ${elName}, ${dsName}`, image: resultBase64 };
-  } catch (e) {
-    return { success: false, message: e instanceof Error ? e.message : String(e) };
+    const result = await generateWithFalQwenRotate({ ...input, image: ctx.currentImage });
+    return {
+      success: true,
+      message: `Camera rotated: ${azName}, ${elName}, ${dsName}. Provider: fal; request: ${result.requestId}.`,
+      image: result.image,
+      provider: 'fal',
+    };
+  } catch (error) {
+    return { success: false, message: error instanceof Error ? error.message : 'Camera rotation failed.' };
   }
 }

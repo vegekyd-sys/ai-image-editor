@@ -4,6 +4,7 @@ import { generateImage } from '@/lib/model-router';
 import { generateTipsPreviewImageOpenRouter } from '@/lib/gemini';
 import { requireCredits, deductByTokens, deductCredits, isBillingEnabled } from '@/lib/billing/credits';
 import { getTokenRate } from '@/lib/billing/token-rates';
+import { getToolPrice } from '@/lib/billing/pricing';
 
 export const maxDuration = 120;
 
@@ -19,10 +20,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Pre-flight credit check
-    const creditCheck = await requireCredits(user.id, 2);
-    if (!creditCheck.ok) return creditCheck.response;
-
     const { image, editPrompt, aspectRatio, background, category, isNsfw } = await req.json();
 
     if (!image || !editPrompt) {
@@ -37,6 +34,16 @@ export async function POST(req: NextRequest) {
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
+    if (isNsfw && background === 'transparent') {
+      return Response.json({ error: 'NSFW transparent editing is not supported by Qwen Spicy.' }, { status: 400 });
+    }
+
+    // The preview can become the final paid Spicy image. Quote its real model
+    // before submission instead of using the legacy 2-credit Qwen estimate.
+    const spicyPrice = isNsfw ? await getToolPrice('edit_image_qwen-spicy') : null;
+    if (isNsfw && !spicyPrice) return Response.json({ error: 'Qwen Spicy pricing is unavailable' }, { status: 503 });
+    const creditCheck = await requireCredits(user.id, spicyPrice?.credits ?? 2);
+    if (!creditCheck.ok) return creditCheck.response;
 
     // Mock mode: return original image unchanged (saves API cost for tip thumbnails)
     if (process.env.MOCK_AI === 'true') {
@@ -56,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     let liteResult: Awaited<ReturnType<typeof generateTipsPreviewImageOpenRouter>> = { image: null };
-    if (background !== 'transparent') {
+    if (!isNsfw && background !== 'transparent') {
       try {
         liteResult = await generateTipsPreviewImageOpenRouter(image, editPrompt, aspectRatio);
       } catch (error) {

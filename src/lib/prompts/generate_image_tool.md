@@ -11,7 +11,7 @@ For a clear direct edit, call `generate_image` directly.
 - To restore original detail, include that snapshot through `reference_media_indices`.
 - `image_refs` is only for workspace asset provider URLs, not timeline snapshots.
 - `skill` labels general intent; omit it for precise manual instructions.
-- `model` is optional. Use `qwen` for NSFW risk; `gpt-image-2.5-flare` for product/design or layout/mockup images, face restoration after Gemini, and `long-video-director` storyboards; `gemini-lite` only on explicit Lite requests.
+- `model` is optional. Use `qwen-spicy` for NSFW risk; `gpt-image-2.5-flare` for product/design or layout/mockup images, face restoration after Gemini, and `long-video-director` storyboards; `gemini-lite` only on explicit Lite requests. Pony and WAI are retired.
 - `wan2.7-image` is opt-in. Never automatically retry a failed/unknown Wan call or switch models.
 - For background removal/cutout, 去背景/抠图/抠像, or transparent PNG/sticker/overlay/alpha output, set `background: "transparent"`; wording alone is insufficient.
 - Existing-image cutout: pass its `media_index`; with no source, omit `media_index` for transparent text-to-image.

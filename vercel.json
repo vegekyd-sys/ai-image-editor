@@ -11,10 +11,6 @@
     {
       "path": "/api/cron/remotion-export",
       "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/health-check",
-      "schedule": "*/10 * * * *"
     }
   ]
 }

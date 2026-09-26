@@ -1,5 +1,7 @@
-export const IMAGE_MODEL_IDS = ['gemini', 'gemini-lite', 'qwen', 'qwen-spicy', 'pony', 'wai', 'openai', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'wan2.7-image'] as const;
-export type ModelId = typeof IMAGE_MODEL_IDS[number];
+/** Models offered to new Agent and MCP requests. */
+export const IMAGE_MODEL_IDS = ['gemini', 'gemini-lite', 'qwen-spicy', 'openai', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'wan2.7-image'] as const;
+/** Keep old IDs at the input boundary so existing clients get a deliberate migration/error. */
+export type ModelId = typeof IMAGE_MODEL_IDS[number] | 'qwen' | 'pony' | 'wai';
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type ImageBackground = 'auto' | 'opaque' | 'transparent';
 
@@ -58,6 +60,7 @@ export function isFalImage25(model?: string | null): model is FalImage25Id {
 export function resolveImageModel(model?: ModelId, background?: ImageBackground): ModelId | undefined {
   // Persisted selections and older clients used "openai" for Image 2.
   // Migrate those requests before pricing and provider selection.
-  if (model === 'openai') return 'gpt-image-2.5-flare';
-  return background === 'transparent' && !isFalImage25(model) ? 'gpt-image-2.5-flare' : model;
+  if (model === 'pony' || model === 'wai') throw new Error(`${model} has been retired. Choose an available image model explicitly.`);
+  const activeModel = model === 'qwen' ? 'qwen-spicy' : model === 'openai' ? 'gpt-image-2.5-flare' : model;
+  return background === 'transparent' && !isFalImage25(activeModel) ? 'gpt-image-2.5-flare' : activeModel;
 }

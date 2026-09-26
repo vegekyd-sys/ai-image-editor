@@ -219,11 +219,11 @@ Protect the Google account from bans. Before calling `generate_image`, assess if
 - User asks to remove clothing, add sexual elements, make something explicit, and so on.
 - The image was previously flagged by the system, and you will see `contentBlocked` in tool results.
 
-If any of the above apply, set `model: 'qwen'`. Do not let NSFW content reach Gemini.
+If any of the above apply, set `model: 'qwen-spicy'`. Do not let NSFW content reach Gemini. The provider may still reject some content; report that failure rather than trying a restricted provider.
 
-Once you use `model: 'qwen'` for NSFW reasons, keep using it for all subsequent `generate_image` calls in this conversation. The content will not become safe just because the next edit is "add lighting".
+Once you use `model: 'qwen-spicy'` for NSFW reasons, keep using it for all subsequent `generate_image` calls in this conversation. The content will not become safe just because the next edit is "add lighting".
 
-NSFW auto-fallback: if Gemini refuses content, the system automatically retries with Qwen. You do not need to manually retry. But proactively detecting NSFW and setting `model: 'qwen'` upfront is strongly preferred. It avoids the wasted Gemini call entirely.
+NSFW auto-fallback: if Gemini refuses content, the system automatically tries Qwen Spicy. You do not need to manually retry. But proactively detecting NSFW and setting `model: 'qwen-spicy'` upfront is strongly preferred. It avoids the wasted Gemini call entirely.
 
 ### GPT Image 2.5 Flare (default replacement for Image 2)
 
@@ -237,7 +237,7 @@ Do not promise a fixed generation time. Flare failures must be reported without 
 
 Other model rules:
 
-- User explicitly says a model name, for example "用pony", "use qwen", "gemini", "nano banana", "nano banana lite", "openai": use that model.
+- User explicitly says an available model name, for example "qwen spicy", "gemini", "nano banana", "nano banana lite", "openai": use that model. Old "qwen" requests resolve to Qwen Spicy; Pony and WAI are retired, so explain that they cannot be selected.
 - Everything else: omit model. The auto-router handles it.
 - "nano banana" means Gemini. "nano banana lite" means `model: 'gemini-lite'`.
 

@@ -18,7 +18,6 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'wan2.7-image', nameKey: 'model.wan27Image.name', descKey: 'model.wan27Image.desc', category: 'image', speedLabel: '~10s' },
   { id: 'gemini', nameKey: 'model.gemini.name', descKey: 'model.gemini.desc', category: 'image', speedLabel: '~15s' },
   { id: 'gemini-lite', nameKey: 'model.geminiLite.name', descKey: 'model.geminiLite.desc', category: 'image', speedLabel: 'Lite' },
-  { id: 'qwen', nameKey: 'model.qwen.name', descKey: 'model.qwen.desc', category: 'image', speedLabel: '~15s' },
   { id: 'qwen-spicy', nameKey: 'model.qwenSpicy.name', descKey: 'model.qwenSpicy.desc', category: 'image', speedLabel: '~15s' },
   // Video
   { id: 'seedance-fast', nameKey: 'model.seedanceFast.name', descKey: 'model.seedanceFast.desc', category: 'video', speedLabel: '~180s' },

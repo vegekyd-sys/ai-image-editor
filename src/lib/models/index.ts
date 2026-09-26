@@ -1,10 +1,7 @@
 import type { ModelBackend, ModelId } from './types';
 import { geminiBackend } from './gemini';
 import { geminiLiteBackend } from './gemini-lite';
-import { qwenBackend } from './qwen';
 import { qwenSpicyBackend } from './qwen-spicy';
-import { ponyBackend } from './pony';
-import { waiBackend } from './wai';
 import { openaiBackend } from './openai';
 import { createImage25Backend } from './image25';
 import { wanImageBackend } from './wan-image';
@@ -12,10 +9,7 @@ import { wanImageBackend } from './wan-image';
 const backends: Map<ModelId, ModelBackend> = new Map([
   ['gemini', geminiBackend],
   ['gemini-lite', geminiLiteBackend],
-  ['qwen', qwenBackend],
   ['qwen-spicy', qwenSpicyBackend],
-  ['pony', ponyBackend],
-  ['wai', waiBackend],
   ['openai', openaiBackend],
   ['gpt-image-2.5-flare', createImage25Backend('gpt-image-2.5-flare')],
   ['gpt-image-2.5-sunburst', createImage25Backend('gpt-image-2.5-sunburst')],

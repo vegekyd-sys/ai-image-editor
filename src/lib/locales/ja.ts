@@ -171,7 +171,7 @@ const ja = {
   'changelog.gpt6AgentModels.item2': '管理者は既定で Codex サブスクリプション、その他のアカウントは Azure で Luna を利用します。GPT-5.6 は一覧から非表示ですが、既存のプロジェクトでは引き続き使えます。',
   'changelog.qwenSpicy.title': 'Qwen Spicy を公開',
   'changelog.qwenSpicy.item1': 'Qwen Spicy を独立した画像モデルとして公開しました。1〜3枚の元画像を使った大胆な高解像度編集に対応します。',
-  'changelog.qwenSpicy.item2': '画像モデル選択、Agentへの指定、または makaron-cli の qwen-spicy から利用できます。既存の Qwen Edit は別モデルとして引き続き利用できます。',
+  'changelog.qwenSpicy.item2': '画像モデル選択、Agent、または makaron-cli で Qwen Spicy を利用できます。旧 Qwen Edit のリクエストはこれに移行し、Pony と WAI は提供を終了しました。',
   'changelog.gptImage25.title': 'GPT Image 2.5 登場：商品画像からインフォグラフィックまで',
   'changelog.gptImage25.item1': '短い指示から商品広告、EC画像、ポスター、インフォグラフィックを制作。ブランド、文字、ビジュアルを一つの画面にまとめられます。アプリやWebサイトの静的なコンセプト画像、動画の絵コンテにも使えます。',
   'changelog.gptImage25.item2': '商品や人物の参考画像をアップロードして、背景や構図を変更。複数の参考画像を組み合わせて新しいシーンを作り、手元の素材からアイデアを広げられます。',
