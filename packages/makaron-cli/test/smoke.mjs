@@ -1573,7 +1573,7 @@ try {
     assert.equal(exportRequest?.method, 'POST');
     assert.equal(exportRequest?.body?.snapshotId, 'snap_comp_1');
     assert.equal(exportRequest?.body?.designPath, 'code/snap_comp_1.json');
-    assert.equal(exportRequest?.body?.renderProfile, 'fast_720p');
+    assert.equal(exportRequest?.body?.renderProfile, 'source');
     assert.equal(exportRequest?.body?.publish, false);
   }
 
@@ -1589,8 +1589,14 @@ try {
     assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
     const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
     assert.equal(exportRequest?.body?.publish, true);
-    assert.equal(exportRequest?.body?.renderProfile, 'fast_720p');
+    assert.equal(exportRequest?.body?.renderProfile, 'source');
     assert.equal(exportRequest?.body?.design?.width, 1080);
+  }
+
+  {
+    await expectSuccess(['materialize', '--project', 'project-auto-1', '--snapshot', 'snap_comp_1', '--profile', 'fast_720p', '--no-wait']);
+    const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
+    assert.equal(exportRequest?.body?.renderProfile, 'fast_720p');
   }
 
   {

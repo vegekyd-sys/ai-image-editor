@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
 import { authenticateRequest } from '@/lib/api-auth'
 import {
+  DEFAULT_REMOTION_RENDER_PROFILE,
   createRemotionExportJob,
   drainRemotionExportQueue,
   resolveRemotionExportDownloadUrl,
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     const snapshotId = body.snapshotId || body.snapshot_id
     const designPath = body.designPath || body.design_path
     const outputType = (body.outputType || body.output_type || 'video') as RemotionExportOutputType
-    const renderProfile = (body.renderProfile || body.render_profile || 'fast_720p') as RemotionRenderProfile
+    const renderProfile = (body.renderProfile || body.render_profile || DEFAULT_REMOTION_RENDER_PROFILE) as RemotionRenderProfile
     const publish = body.publish === true
     const publishSnapshotId = body.publishSnapshotId || body.publish_snapshot_id
       || (publish && outputType === 'video' ? crypto.randomUUID() : undefined)

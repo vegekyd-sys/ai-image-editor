@@ -246,7 +246,7 @@ npx makaron-cli composition export --project <projectId> --snapshot <snapshotId>
 npx makaron-cli composition status <jobId> --wait
 ```
 
-`materialize` is the preferred high-level command for Remotion-to-MP4. It defaults to `--wait`, `--publish`, and the `fast_720p` profile (short side 720, no upscale), so the completed MP4 is also added back to the project timeline like CUI. Use `--no-publish` only when you need a file URL without a new timeline video. Use `--profile source` only when full source resolution is required.
+`materialize` is the preferred high-level command for Remotion-to-MP4. It defaults to `--wait`, `--publish`, and the `source` profile, preserving the composition's dimensions when the MP4 is added back to the project timeline. Use `--no-publish` when you need only a file URL. Use `--profile fast_720p` only when a 720-short-side export is acceptable.
 
 For a run that produced an animated composition, materialize before picking the video URL:
 
@@ -262,7 +262,7 @@ npx makaron-cli materialize --project <projectId> --design-json composition.json
 cat composition.json | npx makaron-cli materialize --project <projectId> --design-json - --pick url
 ```
 
-This JSON-to-MP4 path uses the same defaults as timeline materialize: `--wait`, `--publish`, and `fast_720p`. Add `--no-publish` only when another agent needs the MP4 URL but should not add a timeline video.
+This JSON-to-MP4 path uses the same defaults as timeline materialize: `--wait`, `--publish`, and `source`. Add `--no-publish` when another agent needs the MP4 URL without adding a timeline video.
 
 The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio` so agents can compare video length against export time. Do not apply provider-video ETA rules to Remotion materialize; with a warm exporter it is often near video length to tens of seconds, while cold starts can be longer.
 

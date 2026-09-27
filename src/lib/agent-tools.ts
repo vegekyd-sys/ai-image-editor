@@ -3311,7 +3311,7 @@ function createMaterializeMediaTool(
   return tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
-The tool always queues a durable async export like video generation and returns immediately, so the user can keep chatting while polling/cron finishes the MP4. Ordinary CUI exports use fast_720p (short side 720, no upscale) for speed. Default publish=true so a processing video appears immediately and is replaced by the finished MP4. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
+The tool always queues a durable async export like video generation and returns immediately, so the user can keep chatting while polling/cron finishes the MP4. Export at the composition's source dimensions so a requested 1080p canvas delivers a 1080p MP4. Default publish=true so a processing video appears immediately and is replaced by the finished MP4. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
 For Studio Run, first preview and patch the Remotion source until it is satisfactory, call publish_draft once with the exact final design_path, then call materialize_media once with that same path when MP4 Delivery is requested. The runtime selects locked source resolution from typed Studio Run state. The queued export automatically completes Review and Delivery after the real MP4 is ready. After a successful queue submission, do not author Review/Delivery artifacts or continue reviewing. materialize_media publishes the MP4, not the editable draft.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
@@ -3355,9 +3355,7 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
 
         try {
           const shouldPublish = publish !== false;
-          const renderProfile = studioCheckpoint.studioRunId
-            ? 'source'
-            : 'fast_720p';
+          const renderProfile = 'source';
           const publishSnapshotId = shouldPublish ? crypto.randomUUID() : undefined;
           const job = await createRemotionExportJob({
             userId: ctx.userId,
