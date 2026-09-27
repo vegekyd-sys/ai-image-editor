@@ -32,7 +32,7 @@ that Skill, while an unmatched ordinary long provider video uses this workflow.
 - `prompts/animate.md` for final segment scripts, preflight, and real video generation.
 
 Critical premise:
-- Independent video generations do **not** know what happened in the previous segment. FAL H3 Max Extend receives the completed full previous video as its sole reference.
+- Independent video generations do **not** know what happened in the previous segment. FAL H3 Max Extend receives one completed source video: either the accepted previous video or its selected short ending clip.
 - Each FAL H3 Max generation or Extend call adds at most 15 seconds; other model limits are in `prompts/animate.md`.
 - Every segment must be self-contained and executable by `prompts/animate.md`.
 - When the user has explicitly authorized direct end-to-end H3 Max generation, the review gates may advance in one request. Still create and inspect the anchor, storyboard, and seam artifacts. Do not treat a completed generation task as visual approval. If any awaited task remains processing, report that state and resume only in a later chat turn; never promise an automatic continuation after the current run ends.
