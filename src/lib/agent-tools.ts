@@ -6,7 +6,7 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ImageBackground, ModelId } from './models/types';
-import { IMAGE_MODEL_INPUT_IDS } from './models/types';
+import { IMAGE_MODEL_IDS } from './models/types';
 import { resolveModelChain } from './model-router';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
@@ -1386,7 +1386,7 @@ function createGenerateImageTool(
       inputSchema: z.object({
         editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(IMAGE_MODEL_INPUT_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; legacy qwen maps to qwen-spicy. Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for normal auto routing.'),
+        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for normal auto routing.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2.5 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
