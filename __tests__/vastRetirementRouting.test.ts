@@ -3,7 +3,7 @@ vi.mock('@/lib/models', () => ({ getBackend: vi.fn() }));
 vi.mock('@/lib/gemini', () => ({ ContentBlockedError: class extends Error {} }));
 import { getBackend } from '@/lib/models';
 import { generateImage, resolveModelChain } from '@/lib/model-router';
-import { IMAGE_MODEL_IDS, resolveImageModel } from '@/lib/models/types';
+import { IMAGE_MODEL_IDS, IMAGE_MODEL_INPUT_IDS, resolveImageModel } from '@/lib/models/types';
 import { editImage } from '@/lib/skills/edit-image';
 
 beforeEach(() => vi.mocked(getBackend).mockReset());
@@ -13,6 +13,9 @@ describe('Vast retirement image routing', () => {
     expect(IMAGE_MODEL_IDS).not.toContain('qwen');
     expect(IMAGE_MODEL_IDS).not.toContain('pony');
     expect(IMAGE_MODEL_IDS).not.toContain('wai');
+    expect(IMAGE_MODEL_INPUT_IDS).toContain('qwen');
+    expect(IMAGE_MODEL_INPUT_IDS).not.toContain('pony');
+    expect(IMAGE_MODEL_INPUT_IDS).not.toContain('wai');
     expect(resolveImageModel('qwen')).toBe('qwen-spicy');
     expect(resolveModelChain({ prompt: 'Edit', model: 'qwen' })).toEqual(['qwen-spicy']);
     expect(() => resolveModelChain({ prompt: 'Anime', model: 'pony' })).toThrow('retired');
