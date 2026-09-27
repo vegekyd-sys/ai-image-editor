@@ -184,7 +184,7 @@ Use `animate.md` for final segment scripts and preflight. The compiled scripts m
 - use the user's language for readable action, sound, and style descriptions
 - keep required format tokens in English: `Shot N (Xs):`, `Style:`, and media refs
 - for independent generation, include every important `<<<media_N>>>` anchor ref directly in the segment
-- for independent generation, include the segment's approved storyboard ref directly in the segment, normally near the start as `Storyboard: <<<media_N>>>`
+- for independent generation, normally include the approved storyboard ref near the start as `Storyboard: <<<media_N>>>`; if the storyboard has labels, panel borders, or other graphic elements likely to appear in the generated video, keep it as the approved shot plan but omit that image ref from `story_prompt` and record the reason in preflight
 - for Extend, put only its one source-video marker in `story_prompt`; describe the approved anchor identities, props, storyboard action, and seam in text
 - embed seams into the script body
 - avoid hidden dependencies such as "continue from previous segment"
@@ -192,7 +192,7 @@ Use `animate.md` for final segment scripts and preflight. The compiled scripts m
 
 Before presenting scripts, review:
 - every approved asset is referenced where needed
-- every segment has an approved storyboard; independent-generation prompts contain its storyboard and anchor refs, while Extend prompts contain only the source-video ref and the approved visual facts in text
+- every segment has an approved storyboard; independent-generation prompts contain its anchor refs and normally its storyboard ref, unless a documented visual contamination risk requires using the approved storyboard as a text-described plan only; Extend prompts contain only the source-video ref and the approved visual facts in text
 - every seam is present in adjacent scripts
 - every segment stays within 15s
 - no required character or prop was dropped
@@ -207,6 +207,7 @@ Before calling `generate_animation`, show a short preflight:
 - beat board approved
 - storyboard images approved
 - exact refs per segment
+- any approved storyboard omitted from the provider input because visible labels or panel graphics could contaminate the video, with its actions fully retained in the script
 - seams embedded
 - each script is 15s or less
 - user approved this exact submission
@@ -218,9 +219,9 @@ After approval, submit only the first approved segment with `generate_animation`
 For a seam whose approved plan chooses FAL H3 Max Extend, use the completed accepted video or invoke the existing `skills/video-ffmpeg-lab/SKILL.md` to extract a roughly 4-6s ending clip. Select a tail where the seam-critical people, props, and setting are visible; if the accepted ending lacks them, repair that segment or make an anchored bridge before extending. Publish the tail to the timeline, then call `generate_animation` with `model="fal-h3-max"`, `video_operation="extend"`, that source as the sole video input, and `duration` equal to the next 5-15s contribution. The returned video contains the source again. Use Video FFmpeg Lab to remove precisely the measured overlap, append only the new contribution to the accepted master, and verify picture and audio at the seam. Do not concatenate full Extend outputs or submit an in-progress snapshot. The source for each call must remain 1.625-60s and <=50MB, aspect ratio 0.4-2.5; otherwise use an independent anchored segment.
 
 For every independent-generation `generate_animation` call:
-- `story_prompt` must contain that segment's storyboard ref and required anchor refs as `<<<media_N>>>` markers.
+- `story_prompt` must contain the required anchor refs as `<<<media_N>>>` markers. Include the approved storyboard ref unless its visible labels, panel borders, or other graphics pose a documented contamination risk; in that case omit only the storyboard image ref and transcribe the approved shot actions into the prompt.
 - The exact `story_prompt` sent to the tool must include the refs. Do not rely on refs appearing only in CUI text, preflight notes, or prior conversation.
-- If a required storyboard or anchor ref is missing from the exact `story_prompt`, stop and rewrite the segment script before calling the tool.
+- If a required anchor ref is missing, or a clean approved storyboard ref is missing without a documented reason, stop and rewrite the segment script before calling the tool.
 - The video provider only receives media refs that are present in the final tool submission.
 
 For FAL H3 Max Extend calls, the only media marker in `story_prompt` is the completed source video. Do not pass storyboard images, anchor images, or audio refs to Extend; the provider does not accept them together with its video input. Express the approved visual anchors and next beat in the text prompt and in the chosen tail frames. Check the returned video's duration, characters, props, and seam continuity before proceeding. If the seam or identity fails, revise only that segment; do not advance the master.
