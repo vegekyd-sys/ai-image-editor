@@ -89,17 +89,23 @@ function ffprobe(filePath: string): Promise<{ width: number; height: number; dur
   })
 }
 
-async function downloadAndProbe(url: string, outputPath: string) {
+async function downloadAndProbe(url: string, outputPath: string, expectedWidth: number, expectedHeight: number) {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`MP4 download failed ${res.status}`)
   await writeFile(outputPath, Buffer.from(await res.arrayBuffer()))
   const meta = await ffprobe(outputPath)
-  if (meta.width !== 720 || meta.height !== 1280) {
-    throw new Error(`Expected 720x1280 MP4, got ${meta.width}x${meta.height}`)
+  if (meta.width !== expectedWidth || meta.height !== expectedHeight) {
+    throw new Error(`Expected ${expectedWidth}x${expectedHeight} MP4, got ${meta.width}x${meta.height}`)
   }
   if (Math.abs(meta.duration - 2) > 0.2) {
     throw new Error(`Expected ~2s MP4, got ${meta.duration}s`)
   }
+  await new Promise<void>((resolve, reject) => {
+    execFile('ffmpeg', ['-v', 'error', '-i', outputPath, '-f', 'null', '-'], (error, _stdout, stderr) => {
+      if (error) reject(new Error(`MP4 decode failed: ${stderr || error.message}`))
+      else resolve()
+    })
+  })
   return meta
 }
 
@@ -218,7 +224,6 @@ async function main() {
         projectId: apiProjectId,
         design,
         outputType: 'video',
-        renderProfile: 'fast_720p',
         publish: false,
         name: 'api-materialize-e2e',
       }),
@@ -236,7 +241,35 @@ async function main() {
     }
     if (!apiDone) throw new Error('API materialize timed out')
     const apiUrl = String(apiDone.url || apiDone.storageUrl || '')
-    const apiProbe = await downloadAndProbe(apiUrl, path.join(tmpDir, 'api.mp4'))
+    const apiProbe = await downloadAndProbe(apiUrl, path.join(tmpDir, 'api.mp4'), 1080, 1920)
+
+    const fastQueued = await fetchJson(`${baseUrl}/api/media/materialize`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        projectId: apiProjectId,
+        design,
+        outputType: 'video',
+        renderProfile: 'fast_720p',
+        publish: false,
+        name: 'api-fast-materialize-e2e',
+      }),
+    })
+    const fastJobId = String(fastQueued.jobId || fastQueued.id)
+    if (fastJobId === apiJobId) throw new Error('Fast export reused the source-resolution job')
+    let fastDone: Json | null = null
+    for (let i = 0; i < 80; i++) {
+      const status = await fetchJson(`${baseUrl}/api/remotion/export/${fastJobId}`, { headers: { Authorization: `Bearer ${key}` } })
+      if (status.status === 'completed') {
+        fastDone = status
+        break
+      }
+      if (status.status === 'failed') throw new Error(`Fast materialize failed: ${status.error}`)
+      await wait(Number(status.next_poll_after_ms || 3000))
+    }
+    if (!fastDone) throw new Error('Fast materialize timed out')
+    const fastUrl = String(fastDone.url || fastDone.storageUrl || '')
+    const fastProbe = await downloadAndProbe(fastUrl, path.join(tmpDir, 'fast.mp4'), 720, 1280)
 
     const cliProject = await fetchJson(`${baseUrl}/api/projects/create`, {
       method: 'POST',
@@ -254,7 +287,7 @@ async function main() {
       HOME: tmpDir,
     }
     const cliUrl = await runCli(['materialize', '--project', cliProjectId, '--design-json', designPath, '--pick', 'url'], cliEnv)
-    const cliProbe = await downloadAndProbe(cliUrl, path.join(tmpDir, 'cli.mp4'))
+    const cliProbe = await downloadAndProbe(cliUrl, path.join(tmpDir, 'cli.mp4'), 1080, 1920)
 
     const admin = getSupabaseAdmin()
     const { data: cliSnapshots, error: snapError } = await admin
@@ -269,8 +302,9 @@ async function main() {
 
     console.log(JSON.stringify({
       ok: true,
-      api: { jobId: apiJobId, url: apiUrl, probe: apiProbe },
-      cli: { url: cliUrl, probe: cliProbe, publishedSnapshots: cliSnapshots.length },
+      api: { jobId: apiJobId, probe: apiProbe },
+      fast: { jobId: fastJobId, probe: fastProbe },
+      cli: { probe: cliProbe, publishedSnapshots: cliSnapshots.length },
     }, null, 2))
   } finally {
     server.kill('SIGTERM')
