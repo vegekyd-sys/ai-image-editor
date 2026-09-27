@@ -168,7 +168,7 @@ After storyboard generation:
 - Check that every segment has one approved storyboard image.
 - Check that every storyboard passed the storyboard skill's visual contract.
 - If only one later segment fails, regenerate only the failed segment(s), not the whole workflow.
-- If a storyboard failed twice, stop and report the blocking visual mismatch.
+- After two full-sheet storyboard failures, allow only the storyboard skill's one targeted panel repair when its local-defect conditions hold. Stop and report the blocking mismatch if that repair fails.
 - Show only reviewed storyboard images on the timeline.
 
 Ask for storyboard approval before scripts. Do not enter Gate 7 until the user approves the reviewed storyboards.

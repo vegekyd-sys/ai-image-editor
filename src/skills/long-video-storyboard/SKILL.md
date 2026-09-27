@@ -89,7 +89,7 @@ Auto-regenerate if:
 - seam targets are not visible
 - staging is too flat or confusing
 
-If the same storyboard fails twice, block and report the exact visual contract that failed. Do not present it as approved.
+If two full-sheet attempts fail, do not generate a third full sheet. When the remaining failure is confined to one or two panels and the approved identities, render family, and segment action remain intact, make at most one targeted `generate_image` edit of the latest sheet. Pass that sheet as the actual image input along with the required approved anchors; name the exact panel and visual defect, preserve all other panels, then call `analyze_image` on the entire repaired sheet. Do not rewrite an essential story beat merely to excuse a failed image. If the targeted edit still fails, or the failure is not local, block and report the exact mismatch. Never present a failed sheet as approved.
 
 ## Output Contract
 
