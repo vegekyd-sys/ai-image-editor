@@ -34,7 +34,7 @@
 - 2026-09-27 停机前禁用并 bootout 本机 `com.makaron.qwen-vast-self-heal`（`launchctl print-disabled` 显示 disabled），避免其每 5 分钟自动拉起 GPU。随后停止主实例 `48270326`。只读复核主实例和冷备 `38761988` 均为 `actual_status=exited`、`intended_status=stopped`、GPU 小时费用为 0；两块磁盘仍计费。生产的 `COMFYUI_*`/`VAST_API_KEY` 环境变量、旧域名在确认无外部消费者后再退役，不盲删。
 - 停机后生产 `GET /api/health` 为 healthy；经新版 CLI `makaron-cli@0.15.4` 调用生产 Qwen Spicy 文生图，实际得到可解码的 1024×1024 PNG，扣 3 credits、余额从 82496 到 82493，确认此链路不依赖已停 GPU。产物在忽略的 `test-results/vast-retirement-poststop-spicy.png`。
 - Vast 主实例 `48270326` 停后仍约 $0.083/小时磁盘；冷备 `38761988` 停后仍约 $0.042/小时磁盘，合计约 $0.125/小时（$3/天、$90/30 天）。相比停机前省约 $0.40/小时 GPU。停机不会自动删除磁盘；用户随后明确授权观察 3 天，在 2026-09-30 到期且生产无异常时销毁这两台实例，之前不提前销毁。
-- 零 Vast 持续费恢复材料：公开 GHCR 镜像 `ghcr.io/vegekyd-sys/makaron-vast-qwen-serverless@sha256:960c21f4861e019ec1177363eabdfe938cc67942977caba8651bffbf680767a6` 可匿名获取；Qwen 服务源码仍在公开 GitHub 仓库 `vegekyd-sys/makaron-vast-qwen-serverless`。用户要求不占本机空间，临时的本机源码备份已删除。镜像约 34.6 GB，未在新 Vast 实例做过恢复演练。**要使 Vast 持续费用真正归零，最终需销毁主实例和现有冷备及其磁盘；仅停止仍约 $3/天。**
+- 零 Vast 持续费恢复材料：公开 GHCR 镜像 `ghcr.io/vegekyd-sys/makaron-vast-qwen-serverless@sha256:960c21f4861e019ec1177363eabdfe938cc67942977caba8651bffbf680767a6` 可匿名获取；本机 `/Users/tianyicai/Backups/makaron-vast-qwen-2026-09-27/` 仅保留约 5.9 MB 的 Qwen/KSampler 源码及启动脚本，不含 34.6 GB 镜像、模型权重或凭据。镜像未在本机下载，未在新 Vast 实例做过恢复演练。**要使 Vast 持续费用真正归零，最终需销毁主实例和现有冷备及其磁盘；仅停止仍约 $3/天。**
 
 ## 发布前检查
 
