@@ -99,7 +99,7 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`). `auto` uses GPT-6 Luna through Azure API; base GPT-5.6 and GPT-6 IDs select Azure API, while suffixed IDs explicitly select the personal plan. Never put an image or video model ID in `--agent-model`.
+`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`). `auto` uses GPT-6 Luna through the Codex subscription for eligible accounts (including admins) and through Azure API otherwise; base GPT-5.6 and GPT-6 IDs select Azure API, while suffixed IDs explicitly request the personal plan where authorized. Never put an image or video model ID in `--agent-model`.
 
 ```bash
 npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --json -b "make a 20s badminton video"
@@ -452,7 +452,7 @@ npx makaron-cli materialize --project <projectId> --design-json composition.json
 npx makaron-cli responses get <runId> --materialize --wait --pick first_video_url
 ```
 
-`materialize` defaults to `--wait`, `--publish`, and `fast_720p`, so the completed MP4 is added back to the timeline like CUI. Use `--no-publish` only when you need a file URL without a new timeline video. The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio`; use those metrics instead of provider-video ETA rules.
+`materialize` defaults to `--wait`, `--publish`, and `source`, preserving composition dimensions when the MP4 is added back to the timeline. Use `--no-publish` when you need only a file URL, or `--profile fast_720p` when a 720-short-side export is acceptable. The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio`; use those metrics instead of provider-video ETA rules.
 
 For JSON-to-MP4, pass a Makaron/Remotion composition JSON with `--design-json`. This is the correct CLI path when another agent already has the composition JSON and only needs the exported video:
 
