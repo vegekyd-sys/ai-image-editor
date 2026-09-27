@@ -301,11 +301,53 @@ async function main() {
     const publishedUrl = cliSnapshots[0]?.video_meta?.videoUrl
     if (publishedUrl !== cliUrl) throw new Error('Published snapshot video URL does not match CLI output URL')
 
+    let agentProbe: { width: number; height: number; duration: number } | undefined
+    if (process.env.REMOTION_E2E_AGENT === 'true') {
+      const prompt = '用 Remotion run_code composition 创建一个 2 秒、1080x1920、30 FPS 的可编辑竖屏剪辑视频：三段纯色镜头依次出现，每段有清楚的大字标题。无需外部素材，不调用视频生成模型。保存 Composition 后调用 materialize_media({publish:true}) 交付真实 MP4，最终 MP4 必须是 1080x1920。'
+      const submitted = JSON.parse(await runCli(['chat', '--project', 'auto', '-b', '--json', prompt], cliEnv)) as Json
+      const agentProjectId = String(submitted.projectId || '')
+      const runId = String(submitted.runId || '')
+      if (!agentProjectId || !runId) throw new Error('Agent chat did not return a project and run ID')
+      projectIds.push(agentProjectId)
+
+      let runStatus = ''
+      for (let i = 0; i < 120; i++) {
+        const run = await fetchJson(`${baseUrl}/api/agent/run/${runId}`, { headers: { Authorization: `Bearer ${key}` } })
+        runStatus = String(run.status || '')
+        if (runStatus === 'completed') break
+        if (['failed', 'aborted'].includes(runStatus)) throw new Error(`Agent run ${runId} ended ${runStatus}`)
+        await wait(5000)
+      }
+      if (runStatus !== 'completed') {
+        await fetchJson(`${baseUrl}/api/agent/abort`, {
+          method: 'POST', headers, body: JSON.stringify({ runId }),
+        }).catch(() => {})
+        throw new Error(`Agent run ${runId} timed out`)
+      }
+
+      const { data: agentJobs, error: agentJobError } = await admin
+        .from('remotion_export_jobs')
+        .select('id,status,width,height,storage_url,metadata')
+        .eq('project_id', agentProjectId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      if (agentJobError) throw new Error(agentJobError.message)
+      const agentJob = agentJobs?.[0]
+      if (!agentJob || agentJob.status !== 'completed' || !agentJob.storage_url) {
+        throw new Error(`Agent run ${runId} did not complete a Remotion MP4 export`)
+      }
+      if (agentJob.metadata?.renderProfile !== 'source') {
+        throw new Error(`Agent export used ${String(agentJob.metadata?.renderProfile)} instead of source`)
+      }
+      agentProbe = await downloadAndProbe(agentJob.storage_url, path.join(tmpDir, 'agent.mp4'), 1080, 1920)
+    }
+
     console.log(JSON.stringify({
       ok: true,
       api: { jobId: apiJobId, probe: apiProbe },
       fast: { jobId: fastJobId, probe: fastProbe },
       cli: { probe: cliProbe, publishedSnapshots: cliSnapshots.length },
+      ...(agentProbe ? { agent: { probe: agentProbe } } : {}),
     }, null, 2))
   } finally {
     server?.kill('SIGTERM')
