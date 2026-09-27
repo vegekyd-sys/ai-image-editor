@@ -48,7 +48,16 @@ async function falJson(url: string, key: string, signal: AbortSignal): Promise<R
   const response = await fetch(url, {
     headers: { Authorization: `Key ${key}` }, signal, redirect: 'error',
   });
-  if (!response.ok) throw new Error(`fal camera request HTTP ${response.status}`);
+  if (!response.ok) {
+    // fal can include the full source data URL in a 422 response. Never surface that body.
+    if (response.status === 422) {
+      const payload = await response.json().catch(() => null) as { detail?: Array<{ type?: unknown }> } | null;
+      if (Array.isArray(payload?.detail) && payload.detail.some(item => item.type === 'content_policy_violation')) {
+        throw new Error('fal camera content checker rejected this result (HTTP 422).');
+      }
+    }
+    throw new Error(`fal camera request HTTP ${response.status}`);
+  }
   return await response.json() as Record<string, unknown>;
 }
 
@@ -114,6 +123,6 @@ export async function generateWithFalQwenRotate(input: FalRotateInput): Promise<
     console.log(`[fal-qwen-rotate] request=${requestId} totalMs=${Date.now() - started}`);
     return { image, requestId, durationMs: Date.now() - started };
   } catch (error) {
-    throw new Error(`fal camera request ${requestId} did not complete. No automatic retry. ${error instanceof Error ? error.message : ''}`);
+    throw new Error(`fal camera request ${requestId} failed. No automatic retry. ${error instanceof Error ? error.message : ''}`);
   }
 }

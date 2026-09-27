@@ -36,4 +36,26 @@ describe('fal camera rotation', () => {
     expect(calls.filter(call => call.method === 'POST')).toHaveLength(1);
     expect(calls.map(call => call.url)).not.toContain(expect.stringContaining('comfyui'));
   });
+
+  it('reports a content-checker rejection without exposing the source image or retrying', async () => {
+    const png = await sharp({ create: { width: 512, height: 512, channels: 3, background: 'blue' } }).png().toBuffer();
+    const image = `data:image/png;base64,${png.toString('base64')}`;
+    const fetchMock = vi.fn(async (rawUrl: string | URL | Request, init?: RequestInit) => {
+      const url = String(rawUrl);
+      if (init?.method === 'POST') return Response.json({ request_id: 'blocked-123' });
+      if (url.endsWith('/status')) return Response.json({ status: 'COMPLETED' });
+      return Response.json({ detail: [{ type: 'content_policy_violation', input: { image_urls: [image] } }] }, { status: 422 });
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+    let message = '';
+    try {
+      await generateWithFalQwenRotate({ image, azimuth: 315, elevation: 30, distance: 1.4 });
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message).toContain('content checker rejected');
+    expect(message).toContain('No automatic retry');
+    expect(message).not.toContain(image);
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
 });
