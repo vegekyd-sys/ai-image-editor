@@ -15,7 +15,8 @@ dotenv.config({ path: '.env' })
 type Json = Record<string, unknown>
 
 const port = Number(process.env.REMOTION_E2E_PORT || 4307)
-const baseUrl = `http://127.0.0.1:${port}`
+const remoteBaseUrl = process.env.REMOTION_E2E_BASE_URL?.replace(/\/$/, '')
+const baseUrl = remoteBaseUrl || `http://127.0.0.1:${port}`
 const cliPath = path.join(process.cwd(), 'packages/makaron-cli/bin/makaron.mjs')
 
 function wait(ms: number) {
@@ -166,7 +167,7 @@ async function main() {
   const { key, id: keyId } = await generateApiKey(userId, 'remotion-materialize-e2e')
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'remotion-materialize-e2e-'))
   const projectIds: string[] = []
-  const server = spawn('npx', ['next', 'dev', '--webpack', '-H', '127.0.0.1', '-p', String(port)], {
+  const server = remoteBaseUrl ? null : spawn('npx', ['next', 'dev', '--webpack', '-H', '127.0.0.1', '-p', String(port)], {
     env: {
       ...process.env,
       MAKARON_APP_URL: baseUrl,
@@ -175,11 +176,11 @@ async function main() {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
-  server.stdout.on('data', chunk => process.stderr.write(`[next] ${chunk}`))
-  server.stderr.on('data', chunk => process.stderr.write(`[next] ${chunk}`))
+  server?.stdout.on('data', chunk => process.stderr.write(`[next] ${chunk}`))
+  server?.stderr.on('data', chunk => process.stderr.write(`[next] ${chunk}`))
 
   try {
-    await waitForServer(server)
+    if (server) await waitForServer(server)
 
     const headers = {
       'Authorization': `Bearer ${key}`,
@@ -307,7 +308,7 @@ async function main() {
       cli: { probe: cliProbe, publishedSnapshots: cliSnapshots.length },
     }, null, 2))
   } finally {
-    server.kill('SIGTERM')
+    server?.kill('SIGTERM')
     await cleanup(userId, keyId, projectIds, tmpDir)
   }
 }
