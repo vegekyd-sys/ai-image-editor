@@ -92,10 +92,11 @@ export interface McpServerOptions {
       seedAudioDurationSec?: number
       seedAudioProviderCredits?: number
       seedAudioGenerationSec?: number
+      imageInputCount?: number
     },
   ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
-  onToolStart?: (toolName: string, model?: string) => Promise<{ allowed: boolean; message?: string }>;
+  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number }) => Promise<{ allowed: boolean; message?: string }>;
   /** Called only before a Grok personal-plan request safely falls back to the paid API. */
   onBeforeGrokApiFallback?: (toolName: string, model?: string) => Promise<void>;
 }
@@ -141,9 +142,10 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
     },
     async (params) => {
       try {
+        const imageInputCount = (params.image ? 1 : 0) + (params.referenceImages?.length ?? 0);
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', resolveImageModel(params.model ?? undefined, params.background ?? undefined));
+          const check = await options.onToolStart('makaron_edit_image', resolveImageModel(params.model ?? undefined, params.background ?? undefined), { imageInputCount });
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -170,7 +172,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
           return { isError: true, content: [{ type: 'text' as const, text: result.message }] };
         }
         // Bill after success
-        await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage);
+        await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage, { imageInputCount });
         const msg = result.usedModel
           ? `${result.message} (model: ${result.usedModel})`
           : result.message;

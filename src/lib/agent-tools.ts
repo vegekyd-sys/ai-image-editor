@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ImageBackground, ModelId } from './models/types';
 import { IMAGE_MODEL_IDS } from './models/types';
+import { resolveModelChain } from './model-router';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
@@ -21,7 +22,7 @@ import {
   refundCredits,
   requireCredits,
 } from './billing/credits';
-import { getToolPrice, resolveToolName } from './billing/pricing';
+import { FAL_ROTATE_CAMERA_TOOL, getToolPrice, resolveToolName } from './billing/pricing';
 import { deductSeedAudioCredits } from './billing/seed-audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
@@ -1425,21 +1426,42 @@ function createGenerateImageTool(
         } catch (error) {
           return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: 'model_retired' };
         }
-        if (ctx.userId && billingModel && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
+        const imageInputCount = (editTarget ? 1 : 0) + resolvedRefs.length;
+        const spicyReachable = imageInputCount <= 3 && !(ctx.isNsfw && background === 'transparent')
+          && resolveModelChain({
+            image: editTarget,
+            references: resolvedRefs.length ? resolvedRefs.map(url => ({ url, role: 'reference' })) : undefined,
+            prompt: editPrompt,
+            model: billingModel,
+            category: skill,
+            background,
+            isNsfw: ctx.isNsfw,
+          }).includes('qwen-spicy');
+        if (ctx.userId && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
+          let requiredCredits = 0;
           if (isFalImage25(billingModel)) {
             const rate = await getTokenRate(billingModel);
             if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'GPT Image 2.5 pricing is not configured.', error: 'pricing_unavailable' };
-            const check = await requireCredits(ctx.userId, 5);
-            if (!check.ok) return { success: false, message: 'Insufficient credits.', error: 'insufficient_credits' };
+            requiredCredits = 5;
           }
-          const price = isFalImage25(billingModel) ? null : await getToolPrice(resolveToolName('edit_image', billingModel));
-          if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {
-            return { success: false, message: `Tool pricing is not configured: edit_image_${billingModel}`, error: 'pricing_unavailable' };
+          if (billingModel && !isFalImage25(billingModel)) {
+            const toolName = resolveToolName('edit_image', billingModel, imageInputCount);
+            const price = await getToolPrice(toolName);
+            if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {
+              return { success: false, message: `Tool pricing is not configured: ${toolName}`, error: 'pricing_unavailable' };
+            }
+            if (price && !price.isFree) requiredCredits = Math.max(requiredCredits, price.credits);
           }
-          if (price && !price.isFree) {
-            const check = await requireCredits(ctx.userId, price.credits);
-            if (!check.ok) return { success: false, message: `Insufficient credits. Need ${price.credits}, have ${check.balance}.`, error: 'insufficient_credits' };
+          if (spicyReachable) {
+            const spicyToolName = resolveToolName('edit_image', 'qwen-spicy', imageInputCount);
+            const spicyPrice = await getToolPrice(spicyToolName);
+            if (!spicyPrice) return { success: false, message: `Tool pricing is not configured: ${spicyToolName}`, error: 'pricing_unavailable' };
+            if (!spicyPrice.isFree) requiredCredits = Math.max(requiredCredits, spicyPrice.credits);
           }
+          // For token-priced, non-Spicy auto routes this remains an estimate;
+          // the final debit still uses actual provider usage before publishing.
+          const check = await requireCredits(ctx.userId, requiredCredits || 5);
+          if (!check.ok) return { success: false, message: `Insufficient credits. Need ${requiredCredits || 5}, have ${check.balance}.`, error: 'insufficient_credits' };
         }
         const imageStartedAt = Date.now();
         const skillResult = await editImage(
@@ -1493,7 +1515,10 @@ function createGenerateImageTool(
           && skillResult.usedModel !== 'gemini'
         ) {
           // Fixed-price image backends share one awaited debit + usage-log transaction.
-          await deductCredits(ctx.userId ?? '', null, 'edit_image', skillResult.usedModel, Date.now() - imageStartedAt);
+          const billingTool = skillResult.usedModel === 'qwen-spicy'
+            ? resolveToolName('edit_image', skillResult.usedModel, imageInputCount)
+            : 'edit_image';
+          await deductCredits(ctx.userId ?? '', null, billingTool, skillResult.usedModel, Date.now() - imageStartedAt);
         }
         // NSFW detection: flag session so all subsequent calls skip Gemini
         if (skillResult.contentBlocked) ctx.isNsfw = true;
@@ -3948,7 +3973,7 @@ Parameters:
       }),
       execute: async ({ azimuth, elevation, distance }) => {
         if (ctx.userId && await isBillingEnabled()) {
-          const price = await getToolPrice('rotate_camera');
+          const price = await getToolPrice(FAL_ROTATE_CAMERA_TOOL);
           if (!price) return { success: false, message: 'Camera rotation pricing is not configured.' };
           const check = await requireCredits(ctx.userId, price.credits);
           if (!check.ok) return { success: false, message: 'Insufficient credits for camera rotation.' };
@@ -3963,7 +3988,7 @@ Parameters:
           ctx.generatedImages.push(skillResult.image);
           ctx.lastImageBackground = undefined;
           // Await the debit so a completed paid generation has a durable usage record.
-          if (ctx.userId) await deductCredits(ctx.userId, null, 'rotate_camera', undefined, Date.now() - started);
+          if (ctx.userId) await deductCredits(ctx.userId, null, FAL_ROTATE_CAMERA_TOOL, undefined, Date.now() - started);
         }
         return { success: skillResult.success as true, message: skillResult.message };
       },

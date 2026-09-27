@@ -1013,6 +1013,21 @@ describe('credits', () => {
       expect(resolveToolName('create_voiceover')).toBe('create_voiceover');
       expect(resolveToolName('makaron_create_video')).toBe('create_video');
     });
+
+    it('uses a separate fal SKU without changing the production Vast price', async () => {
+      const { FAL_ROTATE_CAMERA_TOOL, resolveToolName } = await import('@/lib/billing/pricing');
+      expect(FAL_ROTATE_CAMERA_TOOL).toBe('rotate_camera_fal');
+      expect(resolveToolName('makaron_rotate_camera')).toBe(FAL_ROTATE_CAMERA_TOOL);
+    });
+
+    it('prices Spicy by generation versus edit input count', async () => {
+      const { resolveToolName } = await import('@/lib/billing/pricing');
+      expect(resolveToolName('makaron_edit_image', 'qwen-spicy', 0)).toBe('generate_image_qwen-spicy');
+      expect(resolveToolName('makaron_edit_image', 'qwen-spicy', 1)).toBe('edit_image_qwen-spicy');
+      expect(resolveToolName('makaron_edit_image', 'qwen-spicy', 2)).toBe('edit_image_qwen-spicy-2');
+      expect(resolveToolName('makaron_edit_image', 'qwen-spicy', 3)).toBe('edit_image_qwen-spicy-3');
+      expect(() => resolveToolName('makaron_edit_image', 'qwen-spicy', 4)).toThrow('0-3 input images');
+    });
   });
 
   describe('getTokenRate matching', () => {
