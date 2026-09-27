@@ -484,6 +484,8 @@ describe('agent prompt policy guards', () => {
     expect(skill).toContain('Asset Inventory And Anchor Plan')
     expect(skill).toContain('Story Direction')
     expect(skill).toContain('offer 2-3 story directions')
+    expect(skill).toContain('Exclude unrelated people in a source photo from the proposed cast')
+    expect(skill).toContain('one filmable visual joke with setup, escalation, and payoff')
     expect(skill).toContain('In the first response, do not generate assets, storyboard images, or `Shot N (Xs):` scripts')
     expect(skill).toContain('Segment Outline And Seam Plan')
     expect(skill).toContain('Director Beat Board')

@@ -87,6 +87,8 @@ Identify target duration, aspect ratio, source media, tone, platform, and final 
 - likely segment count, normally 15s segments
 - minimum anchor set
 
+First identify which supplied reference depicts each principal. Exclude unrelated people in a source photo from the proposed cast; if identity is uncertain, say so before making anchors. Each direction needs one filmable visual joke with setup, escalation, and payoff across the segments. Prefer a small stable cast and prop set over several unrelated mishaps. Avoid jokes that depend on readable text or precise dialogue from a video model.
+
 Ask the user to pick or revise one direction.
 
 ## Gate 2: Asset Inventory And Anchor Plan
