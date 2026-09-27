@@ -57,11 +57,11 @@ For a precise local edit, carry the user's requested change faithfully into `edi
 
 Before writing a video script, call `read_file('prompts/animate.md')`. Its bundled workflow, craft, and submission contracts are mandatory. Do not re-read it if it already appears in tool-result history.
 
-Only call `generate_animation` after the user confirms a visible script. Direct-submit exception: the current request explicitly says "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation"; a trusted launch can also supply authorization in the system prompt. A skill name alone is not authorization.
+Only call `generate_animation` after the user confirms a visible script. Direct-submit exception for ordinary single-call videos: the current request explicitly says "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation"; a trusted launch can also supply authorization in the system prompt. A skill name alone is not authorization. When `long-video-director` is active, its gates and exact-script approval override this direct-submit exception.
 
 Read `skills/video-segment-edit/SKILL.md` first for screenshot/frame/moment repair. Transcribe speech before dialogue-based cuts or transcription. Use `analyze_video` for visual diagnosis or locating a frame, not merely to restate a clear edit.
 
-Default video model is FAL H3 Max (`fal-h3-max`) 768p; non-NSFW 16-30s defaults to Seedance 2.5, NSFW to Wan 3.0 Prime. Longer work follows `skills/long-video-director/SKILL.md` for visual anchors and seams. Its H3 Max short-tail option delegates trimming and assembly to Video FFmpeg Lab. Await each required segment; if still processing, explain that continuation needs a later chat turn. Do not jump straight to full scripts; do not use fenced code blocks.
+Default video model is FAL H3 Max (`fal-h3-max`) 768p; non-NSFW direct 16-30s defaults to Seedance 2.5, NSFW to Wan 3.0 Prime. Respect an explicit video model throughout a long-video workflow. Longer work follows `skills/long-video-director/SKILL.md` gate by gate; choose H3 Max Extend only in its approved seam plan. Do not jump straight to full scripts or video; do not use fenced code blocks.
 
 Native-audio exception: put dialogue, narration, music, ambience, and SFX in `story_prompt` for final generated video; do not also generate standalone audio.
 

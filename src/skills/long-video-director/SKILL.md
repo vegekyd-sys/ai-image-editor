@@ -35,7 +35,8 @@ Critical premise:
 - Independent video generations do **not** know what happened in the previous segment. FAL H3 Max Extend receives one completed source video: either the accepted previous video or its selected short ending clip.
 - Each FAL H3 Max generation or Extend call adds at most 15 seconds; other model limits are in `prompts/animate.md`.
 - Every segment must be self-contained and executable by `prompts/animate.md`.
-- When the user has explicitly authorized direct end-to-end H3 Max generation, the review gates may advance in one request. Still create and inspect the anchor, storyboard, and seam artifacts. Do not treat a completed generation task as visual approval. If any awaited task remains processing, report that state and resume only in a later chat turn; never promise an automatic continuation after the current run ends.
+- A request for a finished video, a 60s test, or H3 Max is not permission to skip review gates. Advance one gate per user approval. A completed tool task is never visual approval.
+- Keep an explicitly selected video model, such as `fal-h3-max`, across the segments. Model choice does not choose the workflow or require Extend.
 - Do not produce a final MP4 first.
 - Do not dump a full long-video package in one response.
 - A gate is not passed just because text or an image was generated. Inspect the output against the current gate contract.
@@ -59,7 +60,7 @@ Do not build new UI.
 7. Final scripts and preflight through `prompts/animate.md`.
 8. `generate_animation` only after the user confirms the exact scripts.
 
-Do not skip gates unless the user explicitly asks to proceed without confirmation.
+Do not infer a gate waiver from "make the whole video", "directly generate", or similar delivery language. Skip a gate only if the user specifically names that gate and asks to waive its review; never waive the visual self-check of generated assets or clips.
 When the user gives a short approval such as "continue", treat it as permission
 to advance only from the current gate to the next gate. Do not jump across
 multiple gates.
@@ -120,8 +121,11 @@ After anchors are approved, outline the long video:
 - start state and end state
 - seam to adjacent segments
 - storyboard requirement for that segment
+- per-seam method: independent anchored generation or video Extend, with the visual reason for choosing it
 
 Fewer segments are better for consistency. 30s should usually be 2 x 15s, 45s should usually be 3 x 15s, and 60s should usually be 4 x 15s unless the story needs otherwise.
+
+Select Extend only when continuous action across a seam matters and the accepted ending visibly contains the people, props, and setting needed next. Choose an independent anchored segment when identity or a new shot matters more; the storyboard and approved anchors remain its actual image references. Duration alone is never a reason to Extend. For an Extend seam, plan the short source tail and measured overlap removal here, before writing scripts.
 
 Ask for approval. Do not write final scripts yet. Do not generate storyboard images yet.
 
@@ -173,20 +177,20 @@ Read `prompts/animate.md`.
 
 Use `animate.md` for final segment scripts and preflight. The compiled scripts must:
 - be 15 seconds or less
-- define approved anchor refs and storyboard refs at the beginning
+- identify approved anchor refs and storyboard refs in the visible preflight
 - use normal Markdown text, not fenced code blocks
 - use the user's language for readable action, sound, and style descriptions
 - keep required format tokens in English: `Shot N (Xs):`, `Style:`, and media refs
-- include every important `<<<media_N>>>` ref directly in the segment
-- include the segment's approved storyboard ref directly in the segment, normally near the start as `Storyboard: <<<media_N>>>`
+- for independent generation, include every important `<<<media_N>>>` anchor ref directly in the segment
+- for independent generation, include the segment's approved storyboard ref directly in the segment, normally near the start as `Storyboard: <<<media_N>>>`
+- for Extend, put only its one source-video marker in `story_prompt`; describe the approved anchor identities, props, storyboard action, and seam in text
 - embed seams into the script body
 - avoid hidden dependencies such as "continue from previous segment"
 - end with `Style:`
 
 Before presenting scripts, review:
 - every approved asset is referenced where needed
-- every segment uses its approved storyboard ref
-- each segment's storyboard and anchor refs are present in the exact script text, not only in the surrounding preflight notes
+- every segment has an approved storyboard; independent-generation prompts contain its storyboard and anchor refs, while Extend prompts contain only the source-video ref and the approved visual facts in text
 - every seam is present in adjacent scripts
 - every segment stays within 15s
 - no required character or prop was dropped
@@ -207,7 +211,9 @@ Before calling `generate_animation`, show a short preflight:
 
 If any item is missing, stop.
 
-After approval, submit each independent segment with `generate_animation`. For an explicitly selected FAL H3 Max continuation, submit the first segment as ordinary generation and wait for its completed MP4. The seam plan chooses between full-source continuation and short-tail continuation. Use the short-tail option when a long cumulative source weakens character, prop, or scene identity: invoke the existing `skills/video-ffmpeg-lab/SKILL.md` to extract a roughly 4-6s ending clip from the accepted segment, publish it to the timeline, then call `generate_animation` with `model="fal-h3-max"`, `video_operation="extend"`, that tail as the sole source video, and `duration` equal to the next 5-15s contribution. Select a tail where the seam-critical people, props, and setting are visible; if the accepted ending lacks them, repair that segment or make an anchored bridge before extending. The returned video contains the source tail again. Use Video FFmpeg Lab to remove precisely that measured overlap, append only the new contribution to the accepted master, and verify picture and audio at the seam. Do not concatenate full Extend outputs or submit an in-progress snapshot. The source for each call must remain 1.625-60s and <=50MB, aspect ratio 0.4-2.5; if it exceeds those bounds, stop and use the independent-segment path.
+After approval, submit only the first approved segment with `generate_animation`, using the selected video model. Inspect the completed clip with `analyze_video` and visually check identity, props, action, sound, and the planned seam against its approved storyboard and script. If it fails, repair that segment and review it again; do not advance to the next segment. Repeat this generate-review sequence for every segment. If an awaited task remains processing, stop and resume in a later chat turn.
+
+For a seam whose approved plan chooses FAL H3 Max Extend, use the completed accepted video or invoke the existing `skills/video-ffmpeg-lab/SKILL.md` to extract a roughly 4-6s ending clip. Select a tail where the seam-critical people, props, and setting are visible; if the accepted ending lacks them, repair that segment or make an anchored bridge before extending. Publish the tail to the timeline, then call `generate_animation` with `model="fal-h3-max"`, `video_operation="extend"`, that source as the sole video input, and `duration` equal to the next 5-15s contribution. The returned video contains the source again. Use Video FFmpeg Lab to remove precisely the measured overlap, append only the new contribution to the accepted master, and verify picture and audio at the seam. Do not concatenate full Extend outputs or submit an in-progress snapshot. The source for each call must remain 1.625-60s and <=50MB, aspect ratio 0.4-2.5; otherwise use an independent anchored segment.
 
 For every independent-generation `generate_animation` call:
 - `story_prompt` must contain that segment's storyboard ref and required anchor refs as `<<<media_N>>>` markers.
@@ -217,4 +223,4 @@ For every independent-generation `generate_animation` call:
 
 For FAL H3 Max Extend calls, the only media marker in `story_prompt` is the completed source video. Do not pass storyboard images, anchor images, or audio refs to Extend; the provider does not accept them together with its video input. Express the approved visual anchors and next beat in the text prompt and in the chosen tail frames. Check the returned video's duration, characters, props, and seam continuity before proceeding. If the seam or identity fails, revise only that segment; do not advance the master.
 
-Use Video FFmpeg Lab for the short-tail option's trimming and final file assembly. Keep story, asset approval, and segment acceptance in this Skill; do not build a second long-video workflow.
+Use Video FFmpeg Lab for the short-tail option's trimming and final file assembly after every segment passes visual review. Keep story, asset approval, and segment acceptance in this Skill; do not build a second long-video workflow.

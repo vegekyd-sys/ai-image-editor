@@ -462,6 +462,13 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('Do not jump straight to full scripts')
     expect(agent).toContain('do not use fenced code blocks')
     expect(skill).toContain('Do not dump a full long-video package in one response')
+    expect(agent).toContain('its gates and exact-script approval override this direct-submit exception')
+    expect(agentTs).toContain('An active long-video-director workflow still requires its staged gates and exact-script approval')
+    expect(agentTs).toContain('Completion supplies a Media Index but does not authorize the next segment')
+    expect(skill).toContain('Advance one gate per user approval')
+    expect(skill).toContain('Duration alone is never a reason to Extend')
+    expect(skill).toContain('submit only the first approved segment')
+    expect(skill).not.toContain('review gates may advance in one request')
 
     expect(skill).toContain('Independent video generations do **not** know what happened in the previous segment')
     expect(skill).toContain('Each FAL H3 Max generation or Extend call adds at most 15 seconds')
