@@ -11,7 +11,7 @@ If adult intent is ambiguous, ask one short question before choosing this lane.
 | Adult request | Route |
 |---|---|
 | Agent-driven work or a persistent Makaron project | `makaron chat` with Agent model `grok-4.6` |
-| Standalone image generation or editing | `makaron edit` with image model `qwen` |
+| Standalone image generation or editing | `makaron edit` with image model `qwen-spicy` |
 | Standalone video generation | `makaron video create` with video model `wan-3.0-prime` |
 
 For project-based work, keep the complete request in one `chat` job. Because
@@ -20,20 +20,20 @@ brief:
 
 ```bash
 npx makaron-cli chat --project <id|auto> --agent-model grok-4.6 --json \
-  -b "<complete adult request; use qwen for still images and wan-3.0-prime for video>"
+  -b "<complete adult request; use qwen-spicy for still images and wan-3.0-prime for video>"
 ```
 
 For explicit raw-tool work without a project timeline:
 
 ```bash
-npx makaron-cli edit --image-model qwen --image <file-or-url> --out <path> "<prompt>"
+npx makaron-cli edit --image-model qwen-spicy --image <file-or-url> --out <path> "<prompt>"
 npx makaron-cli video create --video-model wan-3.0-prime --script "<shot script>" --duration <seconds>
 ```
 
 ## Keep the exception scoped
 
-- Do not force SFW jobs onto Grok, Qwen, or Wan 3.0 Prime.
-- Never put `qwen` or `wan-3.0-prime` in `--agent-model`.
+- Do not force SFW jobs onto Grok, Qwen Spicy, or Wan 3.0 Prime.
+- Never put `qwen-spicy` or `wan-3.0-prime` in `--agent-model`.
 - Do not pass `--image-model` or `--video-model` to `makaron chat`; it rejects
   those flags. State those preferences in the chat brief or use the standalone
   commands.

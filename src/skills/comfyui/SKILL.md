@@ -34,7 +34,7 @@ not invoke OpenMontage Python tools, HyperFrames, or unexposed provider APIs.
 ## Execution Contract
 
 - Apply the source prompting and reference discipline through Makaron image models. Respect the selected model; if the named external provider is unavailable, state the native replacement before generation.
-- Route Qwen, Pony, and WAI requests through Makaron's existing ComfyUI-backed image models. Arbitrary custom graph upload and unregistered nodes are outside this adapter.
+- Route legacy Qwen image requests to Qwen Spicy. Pony and WAI are retired; do not silently substitute another model. Arbitrary custom graph upload and unregistered nodes are outside this adapter.
 - Keep provider and runtime claims honest. An adapted skill preserves the goal,
   not an unavailable vendor implementation.
 - Use project timeline media and workspace files as the source of truth.
