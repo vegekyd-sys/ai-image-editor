@@ -1160,7 +1160,7 @@ async function exportComposition(baseUrl, headers, opts = {}) {
     designPath: opts.designPath,
     design: opts.design,
     outputType: opts.outputType || 'video',
-    renderProfile: opts.renderProfile || 'fast_720p',
+    renderProfile: opts.renderProfile || 'source',
     publish: opts.publish === true,
     name: opts.name,
   };
@@ -2799,7 +2799,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   await listProjects(baseUrl, headers);
 } else if (command === 'materialize') {
   const { headers, baseUrl } = getAuth();
-  const opts = { wait: true, publish: true, json: false, outputType: 'video', renderProfile: 'fast_720p', pick: null, quiet: false };
+  const opts = { wait: true, publish: true, json: false, outputType: 'video', renderProfile: 'source', pick: null, quiet: false };
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) opts.projectId = args[++i];
     else if (args[i] === '--media' && args[i + 1]) opts.mediaIndex = Number(args[++i]);
@@ -2827,7 +2827,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const { headers, baseUrl } = getAuth();
   const sub = args[1];
   if (sub === 'export') {
-    const opts = { wait: false, publish: false, json: false, outputType: 'video', renderProfile: 'fast_720p', pick: null, quiet: false };
+    const opts = { wait: false, publish: false, json: false, outputType: 'video', renderProfile: 'source', pick: null, quiet: false };
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--project' && args[i + 1]) opts.projectId = args[++i];
       else if (args[i] === '--media' && args[i + 1]) opts.mediaIndex = Number(args[++i]);

@@ -97,8 +97,7 @@ describe('Studio production skills', () => {
     expect(production).toContain('linked Storyboard range and representative overlap');
     expect(production).toContain('narrationTimingEvidence');
     expect(production).toContain('returned narration cue sheet');
-    expect(agent).toContain('const renderProfile = studioCheckpoint.studioRunId');
-    expect(agent).toContain("? 'source'");
+    expect(agent).toContain("const renderProfile = 'source'");
     expect(agent).toContain('Studio Composition must keep the locked delivery resolution');
   });
 

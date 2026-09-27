@@ -7,24 +7,26 @@ import { readAgentRuntimeSource } from './helpers/agentRuntimeSource'
 const read = (path: string) => readFileSync(path, 'utf-8')
 
 describe('Remotion export worker contract', () => {
-  it('uses 720p output profile by default for portrait compositions', () => {
+  it('preserves requested portrait composition dimensions by default', () => {
     expect(resolveRemotionRenderProfile({ width: 1080, height: 1920 })).toMatchObject({
+      profile: 'source',
+      width: 1080,
+      height: 1920,
+      sourceWidth: 1080,
+      sourceHeight: 1920,
+      scale: 1,
+    })
+  })
+
+  it('keeps an explicit fast 720p export available', () => {
+    expect(resolveRemotionRenderProfile({ width: 1080, height: 1920 }, 'fast_720p')).toMatchObject({
       profile: 'fast_720p',
       width: 720,
       height: 1280,
       sourceWidth: 1080,
       sourceHeight: 1920,
     })
-  })
-
-  it('uses true 720p for landscape-ish compositions', () => {
-    expect(resolveRemotionRenderProfile({ width: 1080, height: 960 })).toMatchObject({
-      profile: 'fast_720p',
-      width: 810,
-      height: 720,
-      sourceWidth: 1080,
-      sourceHeight: 960,
-    })
+    expect(resolveRemotionRenderProfile({ width: 1080, height: 960 }, 'fast_720p')).toMatchObject({ width: 810, height: 720 })
   })
 
   it('can preserve source dimensions when requested', () => {
@@ -168,6 +170,7 @@ describe('Remotion export worker contract', () => {
     const packageJson = read('package.json')
 
     expect(postRoute).toContain('createRemotionExportJob')
+    expect(postRoute).toContain('body.render_profile || DEFAULT_REMOTION_RENDER_PROFILE')
     expect(postRoute).toContain("publish && outputType === 'video' ? crypto.randomUUID()")
     expect(postRoute).toContain('drainRemotionExportQueue')
     expect(postRoute).toContain('shouldRunRemotionExportInline')
@@ -181,7 +184,7 @@ describe('Remotion export worker contract', () => {
     expect(agent).not.toContain('runRemotionExportJobAndWait')
     expect(agent).not.toContain("profile: z.enum(['fast_720p', 'source'])")
     expect(agent).not.toContain('wait: z.boolean()')
-    expect(agent).toContain("studioCheckpoint.studioRunId\n            ? 'source'\n            : 'fast_720p'")
+    expect(agent).toContain("const renderProfile = 'source'")
     expect(agent).toContain('studioRunId: studioCheckpoint.studioRunId')
     expect(agent).toContain('studioRunPending: Boolean(studioCheckpoint.studioRunId)')
     expect(agent).toContain('ctx.pendingVideoSnapshot')
