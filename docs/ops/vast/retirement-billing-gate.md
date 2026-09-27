@@ -28,13 +28,14 @@
 
 ## Vast 停机覆盖范围（2026-09-27 只读审计）
 
-- 候选代码已将旧 `qwen` 映射到 `qwen-spicy`；NSFW 和 Enhance 主路径走 Spicy。`pony`/`wai` 明确退役并报错，不要求风格等价替代。相机旋转走 fal，使用独立的 `rotate_camera_fal` 价目。Preview 的 MCP 真实出图和扣费已验收；51 次多角度测试得到 50 张图、1 次供应商内容策略拒绝。生产尚未切到该候选版本。
-- 停机前只剩三个实际动作：① 发布候选到生产，并在生产真实验收 Spicy（含旧 `qwen` 调用和 NSFW）、Enhance、fal 旋转及扣费；② 确认旧 Vast 调用已排空，再卸载本机每 5 分钟运行的 `com.makaron.qwen-vast-self-heal`，否则停机后它会自动拉起 GPU；③ 收到用户明确停机指令后再停止 Vast。当前不做这三步。
-- 附带清理：内置 `src/skills/comfyui/SKILL.md` 和 CLI 帮助/文档仍宣称 Pony/WAI 可用，应在发布时同步更正；生产的 `COMFYUI_*`/`VAST_API_KEY` 环境变量、旧健康检查与 `comfyui.makaron.app` 域名在确认没有外部消费者后再退役。它们不是继续租用 GPU 的理由，但不能盲删。
+- 生产已经由 `dev` 提交 `c9a73152` 发布到 `https://www.makaron.app`；CLI 0.15.4 已发布。旧 `qwen` 经 CLI/MCP 真实出图由 Spicy 处理，Pony/WAI 被输入校验拒绝；NSFW Spicy 编辑、Enhance、Spicy 0/1/2/3 图和 fal 旋转均有生产可解码输出及对应 SKU 扣费。2026-09-27 12:25 UTC 后的本轮生产调用合计 398 credits；查询不到新的旧 Qwen/Pony/WAI/旧旋转 SKU 记录。
+- 生产多角度矩阵覆盖人像、动漫、产品各 17 组，共 51 组：50 张成功，**1 组性感人像 315°/30°/1.4 被 fal 内容审核 HTTP 422 拒绝**；与 Preview 同角度结果一致，失败项没有 Makaron usage 扣费记录。产物见本机忽略的 `test-results/camera-angle-preview-matrix/`。部分远近角度耗时 35–68 秒，产品壶嘴/把手存在生成式形变；不能承诺严格 3D 几何一致。
+- 生产浏览器项目页当前显示未登录，Tips UI 的真实用户操作未完成。以上 CLI/MCP 结果不能代替该验收。用户要求“全部没问题后停机”，所以内容审核例外和 UI 验收未定之前，**不停止 Vast**。
+- 停机时先卸载本机每 5 分钟运行的 `com.makaron.qwen-vast-self-heal`，否则它会自动拉起 GPU；再停止主实例并观察。生产的 `COMFYUI_*`/`VAST_API_KEY` 环境变量、旧域名在确认无外部消费者后再退役，不盲删。
 - Vast 主实例 `48270326` 仍运行，约 $0.40/小时 GPU + $0.083/小时磁盘；冷备 `38761988` 已停止但仍约 $0.042/小时磁盘。停主实例只省 GPU 费，不会自动删除两块盘；销毁实例属于另一个需要明确授权的决定。
+- 零 Vast 持续费恢复材料：公开 GHCR 镜像 `ghcr.io/vegekyd-sys/makaron-vast-qwen-serverless@sha256:960c21f4861e019ec1177363eabdfe938cc67942977caba8651bffbf680767a6` 可匿名获取；运行时源码和脚本另存本机 `/Users/tianyicai/Backups/makaron-vast-qwen-2026-09-27/`。镜像约 34.6 GB，未在新 Vast 实例做过恢复演练。**要使 Vast 持续费用真正归零，最终需销毁主实例和现有冷备及其磁盘；仅停止仍约 $3/天。**
 
 ## 发布前检查
 
-1. 在将要发布的提交与环境上核对模型配置、六条 SKU 和费用；Preview/Production 共库，不能把 Preview 扣费当作生产路由验收。
-2. 在生产真实运行 Spicy、Enhance 和 fal 旋转，核对图片、余额、usage 记录，并确认没有旧 Vast 流量。上述 Tips 报价及归因问题保留为已知问题。
-3. 用户确认停机时，先停自愈任务，再停止 Vast 主实例并持续观察；冷备和磁盘另行决定，不自动销毁。
+1. 请用户确认是否接受 fal 的单角度内容审核限制，并在已登录的生产浏览器里完成 Tips Preview UI 验收。上述 Tips 报价及归因问题保留为已知问题。
+2. 切断本机 Vast 自愈任务，停止主实例并观察生产流量；只有在用户接受零费用备份的恢复耗时及不可逆风险后，才另行决定是否销毁两台实例和磁盘。
