@@ -32,9 +32,10 @@ that Skill, while an unmatched ordinary long provider video uses this workflow.
 - `prompts/animate.md` for final segment scripts, preflight, and real video generation.
 
 Critical premise:
-- Video models do **not** know what happened in the previous segment.
-- Each video generation call can produce at most 15 seconds.
+- Independent video generations do **not** know what happened in the previous segment. FAL H3 Max Extend receives the completed full previous video as its sole reference.
+- Each FAL H3 Max generation or Extend call adds at most 15 seconds; other model limits are in `prompts/animate.md`.
 - Every segment must be self-contained and executable by `prompts/animate.md`.
+- When the user has explicitly authorized direct end-to-end H3 Max generation, the review gates may advance in one request. Still create and inspect the anchor, storyboard, and seam artifacts. Do not treat a completed generation task as visual approval. If any awaited task remains processing, report that state and resume only in a later chat turn; never promise an automatic continuation after the current run ends.
 - Do not produce a final MP4 first.
 - Do not dump a full long-video package in one response.
 - A gate is not passed just because text or an image was generated. Inspect the output against the current gate contract.
@@ -206,12 +207,14 @@ Before calling `generate_animation`, show a short preflight:
 
 If any item is missing, stop.
 
-After approval, submit each segment independently with `generate_animation`.
+After approval, submit each independent segment with `generate_animation`. For an explicitly selected FAL H3 Max continuation, submit the first segment as ordinary generation and wait for its completed MP4. The seam plan chooses between full-source continuation and short-tail continuation. Use the short-tail option when a long cumulative source weakens character, prop, or scene identity: invoke the existing `skills/video-ffmpeg-lab/SKILL.md` to extract a roughly 4-6s ending clip from the accepted segment, publish it to the timeline, then call `generate_animation` with `model="fal-h3-max"`, `video_operation="extend"`, that tail as the sole source video, and `duration` equal to the next 5-15s contribution. Select a tail where the seam-critical people, props, and setting are visible; if the accepted ending lacks them, repair that segment or make an anchored bridge before extending. The returned video contains the source tail again. Use Video FFmpeg Lab to remove precisely that measured overlap, append only the new contribution to the accepted master, and verify picture and audio at the seam. Do not concatenate full Extend outputs or submit an in-progress snapshot. The source for each call must remain 1.625-60s and <=50MB, aspect ratio 0.4-2.5; if it exceeds those bounds, stop and use the independent-segment path.
 
-For every `generate_animation` call:
+For every independent-generation `generate_animation` call:
 - `story_prompt` must contain that segment's storyboard ref and required anchor refs as `<<<media_N>>>` markers.
 - The exact `story_prompt` sent to the tool must include the refs. Do not rely on refs appearing only in CUI text, preflight notes, or prior conversation.
 - If a required storyboard or anchor ref is missing from the exact `story_prompt`, stop and rewrite the segment script before calling the tool.
 - The video provider only receives media refs that are present in the final tool submission.
 
-Treat final assembly or MP4 concatenation as outside this standalone skill unless another workflow is explicitly invoked.
+For FAL H3 Max Extend calls, the only media marker in `story_prompt` is the completed source video. Do not pass storyboard images, anchor images, or audio refs to Extend; the provider does not accept them together with its video input. Express the approved visual anchors and next beat in the text prompt and in the chosen tail frames. Check the returned video's duration, characters, props, and seam continuity before proceeding. If the seam or identity fails, revise only that segment; do not advance the master.
+
+Use Video FFmpeg Lab for the short-tail option's trimming and final file assembly. Keep story, asset approval, and segment acceptance in this Skill; do not build a second long-video workflow.

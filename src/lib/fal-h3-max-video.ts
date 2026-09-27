@@ -23,6 +23,7 @@ export interface FalH3MaxTaskResult {
   taskId: string
   status: 'pending' | 'processing' | 'completed' | 'failed'
   videoUrl?: string
+  duration?: number
   error?: string
 }
 
@@ -45,6 +46,11 @@ function headers(): Record<string, string> {
 }
 
 function taskRequest(taskId: string): { requestId: string; queueBase: string } {
+  if (taskId.startsWith('fal-h3max-extend-')) {
+    // fal's queue status/result API is scoped to the model alias, even when
+    // submission uses the nested /extend-video endpoint.
+    return { requestId: taskId.slice('fal-h3max-extend-'.length), queueBase: LEGACY_QUEUE_BASE }
+  }
   if (taskId.startsWith('fal-h3max-reference-')) {
     return { requestId: taskId.slice('fal-h3max-reference-'.length), queueBase: LEGACY_QUEUE_BASE }
   }
@@ -165,13 +171,15 @@ export async function getFalH3MaxVideoTask(taskId: string): Promise<FalH3MaxTask
     return { taskId, status: 'failed', error: errorMessage(failure ?? {}, 'MiniMax H3 Max generation failed: provider rejected the input (HTTP 422).') }
   }
   const resultBody = await readJson(resultResponse, 'MiniMax H3 Max result') as {
-    video?: { url?: unknown }
+    video?: { url?: unknown }; duration?: unknown
   }
   const videoUrl = typeof resultBody.video?.url === 'string' ? resultBody.video.url : undefined
   if (!videoUrl) {
     return { taskId, status: 'failed', error: 'MiniMax H3 Max completed without a video URL.' }
   }
-  return { taskId, status: 'completed', videoUrl }
+  const duration = typeof resultBody.duration === 'number' && Number.isFinite(resultBody.duration) && resultBody.duration > 0
+    ? resultBody.duration : undefined
+  return { taskId, status: 'completed', videoUrl, ...(duration ? { duration } : {}) }
 }
 
 export async function waitForFalH3MaxVideoTask(
@@ -181,13 +189,24 @@ export async function waitForFalH3MaxVideoTask(
   const timeoutMs = Math.max(0, options.timeoutMs ?? 6_000)
   const pollIntervalMs = Math.max(0, options.pollIntervalMs ?? 250)
   const deadline = Date.now() + timeoutMs
+  let lastResult: FalH3MaxTaskResult = { taskId, status: 'processing' }
 
   while (true) {
-    const result = await getFalH3MaxVideoTask(taskId)
-    if (result.status === 'completed' || result.status === 'failed') return result
+    try {
+      const result = await getFalH3MaxVideoTask(taskId)
+      if (result.status === 'completed' || result.status === 'failed') return result
+      lastResult = result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const transientHttpError = /MiniMax H3 Max (?:status|result) error (?:408|429|5\d\d):/.test(message)
+      const transientNetworkError = error instanceof TypeError || (error instanceof Error && error.name === 'AbortError')
+      if (!transientHttpError && !transientNetworkError) throw error
+      // A failed status/result fetch says nothing about the paid inference job.
+      // Keep polling its original request ID; never create a replacement task.
+    }
 
     const remainingMs = deadline - Date.now()
-    if (remainingMs <= 0) return result
+    if (remainingMs <= 0) return lastResult
     await new Promise(resolve => setTimeout(resolve, Math.min(pollIntervalMs, remainingMs)))
   }
 }

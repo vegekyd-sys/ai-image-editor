@@ -246,7 +246,7 @@ export async function GET(
     const isFalH3Max = videoMeta.taskId.startsWith('fal-h3max-')
     const isSyncLipsync = videoMeta.taskId.startsWith('sync3-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
-    let result: { taskId: string; status: string; videoUrl?: string; error?: string }
+    let result: { taskId: string; status: string; videoUrl?: string; duration?: number; error?: string }
     const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
 
     if (isMuleRouter) {
@@ -310,7 +310,8 @@ export async function GET(
     }
 
     if (result.status === 'completed' && result.videoUrl) {
-      const updatedMeta: VideoMeta = { ...videoMeta, status: 'completed', videoUrl: result.videoUrl, providerUrl: result.videoUrl }
+      const updatedMeta: VideoMeta = { ...videoMeta, status: 'completed', videoUrl: result.videoUrl, providerUrl: result.videoUrl,
+        ...(result.duration && videoMeta.taskId.startsWith('fal-h3max-extend-') ? { duration: result.duration } : {}) }
 
       await admin
         .from('snapshots')

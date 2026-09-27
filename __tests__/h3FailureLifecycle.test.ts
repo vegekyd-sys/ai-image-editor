@@ -42,12 +42,12 @@ it('returns failed, invokes the atomic refund, and stops provider/refund polling
 });
 
 it('does not change state or refund when the result endpoint is temporarily unavailable', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ status: 'COMPLETED' }))
-    .mockResolvedValueOnce(Response.json({}, { status: 503 })));
-  expect((await poll()).status).toBe(500);
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(async url => String(url).endsWith('/status')
+    ? Response.json({ status: 'COMPLETED' }) : Response.json({}, { status: 503 })));
+  expect(await (await poll()).json()).toMatchObject({ status: 'processing' });
   expect(state.meta.status).toBe('processing');
   expect(state.rpc).not.toHaveBeenCalled();
-});
+}, 10_000);
 
 it('does not publish a terminal state when the refund transaction fails', async () => {
   state.rpc.mockResolvedValueOnce({ error: { message: 'temporary database failure' } });

@@ -109,7 +109,7 @@ export function validateVideoScript(opts: {
   }
 
   // 4. base mode requires a model that can edit the reference video as the base.
-  if (videoRefUrl && videoRefType === 'base') {
+  if (videoRefUrl && videoRefType === 'base' && !(normalizeVideoModelId(model) === 'fal-h3-max' && opts.operation === 'extend')) {
     if (!capability.supportsBaseVideoEdit) {
       return `Video editing (base mode) is not supported by ${capability.label}. Choose a model with base video editing support, or use video_ref_type="feature" for style/motion reference.`
     }

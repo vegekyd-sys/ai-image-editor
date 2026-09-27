@@ -49,6 +49,7 @@ export interface CreateVideoResult {
   providerModel?: string;
   provider?: string;
   videoUrl?: string;
+  sourceDuration?: number;
   status?: 'completed' | 'processing' | 'pending' | 'failed';
   message: string;
   retryable?: boolean;
@@ -319,7 +320,12 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: `${capability.label} supports at most ${capability.maxAudioReferences ?? 3} reference audio files per generation.`,
     };
   }
-  const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas, Boolean(input.onBeforeProviderSubmit));
+  const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas, Boolean(input.onBeforeProviderSubmit) || (provider === 'fal-h3-max' && videoOperation === 'extend'));
+  const h3ExtendSource = provider === 'fal-h3-max' && videoOperation === 'extend' ? resolvedReferenceVideoMetas?.[0] : undefined;
+  if (provider === 'fal-h3-max' && videoOperation === 'extend' &&
+      (!h3ExtendSource || !(Number(h3ExtendSource.durationSec) > 0) || !(Number(h3ExtendSource.fileSizeBytes) > 0) || !(Number(h3ExtendSource.width) > 0) || !(Number(h3ExtendSource.height) > 0))) {
+    return { success: false, message: 'H3 Max Extend needs a measurable source video duration, size, and dimensions before billing.' };
+  }
 
   if (images.length === 0 && !hasVideoReference) {
     if (hasAudioReference && provider !== 'seedance-2.5' && !isWan30) {
@@ -387,6 +393,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       });
       filteredImages = prepared.images;
       finalPrompt = prepared.prompt;
+    } else if (provider === 'fal-h3-max' && videoOperation === 'extend') {
+      filteredImages = [];
+      finalPrompt = script.replace(/<<<(?:image|media|video)_\d+>>>/gi, 'the source video');
     } else if (isWan30 || provider === 'fal-h3-max') {
       const prepared = prepareWan30References({
         prompt: script,
@@ -437,7 +446,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       operation: videoOperation,
     }) ?? parseTotalDuration(finalPrompt);
 
-    const h3References = provider === 'fal-h3-max'
+    const h3References = provider === 'fal-h3-max' && videoOperation !== 'extend'
       ? await (await import('../h3-reference-preflight')).prepareH3ReferenceMedia(filteredImages, providerVideoUrls, audioUrls || [])
       : undefined;
     let billingUsage: VideoQuoteInput | undefined;
@@ -468,7 +477,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       resolution: route.resolution,
       aspectRatio,
       outputDuration: provider === 'seedance-2.5' && videoOperation === 'edit' ? -1 : resolvedDuration,
-      referenceVideoDuration: billingUsage?.referenceVideoDurationSec ?? (previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration),
+      referenceVideoDuration: billingUsage?.referenceVideoDurationSec ?? h3ExtendSource?.durationSec ?? (previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration),
       referenceVideoMetas: resolvedReferenceVideoMetas,
       hasVideoReference,
       imageReferenceCount: filteredImages.length,
@@ -497,7 +506,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     let taskId: string;
 
-    if (videoUrl && videoReferType === 'base' && !capability.supportsBaseVideoEdit) {
+    if (videoUrl && videoReferType === 'base' && videoOperation !== 'extend' && !capability.supportsBaseVideoEdit) {
       return {
         success: false,
         message: `Video editing (base mode) is not supported by ${capability.label}. Use video_ref_type="feature" or choose a model that supports base video editing.`,
@@ -616,6 +625,17 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         providerModel: route.providerModel,
         message: `MiniMax H3 video task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
+    } else if (provider === 'fal-h3-max' && videoOperation === 'extend') {
+      const { createFalH3MaxExtendVideoTask } = await import('../fal-h3-max-extend-video');
+      taskId = await createFalH3MaxExtendVideoTask({
+        videoUrl: providerVideoUrls[0], prompt: finalPrompt, duration: resolvedDuration ?? 5,
+        resolution: route.resolution as '480p' | '768p',
+        aspectRatio: aspectRatio || 'auto',
+        onBeforeSubmit: billingUsage ? () => input.onBeforeProviderSubmit!(billingUsage!) : undefined,
+      });
+      return { success: true, taskId, videoModel: provider, sourceDuration: h3ExtendSource?.durationSec ?? undefined,
+        providerModel: 'minimax/h3-max/extend-video',
+        message: `FAL H3 Max Extend task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.` };
     } else if (provider === 'fal-h3-max' && h3References) {
       const { createFalH3MaxReferenceVideoTask } = await import('../fal-h3-max-reference-video');
       taskId = await createFalH3MaxReferenceVideoTask({
