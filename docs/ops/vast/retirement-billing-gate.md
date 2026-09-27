@@ -1,6 +1,6 @@
 # Vast 退役候选的图片计费门槛
 
-这是 Preview/worktree 的验收记录，不是生产切换或 Vast 停机许可。Production 与 Preview 共用 Supabase；发布前必须重新只读核价，并在目标版本上验收真实出图及扣费。
+这是 Preview、Production 和 Vast 停机的验收记录。Production 与 Preview 共用 Supabase；表内供应商价格为当时核价依据，不代表当前供应商结算金额。
 
 | 路径 | `credit_pricing.tool_name` | credits/次 | 供应商标价/次 |
 | --- | --- | ---: | ---: |
@@ -11,7 +11,7 @@
 | Spicy 双图编辑 | `edit_image_qwen-spicy-2` | 9 | $0.043 |
 | Spicy 三图编辑 | `edit_image_qwen-spicy-3` | 10 | $0.046 |
 
-价格来自 `20260926200819_fal_rotation_pricing.sql` 和 `20260927075458_qwen_spicy_operation_pricing.sql`；供应商标价是核价依据，不等同于某次请求的实际账单。缺价必须拒绝请求；不能默认免费，也不能把多图按单图扣。生产仍使用旧 Vast 旋转 SKU，候选版本上线时才会切到 fal SKU。
+价格来自 `20260926200819_fal_rotation_pricing.sql` 和 `20260927075458_qwen_spicy_operation_pricing.sql`；供应商标价是核价依据，不等同于某次请求的实际账单。缺价必须拒绝请求；不能默认免费，也不能把多图按单图扣。生产已切到 fal 旋转 SKU；旧 Vast SKU 仅供历史对照。
 
 ## 2026-09-27 Preview 证据
 
@@ -30,12 +30,13 @@
 
 - 生产已经由 `dev` 提交 `c9a73152` 发布到 `https://www.makaron.app`；CLI 0.15.4 已发布。旧 `qwen` 经 CLI/MCP 真实出图由 Spicy 处理，Pony/WAI 被输入校验拒绝；NSFW Spicy 编辑、Enhance、Spicy 0/1/2/3 图和 fal 旋转均有生产可解码输出及对应 SKU 扣费。2026-09-27 12:25 UTC 后的本轮生产调用合计 398 credits；查询不到新的旧 Qwen/Pony/WAI/旧旋转 SKU 记录。
 - 生产多角度矩阵覆盖人像、动漫、产品各 17 组，共 51 组：50 张成功，**1 组性感人像 315°/30°/1.4 被 fal 内容审核 HTTP 422 拒绝**；与 Preview 同角度结果一致，失败项没有 Makaron usage 扣费记录。产物见本机忽略的 `test-results/camera-angle-preview-matrix/`。部分远近角度耗时 35–68 秒，产品壶嘴/把手存在生成式形变；不能承诺严格 3D 几何一致。
-- 生产浏览器项目页当前显示未登录，Tips UI 的真实用户操作未完成。以上 CLI/MCP 结果不能代替该验收。用户要求“全部没问题后停机”，所以内容审核例外和 UI 验收未定之前，**不停止 Vast**。
-- 停机时先卸载本机每 5 分钟运行的 `com.makaron.qwen-vast-self-heal`，否则它会自动拉起 GPU；再停止主实例并观察。生产的 `COMFYUI_*`/`VAST_API_KEY` 环境变量、旧域名在确认无外部消费者后再退役，不盲删。
-- Vast 主实例 `48270326` 仍运行，约 $0.40/小时 GPU + $0.083/小时磁盘；冷备 `38761988` 已停止但仍约 $0.042/小时磁盘。停主实例只省 GPU 费，不会自动删除两块盘；销毁实例属于另一个需要明确授权的决定。
+- 用户接受 fal 1/51 的内容审核限制。已登录的生产 Chrome 项目 `/projects/8bd9d5bf-964e-4f4e-9182-8d5b58773a85` 中点击 Enhance「电影感光影强化」：Spicy 生成了可见缩略图和可打开的 Draft；只读计费核对新增 `edit_image_qwen-spicy`、`source=app`、8 credits。未点击「继续编辑」，不将验收草稿加入用户时间轴。生成图会重绘版式、丢失原海报部分文字，属于生成质量限制，不等同于无图或路由失败。
+- 2026-09-27 停机前禁用并 bootout 本机 `com.makaron.qwen-vast-self-heal`（`launchctl print-disabled` 显示 disabled），避免其每 5 分钟自动拉起 GPU。随后停止主实例 `48270326`。只读复核主实例和冷备 `38761988` 均为 `actual_status=exited`、`intended_status=stopped`、GPU 小时费用为 0；两块磁盘仍计费。生产的 `COMFYUI_*`/`VAST_API_KEY` 环境变量、旧域名在确认无外部消费者后再退役，不盲删。
+- 停机后生产 `GET /api/health` 为 healthy；经新版 CLI `makaron-cli@0.15.4` 调用生产 Qwen Spicy 文生图，实际得到可解码的 1024×1024 PNG，扣 3 credits、余额从 82496 到 82493，确认此链路不依赖已停 GPU。产物在忽略的 `test-results/vast-retirement-poststop-spicy.png`。
+- Vast 主实例 `48270326` 停后仍约 $0.083/小时磁盘；冷备 `38761988` 停后仍约 $0.042/小时磁盘，合计约 $0.125/小时（$3/天、$90/30 天）。相比停机前省约 $0.40/小时 GPU。停机不会自动删除磁盘；销毁两实例属于另一个不可逆操作，尚未获得针对它们的明确授权。
 - 零 Vast 持续费恢复材料：公开 GHCR 镜像 `ghcr.io/vegekyd-sys/makaron-vast-qwen-serverless@sha256:960c21f4861e019ec1177363eabdfe938cc67942977caba8651bffbf680767a6` 可匿名获取；运行时源码和脚本另存本机 `/Users/tianyicai/Backups/makaron-vast-qwen-2026-09-27/`。镜像约 34.6 GB，未在新 Vast 实例做过恢复演练。**要使 Vast 持续费用真正归零，最终需销毁主实例和现有冷备及其磁盘；仅停止仍约 $3/天。**
 
 ## 发布前检查
 
-1. 请用户确认是否接受 fal 的单角度内容审核限制，并在已登录的生产浏览器里完成 Tips Preview UI 验收。上述 Tips 报价及归因问题保留为已知问题。
-2. 切断本机 Vast 自愈任务，停止主实例并观察生产流量；只有在用户接受零费用备份的恢复耗时及不可逆风险后，才另行决定是否销毁两台实例和磁盘。
+1. 已完成：用户接受 fal 单角度审核限制；生产 Tips UI 真实预览和扣费、停机后 Spicy 出图均通过。上述 Tips 报价及归因问题保留为已知问题。
+2. 待决策：如要 Vast 持续费用归零，需销毁两台实例及磁盘，并接受从公共 GHCR 镜像和源码重新租 GPU、下载约 34.6 GB 镜像的恢复时间；尚未做新实例恢复演练，也尚未销毁磁盘。
