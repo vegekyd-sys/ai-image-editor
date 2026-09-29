@@ -252,6 +252,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.creativeHome.title': "創作のための新しいホーム",
+  'changelog.creativeHome.item1': "動く作品からインスピレーションを。テンプレートを開いて仕上がりを確認し、自分の写真で創作を始められます。",
+  'changelog.creativeHome.item2': "画像、動画、デザイン、音楽をひとつのページで。「もっと見る」の後は、下にスクロールするだけで新しいテンプレートに出会えます。",
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
   'changelog.gpt6AgentModels.title': 'GPT-6 Luna と Sol が登場',

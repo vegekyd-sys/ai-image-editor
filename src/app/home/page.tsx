@@ -186,7 +186,7 @@ function HomePageInner() {
   const heroSourceRef = useRef<HTMLElement | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
   const [heroArrived, setHeroArrived] = useState(false)
-  const [heroPoster, setHeroPoster] = useState<string | null>(null)
+  const [heroPoster, setHeroPoster] = useState<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
     setCreateAgentModel(loadCreateAgentModelPreference())
@@ -2078,15 +2078,19 @@ function HomePageInner() {
     heroSourceRef.current = source
     setHeroRect(readHomeHeroGeometry(source))
     const video = source.querySelector('video')
-    let poster: string | null = null
+    let poster: HTMLCanvasElement | null = null
     if (video && video.readyState >= 2) {
       try {
         const canvas = document.createElement('canvas')
         const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight))
         canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
         canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
-        canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
-        poster = canvas.toDataURL('image/jpeg', 0.82)
+        const context = canvas.getContext('2d')
+        if (context) {
+          context.drawImage(video, 0, 0, canvas.width, canvas.height)
+          // Retain the exact frame without synchronously encoding a JPEG on click.
+          poster = canvas
+        }
       } catch { /* A cross-origin video can still use the live fly player. */ }
     }
     setHeroPoster(poster)
@@ -2338,7 +2342,7 @@ function HomePageInner() {
           <a href="#product" className="creative-brand" aria-label={t('homeDesign.home')}><MakaronLogo markSize={34} /></a>
           <div className="creative-account"><TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
         </header>
-        <HomeCreativeHero skills={homeSkills} paused={motionPaused} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick}>
+        <HomeCreativeHero skills={homeSkills} paused={motionPaused || !!selectedDetail} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={showAgentLanding} onSelect={handleSkillCardClick}>
           {/* ── Inline Input Box ── */}
           <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',
@@ -2687,13 +2691,15 @@ function HomePageInner() {
             opacity: heroExpanded ? (heroArrived ? 0 : 1) : heroRect.opacity,
           }}>
             {!heroPoster && renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, active: !heroArrived, extraStyle: { position: 'absolute' } })}
-            {heroPoster && !heroArrived && <img src={heroPoster} alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} />}
+            {heroPoster && !heroArrived && <canvas aria-hidden="true" width={heroPoster.width} height={heroPoster.height} ref={canvas => {
+              canvas?.getContext('2d')?.drawImage(heroPoster, 0, 0)
+            }} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} />}
           </div>
         )
       })()}
 
-      {/* Warm neighboring photos after the first transition frame has painted. */}
-      {selectedDetail && heroExpanded && (
+      {/* Prepare neighboring content after the opening motion, outside the input frame. */}
+      {selectedDetail && heroExpanded && (!heroRect || heroArrived) && (
         <div aria-hidden style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }}>
           {filteredHomeSkills.slice(
             Math.max(0, filteredHomeSkills.findIndex(s => s.id === selectedDetail.id) - 1),
@@ -2890,7 +2896,7 @@ function HomePageInner() {
               }}
             >
             <div ref={detailInnerRef} style={{ position: 'relative', width: '100%', height: '100%', willChange: 'transform' }}>
-            {heroExpanded && (() => {
+            {heroExpanded && (!heroRect || heroArrived) && (() => {
               const activeIdx = Math.max(0, filteredHomeSkills.findIndex(s => s.id === selectedDetail?.id))
               // Keep the active slide and its immediate neighbors ready.
               const WINDOW_BEFORE = 1

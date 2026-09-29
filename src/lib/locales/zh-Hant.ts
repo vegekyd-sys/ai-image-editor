@@ -253,6 +253,9 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.creativeHome.title': "全新創作首頁",
+  'changelog.creativeHome.item1': "在會動的作品中尋找靈感，點開範本即可查看效果，加入自己的照片開始創作。",
+  'changelog.creativeHome.item2': "圖片、影片、設計、音樂，一頁探索。瀏覽更多範本後，繼續向下滑就能發現新作品。",
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
   'changelog.gpt6AgentModels.title': 'GPT-6 Luna 與 Sol 登場',

@@ -215,6 +215,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.creativeHome.title': "A new home for your ideas",
+  'changelog.creativeHome.item1': "Find inspiration in moving artwork. Open a template to preview the result, then add your photos to start creating.",
+  'changelog.creativeHome.item2': "Explore images, video, design and music in one place. Discover more templates, then keep scrolling to find your next idea.",
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
   'changelog.gpt6AgentModels.title': 'GPT-6 Luna and Sol Are Here',
