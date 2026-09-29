@@ -218,6 +218,7 @@ const zh = {
   'changelog.creativeHome.title': "全新创作首页",
   'changelog.creativeHome.item1': "在会动的作品中寻找灵感，点开模板即可查看效果，加入自己的照片开始创作。",
   'changelog.creativeHome.item2': "图片、视频、设计、音乐，一页探索。浏览更多模板后，继续向下滑就能发现新作品。",
+  'changelog.loading': '正在载入更新内容…',
   'changelog.heading': '更新',
   'changelog.close': '关闭更新',
   'changelog.gpt6AgentModels.title': 'GPT-6 Luna 与 Sol 登场',

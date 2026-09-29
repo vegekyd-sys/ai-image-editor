@@ -103,6 +103,7 @@ export default function HomePage() {
 
 function HomePageInner() {
   const { paused: motionPaused, setPaused: setMotionPaused } = useHomeMotion()
+  const [homeOverlayOpen, setHomeOverlayOpen] = useState(false)
   const { user, loading: authLoading } = useAuth()
   const hydrated = useHydrated()
   const renderUser = hydrated ? user : null
@@ -2041,7 +2042,7 @@ function HomePageInner() {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
       if (variant === 'thumb') {
-        return <LazyVideo src={normalizeDomain(url)} style={style} fallbackSrc={opts?.fallbackSrc} eager={opts?.priority} suspended={opts?.suspended} paused={motionPaused} />
+        return <LazyVideo src={normalizeDomain(url)} style={style} fallbackSrc={opts?.fallbackSrc} eager={opts?.priority} suspended={opts?.suspended} paused={motionPaused || homeOverlayOpen} />
       }
       return <SkillVideo src={normalizeDomain(url)} style={style} eager={opts?.priority} active={opts?.active ?? true} />
     }
@@ -2322,7 +2323,7 @@ function HomePageInner() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className="mkr-page creative-home" data-motion-paused={motionPaused || !!selectedDetail} data-detail-open={!!selectedDetail} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="mkr-page creative-home" data-motion-paused={motionPaused || homeOverlayOpen || !!selectedDetail} data-detail-open={!!selectedDetail} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <input
           ref={skillFileRef}
           type="file"
@@ -2340,9 +2341,9 @@ function HomePageInner() {
         <div style={{ display: showAgentLanding ? 'none' : undefined }}>
         <header className="creative-header" style={{ visibility: selectedDetail ? 'hidden' : undefined }}>
           <a href="#product" className="creative-brand" aria-label={t('homeDesign.home')}><MakaronLogo markSize={34} /></a>
-          <div className="creative-account"><TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
+          <div className="creative-account"><TopBar page="home" onOverlayChange={setHomeOverlayOpen} authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
         </header>
-        <HomeCreativeHero skills={homeSkills} paused={motionPaused || !!selectedDetail} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={showAgentLanding} onSelect={handleSkillCardClick}>
+        <HomeCreativeHero skills={homeSkills} paused={motionPaused || homeOverlayOpen || !!selectedDetail} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={showAgentLanding} onSelect={handleSkillCardClick}>
           {/* ── Inline Input Box ── */}
           <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',

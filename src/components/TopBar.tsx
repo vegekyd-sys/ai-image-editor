@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useState, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState, useRef, useTransition, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import dynamic from 'next/dynamic'
+import ChangelogDialog from '@/components/ChangelogDialog'
+import { useHydrated } from '@/hooks/useHydrated'
 import { useAuth } from '@/hooks/useAuth'
 import { LocaleToggle, useLocale } from '@/lib/i18n'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
@@ -14,11 +15,13 @@ import { buildLoginHref } from '@/lib/auth-return'
 import { requestNativePageStackPush } from '@/lib/native-page-stack'
 import { clearCreateDraftContinuation } from '@/lib/imageCache'
 
-const Changelog = dynamic(() => import('@/components/Changelog'), { ssr: false })
+const loadChangelog = () => import('@/components/Changelog')
+const Changelog = lazy(loadChangelog)
 
 interface TopBarProps {
   page: 'home' | 'projects'
   authReturnPath?: string | null
+  onOverlayChange?: (open: boolean) => void
 }
 
 interface CreditsPayload {
@@ -137,10 +140,12 @@ function AccountGlassLayers() {
   )
 }
 
-export default function TopBar({ authReturnPath }: TopBarProps) {
+export default function TopBar({ authReturnPath, onOverlayChange }: TopBarProps) {
   const { user, signOut } = useAuth()
   const { locale, t } = useLocale()
   const router = useRouter()
+  const hydrated = useHydrated()
+  const [loginPending, startLoginNavigation] = useTransition()
 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [hasMounted, setHasMounted] = useState(false)
@@ -157,10 +162,23 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
     return cached?.balance ?? null
   })
   const [showChangelog, setShowChangelog] = useState(false)
+  const [localeMenuOpen, setLocaleMenuOpen] = useState(false)
+
+  useEffect(() => {
+    onOverlayChange?.(showChangelog || userMenuOpen || localeMenuOpen)
+    return () => onOverlayChange?.(false)
+  }, [showChangelog, userMenuOpen, localeMenuOpen, onOverlayChange])
 
   useEffect(() => {
     setHasMounted(true)
   }, [])
+
+  // Warm only this small guest destination after hydration; touch has no hover lead time.
+  useEffect(() => {
+    if (!hydrated || user) return
+    const timer = window.setTimeout(() => router.prefetch(buildLoginHref(authReturnPath)), 800)
+    return () => window.clearTimeout(timer)
+  }, [hydrated, user, authReturnPath, router])
 
   const warmTopBarRoute = useCallback((path: string) => {
     const route = path.split('?')[0] || path
@@ -383,6 +401,8 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             onClick={() => setShowChangelog(true)}
+            onPointerEnter={() => { void loadChangelog().catch(() => undefined) }}
+            onFocus={() => { void loadChangelog().catch(() => undefined) }}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
@@ -596,7 +616,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                         <button onClick={() => navigateTopBar('/skills')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
                           <span>Skills</span>
                         </button>
-                        <LocaleToggle variant="menu" style={{ ...desktopMenuBtnStyle, minHeight: 38 }} />
+                        <LocaleToggle onOpenChange={setLocaleMenuOpen} variant="menu" style={{ ...desktopMenuBtnStyle, minHeight: 38 }} />
                         <div style={accountSeparatorStyle} />
                         <button
                           onClick={() => { setUserMenuOpen(false); signOut() }}
@@ -707,7 +727,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                               <button onClick={() => navigateTopBar('/skills')} style={mobileMenuBtnStyle}>
                                 <span>Skills</span>
                               </button>
-                              <LocaleToggle variant="menu" style={{ ...mobileMenuBtnStyle, minHeight: 50 }} />
+                              <LocaleToggle onOpenChange={setLocaleMenuOpen} variant="menu" style={{ ...mobileMenuBtnStyle, minHeight: 50 }} />
                             </nav>
 
                             <div style={{ marginTop: 'auto', paddingTop: 18 }}>
@@ -725,18 +745,23 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <LocaleToggle />
+              <LocaleToggle onOpenChange={setLocaleMenuOpen} />
               <a
                 href={buildLoginHref(authReturnPath)}
-                onClick={() => {
-                  if (!authReturnPath) return
-                  try {
-                    clearCreateDraftContinuation()
-                    localStorage.setItem('mkr_return_url', authReturnPath)
-                    sessionStorage.setItem('mkr_return_url', authReturnPath)
-                  } catch {
-                    // Native navigation remains usable even if storage is blocked.
+                aria-busy={loginPending}
+                onPointerEnter={() => router.prefetch(buildLoginHref(authReturnPath))}
+                onFocus={() => router.prefetch(buildLoginHref(authReturnPath))}
+                onClick={(event) => {
+                  if (authReturnPath) {
+                    try {
+                      clearCreateDraftContinuation()
+                      localStorage.setItem('mkr_return_url', authReturnPath)
+                      sessionStorage.setItem('mkr_return_url', authReturnPath)
+                    } catch { /* Native href remains usable if storage is blocked. */ }
                   }
+                  if (!hydrated || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                  event.preventDefault()
+                  startLoginNavigation(() => navigateTopBar(buildLoginHref(authReturnPath)))
                 }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
@@ -744,6 +769,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                   color: 'rgba(255,255,255,0.45)',
                   display: 'flex', alignItems: 'center', gap: 5,
                   textDecoration: 'none',
+                  opacity: loginPending ? 0.55 : 1,
                   transition: 'color 0.2s',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
@@ -760,7 +786,13 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
         </div>
       </div>
 
-      {showChangelog && <Changelog onClose={() => setShowChangelog(false)} locale={locale} />}
+      {showChangelog && createPortal(
+        <Suspense fallback={<ChangelogDialog onClose={() => setShowChangelog(false)} locale={locale}>
+          <div role="status" aria-busy="true" className="py-6 text-sm text-white/60">{t('changelog.loading')}</div>
+        </ChangelogDialog>}>
+          <Changelog onClose={() => setShowChangelog(false)} locale={locale} />
+        </Suspense>, document.body,
+      )}
     </>
   )
 }

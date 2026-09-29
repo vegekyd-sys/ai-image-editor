@@ -32,6 +32,7 @@ vi.mock('@/lib/i18n', () => ({
       'nav.projects': '项目',
       'nav.primary': '主导航',
       'nav.signIn': '登录',
+      'nav.updates': '更新',
     }[key] ?? key),
   }),
 }))
@@ -120,6 +121,7 @@ describe('first interaction navigation', () => {
   })
 
   it('keeps Sign in usable as a native link before hydration', () => {
+    mocks.hydrated = false
     render(<TopBar page="home" />)
 
     const signIn = screen.getByRole('link', { name: '登录' })
@@ -150,4 +152,34 @@ describe('first interaction navigation', () => {
     expect(sessionStorage.getItem('mkr_return_url')).toBe('/home/world-cup-mvp')
     expect(localStorage.getItem('mkr_return_url')).toBe('/home/world-cup-mvp')
   })
+  it('routes a hydrated Sign in tap immediately without reloading the document', () => {
+    render(<TopBar page="home" authReturnPath="/home/example" />)
+    let prevented = false
+    document.addEventListener('click', event => { prevented = event.defaultPrevented }, { once: true })
+    fireEvent.click(screen.getByRole('link', { name: '登录' }))
+    expect(prevented).toBe(true)
+    expect(mocks.push).toHaveBeenCalledExactlyOnceWith('/login?next=%2Fhome%2Fexample')
+    expect(sessionStorage.getItem('mkr_return_url')).toBe('/home/example')
+  })
+
+  it('preserves modifier clicks on Sign in', () => {
+    render(<TopBar page="home" />)
+    let prevented = true
+    document.addEventListener('click', event => { prevented = event.defaultPrevented; event.preventDefault() }, { once: true })
+    fireEvent.click(screen.getByRole('link', { name: '登录' }), { metaKey: true })
+    expect(prevented).toBe(false)
+    expect(mocks.push).not.toHaveBeenCalled()
+  })
+
+  it('opens a closeable dialog immediately while release notes load and pauses the home', () => {
+    const onOverlayChange = vi.fn()
+    render(<TopBar page="home" onOverlayChange={onOverlayChange} />)
+    fireEvent.click(screen.getByRole('button', { name: '更新' }))
+    expect(screen.getByRole('dialog', { name: '更新' })).toBeTruthy()
+    expect(onOverlayChange).toHaveBeenLastCalledWith(true)
+    fireEvent.click(screen.getByRole('button', { name: '关闭更新' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(onOverlayChange).toHaveBeenLastCalledWith(false)
+  })
+
 })

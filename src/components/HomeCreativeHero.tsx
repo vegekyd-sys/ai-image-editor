@@ -41,13 +41,36 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
   const { t, locale } = useLocale()
   const heroRef = useRef<HTMLElement>(null)
   const [mobileComposition, setMobileComposition] = useState(false)
+  const [viewportReady, setViewportReady] = useState(false)
+  const [inView, setInView] = useState(false)
+  const [pageVisible, setPageVisible] = useState(true)
+  const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    const hero = heroRef.current
+    if (!hero) return
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.01 })
+    observer.observe(hero)
+    const visibility = () => setPageVisible(!document.hidden)
+    const focus = () => setEditing(Boolean(hero.querySelector('input:focus, textarea:focus, [contenteditable="true"]:focus')))
+    visibility()
+    document.addEventListener('visibilitychange', visibility)
+    document.addEventListener('focusin', focus)
+    document.addEventListener('focusout', focus)
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('visibilitychange', visibility)
+      document.removeEventListener('focusin', focus)
+      document.removeEventListener('focusout', focus)
+    }
+  }, [])
   useEffect(() => {
     const query = window.matchMedia('(max-width: 767px)')
-    const update = () => setMobileComposition(query.matches)
+    const update = () => { setMobileComposition(query.matches); setViewportReady(true) }
     update()
     query.addEventListener('change', update)
     return () => query.removeEventListener('change', update)
   }, [])
+  const still = paused || suspended || !inView || !pageVisible || editing
   const previewFor = (skill: HomeSkill) => {
     const preview = heroPreviews[skill.id as keyof typeof heroPreviews]
     // Catalog changes invalidate the baked preview; details always retain the original.
@@ -61,13 +84,13 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
 
 
   return (
-    <section className="creative-hero creative-hero-orbital" data-locale={locale} id="product" ref={heroRef} aria-labelledby="creative-hero-title">
+    <section className="creative-hero creative-hero-orbital" data-locale={locale} data-still={still} id="product" ref={heroRef} aria-labelledby="creative-hero-title">
       <div className="creative-orbit">
         {featured.map((skill, index) => (
           <button type="button" key={skill.id} className={`creative-art creative-art-${index}`} style={activeSkillId === skill.id ? { opacity: 0 } : undefined} inert={mobileComposition && index === 3 ? true : undefined} onClick={event => onSelect(skill, event)} aria-label={t('homeDesign.openTemplate', pickLocalizedValue(skill.labels, locale))}>
             <div className="creative-art-frame">
               {/\.(mp4|webm)(?:[?#]|$)/i.test(skill.image) ? (
-                <LazyVideo src={previewFor(skill)} eager={index === 0} suspended={suspended || (mobileComposition && (index === 1 || index === 2))} paused={paused}
+                <LazyVideo src={previewFor(skill)} eager={index === 0} suspended={suspended || !viewportReady || (mobileComposition && index !== 4)} paused={still}
                   posterSrc={posterFor(skill)}
                   fallbackSrc={skill.before_images?.[0] ? getThumbnailUrl(skill.before_images[0], 600, 80) : undefined}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />

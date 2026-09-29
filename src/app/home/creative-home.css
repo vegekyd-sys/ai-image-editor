@@ -46,8 +46,11 @@
 .creative-orbit { position:absolute; inset:0; z-index:1; transform:translateY(calc(var(--home-scroll)*-65px)); }
 .creative-art { position:absolute; border:0; padding:0; background:transparent; color:#fff; animation:creative-drift 10s ease-in-out infinite alternate; transform:rotate(var(--tilt)); }
 .creative-art-frame { position:relative; width:100%; height:100%; overflow:hidden; border-radius:5px; border:1px solid #ffffff40; background:#141414; transition:transform .35s,border-color .35s; }
-.creative-art:hover { z-index:5; }
-.creative-art:hover .creative-art-frame { transform:scale(1.06) rotate(calc(var(--tilt)*-.5)); border-color:var(--home-accent); }
+@media(hover:hover) and (pointer:fine) {
+  .creative-art:hover { z-index:5; }
+  .creative-art:hover .creative-art-frame { transform:scale(1.06) rotate(calc(var(--tilt)*-.5)); border-color:var(--home-accent); }
+}
+
 .creative-art img { width:100%; height:100%; object-fit:cover; }
 .creative-art-caption { position:absolute; bottom:0; left:0; right:0; padding:35px 14px 14px; display:flex; justify-content:space-between; align-items:center; font-size:var(--home-caption); text-align:left; background:linear-gradient(transparent,#0009); }
 .creative-description-mobile { display:none; }
@@ -454,3 +457,12 @@
 
 .creative-home.mkr-page { font-family:var(--home-font); overflow-anchor:none; }
 .creative-account .makaron-topbar > div:first-child button { font-size:var(--home-control) !important; letter-spacing:0 !important; text-transform:none !important; white-space:nowrap; }
+
+/* Keep touch controls independent of animated video backdrop recomposition. */
+.creative-home :is(button,a,[role='button']) { touch-action:manipulation; }
+.creative-hero[data-still='true'] .creative-art { animation-play-state:paused; }
+@media(pointer:coarse) {
+  .creative-hero-orbital .creative-art { animation:none; transform:rotate(var(--tilt)); }
+  .creative-header::before { backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
+  .creative-home .creative-hero-composer .mkr-input-box-liquid { backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
+}
