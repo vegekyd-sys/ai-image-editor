@@ -52,7 +52,7 @@ it('stops desktop artwork offscreen and in background tabs, then resumes visible
   mobile = false
   const view = render(<HomeCreativeHero {...props}>Content</HomeCreativeHero>)
   visible(true)
-  expect(view.container.querySelectorAll('video[data-playing="true"]').length).toBeGreaterThan(1)
+  expect(view.container.querySelectorAll('video[data-playing="true"]')).toHaveLength(2)
   visible(false)
   expect(view.container.querySelectorAll('video[data-playing="true"]')).toHaveLength(0)
   visible(true)
@@ -61,5 +61,5 @@ it('stops desktop artwork offscreen and in background tabs, then resumes visible
   expect(view.container.querySelectorAll('video[data-playing="true"]')).toHaveLength(0)
   hidden.mockReturnValue(false)
   fireEvent(document, new Event('visibilitychange'))
-  expect(view.container.querySelectorAll('video[data-playing="true"]').length).toBeGreaterThan(1)
+  expect(view.container.querySelectorAll('video[data-playing="true"]')).toHaveLength(2)
 })

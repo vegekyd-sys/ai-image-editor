@@ -165,9 +165,9 @@ export default function TopBar({ authReturnPath, onOverlayChange }: TopBarProps)
   const [localeMenuOpen, setLocaleMenuOpen] = useState(false)
 
   useEffect(() => {
-    onOverlayChange?.(showChangelog || userMenuOpen || localeMenuOpen)
+    onOverlayChange?.(showChangelog || userMenuOpen || localeMenuOpen || loginPending)
     return () => onOverlayChange?.(false)
-  }, [showChangelog, userMenuOpen, localeMenuOpen, onOverlayChange])
+  }, [showChangelog, userMenuOpen, localeMenuOpen, loginPending, onOverlayChange])
 
   useEffect(() => {
     setHasMounted(true)
