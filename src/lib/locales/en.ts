@@ -655,7 +655,7 @@ const en = {
 
   // Home creation flow
   'home.create': 'Create',
-  'home.createPlaceholder': 'Describe what you want to create...',
+  'home.createPlaceholder': 'Describe what you want to create, or upload photos',
   'home.projectPlaceholder': "Got a pic? Let's glow it up.\nNo pic? I'll cook one up.",
   'home.createFreePreview': 'Create free preview',
   'home.uploadPhoto': 'Upload photo',
@@ -680,13 +680,13 @@ const en = {
   'home.welcomeGift': "Here's a gift to get you started",
   'home.value': 'value',
   'home.startCreating': 'Start Creating',
-  'home.placeholder.1': 'Turn these photos into a vlog',
-  'home.placeholder.2': 'Make a set of social media content from this product shot',
-  'home.placeholder.3': 'Make me look better',
-  'home.placeholder.4': "Create an emoji pack from my cat's photo",
-  'home.placeholder.5': 'Turn this photo into an e-commerce poster',
-  'home.placeholder.6': 'Storyboard these photos and add a soundtrack',
-  'home.placeholder.7': 'One photo, show me 6 completely different directions',
+  'home.placeholder.1': 'Upload a photo and tell me what to change',
+  'home.placeholder.2': 'Try: Change the background to a sunset beach',
+  'home.placeholder.3': 'Add photos and describe the video you want',
+  'home.placeholder.4': 'Try: Design a minimal poster for a coffee shop',
+  'home.placeholder.5': 'Add a product photo, its key features and a style',
+  'home.placeholder.6': 'Try: Compose a relaxing piano soundtrack',
+  'home.placeholder.7': 'Pick a template below and add your own photos',
   'editor.enteringChat': 'Entering Chat\nContinue Editing',
 
   // Skills management

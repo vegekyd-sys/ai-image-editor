@@ -467,7 +467,7 @@ const zhHant = {
 
   // Home
   'home.create': '建立',
-  'home.createPlaceholder': '描述你想要的創意...',
+  'home.createPlaceholder': '告訴我你想創作什麼，或先上傳照片',
   'home.projectPlaceholder': '描述你想要的創意...',
   'home.createFreePreview': '產生免費預覽',
   'home.uploadPhoto': '上傳照片',
@@ -492,13 +492,13 @@ const zhHant = {
   'home.welcomeGift': '我們送你一份創作禮物',
   'home.value': '價值',
   'home.startCreating': '開始創作',
-  'home.placeholder.1': '把這些圖片做成 Vlog',
-  'home.placeholder.2': '用這張產品照幫我做一套社群素材',
-  'home.placeholder.3': '把我修得更好看',
-  'home.placeholder.4': '用我的貓咪照片做一組貼圖',
-  'home.placeholder.5': '把這張圖片做成電商海報',
-  'home.placeholder.6': '把這些照片做成故事板並加入配樂',
-  'home.placeholder.7': '用一張照片探索 6 個完全不同的方向',
+  'home.placeholder.1': '上傳一張照片，告訴我你想怎麼改',
+  'home.placeholder.2': '試著輸入：把背景換成海邊日落',
+  'home.placeholder.3': '上傳幾張照片，說說你想拍的影片',
+  'home.placeholder.4': '試著輸入：做一張極簡咖啡店海報',
+  'home.placeholder.5': '上傳產品圖，告訴我賣點和風格',
+  'home.placeholder.6': '試著輸入：寫一段輕鬆的鋼琴配樂',
+  'home.placeholder.7': '選一個下方範本，換上你自己的照片',
 
   // Landing
   'landing.heroDesc1': 'Makaron 預判你的下一步創意。',

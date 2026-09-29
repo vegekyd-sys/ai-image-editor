@@ -187,16 +187,16 @@
   .creative-hero-orbital .creative-art:hover .creative-art-caption { opacity:1; }
   .creative-hero-orbital .creative-art:hover .creative-art-frame::after { opacity:.25; }
 }
-.creative-hero-orbital .creative-art:nth-child(2) { animation-delay:-3s; }
-.creative-hero-orbital .creative-art:nth-child(3) { animation-delay:-7s; }
-.creative-hero-orbital .creative-art:nth-child(4) { animation-delay:-5s; }
-.creative-hero-orbital .creative-art:nth-child(5) { animation-delay:-9s; }
+.creative-hero-orbital .creative-art:nth-child(2) { animation-delay:-3s; animation-duration:8.5s; }
+.creative-hero-orbital .creative-art:nth-child(3) { animation-delay:-7s; animation-duration:9s; }
+.creative-hero-orbital .creative-art:nth-child(4) { animation-delay:-5s; animation-duration:8s; }
+.creative-hero-orbital .creative-art:nth-child(5) { animation-delay:-9s; animation-duration:9.5s; }
 .creative-hero-orbital .creative-art-0 { --tilt:-13deg; left:-5%; top:21%; width:25%; height:69%; z-index:1; }
 .creative-hero-orbital .creative-art-1 { --tilt:-9deg; left:13%; top:-2%; width:16.5%; height:32%; z-index:2; }
 .creative-hero-orbital .creative-art-2 { --tilt:8deg; right:4%; top:-1%; width:22%; height:27%; z-index:1; }
 .creative-hero-orbital .creative-art-3 { --tilt:-6deg; left:36%; right:auto; bottom:-2%; width:31%; height:auto; aspect-ratio:7/4; z-index:2; }
 .creative-hero-orbital .creative-art-4 { --tilt:9deg; right:-4%; top:19%; width:23%; height:63%; aspect-ratio:auto; z-index:2; }
-@keyframes creative-orbital-breathe { from { transform:translate(-2px,-6px) rotate(calc(var(--tilt) - .9deg)); } to { transform:translate(2px,6px) rotate(calc(var(--tilt) + .9deg)); } }
+@keyframes creative-orbital-breathe { from { transform:translate(-3px,-10px) rotate(calc(var(--tilt) - .9deg)); } to { transform:translate(3px,10px) rotate(calc(var(--tilt) + .9deg)); } }
 @media(max-width:1100px) and (min-width:768px) {
   .creative-hero-orbital .creative-art-1 { left:7%; width:19%; }
   .creative-hero-orbital .creative-art-2 { right:5%; width:23%; }
@@ -228,8 +228,8 @@
   .creative-hero-orbital .creative-orbit { inset:0; transform:none; }
   .creative-hero-orbital .creative-orbit::before { display:none; }
   .creative-hero-orbital .creative-orbit::after { content:""; position:absolute; z-index:3; inset:0 0 48%; background:linear-gradient(90deg,#000 0%,#000e 22%,#0009 48%,transparent 80%); pointer-events:none; }
-  .creative-hero-orbital .creative-art { animation-duration:10s; }
-  .creative-hero-orbital .creative-art-frame > :first-child { opacity:.9; }
+  /* Dim media through opacity, without adding another filter/compositing effect. */
+  .creative-hero-orbital .creative-art-frame > :first-child { opacity:.46; }
   .creative-hero-orbital .creative-art-1,
   .creative-hero-orbital .creative-art-2 { display:none; }
   .creative-hero-orbital .creative-art-0,
@@ -370,7 +370,8 @@
 /* Shared Liquid Glass material, scoped to this homepage's controls. */
 .creative-home .creative-more.mkr-liquid-pill { position:relative; overflow:hidden; border:1px solid var(--home-glass-edge); box-shadow:var(--home-glass-shadow); color:#e3e3e9; }
 .creative-home .creative-hero-composer textarea { font-family:var(--home-font); font-size:16px !important; line-height:1.65; letter-spacing:0; }
-.creative-home .creative-hero-composer textarea::placeholder { color:#c1c1cc; opacity:1; }
+.creative-home .creative-hero-composer textarea::placeholder,
+.mkr-guided-placeholder::placeholder { color:#9696a3; opacity:1; }
 .creative-home .creative-hero-composer .mkr-liquid-input { backdrop-filter:blur(16px) saturate(1.42); -webkit-backdrop-filter:blur(16px) saturate(1.42); }
 .creative-home .creative-art-caption { font-size:var(--home-caption); font-weight:500; }
 .creative-home .creative-market-grid .mkr-skill-card { box-shadow:inset 0 1px 0 #ffffff26,0 12px 28px #0004; border:1px solid #ffffff24; }
@@ -449,7 +450,6 @@
 .creative-home :is(button,a,[role='button']) { touch-action:manipulation; }
 .creative-hero[data-still='true'] .creative-art { animation-play-state:paused; }
 @media(pointer:coarse) {
-  .creative-hero-orbital .creative-art { animation:none; transform:rotate(var(--tilt)); }
   .creative-header::before { backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
   .creative-home .creative-hero-composer .mkr-input-box-liquid { backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); }
 }

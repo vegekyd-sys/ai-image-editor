@@ -828,13 +828,11 @@ function HomePageInner() {
     t('home.placeholder.6'),
     t('home.placeholder.7'),
   ]
-  const [placeholderIdx, setPlaceholderIdx] = useState(0)
   const [showWelcome, setShowWelcome] = useState(false)
   const [welcomeCredits, setWelcomeCredits] = useState(0)
   const [showIOSTrial, setShowIOSTrial] = useState(false)
   const [showPreAuthIOSTrial, setShowPreAuthIOSTrial] = useState(false)
   const [trialContinuationVersion, setTrialContinuationVersion] = useState(0)
-  useEffect(() => { setPlaceholderIdx(Math.floor(Math.random() * placeholders.length)) }, [])
 
   // Restore state from login redirect + detect welcome
   const returnTextRef = useRef<string | null>(null)
@@ -2358,7 +2356,9 @@ function HomePageInner() {
               boxRef={inlineBoxRef}
               textareaRef={inlineTextareaRef}
               swipeRef={inlineCardSwipeRef}
-              placeholder={placeholders[placeholderIdx]}
+              placeholder={t('home.createPlaceholder')}
+              placeholderExamples={placeholders}
+              placeholderPaused={motionPaused || homeOverlayOpen || !!selectedDetail || showAgentLanding}
               createLabel={skillActionCreateLabel}
               actionMode={isGuestSkillAction}
               actionEyebrow={isPreAuthIOSSkillAction ? t('home.firstFree') : isGuestSkillAction ? t('home.previewFree') : undefined}
@@ -2607,7 +2607,9 @@ function HomePageInner() {
               boxRef={inputBoxRef}
               textareaRef={textareaRef}
               swipeRef={cardSwipeRef}
-              placeholder={placeholders[placeholderIdx]}
+              placeholder={t('home.createPlaceholder')}
+              placeholderExamples={placeholders}
+              placeholderPaused={motionPaused || homeOverlayOpen || !!selectedDetail || showAgentLanding}
               createLabel={skillActionCreateLabel}
               actionMode={isGuestSkillAction}
               actionEyebrow={isPreAuthIOSSkillAction ? t('home.firstFree') : isGuestSkillAction ? t('home.previewFree') : undefined}

@@ -468,7 +468,7 @@ const ja = {
 
   // Home
   'home.create': '作成',
-  'home.createPlaceholder': '作りたいものを説明してください...',
+  'home.createPlaceholder': '作りたいものを入力するか、写真をアップロード',
   'home.projectPlaceholder': '写真がある？もっと魅力的にしよう。\n写真がなくても、こちらで作れます。',
   'home.createFreePreview': '無料プレビューを生成',
   'home.uploadPhoto': '写真をアップロード',
@@ -493,13 +493,13 @@ const ja = {
   'home.welcomeGift': '創作を始めるためのギフトをお贈りします',
   'home.value': '相当',
   'home.startCreating': '創作を始める',
-  'home.placeholder.1': 'この写真でVlogを作って',
-  'home.placeholder.2': 'この商品写真からSNS投稿素材を作って',
-  'home.placeholder.3': 'もっときれいに見せて',
-  'home.placeholder.4': '猫の写真からスタンプセットを作って',
-  'home.placeholder.5': 'この写真をECポスターにして',
-  'home.placeholder.6': 'この写真を絵コンテにして音楽を付けて',
-  'home.placeholder.7': '1枚の写真からまったく違う6つの方向を見せて',
+  'home.placeholder.1': '写真をアップロードして、変えたいところを教えてください',
+  'home.placeholder.2': '入力例：背景を夕暮れの海辺に変えて',
+  'home.placeholder.3': '写真を追加して、作りたい動画を教えてください',
+  'home.placeholder.4': '入力例：カフェのシンプルなポスターを作って',
+  'home.placeholder.5': '商品写真を追加して、特徴と好みのスタイルを教えてください',
+  'home.placeholder.6': '入力例：穏やかなピアノのBGMを作って',
+  'home.placeholder.7': '下のテンプレートを選んで、自分の写真を追加',
 
   // Landing
   'landing.tagline': 'one man creative studio',

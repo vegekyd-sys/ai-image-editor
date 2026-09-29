@@ -655,7 +655,7 @@ const zh = {
 
   // Home creation flow
   'home.create': '创建',
-  'home.createPlaceholder': '描述你想要的创意...',
+  'home.createPlaceholder': '告诉我你想创作什么，或先上传照片',
   'home.projectPlaceholder': '描述你想要的创意...',
   'home.createFreePreview': '生成免费预览',
   'home.uploadPhoto': '上传照片',
@@ -680,13 +680,13 @@ const zh = {
   'home.welcomeGift': '我们送了你一份创作礼物',
   'home.value': '价值',
   'home.startCreating': '开始创作',
-  'home.placeholder.1': '把这些图片做个 vlog',
-  'home.placeholder.2': '用这张产品图帮我做一套小红书素材',
-  'home.placeholder.3': '把我P的美一点',
-  'home.placeholder.4': '给我的猫拍一组表情包',
-  'home.placeholder.5': '把这张图片变成个电商海报',
-  'home.placeholder.6': '把这几张照片做成一个故事板，加上配乐',
-  'home.placeholder.7': '一张照片，帮我探索 6 个完全不同的方向',
+  'home.placeholder.1': '上传一张照片，告诉我你想怎么改',
+  'home.placeholder.2': '试着输入：把背景换成海边日落',
+  'home.placeholder.3': '上传几张照片，说说你想拍的视频',
+  'home.placeholder.4': '试着输入：做一张极简咖啡店海报',
+  'home.placeholder.5': '上传产品图，告诉我卖点和风格',
+  'home.placeholder.6': '试着输入：写一段轻松的钢琴配乐',
+  'home.placeholder.7': '选一个下方模板，换上你自己的照片',
   'editor.enteringChat': '进入聊天\n继续编辑',
 
   // Skills management
