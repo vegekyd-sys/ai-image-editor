@@ -255,6 +255,7 @@ const ja = {
   'changelog.creativeHome.title': "創作のための新しいホーム",
   'changelog.creativeHome.item1': "動く作品からインスピレーションを。テンプレートを開いて仕上がりを確認し、自分の写真で創作を始められます。",
   'changelog.creativeHome.item2': "画像、動画、デザイン、音楽をひとつのページで。「もっと見る」の後は、下にスクロールするだけで新しいテンプレートに出会えます。",
+  'login.loading': 'ログイン画面を開いています…',
   'changelog.loading': '更新内容を読み込み中…',
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
