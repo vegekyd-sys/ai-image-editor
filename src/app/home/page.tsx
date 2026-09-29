@@ -25,7 +25,7 @@ import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 import HomeCreativeStudio from '@/components/HomeCreativeStudio'
 import { readHomeHeroGeometry, type HomeHeroGeometry } from '@/lib/home-hero-geometry'
-import HomeCreativeHero, { HomeCreativeRibbon, HomeCreativeFooter, useHomeMotion } from '@/components/HomeCreativeHero'
+import HomeCreativeHero, { HomeMotionToggle, HomeCreativeFooter, useHomeMotion } from '@/components/HomeCreativeHero'
 import './creative-home.css'
 import TopBar from '@/components/TopBar'
 import ModeToggle from '@/components/ModeToggle'
@@ -2343,7 +2343,7 @@ function HomePageInner() {
           <a href="#product" className="creative-brand" aria-label={t('homeDesign.home')}><MakaronLogo markSize={34} /></a>
           <div className="creative-account"><TopBar page="home" onOverlayChange={setHomeOverlayOpen} authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
         </header>
-        <HomeCreativeHero skills={homeSkills} paused={motionPaused || homeOverlayOpen || !!selectedDetail} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={showAgentLanding} onSelect={handleSkillCardClick}>
+        <HomeCreativeHero skills={homeSkills} paused={motionPaused || homeOverlayOpen || !!selectedDetail} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={showAgentLanding} onSelect={handleSkillCardClick} controls={<HomeMotionToggle paused={motionPaused} onToggle={() => setMotionPaused(value => !value)} />}>
           {/* ── Inline Input Box ── */}
           <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',
@@ -2402,7 +2402,6 @@ function HomePageInner() {
             />
           </div>
         </HomeCreativeHero>
-        <HomeCreativeRibbon paused={motionPaused} onToggle={() => setMotionPaused(value => !value)} />
 
         {/* ── Skill Template Grid ── */}
         <div id="templates" className="creative-market" ref={skillSectionRef} data-testid="skill-market" style={{

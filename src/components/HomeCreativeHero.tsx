@@ -30,9 +30,10 @@ export function useHomeMotion() {
   return { paused, setPaused }
 }
 
-export default function HomeCreativeHero({ skills, paused, suspended, activeSkillId, onSelect, children }: {
+export default function HomeCreativeHero({ skills, paused, suspended, activeSkillId, onSelect, children, controls }: {
   activeSkillId?: string
   children: ReactNode
+  controls?: ReactNode
   skills: HomeSkill[]
   paused: boolean
   suspended: boolean
@@ -87,6 +88,7 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
 
   return (
     <section className="creative-hero creative-hero-orbital" data-locale={locale} data-still={still} id="product" ref={heroRef} aria-labelledby="creative-hero-title">
+      {controls}
       <div className="creative-orbit">
         {featured.map((skill, index) => (
           <button type="button" key={skill.id} className={`creative-art creative-art-${index}`} style={activeSkillId === skill.id ? { opacity: 0 } : undefined} inert={mobileComposition && index === 3 ? true : undefined} onClick={event => onSelect(skill, event)} aria-label={t('homeDesign.openTemplate', pickLocalizedValue(skill.labels, locale))}>
@@ -116,13 +118,12 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
   )
 }
 
-export function HomeCreativeRibbon({ paused, onToggle }: { paused: boolean; onToggle: () => void }) {
+export function HomeMotionToggle({ paused, onToggle }: { paused: boolean; onToggle: () => void }) {
   const { t } = useLocale()
-  return <div className="creative-ribbon creative-ribbon-compact">
-    <button type="button" className="creative-motion-toggle mkr-liquid-pill" onClick={onToggle} aria-pressed={paused}>
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">{paused ? <path d="m5 3 8 5-8 5Z" /> : <path d="M5 2v12M11 2v12" />}</svg>{t(paused ? 'homeDesign.resume' : 'homeDesign.pause')}
-    </button>
-  </div>
+  const label = t(paused ? 'homeDesign.resume' : 'homeDesign.pause')
+  return <button type="button" className="creative-motion-toggle" onClick={onToggle} aria-label={label} title={label}>
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{paused ? <path d="m6 3 7 5-7 5Z" /> : <path d="M5 3v10M11 3v10" />}</svg>
+  </button>
 }
 
 export function HomeCreativeFooter() {
