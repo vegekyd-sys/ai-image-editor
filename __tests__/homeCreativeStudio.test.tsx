@@ -48,17 +48,21 @@ describe('homepage creative studio', () => {
     expect(onUseIdea).toHaveBeenCalledTimes(2)
   })
 
-  it('supports keyboard mode navigation and an accessible comparison control', () => {
+  it('starts with the complete result and supports original/result selection and keyboard mode navigation', () => {
     const view = render(<HomeCreativeStudio skills={skills} paused={false} suspended={false} onUseIdea={vi.fn()} />)
-    const slider = view.getByRole('slider')
-    fireEvent.change(slider, { target: { value: '72' } })
-    expect(slider.getAttribute('aria-valuetext')).toBe('72% 原片，28% 作品')
+    expect(view.getByRole('button', { name: '生成效果' }).getAttribute('aria-pressed')).toBe('true')
+    expect(view.queryByRole('slider')).toBeNull()
+    expect(view.getByRole('img').getAttribute('src')).toContain('cloud-house-after')
+    fireEvent.click(view.getByRole('button', { name: '原图' }))
+    expect(view.getByRole('img').getAttribute('src')).toContain('portrait-before')
     fireEvent.keyDown(view.getByRole('tab', { name: '图片' }), { key: 'ArrowLeft' })
     const music = view.getByRole('tab', { name: '音乐' })
     expect(music.getAttribute('aria-selected')).toBe('true')
     expect(document.activeElement).toBe(music)
     fireEvent.keyDown(music, { key: 'Home' })
-    expect(view.getByRole('slider').getAttribute('aria-valuenow') || (view.getByRole('slider') as HTMLInputElement).value).toBe('72')
+    expect(view.getByRole('button', { name: '原图' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(view.getByRole('button', { name: '生成效果' }))
+    expect(view.getByRole('img').getAttribute('src')).toContain('cloud-house-after')
   })
 
   it('suspends hidden video and removes its player when another medium is selected', () => {
