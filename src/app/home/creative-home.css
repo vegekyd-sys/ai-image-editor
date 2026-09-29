@@ -20,9 +20,6 @@
 
 .creative-header { display:flex; align-items:center; justify-content:space-between; gap:32px; padding:16px var(--home-gutter); position:relative; z-index:140; }
 .creative-brand { text-decoration:none; flex-shrink:0; font-size:24px; }
-.creative-header-nav { display:flex; align-items:center; gap:40px; font-size:var(--home-body); }
-.creative-header-nav a { text-decoration:none; color:#c4c4c8; }
-.creative-header-nav a:hover { color:var(--home-accent); }
 .creative-account .makaron-topbar { padding:0 !important; gap:24px; }
 .creative-account .makaron-topbar a { font-size:13px !important; }
 .creative-hero { position:relative; min-height:650px; height:calc(100svh - 80px); max-height:980px; isolation:isolate; --home-scroll:0; }
@@ -101,7 +98,6 @@
   .creative-header { padding:16px 20px; gap:12px; }
 
   .creative-brand { font-size:24px; }
-  .creative-header-nav { display:none; }
   .creative-brand img { width:28px !important; height:28px !important; }
   .creative-brand > div { gap:8px !important; }
   .creative-account .makaron-topbar { gap:0; }
@@ -377,8 +373,6 @@
 
 /* Shared Liquid Glass material, scoped to this homepage's controls. */
 .creative-home :is(.creative-more,.creative-motion-toggle).mkr-liquid-pill { position:relative; overflow:hidden; border:1px solid var(--home-glass-edge); box-shadow:var(--home-glass-shadow); color:#e3e3e9; }
-.creative-header-nav { padding:0 20px; border-radius:999px; min-height:44px; border:1px solid #ffffff1a; }
-.creative-header-nav a { padding:10px 0; }
 .creative-home .creative-hero-composer textarea { font-family:var(--home-font); font-size:16px !important; line-height:1.65; letter-spacing:0; }
 .creative-home .creative-hero-composer textarea::placeholder { color:#c1c1cc; opacity:1; }
 .creative-home .creative-hero-composer .mkr-liquid-input { backdrop-filter:blur(16px) saturate(1.42); -webkit-backdrop-filter:blur(16px) saturate(1.42); }

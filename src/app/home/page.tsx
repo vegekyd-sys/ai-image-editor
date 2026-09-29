@@ -2336,11 +2336,6 @@ function HomePageInner() {
         <div style={{ display: showAgentLanding ? 'none' : undefined }}>
         <header className="creative-header" style={{ visibility: selectedDetail ? 'hidden' : undefined }}>
           <a href="#product" className="creative-brand" aria-label={t('homeDesign.home')}><MakaronLogo markSize={34} /></a>
-          <nav className="creative-header-nav mkr-liquid-pill" aria-label={t('homeDesign.navigation')}>
-            <a href="#studio">{t('homeDesign.product')}</a>
-            <a href="#templates">{t('homeDesign.templates')}</a>
-            <a href="#create">{t('homeDesign.create')}</a>
-          </nav>
           <div className="creative-account"><TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
         </header>
         <HomeCreativeHero skills={homeSkills} paused={motionPaused} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick}>
