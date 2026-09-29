@@ -23,10 +23,7 @@ import {
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
-import HomeCreativeStudio from '@/components/HomeCreativeStudio'
-import { readHomeHeroGeometry, type HomeHeroGeometry } from '@/lib/home-hero-geometry'
-import HomeCreativeHero, { HomeCreativeRibbon, HomeCreativeFooter, useHomeMotion } from '@/components/HomeCreativeHero'
-import './creative-home.css'
+import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
 import ModeToggle from '@/components/ModeToggle'
 import AgentContent from '@/components/AgentContent'
@@ -80,8 +77,8 @@ const IOS_SKILL_BACK_COMMIT_PX = 88
 const IOS_SKILL_BACK_CLOSE_MS = 180
 const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
 const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'
-const INITIAL_SKILL_CARD_COUNT = 8
-const SKILL_CARD_BATCH_SIZE = 8
+const INITIAL_SKILL_CARD_COUNT = 12
+const SKILL_CARD_BATCH_SIZE = 12
 
 function getHomeScrollContainer(node: HTMLElement | null): HTMLElement | null {
   if (!node) return null
@@ -102,7 +99,6 @@ export default function HomePage() {
 }
 
 function HomePageInner() {
-  const { paused: motionPaused, setPaused: setMotionPaused } = useHomeMotion()
   const { user, loading: authLoading } = useAuth()
   const hydrated = useHydrated()
   const renderUser = hydrated ? user : null
@@ -141,7 +137,6 @@ function HomePageInner() {
   const [activeCategory, setActiveCategory] = useState('all')
   const [categoryHasChanged, setCategoryHasChanged] = useState(false)
   const [visibleSkillCount, setVisibleSkillCount] = useState(INITIAL_SKILL_CARD_COUNT)
-  const [skillBrowseExpanded, setSkillBrowseExpanded] = useState(false)
   const skillLoadMoreRef = useRef<HTMLDivElement>(null)
   const skillSectionRef = useRef<HTMLDivElement>(null)
   const skillGridRef = useRef<HTMLDivElement>(null)
@@ -182,11 +177,8 @@ function HomePageInner() {
   const skillFileRef = useRef<HTMLInputElement>(null)
   const skillMenuRef = useRef<HTMLDivElement>(null)
   const [selectedDetail, setSelectedDetail] = useState<HomeSkill | null>(null)
-  const [heroRect, setHeroRect] = useState<HomeHeroGeometry | null>(null)
-  const heroSourceRef = useRef<HTMLElement | null>(null)
+  const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
-  const [heroArrived, setHeroArrived] = useState(false)
-  const [heroPoster, setHeroPoster] = useState<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
     setCreateAgentModel(loadCreateAgentModelPreference())
@@ -720,22 +712,13 @@ function HomePageInner() {
     if (options?.skipHeroCollapse) {
       setSelectedDetail(null)
       setHeroRect(null)
-      heroSourceRef.current = null
       resetSkillBackPan()
     } else {
-      // Hover, scrolling, and viewport changes can alter the original card while
-      // the detail is open. Land on its current frame, including its tilt.
-      if (heroSourceRef.current?.isConnected) {
-        setHeroRect(readHomeHeroGeometry(heroSourceRef.current))
-      }
-      setHeroPoster(null)
-      setHeroArrived(false)
       setHeroExpanded(false)
       detailCloseTimerRef.current = window.setTimeout(() => {
         detailCloseTimerRef.current = null
         setSelectedDetail(null)
         setHeroRect(null)
-        heroSourceRef.current = null
         resetSkillBackPan()
       }, 350)
     }
@@ -944,21 +927,22 @@ function HomePageInner() {
     }
   }, [])
 
-  // One deliberate expansion, then the same incremental scroll loading as the original home.
   useEffect(() => {
     const sentinel = skillLoadMoreRef.current
-    if (!skillBrowseExpanded || !sentinel || visibleSkillCount >= filteredHomeSkills.length) return
+    if (!sentinel || visibleSkillCount >= filteredHomeSkills.length) return
     if (typeof IntersectionObserver === 'undefined') {
       startTransition(() => setVisibleSkillCount(filteredHomeSkills.length))
       return
     }
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return
-      startTransition(() => setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length)))
+      startTransition(() => {
+        setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length))
+      })
     }, { rootMargin: '200px 0px' })
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [skillBrowseExpanded, filteredHomeSkills.length, visibleSkillCount])
+  }, [filteredHomeSkills.length, visibleSkillCount])
 
   // Preload user's installed skills
   const skillsFetchedRef = useRef(false)
@@ -2041,7 +2025,7 @@ function HomePageInner() {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
       if (variant === 'thumb') {
-        return <LazyVideo src={normalizeDomain(url)} style={style} fallbackSrc={opts?.fallbackSrc} eager={opts?.priority} suspended={opts?.suspended} paused={motionPaused} />
+        return <LazyVideo src={normalizeDomain(url)} style={style} fallbackSrc={opts?.fallbackSrc} eager={opts?.priority} suspended={opts?.suspended} />
       }
       return <SkillVideo src={normalizeDomain(url)} style={style} eager={opts?.priority} active={opts?.active ?? true} />
     }
@@ -2073,39 +2057,15 @@ function HomePageInner() {
     clearDetailCloseTimer()
     blurHomeComposers()
     setViewMode('human')
-    const card = e.currentTarget as HTMLElement
-    const source = card.querySelector<HTMLElement>('.creative-art-frame') || card
-    heroSourceRef.current = source
-    setHeroRect(readHomeHeroGeometry(source))
-    const video = source.querySelector('video')
-    let poster: HTMLCanvasElement | null = null
-    if (video && video.readyState >= 2) {
-      try {
-        const canvas = document.createElement('canvas')
-        const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight))
-        canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
-        canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
-        const context = canvas.getContext('2d')
-        if (context) {
-          context.drawImage(video, 0, 0, canvas.width, canvas.height)
-          // Retain the exact frame without synchronously encoding a JPEG on click.
-          poster = canvas
-        }
-      } catch { /* A cross-origin video can still use the live fly player. */ }
-    }
-    setHeroPoster(poster)
-    setHeroArrived(false)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setHeroRect(rect)
     setHeroExpanded(false)
     setSelectedDetail(template)
     setSelectedSkill(template.skill_path ? template.id : null)
     applyLocalizedSkillPrompt(template)
-    const visibleInCategory = filteredHomeSkills.some(skill => skill.id === template.id)
-    if (!visibleInCategory) setActiveCategory('all')
-    const detailSkills = visibleInCategory ? filteredHomeSkills : homeSkills
-    const idx = detailSkills.findIndex(t => t.id === template.id)
+    const idx = filteredHomeSkills.findIndex(t => t.id === template.id)
     requestAnimationFrame(() => {
-      // Paint the source geometry before starting the transition.
-      requestAnimationFrame(() => setHeroExpanded(true))
+      setHeroExpanded(true)
       // Position to the clicked slide via JS transform (no scroll-snap)
       if (detailInnerRef.current && detailSnapRef.current) {
         const slideH = detailSnapRef.current.clientHeight
@@ -2322,7 +2282,7 @@ function HomePageInner() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className="mkr-page creative-home" data-motion-paused={motionPaused || !!selectedDetail} data-detail-open={!!selectedDetail} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="mkr-page" style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <input
           ref={skillFileRef}
           type="file"
@@ -2335,17 +2295,42 @@ function HomePageInner() {
           }}
         />
 
+        {/* Ambient glow */}
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0,
+          height: '520px', pointerEvents: 'none', zIndex: Z.AMBIENT,
+          background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
+        }} />
+
         {showAgentLanding && <AgentContent />}
 
         <div style={{ display: showAgentLanding ? 'none' : undefined }}>
-        <header className="creative-header" style={{ visibility: selectedDetail ? 'hidden' : undefined }}>
-          <a href="#product" className="creative-brand" aria-label={t('homeDesign.home')}><MakaronLogo markSize={34} /></a>
-          <div className="creative-account"><TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
-        </header>
-        <HomeCreativeHero skills={homeSkills} paused={motionPaused || !!selectedDetail} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={showAgentLanding} onSelect={handleSkillCardClick}>
+        <div style={{ display: selectedDetail ? 'none' : undefined }}>
+          <TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} />
+        </div>
+
+        {/* ── Hero: Landing-page style ── */}
+        <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
+          {/* Glow */}
+          <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
+
+          <div className="relative z-10 flex flex-col items-center text-center pt-10 lg:pt-16 px-6 max-w-[660px]">
+            <MakaronLogo
+              markSize="clamp(34px, 6vw, 52px)"
+              className="mt-4"
+              textClassName="text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]"
+            />
+            <p className="mt-3 leading-tight">
+              <RollingTagline className="text-2xl lg:text-[32px]" />
+            </p>
+            <p className="mt-6 text-[15px] lg:text-lg text-[#a1a1aa] leading-relaxed max-w-[480px]">
+              {t('landing.heroDesc1')}<br />{t('landing.heroDesc2')}
+            </p>
+          </div>
+
           {/* ── Inline Input Box ── */}
           <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
-            marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',
+            marginTop: '32px', width: '100%', maxWidth: '480px', padding: '0 16px',
             ...(isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}),
           }}>
             <CreateInputBox
@@ -2400,11 +2385,10 @@ function HomePageInner() {
               onDrop={handleDrop}
             />
           </div>
-        </HomeCreativeHero>
-        <HomeCreativeRibbon paused={motionPaused} onToggle={() => setMotionPaused(value => !value)} />
+        </div>
 
         {/* ── Skill Template Grid ── */}
-        <div id="templates" className="creative-market" ref={skillSectionRef} data-testid="skill-market" style={{
+        <div ref={skillSectionRef} data-testid="skill-market" style={{
           flex: 1,
           paddingLeft: isDesktop ? '24px' : '14px',
           paddingRight: isDesktop ? '24px' : '14px',
@@ -2414,9 +2398,19 @@ function HomePageInner() {
           width: '100%',
           margin: '0 auto',
         }}>
-          <div className="creative-market-heading" data-locale={locale}>
-            <h2>{t('homeDesign.galleryTitle')}</h2>
-            <p>{t('homeDesign.galleryDescription')}</p>
+          <div style={{
+            textAlign: 'center',
+            marginBottom: (skillCategoriesLoading || visibleSkillCategories.length > 0)
+              ? (isDesktop ? 8 : 6)
+              : (isDesktop ? 24 : 16),
+          }}>
+            <h2 style={{
+              fontSize: isDesktop ? '1.25rem' : '1.1rem',
+              fontWeight: 700,
+              color: 'rgba(255,255,255,0.9)',
+              margin: 0,
+              letterSpacing: '-0.01em',
+            }}>{t('skills.title')}</h2>
           </div>
 
           {(skillCategoriesLoading || visibleSkillCategories.length > 0) && (
@@ -2466,7 +2460,7 @@ function HomePageInner() {
           <div
             ref={skillGridRef}
             id="skill-market-grid"
-            className="mkr-category-grid mkr-skill-category-swipe-region creative-market-grid"
+            className="mkr-category-grid mkr-skill-category-swipe-region"
             data-testid="skill-grid"
             data-skill-category-swipe-region="true"
             onClickCapture={handleSkillGridClickCapture}
@@ -2497,7 +2491,7 @@ function HomePageInner() {
                 className={`mkr-skill-card${categoryHasChanged ? '' : ' mkr-row-enter'}`}
                 onClick={(e) => handleSkillCardClick(template, e)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() }
+                  if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click()
                 }}
                 style={{
                   position: 'relative',
@@ -2511,8 +2505,8 @@ function HomePageInner() {
                 }}
               >
                 {renderCoverMedia(template.image, pickLocalizedValue(template.labels, locale), 'thumb', {
-                  priority: false,
-                  suspended: !!selectedDetail || showAgentLanding,
+                  priority: i < 1,
+                  suspended: !!selectedDetail,
                   fallbackSrc: template.before_images?.[0]
                     ? getThumbnailUrl(template.before_images[0], 400, 70, 533, 'cover')
                     : undefined,
@@ -2544,25 +2538,11 @@ function HomePageInner() {
               </div>
             ))}
           </div>
-          {visibleSkillCount < filteredHomeSkills.length && (skillBrowseExpanded ? (
+          {visibleSkillCount < filteredHomeSkills.length && (
             <div ref={skillLoadMoreRef} aria-hidden="true" style={{ height: 1, width: '100%' }} />
-          ) : (
-            <button type="button" className="creative-more mkr-liquid-pill mkr-liquid-pill-strong" onClick={() => {
-              setSkillBrowseExpanded(true)
-              setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length))
-            }}>{t('homeDesign.more')}</button>
-          ))}
+          )}
 
         </div>
-
-        <HomeCreativeStudio skills={homeSkills} paused={motionPaused} suspended={!!selectedDetail || showAgentLanding} onUseIdea={(prompt) => {
-          setSelectedSkill(null)
-          createInput.setText(prompt)
-          inlineTextareaRef.current?.focus({ preventScroll: true })
-          document.getElementById('create')?.scrollIntoView({ block: 'center', behavior: motionPaused ? 'instant' : 'smooth' })
-        }} />
-
-        <HomeCreativeFooter />
 
         {/* ── Bottom edge fade — fixed, below input, blends cards into system bar ── */}
         {!isDesktop && (showFixedInput || selectedDetail) && (
@@ -2667,44 +2647,37 @@ function HomePageInner() {
       {heroRect && selectedDetail && (() => {
         const vw = typeof window !== 'undefined' ? window.innerWidth : 1280
         const vh = typeof window !== 'undefined' ? window.innerHeight : 800
-        const cardW = Math.min(560, vw * 0.5, vh * 0.6)
-        const cardH = Math.min(cardW * 4 / 3, vh * 0.8)
+        const cardW = 440
+        const cardH = vh * 0.75
         const pb = inputWrapperHeight + 16
         const targetTop = isDesktop ? Math.max(0, (vh - cardH - pb) / 2) : 0
         const targetLeft = isDesktop ? (vw - cardW) / 2 : 0
         const targetW = isDesktop ? cardW : vw
         const targetH = isDesktop ? cardH : vh
         return (
-          <div data-testid="home-hero-fly" onTransitionEnd={event => {
-            if (event.target === event.currentTarget && ['width', 'height', 'transform'].includes(event.propertyName) && heroExpanded) setHeroArrived(true)
-          }} style={{
+          <div style={{
             position: 'fixed', zIndex: Z.HERO_FLY, pointerEvents: 'none',
             top: heroExpanded ? targetTop : heroRect.top,
             left: heroExpanded ? targetLeft : heroRect.left,
             width: heroExpanded ? targetW : heroRect.width,
             height: heroExpanded ? targetH : heroRect.height,
-            transform: `rotate(${heroExpanded ? 0 : heroRect.rotation}deg)`,
-            transformOrigin: 'center',
-            borderRadius: heroExpanded ? (isDesktop ? 24 : 0) : heroRect.borderRadius,
+            borderRadius: heroExpanded ? (isDesktop ? 24 : 0) : 16,
             overflow: 'hidden',
-            transition: 'top .35s cubic-bezier(0.22,1,0.36,1), left .35s cubic-bezier(0.22,1,0.36,1), width .35s cubic-bezier(0.22,1,0.36,1), height .35s cubic-bezier(0.22,1,0.36,1), transform .35s cubic-bezier(0.22,1,0.36,1), border-radius .35s ease',
-            opacity: heroExpanded ? (heroArrived ? 0 : 1) : heroRect.opacity,
+            transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
+            opacity: heroExpanded ? 0 : 1,
           }}>
-            {!heroPoster && renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, active: !heroArrived, extraStyle: { position: 'absolute' } })}
-            {heroPoster && !heroArrived && <canvas aria-hidden="true" width={heroPoster.width} height={heroPoster.height} ref={canvas => {
-              canvas?.getContext('2d')?.drawImage(heroPoster, 0, 0)
-            }} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} />}
+            { }
+            {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, extraStyle: { position: 'absolute' } })}
           </div>
         )
       })()}
 
-      {/* Prepare neighboring content after the opening motion, outside the input frame. */}
-      {selectedDetail && heroExpanded && (!heroRect || heroArrived) && (
+      {/* Preload all before_images thumbnails so they appear instantly when user scrolls
+          between skill slides (overlay virtualization caches only ±window, but before images
+          are tiny and we always want them ready). */}
+      {selectedDetail && (
         <div aria-hidden style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          {filteredHomeSkills.slice(
-            Math.max(0, filteredHomeSkills.findIndex(s => s.id === selectedDetail.id) - 1),
-            filteredHomeSkills.findIndex(s => s.id === selectedDetail.id) + 3,
-          ).flatMap(s => (s.before_images || []).slice(0, 3)).map((url, i) => (
+          {homeSkills.flatMap(s => (s.before_images || []).slice(0, 3)).map((url, i) => (
 
             <img key={`preload-${i}`} src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt="" />
           ))}
@@ -2722,10 +2695,10 @@ function HomePageInner() {
           style={{
             position: 'fixed', inset: 0, zIndex: Z.OVERLAY,
             background: isDesktop ? 'rgba(0,0,0,0.7)' : '#000',
-            opacity: heroExpanded && (!heroRect || heroArrived) ? 1 : 0,
+            opacity: heroExpanded ? 1 : 0,
             pointerEvents: heroExpanded ? 'auto' : 'none',
             transform: isDesktop ? undefined : `translate3d(${skillBackPanX}px, 0, 0)`,
-            transition: heroRect && heroExpanded ? 'none' : skillBackPanSettling
+            transition: skillBackPanSettling
               ? 'opacity 0.3s ease 0.1s, transform 180ms ease-out'
               : 'opacity 0.3s ease 0.1s',
             willChange: skillBackPanActive || skillBackPanSettling ? 'transform, opacity' : 'opacity',
@@ -2896,11 +2869,11 @@ function HomePageInner() {
               }}
             >
             <div ref={detailInnerRef} style={{ position: 'relative', width: '100%', height: '100%', willChange: 'transform' }}>
-            {heroExpanded && (!heroRect || heroArrived) && (() => {
+            {(() => {
               const activeIdx = Math.max(0, filteredHomeSkills.findIndex(s => s.id === selectedDetail?.id))
-              // Keep the active slide and its immediate neighbors ready.
-              const WINDOW_BEFORE = 1
-              const WINDOW_AFTER = 2
+              // Window: 4 before + active + 5 after = 10 slides rendered at most.
+              const WINDOW_BEFORE = 4
+              const WINDOW_AFTER = 5
               return filteredHomeSkills.map((template, i) => {
                 const inWindow = i >= activeIdx - WINDOW_BEFORE && i <= activeIdx + WINDOW_AFTER
                 return (

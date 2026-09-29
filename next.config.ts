@@ -5,10 +5,6 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: '/home-hero/:path*',
-        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
-      },
-      {
         source: '/llms.txt',
         headers: [
           { key: 'Access-Control-Allow-Origin', value: '*' },
