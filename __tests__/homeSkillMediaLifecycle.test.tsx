@@ -105,6 +105,7 @@ describe('home skill video lifecycle', () => {
 
     fireEvent.loadedData(video)
     expect(video.style.opacity).toBe('1')
+    expect(container.querySelector<HTMLImageElement>('[data-home-video-poster="true"]')?.style.opacity).toBe('0')
 
     act(() => {
       MockIntersectionObserver.instances[0].trigger({ isIntersecting: false, intersectionRatio: 0 })
@@ -112,7 +113,7 @@ describe('home skill video lifecycle', () => {
     })
 
     expect(container.querySelector('video')).toBeNull()
-    expect(container.querySelector('[data-home-video-poster="true"]')).toBeTruthy()
+    expect(container.querySelector<HTMLImageElement>('[data-home-video-poster="true"]')?.style.opacity).toBe('1')
 
     act(() => {
       MockIntersectionObserver.instances[0].trigger({ isIntersecting: true, intersectionRatio: 1 })

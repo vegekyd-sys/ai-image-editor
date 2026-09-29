@@ -2082,10 +2082,11 @@ function HomePageInner() {
     if (video && video.readyState >= 2) {
       try {
         const canvas = document.createElement('canvas')
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        canvas.getContext('2d')?.drawImage(video, 0, 0)
-        poster = canvas.toDataURL('image/jpeg', 0.9)
+        const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight))
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
+        canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
+        poster = canvas.toDataURL('image/jpeg', 0.82)
       } catch { /* A cross-origin video can still use the live fly player. */ }
     }
     setHeroPoster(poster)
@@ -2511,7 +2512,7 @@ function HomePageInner() {
                 }}
               >
                 {renderCoverMedia(template.image, pickLocalizedValue(template.labels, locale), 'thumb', {
-                  priority: i < 1,
+                  priority: false,
                   suspended: !!selectedDetail || showAgentLanding,
                   fallbackSrc: template.before_images?.[0]
                     ? getThumbnailUrl(template.before_images[0], 400, 70, 533, 'cover')
@@ -2690,18 +2691,19 @@ function HomePageInner() {
             transition: 'top .35s cubic-bezier(0.22,1,0.36,1), left .35s cubic-bezier(0.22,1,0.36,1), width .35s cubic-bezier(0.22,1,0.36,1), height .35s cubic-bezier(0.22,1,0.36,1), transform .35s cubic-bezier(0.22,1,0.36,1), border-radius .35s ease',
             opacity: heroExpanded ? (heroArrived ? 0 : 1) : heroRect.opacity,
           }}>
-            {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, active: !heroArrived, extraStyle: { position: 'absolute' } })}
+            {!heroPoster && renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, active: !heroArrived, extraStyle: { position: 'absolute' } })}
             {heroPoster && !heroArrived && <img src={heroPoster} alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} />}
           </div>
         )
       })()}
 
-      {/* Preload all before_images thumbnails so they appear instantly when user scrolls
-          between skill slides (overlay virtualization caches only ±window, but before images
-          are tiny and we always want them ready). */}
-      {selectedDetail && (
+      {/* Warm neighboring photos after the first transition frame has painted. */}
+      {selectedDetail && heroExpanded && (
         <div aria-hidden style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          {homeSkills.flatMap(s => (s.before_images || []).slice(0, 3)).map((url, i) => (
+          {filteredHomeSkills.slice(
+            Math.max(0, filteredHomeSkills.findIndex(s => s.id === selectedDetail.id) - 1),
+            filteredHomeSkills.findIndex(s => s.id === selectedDetail.id) + 3,
+          ).flatMap(s => (s.before_images || []).slice(0, 3)).map((url, i) => (
 
             <img key={`preload-${i}`} src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt="" />
           ))}
@@ -2893,11 +2895,11 @@ function HomePageInner() {
               }}
             >
             <div ref={detailInnerRef} style={{ position: 'relative', width: '100%', height: '100%', willChange: 'transform' }}>
-            {(() => {
+            {heroExpanded && (() => {
               const activeIdx = Math.max(0, filteredHomeSkills.findIndex(s => s.id === selectedDetail?.id))
-              // Window: 4 before + active + 5 after = 10 slides rendered at most.
-              const WINDOW_BEFORE = 4
-              const WINDOW_AFTER = 5
+              // Keep the active slide and its immediate neighbors ready.
+              const WINDOW_BEFORE = 1
+              const WINDOW_AFTER = 2
               return filteredHomeSkills.map((template, i) => {
                 const inWindow = i >= activeIdx - WINDOW_BEFORE && i <= activeIdx + WINDOW_AFTER
                 return (

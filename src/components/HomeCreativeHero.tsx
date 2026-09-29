@@ -6,6 +6,7 @@ import type { HomeSkill } from '@/lib/home-skills'
 import { LazyVideo } from '@/components/HomeSkillMedia'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
 import MakaronLogo from '@/components/MakaronLogo'
+import heroPreviews from '@/lib/home-hero-previews.json'
 
 // Curated placement, with the live catalog retaining authority over availability and media.
 const FEATURED_IDS = [
@@ -47,6 +48,11 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
     query.addEventListener('change', update)
     return () => query.removeEventListener('change', update)
   }, [])
+  const previewFor = (skill: HomeSkill) => {
+    const preview = heroPreviews[skill.id as keyof typeof heroPreviews]
+    // Catalog changes invalidate the baked preview; details always retain the original.
+    return preview?.source === skill.image ? preview.preview : skill.image
+  }
   const featured = FEATURED_IDS.map(id => skills.find(skill => skill.id === id)).filter((skill): skill is HomeSkill => !!skill)
 
 
@@ -57,7 +63,7 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
           <button type="button" key={skill.id} className={`creative-art creative-art-${index}`} style={activeSkillId === skill.id ? { opacity: 0 } : undefined} inert={mobileComposition && index === 3 ? true : undefined} onClick={event => onSelect(skill, event)} aria-label={t('homeDesign.openTemplate', pickLocalizedValue(skill.labels, locale))}>
             <div className="creative-art-frame">
               {/\.(mp4|webm)(?:[?#]|$)/i.test(skill.image) ? (
-                <LazyVideo src={skill.image} eager={index < 2} suspended={suspended} paused={paused}
+                <LazyVideo src={previewFor(skill)} eager={index === 0} suspended={suspended || (mobileComposition && (index === 1 || index === 2))} paused={paused}
                   fallbackSrc={skill.before_images?.[0] ? getThumbnailUrl(skill.before_images[0], 600, 80) : undefined}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : <img src={getThumbnailUrl(skill.image, 600, 85)} alt="" loading={index < 2 ? 'eager' : 'lazy'} />}

@@ -164,7 +164,7 @@ export function LazyVideo({
             height: '100%',
             objectFit: 'cover',
             display: 'block',
-            opacity: 0.82,
+            opacity: videoReady ? 0 : 0.82,
             filter: 'blur(2px) saturate(0.82)',
             transform: 'scale(1.02)',
           }}
@@ -176,7 +176,7 @@ export function LazyVideo({
           alt=""
           aria-hidden="true"
           data-home-video-poster="true"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: videoReady ? 0 : 1 }}
         />
       )}
       {shouldAttach && (
