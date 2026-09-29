@@ -13,9 +13,9 @@ beforeEach(() => {
 
 describe('explicit Image 2.5 routing', () => {
   it('preserves Auto and transparent contracts but never switches an explicit Wan call', () => {
-    expect(resolveModelChain({ prompt: 'A mug.' })).toEqual(['gemini', 'qwen']);
-    expect(resolveModelChain({ prompt: 'Enhance.', image: 'https://example.com/a.jpg', category: 'enhance' })).toEqual(['qwen', 'gemini']);
-    expect(resolveModelChain({ prompt: 'Edit.', model: 'gpt-image-2.5-flare', isNsfw: true })).toEqual(['gpt-image-2.5-flare']);
+    expect(resolveModelChain({ prompt: 'A mug.' })).toEqual(['gemini', 'qwen-spicy']);
+    expect(resolveModelChain({ prompt: 'Enhance.', image: 'https://example.com/a.jpg', category: 'enhance' })).toEqual(['qwen-spicy', 'gemini']);
+    expect(resolveModelChain({ prompt: 'Edit.', model: 'gpt-image-2.5-flare', isNsfw: true })).toEqual(['qwen-spicy']);
     expect(resolveModelChain({ prompt: 'Cutout.', model: 'gpt-image-2.5-flare', background: 'transparent' })).toEqual(['gpt-image-2.5-flare']);
   });
 

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
 import { IMAGE_MODEL_IDS, isFalImage25, resolveImageModel } from '@/lib/models/types';
 import { normalizeGenerateImageMediaIndex } from '@/lib/generate-image-input';
+import { resolveToolName } from '@/lib/billing/pricing';
 
 // Execute the actual factory in isolation: importing all unrelated Agent tools
 // would also boot their SDKs and load every raw Markdown prompt in this test.
@@ -23,12 +24,13 @@ function setup(provider = 'azure') {
   const getToolPrice = vi.fn().mockResolvedValue({ credits: 6, isFree: false });
   const getTokenRate = vi.fn().mockResolvedValue({ model_id: 'gpt-image-2.5-flare', markup: 2, is_active: true });
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
-  const ctx = { preferredModel: 'wan2.7-image', userId: 'test-user', projectId: 'test-project', currentImage: '', snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined };
+  const resolveModelChain = vi.fn(({ model }: { model?: string }) => model ? [model] : ['gemini', 'qwen-spicy']);
+  const ctx = { preferredModel: 'wan2.7-image', userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined };
   const context = vm.createContext({
-    tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, getTokenRate,
+    tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, resolveModelChain, getTokenRate,
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex,
     validateImageIndex: vi.fn(), getToolPrice, isBillingEnabled,
-    resolveToolName: (_name: string, model: string) => `edit_image_${model}`,
+    resolveToolName,
     editImage, requireCredits, deductCredits, refreshSnapshotUrls: vi.fn(), console,
     require: (name: string) => {
       if (name === './billing/credits') return { deductByTokens };
@@ -119,6 +121,25 @@ describe('App Agent Wan execution and billing', () => {
   });
 });
 
+describe('App Agent Qwen Spicy operation pricing', () => {
+  it.each([
+    { inputCount: 0, tool: 'generate_image_qwen-spicy', credits: 3 },
+    { inputCount: 1, tool: 'edit_image_qwen-spicy', credits: 8 },
+    { inputCount: 2, tool: 'edit_image_qwen-spicy-2', credits: 9 },
+    { inputCount: 3, tool: 'edit_image_qwen-spicy-3', credits: 10 },
+  ])('quotes and charges $tool for $inputCount inputs', async ({ inputCount, tool: toolName, credits }) => {
+    const { tool, ctx, editImage, getToolPrice, requireCredits, deductCredits } = setup();
+    ctx.preferredModel = 'qwen-spicy';
+    if (inputCount > 0) ctx.currentImage = 'data:image/jpeg;base64,YQ==';
+    ctx.referenceImages = Array.from({ length: Math.max(0, inputCount - 1) }, () => 'data:image/jpeg;base64,Yg==');
+    getToolPrice.mockImplementation(async (name: string) => name === toolName ? { credits, isFree: false } : null);
+    editImage.mockResolvedValue({ success: true, image: 'data:image/jpeg;base64,YQ==', usedModel: 'qwen-spicy', provider: 'mulerouter' });
+    expect((await tool.execute({ editPrompt: 'Edit.' })).success).toBe(true);
+    expect(getToolPrice).toHaveBeenCalledWith(toolName);
+    expect(requireCredits).toHaveBeenCalledWith('test-user', credits);
+    expect(deductCredits).toHaveBeenCalledWith('test-user', null, toolName, 'qwen-spicy', expect.any(Number));
+  });
+});
 
 describe('App Agent Image 2.5 billing', () => {
   it('checks Flare pricing for a legacy Image 2 selection even on a subscription agent', async () => {

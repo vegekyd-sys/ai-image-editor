@@ -5,7 +5,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { validateApiKey } from '@/lib/billing/api-keys';
 import { enterBillingAttribution, resolveRequestBillingSource } from '@/lib/billing/attribution';
 import { checkBalance, deductCredits, deductByTokens, isBillingEnabled, recordSubscriptionUsage, requireCredits } from '@/lib/billing/credits';
-import { resolveToolName } from '@/lib/billing/pricing';
+import { getToolPrice, resolveToolName } from '@/lib/billing/pricing';
 import { deductSeedAudioCredits } from '@/lib/billing/seed-audio';
 import { submitMcpVideo, settleMcpVideoStatus } from '@/lib/billing/mcp-video';
 import { quoteSeedAudio } from '@/lib/billing/media-pricing';
@@ -72,7 +72,7 @@ async function handleMcp(req: Request): Promise<Response> {
     submitVideo: auth.type === 'user' ? (input, toolName) => submitMcpVideo(input, { userId: auth.userId!, apiKeyId: auth.keyId!, toolName }) : undefined,
     onVideoStatus: auth.type === 'user' ? (taskId, status, queryFailed) => settleMcpVideoStatus(auth.userId!, taskId, status, queryFailed) : undefined,
     // Pre-check: ensure user has enough credits
-    onToolStart: auth.type === 'user' ? async (toolName, model) => {
+    onToolStart: auth.type === 'user' ? async (toolName, model, meta) => {
       if (!(await isBillingEnabled())) return { allowed: true };
       if (toolName === 'makaron_edit_image' && isFalImage25(model)) {
         const rate = await getTokenRate(model);
@@ -87,12 +87,22 @@ async function handleMcp(req: Request): Promise<Response> {
         const check = await requireCredits(auth.userId!, quote.credits);
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
+      if (toolName === 'makaron_edit_image' && model !== 'wan2.7-image' && !isFalImage25(model)
+        && meta?.imageInputCount !== undefined && meta.imageInputCount <= 3) {
+        // Auto/Gemini requests may fall back to Spicy. Quote the most expensive
+        // fixed-price provider they can reach before submitting either call.
+        const spicyName = resolveToolName(toolName, 'qwen-spicy', meta.imageInputCount);
+        const price = await getToolPrice(spicyName);
+        if (!price) return { allowed: false, message: `${spicyName} pricing is not configured.` };
+        const check = await requireCredits(auth.userId!, price.isFree ? 0 : price.credits);
+        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
+      }
       if (['makaron_write_video_script', 'makaron_analyze_video'].includes(toolName)
-        || (toolName === 'makaron_edit_image' && !['qwen', 'qwen-spicy', 'pony', 'wai', 'wan2.7-image'].includes(model ?? ''))) {
+        || (toolName === 'makaron_edit_image' && !['qwen-spicy', 'wan2.7-image'].includes(model ?? ''))) {
         const check = await requireCredits(auth.userId!, 5);
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
-      const pricingName = resolveToolName(toolName, model);
+      const pricingName = resolveToolName(toolName, model, meta?.imageInputCount);
       const { ok, balance, cost } = await checkBalance(auth.userId!, pricingName);
       if (!ok) {
         return { allowed: false, message: `Insufficient credits. Need ${cost}, have ${balance}. Top up at https://www.makaron.app/dashboard` };
@@ -160,7 +170,8 @@ async function handleMcp(req: Request): Promise<Response> {
         }));
       } else {
         // Per-action billing — ComfyUI, Suno etc.
-        trackCharge(await deductCredits(auth.userId!, auth.keyId!, toolName, model, durationMs));
+        const pricingName = resolveToolName(toolName, model, meta?.imageInputCount);
+        trackCharge(await deductCredits(auth.userId!, auth.keyId!, pricingName, model, durationMs));
       }
     } : undefined,
   });

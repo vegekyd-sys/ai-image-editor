@@ -81,7 +81,7 @@ describe('agent media scenario matrix', () => {
       "skill='creative'",
       "skill='wild'",
       "skill='captions'",
-      "model: 'qwen'",
+      "model: 'qwen-spicy'",
       "model: 'gpt-image-2.5-flare'",
       'Context Mode',
       'Keep every person',

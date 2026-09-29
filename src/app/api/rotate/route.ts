@@ -1,60 +1,37 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { InferenceClient } from '@huggingface/inference';
+import { rotateCamera } from '@/lib/skills/rotate-camera';
+import { deductCredits, requireCredits } from '@/lib/billing/credits';
+import { FAL_ROTATE_CAMERA_TOOL, getToolPrice } from '@/lib/billing/pricing';
 
 export const maxDuration = 300;
 
-const HF_TOKEN = process.env.HF_TOKEN;
-
 export async function POST(req: NextRequest) {
-  try {
-    // Auth check
-    const supabase = await createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    const user = session?.user;
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { image, prompt } = await req.json();
-    if (!image || !prompt) {
-      return Response.json({ error: 'image and prompt are required' }, { status: 400 });
-    }
-
-    if (!HF_TOKEN) {
-      return Response.json({ error: 'HF_TOKEN not configured' }, { status: 500 });
-    }
-
-    // Convert image (URL or base64 dataurl) to Uint8Array for Blob
-    let imgBytes: Uint8Array;
-    if (image.startsWith('http')) {
-      const res = await fetch(image);
-      imgBytes = new Uint8Array(await res.arrayBuffer());
-    } else {
-      const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
-      const buf = Buffer.from(base64Data, 'base64');
-      imgBytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-    }
-    const blob = new Blob([imgBytes as BlobPart], { type: 'image/jpeg' });
-
-    const client = new InferenceClient(HF_TOKEN);
-    const result = await client.imageToImage({
-      provider: 'fal-ai',
-      model: 'fal/Qwen-Image-Edit-2511-Multiple-Angles-LoRA',
-      inputs: blob,
-      parameters: { prompt },
-    });
-
-    // result is a Blob — convert to base64
-    const resultBuf = Buffer.from(await result.arrayBuffer());
-    const resultBase64 = `data:image/jpeg;base64,${resultBuf.toString('base64')}`;
-
-    return Response.json({ image: resultBase64 });
-  } catch (error) {
-    console.error('Rotate API error:', error);
-    return Response.json(
-      { error: error instanceof Error ? error.message : 'Failed to generate rotated view' },
-      { status: 500 },
-    );
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body.image !== 'string' || typeof body.azimuth !== 'number'
+    || typeof body.elevation !== 'number' || typeof body.distance !== 'number') {
+    return Response.json({ error: 'image, azimuth, elevation and distance are required' }, { status: 400 });
   }
+  const price = await getToolPrice(FAL_ROTATE_CAMERA_TOOL);
+  if (!price) return Response.json({ error: 'Camera rotation pricing is unavailable' }, { status: 503 });
+  const check = await requireCredits(user.id, price.credits);
+  if (!check.ok) return check.response;
+
+  const started = Date.now();
+  const result = await rotateCamera(
+    { azimuth: body.azimuth, elevation: body.elevation, distance: body.distance },
+    { currentImage: body.image },
+  );
+  if (!result.success || !result.image) return Response.json({ error: result.message }, { status: 502 });
+  try {
+    await deductCredits(user.id, null, FAL_ROTATE_CAMERA_TOOL, undefined, Date.now() - started);
+  } catch (error) {
+    console.error('[rotate] Billing failed after completed generation:', error);
+    return Response.json({ error: 'Camera rotation completed but billing reconciliation is required' }, { status: 503 });
+  }
+  return Response.json({ image: result.image, provider: result.provider, message: result.message });
 }

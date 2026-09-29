@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { editImage } from '../lib/skills/edit-image';
-import { IMAGE_MODEL_IDS } from '../lib/models/types';
+import { IMAGE_MODEL_INPUT_IDS } from '../lib/models/types';
 import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
@@ -92,10 +92,11 @@ export interface McpServerOptions {
       seedAudioDurationSec?: number
       seedAudioProviderCredits?: number
       seedAudioGenerationSec?: number
+      imageInputCount?: number
     },
   ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
-  onToolStart?: (toolName: string, model?: string) => Promise<{ allowed: boolean; message?: string }>;
+  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number }) => Promise<{ allowed: boolean; message?: string }>;
   /** Called only before a Grok personal-plan request safely falls back to the paid API. */
   onBeforeGrokApiFallback?: (toolName: string, model?: string) => Promise<void>;
 }
@@ -114,15 +115,15 @@ export function createMakaronMcpServer(options?: McpServerOptions) {
 
 | Use case | skill | model | Notes |
 |----------|-------|-------|-------|
-| Enhance/beautify/color grade | enhance | (auto) | Best quality with qwen, auto-routed |
+| Enhance/beautify/color grade | enhance | (auto) | Qwen Spicy primary, Gemini fallback |
 | Add creative fun elements | creative | (auto) | Gemini handles .md templates well |
 | Exaggerate/surreal transform | wild | (auto) | Gemini handles .md templates well |
 | Add text/captions/titles | captions | (auto) | Gemini handles .md templates well |
-| Text-to-image | (omit) | (auto) | gemini→qwen auto fallback, handles all styles including anime |
-| NSFW/sensitive editing | (omit) | qwen | Gemini will refuse |
+| Text-to-image | (omit) | (auto) | Gemini→Qwen Spicy auto fallback |
+| NSFW/sensitive editing | (omit) | qwen-spicy | Keep it off Gemini; provider may still reject some content |
 | Product/e-commerce/infographic/design/layout/poster/text | (omit) | gpt-image-2.5-flare | Default design image route; preserve the user brief verbatim |
 | Fast lower-cost drafts | (omit) | gemini-lite | Nano Banana 2 Lite for fast 1K image drafts |
-| Qwen Spicy | (omit) | qwen-spicy | Independent MuleRouter model, 1-3 image editing |
+| Qwen Spicy | (omit) | qwen-spicy | MuleRouter model, 1-3 image editing |
 | Wan 2.7 generation/editing | (omit) | wan2.7-image | Fast ~1K output, up to 9 input images; no automatic retries |
 | Not sure | (omit) | (auto) | Auto routing with fallback |
 
@@ -134,16 +135,17 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback. For ordinary edits, use specific English editing instructions'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
-      model: z.enum(IMAGE_MODEL_IDS).nullish().describe('Default to gpt-image-2.5-flare for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockups, face-identity restoration after a Gemini edit, and director storyboards. GPT Image 2 and the legacy openai parameter now resolve to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality with no subscription or automatic fallback. Honor other explicitly named models: Qwen Spicy = qwen-spicy; existing self-hosted Qwen = qwen; Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for auto routing.'),
+      model: z.enum(IMAGE_MODEL_INPUT_IDS).nullish().describe('Default to gpt-image-2.5-flare for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockups, face-identity restoration after a Gemini edit, and director storyboards. GPT Image 2 and the legacy openai parameter now resolve to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality with no subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; legacy qwen maps to qwen-spicy. Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for auto routing.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5 supports up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2.5 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
     },
     async (params) => {
       try {
+        const imageInputCount = (params.image ? 1 : 0) + (params.referenceImages?.length ?? 0);
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', resolveImageModel(params.model ?? undefined, params.background ?? undefined));
+          const check = await options.onToolStart('makaron_edit_image', resolveImageModel(params.model ?? undefined, params.background ?? undefined), { imageInputCount });
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -170,7 +172,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
           return { isError: true, content: [{ type: 'text' as const, text: result.message }] };
         }
         // Bill after success
-        await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage);
+        await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage, { imageInputCount });
         const msg = result.usedModel
           ? `${result.message} (model: ${result.usedModel})`
           : result.message;
@@ -192,7 +194,7 @@ Parameters:
 - elevation: vertical angle (-30=low angle, 0=eye level, 30=elevated, 60=high angle)
 - distance: zoom level (0.6=close-up, 1.0=medium, 1.4=wide shot)
 
-Uses Qwen Image Edit model to regenerate the image from the requested camera angle.`,
+Uses fal's Qwen Image Edit 2511 Multiple-Angles LoRA to regenerate the image from the requested camera angle.`,
     {
       image: z.string().describe('Input image: local file path, URL, or base64 data URL'),
       azimuth: z.number().min(0).max(360).describe('Horizontal rotation degrees'),

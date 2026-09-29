@@ -1,4 +1,4 @@
-import { generateImage } from '../model-router';
+import { generateImage, SpicyImageRequestError } from '../model-router';
 import type { ImageBackground, ModelId, TokenUsage } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
 import { ProviderImageInputError } from '../provider-image-preflight';
@@ -25,7 +25,15 @@ export async function editImage(
   ctx: SkillContext,
 ): Promise<SkillResult> {
   const { editPrompt, skill, aspectRatio, background, preferredModel, isNsfw } = input;
-  const requestedModel = resolveImageModel(preferredModel, background);
+  if (isNsfw && background === 'transparent') {
+    return { success: false, message: 'NSFW transparent editing is not supported by Qwen Spicy. No other provider was called.' };
+  }
+  let requestedModel: ModelId | undefined;
+  try {
+    requestedModel = isNsfw ? 'qwen-spicy' : resolveImageModel(preferredModel, background);
+  } catch (error) {
+    return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.' };
+  }
   const hasReference = !!ctx.referenceImages?.length;
 
   // Agent reads skill templates via read_file and internalizes rules into editPrompt.
@@ -60,7 +68,7 @@ export async function editImage(
   let usedProvider: string | undefined;
   // A transparent request is a strict, paid provider call. Do not fan it out
   // or repeat it after failure; surface the capability error to the user.
-  const MAX_ATTEMPTS = background === 'transparent' || requestedModel === 'wan2.7-image' || requestedModel === 'qwen-spicy' || isFalImage25(requestedModel) ? 1 : 2;
+  const MAX_ATTEMPTS = isNsfw || skill === 'enhance' || background === 'transparent' || requestedModel === 'wan2.7-image' || requestedModel === 'qwen-spicy' || isFalImage25(requestedModel) ? 1 : 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let genResult;
@@ -82,7 +90,7 @@ export async function editImage(
       if (error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
         return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
       }
-      if (requestedModel === 'wan2.7-image' || isFalImage25(requestedModel)) {
+      if (error instanceof SpicyImageRequestError || requestedModel === 'wan2.7-image' || requestedModel === 'qwen-spicy' || isNsfw || skill === 'enhance' || isFalImage25(requestedModel)) {
         // Return a durable tool result even for an unknown paid outcome. Never
         // echo arbitrary transport errors or invite automatic paid resubmission.
         return { success: false, message: 'Image generation did not complete. The provider outcome may be unknown. Do not retry automatically or silently switch models; explain the failure to the user. Do not bypass a failed required image edit by sending the unedited original into dependent video generation.' };

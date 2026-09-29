@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ImageBackground, ModelId } from './models/types';
 import { IMAGE_MODEL_IDS } from './models/types';
+import { resolveModelChain } from './model-router';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
@@ -21,7 +22,7 @@ import {
   refundCredits,
   requireCredits,
 } from './billing/credits';
-import { getToolPrice, resolveToolName } from './billing/pricing';
+import { FAL_ROTATE_CAMERA_TOOL, getToolPrice, resolveToolName } from './billing/pricing';
 import { deductSeedAudioCredits } from './billing/seed-audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
@@ -1385,7 +1386,7 @@ function createGenerateImageTool(
       inputSchema: z.object({
         editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Honor other explicitly named/selected models. Qwen Spicy = qwen-spicy; existing self-hosted Qwen = qwen; Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for normal auto routing.'),
+        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for normal auto routing.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2.5 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
@@ -1419,22 +1420,48 @@ function createGenerateImageTool(
 
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
-        const billingModel = resolveImageModel(resolvedModel, background);
-        if (ctx.userId && billingModel && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
+        let billingModel: ModelId | undefined;
+        try {
+          billingModel = ctx.isNsfw ? 'qwen-spicy' : resolveImageModel(resolvedModel, background);
+        } catch (error) {
+          return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: 'model_retired' };
+        }
+        const imageInputCount = (editTarget ? 1 : 0) + resolvedRefs.length;
+        const spicyReachable = imageInputCount <= 3 && !(ctx.isNsfw && background === 'transparent')
+          && resolveModelChain({
+            image: editTarget,
+            references: resolvedRefs.length ? resolvedRefs.map(url => ({ url, role: 'reference' })) : undefined,
+            prompt: editPrompt,
+            model: billingModel,
+            category: skill,
+            background,
+            isNsfw: ctx.isNsfw,
+          }).includes('qwen-spicy');
+        if (ctx.userId && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
+          let requiredCredits = 0;
           if (isFalImage25(billingModel)) {
             const rate = await getTokenRate(billingModel);
             if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'GPT Image 2.5 pricing is not configured.', error: 'pricing_unavailable' };
-            const check = await requireCredits(ctx.userId, 5);
-            if (!check.ok) return { success: false, message: 'Insufficient credits.', error: 'insufficient_credits' };
+            requiredCredits = 5;
           }
-          const price = isFalImage25(billingModel) ? null : await getToolPrice(resolveToolName('edit_image', billingModel));
-          if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {
-            return { success: false, message: `Tool pricing is not configured: edit_image_${billingModel}`, error: 'pricing_unavailable' };
+          if (billingModel && !isFalImage25(billingModel)) {
+            const toolName = resolveToolName('edit_image', billingModel, imageInputCount);
+            const price = await getToolPrice(toolName);
+            if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {
+              return { success: false, message: `Tool pricing is not configured: ${toolName}`, error: 'pricing_unavailable' };
+            }
+            if (price && !price.isFree) requiredCredits = Math.max(requiredCredits, price.credits);
           }
-          if (price && !price.isFree) {
-            const check = await requireCredits(ctx.userId, price.credits);
-            if (!check.ok) return { success: false, message: `Insufficient credits. Need ${price.credits}, have ${check.balance}.`, error: 'insufficient_credits' };
+          if (spicyReachable) {
+            const spicyToolName = resolveToolName('edit_image', 'qwen-spicy', imageInputCount);
+            const spicyPrice = await getToolPrice(spicyToolName);
+            if (!spicyPrice) return { success: false, message: `Tool pricing is not configured: ${spicyToolName}`, error: 'pricing_unavailable' };
+            if (!spicyPrice.isFree) requiredCredits = Math.max(requiredCredits, spicyPrice.credits);
           }
+          // For token-priced, non-Spicy auto routes this remains an estimate;
+          // the final debit still uses actual provider usage before publishing.
+          const check = await requireCredits(ctx.userId, requiredCredits || 5);
+          if (!check.ok) return { success: false, message: `Insufficient credits. Need ${requiredCredits || 5}, have ${check.balance}.`, error: 'insufficient_credits' };
         }
         const imageStartedAt = Date.now();
         const skillResult = await editImage(
@@ -1488,7 +1515,10 @@ function createGenerateImageTool(
           && skillResult.usedModel !== 'gemini'
         ) {
           // Fixed-price image backends share one awaited debit + usage-log transaction.
-          await deductCredits(ctx.userId ?? '', null, 'edit_image', skillResult.usedModel, Date.now() - imageStartedAt);
+          const billingTool = skillResult.usedModel === 'qwen-spicy'
+            ? resolveToolName('edit_image', skillResult.usedModel, imageInputCount)
+            : 'edit_image';
+          await deductCredits(ctx.userId ?? '', null, billingTool, skillResult.usedModel, Date.now() - imageStartedAt);
         }
         // NSFW detection: flag session so all subsequent calls skip Gemini
         if (skillResult.contentBlocked) ctx.isNsfw = true;
@@ -3928,7 +3958,7 @@ function createRotateCameraTool(
   return tool({
       description: `Rotate the virtual camera around the subject to show a different perspective/angle.
 Use this when the user wants to see the image from a different viewpoint — e.g. "show from the side", "bird's eye view", "rotate left", "show the back", "zoom in".
-This uses Qwen Image Edit to regenerate the image from the requested camera angle.
+This uses fal's Qwen Image Edit 2511 Multiple-Angles LoRA to regenerate the image from the requested camera angle.
 
 Parameters:
 - azimuth: horizontal rotation (0=front, 45=front-right, 90=right, 135=back-right, 180=back, 225=back-left, 270=left, 315=front-left)
@@ -3940,6 +3970,13 @@ Parameters:
         distance: z.number().min(0.6).max(1.4).describe('Zoom distance (0.6=close-up, 1.0=medium, 1.4=wide)'),
       }),
       execute: async ({ azimuth, elevation, distance }) => {
+        if (ctx.userId && await isBillingEnabled()) {
+          const price = await getToolPrice(FAL_ROTATE_CAMERA_TOOL);
+          if (!price) return { success: false, message: 'Camera rotation pricing is not configured.' };
+          const check = await requireCredits(ctx.userId, price.credits);
+          if (!check.ok) return { success: false, message: 'Insufficient credits for camera rotation.' };
+        }
+        const started = Date.now();
         const skillResult = await rotateCamera(
           { azimuth, elevation, distance },
           { currentImage: ctx.currentImage },
@@ -3948,11 +3985,8 @@ Parameters:
           ctx.currentImage = skillResult.image;
           ctx.generatedImages.push(skillResult.image);
           ctx.lastImageBackground = undefined;
-          // Bill for camera rotation (per-action)
-          import('./billing/credits').then(({ deductCredits }) =>
-            deductCredits(ctx.userId ?? '', null, 'rotate_camera')
-              .catch(e => console.error('[billing] rotate_camera deduct error:', e))
-          );
+          // Await the debit so a completed paid generation has a durable usage record.
+          if (ctx.userId) await deductCredits(ctx.userId, null, FAL_ROTATE_CAMERA_TOOL, undefined, Date.now() - started);
         }
         return { success: skillResult.success as true, message: skillResult.message };
       },

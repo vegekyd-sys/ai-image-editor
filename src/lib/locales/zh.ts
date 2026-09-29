@@ -222,7 +222,7 @@ const zh = {
   'changelog.gpt6AgentModels.item2': '管理员默认通过 Codex 套餐使用 Luna，其他账号默认通过 Azure；GPT-5.6 已从列表隐藏，已有项目仍可使用。',
   'changelog.qwenSpicy.title': 'Qwen Spicy 上线',
   'changelog.qwenSpicy.item1': 'Qwen Spicy 现已作为独立图片模型上线，支持用 1–3 张原图进行更大胆的高分辨率编辑。',
-  'changelog.qwenSpicy.item2': '可在图片模型选择器中选择、直接让 Agent 使用 Qwen Spicy，或在 makaron-cli 中指定 qwen-spicy；原有 Qwen Edit 继续独立保留。',
+  'changelog.qwenSpicy.item2': '可在图片模型选择器、Agent 或 makaron-cli 中选用 Qwen Spicy；旧 Qwen Edit 请求现映射到它，Pony 和 WAI 已退役。',
   'changelog.gptImage25.title': 'GPT Image 2.5 上线：从产品图到信息图',
   'changelog.gptImage25.item1': '用一句话制作产品广告、电商图片、海报和信息图，把品牌、文字与画面组织在一起；也可以探索 App、网站界面的静态概念图和视频分镜。',
   'changelog.gptImage25.item2': '上传产品或人物参考图，就能更换背景、调整画面，或结合多张参考图创作新的场景，让已有素材延伸出更多创意。',

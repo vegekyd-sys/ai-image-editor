@@ -181,9 +181,12 @@ async function runTask(path: string, payload: Record<string, unknown>): Promise<
     const imageUrl = await waitForTask(path, taskId)
     const image = await downloadImageAsDataUrl(imageUrl)
     console.log(`[mulerouter-image] ${path.includes('qwen') ? 'qwen-edit-spicy' : 'z-image-spicy'} completed in ${((Date.now() - startedAt) / 1_000).toFixed(1)}s`)
-    return image
-  } finally {
     await deleteTask(path, taskId)
+    return image
+  } catch (error) {
+    // A paid task may have completed even when its CDN download failed.
+    // Preserve it for manual recovery instead of deleting the only result.
+    throw new Error(`MuleRouter image task ${taskId} was preserved after an incomplete local result. Do not submit again automatically. ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 

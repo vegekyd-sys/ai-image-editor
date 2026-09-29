@@ -183,4 +183,19 @@ describe('MuleRouter Qwen Image Edit Spicy integration', () => {
     const { generateWithMuleRouterQwenEdit } = await import('@/lib/mulerouter-image')
     await expect(generateWithMuleRouterQwenEdit(['image'], 'prompt')).rejects.toThrow('test provider failure')
   })
+
+  it('preserves a completed paid task when its image CDN cannot be downloaded', async () => {
+    const calls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push(init?.method ?? 'GET')
+      if (init?.method === 'POST') return taskCreated()
+      if (String(url) === 'https://cdn.example.com/output.webp') throw new Error('certificate rejected')
+      return taskCompleted()
+    }))
+
+    const { generateWithMuleRouterQwenEdit } = await import('@/lib/mulerouter-image')
+    await expect(generateWithMuleRouterQwenEdit(['image'], 'prompt')).rejects.toThrow('was preserved')
+    expect(calls.filter(method => method === 'POST')).toHaveLength(1)
+    expect(calls).not.toContain('DELETE')
+  })
 })

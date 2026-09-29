@@ -1936,7 +1936,7 @@ Usage:
 Options:
   --image <file|url>        Base image to edit. Omit for text-to-image.
   --ref <file|url>          Additional reference image. Repeatable, up to 3.
-  --image-model <id>        gemini, gemini-lite, qwen, qwen-spicy, openai, gpt-image-2.5-flare, gpt-image-2.5-sunburst, wan2.7-image, pony, or wai.
+  --image-model <id>        gemini, gemini-lite, qwen-spicy, openai, gpt-image-2.5-flare, gpt-image-2.5-sunburst, or wan2.7-image. Legacy qwen maps to qwen-spicy.
   --skill <id>              enhance, creative, wild, or captions.
   --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
   --background <mode>       auto, opaque, or transparent.
@@ -1948,7 +1948,7 @@ Notes:
   and fails instead of returning an opaque fallback.
 
 Examples:
-  makaron edit --image portrait.jpg --image-model qwen --out result.jpg "cinematic warm light"
+  makaron edit --image portrait.jpg --image-model qwen-spicy --out result.jpg "cinematic warm light"
   makaron edit --image product.jpg --ref style.png --aspect 1:1 "use this visual style"
   makaron edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
 `);
@@ -3043,7 +3043,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else promptParts.push(args[i]);
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image|pony|wai] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);
