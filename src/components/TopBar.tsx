@@ -2,6 +2,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useState, useRef, useTransition, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ChangelogDialog from '@/components/ChangelogDialog'
 import { useHydrated } from '@/hooks/useHydrated'
@@ -172,13 +173,6 @@ export default function TopBar({ authReturnPath, onOverlayChange }: TopBarProps)
   useEffect(() => {
     setHasMounted(true)
   }, [])
-
-  // Warm only this small guest destination after hydration; touch has no hover lead time.
-  useEffect(() => {
-    if (!hydrated || user) return
-    const timer = window.setTimeout(() => router.prefetch(buildLoginHref(authReturnPath)), 800)
-    return () => window.clearTimeout(timer)
-  }, [hydrated, user, authReturnPath, router])
 
   const warmTopBarRoute = useCallback((path: string) => {
     const route = path.split('?')[0] || path
@@ -746,11 +740,10 @@ export default function TopBar({ authReturnPath, onOverlayChange }: TopBarProps)
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <LocaleToggle onOpenChange={setLocaleMenuOpen} />
-              <a
+              <Link
+                prefetch={true}
                 href={buildLoginHref(authReturnPath)}
                 aria-busy={loginPending}
-                onPointerEnter={() => router.prefetch(buildLoginHref(authReturnPath))}
-                onFocus={() => router.prefetch(buildLoginHref(authReturnPath))}
                 onClick={(event) => {
                   if (authReturnPath) {
                     try {
@@ -780,7 +773,7 @@ export default function TopBar({ authReturnPath, onOverlayChange }: TopBarProps)
                   <circle cx="12" cy="7" r="4" />
                 </svg>
                 {t('nav.signIn')}
-              </a>
+              </Link>
             </div>
           )}
         </div>
