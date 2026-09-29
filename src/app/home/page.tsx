@@ -141,6 +141,8 @@ function HomePageInner() {
   const [activeCategory, setActiveCategory] = useState('all')
   const [categoryHasChanged, setCategoryHasChanged] = useState(false)
   const [visibleSkillCount, setVisibleSkillCount] = useState(INITIAL_SKILL_CARD_COUNT)
+  const [skillBrowseExpanded, setSkillBrowseExpanded] = useState(false)
+  const skillLoadMoreRef = useRef<HTMLDivElement>(null)
   const skillSectionRef = useRef<HTMLDivElement>(null)
   const skillGridRef = useRef<HTMLDivElement>(null)
   const categoryScrollRef = useRef<HTMLDivElement>(null)
@@ -941,6 +943,22 @@ function HomePageInner() {
       controller.abort()
     }
   }, [])
+
+  // One deliberate expansion, then the same incremental scroll loading as the original home.
+  useEffect(() => {
+    const sentinel = skillLoadMoreRef.current
+    if (!skillBrowseExpanded || !sentinel || visibleSkillCount >= filteredHomeSkills.length) return
+    if (typeof IntersectionObserver === 'undefined') {
+      startTransition(() => setVisibleSkillCount(filteredHomeSkills.length))
+      return
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return
+      startTransition(() => setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length)))
+    }, { rootMargin: '200px 0px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [skillBrowseExpanded, filteredHomeSkills.length, visibleSkillCount])
 
   // Preload user's installed skills
   const skillsFetchedRef = useRef(false)
@@ -2526,9 +2544,14 @@ function HomePageInner() {
               </div>
             ))}
           </div>
-          {visibleSkillCount < filteredHomeSkills.length && (
-            <button type="button" className="creative-more mkr-liquid-pill mkr-liquid-pill-strong" onClick={() => setVisibleSkillCount(count => count + SKILL_CARD_BATCH_SIZE)}>{t('homeDesign.more')}</button>
-          )}
+          {visibleSkillCount < filteredHomeSkills.length && (skillBrowseExpanded ? (
+            <div ref={skillLoadMoreRef} aria-hidden="true" style={{ height: 1, width: '100%' }} />
+          ) : (
+            <button type="button" className="creative-more mkr-liquid-pill mkr-liquid-pill-strong" onClick={() => {
+              setSkillBrowseExpanded(true)
+              setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length))
+            }}>{t('homeDesign.more')}</button>
+          ))}
 
         </div>
 

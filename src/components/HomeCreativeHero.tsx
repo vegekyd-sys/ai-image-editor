@@ -73,7 +73,7 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
         </div>
         <div className="creative-hero-composer" id="create">{children}</div>
         <div className="creative-actions">
-          <a className="creative-text-link mkr-liquid-pill mkr-liquid-pill-strong" href="#templates">{t('homeDesign.explore')}<span aria-hidden="true">↓</span></a>
+          <a className="creative-text-link" href="#templates">{t('homeDesign.explore')}<span aria-hidden="true">↓</span></a>
         </div>
       </div>
     </section>

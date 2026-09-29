@@ -152,12 +152,15 @@ export default function HomeCreativeStudio({ skills, paused, suspended, onUseIde
       </div>
       <div className="creative-studio-panel" role="tabpanel" id="studio-panel" aria-labelledby={`studio-tab-${mode}`} tabIndex={0}>
         <div className="creative-studio-stage" data-mode={mode} key={mode}>
-          {mode === 'image' && <div className="studio-compare" style={{ '--reveal': `${reveal}%` } as CSSProperties}>
+          {mode === 'image' && <div className="studio-compare" data-full-view={reveal === 0 || reveal === 100} style={{ '--reveal': `${reveal}%` } as CSSProperties}>
             <img src={AFTER} className="studio-compare-after" alt={t('homeStudio.afterAlt')} loading="lazy" />
             <img src={BEFORE} className="studio-compare-before" alt={t('homeStudio.beforeAlt')} loading="lazy" />
             <div className="studio-compare-line" aria-hidden="true"><span><svg width="24" height="20" viewBox="0 0 24 20" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m8 4-6 6 6 6m8-12 6 6-6 6" /></svg></span></div>
-            <div className="studio-compare-labels"><span>{t('homeStudio.before')}</span><span>{t('homeStudio.after')}</span></div>
-            <input type="range" min={5} max={95} value={reveal} onChange={event => setReveal(Number(event.target.value))} aria-label={t('homeStudio.compare')} aria-valuetext={t('homeStudio.compareValue', reveal)} />
+            <div className="studio-compare-labels">
+              <button type="button" aria-pressed={reveal === 100} onClick={() => setReveal(100)}>{t('homeStudio.before')}</button>
+              <button type="button" aria-pressed={reveal === 0} onClick={() => setReveal(0)}>{t('homeStudio.after')}</button>
+            </div>
+            <input type="range" min={0} max={100} value={reveal} onChange={event => setReveal(Number(event.target.value))} aria-label={t('homeStudio.compare')} aria-valuetext={t('homeStudio.compareValue', reveal)} />
           </div>}
           {mode === 'video' && <div className="studio-video">
             {videoSkill ? <LazyVideo src={videoSkill.image} paused={paused} suspended={suspended || !inView} fallbackSrc={videoSkill.before_images?.[0]} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} /> : <img src={AFTER} alt={t('homeStudio.afterAlt')} />}
