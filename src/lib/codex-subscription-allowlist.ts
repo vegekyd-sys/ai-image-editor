@@ -5,7 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/service';
 export const CODEX_SUBSCRIPTION_ALLOWLIST_SETTING_KEY = 'codex_subscription_allowed_user_ids';
 
 // Keep the persisted key and exports compatible with existing deployments.
-// This is now the authoritative membership list for BOTH personal plans.
+// This is the shared personal-plan membership list. Codex also admits admins.
 export function getPersonalSubscriptionOwnerUserIds(): string[] {
   return normalizeCodexSubscriptionUserIds([
     process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
@@ -68,7 +68,22 @@ export async function isDynamicCodexSubscriptionUserAllowed(
 ): Promise<boolean> {
   if (!userId) return false;
   if (getPersonalSubscriptionOwnerUserIds().includes(userId)) return true;
-  return (await getDynamicCodexSubscriptionAllowedUserIds(admin)).includes(userId);
+  if ((await getDynamicCodexSubscriptionAllowedUserIds(admin)).includes(userId)) return true;
+  const { data, error } = await (admin ?? getSupabaseAdmin())
+    .from('user_profiles').select('is_admin').eq('id', userId).maybeSingle();
+  return !error && data?.is_admin === true;
+}
+
+export async function getCodexSubscriptionEligibleUserIds(
+  sharedUserIds: string[],
+  admin: SupabaseClient = getSupabaseAdmin(),
+): Promise<string[]> {
+  const { data, error } = await admin.from('user_profiles').select('id').eq('is_admin', true);
+  if (error) throw error;
+  return normalizeCodexSubscriptionUserIds([
+    ...sharedUserIds,
+    ...(data ?? []).map(profile => profile.id),
+  ]);
 }
 
 export async function saveDynamicCodexSubscriptionAllowedUserIds(

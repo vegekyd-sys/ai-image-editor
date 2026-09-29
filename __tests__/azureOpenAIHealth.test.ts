@@ -11,7 +11,7 @@ describe('Azure OpenAI health contract', () => {
     expect(isRequiredServiceDown('unavailable')).toBe(true);
   });
 
-  it('uses the Responses endpoint origin and accepts all three GPT-5.6 snapshots', () => {
+  it('uses the Responses endpoint origin and accepts the required GPT-5.6 and GPT-6 models', () => {
     expect(resolveAzureOpenAIModelsRequest({
       AZURE_OPENAI_API_KEY: 'test-key',
       AZURE_OPENAI_RESPONSES_URL:
@@ -25,6 +25,8 @@ describe('Azure OpenAI health contract', () => {
 
     expect(() => assertRequiredGPT56Models({
       data: [
+        { id: 'gpt-6-luna-2026-09-22' },
+        { id: 'gpt-6-sol-2026-09-22' },
         { id: 'gpt-5.6-terra-2026-07-09' },
         { id: 'gpt-5.6-sol-2026-07-09' },
         { id: 'gpt-5.6-luna-2026-07-09' },
@@ -35,6 +37,8 @@ describe('Azure OpenAI health contract', () => {
   it('rejects health when any required GPT-5.6 model is missing', () => {
     expect(() => assertRequiredGPT56Models({
       data: [
+        { id: 'gpt-6-luna-2026-09-22' },
+        { id: 'gpt-6-sol-2026-09-22' },
         { id: 'gpt-5.6-terra-2026-07-09' },
         { id: 'gpt-5.6-sol-2026-07-09' },
       ],

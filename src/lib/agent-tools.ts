@@ -1,3 +1,5 @@
+import { isFalImage25, resolveImageModel } from './models/types';
+import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
 import { after } from 'next/server';
 import { z } from 'zod';
@@ -50,6 +52,7 @@ import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import {
   rebuildAgentSnapshotUrls,
   type AgentSnapshotIndexRow,
+  partitionCompositionMediaRefs,
 } from './agent-media-index';
 import { mergePatchProps } from './patch-props';
 import { persistCompositionDraft } from './composition-draft';
@@ -679,11 +682,23 @@ async function createTranscriptArtifact(input: {
 async function validateCompositionMediaAspect(
   ctx: AgentContext,
   result: { code: string; props?: Record<string, unknown>; width?: number; height?: number },
+  targetAspectRatio?: string,
 ): Promise<string | null> {
   const outputWidth = Number(result.width || 1080);
   const outputHeight = Number(result.height || 1350);
   if (!Number.isFinite(outputWidth) || !Number.isFinite(outputHeight) || outputWidth <= 0 || outputHeight <= 0) {
     return null;
+  }
+  // An explicit output target owns the canvas, independently of source shape.
+  // This is a semantic tool argument, not a keyword guess from the user prompt.
+  if (targetAspectRatio !== undefined) {
+    const parts = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(targetAspectRatio);
+    const targetRatio = parts ? Number(parts[1]) / Number(parts[2]) : NaN;
+    if (!Number.isFinite(targetRatio) || targetRatio <= 0) {
+      return 'Invalid target_aspect_ratio. Use a positive width:height ratio such as "9:16".';
+    }
+    if (Math.abs((outputWidth / outputHeight) / targetRatio - 1) <= 0.01) return null;
+    return `Composition rejected: returned canvas ${Math.round(outputWidth)}x${Math.round(outputHeight)} does not match the requested target_aspect_ratio ${targetAspectRatio}. Keep the requested target, preserve source pixels with proportional scaling and contain/background (crop only when authorized), and repair the saved composition; do not switch to Node/FFmpeg.`;
   }
   if (!ctx.supabase || !ctx.projectId) return null;
 
@@ -750,7 +765,7 @@ async function validateCompositionMediaAspect(
         ? '1920x1080'
         : '1080x1080';
 
-    return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition".`;
+    return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition". If the user explicitly requested a different output aspect, keep that canvas and pass target_aspect_ratio (for example "9:16"); fit the source proportionally with contain/background or authorized cropping. Repair the saved composition, not a Node/FFmpeg replacement.`;
   } catch {
     return null;
   }
@@ -1368,11 +1383,11 @@ function createGenerateImageTool(
   return tool({
       description: generateImageToolPrompt,
       inputSchema: z.object({
-        editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
+        editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(IMAGE_MODEL_IDS).optional().describe('NEVER set this unless the user literally says a model name like "用pony", "use qwen", "用openai", "nano banana lite", or "Wan 2.7 Image" (wan2.7-image: fast single-image generation/editing, up to 9 inputs, no transparent output; failures must not be automatically retried), or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
+        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Honor other explicitly named/selected models. Qwen Spicy = qwen-spicy; existing self-hosted Qwen = qwen; Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for normal auto routing.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
-        background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
+        background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2.5 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
@@ -1404,11 +1419,17 @@ function createGenerateImageTool(
 
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
-        const billingModel = background === 'transparent' ? 'openai' : resolvedModel;
+        const billingModel = resolveImageModel(resolvedModel, background);
         if (ctx.userId && billingModel && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
-          const price = await getToolPrice(resolveToolName('edit_image', billingModel));
-          if (!price && billingModel === 'wan2.7-image') {
-            return { success: false, message: 'Tool pricing is not configured: edit_image_wan2.7-image', error: 'pricing_unavailable' };
+          if (isFalImage25(billingModel)) {
+            const rate = await getTokenRate(billingModel);
+            if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'GPT Image 2.5 pricing is not configured.', error: 'pricing_unavailable' };
+            const check = await requireCredits(ctx.userId, 5);
+            if (!check.ok) return { success: false, message: 'Insufficient credits.', error: 'insufficient_credits' };
+          }
+          const price = isFalImage25(billingModel) ? null : await getToolPrice(resolveToolName('edit_image', billingModel));
+          if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {
+            return { success: false, message: `Tool pricing is not configured: edit_image_${billingModel}`, error: 'pricing_unavailable' };
           }
           if (price && !price.isFree) {
             const check = await requireCredits(ctx.userId, price.credits);
@@ -1517,7 +1538,7 @@ function createGenerateAnimationTool(
         duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max accepts integer 5–15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can honor it. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive. Grok reference-to-video accepts supported fixed ratios.'),
         model: z.string().optional().describe('Video model/provider id. Defaults to fal-h3-max at 768p. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, wan-3.0, wan-3.0-prime, kling, grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Default to seedance-2.5 for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
-        video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. fal H3 Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
+        video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. fal H3 Max supports 480p/768p/1080p (1080p uses latent refinement from 768p), default 768p. fal H3 Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, MiniMax H3, and FAL H3 Max.'),
         reference_voice_ids: z.array(z.string()).max(3).optional().describe('Grok Imagine Video 1.5 preset xAI voice ids, e.g. ["eve"] or ["eve","leo"]. Reference them as <AUDIO_0>, <AUDIO_1> in story_prompt. Do not use Audio Index labels or uploaded URLs here.'),
@@ -3290,7 +3311,7 @@ function createMaterializeMediaTool(
   return tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
-The tool always queues a durable async export like video generation and returns immediately, so the user can keep chatting while polling/cron finishes the MP4. Ordinary CUI exports use fast_720p (short side 720, no upscale) for speed. Default publish=true so a processing video appears immediately and is replaced by the finished MP4. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
+The tool always queues a durable async export like video generation and returns immediately, so the user can keep chatting while polling/cron finishes the MP4. Export at the composition's source dimensions so a requested 1080p canvas delivers a 1080p MP4. Default publish=true so a processing video appears immediately and is replaced by the finished MP4. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
 For Studio Run, first preview and patch the Remotion source until it is satisfactory, call publish_draft once with the exact final design_path, then call materialize_media once with that same path when MP4 Delivery is requested. The runtime selects locked source resolution from typed Studio Run state. The queued export automatically completes Review and Delivery after the real MP4 is ready. After a successful queue submission, do not author Review/Delivery artifacts or continue reviewing. materialize_media publishes the MP4, not the editable draft.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
@@ -3334,9 +3355,7 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
 
         try {
           const shouldPublish = publish !== false;
-          const renderProfile = studioCheckpoint.studioRunId
-            ? 'source'
-            : 'fast_720p';
+          const renderProfile = 'source';
           const publishSnapshotId = shouldPublish ? crypto.randomUUID() : undefined;
           const job = await createRemotionExportJob({
             userId: ctx.userId,
@@ -4136,7 +4155,7 @@ Path is auto-generated from the current project and output type. Just provide a 
           start: z.number().nonnegative().optional(),
           end: z.number().positive().optional(),
           description: z.string().min(1).optional(),
-        })).max(20).optional().describe('Publish external image or video media directly to the current Media List without uploading derivatives. Preserve Scene type="image" or type="video" when available. Images need source_url + type + description; videos also require start + end. Older callers may omit type, in which case the server detects it once from MIME/file bytes. Put known media analysis into description so later Agent turns can use it without repeating Analyze.'),
+        })).max(20).optional().describe('Publish external image or video media to the current Media List. HEIC images are converted to durable JPEG URLs; compatible images and video ranges retain source URLs. Preserve Scene type="image" or type="video" when available. Images need source_url + type + description; videos also require start + end. Older callers may omit type, in which case the server detects it once from MIME/file bytes. Put known media analysis into description so later Agent turns can use it without repeating Analyze.'),
         workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
         limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),
@@ -4178,16 +4197,17 @@ Path is auto-generated from the current project and output type. Just provide a 
             const published = await publishExternalVideoRanges({
               supabase: ctx.supabase,
               projectId: ctx.projectId,
+              userId: ctx.userId,
               ranges: sourceRanges,
             });
             await refreshSnapshotUrls(ctx);
             if (published.length) ctx.currentSnapshotIndex = published[published.length - 1].mediaIndex - 1;
             return {
               success: true,
-              message: `Published ${published.length} external media item${published.length === 1 ? '' : 's'} to the current Media List without uploading derivatives:\n${published.map((item, index) => item.sourceRange
+              message: `Published ${published.length} external media item${published.length === 1 ? '' : 's'} to the current Media List:\n${published.map((item, index) => item.sourceRange
                 ? `${index + 1}. ${item.ref} [video] source_url=${item.sourceRange.source_url} start=${item.sourceRange.start_sec} end=${item.sourceRange.end_sec}\n   Media description: ${item.description}`
                 : `${index + 1}. ${item.ref} [image] source_url=${item.url}\n   Media description: ${item.description}`
-              ).join('\n')}\nThese refs are available immediately to later tools in this same Agent session. Video refs are bounded to their source ranges; image refs use their source URL directly. Their Media List descriptions are existing media understanding; consume covered content directly and call Analyze only for missing or uncovered details.`,
+              ).join('\n')}\nThese refs are available immediately to later tools in this same Agent session. Video refs are bounded to their source ranges; image refs use browser-compatible URLs (HEIC images are converted to JPEG). Their Media List descriptions are existing media understanding; consume covered content directly and call Analyze only for missing or uncovered details.`,
               published,
             };
           } catch (error) {
@@ -4499,11 +4519,15 @@ function createRunCodeTool(
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
         media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
+        target_aspect_ratio: z.string().regex(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/).refine(value => {
+          const [width, height] = value.split(':').map(Number);
+          return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 && Number.isFinite(width / height);
+        }, 'Use a positive width:height ratio').optional().describe('Composition only: output aspect explicitly requested by the user, e.g. "9:16", "16:9", "1:1", or "4:5". Pass on every run/patch when reframing source footage. Overrides the default source-aspect constraint and validates the returned canvas against this target. Keep sources proportional using contain/background; crop only when authorized. Omit when no output aspect/reframe was requested; do not invent a target just to bypass a validation error.'),
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }).refine(value => Boolean(value.code || value.code_path || value.composition?.code || value.composition_parts), {
         message: 'Provide executable code, a code_path, a direct composition payload, or durable composition parts.',
       }),
-      execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime }) => {
+      execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime, target_aspect_ratio }) => {
         let executableCode = code || '';
         if (code_path) {
           if (!ctx.supabase || !ctx.userId) {
@@ -4703,8 +4727,13 @@ function createRunCodeTool(
               const v = validateImageIndex(ctx.snapshotImages, ref);
               if (v.error) return { type: 'text' as const, content: v.error };
             }
-            const stillMediaRefs = media_refs.filter(ref => !isVideoUrl(ctx.snapshotImages[ref - 1]));
-            const skippedVideoRefs = media_refs.filter(ref => isVideoUrl(ctx.snapshotImages[ref - 1]));
+            const snapshotRows = await refreshSnapshotUrls(ctx);
+            if (ctx.supabase && ctx.projectId && !snapshotRows.length) {
+              throw new Error('Unable to load timeline media types for composition inputs.');
+            }
+            const { stillMediaRefs, skippedVideoRefs } = partitionCompositionMediaRefs(
+              media_refs, ctx.snapshotImages, snapshotRows,
+            );
             preloadedImages = await Promise.all(
               stillMediaRefs.map(ref => fetchImageBuffer(ctx.snapshotImages[ref - 1]))
             );
@@ -4916,7 +4945,7 @@ function createRunCodeTool(
               props: resolvedProps,
               width: result.width,
               height: result.height,
-            });
+            }, target_aspect_ratio);
             if (aspectError) {
               return { type: 'text' as const, content: aspectError };
             }

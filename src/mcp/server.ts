@@ -1,3 +1,4 @@
+import { resolveImageModel } from '../lib/models/types';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
@@ -119,8 +120,9 @@ export function createMakaronMcpServer(options?: McpServerOptions) {
 | Add text/captions/titles | captions | (auto) | Gemini handles .md templates well |
 | Text-to-image | (omit) | (auto) | gemini→qwen auto fallback, handles all styles including anime |
 | NSFW/sensitive editing | (omit) | qwen | Gemini will refuse |
-| Design/layout/poster/text | (omit) | openai | Best text rendering & design (~50s, premium pricing) |
+| Product/e-commerce/infographic/design/layout/poster/text | (omit) | gpt-image-2.5-flare | Default design image route; preserve the user brief verbatim |
 | Fast lower-cost drafts | (omit) | gemini-lite | Nano Banana 2 Lite for fast 1K image drafts |
+| Qwen Spicy | (omit) | qwen-spicy | Independent MuleRouter model, 1-3 image editing |
 | Wan 2.7 generation/editing | (omit) | wan2.7-image | Fast ~1K output, up to 9 input images; no automatic retries |
 | Not sure | (omit) | (auto) | Auto routing with fallback |
 
@@ -130,18 +132,18 @@ Input image can be a local file path (stdio), URL, or base64 data URL. Omit imag
 IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are fully supported and produce better results.`,
     {
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
-      editPrompt: z.string().describe('English editing instructions describing what to change'),
+      editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback. For ordinary edits, use specific English editing instructions'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
-      model: z.enum(IMAGE_MODEL_IDS).nullish().describe('NEVER set unless user literally names a model. Wan 2.7 Image = wan2.7-image (fast single output; never automatically retry failed/unknown requests). Use gemini-lite only when the user asks for Nano Banana 2 Lite / Lite. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
-      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3). Put the original photo here when restoring face/color/details from it.'),
+      model: z.enum(IMAGE_MODEL_IDS).nullish().describe('Default to gpt-image-2.5-flare for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockups, face-identity restoration after a Gemini edit, and director storyboards. GPT Image 2 and the legacy openai parameter now resolve to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality with no subscription or automatic fallback. Honor other explicitly named models: Qwen Spicy = qwen-spicy; existing self-hosted Qwen = qwen; Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for auto routing.'),
+      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5 supports up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
-      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
+      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2.5 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
     },
     async (params) => {
       try {
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', params.background === 'transparent' ? 'openai' : params.model ?? undefined);
+          const check = await options.onToolStart('makaron_edit_image', resolveImageModel(params.model ?? undefined, params.background ?? undefined));
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -274,12 +276,12 @@ Tips:
     `Submit a video rendering task. Returns a taskId for polling.
 
 IMPORTANT:
-- SeeDance, Wan 3.0, Gemini Omni 1.1, MiniMax H3, and MiniMax H3 Max support native text-to-video with no images. H3 Max accepts at most one public image URL and treats it as image-to-video, not a feature reference.
+- SeeDance, Wan 3.0, Gemini Omni 1.1, MiniMax H3, and MiniMax H3 Max support native text-to-video with no images. fal H3 Turbo (minimax-h3-max) accepts at most one start image for image-to-video. fal H3 Max (fal-h3-max, default) uses reference-to-video for any image/video/audio input: up to 9 images + 3 videos + 3 audios, 12 total; audio-only input is not supported.
 - EvoLink Seedance reference images must be JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB each. Input errors distinguish too_small, too_large, invalid_aspect_ratio, unsupported_format, and unreadable. NON_RETRYABLE means the same URL must not be resubmitted; prepare a new compliant URL or replace the source first.
 - When images are provided, script should use <<<media_N>>> format (from makaron_write_video_script output). Text-to-video scripts should not invent media markers.
 - Video timing depends on the selected model: fal H3 Turbo and fal H3 Max usually finish in tens of seconds; Max with video references may take around 1-2 minutes. Queue and saving time can vary; other providers may take 3-5 minutes; Grok is optimized for substantially faster generation; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll and measure the actual elapsed time.
-- Duration: omit for smart mode. H3 Max supports exactly 5/10/15s and defaults to 5s. Seedance 2.5 supports 4-30s; Wan 3.0 supports 2-30s; SeeDance 2.0 and MiniMax H3 support 4-15s; Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
-- Resolution: omit or use "auto" for the selected model default. wan-3.0 and wan-3.0-prime expose 480p/720p/1080p/2k/4k; 2k/4k automatically use the matching FlashVSR/Pro endpoint. minimax-h3-max uses the Turbo route, supports 480p/768p, and defaults to native 768p; minimax-h3 supports 768p/2k and defaults to 768p. Gemini Omni supports 360p/720p/1080p/4k; Seedance 2.5 supports 480p/720p; Grok text-to-video supports 480p/720p/1080p and caps image/voice references at 720p.
+- Duration: omit for smart mode. fal H3 Max supports integer 5-15s; fal H3 Turbo supports exactly 5/10/15s. Both default to 5s. Seedance 2.5 supports 4-30s; Wan 3.0 supports 2-30s; SeeDance 2.0 and MiniMax H3 support 4-15s; Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
+- Resolution: omit or use "auto" for the selected model default. wan-3.0 and wan-3.0-prime expose 480p/720p/1080p/2k/4k; 2k/4k automatically use the matching FlashVSR/Pro endpoint. fal-h3-max supports 480p/768p/1080p, default 768p; 1080p uses latent refinement from 768p. minimax-h3-max uses the Turbo route and supports only 480p/768p; minimax-h3 supports 768p/2k and defaults to 768p. Gemini Omni supports 360p/720p/1080p/4k; Seedance 2.5 supports 480p/720p; Grok text-to-video supports 480p/720p/1080p and caps image/voice references at 720p.
 - Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references, plus dedicated edit/extend modes. Gemini Omni accepts one timeline/external video and can extend it forward for 3-10 seconds (10 seconds by default).
 
 Models:
@@ -293,7 +295,7 @@ Models:
 - grok — one Makaron selector with split xAI routing: Grok Imagine Video 1.5 for text generation (up to 1080p) or feature/reference generation (1-7 images or preset voices, up to 720p, native audio), and Grok Imagine Video for one-video edit/extend (up to 720p)
 - google-omni — Gemini Omni 1.1 Flash via Google, fast text/image/video generation, editing, and forward extension, 360p/720p/upscaled 1080p/4k, up to 6 image references without a video reference, one video reference for edit/extend, native generated audio, no uploaded audio references
 - minimax-h3 — MiniMax H3 direct API, native text-to-video plus up to 9 image / 3 video / 3 audio references, 4-15s, public 768p/2K, default 768P
-- fal-h3-max (default) — FAL H3 Max, native T2V or image/video/audio R2V, integer 5–15s, 480p/768p default 768p. Up to 9 images + 3 videos + 3 audios, 12 total. Video/audio each 2–15s and modality total <=15s. Use generate plus feature references for video modifications.
+- fal-h3-max (default) — FAL H3 Max, native T2V or image/video/audio R2V, integer 5–15s, 480p/768p/1080p default 768p. Up to 9 images + 3 videos + 3 audios, 12 total. Video/audio each 2–15s and modality total <=15s. Use generate plus feature references for video modifications.
 - minimax-h3-max — fal H3 Turbo faster-than-real-time route, native text-to-video or exactly one start-image image-to-video, exactly 5/10/15s, 480p/768p, default native 768p; no reference video/audio yet
 - sync-lipsync-v3 — exact replacement-audio lip sync; requires exactly one source video and one audio URL, preserves source framing and the supplied audio
 
@@ -309,9 +311,9 @@ Style: Cinematic, warm golden light.`,
       audioUrls: z.array(z.string().url()).max(10).optional().describe('Public reference audio URLs. Sync Lipsync v3 requires exactly one replacement track; Seedance 2.5 accepts up to 10.'),
       referenceVoiceIds: z.array(z.string()).max(3).optional().describe('Grok Imagine Video 1.5 preset voice ids (up to 3), such as eve or leo. These are provider voice names, not uploaded audio URLs.'),
       referenceVideoDuration: z.number().positive().optional().describe('Known source-video duration in seconds. Pass this for Grok edit/extend so duration validation and input-video billing match the actual source.'),
-      duration: z.number().optional().describe('Duration in seconds. H3 Max accepts exactly 5/10/15s and defaults to 5s. Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s.'),
+      duration: z.number().optional().describe('Duration in seconds. fal H3 Max accepts integer 5-15s; fal H3 Turbo accepts exactly 5/10/15s. Both default to 5s. Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok reference-to-video supports fixed provider ratios.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'wan-3.0', 'wan-3.0-prime', 'kling', 'grok', 'google-omni', 'minimax-h3', 'minimax-h3-max', 'fal-h3-max', 'sync-lipsync-v3']).optional().describe('Video model. Wan exposes wan-3.0 and wan-3.0-prime; minimax-h3-max is the near-real-time T2V/single-image I2V route and does not accept reference video or audio.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'wan-3.0', 'wan-3.0-prime', 'kling', 'grok', 'google-omni', 'minimax-h3', 'minimax-h3-max', 'fal-h3-max', 'sync-lipsync-v3']).optional().describe('Video model. Default fal-h3-max supports image/video/audio reference-to-video at 768p. Wan exposes wan-3.0 and wan-3.0-prime; minimax-h3-max is the near-real-time T2V/single-image I2V route and does not accept reference video or audio.'),
       videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Shared output-resolution control for every video model. fal H3 Turbo supports 480p/768p and defaults to native 768p; MiniMax H3 supports 768p/2k; other capabilities follow the selected model.'),
       operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require videoUrls. Grok and Omni extend forward only.'),
       extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction. Omit or use forward for Gemini Omni.'),

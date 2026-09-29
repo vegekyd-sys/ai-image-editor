@@ -1,0 +1,45 @@
+diff --git a/node_modules/@ai-sdk/deepseek/src/chat/convert-to-deepseek-chat-messages.ts b/node_modules/@ai-sdk/deepseek/src/chat/convert-to-deepseek-chat-messages.ts
+--- a/node_modules/@ai-sdk/deepseek/src/chat/convert-to-deepseek-chat-messages.ts
++++ b/node_modules/@ai-sdk/deepseek/src/chat/convert-to-deepseek-chat-messages.ts
+@@ -45,7 +45,7 @@
+   messages: DeepSeekChatPrompt;
+   warnings: Array<SharedV4Warning>;
+ }> {
+-  const isDeepSeekV4 = modelId.includes('deepseek-v4');
++  const isDeepSeekV4 = (modelId === 'deepseek-flash' || modelId.includes('deepseek-v4'));
+   const messages: DeepSeekChatPrompt = [];
+   const warnings: Array<SharedV4Warning> = [];
+ 
+diff --git a/node_modules/@ai-sdk/deepseek/src/chat/deepseek-chat-language-model.ts b/node_modules/@ai-sdk/deepseek/src/chat/deepseek-chat-language-model.ts
+--- a/node_modules/@ai-sdk/deepseek/src/chat/deepseek-chat-language-model.ts
++++ b/node_modules/@ai-sdk/deepseek/src/chat/deepseek-chat-language-model.ts
+@@ -322,7 +322,7 @@
+       thinking?.type !== 'disabled' &&
+       (thinking != null ||
+         this.modelId === 'deepseek-reasoner' ||
+-        this.modelId.includes('deepseek-v4'));
++        (this.modelId === 'deepseek-flash' || this.modelId.includes('deepseek-v4')));
+ 
+     if (isThinkingEnabled && temperature != null) {
+       allWarnings.push({
+diff --git a/node_modules/@ai-sdk/deepseek/dist/index.js b/node_modules/@ai-sdk/deepseek/dist/index.js
+--- a/node_modules/@ai-sdk/deepseek/dist/index.js
++++ b/node_modules/@ai-sdk/deepseek/dist/index.js
+@@ -137,7 +137,7 @@
+   supportsStructuredOutputs = false
+ }) {
+   var _a;
+-  const isDeepSeekV4 = modelId.includes("deepseek-v4");
++  const isDeepSeekV4 = modelId === "deepseek-flash" || modelId.includes("deepseek-v4");
+   const messages = [];
+   const warnings = [];
+   if ((responseFormat == null ? void 0 : responseFormat.type) === "json") {
+@@ -833,7 +833,7 @@
+       });
+     }
+     const thinking = this.config.supportsThinking === false ? void 0 : thinkingType != null ? { type: thinkingType === "adaptive" ? "enabled" : thinkingType } : isCustomReasoning(reasoning) ? { type: reasoning === "none" ? "disabled" : "enabled" } : void 0;
+-    const isThinkingEnabled = this.config.supportsThinking !== false && (thinking == null ? void 0 : thinking.type) !== "disabled" && (thinking != null || this.modelId === "deepseek-reasoner" || this.modelId.includes("deepseek-v4"));
++    const isThinkingEnabled = this.config.supportsThinking !== false && (thinking == null ? void 0 : thinking.type) !== "disabled" && (thinking != null || this.modelId === "deepseek-reasoner" || (this.modelId === "deepseek-flash" || this.modelId.includes("deepseek-v4")));
+     if (isThinkingEnabled && temperature != null) {
+       allWarnings.push({
+         type: "unsupported",

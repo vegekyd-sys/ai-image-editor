@@ -113,7 +113,7 @@ describe('agent reliability policy', () => {
     expect(nonRepeatable).not.toContain("'materialize_media'");
     expect(agent).not.toContain('wait: z.boolean()');
     expect(agent).not.toContain("profile: z.enum(['fast_720p', 'source'])");
-    expect(agent).toContain("studioCheckpoint.studioRunId\n            ? 'source'\n            : 'fast_720p'");
+    expect(agent).toContain("const renderProfile = 'source'");
     expect(agent).toContain('studioRunId: studioCheckpoint.studioRunId');
     expect(agent).toContain('shouldPreferLatestDraft');
     expect(agent).toContain('design_path: shouldPreferLatestDraft ? latestDraftPath : design_path');

@@ -3,6 +3,7 @@ import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { AgentPerf } from '@/lib/agent-perf';
 import { requireCredits, recordAgentTokenUsage } from '@/lib/billing/credits';
+import { enterBillingAttribution, resolveRequestBillingSource } from '@/lib/billing/attribution';
 import { getRequestLocale } from '@/lib/server-locale';
 import { translate } from '@/lib/locales';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
@@ -46,8 +47,9 @@ export async function POST(req: NextRequest) {
     ]);
     endRequestRead({ authenticated: !('error' in authResult) });
     if ('error' in authResult) return authResult.error;
-    const { userId, supabase } = authResult.auth;
+    const { userId, supabase, apiKeyId } = authResult.auth;
     cleanupSupabase = supabase;
+    const billingSource = resolveRequestBillingSource(req, { apiKeyId });
 
     const {
       projectId,
@@ -171,6 +173,9 @@ export async function POST(req: NextRequest) {
       isNsfw,
       headless: true,
       firstMessageId,
+      // Read back by the execution runner so every credit debit inside this
+      // run is attributed to it (usage_logs.run_id / source).
+      billing: { source: billingSource, apiKeyId: apiKeyId ?? null },
       ...(durableExecution ? {
         executionOwnerOrigin: req.nextUrl.origin,
         executionRequest: {
@@ -220,6 +225,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: runCreateError?.message || 'Failed to create run' }, { status: 500 });
     }
     createdRunId = runId;
+    enterBillingAttribution({ runId, projectId, source: billingSource, apiKeyId: apiKeyId ?? null });
 
     // Write user message to DB (frontend does this itself, headless mode must do it here)
     await persistHeadlessUserMessage();

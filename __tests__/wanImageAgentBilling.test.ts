@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
-import { IMAGE_MODEL_IDS } from '@/lib/models/types';
+import { IMAGE_MODEL_IDS, isFalImage25, resolveImageModel } from '@/lib/models/types';
 import { normalizeGenerateImageMediaIndex } from '@/lib/generate-image-input';
 
 // Execute the actual factory in isolation: importing all unrelated Agent tools
@@ -15,16 +15,17 @@ const factory = parsed.statements.find(node => ts.isFunctionDeclaration(node) &&
 if (!factory) throw new Error('Missing generate_image factory');
 const code = ts.transpileModule(factory.getText(parsed), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
 
-function setup() {
+function setup(provider = 'azure') {
   const editImage = vi.fn().mockResolvedValue({ success: true, image: 'data:image/jpeg;base64,YQ==', usedModel: 'wan2.7-image', provider: 'dashscope' });
   const deductByTokens = vi.fn().mockResolvedValue({ charged: 9, remaining: 91 });
   const requireCredits = vi.fn().mockResolvedValue({ ok: true, balance: 100 });
   const deductCredits = vi.fn().mockResolvedValue({ charged: 6, remaining: 94 });
   const getToolPrice = vi.fn().mockResolvedValue({ credits: 6, isFree: false });
+  const getTokenRate = vi.fn().mockResolvedValue({ model_id: 'gpt-image-2.5-flare', markup: 2, is_active: true });
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
   const ctx = { preferredModel: 'wan2.7-image', userId: 'test-user', projectId: 'test-project', currentImage: '', snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined };
   const context = vm.createContext({
-    tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS,
+    tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, getTokenRate,
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex,
     validateImageIndex: vi.fn(), getToolPrice, isBillingEnabled,
     resolveToolName: (_name: string, model: string) => `edit_image_${model}`,
@@ -35,7 +36,7 @@ function setup() {
     },
   });
   const create = vm.runInContext(`${code}\ncreateGenerateImageTool`, context);
-  return { tool: create({ ctx, runtime: { spec: { provider: 'azure' } } }), ctx, editImage, requireCredits, deductCredits, deductByTokens, getToolPrice, isBillingEnabled };
+  return { tool: create({ ctx, runtime: { spec: { provider } } }), ctx, editImage, requireCredits, deductCredits, deductByTokens, getToolPrice, isBillingEnabled, getTokenRate };
 }
 
 describe('App Agent Wan execution and billing', () => {
@@ -115,5 +116,32 @@ describe('App Agent Wan execution and billing', () => {
     deductByTokens.mockRejectedValue(new Error('Ledger unavailable'));
     await expect(tool.execute({ editPrompt: 'Both cups.' })).rejects.toThrow('Ledger unavailable');
     expect(ctx.generatedImages).toHaveLength(0);
+  });
+});
+
+
+describe('App Agent Image 2.5 billing', () => {
+  it('checks Flare pricing for a legacy Image 2 selection even on a subscription agent', async () => {
+    const { tool, ctx, getTokenRate, editImage } = setup('codex-subscription');
+    ctx.preferredModel = 'openai';
+    getTokenRate.mockResolvedValue(null);
+    expect(await tool.execute({ editPrompt: 'Product image' })).toMatchObject({ success: false, error: 'pricing_unavailable' });
+    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    expect(editImage).not.toHaveBeenCalled();
+  });
+  it('rejects missing exact pricing before a paid call', async () => {
+    const { tool, ctx, getTokenRate, editImage } = setup();
+    ctx.preferredModel = 'gpt-image-2.5-flare';
+    getTokenRate.mockResolvedValue(null);
+    expect(await tool.execute({ editPrompt: 'A mug.' })).toMatchObject({ success: false, error: 'pricing_unavailable' });
+    expect(editImage).not.toHaveBeenCalled();
+  });
+  it('passes exact provider cost into the ledger before publishing', async () => {
+    const { tool, ctx, editImage, deductByTokens, deductCredits } = setup();
+    ctx.preferredModel = 'gpt-image-2.5-flare';
+    editImage.mockResolvedValue({ success: true, image: 'data:image/jpeg;base64,YQ==', usedModel: 'gpt-image-2.5-flare', provider: 'fal', usage: { modelId: 'gpt-image-2.5-flare', inputTokens: 0, outputTokens: 0, providerCostUsd: 0.0062 } });
+    expect((await tool.execute({ editPrompt: 'Cup', background: 'transparent' })).success).toBe(true);
+    expect(deductByTokens).toHaveBeenCalledWith('test-user', 'generate_image', 'gpt-image-2.5-flare', 0, 0, undefined, undefined, undefined, 0.0062);
+    expect(deductCredits).not.toHaveBeenCalled();
   });
 });

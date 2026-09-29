@@ -76,7 +76,7 @@ Server/SDK instead of expanding this adapter.
    CODEX_CLI_PATH=/Applications/ChatGPT.app/Contents/Resources/codex
    CODEX_SUBSCRIPTION_REASONING_EFFORT=medium
    CODEX_SUBSCRIPTION_ORIGINATOR=makaron
-   CODEX_SUBSCRIPTION_SMOKE_MODEL=gpt-5.6-terra
+   CODEX_SUBSCRIPTION_SMOKE_MODEL=gpt-6-luna
    ```
 
 3. Keep the selected fallback's existing API credentials configured:
@@ -97,7 +97,7 @@ schema. It does not print the ChatGPT account id or access credential.
 ## VLab relay + Vercel Preview
 
 The relay in `services/codex-subscription-relay` is a separate Node service. It
-must use its own Unix user, `CODEX_HOME`, pinned Codex CLI, loopback port, and
+must use its own Unix user, `CODEX_HOME`, pinned Codex CLI (currently `0.156.1`), loopback port, and
 service unit. Copy only the already-authorized `auth.json` into that dedicated
 home; do not share another Agent's sessions, config, workspace, or App Server.
 
@@ -147,7 +147,7 @@ keeping the HMAC and Relay-side authorization boundary.
 
 ## Runtime behavior
 
-1. A GPT-5.6 request for the configured owner or an allowlisted test account
+1. A GPT-6 or GPT-5.6 request for the configured owner or an allowlisted test account
    selects `codex-subscription`.
 2. Local mode starts `codex app-server --stdio` directly. Relay mode signs the
    request to VLab; only the isolated relay starts App Server and caches the

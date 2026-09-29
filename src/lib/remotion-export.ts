@@ -27,6 +27,7 @@ import {
 export type RemotionExportStatus = 'queued' | 'rendering' | 'completed' | 'failed'
 export type RemotionExportOutputType = 'video' | 'image'
 export type RemotionRenderProfile = 'fast_720p' | 'source'
+export const DEFAULT_REMOTION_RENDER_PROFILE: RemotionRenderProfile = 'source'
 
 export interface RemotionExportJob {
   id: string
@@ -406,7 +407,7 @@ async function markPublishedSnapshotsFailed(
 
 export function resolveRemotionRenderProfile(
   design: Pick<DesignPayload, 'width' | 'height'>,
-  profile: RemotionRenderProfile = 'fast_720p',
+  profile: RemotionRenderProfile = DEFAULT_REMOTION_RENDER_PROFILE,
 ) {
   const sourceWidth = Number(design.width) || 1080
   const sourceHeight = Number(design.height) || 1920
@@ -486,7 +487,7 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
   }
 
   const outputType = input.outputType || 'video'
-  const renderProfile = input.renderProfile || 'fast_720p'
+  const renderProfile = input.renderProfile || DEFAULT_REMOTION_RENDER_PROFILE
   let fingerprintSource = input.design
   let resolvedDesignPath = input.designPath
   if (!fingerprintSource && input.snapshotId) {
@@ -830,6 +831,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
     const { design, designPath } = await loadJobDesign(job, admin)
     const resolvedDesign = await normalizeDesignForServer(design, job.project_id, admin)
     stageTimings.resolveDesignMs = Date.now() - loadStart
+    // Jobs queued before the source-resolution default may have no profile metadata.
     const renderProfile = job.metadata?.renderProfile === 'source' ? 'source' : 'fast_720p'
     const renderTarget = resolveRemotionRenderProfile(resolvedDesign, renderProfile)
     const fps = resolvedDesign.animation?.fps || 30

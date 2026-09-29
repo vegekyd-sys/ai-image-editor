@@ -361,7 +361,7 @@ export async function* runMakaronAgent(
     : allTools;
 
   // Build user message content. Visual Agents receive the relevant still images
-  // in the same first request as the user's text. DeepSeek remains text-only and
+  // in the same first request as the user's text. DeepSeek V4 Pro remains text-only and
   // reaches images through analyze_image's Gemini fallback.
   const animImages = options?.animationImages;
   const directVisionImages: NativeVisionImageInput[] = nativeImageAnalysis

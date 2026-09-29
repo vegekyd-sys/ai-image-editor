@@ -8,6 +8,8 @@ import { dispatchAgentExecutionAttempt } from '@/lib/agent-execution-dispatch';
 import { extractStudioDeliveryVideo } from '@/lib/agent-run-artifacts';
 import { resolveWorkspaceFile } from '@/lib/workspace';
 import { normalizeLocale, translate } from '@/lib/locales';
+import { getRunUsage } from '@/lib/billing/run-usage';
+import { getBalance } from '@/lib/billing/credits';
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
 
@@ -132,6 +134,7 @@ export async function GET(
     const admin = getSupabaseAdmin();
     const url = new URL(req.url);
     const wantEvents = url.searchParams.get('events') === 'true';
+    const wantUsage = url.searchParams.get('usage') === 'true';
     const streamView = wantEvents && url.searchParams.get('view') === 'stream';
     const afterSeq = url.searchParams.has('after') ? parseInt(url.searchParams.get('after')!) : undefined;
 
@@ -816,6 +819,17 @@ export async function GET(
       events = data ?? [];
     }
 
+    // Per-run credit usage. Included once the Agent has stopped (charges are
+    // awaited before the run turns terminal) or on request with ?usage=true.
+    let usage: Awaited<ReturnType<typeof getRunUsage>> | undefined;
+    if (agentDone || wantUsage) {
+      const [summary, balance] = await Promise.all([
+        getRunUsage(admin, runId),
+        getBalance(run.user_id).then(result => result.balance).catch(() => undefined),
+      ]);
+      usage = typeof balance === 'number' ? { ...summary, balance } : summary;
+    }
+
     return NextResponse.json({
       id: run.id,
       status: effectiveStatus,
@@ -835,6 +849,7 @@ export async function GET(
       output: finalOutput,
       eventCount: eventCount ?? 0,
       result, // legacy
+      ...(usage ? { usage } : {}),
       ...(errorMsg ? { error: { code: 'agent_error', message: errorMsg } } : {}),
       ...(events ? { events } : {}),
     });

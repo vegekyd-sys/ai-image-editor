@@ -621,7 +621,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       taskId = await createFalH3MaxReferenceVideoTask({
         prompt: finalPrompt, images: filteredImages, videos: h3References.videos, audios: h3References.audios,
         duration: resolvedDuration ?? 5, aspectRatio: providerAspectRatio,
-        resolution: route.resolution as '480p' | '768p', imagesVerified: true,
+        resolution: route.resolution as '480p' | '768p' | '1080p', imagesVerified: true,
         onBeforeSubmit: billingUsage ? () => input.onBeforeProviderSubmit!(billingUsage!) : undefined,
       });
       return { success: true, taskId, videoModel: provider,

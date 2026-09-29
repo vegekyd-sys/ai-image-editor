@@ -3,6 +3,7 @@ import type { ModelMessage } from 'ai';
 import { authenticateRequest } from '@/lib/api-auth';
 import type { AgentDualWriter as AgentDualWriterType } from '@/lib/agentDualWriter';
 import { requireCredits, recordAgentTokenUsage } from '@/lib/billing/credits';
+import { enterBillingAttribution, resolveRequestBillingSource } from '@/lib/billing/attribution';
 import { AgentPerf } from '@/lib/agent-perf';
 import { getRequestLocale } from '@/lib/server-locale';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
@@ -39,7 +40,8 @@ export async function POST(req: NextRequest) {
     endAuth({ ok: !('error' in authResult) });
     endReadBody();
     if ('error' in authResult) return authResult.error;
-    const { userId, supabase } = authResult.auth;
+    const { userId, supabase, apiKeyId } = authResult.auth;
+    const billingSource = resolveRequestBillingSource(req, { apiKeyId });
 
     const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
             tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
@@ -194,6 +196,7 @@ export async function POST(req: NextRequest) {
 
       runId = crypto.randomUUID();
       firstMessageId = crypto.randomUUID();
+      enterBillingAttribution({ runId, projectId, source: billingSource, apiKeyId: apiKeyId ?? null });
       const inlineLeaseSeconds = Math.max(
         60,
         Math.min(900, Number(process.env.AGENT_INLINE_LEASE_SECONDS) || 120),
@@ -222,6 +225,7 @@ export async function POST(req: NextRequest) {
         preferredModel,
         requestedAgentModel: requestedAgentModel ?? 'auto',
         agentModel: resolvedAgentModel.id,
+        billing: { source: billingSource, apiKeyId: apiKeyId ?? null },
         agentProvider: resolvedAgentModel.provider,
         agentProviderModel: resolvedAgentModel.providerModelId,
         isNsfw,

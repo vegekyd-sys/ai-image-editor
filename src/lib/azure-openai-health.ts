@@ -1,6 +1,8 @@
 export type ServiceHealthStatus = 'healthy' | 'unhealthy' | 'unavailable';
 
 export const REQUIRED_GPT56_MODEL_PREFIXES = [
+  'gpt-6-luna',
+  'gpt-6-sol',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',

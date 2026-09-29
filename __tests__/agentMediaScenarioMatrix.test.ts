@@ -82,7 +82,7 @@ describe('agent media scenario matrix', () => {
       "skill='wild'",
       "skill='captions'",
       "model: 'qwen'",
-      "model: 'openai'",
+      "model: 'gpt-image-2.5-flare'",
       'Context Mode',
       'Keep every person',
       'Do NOT add any text, watermarks, or borders',
@@ -100,7 +100,7 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain('media_index')
     expect(generateImageTool).toContain('reference_media_indices')
     expect(generateImageTool).toContain('`image_refs` is only for workspace asset provider URLs')
-    expect(generateImageTool).toContain("Context Mode for `model='openai'`")
+    expect(generateImageTool).toContain("Context Mode for `model='gpt-image-2.5-flare'`")
   })
 
   it('routes natural-language transparency and cutouts through the explicit tool contract', () => {
@@ -193,7 +193,9 @@ describe('agent media scenario matrix', () => {
     expect(coding).not.toContain('Think like a music video director')
     expect(remotion).toContain('Remotion Composition')
     expect(remotion).toContain('Canvas Aspect Contract')
-    expect(remotion).toContain('derive the Remotion canvas from the selected Media Index video dimensions')
+    expect(remotion).toContain("The user's explicit output aspect owns the Remotion canvas")
+    expect(remotion).toContain('target_aspect_ratio: "9:16"')
+    expect(remotion).toContain('Only when no output aspect or reframe is requested, derive the canvas from the selected Media Index video dimensions')
     expect(remotion).toContain('Never place 9:16 timeline videos into a 16:9 canvas')
     expect(remotion).toContain('width: 1080')
     expect(remotion).toContain('height: 1920')

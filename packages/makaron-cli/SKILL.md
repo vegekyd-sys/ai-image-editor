@@ -81,11 +81,11 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`), and the personal-plan routes (`gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`, `grok-4.6-grok-subscription`). For the configured owner, `auto` uses GPT-5.6 Terra through the personal Codex plan; base GPT-5.6 IDs select Azure API and base `grok-4.6` selects OpenRouter API, while suffixed IDs explicitly select the corresponding personal plan. Never put an image or video model ID in `--agent-model`.
+`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`, `grok-4.6-grok-subscription`). `auto` uses GPT-6 Luna through the Codex subscription for eligible accounts (including admins) and through Azure API otherwise; base GPT-5.6 and GPT-6 IDs select Azure API and base `grok-4.6` selects OpenRouter API, while suffixed IDs explicitly request the corresponding personal plan where authorized. Never put an image or video model ID in `--agent-model`.
 
 ```bash
 npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --json -b "make a 20s badminton video"
-npx makaron-cli chat --project auto --agent-model gpt-5.6-sol-codex-subscription --json -b "reply with the active model"
+npx makaron-cli chat --project auto --agent-model gpt-6-luna-codex-subscription --json -b "reply with the active model"
 npx makaron-cli chat --project auto --agent-model grok-4.6-grok-subscription --json -b "reply with the active model"
 ```
 
@@ -138,7 +138,7 @@ npx makaron-cli composition export --project <projectId> --snapshot <snapshotId>
 npx makaron-cli composition status <jobId> --wait
 ```
 
-`materialize` is the preferred high-level command for Remotion-to-MP4. It defaults to `--wait`, `--publish`, and the `fast_720p` profile (short side 720, no upscale), so the completed MP4 is also added back to the project timeline like CUI. Use `--no-publish` only when you need a file URL without a new timeline video. Use `--profile source` only when full source resolution is required.
+`materialize` is the preferred high-level command for Remotion-to-MP4. It defaults to `--wait`, `--publish`, and the `source` profile, preserving the composition's dimensions when the MP4 is added back to the project timeline. Use `--no-publish` when you need only a file URL. Use `--profile fast_720p` only when a 720-short-side export is acceptable.
 
 For a run that produced an animated composition, materialize before picking the video URL:
 
@@ -154,7 +154,7 @@ npx makaron-cli materialize --project <projectId> --design-json composition.json
 cat composition.json | npx makaron-cli materialize --project <projectId> --design-json - --pick url
 ```
 
-This JSON-to-MP4 path uses the same defaults as timeline materialize: `--wait`, `--publish`, and `fast_720p`. Add `--no-publish` only when another agent needs the MP4 URL but should not add a timeline video.
+This JSON-to-MP4 path uses the same defaults as timeline materialize: `--wait`, `--publish`, and `source`. Add `--no-publish` when another agent needs the MP4 URL without adding a timeline video.
 
 The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio` so agents can compare video length against export time. Do not apply provider-video ETA rules to Remotion materialize; with a warm exporter it is often near video length to tens of seconds, while cold starts can be longer.
 
@@ -240,17 +240,17 @@ npx makaron-cli edit --image photo.jpg "add cinematic warm lighting"
 npx makaron-cli edit "a cyberpunk cityscape at night"
 
 # With model/skill/reference
-npx makaron-cli edit --image photo.jpg --image-model openai --skill captions "add title"
+npx makaron-cli edit --image photo.jpg --image-model gpt-image-2.5-flare --skill captions "add title"
 npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 
 # Output to file
 npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 
-# Strict transparent output through GPT Image 2
-npx makaron-cli edit --image-model openai --background transparent --out sticker.png "a magenta star sticker"
+# Strict transparent output through GPT Image 2.5 Flare
+npx makaron-cli edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|wan2.7-image|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Transparent output routes strictly to GPT Image 2 and fails instead of returning an opaque fallback. Wan 2.7 Image is an explicit fast ~1K route; do not automatically retry failures/timeouts, and do not promise exact face preservation.
+Options: `--image`, `--image-model gemini|gemini-lite|qwen|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Qwen Spicy is an independent 1–3 image editor; `qwen` remains the existing self-hosted model. Transparent output routes strictly to GPT Image 2.5 Flare and fails instead of returning an opaque fallback. Wan 2.7 Image is an explicit fast ~1K route; do not automatically retry failures/timeouts, and do not promise exact face preservation.
 
 ### `video` — Standalone video tools (no project timeline)
 
@@ -405,3 +405,5 @@ send_message "All done!"
 - `edit`/`video`/`music` are fallback tools for when `chat` is unavailable or you need raw model access without project context.
 
 FAL video models: **fal H3 Turbo** uses `minimax-h3-max` for single-start-frame I2V/T2V. **FAL H3 Max** uses the new selector `fal-h3-max`: native T2V or image/video/audio reference-to-video, default 768p, optional 480p, integer 5–15s; at most 9 images / 3 videos / 3 audios / 12 total. Reference video/audio each 2–15s and each modality totals at most 15s. Source-video modifications use generation with feature references, not typed edit/extend. Reference input tokens are billed in addition to output video; query current pricing.
+
+The legacy `openai` image-model parameter now resolves to GPT Image 2.5 Flare.

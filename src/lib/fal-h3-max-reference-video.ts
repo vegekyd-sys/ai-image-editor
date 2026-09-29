@@ -1,10 +1,10 @@
 /** FAL H3 Max reference and native text generation adapter.
- * Contract checked 2026-09-05: https://fal.ai/models/minimax/h3-max/reference-to-video/api
+ * Contract checked 2026-09-08: https://fal.ai/models/minimax/h3-max/reference-to-video/api
  */
 import { validateProviderImages } from './provider-image-preflight'
-import type { FalH3MaxResolution } from './fal-h3-max-video'
 
 export const H3_MAX_REFERENCE_ENDPOINT = 'minimax/h3-max/reference-to-video'
+export type H3MaxReferenceResolution = '480p' | '768p' | '1080p'
 
 export interface H3MaxReferenceInput {
   prompt: string
@@ -12,7 +12,7 @@ export interface H3MaxReferenceInput {
   videos?: Array<{ url: string; durationSec: number }>
   audios?: Array<{ url: string; durationSec: number }>
   duration?: number
-  resolution?: FalH3MaxResolution
+  resolution?: H3MaxReferenceResolution
   aspectRatio?: string
   seed?: number
   onBeforeSubmit?: () => Promise<void>
@@ -44,7 +44,7 @@ export function buildH3MaxReferencePayload(input: H3MaxReferenceInput): Record<s
   // Upload with the real filename/content type before entering this adapter.
   if (audios.some(clip => !clip.url.startsWith('https://'))) throw new Error('H3 Max reference audio requires an HTTPS file URL with a supported audio filename; upload data URIs first.')
   const resolution = input.resolution ?? '768p'
-  if (!['480p', '768p'].includes(resolution)) throw new Error('H3 Max reference resolution must be 480p or 768p.')
+  if (!['480p', '768p', '1080p'].includes(resolution)) throw new Error('H3 Max reference resolution must be 480p, 768p, or 1080p.')
   const aspectRatio = !input.aspectRatio || input.aspectRatio === 'auto' ? 'adaptive' : input.aspectRatio
   if (!['adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'].includes(aspectRatio)) throw new Error('Unsupported H3 Max reference aspect ratio.')
   const counts = { image: images.length, media: images.length, video: videos.length, audio: audios.length }
@@ -97,16 +97,18 @@ export async function createFalH3MaxReferenceVideoTask(input: H3MaxReferenceInpu
  * Video examples use 37,296 tokens per 5s at 768p (the prose rounds to 7,459/s).
  */
 export function estimateH3MaxReferenceCost(input: {
-  duration: number; resolution: FalH3MaxResolution
+  duration: number; resolution: H3MaxReferenceResolution
   images: Array<{ width: number; height: number }>
   videoSeconds: number; audioSeconds: number
 }) {
   const values = [input.duration, input.videoSeconds, input.audioSeconds, ...input.images.flatMap(image => [image.width, image.height])]
   if (values.some(value => !Number.isFinite(value) || value < 0) || input.duration <= 0 || input.images.some(image => image.width <= 0 || image.height <= 0)) throw new Error('Cost estimate requires measured positive dimensions and nonnegative durations.')
+  // Live fal billing 2026-09-08: 1080p refinement charged output only for video references.
+  // Keep image/audio token rates from the published rate card.
   const referenceTokens = input.images.reduce((sum, image) => sum + image.width * image.height / 1024, 0)
-    + input.videoSeconds * (input.resolution === '480p' ? 2886 : 37296 / 5)
+    + input.videoSeconds * (input.resolution === '1080p' ? 0 : input.resolution === '480p' ? 2886 : 37296 / 5)
     + input.audioSeconds * 80
-  const outputUsd = input.duration * (input.resolution === '480p' ? 0.05 : 0.08)
+  const outputUsd = input.duration * (input.resolution === '480p' ? 0.05 : input.resolution === '1080p' ? 0.16 : 0.08)
   const referenceUsd = Math.max(0, referenceTokens - 4096) * 0.02 / 1000
   return { outputUsd, referenceTokens, referenceUsd, totalUsd: outputUsd + referenceUsd, estimatedCreditsAt2x: Math.ceil((outputUsd + referenceUsd) * 200 - 1e-9) }
 }

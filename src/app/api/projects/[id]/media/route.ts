@@ -161,6 +161,7 @@ export async function POST(
     const published = await publishExternalVideoRanges({
       supabase,
       projectId: id,
+      userId,
       ranges: rawRanges as Parameters<typeof publishExternalVideoRanges>[0]['ranges'],
     })
 

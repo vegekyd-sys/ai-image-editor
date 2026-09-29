@@ -17,12 +17,19 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-09-23', localeKey: 'gpt6AgentModels' },
+  { date: '2026-09-22', localeKey: 'qwenSpicy' },
+  { date: '2026-09-19', localeKey: 'cliRunCredits' },
+  { date: '2026-09-15', localeKey: 'sceneImportReliability' },
+  { date: '2026-09-10', en: { title: 'DeepSeek V4.1 Flash', items: ['DeepSeek V4.1 Flash is now available in Agent: a fast, lower-cost option that understands images and turns a simple prompt into an editable project or finished video.'] }, zh: { title: 'DeepSeek V4.1 Flash 上线', items: ['Agent 现已支持 DeepSeek V4.1 Flash：更快、更省成本，也能看懂图片，把一句话变成可编辑项目或成片。'] } },
+  { date: '2026-09-10', localeKey: 'gptImage25' },
+  { date: '2026-09-06', localeKey: 'creativeSpeedUpgrade' },
   { date: '2026-09-04', localeKey: 'wan27Image' },
   { date: '2026-09-03', localeKey: 'fasterVideoAnalysis' },
   { date: '2026-09-03', localeKey: 'videoReplication' },
@@ -994,6 +1001,22 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  gpt6AgentModels: {
+    title: 'changelog.gpt6AgentModels.title',
+    items: ['changelog.gpt6AgentModels.item1', 'changelog.gpt6AgentModels.item2'],
+  },
+  qwenSpicy: {
+    title: 'changelog.qwenSpicy.title',
+    items: ['changelog.qwenSpicy.item1', 'changelog.qwenSpicy.item2'],
+  },
+  gptImage25: {
+    title: 'changelog.gptImage25.title',
+    items: ['changelog.gptImage25.item1', 'changelog.gptImage25.item2', 'changelog.gptImage25.item3'],
+  },
+  creativeSpeedUpgrade: {
+    title: 'changelog.creativeSpeedUpgrade.title',
+    items: ['changelog.creativeSpeedUpgrade.item1', 'changelog.creativeSpeedUpgrade.item2', 'changelog.creativeSpeedUpgrade.item3'],
+  },
   wan27Image: {
     title: 'changelog.wan27Image.title',
     items: ['changelog.wan27Image.item1', 'changelog.wan27Image.item2'],
@@ -1031,6 +1054,14 @@ const LOCALIZED_CHANGELOG_KEYS = {
       'changelog.googleOmni11.item1',
       'changelog.googleOmni11.item2',
     ],
+  },
+  cliRunCredits: {
+    title: 'changelog.cliRunCredits.title',
+    items: ['changelog.cliRunCredits.item1', 'changelog.cliRunCredits.item2'],
+  },
+  sceneImportReliability: {
+    title: 'changelog.sceneImportReliability.title',
+    items: ['changelog.sceneImportReliability.item1', 'changelog.sceneImportReliability.item2'],
   },
   externalImages: {
     title: 'changelog.externalImages.title',

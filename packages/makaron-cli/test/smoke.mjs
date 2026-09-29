@@ -51,6 +51,27 @@ const marketplaceCategories = [{
   is_active: true,
 }];
 
+const runUsageFixture = {
+  credits_charged: 43,
+  credits_refunded: 0,
+  credits_net: 43,
+  input_tokens: 20500,
+  output_tokens: 1800,
+  cache_read_tokens: 0,
+  cache_write_tokens: 0,
+  entries: [
+    { tool_name: 'agent', model: 'gpt-5.6-terra', calls: 2, credits: 24, input_tokens: 20000, output_tokens: 500 },
+    { tool_name: 'generate_image', model: 'gemini-3.1-flash-image-preview', calls: 1, credits: 19, input_tokens: 500, output_tokens: 1300 },
+  ],
+  sources: ['cli'],
+  balance: 1157,
+};
+
+const usageRowsFixture = [
+  { tool_name: 'generate_image', model_used: 'gemini-3.1-flash-image-preview', credits_charged: 19, input_tokens: 500, output_tokens: 1300, source: 'cli', run_id: '11111111-2222-4333-8444-555555555555', project_id: 'project-auto-1', created_at: '2026-09-19T01:00:00.000Z' },
+  { tool_name: 'agent', model_used: 'gpt-5.6-terra', credits_charged: 24, input_tokens: 20000, output_tokens: 500, source: 'cli', run_id: '11111111-2222-4333-8444-555555555555', project_id: 'project-auto-1', created_at: '2026-09-19T00:59:00.000Z' },
+];
+
 const server = http.createServer(async (req, res) => {
   const chunks = [];
   req.on('data', chunk => chunks.push(chunk));
@@ -59,7 +80,7 @@ const server = http.createServer(async (req, res) => {
   const contentType = req.headers['content-type'] || '';
   const body = rawBody && String(contentType).includes('application/json') ? JSON.parse(rawBody) : null;
   const url = new URL(req.url, 'http://127.0.0.1');
-  requests.push({ method: req.method, pathname: url.pathname, search: url.search, body });
+  requests.push({ method: req.method, pathname: url.pathname, search: url.search, body, client: req.headers['x-makaron-client'] });
 
   const sendJson = (status, data) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -238,13 +259,15 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
-    sendJson(200, {
+    // Direct MCP tool calls report what they charged through response headers.
+    res.writeHead(200, { 'Content-Type': 'application/json', 'X-Credits-Charged': '4', 'X-Credits-Remaining': '300' });
+    res.end(JSON.stringify({
       jsonrpc: '2.0',
       id: body?.id ?? 1,
       result: {
         content: [{ type: 'text', text: 'Video rendering task created.\n\nTask ID: task-unified-text-smoke' }],
       },
-    });
+    }));
     return;
   }
 
@@ -256,6 +279,20 @@ const server = http.createServer(async (req, res) => {
       incomplete: false,
       output: [{ id: 'out_1', type: 'image', url: 'https://cdn.example/image.png' }],
       result: { images: [{ imageUrl: 'https://cdn.example/image.png' }] },
+      usage: runUsageFixture,
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/billing/usage') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    const filtered = url.searchParams.get('run_id');
+    sendJson(200, {
+      usage: usageRowsFixture,
+      offset: 0,
+      limit: 50,
+      attribution_available: true,
+      ...(filtered ? { summary: runUsageFixture, filter: { run_id: filtered, project_id: null } } : {}),
     });
     return;
   }
@@ -595,6 +632,7 @@ try {
     [['chat', '--help'], /Agent LLM defaults to auto/],
     [['responses', '--help'], /Responses commands:/],
     [['responses', 'get', '--help'], /Usage: makaron responses get/],
+    [['usage', '--help'], /Usage: makaron usage/],
     [['responses', 'watch', '--help'], /Usage: makaron responses watch/],
     [['responses', 'list', '--help'], /Usage: makaron responses list/],
     [['materialize', '--help'], /Usage: makaron materialize/],
@@ -654,7 +692,7 @@ try {
     const result = await expectHelp(['chat', '--help'], /Agent LLM defaults to auto/);
     assert.match(result.stdout, /^\s+--agent-model <id>/m);
     assert.match(result.stdout, /deepseek-v4-pro/);
-    assert.match(result.stdout, /account owner uses the personal\s+Codex plan/);
+    assert.match(result.stdout, /GPT-6 Luna through the Codex subscription for\s+eligible accounts, including admins, or Azure API otherwise/);
     assert.match(result.stdout, /gpt-5\.6-\*-codex-subscription/);
     assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
@@ -680,7 +718,7 @@ try {
       'app Agent model catalog',
     );
     const subscriptionModels = [
-      'gpt-5.6-terra-codex-subscription',
+      'gpt-6-luna-codex-subscription',
       ...extractQuotedValues(
       appCatalogSource,
       /export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = \[([\s\S]*?)\] as const;/,
@@ -696,11 +734,11 @@ try {
       cliModels,
       [
         'auto',
-        ...appModels.slice(0, 3),
+        ...appModels.slice(0, 5),
         ...subscriptionModels,
-        appModels[3],
+        appModels[5],
         ...grokSubscriptionModel,
-        ...appModels.slice(4),
+        ...appModels.slice(6),
       ],
       'CLI Agent LLM allowlist must stay in sync with the app catalog',
     );
@@ -798,6 +836,24 @@ try {
 
   {
     const requestStart = requests.length;
+    const result = await expectSuccess([
+      'chat', '--project', 'project-models-1', '--agent-model', 'deepseek-flash',
+      '--json', '-b', 'make a low-cost comparison run',
+    ]);
+    assert.equal(JSON.parse(result.stdout).runId, 'run_mock_1');
+    const flow = requests.slice(requestStart);
+    assert.deepEqual(flow.map(request => `${request.method} ${request.pathname}`), [
+      'POST /api/agent/run',
+    ]);
+    assert.deepEqual(flow[0].body, {
+      projectId: 'project-models-1',
+      prompt: 'make a low-cost comparison run',
+      agentModel: 'deepseek-flash',
+    });
+  }
+
+  {
+    const requestStart = requests.length;
     await expectSuccess([
       'chat', '--project', 'project-models-1', '--agent-model=auto',
       '--json', '-b', 'use automatic Agent LLM routing',
@@ -826,12 +882,12 @@ try {
     const requestStart = requests.length;
     await expectSuccess([
       'chat', '--project', 'project-models-1', '--agent-model',
-      'gpt-5.6-sol-codex-subscription', '--json', '-b',
+      'gpt-6-sol-codex-subscription', '--json', '-b',
       'use the personal Codex plan explicitly',
     ]);
     const runRequest = requests.slice(requestStart)
       .find(request => request.pathname === '/api/agent/run');
-    assert.equal(runRequest?.body?.agentModel, 'gpt-5.6-sol-codex-subscription');
+    assert.equal(runRequest?.body?.agentModel, 'gpt-6-sol-codex-subscription');
   }
 
   {
@@ -1100,6 +1156,7 @@ try {
   {
     const result = await expectSuccess(['video', 'create', '--script', 'A neon one-person studio wakes at dawn', '--duration', '5', '--video-model', 'seedance-fast']);
     assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    assert.match(result.stderr, /💳 {2}4 credits used · balance 300/);
     const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
     assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
     assert.deepEqual(mcpRequest?.body?.params?.arguments?.images, []);
@@ -1342,6 +1399,64 @@ try {
     assert.equal(result.stdout.trim(), 'https://app.example/projects/project-auto-1');
   }
 
+  // Per-run credit usage: run status carries `usage`, picks expose it, chat prints it.
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_mock_1', '--pick', 'credits_used']);
+    assert.equal(result.stdout.trim(), '43');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_mock_1', '--pick', 'usage']);
+    const usage = JSON.parse(result.stdout);
+    assert.equal(usage.credits_net, 43);
+    assert.deepEqual(usage.entries.map(entry => entry.tool_name), ['agent', 'generate_image']);
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_mock_1', '--json']);
+    assert.equal(JSON.parse(result.stdout).usage.balance, 1157);
+  }
+
+  {
+    const requestStart = requests.length;
+    const result = await expectSuccess(['chat', '--project', 'project-usage-1', 'make it pop']);
+    assert.match(result.stderr, /💳 {2}43 credits used \(agent 24 · generate_image 19\) · balance 1157/);
+    const flow = requests.slice(requestStart);
+    assert.deepEqual(flow.map(request => `${request.method} ${request.pathname}`), [
+      'POST /api/agent/run',
+      'GET /api/agent/run/run_mock_1',
+    ]);
+    for (const request of flow) {
+      assert.equal(request.client, `makaron-cli/${pkg.version}`, 'every API call identifies makaron-cli for source=cli attribution');
+    }
+  }
+
+  {
+    const requestStart = requests.length;
+    const result = await expectSuccess(['usage', '--run', '11111111-2222-4333-8444-555555555555', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.summary.credits_net, 43);
+    assert.equal(data.usage.length, 2);
+    const usageRequest = requests.slice(requestStart).find(request => request.pathname === '/api/billing/usage');
+    assert.equal(usageRequest?.search, '?run_id=11111111-2222-4333-8444-555555555555');
+    assert.equal(usageRequest?.client, `makaron-cli/${pkg.version}`);
+  }
+
+  {
+    const result = await expectSuccess(['usage']);
+    assert.match(result.stdout, /generate_image/);
+    assert.match(result.stdout, /gpt-5\.6-terra/);
+    assert.match(result.stdout, /11111111/);
+    assert.doesNotMatch(result.stdout, /Total:/);
+    const filtered = await expectSuccess(['usage', '--run', '11111111-2222-4333-8444-555555555555']);
+    assert.match(filtered.stdout, /Total: 43 credits used \(agent 24 · generate_image 19\) · balance 1157/);
+  }
+
+  {
+    const result = await expectFailure(['usage', '--bogus']);
+    assert.match(result.stderr, /Unknown option: --bogus/);
+  }
+
   {
     const result = await expectSuccess(['responses', 'get', 'run_studio_1', '--pick', 'studio_recipe']);
     assert.equal(result.stdout.trim(), 'cinematic-video');
@@ -1458,7 +1573,7 @@ try {
     assert.equal(exportRequest?.method, 'POST');
     assert.equal(exportRequest?.body?.snapshotId, 'snap_comp_1');
     assert.equal(exportRequest?.body?.designPath, 'code/snap_comp_1.json');
-    assert.equal(exportRequest?.body?.renderProfile, 'fast_720p');
+    assert.equal(exportRequest?.body?.renderProfile, 'source');
     assert.equal(exportRequest?.body?.publish, false);
   }
 
@@ -1474,8 +1589,14 @@ try {
     assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
     const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
     assert.equal(exportRequest?.body?.publish, true);
-    assert.equal(exportRequest?.body?.renderProfile, 'fast_720p');
+    assert.equal(exportRequest?.body?.renderProfile, 'source');
     assert.equal(exportRequest?.body?.design?.width, 1080);
+  }
+
+  {
+    await expectSuccess(['materialize', '--project', 'project-auto-1', '--snapshot', 'snap_comp_1', '--profile', 'fast_720p', '--no-wait']);
+    const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
+    assert.equal(exportRequest?.body?.renderProfile, 'fast_720p');
   }
 
   {

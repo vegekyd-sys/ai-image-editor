@@ -350,4 +350,4 @@ Style: Urban cinematic, neon noir, handheld energy.
 
 Now analyze the provided images and write the video prompt. Output ONLY the prompt text, nothing else.
 
-- **FAL H3 Max** (`fal-h3-max`): native text-to-video without media, otherwise reference-to-video, including one-image references and video modifications. Use normal media/audio markers; up to 9 images, 3 videos, 3 audios, 12 total. Video/audio each 2–15s and each modality total <=15s. Output integer 5–15s at 480p/768p, default 768p. Source-video modifications use feature references with `video_operation="generate"`; there is no typed edit/extend contract or exact original-audio preservation.
+- **FAL H3 Max** (`fal-h3-max`): native text-to-video without media, otherwise reference-to-video, including one-image references and video modifications. Use normal media/audio markers; up to 9 images, 3 videos, 3 audios, 12 total. Video/audio each 2–15s and each modality total <=15s. Output integer 5–15s at 480p/768p/1080p, default 768p. Source-video modifications use feature references with `video_operation="generate"`; there is no typed edit/extend contract or exact original-audio preservation.

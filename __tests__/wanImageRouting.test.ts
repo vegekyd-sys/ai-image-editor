@@ -16,7 +16,7 @@ describe('explicit Wan routing', () => {
     expect(resolveModelChain({ prompt: 'A mug.' })).toEqual(['gemini', 'qwen']);
     expect(resolveModelChain({ prompt: 'Enhance.', image: 'https://example.com/a.jpg', category: 'enhance' })).toEqual(['qwen', 'gemini']);
     expect(resolveModelChain({ prompt: 'Edit.', model: 'wan2.7-image', isNsfw: true })).toEqual(['wan2.7-image']);
-    expect(resolveModelChain({ prompt: 'Cutout.', model: 'wan2.7-image', background: 'transparent' })).toEqual(['openai']);
+    expect(resolveModelChain({ prompt: 'Cutout.', model: 'wan2.7-image', background: 'transparent' })).toEqual(['gpt-image-2.5-flare']);
   });
 
   it('routes the actual model/provider through the shared skill', async () => {

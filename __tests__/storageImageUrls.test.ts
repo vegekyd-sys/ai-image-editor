@@ -21,7 +21,7 @@ describe('Supabase image URLs', () => {
   it('uses hosted Supabase image transformations outside local E2E', () => {
     const url = `https://example.supabase.co${path}`
     expect(getOptimizedUrl(url)).toBe(
-      'https://example.supabase.co/storage/v1/render/image/public/images/user/project/source.jpg?width=2000&quality=95',
+      'https://example.supabase.co/storage/v1/render/image/public/images/user/project/source.jpg?width=2000&quality=95&resize=contain',
     )
     expect(getThumbnailUrl(url, 400, 70, 533, 'contain')).toBe(
       'https://example.supabase.co/storage/v1/render/image/public/images/user/project/source.jpg?width=400&quality=70&height=533&resize=contain',

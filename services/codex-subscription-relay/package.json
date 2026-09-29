@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@openai/codex": "0.151.0"
+    "@openai/codex": "0.156.1"
   }
 }

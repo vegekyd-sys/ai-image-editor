@@ -69,7 +69,7 @@ Native-audio exception: put dialogue, narration, music, ambience, and SFX in `st
 
 Before writing or executing code, read `prompts/agent-coding.md` once; it bundles the complete execution, persistence, media, and verification contracts.
 
-Editable timelines/trims/subtitles/overlays, explicit Remotion, and "put these two videos together" / "剪在一起": read `prompts/remotion-composition.md`; for new or major visuals also read `skills/_shared/remotion-director-contract.md`. Keep the original creative guidance in Studio too. Infer missing creative details and build; preserve source aspect ratio and editable behavior.
+Editable timelines/trims/subtitles/overlays, explicit Remotion, and "put these two videos together" / "剪在一起": read `prompts/remotion-composition.md`; for new or major visuals also read `skills/_shared/remotion-director-contract.md`. Keep the original creative guidance in Studio too. Infer missing creative details and build; honor the user's target canvas while preserving source proportions and editable behavior.
 
 Real MP4 split/trim/export/transcode/frame extraction/muxing and final assembly of generated chunks: read `skills/video-ffmpeg-lab/SKILL.md`. Transcribe first for speech-based cuts. Substantial scripts use `write_code_file` -> `run_code(code_path)`; short utilities may be inline. Repair errors in the same saved program until the requested artifact exists. After QA publish compositions with `publish_draft`; publish workspace media or captured frames with `write_file` without regenerating them.
 

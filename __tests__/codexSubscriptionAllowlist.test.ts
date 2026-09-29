@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CODEX_SUBSCRIPTION_ALLOWLIST_SETTING_KEY,
   getDynamicCodexSubscriptionAllowedUserIds,
+  getCodexSubscriptionEligibleUserIds,
+  isDynamicCodexSubscriptionUserAllowed,
   normalizeCodexSubscriptionUserIds,
   saveDynamicCodexSubscriptionAllowedUserIds,
 } from '@/lib/codex-subscription-allowlist';
@@ -91,5 +93,24 @@ describe('dynamic Codex subscription allowlist', () => {
     const failed = readClient({ data: null, error: null });
     failed.maybeSingle.mockRejectedValue(new Error('network disconnected'));
     await expect(getDynamicCodexSubscriptionAllowedUserIds(failed.client)).resolves.toEqual(['owner-id']);
+  });
+
+  it('admits existing admins to Codex without adding them to the shared personal-plan list', async () => {
+    const from = vi.fn((table: string) => {
+      if (table === 'app_settings') return {
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { value: '["shared"]' }, error: null }) }) }),
+      };
+      if (table === 'user_profiles') return {
+        select: () => ({ eq: (_field: string, value: unknown) => value === true
+          ? Promise.resolve({ data: [{ id: 'admin-only' }], error: null })
+          : { maybeSingle: async () => ({ data: { is_admin: true }, error: null }) } }),
+      };
+      throw new Error(`Unexpected table: ${table}`);
+    });
+    const client = { from } as any;
+    const shared = await getDynamicCodexSubscriptionAllowedUserIds(client);
+    expect(shared).toEqual(['shared']);
+    expect(await getCodexSubscriptionEligibleUserIds(shared, client)).toEqual(['shared', 'admin-only']);
+    expect(await isDynamicCodexSubscriptionUserAllowed('admin-only', client)).toBe(true);
   });
 });

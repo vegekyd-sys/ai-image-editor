@@ -41,3 +41,19 @@ export function pinAgentMediaUrl(
   next[mediaIndex - 1] = mediaUrl;
   return next;
 }
+
+/** Timeline types remain authoritative for extensionless external media URLs. */
+export function partitionCompositionMediaRefs(
+  refs: number[],
+  urls: string[],
+  rows: AgentSnapshotIndexRow[],
+): { stillMediaRefs: number[]; skippedVideoRefs: number[] } {
+  const stillMediaRefs: number[] = [];
+  const skippedVideoRefs: number[] = [];
+  for (const ref of refs) {
+    const row = rows[ref - 1];
+    const video = row ? row.type === 'video' : /\.(mp4|mov|webm)(?:\?|$)/i.test(urls[ref - 1] || '');
+    (video ? skippedVideoRefs : stillMediaRefs).push(ref);
+  }
+  return { stillMediaRefs, skippedVideoRefs };
+}

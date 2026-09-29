@@ -6,6 +6,7 @@ import { AgentPerf } from './agent-perf';
 import { buildPromptContext } from './agent-context';
 import { getSupabaseAdmin } from './supabase/service';
 import { recordAgentTokenUsage } from './billing/credits';
+import { billingAttributionFromRunMetadata, enterBillingAttribution } from './billing/attribution';
 import {
   resolveAgentModelSpec,
   resolveAgentModelSpecForUser,
@@ -329,6 +330,12 @@ export async function runAgentExecutionAttempt(
   endRunLoad({ found: !!runData });
   const run = runData as AgentRunRecord | null;
   if (!run || run.status !== 'running') return { claimed: false, runId };
+  // Every credit debit/refund performed by this attempt (Agent tokens, tools,
+  // video reservations) is attributed to the run for per-run usage reporting.
+  enterBillingAttribution(billingAttributionFromRunMetadata(
+    run.metadata as Record<string, unknown> | null,
+    { runId, projectId: run.project_id },
+  ));
   const workerOrigin = normalizeAgentExecutionOrigin(options.origin);
   const taskOrigin = typeof run.metadata?.executionOwnerOrigin === 'string'
     ? run.metadata.executionOwnerOrigin

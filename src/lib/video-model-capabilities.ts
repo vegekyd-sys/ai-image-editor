@@ -508,10 +508,10 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     defaultImageWorkflow: 'reference-to-video',
     longVideoChunkSeconds: 15,
     maxImageReferences: 9, maxVideoReferences: 3, maxAudioReferences: 3, maxTotalReferences: 12,
-    supportedResolutions: ['480p', '768p'], defaultResolution: '768p',
+    supportedResolutions: ['480p', '768p', '1080p'], defaultResolution: '768p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     estimatedCostPerSecondUsd: 0.08,
-    estimatedCostPerSecondUsdByResolution: { '480p': 0.05, '768p': 0.08 },
+    estimatedCostPerSecondUsdByResolution: { '480p': 0.05, '768p': 0.08, '1080p': 0.16 },
     provider: 'fal-h3-max', providerModel: 'minimax/h3-max/reference-to-video',
   },
   piapi: {
@@ -894,8 +894,10 @@ export function estimateVideoProviderCostUsd(options: {
     : capability.estimatedInputCostUsdPerVideoSecondByResolution?.[route.resolution]
     ?? capability.estimatedInputCostUsdPerVideoSecond
     ?? 0
+  // Live fal billing 2026-09-08: 1080p refinement charged output only for video references.
+  // Keep image/audio token rates from the published rate card.
   const referenceTokens = normalizedModel === 'fal-h3-max'
-    ? Math.max(0, (options.referenceImagePixels ?? 0) / 1024 + (options.referenceVideoDurationSec ?? 0) * (route.resolution === '480p' ? 2886 : 7459.2) + (options.referenceAudioDurationSec ?? 0) * 80 - 4096)
+    ? Math.max(0, (options.referenceImagePixels ?? 0) / 1024 + (options.referenceVideoDurationSec ?? 0) * (route.resolution === '1080p' ? 0 : route.resolution === '480p' ? 2886 : 7459.2) + (options.referenceAudioDurationSec ?? 0) * 80 - 4096)
     : 0
   const standardCost = options.durationSec * perSecond
     + referenceTokens * 0.02 / 1000

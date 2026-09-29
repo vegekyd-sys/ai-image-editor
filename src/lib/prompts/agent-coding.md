@@ -87,7 +87,7 @@ return {
 
 Composition runtime:
 - `type: "render"` and `type: "patch"` create a draft preview and autosave it before returning success.
-- For timeline videos, preserve the selected Media Index video aspect ratio. Two 9:16 videos spliced together must return a 9:16 canvas such as `width: 1080, height: 1920`, not a 16:9 canvas.
+- For timeline videos, the user's explicit output aspect takes priority: pass `target_aspect_ratio` on `run_code` and fit sources proportionally with contain/background or authorized cropping. Without a requested reframe, preserve the selected Media Index video aspect ratio. Two 9:16 videos spliced together must return a 9:16 canvas such as `width: 1080, height: 1920`, not a 16:9 canvas.
 - `write_file({ fromLastRunCode: true, name: "slug", publish: false })` creates an optional named workspace checkpoint without creating a timeline snapshot.
 - `write_file({ fromLastRunCode: true, name: "slug" })` saves and publishes the composition to the timeline.
 - `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: 3 })` publishes recent exported workspace videos to the timeline. Use this immediately after direct FFmpeg requests that create user-facing MP4s, such as "split this into three videos", "cut out this part", "trim/export this clip", or "transcode this video".

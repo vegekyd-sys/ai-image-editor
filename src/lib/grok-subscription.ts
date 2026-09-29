@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
-import { isDynamicCodexSubscriptionUserAllowed } from './codex-subscription-allowlist';
+import { getDynamicCodexSubscriptionAllowedUserIds } from './codex-subscription-allowlist';
 
 const SIGNATURE_HEADER = {
   timestamp: 'x-makaron-relay-timestamp',
@@ -58,7 +58,7 @@ export function getGrokSubscriptionAllowedUserIds(): Set<string> {
 
 export async function isGrokSubscriptionAllowedUser(userId?: string): Promise<boolean> {
   if (!userId || !relayUrl() || !relaySecret()) return false;
-  return isDynamicCodexSubscriptionUserAllowed(userId);
+  return (await getDynamicCodexSubscriptionAllowedUserIds()).includes(userId);
 }
 
 export function createGrokRelaySignature(input: {

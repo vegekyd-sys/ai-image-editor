@@ -2,14 +2,14 @@
 
 Read this file once before any existing-image background removal, subject
 isolation, cutout, 抠图, 抠像, or transparent PNG extraction. This is the
-canonical `editPrompt` contract for GPT Image 2. Sticker and video Skills may
+canonical `editPrompt` contract for GPT Image 2.5. Sticker and video Skills may
 add staging or QA requirements, but must not replace or weaken this contract.
 
 ## Tool Contract
 
 - Existing image: pass its literal 1-based `media_index` and set
   `background: "transparent"`.
-- Pure existing-image cutout: omit `aspectRatio`. The Image 2 request uses
+- Pure existing-image cutout: omit `aspectRatio`. The Image 2.5 request uses
   `size: "auto"`, then Makaron fits the transparent result onto a canvas with
   the source image's exact dimensions without stretching or cropping it.
 - When the user explicitly requests a new transparent layout or canvas ratio,

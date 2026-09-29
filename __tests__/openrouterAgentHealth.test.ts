@@ -4,13 +4,15 @@ import {
   resolveOpenRouterAgentHealthRequest,
 } from '@/lib/openrouter-agent-health';
 
-describe('OpenRouter GPT-5.6 health contract', () => {
+describe('OpenRouter GPT health contract', () => {
   it('uses the existing OpenRouter key shared with image generation', () => {
     expect(resolveOpenRouterAgentHealthRequest({ OPENROUTER_API_KEY: ' shared-key ' }))
       .toEqual({
         apiKey: 'shared-key',
         authUrl: 'https://openrouter.ai/api/v1/auth/key',
         modelUrls: [
+          'https://openrouter.ai/api/v1/models/openai/gpt-6-luna/endpoints',
+          'https://openrouter.ai/api/v1/models/openai/gpt-6-sol/endpoints',
           'https://openrouter.ai/api/v1/models/openai/gpt-5.6-terra/endpoints',
           'https://openrouter.ai/api/v1/models/openai/gpt-5.6-sol/endpoints',
           'https://openrouter.ai/api/v1/models/openai/gpt-5.6-luna/endpoints',

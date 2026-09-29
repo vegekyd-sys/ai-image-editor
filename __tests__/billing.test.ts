@@ -409,6 +409,8 @@ describe('credits', () => {
         cache_write_tokens: 0,
         duration_ms: null,
         source: 'app',
+        run_id: null,
+        project_id: null,
       });
       expect(mockRpc).not.toHaveBeenCalled();
     });
@@ -630,6 +632,8 @@ describe('credits', () => {
         p_api_key_id: null,
         p_cache_read_tokens: null,
         p_cache_write_tokens: null,
+        p_run_id: null,
+        p_project_id: null,
       });
     });
 
@@ -816,6 +820,8 @@ describe('credits', () => {
         p_api_key_id: null,
         p_cache_read_tokens: null,
         p_cache_write_tokens: null,
+        p_run_id: null,
+        p_project_id: null,
       });
     });
 
@@ -884,6 +890,8 @@ describe('credits', () => {
         p_amount: 93,
         p_tool_name: 'create_video',
         p_source: 'app',
+        p_run_id: null,
+        p_project_id: null,
       });
     });
   });

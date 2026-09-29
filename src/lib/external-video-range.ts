@@ -1,3 +1,4 @@
+import { prepareExternalImage } from '@/lib/external-image';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VideoMeta, VideoSourceRange } from '@/types';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
@@ -87,6 +88,7 @@ export async function detectExternalMediaType(
 export async function publishExternalVideoRanges(options: {
   supabase: SupabaseClient;
   projectId: string;
+  userId: string;
   ranges: ExternalVideoRangeInput[];
   fetchImpl?: typeof fetch;
 }): Promise<PublishedExternalVideoRange[]> {
@@ -101,18 +103,20 @@ export async function publishExternalVideoRanges(options: {
 
   const { data: existingRows, error: existingError } = await options.supabase
     .from('snapshots')
-    .select('id, type, image_url, design_path, video_meta, description, sort_order')
+    .select('id, type, image_url, design_path, video_meta, description, sort_order, metadata')
     .eq('project_id', options.projectId)
     .order('sort_order', { ascending: true });
   if (existingError) throw new Error(`Media List lookup failed: ${existingError.message}`);
 
   const existingByIdentity = new Map<string, { id: string; videoMeta: VideoMeta; description?: string }>();
-  const existingImagesByUrl = new Map<string, { id: string; description?: string }>();
+  const existingImagesByUrl = new Map<string, { id: string; url: string; description?: string; metadata?: Record<string, unknown> }>();
   for (const row of existingRows || []) {
-    const typedRow = row as { id: string; type?: string; image_url?: string; design_path?: string; video_meta?: VideoMeta; description?: string };
+    const typedRow = row as { id: string; type?: string; image_url?: string; design_path?: string; video_meta?: VideoMeta; description?: string; metadata?: { externalImageSourceUrl?: string } };
     if (typedRow.type !== 'video') {
       if (typedRow.type !== 'reference' && !typedRow.design_path && typedRow.image_url) {
-        existingImagesByUrl.set(typedRow.image_url, { id: typedRow.id, description: typedRow.description });
+        const entry = { id: typedRow.id, url: typedRow.image_url, description: typedRow.description, metadata: typedRow.metadata };
+        existingImagesByUrl.set(typedRow.image_url, entry);
+        if (typedRow.metadata?.externalImageSourceUrl) existingImagesByUrl.set(typedRow.metadata.externalImageSourceUrl, entry);
       }
       continue;
     }
@@ -132,16 +136,26 @@ export async function publishExternalVideoRanges(options: {
     if (item.type === 'image') {
       const label = item.description || 'External image';
       const existing = existingImagesByUrl.get(item.source_url);
+      const imageUrl = existing && existing.url !== item.source_url
+        ? existing.url
+        : await prepareExternalImage({
+          sourceUrl: item.source_url,
+          userId: options.userId,
+          projectId: options.projectId,
+          supabase: options.supabase,
+          fetchImpl: options.fetchImpl,
+        });
       if (existing) {
-        if (existing.description !== label) {
+        if (existing.description !== label || existing.url !== imageUrl) {
           const { error: refreshError } = await options.supabase
             .from('snapshots')
-            .update({ description: label })
+            .update({ description: label, image_url: imageUrl, metadata: { ...existing.metadata, externalImageSourceUrl: item.source_url } })
             .eq('id', existing.id);
           if (refreshError) throw new Error(`External source metadata refresh failed: ${refreshError.message}`);
           existing.description = label;
+          existing.url = imageUrl;
         }
-        snapshotIds.push({ id: existing.id, type: 'image', url: item.source_url, description: label, created: false });
+        snapshotIds.push({ id: existing.id, type: 'image', url: existing.url, description: label, created: false });
         continue;
       }
 
@@ -151,15 +165,16 @@ export async function publishExternalVideoRanges(options: {
       const { error: insertError } = await options.supabase.from('snapshots').insert({
         id: snapshotId,
         project_id: options.projectId,
-        image_url: item.source_url,
+        image_url: imageUrl,
+        metadata: { externalImageSourceUrl: item.source_url },
         tips: [],
         message_id: '',
         sort_order: sortResult.data ?? Date.now(),
         description: label,
       });
       if (insertError) throw new Error(`External image publish failed: ${insertError.message}`);
-      existingImagesByUrl.set(item.source_url, { id: snapshotId, description: label });
-      snapshotIds.push({ id: snapshotId, type: 'image', url: item.source_url, description: label, created: true });
+      existingImagesByUrl.set(item.source_url, { id: snapshotId, url: imageUrl, description: label });
+      snapshotIds.push({ id: snapshotId, type: 'image', url: imageUrl, description: label, created: true });
       continue;
     }
 
