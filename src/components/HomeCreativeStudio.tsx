@@ -14,7 +14,7 @@ type Tone = typeof TONES[number]
 const TONE_COLORS: Record<Tone, string> = { fuchsia: '#f27635', ice: '#2469bc', paper: '#f5eedb' }
 const DESIGN_ART: Record<Tone, string> = { fuchsia: '/home-studio/design-peel.webp', ice: '/home-studio/design-light.webp', paper: '/home-studio/design-flight.webp' }
 const BEFORE = '/home-studio/portrait-before.webp'
-const AFTER = '/home-studio/cloud-house-after.webp'
+const AFTER = '/home-studio/portrait-glamour-after-v2.webp'
 
 function Arrow() {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg>
@@ -28,7 +28,6 @@ export default function HomeCreativeStudio({ skills, paused, suspended, onUseIde
 }) {
   const { t, locale } = useLocale()
   const [mode, setMode] = useState<Mode>('image')
-  const [imageView, setImageView] = useState<'before' | 'after'>('after')
   const [tone, setTone] = useState<Tone>('fuchsia')
   const [mood, setMood] = useState<Mood>('dream')
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -152,16 +151,16 @@ export default function HomeCreativeStudio({ skills, paused, suspended, onUseIde
       </div>
       <div className="creative-studio-panel" data-mode={mode} role="tabpanel" id="studio-panel" aria-labelledby={`studio-tab-${mode}`} tabIndex={0}>
         <div className="creative-studio-stage" data-mode={mode} key={mode}>
-          {mode === 'image' && <div className="studio-image" data-view={imageView}>
-            <div className="studio-image-canvas">
-              <img src={AFTER} className="studio-image-after" alt={t('homeStudio.afterAlt')} aria-hidden={imageView !== 'after'} loading="lazy" />
-              <img src={BEFORE} className="studio-image-before" alt={t('homeStudio.beforeAlt')} aria-hidden={imageView !== 'before'} loading="lazy" />
-            </div>
-            <div className="studio-image-controls" role="group" aria-label={t('homeStudio.compare')}>
-              <button type="button" aria-pressed={imageView === 'before'} onClick={() => setImageView('before')}>{t('homeStudio.before')}</button>
-              <span aria-hidden="true">→</span>
-              <button type="button" aria-pressed={imageView === 'after'} onClick={() => setImageView('after')}>{t('homeStudio.after')}</button>
-            </div>
+          {mode === 'image' && <div className="studio-image-pair" role="group" aria-label={t('homeStudio.compare')}>
+            <figure>
+              <img src={BEFORE} alt={t('homeStudio.beforeAlt')} width={1000} height={1250} loading="lazy" decoding="async" />
+              <figcaption>{t('homeStudio.before')}</figcaption>
+            </figure>
+            <span className="studio-image-direction" aria-hidden="true">→</span>
+            <figure>
+              <img src={AFTER} alt={t('homeStudio.afterAlt')} width={800} height={1000} loading="lazy" decoding="async" />
+              <figcaption>{t('homeStudio.after')}</figcaption>
+            </figure>
           </div>}
           {mode === 'video' && <div className="studio-video">
             {videoSkill ? <LazyVideo src={videoSkill.image} paused={paused} suspended={suspended || !inView} fallbackSrc={videoSkill.before_images?.[0]} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} /> : <img src={AFTER} alt={t('homeStudio.afterAlt')} />}

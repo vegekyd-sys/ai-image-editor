@@ -48,21 +48,19 @@ describe('homepage creative studio', () => {
     expect(onUseIdea).toHaveBeenCalledTimes(2)
   })
 
-  it('starts with the complete result and supports original/result selection and keyboard mode navigation', () => {
+  it('shows both complete portraits together and supports keyboard mode navigation', () => {
     const view = render(<HomeCreativeStudio skills={skills} paused={false} suspended={false} onUseIdea={vi.fn()} />)
-    expect(view.getByRole('button', { name: '生成效果' }).getAttribute('aria-pressed')).toBe('true')
+    expect(view.getByRole('group', { name: '原图与生成效果对比' })).toBeTruthy()
+    expect(view.getAllByRole('img').map(image => image.getAttribute('src'))).toEqual([
+      '/home-studio/portrait-before.webp', '/home-studio/portrait-glamour-after-v2.webp',
+    ])
     expect(view.queryByRole('slider')).toBeNull()
-    expect(view.getByRole('img').getAttribute('src')).toContain('cloud-house-after')
-    fireEvent.click(view.getByRole('button', { name: '原图' }))
-    expect(view.getByRole('img').getAttribute('src')).toContain('portrait-before')
     fireEvent.keyDown(view.getByRole('tab', { name: '图片' }), { key: 'ArrowLeft' })
     const music = view.getByRole('tab', { name: '音乐' })
     expect(music.getAttribute('aria-selected')).toBe('true')
     expect(document.activeElement).toBe(music)
     fireEvent.keyDown(music, { key: 'Home' })
-    expect(view.getByRole('button', { name: '原图' }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(view.getByRole('button', { name: '生成效果' }))
-    expect(view.getByRole('img').getAttribute('src')).toContain('cloud-house-after')
+    expect(view.getAllByRole('img')).toHaveLength(2)
   })
 
   it('suspends hidden video and removes its player when another medium is selected', () => {
