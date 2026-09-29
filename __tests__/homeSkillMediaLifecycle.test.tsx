@@ -64,6 +64,14 @@ describe('home skill video lifecycle', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
   })
 
+  it('uses a supplied poster without capturing and storing video frames at runtime', async () => {
+    const { container, unmount } = render(<LazyVideo src="/home-hero/example.mp4" posterSrc="/home-hero/example.webp" style={{}} eager />)
+    expect(container.querySelector('[data-home-video-poster]')?.getAttribute('src')).toBe('/home-hero/example.webp')
+    fireEvent.loadedData(container.querySelector('video')!)
+    await waitFor(() => expect(posterMocks.capture).not.toHaveBeenCalled())
+    unmount()
+  })
+
   it('pauses motion without detaching the current frame and resumes on request', async () => {
     const props = { src: 'https://cdn.makaron.app/cover.mp4', style: {}, eager: true }
     const { container, rerender } = render(<LazyVideo {...props} />)

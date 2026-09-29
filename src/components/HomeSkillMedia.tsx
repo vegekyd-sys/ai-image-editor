@@ -27,6 +27,7 @@ export function LazyVideo({
   src,
   style,
   fallbackSrc,
+  posterSrc,
   eager = false,
   suspended = false,
   paused = false,
@@ -34,6 +35,7 @@ export function LazyVideo({
   src: string
   style: CSSProperties
   fallbackSrc?: string
+  posterSrc?: string
   eager?: boolean
   suspended?: boolean
   paused?: boolean
@@ -53,8 +55,8 @@ export function LazyVideo({
   // Restore an already-generated poster near the viewport, but never launch a
   // second hidden video pipeline. The live card video captures its own first
   // frame after loadeddata instead.
-  const cachedPoster = useHomeVideoPoster(resolvedSrc, shouldAttach, false)
-  const poster = capturedPoster ?? cachedPoster
+  const cachedPoster = useHomeVideoPoster(resolvedSrc, shouldAttach && !posterSrc, false)
+  const poster = posterSrc ?? capturedPoster ?? cachedPoster
 
   useEffect(() => {
     const el = observerRef.current
@@ -176,6 +178,8 @@ export function LazyVideo({
           alt=""
           aria-hidden="true"
           data-home-video-poster="true"
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: videoReady ? 0 : 1 }}
         />
       )}

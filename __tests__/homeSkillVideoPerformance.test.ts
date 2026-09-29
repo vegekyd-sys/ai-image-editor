@@ -38,7 +38,7 @@ describe('home skill video performance guardrails', () => {
     const initialCardCount = Number(homePage.match(/INITIAL_SKILL_CARD_COUNT = (\d+)/)?.[1])
     expect(initialCardCount).toBeGreaterThan(0)
     expect(initialCardCount).toBeLessThanOrEqual(12)
-    expect(mediaSource).toContain('useHomeVideoPoster(resolvedSrc, shouldAttach, false)')
+    expect(mediaSource).toContain('useHomeVideoPoster(resolvedSrc, shouldAttach && !posterSrc, false)')
     expect(mediaSource).toContain('cacheHomeVideoPosterFromElement')
     expect(mediaSource).toContain('if (!shouldAttach) setVideoReady(false)')
     expect(mediaSource).toContain('data-home-video-poster="true"')

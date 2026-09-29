@@ -53,6 +53,10 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
     // Catalog changes invalidate the baked preview; details always retain the original.
     return preview?.source === skill.image ? preview.preview : skill.image
   }
+  const posterFor = (skill: HomeSkill) => {
+    const preview = heroPreviews[skill.id as keyof typeof heroPreviews]
+    return preview?.source === skill.image ? preview.poster : undefined
+  }
   const featured = FEATURED_IDS.map(id => skills.find(skill => skill.id === id)).filter((skill): skill is HomeSkill => !!skill)
 
 
@@ -64,6 +68,7 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
             <div className="creative-art-frame">
               {/\.(mp4|webm)(?:[?#]|$)/i.test(skill.image) ? (
                 <LazyVideo src={previewFor(skill)} eager={index === 0} suspended={suspended || (mobileComposition && (index === 1 || index === 2))} paused={paused}
+                  posterSrc={posterFor(skill)}
                   fallbackSrc={skill.before_images?.[0] ? getThumbnailUrl(skill.before_images[0], 600, 80) : undefined}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : <img src={getThumbnailUrl(skill.image, 600, 85)} alt="" loading={index < 2 ? 'eager' : 'lazy'} />}
