@@ -2317,7 +2317,7 @@ function HomePageInner() {
         <div style={{ display: showAgentLanding ? 'none' : undefined }}>
         <header className="creative-header" style={{ visibility: selectedDetail ? 'hidden' : undefined }}>
           <a href="#product" className="creative-brand" aria-label={t('homeDesign.home')}><MakaronLogo markSize={34} /></a>
-          <nav className="creative-header-nav" aria-label={t('homeDesign.navigation')}>
+          <nav className="creative-header-nav mkr-liquid-pill" aria-label={t('homeDesign.navigation')}>
             <a href="#studio">{t('homeDesign.product')}</a>
             <a href="#templates">{t('homeDesign.templates')}</a>
             <a href="#create">{t('homeDesign.create')}</a>
@@ -2527,7 +2527,7 @@ function HomePageInner() {
             ))}
           </div>
           {visibleSkillCount < filteredHomeSkills.length && (
-            <button type="button" className="creative-more" onClick={() => setVisibleSkillCount(count => count + SKILL_CARD_BATCH_SIZE)}>{t('homeDesign.more')}</button>
+            <button type="button" className="creative-more mkr-liquid-pill mkr-liquid-pill-strong" onClick={() => setVisibleSkillCount(count => count + SKILL_CARD_BATCH_SIZE)}>{t('homeDesign.more')}</button>
           )}
 
         </div>

@@ -186,7 +186,7 @@ export default function HomeCreativeStudio({ skills, paused, suspended, onUseIde
             {audioError && <span className="studio-audio-error" role="alert">{t('homeStudio.music.error')}</span>}
             <div className="studio-wave" aria-hidden="true">{Array.from({ length: 36 }, (_, index) => <i key={index} style={{ '--bar': `${18 + ((index * 19 + 7) % 67)}%`, '--delay': `${index * -0.11}s` } as CSSProperties} />)}</div>
             <div className="studio-moods" role="group" aria-label={t('homeStudio.moodSelector')}>
-              {MOODS.map(item => <button type="button" key={item} aria-pressed={mood === item} onClick={() => selectMood(item)}>{t(`homeStudio.mood.${item}.label`)}</button>)}
+              {MOODS.map(item => <button type="button" key={item} className="mkr-liquid-pill" aria-pressed={mood === item} onClick={() => selectMood(item)}>{t(`homeStudio.mood.${item}.label`)}</button>)}
             </div>
             <span className="studio-music-note">{t('homeStudio.music.note')}</span>
           </div>}

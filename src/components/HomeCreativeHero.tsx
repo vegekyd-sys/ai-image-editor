@@ -73,7 +73,7 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
         </div>
         <div className="creative-hero-composer" id="create">{children}</div>
         <div className="creative-actions">
-          <a className="creative-text-link" href="#templates">{t('homeDesign.explore')}<span aria-hidden="true">↓</span></a>
+          <a className="creative-text-link mkr-liquid-pill mkr-liquid-pill-strong" href="#templates">{t('homeDesign.explore')}<span aria-hidden="true">↓</span></a>
         </div>
       </div>
     </section>
@@ -83,7 +83,7 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
 export function HomeCreativeRibbon({ paused, onToggle }: { paused: boolean; onToggle: () => void }) {
   const { t } = useLocale()
   return <div className="creative-ribbon creative-ribbon-compact">
-    <button type="button" className="creative-motion-toggle" onClick={onToggle} aria-pressed={paused}>
+    <button type="button" className="creative-motion-toggle mkr-liquid-pill" onClick={onToggle} aria-pressed={paused}>
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">{paused ? <path d="m5 3 8 5-8 5Z" /> : <path d="M5 2v12M11 2v12" />}</svg>{t(paused ? 'homeDesign.resume' : 'homeDesign.pause')}
     </button>
   </div>
