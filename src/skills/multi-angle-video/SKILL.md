@@ -182,6 +182,10 @@ wide/context, medium/action, close/reaction, and detail/insert coverage. Use cle
 changes of scale, height, depth, or viewpoint, rather than a sequence of small
 left/right rotations at the same distance. If fewer functions suit the source,
 state the creative reason. The point is attention control, not lens numbers.
+When meaning calls for a wider space, specify observable composition: a smaller
+person in frame, readable landmarks and their relationship, and the depth or
+area revealed relative to the preceding shot. Calling a shot "wide" or naming
+a lens is insufficient if the result retains the source medium framing.
 
 Audit the proposed sequence before generation: does each cut reveal, emphasize,
 connect, or release something? If adjacent shots serve the same purpose and only
@@ -225,14 +229,22 @@ Build one complete prompt with a short title, source marker, the observed story
 arc, and every timed shot's visual purpose and composition. Lead with the desired
 film: put the timed shot list immediately after a short creative brief. Describe
 each shot concisely by purpose, size/viewpoint, and actual action. For speech-led
-shots, include the relevant source phrase and why its meaning motivates this
+shots, identify the relevant source phrase (a semantic label or beat ID can
+avoid repeating dialogue) and why its meaning motivates this
 composition or hold; give measured source-clock ranges, not only a list of
 shots to distribute across the clip. Do not paste
 the plan's entire risk register into every shot. Then give one compact source-performance contract,
 the important action anchors and speech/quiet windows, and gaze/equipment rules.
 Do not bury cinematography under repeated prohibitions or a generic adjective
-such as "cinematic". Example
-language to adapt to the observed source:
+such as "cinematic".
+
+Keep dialogue separate from directing instructions. If quoting the complete
+source text is necessary, quote it once with its clock; use meaning labels in
+other sections. These are directions for preserving the recorded speech, not
+new lines to recite. A source audio feature reference can help voice consistency
+on a supported model, but it does not guarantee phrase timing or unchanged sound.
+
+Source-performance contract to adapt to the observed source:
 
 > Film additional coverage of the event in <<<media_1>>>. Keep the same complete
 > source clock in real time. At each timestamp preserve the person's action,
@@ -304,6 +316,10 @@ cuts are motivated, identity/props stay stable, gaze does not chase the cameras,
 mouth activity matches talking/quiet windows, and fast actions keep their timing.
 Check that the model has not drawn filming equipment into reverse/shoulder shots.
 Review moving playback and sound; a contact sheet alone cannot prove continuity.
+Transcribe a speech-bearing native candidate once to check omissions, repetition,
+extra words, and phrase drift before any original-audio replacement. Resolve
+conflicting automated reports against the actual audio and decoded frames;
+video analysis can hallucinate actions or echo supplied reference timestamps.
 Creative QA is separate from fidelity QA. Replay with the original speech and
 compare the actual cuts/framing with `meaningBeats`, especially turns and payoffs.
 Record whether each key thought receives its intended visual emphasis and whether

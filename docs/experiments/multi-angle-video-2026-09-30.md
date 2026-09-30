@@ -203,3 +203,68 @@ Reviewed local plan: `semantic-v3-plan-reviewed.json` in the evidence directory.
 Clock coverage and shot-to-meaning references were checked. Skill validation,
 startup contract, three startup tests, and diff checks passed. This establishes
 the revised planning workflow, not generated-video or model-execution acceptance.
+
+## Round 3: real speech-led video validation (2026-10-01)
+
+The user explicitly requested real 15s Seedance/H3 tests and a four-panel video.
+Both first submissions used the unchanged prepared source and the same reviewed
+1,556-character prompt. The semantic focus was face coverage at the rhetorical
+turn, then expansion into the surroundings at the courtyard phrase. They ran
+through the candidate local Makaron MCP API with the user's existing account.
+
+| Candidate | Measured native streams | Evidence and verdict |
+| --- | --- | --- |
+| Seedance 2.5, 720p | 1280×720, 24fps; picture 14.708333s / 353 frames; audio/container 14.720s | ASR retained both utterances without added/repeated words; boundaries about −0.01s then +0.01s; `This` about −0.03s. Face-to-environment emphasis appears near the turn, but the environment shot remains a source-like medium view. Missing final seven frames; no complete native acceptance. |
+| FAL H3 Max, first 768p pass | 1344×768, 24fps; picture 15.083333s / 362 frames; audio/container 15.104s | ASR detected an extra courtyard utterance at 5.78–8.74s, another altered repetition near 8.98s, and additional unclear words. Independent audio/video analysis confirmed the duplication and the contradiction with the drinking pause. Rejected. |
+| FAL H3 Max, one corrected retry | Same nominal resolution/FPS and approximately 15.1s native stream | Removed repeated literal dialogue from the prompt, made the spatial composition more explicit, and supplied the source WAV as `<<<audio_1>>>`. ASR no longer detected repetition/extra words, but did not recognize `Honestly though`; `This` began at 9.47s, 1.22s before the source phrase, and the ending was 1.26s early. The courtyard stayed medium and apple actions appeared earlier. Still fails source-clock and spatial-payoff acceptance. |
+
+One initial retry submission omitted the required audio marker and was rejected
+before generation. Adding `<<<audio_1>>>` repaired the arguments; no charge row
+was recorded for that rejected request. There was only one generated H3 retry.
+The simultaneous changes do not isolate the cause of the audio improvement.
+An audio feature reference is not an exact-original-audio or timing lock.
+
+Video-understanding reports also asserted a physical laptop closure and echoed
+reference timestamps that conflict with decoded frames or ASR. Those assertions
+were not adopted as ground truth. Timed source/output frames, actual native ASR,
+FFprobe and playback/decode evidence remain distinct; none proves framewise
+lip-sync on its own. The tests do not establish full skill acceptance.
+
+### Four-panel delivery
+
+`semantic-v3-four-panel-with-source-audio.mp4`: 1728×1080, 24fps, 360 frames,
+15.000s. Top left is the source; top right is the supplied example; bottom left
+is Seedance's finished hybrid; bottom right is the corrected H3 candidate.
+The panels use one unchanged original AAC track, not a mixture of native tracks.
+Native audio failures/timing differences remain recorded separately.
+
+- Seedance hybrid: native AI picture 0–13.25s, then the prepared source's actual
+  13.25–15s close ending, cropped at (332,96), 480×270, scaled to 1280×720.
+  This replaces a complete closing shot, with no freeze, stretch or repeated tail.
+- H3 presentation: only trim the native trailing duration to 15s, and use the
+  original source audio for the comparison. This does not fix its visual clock.
+- Both final individual files and the four-panel file measure exactly 15s and
+  360 frames. AAC packet MD5 matches the source. Native and final videos decoded;
+  the finished four-panel preview was inspected. Detailed receipts, QA, prompt,
+  probe data and files are in the existing local evidence directory.
+
+The skill now asks for observable spatial composition rather than a "wide" label
+alone, avoids redundant full-dialogue quotations, checks native audio before a
+remux, and resolves automated-analysis conflicts against measured evidence.
+These further instruction changes have not received another generation pass.
+
+Receipts: Seedance `task-unified-1790790199-73i4jmnv`; initial H3
+`fal-h3max-reference-01a0f36a-377e-7020-b3df-9ebe41cd6cfe`; corrected H3
+`fal-h3max-reference-01a0f374-df6f-7920-9997-4b0c1ea3f131`.
+ASR QA runs: `cd352904-74a5-43e6-b1e3-ac7d7461755a`,
+`fdd2f180-fae3-4e62-bde5-20046329b02a`,
+`da4b213b-9347-4275-b043-42e1814acd7d`. Each transcribed its own candidate once.
+Actual video charges: 975 + 672 + 676 = 2,323 credits; three standalone
+candidate analyses charged 1 each. This round total: 2,326 credits.
+No production deployment or merge was performed.
+
+The four-panel file was uploaded through Makaron CLI into the account/project
+storage path and attached as `<<<media_9>>>`, snapshot
+`e27f9efe-87f2-4d8c-9641-3b0dd72cb258`, without replacing prior media. Its
+description explicitly records the remaining acceptance failures. The project
+delivery is complete; it does not promote the candidate product skill to production.
