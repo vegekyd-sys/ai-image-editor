@@ -1,6 +1,6 @@
 ---
 name: multi-angle-video
-description: Turn a supplied single-camera take into professional multi-angle coverage with new camera positions and motivated cuts, preserving its performance, action timing, gaze, identity, and original soundtrack. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.
+description: Turn a supplied single-camera take into story-driven multi-angle coverage, with expressive shot sizes, purposeful details and reactions, and motivated cuts grounded in the original performance. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.
 allowed-tools: read_file list_files analyze_video analyze_image transcribe_audio preview_frame generate_animation run_code write_file
 metadata:
   makaron:
@@ -20,8 +20,9 @@ metadata:
 # Multi-Angle Video
 
 Create synthetic camera coverage of the event already recorded in the source.
-The user wants new viewpoints and professional cutting, while the performance
-and soundtrack remain the authority. Framewise fidelity is an acceptance target,
+The user wants a directed scene: attention, emotion, and pacing shaped through
+new viewpoints and professional cutting. The performance and soundtrack remain
+the authority. New angles alone do not satisfy this skill. Framewise fidelity is an acceptance target,
 not a guarantee made before inspecting the generated result.
 
 This is a specialized source edit. Read `prompts/animate.md` and
@@ -78,6 +79,8 @@ Persist a compact coverage plan through `write_file` before paid generation:
   "talkingWindows": [],
   "quietWindows": [],
   "actionAnchors": [],
+  "storyArc": "an interpretation supported by the recorded actions, not a new plot",
+  "beats": [],
   "shots": [],
   "generation": { "model": "seedance-2.5", "resolution": "720p", "taskId": null },
   "qa": { "status": "planned", "failures": [] }
@@ -85,20 +88,68 @@ Persist a compact coverage plan through `write_file` before paid generation:
 ```
 
 Replace example measurements with observed values. Each shot records
-`start`, `end`, `cameraPosition`, `lensFeel`, `focus`, `movement`, `action`, and
-`cutReason`. Shot ranges start at zero, end at the measured source duration, and
+`start`, `end`, `beat`, `storyFunction`, `shotSize`, `cameraPosition`, `lensFeel`,
+`focus`, `movement`, `action`, and `cutReason`. Record the contrast with the
+preceding shot and any implied environment that needs output review.
+Shot ranges start at zero, end at the measured source duration, and
 cover the clock in order without gaps or overlaps. Preserve action-anchor
 uncertainty and speech timing provenance in the plan.
 
-## Direct professional coverage
+## Find the scene's story before choosing angles
 
-Choose shot count and pacing from the scene and brief. A compact take often
-needs only a few useful angles; thirteen is an example, not a requirement.
-Alternate establishing view, face/reaction, and meaningful hand/prop inserts.
-Give dialogue enough room; cut at phrase boundaries, action initiations, or
-reaction beats. Maintain screen direction and spatial orientation. Favor clear
-hard cuts over decorative transitions. Avoid gratuitous orbits, extreme macro,
-and invented background details when unseen geometry would dominate the shot.
+Interpret the recorded performance in one sentence: what draws attention at the
+start, what changes, and what resolves or remains at the end? A routine gesture
+can carry a small story: anticipation, hesitation, release, discovery, pleasure,
+or a visual punchline. Infer tone from actual speech, expressions, and actions;
+do not invent a conflict, backstory, or new behavior to create an arc.
+
+Break the source into meaningful beats, each with an observed action, emotional
+or informational purpose, and source-clock evidence. Then assign shot functions:
+
+- Establish the person and their relationship to the space, not just a slightly
+  rotated version of the source framing.
+- Move close when a face or reaction reveals something; leave enough time to
+  read it. A close-up must earn its intimacy.
+- Use a hand, object, texture, or interaction insert when that detail advances
+  attention. Dialogue may continue over it in the unchanged source soundtrack;
+  not every spoken word needs a visible face. Do not fabricate screen text.
+- Choose a meaningful point of view: over an object, through a foreground edge,
+  near table height, above the action, or along an existing motion trajectory.
+  Explain what the viewpoint reveals that the previous shot did not.
+- Let an environment shot give a pause, scale, or contextual payoff. Preserve
+  confirmed landmarks and spatial relationships; allow restrained inferred
+  geometry when needed for the viewpoint, mark it for review, and avoid new
+  conspicuous features. Unseen geometry is a review risk, not a blanket reason
+  to keep every shot at eye level.
+- Shape the ending as an observed payoff or reaction. Do not spend the whole
+  ending on a generic frontal medium shot if a recorded gesture can resolve it.
+
+Choose number and duration from these beats. A lively 15-second action-led take
+may support roughly 8–10 shots; a sustained emotional moment may need far fewer.
+Neither that range nor the inspiration's shot count is a template. Do not fill
+time with redundant coverage or chop every sentence for variety. Short inserts
+can accelerate a beat; a longer reaction or wide shot can let it breathe.
+
+## Compose an expressive shot progression
+
+For a scene with a visible person, setting, and handled objects, actively explore
+wide/context, medium/action, close/reaction, and detail/insert coverage. Use clear
+changes of scale, height, depth, or viewpoint, rather than a sequence of small
+left/right rotations at the same distance. If fewer functions suit the source,
+state the creative reason. The point is attention control, not lens numbers.
+
+Audit the proposed sequence before generation: does each cut reveal, emphasize,
+connect, or release something? If adjacent shots serve the same purpose and only
+change azimuth, replace one with a motivated detail, perspective, or reaction,
+or merge them. Make the middle develop and the ending land. A plan dominated by
+eye-level medium shots fails creative review even when its timestamps are valid.
+
+Cut at phrase boundaries, changes of attention, action initiations, or reaction
+beats. Use continuity across a cut to make a gesture feel uninterrupted. Maintain
+screen direction and spatial orientation. Favor clean hard cuts; use focus and
+foreground composition to guide attention. Avoid decorative orbits and arbitrary
+extreme angles. Tight details and low/high viewpoints are welcome when motivated
+by the action and compatible with the source.
 
 Describe the original A-camera in world space. The subject's gaze remains aimed
 at that original lens or at source-observed objects. New cameras never attract
@@ -112,8 +163,14 @@ tripods, filming rigs, lights, or crew unless already visible in the source.
 An offscreen A-camera defines an eyeline only; never materialize it in an
 over-the-shoulder view.
 
-Build one complete prompt with a short title, the source marker, locked event,
-speech/quiet windows, action anchors, gaze rule, and every timed shot. Example
+Build one complete prompt with a short title, source marker, the observed story
+arc, and every timed shot's visual purpose and composition. Lead with the desired
+film: put the timed shot list immediately after a short creative brief. Describe
+each shot concisely by purpose, size/viewpoint, and actual action; do not paste
+the plan's entire risk register into every shot. Then give one compact source-performance contract,
+the important action anchors and speech/quiet windows, and gaze/equipment rules.
+Do not bury cinematography under repeated prohibitions or a generic adjective
+such as "cinematic". Example
 language to adapt to the observed source:
 
 > Film additional coverage of the event in <<<media_1>>>. Keep the same complete
@@ -186,6 +243,13 @@ cuts are motivated, identity/props stay stable, gaze does not chase the cameras,
 mouth activity matches talking/quiet windows, and fast actions keep their timing.
 Check that the model has not drawn filming equipment into reverse/shoulder shots.
 Review moving playback and sound; a contact sheet alone cannot prove continuity.
+Creative QA is separate from fidelity QA. Record actual distinct shot sizes and
+viewpoints, the inserts/reactions/context that survived, and whether the opening,
+development, and ending convey the planned arc. Evaluate shot usefulness and
+rhythm, not just cut count. Multiple angles with monotonous scale or no narrative
+development remain a failed candidate, even with perfect source timing. Compare
+with the supplied inspiration's level of visual storytelling, never require its
+specific shot order, invented setting details, or actor-specific gestures.
 
 After visual timing passes, use Node FFmpeg to keep the generated picture and
 replace its entire audio with the selected original take's stream, or remove

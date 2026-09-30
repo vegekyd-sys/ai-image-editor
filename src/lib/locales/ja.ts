@@ -2,7 +2,7 @@ import type { TranslationDictionary } from './index';
 
 const ja = {
   "skill.multiAngle.label": "マルチアングル動画",
-  "skill.multiAngle.description": "単一カメラの動画をアップロードして、新しいアングルとプロの編集を作成。元の演技と音声を保ちます。",
+  "skill.multiAngle.description": "元の演技を軸に、画角・ディテール・リアクションを組み立て、単一カメラの動画を物語性のあるマルチアングル映像にします。",
   "homeOrbit.title1": "想像を、",
   "homeOrbit.title2": "待たせない。",
   "homeOrbit.mobileDescription": "画像、映像、デザイン、音楽",
