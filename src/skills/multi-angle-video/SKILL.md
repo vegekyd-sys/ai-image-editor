@@ -70,6 +70,14 @@ Check labels against decoded frame timestamps; analysis prose alone is not a
 precise motion clock. A 4 fps sheet is a starting point, not proof of subframe
 precision. Record the measurement uncertainty rather than inventing decimals.
 
+Classify the actual sound before treating it as speech: performer dialogue,
+voiceover, music/lyrics, ambience, or silence. Burned-in captions can communicate
+the lesson even when the performer does not speak; keep their meaning separate
+from a speech clock. If ASR reports no speech, check the sound and decoded frames
+before calling it a missing transcript. Do not make a silent demonstrator recite
+the source captions or song lyrics. Record any requested removal/recreation of
+overlays separately from performance preservation.
+
 If speech is present, read `skills/_shared/speech-clock.md` and transcribe the
 chosen source once. Reuse its full persisted word timings when the inline list
 is compacted. Group neighboring spoken words into talking windows (a gap near
@@ -103,6 +111,12 @@ Persist a compact coverage plan through `write_file` before paid generation:
   "qa": { "status": "planned", "failures": [] }
 }
 ```
+
+Parse the saved plan with Node `JSON.parse` before submission and verify that
+shot ranges form one contiguous source clock. Reference the complete persisted
+ASR artifact rather than manually retyping long word arrays. The final submitted
+prompt and plan must have the same reviewed shot ranges; revise both when
+creative review changes the sequence.
 
 Replace example measurements with observed values. Each shot records
 `start`, `end`, `beat`, `storyFunction`, `shotSize`, `cameraPosition`, `lensFeel`,
@@ -144,6 +158,9 @@ Choose size, composition, and duration from the meaning of each beat. A personal
 admission may need face intimacy; an explanation may need the relevant detail;
 a reversal may need a held reaction; a claim about the surroundings may need
 space to become visible. These are options, not a fixed face/detail/wide recipe.
+If a selected excerpt begins mid-thought, use the available source context to
+interpret the fragment, and record any remaining uncertainty. Do not turn a
+fragment into a different claim merely to give the opening a story.
 Keep a face when delivery carries the meaning; show a referent when seeing it
 helps the thought. Do not cut to every noun or illustrate absent events.
 If speech turns from one idea to another, let the visual emphasis turn with it,
@@ -206,6 +223,11 @@ phrase. Repairing action continuity must preserve that visual emphasis. An
 action may continue outside the frame; showing every action in full is not a
 reason to reveal the next idea prematurely.
 
+A semantic transition need not add a separate short bridge shot: a continuous
+reframe or focus change can let a product arrive in its real source gesture,
+then become the attention target. Avoid near-identical adjacent face portraits
+and subsecond bridges that fragment a single thought without revealing anything.
+
 Cut at phrase boundaries, changes of attention, action initiations, or reaction
 beats. Use continuity across a cut to make a gesture feel uninterrupted. Maintain
 screen direction and spatial orientation. Favor clean hard cuts; use focus and
@@ -217,6 +239,11 @@ Describe the original A-camera in world space. The subject's gaze remains aimed
 at that original lens or at source-observed objects. New cameras never attract
 their gaze. A look into a new lens is allowed only if it reproduces the source's
 actual gaze direction; returning to the A-camera axis can provide a clean end.
+For a product insert, move the virtual camera closer to the recorded held item;
+do not have the presenter thrust it toward the lens or add a beauty pose to
+create the framing. Do not add corrective diagrams, dotted lines, or teaching
+overlays unless requested. These would change the event or its presentation
+beyond new camera coverage.
 Count handled props and lock their locations, hand ownership, and trajectories.
 Camera/lens descriptions are aesthetic directions, not measured physical lenses.
 Make that distinction explicit in the generation prompt: additional angles are
@@ -317,7 +344,10 @@ mouth activity matches talking/quiet windows, and fast actions keep their timing
 Check that the model has not drawn filming equipment into reverse/shoulder shots.
 Review moving playback and sound; a contact sheet alone cannot prove continuity.
 Transcribe a speech-bearing native candidate once to check omissions, repetition,
-extra words, and phrase drift before any original-audio replacement. Resolve
+extra words, overlapping voices, and phrase drift before any original-audio
+replacement. A repeated benefit or new claim invalidates a testimonial even if
+the product reveal lands on time. A source audio feature is a reference, not a
+protected immutable sound layer. Resolve
 conflicting automated reports against the actual audio and decoded frames;
 video analysis can hallucinate actions or echo supplied reference timestamps.
 Creative QA is separate from fidelity QA. Replay with the original speech and
