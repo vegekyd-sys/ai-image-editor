@@ -106,6 +106,11 @@ their gaze. A look into a new lens is allowed only if it reproduces the source's
 actual gaze direction; returning to the A-camera axis can provide a clean end.
 Count handled props and lock their locations, hand ownership, and trajectories.
 Camera/lens descriptions are aesthetic directions, not measured physical lenses.
+Make that distinction explicit in the generation prompt: additional angles are
+virtual viewpoints, not additional objects in the set. Do not show cameras,
+tripods, filming rigs, lights, or crew unless already visible in the source.
+An offscreen A-camera defines an eyeline only; never materialize it in an
+over-the-shoulder view.
 
 Build one complete prompt with a short title, the source marker, locked event,
 speech/quiet windows, action anchors, gaze rule, and every timed shot. Example
@@ -118,7 +123,9 @@ language to adapt to the observed source:
 > source lighting, identity, wardrobe, set, and prop counts. Do not redirect the
 > performer toward the new lenses. Do not add speech or actions. No retiming,
 > repeated actions, slow motion, freezes, or duplicated objects. Preserve source
-> audio in sync. Follow these contiguous shot ranges: [measured shot list].
+> audio in sync. These are virtual viewpoints; do not add visible cameras,
+> tripods, filming equipment, or crew. Follow these contiguous shot ranges:
+> [measured shot list].
 
 Use the user's language for the script and explanations. Do not copy an
 article's actor, location, dialogue, props, or action timestamps into a new take.
@@ -177,6 +184,7 @@ Compare actual decoded source/output frames at each shot's midpoint, every cut,
 important motion anchors, and speech close-ups. Confirm new angles are visible,
 cuts are motivated, identity/props stay stable, gaze does not chase the cameras,
 mouth activity matches talking/quiet windows, and fast actions keep their timing.
+Check that the model has not drawn filming equipment into reverse/shoulder shots.
 Review moving playback and sound; a contact sheet alone cannot prove continuity.
 
 After visual timing passes, use Node FFmpeg to keep the generated picture and
