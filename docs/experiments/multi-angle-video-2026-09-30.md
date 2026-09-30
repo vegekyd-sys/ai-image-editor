@@ -72,3 +72,87 @@ not received a new paid generation; the reported outputs precede it.
   receipts, decoded contact sheets, and `comparison-muted.mp4`.
 
 Workflow inspiration: https://fal.ai/learn/tools/how-to-create-multi-angle-video-seedance-2-5
+
+## Round 2: narrative and scale revision
+
+The user rejected the first round's weak shot language. The reference's lower
+AI panel was isolated for comparison: its first 15 seconds contain faces,
+object inserts, computer viewpoint, courtyard scale, and a low action angle.
+This exposed a planning problem, not evidence that either model cannot direct
+such coverage. The first plan overused adjacent medium views and discouraged
+motivated tight details and elevated/lower viewpoints.
+
+The revised skill finds an observed micro-story before angles, assigns a purpose
+to every shot, requires useful contrasts in scale/viewpoint/foreground, allows
+source dialogue over detail inserts, and independently checks creative quality
+and source fidelity. It permits restrained inferred geometry while preserving
+confirmed landmarks. A long source checklist now follows a concise shot list,
+instead of dominating the prompt. None of this test actor's objects or timings
+are embedded as instructions in the reusable skill.
+
+The actual product Agent planned ten shots around the source's small emotional
+arc: inbox frustration, a drinking pause, attention returning to the courtyard,
+then the apple gesture and reaction. Director review shortened the executable
+prompt to 1,644 characters and corrected two source-state errors: the apple is
+already held at 10.69s, and denser source frames support the real apple-to-mouth,
+bite, and subsequent reaction instead of prohibiting that recorded ending.
+Both models received this identical revised prompt and the unchanged 15s source.
+
+Observed improvements in both decoded contact sheets: a wider opening, tight
+face coverage, keyboard detail from above, foreground computer composition,
+low/table-level cup coverage, wider spatial relief, low apple-motion coverage,
+and a close ending. The visible camera from Seedance round 1 was absent in these
+round-2 samples. The result is substantially more varied than the first round's
+medium-view coverage. Shot-count detection includes false positives around fast
+apple motion; it is not the creative acceptance criterion.
+
+| Native output | Stream duration | Single-ASR comparison |
+| --- | --- | --- |
+| Seedance 2.5, 1280×720 | picture 14.708333s; audio/container 14.720s | Same recognized dialogue; first utterance start/end −0.01s, second +0.01s |
+| FAL H3 Max, 1344×768 | picture 15.083333s; audio/container 15.104s | First start/end +0.13/−0.03s; second −0.10/−0.22s; one `open`/`opened` ASR difference, not confirmed as a spoken-word change |
+
+H3's speech drift improved materially from round 1. Neither native result proves
+framewise performance fidelity; ASR agreement is not lip/gesture synchronization.
+The Seedance native still truncates the source tail. These are separate remaining
+issues from the demonstrated narrative/scale improvement.
+
+### Finished 15-second candidates
+
+- `narrative-v2-seedance-final-15s.mp4`: 1280×720, 24fps, 360 frames;
+  video, audio, and container exactly 15.000s. Uses native Seedance for
+  0–12.875s and the prepared source's actual 12.875–15s closing shot, cropped
+  480×270 at (332,96) and scaled to 1280×720. This deliberately replaces the
+  entire close ending, retaining the real recorded bite/reaction. It is a hybrid
+  edit, not a native 15s model output. Earlier generated motion remains subject
+  to fidelity review. No source ending was stretched/frozen or synthesized.
+- The Seedance final uses the prepared source AAC stream unchanged; audio packet
+  MD5 matches the source (`858557c9b36f702abaf07a5d9eefc83a`).
+- A preliminary hybrid used the higher-resolution X source directly, with a
+  one-frame timing difference. The recommended final uses the same prepared
+  source clock and constant 24fps instead; the preliminary is retained as evidence.
+- `narrative-v2-h3-15s.mp4`: trims the H3 native trailing picture/audio to
+  15.000s; retains generated sound with AAC re-encoding. Its source-timing
+  differences remain visible/recorded, not hidden by an original-audio swap.
+- `narrative-v2-comparison-muted.mp4`: synchronized 15s panels of the reference,
+  final Seedance hybrid, and H3 second version. It is muted so shared sound cannot
+  imply that either native soundtrack is identical to the source.
+- Both native candidates and finished edits were persisted in the user's project.
+  Final full playback/taste acceptance and framewise fidelity remain distinct
+  from this documented creative improvement. No production deployment occurred.
+
+Validation: full FFmpeg decode of native outputs, finished clips and comparison;
+duration/frame/audio-stream checks; source audio packet hash; source/output frame
+sampling and one ASR per native; 31 related integration/startup/i18n tests;
+skill validation, UI i18n guard, startup/reference contracts and diff checks.
+
+Receipts: planning `6a40d185-ead8-4c4b-9f90-35d8515c9eb8`, prompt review
+`f85960e9-16f9-4d3a-a111-4240aded1f6f`, Seedance
+`task-unified-1790781921-6h9riyzn`, H3
+`fal-h3max-reference-01a0f2ec-1f19-73e3-ad7f-9aabb9d3f005`.
+Cloud file recovery/persistence and Seedance ASR:
+`7aab09ac-10a1-451d-b8a8-84c6bb8da647`; H3 ASR:
+`18c48333-f8ef-48c0-9961-1a81e25d52d9`. Recovery fetched the completed file;
+no new generation was submitted for the CDN download problem.
+Round-2 charges: Seedance 975, H3 672; 1,647 credits this round, 3,294 total
+across both successful rounds. Planning, persistence, and ASR Agent runs used
+the subscription path with zero additional charged credits.

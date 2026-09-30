@@ -105,6 +105,9 @@ do not invent a conflict, backstory, or new behavior to create an arc.
 
 Break the source into meaningful beats, each with an observed action, emotional
 or informational purpose, and source-clock evidence. Then assign shot functions:
+Keep story interpretation separate from visible facts: metaphors in the brief
+must not introduce new objects, actions, or contents in shot descriptions. Update
+old action uncertainties when denser source frames provide better evidence.
 
 - Establish the person and their relationship to the space, not just a slightly
   rotated version of the source framing.
@@ -262,6 +265,15 @@ pad, freeze, or speed-adjust a short/drifting result to manufacture fidelity.
 Do not use `-shortest` to conceal a missing ending. If visual action or lip timing
 drifts, remuxing audio does not fix it: record the failure and revise the prompt
 or use an accepted source segment rather than claiming success.
+
+If a generated candidate truncates the ending, consider a deliberate source
+closing shot instead of a tiny appended tail. Replace the whole closing shot at
+a motivated action/reaction boundary with the same original-clock source range;
+a restrained crop may provide a useful change of scale. Check the join's action,
+eyeline, appearance, framing, and quality. This cannot fix earlier generated
+drift. Preserve the actual recorded ending and disclose the result as a hybrid
+edit with its AI/source time ranges, not a full native model output. If the join
+does not work, retain the failure and revise rather than manufacture duration.
 
 Publish the assembled workspace MP4 once with `write_file` and its exact
 `workspacePaths`. Persist final media paths and QA in the same plan. Report
