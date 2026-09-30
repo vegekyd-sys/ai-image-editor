@@ -3,6 +3,8 @@ import type { TranslationDictionary } from './index';
 
 const zhHant = {
   ...zh,
+  "skill.multiAngle.label": "多機位影片",
+  "skill.multiAngle.description": "上傳單鏡頭影片，生成多角度鏡頭與專業剪輯，保留原片表演和聲音。",
   "homeOrbit.title1": "想像",
   "homeOrbit.title2": "不必等待",
   "homeOrbit.mobileDescription": "圖片、電影、設計、音樂",

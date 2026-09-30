@@ -1,4 +1,6 @@
 const zh = {
+  "skill.multiAngle.label": "多机位视频",
+  "skill.multiAngle.description": "上传单镜头视频，生成多角度镜头与专业剪辑，保留原片表演和声音。",
   "homeOrbit.title1": "想象",
   "homeOrbit.title2": "不必等待",
   "homeOrbit.mobileDescription": "图片、电影、设计、音乐",

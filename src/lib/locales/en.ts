@@ -1,4 +1,6 @@
 const en = {
+  "skill.multiAngle.label": "Multi-Angle Video",
+  "skill.multiAngle.description": "Upload a single-camera take to create new angles and professional cuts while preserving the performance and original sound.",
   "homeOrbit.title1": "Imagination",
   "homeOrbit.title2": "can’t wait.",
   "homeOrbit.mobileDescription": "Images. Films. Design. Music.",
