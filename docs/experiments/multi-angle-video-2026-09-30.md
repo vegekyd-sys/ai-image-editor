@@ -156,3 +156,50 @@ no new generation was submitted for the CDN download problem.
 Round-2 charges: Seedance 975, H3 672; 1,647 credits this round, 3,294 total
 across both successful rounds. Planning, persistence, and ASR Agent runs used
 the subscription path with zero additional charged credits.
+
+## Speech meaning correction (2026-10-01)
+
+The user clarified that the goal is correcting the reusable product skill.
+Round 2's visual variety did not sufficiently express what the speaker was
+saying. Speech windows alone constrain synchronization; they do not direct
+attention, shot size, or the timing of a rhetorical turn.
+
+Production CLI `analyze --video` now completed for the same prepared original
+take (reported model `gemini-3.8-flash`). Its combined audio/visual report
+identified frustration, a pause, a rhetorical reversal, and the surroundings
+as relief. Some estimated action times contradict the previously decoded
+source: for example, it grouped the apple throw into the spoken courtyard line.
+Treat that report as interpretive evidence, reconcile phrase times with the
+persisted source ASR, and retain measured frames as action-clock authority.
+This success does not establish the cause of the earlier regional API failure.
+
+The revised skill analyzes dialogue and visible performance before angles,
+persists phrase-level `meaningBeats`, links shots to them, and requires a reason
+for the framing/hold at that specific thought. It separates literal speech,
+interpretation, and visible events; mentioning an action cannot create one.
+It favors a meaningful change of visual emphasis at a measured thought boundary
+without cutting to every noun or imposing a fixed close/detail/wide recipe.
+Generation prompts carry each important phrase's visual purpose. Final QA
+compares actual cuts with the spoken turn/payoff and rejects disconnected
+coverage even when shot variety and synchronization are otherwise good.
+
+None of this source's dialogue, props, or timestamps are hardcoded in the skill.
+Local structural validation and the manifest loading contract passed; these do
+not establish acceptance of a newly generated video. No new paid video pass
+was submitted for this correction.
+
+Behavioral planning run `9cdc1628-9b2c-4717-a54d-869924148eb5` loaded the
+candidate skill and existing ASR through the real product Agent. It kept the
+rhetorical turn on the face and assigned the following courtyard phrase a
+spatial reveal. Review run `2427bd22-1b60-40ff-97e1-b7db96789e2e` corrected
+conflicting pickup/throw instructions. Developer review then clarified the
+opening and ending framing of its moving reveal shot: starting the action
+coverage earlier must not make the surroundings the visual emphasis too soon.
+The skill now explicitly preserves semantic emphasis when repairing continuity,
+including framing changes within a shot. Both Agent runs completed, charged
+zero credits on the subscription route, and submitted no video generation.
+
+Reviewed local plan: `semantic-v3-plan-reviewed.json` in the evidence directory.
+Clock coverage and shot-to-meaning references were checked. Skill validation,
+startup contract, three startup tests, and diff checks passed. This establishes
+the revised planning workflow, not generated-video or model-execution acceptance.

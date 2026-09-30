@@ -1,6 +1,6 @@
 ---
 name: multi-angle-video
-description: Turn a supplied single-camera take into story-driven multi-angle coverage, with expressive shot sizes, purposeful details and reactions, and motivated cuts grounded in the original performance. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.
+description: Turn a supplied single-camera take into multi-angle coverage whose framing and cuts express the source dialogue, emotion, and actions. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.
 allowed-tools: read_file list_files analyze_video analyze_image transcribe_audio preview_frame generate_animation run_code write_file
 metadata:
   makaron:
@@ -21,7 +21,9 @@ metadata:
 
 Create synthetic camera coverage of the event already recorded in the source.
 The user wants a directed scene: attention, emotion, and pacing shaped through
-new viewpoints and professional cutting. The performance and soundtrack remain
+new viewpoints and professional cutting. Understand what is being communicated
+before deciding how to film it: spoken meaning shapes framing, attention, and
+rhythm, rather than serving only as a lip-sync clock. The performance and soundtrack remain
 the authority. New angles alone do not satisfy this skill. Framewise fidelity is an acceptance target,
 not a guarantee made before inspecting the generated result.
 
@@ -53,8 +55,15 @@ motion; preserve the event. Do not use its replication profile or
 
 ## Measure actions and speech
 
-Inspect only evidence still needed to design coverage. Use `analyze_video` for
-uncertain action, geometry, eyeline, or blocking. Use FFmpeg frame extraction or
+First use `analyze_video` on the selected take to understand dialogue together
+with the visible performance, unless equivalent analysis of this exact take is
+already persisted. Ask for spoken meaning, tone, rhetorical/emotional turns,
+actual actions, and their relationship, as well as geometry and eyeline. Ask it
+to distinguish what is said from what is visibly done and to flag uncertainty.
+An analysis can suggest interpretation; it cannot establish precise timestamps
+or facts unsupported by the recording. If the tool fails, record the failure
+and combine transcription with decoded frames; do not replace speech analysis
+with an action-only storyboard. Use FFmpeg frame extraction or
 `preview_frame` for measured event anchors: about 1 frame/second for orientation,
 then denser samples around quick gestures, prop transfers, throws, or catches.
 Check labels against decoded frame timestamps; analysis prose alone is not a
@@ -69,6 +78,13 @@ chewing, humming, and other vocal activity against audio and frames: ASR silence
 does not mean a closed or motionless mouth. With no speech, skip transcription.
 With no audio stream, keep the final silent unless new sound was requested.
 
+Reconcile analysis with the measured speech and action clocks before planning.
+Use persisted word timings for phrase boundaries and source frames for actions;
+video analysis may round times or put an action inside the wrong utterance.
+Keep literal words, their interpretation, and visible facts distinct. A speaker
+mentioning an action does not authorize enacting it; a spoken referent may be
+offscreen, figurative, remembered, or hypothetical.
+
 Persist a compact coverage plan through `write_file` before paid generation:
 
 ```json
@@ -79,6 +95,7 @@ Persist a compact coverage plan through `write_file` before paid generation:
   "talkingWindows": [],
   "quietWindows": [],
   "actionAnchors": [],
+  "meaningBeats": [],
   "storyArc": "an interpretation supported by the recorded actions, not a new plot",
   "beats": [],
   "shots": [],
@@ -89,13 +106,27 @@ Persist a compact coverage plan through `write_file` before paid generation:
 
 Replace example measurements with observed values. Each shot records
 `start`, `end`, `beat`, `storyFunction`, `shotSize`, `cameraPosition`, `lensFeel`,
-`focus`, `movement`, `action`, and `cutReason`. Record the contrast with the
+`focus`, `movement`, `action`, `meaningBeatIds`, and `cutReason`. Record the contrast with the
 preceding shot and any implied environment that needs output review.
 Shot ranges start at zero, end at the measured source duration, and
 cover the clock in order without gaps or overlaps. Preserve action-anchor
 uncertainty and speech timing provenance in the plan.
+Carry those anchors into each shot's opening state: an action begun before a cut
+continues from its current pose and prop state, rather than restarting in the
+new angle. Remove contradicted action claims from the shot and prompt; retaining
+both conflicting instructions with a general "follow the source" caveat is
+insufficient. Resolve uncertain state before paid submission or mark that part
+of the plan unverified and inspect the source.
 
 ## Find the scene's story before choosing angles
+
+For speech-led footage, map the actual phrases into `meaningBeats` before choosing
+shots. Each beat records `id`, `start`, `end`, `words`, `meaning`, `tone`,
+`visibleEvidence`, `attentionTarget`, and `visualPurpose`, with timing provenance
+and uncertainty. Identify the speaker's claim, admission, contrast, reveal,
+question, or payoff; combine phrases when they form one thought. Map pauses and
+physical reactions too. For a silent take, use observed actions in these fields
+and omit `words`. Do not label beats only with objects or generic action names.
 
 Interpret the recorded performance in one sentence: what draws attention at the
 start, what changes, and what resolves or remains at the end? A routine gesture
@@ -108,6 +139,17 @@ or informational purpose, and source-clock evidence. Then assign shot functions:
 Keep story interpretation separate from visible facts: metaphors in the brief
 must not introduce new objects, actions, or contents in shot descriptions. Update
 old action uncertainties when denser source frames provide better evidence.
+
+Choose size, composition, and duration from the meaning of each beat. A personal
+admission may need face intimacy; an explanation may need the relevant detail;
+a reversal may need a held reaction; a claim about the surroundings may need
+space to become visible. These are options, not a fixed face/detail/wide recipe.
+Keep a face when delivery carries the meaning; show a referent when seeing it
+helps the thought. Do not cut to every noun or illustrate absent events.
+If speech turns from one idea to another, let the visual emphasis turn with it,
+at the measured phrase boundary. A connecting phrase can stay on the speaker
+until the new subject is introduced. Hold the resulting shot long enough for
+the thought to land; variety must not interrupt an important reveal or sentence.
 
 - Establish the person and their relationship to the space, not just a slightly
   rotated version of the source framing.
@@ -147,6 +189,19 @@ change azimuth, replace one with a motivated detail, perspective, or reaction,
 or merge them. Make the middle develop and the ending land. A plan dominated by
 eye-level medium shots fails creative review even when its timestamps are valid.
 
+Every shot's `cutReason` must explain why this framing belongs at this point in
+the spoken thought or observed action. Listing the current action and a lens is
+insufficient. Before generation, review the shot list with the transcript:
+does the viewer's visual attention follow the speaker's changing meaning?
+Would exactly the same sequence fit unrelated dialogue? If so, revise its
+emphasis and timing. Permit purposeful holds and speech over inserts; avoid
+forcing a new shot for every phrase.
+Check changes of framing inside a shot too: if a move provides the semantic
+reveal, describe its starting composition and how it changes on the relevant
+phrase. Repairing action continuity must preserve that visual emphasis. An
+action may continue outside the frame; showing every action in full is not a
+reason to reveal the next idea prematurely.
+
 Cut at phrase boundaries, changes of attention, action initiations, or reaction
 beats. Use continuity across a cut to make a gesture feel uninterrupted. Maintain
 screen direction and spatial orientation. Favor clean hard cuts; use focus and
@@ -169,7 +224,10 @@ over-the-shoulder view.
 Build one complete prompt with a short title, source marker, the observed story
 arc, and every timed shot's visual purpose and composition. Lead with the desired
 film: put the timed shot list immediately after a short creative brief. Describe
-each shot concisely by purpose, size/viewpoint, and actual action; do not paste
+each shot concisely by purpose, size/viewpoint, and actual action. For speech-led
+shots, include the relevant source phrase and why its meaning motivates this
+composition or hold; give measured source-clock ranges, not only a list of
+shots to distribute across the clip. Do not paste
 the plan's entire risk register into every shot. Then give one compact source-performance contract,
 the important action anchors and speech/quiet windows, and gaze/equipment rules.
 Do not bury cinematography under repeated prohibitions or a generic adjective
@@ -246,7 +304,15 @@ cuts are motivated, identity/props stay stable, gaze does not chase the cameras,
 mouth activity matches talking/quiet windows, and fast actions keep their timing.
 Check that the model has not drawn filming equipment into reverse/shoulder shots.
 Review moving playback and sound; a contact sheet alone cannot prove continuity.
-Creative QA is separate from fidelity QA. Record actual distinct shot sizes and
+Creative QA is separate from fidelity QA. Replay with the original speech and
+compare the actual cuts/framing with `meaningBeats`, especially turns and payoffs.
+Record whether each key thought receives its intended visual emphasis and whether
+the shot arrives on its phrase, not merely somewhere in the scene. A visually
+varied result still fails semantic QA if unrelated inserts distract from delivery,
+the relevant subject stays unreadable, or the key visual reveal arrives before
+or after its spoken meaning. Fix the observed mismatch before accepting it;
+shared audio in a comparison is not evidence of semantic or lip-sync success.
+Record actual distinct shot sizes and
 viewpoints, the inserts/reactions/context that survived, and whether the opening,
 development, and ending convey the planned arc. Evaluate shot usefulness and
 rhythm, not just cut count. Multiple angles with monotonous scale or no narrative
