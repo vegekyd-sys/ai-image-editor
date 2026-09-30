@@ -167,6 +167,39 @@ describe('createVideo Seedance 2.5 integration', () => {
     })
   })
 
+  it('bills measured source seconds without replacing adaptive reference duration', async () => {
+    let providerBody: Record<string, unknown> | undefined
+    const beforeSubmit = vi.fn(async () => {})
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      providerBody = JSON.parse(String(init?.body || '{}'))
+      return new Response(JSON.stringify({ id: 'task-unified-seedance25-billed-reference' }), { status: 200 })
+    }))
+
+    const { createVideo } = await import('@/lib/skills/create-video')
+    const result = await createVideo({
+      script: 'Re-shoot <<<media_1>>> with six camera angles, preserving its exact performance clock.',
+      images: [],
+      videoUrls: ['https://example.com/source.mp4'],
+      referenceVideoDuration: 15,
+      referenceVideoMetas: [{ width: 1280, height: 720, fileSizeBytes: 1_000_000, durationSec: 15 }],
+      duration: -1,
+      aspectRatio: 'auto',
+      videoOperation: 'generate',
+      videoModel: 'seedance-2.5',
+      videoResolution: '720p',
+      onBeforeProviderSubmit: beforeSubmit,
+    })
+
+    expect(result).toMatchObject({ success: true })
+    expect(beforeSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'seedance-2.5', durationSec: 15, referenceVideoDurationSec: 15,
+    }))
+    expect(providerBody).toMatchObject({
+      model: 'seedance-2.5-reference-to-video', duration: -1,
+      aspect_ratio: 'adaptive', video_urls: ['https://example.com/source.mp4'],
+    })
+  })
+
   it('uses the dedicated typed video-edit route with locked provider parameters', async () => {
     let providerBody: Record<string, unknown> | undefined
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {

@@ -13,6 +13,7 @@ metadata:
     sourceMediaRequired: true
     modelPreference:
       - seedance-2.5
+      - fal-h3-max
     tags: [video, multi-angle, multi-camera, coverage, source-edit]
 ---
 
@@ -126,14 +127,19 @@ for the source video or create first-frame semantics.
 
 ## Submit through the supported product route
 
-The inspiration uses fal's `task: editing`. Makaron currently uses Evolink and
-its shared source-edit contract requires reference-to-video semantics. Do not
+The inspiration uses Seedance on fal with `task: editing`. Makaron's Seedance
+route currently uses Evolink and its shared source-edit contract requires
+reference-to-video semantics. Do not
 paste fal parameter names, @Video1 markers, draft IDs, or pricing into Makaron.
 Do not bypass product tools to call a different provider.
 
-Respect an explicitly selected model. If it cannot preserve the source clock
-while changing viewpoint, explain the concrete capability gap and propose
-Seedance 2.5; do not silently submit the same script to a different model.
+Respect an explicitly selected model. Seedance 2.5 is the default; FAL H3 Max
+(`fal-h3-max`, not the separate `minimax-h3-max` Turbo model) is also available
+for an explicitly requested comparison or source-reference generation. On H3
+Max, preserving performance/action timing is a prompt target that must be
+checked on the actual output, not a guaranteed direct-edit capability. If a
+different selected model lacks usable video references, explain the concrete
+gap instead of silently rerouting.
 
 - `model: "seedance-2.5"`, `video_intent: "generate"`,
   `video_operation: "generate"`, `duration: -1`, `output_format: "mp4"`.
@@ -146,6 +152,14 @@ Seedance 2.5; do not silently submit the same script to a different model.
   test. Preserve a selected resolution within the current capability; this route
   does not expose fal draft completion or 1080p. An additional final pass is a new
   generation, not an upscale, and needs the applicable budget/authorization.
+- For `fal-h3-max`, use `video_intent: "generate"`,
+  `video_operation: "generate"`, explicit integer `duration` from 5–15 seconds,
+  and the same source-clock prompt and feature video reference. Its default is
+  768p; 480p/1080p are available. Each source reference and all source videos
+  together must fit 15 seconds. It has no typed edit/extend or exact-original-
+  audio toggle. When comparing models, reuse the identical prepared source and
+  measured coverage plan, record each model's actual resolution/cost, and label
+  native output versus any later original-audio remux separately.
 - Omit `keep_original_sound` (unsupported on this route), and describe source
   audio preservation in the prompt. Keep the original audio asset for remuxing;
   a prompt alone cannot guarantee an unchanged soundtrack.
