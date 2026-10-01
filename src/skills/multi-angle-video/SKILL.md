@@ -114,6 +114,13 @@ Keep literal words, their interpretation, and visible facts distinct. A speaker
 mentioning an action does not authorize enacting it; a spoken referent may be
 offscreen, figurative, remembered, or hypothetical.
 
+Record first-visible and last-visible times for a product or other narrative
+reveal separately from physical possession. New framing must not expose a held
+prop earlier than the source reveal. A wider view must stay within observed
+appearance and set facts; do not invent an unseen outfit, body area, screen or
+room merely to make a wider shot possible. Choose another camera view when its
+visibility would change the information conveyed at that moment.
+
 Persist a compact coverage plan through `write_file` before paid generation:
 
 ```json
@@ -539,6 +546,11 @@ important motion anchors, and speech close-ups. Confirm new angles are visible,
 cuts are motivated, identity/props stay stable, gaze does not chase the cameras,
 mouth activity matches talking/quiet windows, and fast actions keep their timing.
 Check that the model has not drawn filming equipment into reverse/shoulder shots.
+Keep a checklist of requested versus successfully inspected timestamps. Split
+frame requests into batches that fit the tool's current limit without dropping
+the remaining timestamps. Before claiming that an ending/action is missing,
+inspect both source and candidate in the final action interval and at their last
+usable frame. A frame before the action begins cannot prove its later absence.
 Review moving playback and sound; a contact sheet alone cannot prove continuity.
 Transcribe a speech-bearing native candidate once to check omissions, repetition,
 extra words, overlapping voices, and phrase drift before any original-audio

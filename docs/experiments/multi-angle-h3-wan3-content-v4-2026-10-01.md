@@ -57,3 +57,49 @@
 | 电商 | https://ai-image-editor-hrjlwy350-vegekyd-sys-projects.vercel.app/projects/ee251be6-49ac-4660-a9fc-9bc33d576a7a | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/ee251be6-49ac-4660-a9fc-9bc33d576a7a/uploads/f98d2f32-18a6-4108-be82-30b0534a8240.mp4 |
 | 高尔夫 | https://ai-image-editor-hrjlwy350-vegekyd-sys-projects.vercel.app/projects/73c93915-06df-4052-9f62-c4032dfc6b74 | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/73c93915-06df-4052-9f62-c4032dfc6b74/uploads/00b175c6-e4f0-42ef-bba8-57730e7d3e9b.mp4 |
 | 教练 | https://ai-image-editor-hrjlwy350-vegekyd-sys-projects.vercel.app/projects/65c105f9-c544-43cb-9e8f-49cdb68c6c1a | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/65c105f9-c544-43cb-9e8f-49cdb68c6c1a/uploads/3194dd1c-d42c-4a85-b107-05d3d97c1cca.mp4 |
+
+
+## 充值后 Wan3 续跑（2026-10-01）
+
+用户确认充值到账，复用原四项目通过 `makaron chat --skill multi-angle-video` 在06596df3独立Preview继续；请求：Wan3充好了，按本轮H3实际提交的同一脚本做15秒，只生成Wan3，不重做H3；原片内容和原声别改，直接生成。
+
+四个供应商任务均完成，四条原件已实际下载并解码验证；原件视频流均15.000s，容器含AAC尾包15.022993s，1920×1080/1080×1920。四条auto continuation都实际启动并完成QA。每个初始调用仅一次；模型wan-3.0 Standard1080p、15秒、源片media_1以及原声引用。每条挂auto completionaction，原件返回后自动QA。
+
+| 素材 | Chat run | Wan task | Prompt SHA256 | 与H3一致 |
+|---|---|---|---|---|
+| courtyard | 6aa1fb59-21c4-4ddd-b7ad-df39f216a715 | mr-wan30-4a0ef793-332d-4930-8315-5557f537b156 | 7361b7545960bc9ee0c130908022573491ec7e30f778834eed9b77d3f96dd48a | exact |
+| product | 298addc7-4119-4138-b166-b7d8d17683be | mr-wan30-bf1729bc-f53c-4115-9215-fbd7beba2cba | 3b731fd434afaf90a1d845c9f13953f4e92537df33abf250fc22929e5a3021b2 | exact |
+| golf | ca1518db-45ba-4a34-a0f5-d6802869ec4f | mr-wan30-8879ff9c-af13-452d-9f54-6f88646975c5 | a5c82a54f3cb1d1738a4d7ab347b2685b06001129e6281267dea6eedd757717d | 高尔夫末句多视角两字；分镜不变 |
+| coaching | fe369973-b42d-414c-b7cf-62073be7f21c | mr-wan30-ed6ebdf3-bf90-4995-8ca8-f99082fba5ff | 82377f67106887ad61c7e2676359af0d3ef23fa71ee86b6cd9e7c05e91884970 | exact |
+
+本次四条Wan生成预扣共1440 Makaron credits；上一轮因供应商余额不足失败的1440已退款，H3没有新增生成。
+
+供应商配置：当前Wan适配器默认prompt_extend=true。这里记录Makaron实际提交脚本，不能声称知晓供应商内部扩写后的prompt。
+
+### 实际结果与自动QA修正
+
+| 素材 | Wan3实测 | 与H3对照/严格验收 |
+|---|---|---|
+| 庭院 | 机位/景别/空间视差更明显，完整台词ASR与源相同，波形相关0.965（非样本相同）。12.25s已抛，12.5s已接，13s开始咬；源12.5s仍腾空、13s刚接、13.5s咬。 | 偏差从H3约2秒缩小到约0.3–0.5秒，但严格动作钟仍未通过。 |
+| 电商 | 台词ASR逐句顺序与时点更贴近；有景别、背景视差和产品近景。0.8s已露出粉色管底部，源产品约5s首次入画。 | 口播更忠实，但提前揭示产品改变信息节奏，未通过。不能把允许的新景别本身判为内容错误。 |
+| 高尔夫 | 保留起始挥杆、姿态纠正、结束随挥；明显左侧全身/胸前球杆近景，保持室内。末段14.5/14.9均有收势；13.5动作相位与源不同。 | 起始动作比H3更完整。auto QA误把12.5s准备姿势当结束，错误声称缺收势；补查尾段Chat已更正为收势存在/动作相位偏移。不能算无需人工QA修正的通过样本。 |
+| 教练 | 多机位更明显，ASR同文，波形相关0.9833；动作阶段和手/球杆状态在同钟有偏移。 | 尚不能认定纯换镜头或原声口型已同步；未通过。 |
+
+人工只做技术收集、实际文件测量、四格呈现与QA复核，没有改创作分镜或重提视频。源/native连续运动的严格逐帧同步未被认证；四格共用原声不能掩盖这一限制。
+
+高尔夫补查通过同项目Chat选Skill（不生成），run fbef6813-6b08-471f-bbf9-ba3259e4c3fa。初始失败因一次超过preview_frame的2–6帧schema限制，后续分批遗漏了13.5/14.8，错误QA以12.5结束。补回Skill的检查清单要求分批时保留全部时点，并检查实际最后可用帧；也补回产品首次可见时间锁，禁止扩大景别提前揭示或虚构未知衣服/身体/场景。
+
+商品与教学候选因文件超过38.5MB分析下载限制，全片analyze_video失败；已用抽帧、ASR和PCM/probe补查，没有把全片连续动作视为全部已验证。大小分别35.6/48.9/62.8/43.2 MB；低码率完整时钟分析代理是后续可改善的路径，不需要再次生成。
+
+### 完整四格交付
+
+四格原片/上一轮H3/本轮H3/本轮Wan3，15.000s、360frames，源音轨AACpacket hash一致，解码无错误。Chrome四条duration15/endedtrue/ready4/errornone实际播放通过；已加入四个原项目。仅审查用，非“严格保真通过”成片。
+
+| 素材 | 四格公开链接 |
+|---|---|
+| courtyard | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/c775d289-1308-4de5-a9c3-5c2c4d3587e4/uploads/e8e3d711-96ec-4334-bd50-879c9b39e4b6.mp4 |
+| product | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/ee251be6-49ac-4660-a9fc-9bc33d576a7a/uploads/6197054a-f2df-499e-87b7-78271e1018e9.mp4 |
+| golf | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/73c93915-06df-4052-9f62-c4032dfc6b74/uploads/52e75dd0-b487-4605-8bfa-cb4faeea90b5.mp4 |
+| coaching | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/65c105f9-c544-43cb-9e8f-49cdb68c6c1a/uploads/cf2fdae8-0d7f-406d-8234-a9241698e197.mp4 |
+
+实际模型脚本汇总：`/Users/tianyicai/Documents/Codex/2026-10-01/multi-angle-h3-wan3-content-v4/actual-submitted-scripts-h3-wan3.md`。
