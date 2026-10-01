@@ -519,6 +519,15 @@ a failure to the model: if the submitted plan already contradicted the source,
 record a planning failure; if a correct instruction was not followed, record an
 output failure. Better camera language cannot compensate for changed content.
 
+Judge content separately from the intended camera changes: a new shot size,
+viewpoint, foreground or focus is not itself a content-fidelity failure. Compare
+the visible action, prop state, participants and speech at the same source time.
+If a close-up hides an action, mark it unverified unless decoded neighboring
+frames establish that the action was omitted or changed. Do not turn a broad
+video-analysis summary, uncertain ASR or an obscured frame into a confirmed
+failure; retain the evidence and its uncertainty. Conversely, multiple visible
+angles do not prove that the measured action clock was preserved.
+
 
 Compare actual decoded source/output frames at each shot's midpoint, every cut,
 important motion anchors, and speech close-ups. Confirm new angles are visible,
