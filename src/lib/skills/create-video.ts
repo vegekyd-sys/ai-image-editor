@@ -458,7 +458,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       }
       billingUsage = {
         model: provider, resolution: route.resolution, operation: videoOperation,
-        durationSec: billsSourceDuration ? sourceSeconds : resolvedDuration,
+        durationSec: billsSourceDuration ? sourceSeconds : (resolvedDuration ?? Math.min(5, capability.maxOutputDuration)),
         imageCount: filteredImages.length, referenceVideoDurationSec: sourceSeconds,
         contentFilter,
         ...(h3References ? { referenceImagePixels: h3References.referenceImagePixels, referenceVideoDurationSec: h3References.referenceVideoDurationSec, referenceAudioDurationSec: h3References.referenceAudioDurationSec } : {}),

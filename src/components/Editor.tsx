@@ -3129,6 +3129,50 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       .catch(e => console.warn('Artifact action failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
+  // Authorized artifact follow-ups use the same durable/idempotent entry as
+  // CLI waits. A re-open or second surface reconnects to the existing child.
+  const automaticArtifactActionsRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (inactive || !projectId || isAgentActive || activeRunId) return;
+    let cancelled = false;
+    const consume = async () => {
+      for (const snap of snapshotsRef.current) {
+        if (snap.type !== 'video' || snap.videoMeta?.status !== 'completed') continue;
+        for (const [actionIndex, action] of (snap.videoMeta.completionActions || []).entries()) {
+          if (cancelled || isAgentActiveRef.current) return;
+          if (action.policy !== 'auto') continue;
+          const key = `${snap.id}:${actionIndex}:${action.prompt}`;
+          if (automaticArtifactActionsRef.current.has(key)) continue;
+          automaticArtifactActionsRef.current.add(key);
+          try {
+            const res = await fetch('/api/agent/run', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ projectId, artifactContinuation: { snapshotId: snap.id, actionIndex } }),
+            });
+            if (!res.ok) {
+              automaticArtifactActionsRef.current.delete(key);
+              if (res.status !== 409) console.warn('Artifact continuation failed:', res.status);
+              return;
+            }
+            const data = await res.json();
+            if (!cancelled && data.runId && data.status === 'running') {
+              window.dispatchEvent(new CustomEvent('makaron-agent-disconnected', { detail: { runId: data.runId, projectId } }));
+            }
+            return;
+          } catch (error) {
+            automaticArtifactActionsRef.current.delete(key);
+            console.warn('Artifact continuation failed:', error);
+            return;
+          }
+        }
+      }
+    };
+    void consume();
+    const timer = setInterval(() => { void consume(); }, 4000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [inactive, projectId, isAgentActive, activeRunId, snapshots]);
+
   const handleVideoFrameEdit = useCallback((anim: ProjectAnimation, time: number) => {
     if (gateInteraction()) return;
     if (!projectId) { console.warn('video frame edit skipped: no projectId'); return; }

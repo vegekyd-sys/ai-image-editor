@@ -12,7 +12,6 @@ metadata:
     manifestVisible: true
     sourceMediaRequired: true
     modelPreference:
-      - seedance-2.5
       - fal-h3-max
     tags: [video, multi-angle, multi-camera, coverage, source-edit]
 ---
@@ -24,7 +23,7 @@ The user wants a directed scene: attention, emotion, and pacing shaped through
 new viewpoints and professional cutting. Understand what is being communicated
 before deciding how to film it: spoken meaning shapes framing, attention, and
 rhythm, rather than serving only as a lip-sync clock. The performance and soundtrack remain
-the authority. New angles alone do not satisfy this skill. Framewise fidelity is an acceptance target,
+the authority. New angles alone do not satisfy this skill. Complete the selected Skill workflow through Makaron tools: analyze, self-review the plan, generate, review the native result, assemble original sound when justified, and publish. A storyboard or copied prompt for a human to submit elsewhere is an intermediate artifact, never completion. Framewise fidelity is an acceptance target,
 not a guarantee made before inspecting the generated result.
 
 This is a specialized source edit. Read `prompts/animate.md` and
@@ -40,16 +39,18 @@ motion; preserve the event. Do not use its replication profile or
 - Probe duration, dimensions, FPS, rotation, file size, and audio streams with
   Node media runtime. Read `skills/video-ffmpeg-lab/SKILL.md` for file operations.
   Record the selected source and any trim's offset in a workspace plan.
+  Save every plan, audio reference, native copy and final under this project's
+  namespace with distinct source/native/final names; account-wide generic filenames
+  can collide across simultaneous projects.
 - Prefer a continuous, reasonably stable shot with visible actions. For already
   cut footage, preserve its existing boundaries and plan coverage per continuous
   take. A moving camera may need more conservative angles; do not imply it is a
   locked-off take. Account for uncertain or unseen geometry when choosing shots.
-- Current Makaron Seedance 2.5 input/output is 4–30 seconds per take. Follow the
-  runtime's current size/FPS limits, not the article's fal limits. Prepare format
-  or size repairs deterministically. For a longer source, plan model-sized
-  sections and their seams without compressing the original performance. Keep
-  original-global and section-local times explicit; avoid a final section under
-  the model's minimum duration by adjusting earlier boundaries.
+- Default H3 Max accepts 5–15 second outputs and up to 15 seconds of source
+  video per generation. For a longer source, use the requested excerpt, or
+  plan sections and their seams without compressing the performance. Keep
+  original-global and section-local times explicit. Prepare format/size repairs
+  deterministically; do not silently switch models to avoid segmentation.
 - Settle trimming before analysis. Every subsequent measurement uses the actual
   submitted clip's clock. Crops/transcodes retain its timing and audio.
 
@@ -67,7 +68,10 @@ with an action-only storyboard. Use FFmpeg frame extraction or
 `preview_frame` for measured event anchors: about 1 frame/second for orientation,
 then denser samples around quick gestures, prop transfers, throws, or catches.
 Check labels against decoded frame timestamps; analysis prose alone is not a
-precise motion clock. A 4 fps sheet is a starting point, not proof of subframe
+precise motion clock. Inspect the final two seconds densely (about 4–8 fps)
+when a handled prop or quick closing gesture is involved; a missed toss, catch
+or bite changes the ending. Unconfirmed is not absent: never prohibit an action
+merely because sparse samples did not show it. A 4 fps sheet is a starting point, not proof of subframe
 precision. Record the measurement uncertainty rather than inventing decimals.
 
 Classify the actual sound before treating it as speech: performer dialogue,
@@ -107,7 +111,7 @@ Persist a compact coverage plan through `write_file` before paid generation:
   "storyArc": "an interpretation supported by the recorded actions, not a new plot",
   "beats": [],
   "shots": [],
-  "generation": { "model": "seedance-2.5", "resolution": "720p", "taskId": null },
+  "generation": { "model": "fal-h3-max", "resolution": "768p", "taskId": null },
   "qa": { "status": "planned", "failures": [] }
 }
 ```
@@ -127,7 +131,10 @@ cover the clock in order without gaps or overlaps. Preserve action-anchor
 uncertainty and speech timing provenance in the plan.
 Carry those anchors into each shot's opening state: an action begun before a cut
 continues from its current pose and prop state, rather than restarting in the
-new angle. Remove contradicted action claims from the shot and prompt; retaining
+new angle. At important prop/gesture cuts and the ending, the submitted shot
+must name the observed body/hand/prop state; a generic "preserve the source"
+line alone leaves H3 free to solve the framing by inventing performer movement.
+Remove contradicted action claims from the shot and prompt; retaining
 both conflicting instructions with a general "follow the source" caveat is
 insufficient. Resolve uncertain state before paid submission or mark that part
 of the plan unverified and inspect the source.
@@ -291,49 +298,49 @@ for the source video or create first-frame semantics.
 
 ## Submit through the supported product route
 
-The inspiration uses Seedance on fal with `task: editing`. Makaron's Seedance
-route currently uses Evolink and its shared source-edit contract requires
-reference-to-video semantics. Do not
-paste fal parameter names, @Video1 markers, draft IDs, or pricing into Makaron.
-Do not bypass product tools to call a different provider.
+Use FAL H3 Max (`fal-h3-max`) at 768p by default. It accepts feature video
+references and native audio; the distinct `minimax-h3-max` Turbo route cannot
+perform this workflow. Respect an explicitly selected capable model, but do not
+add a Seedance comparison/final pass without a user request. H3 preservation of
+performance/action timing is a target to inspect, not a guaranteed edit contract.
+Read current model capabilities when a different model is requested.
 
-Respect an explicitly selected model. Seedance 2.5 is the default; FAL H3 Max
-(`fal-h3-max`, not the separate `minimax-h3-max` Turbo model) is also available
-for an explicitly requested comparison or source-reference generation. On H3
-Max, preserving performance/action timing is a prompt target that must be
-checked on the actual output, not a guaranteed direct-edit capability. If a
-different selected model lacks usable video references, explain the concrete
-gap instead of silently rerouting.
-
-- `model: "seedance-2.5"`, `video_intent: "generate"`,
-  `video_operation: "generate"`, `duration: -1`, `output_format: "mp4"`.
-- Put the timeline source's `<<<media_N>>>` in the complete `story_prompt`.
-  For a workspace source outside Media Index, use its actual HTTPS URL as
-  `video_ref_url`, with `video_ref_type: "feature"`, and clearly identify that
-  reference's source-clock authority in the prompt. Do not reference unrelated
-  timeline media.
-- Default to one 720p pass. Use 480p for an explicitly requested draft or budget
-  test. Preserve a selected resolution within the current capability; this route
-  does not expose fal draft completion or 1080p. An additional final pass is a new
-  generation, not an upscale, and needs the applicable budget/authorization.
-- For `fal-h3-max`, use `video_intent: "generate"`,
-  `video_operation: "generate"`, explicit integer `duration` from 5–15 seconds,
-  and the same source-clock prompt and feature video reference. Its default is
-  768p; 480p/1080p are available. Each source reference and all source videos
-  together must fit 15 seconds. It has no typed edit/extend or exact-original-
-  audio toggle. When comparing models, reuse the identical prepared source and
-  measured coverage plan, record each model's actual resolution/cost, and label
-  native output versus any later original-audio remux separately.
-- Omit `keep_original_sound` (unsupported on this route), and describe source
-  audio preservation in the prompt. Keep the original audio asset for remuxing;
-  a prompt alone cannot guarantee an unchanged soundtrack.
-- Follow the existing generation authorization gate. A skill selection alone
-  grants no paid submission. Reuse explicit direct-submit authority; otherwise
-  show the measured shot script and current cost estimate for confirmation.
-- Record the returned task ID. Submission is pending work. Resume from that task
-  and its actual completed media; never resubmit merely because it is slow.
-  If the UI requires a follow-up, use `completion_actions` for reviewing coverage
-  and restoring the original audio, carrying the source and plan workspace path.
+- Call `generate_animation` yourself with the complete self-reviewed prompt:
+  `model: "fal-h3-max"`, `video_resolution: "768p"`,
+  `video_intent: "generate"`, `video_operation: "generate"`, integer `duration`
+  matching the selected 5–15 second clock, and `output_format: "mp4"`.
+- Put only the selected timeline source's `<<<media_N>>>` in `story_prompt`.
+  For a workspace reference outside Media Index, pass its actual HTTPS URL as
+  `video_ref_url`, `video_ref_type: "feature"`, and describe its source authority.
+  Pass `media_refs: [N]` for that selected timeline reference, without also
+  duplicating it in `video_ref_url`; never use an empty reference list when the
+  prompt depends on source footage. Do not include other timeline videos merely
+  because they are available.
+- Preserve source aspect within supported ratios. All selected source videos
+  together must fit 15 seconds. Use the requested resolution when supported;
+  480p is an explicit budget draft, 1080p an explicitly requested quality pass.
+- Omit unsupported `keep_original_sound`. Retain the selected source sound for
+  final remuxing. For a speaking source, extract a same-clock WAV with Node media
+  runtime and pass its returned HTTPS URL in `audio_refs`, identifying it as
+  `<<<audio_1>>>` in the prompt for voice/performance reference. This does not
+  protect exact words or timing. Use one concise recorded-speech contract; do
+  not repeatedly quote dialogue in each shot, which can cause duplicate voices.
+- Show the script and submit when this request explicitly authorizes generation
+  or a trusted template launch does. Selection alone does not grant paid work;
+  reuse existing direct-submit authorization. One initial generation per take
+  is the default budget; a failed candidate does not authorize endless retries.
+- Persist source, plan/prompt paths, selected model, native artifact identity,
+  and requested deliverable before the async boundary. Record the returned
+  task ID and resume that task, never submit another merely because it is slow.
+- Native generation is intermediate when source sound restoration or QA remains.
+  Include one `completion_actions` entry that names this Skill, the exact source
+  Media Index, plan/prompt paths and task/snapshot identity when known, and asks
+  Makaron to review the completed native artifact, restore source sound only
+  without concealing visual drift, publish, and save QA. Use `policy: "auto"`
+  only for an explicitly authorized end-to-end request; otherwise `"confirm"`.
+  The continuation must forbid new paid generation unless separately authorized.
+  On resumption, read the persisted plan and select the actual completed native
+  video; do not reinterpret or re-generate the scene from the original request.
 
 ## Verify and deliver
 
@@ -348,7 +355,16 @@ extra words, overlapping voices, and phrase drift before any original-audio
 replacement. A repeated benefit or new claim invalidates a testimonial even if
 the product reveal lands on time. A source audio feature is a reference, not a
 protected immutable sound layer. Resolve
-conflicting automated reports against the actual audio and decoded frames;
+conflicting automated reports against the actual audio and decoded frames.
+For every claimed new/missing action, inspect the source around that event and
+ending as well as the candidate; source uncertainty is not proof of invention.
+For speech, compare full utterance boundaries and sequence, not just overall
+ASR text. Sparse stills cannot establish continuous mouth/action timing. If
+native speech is overlapping or unintelligible, phrase timing remains unverified;
+do not promote the candidate to source-audio acceptance on a few matching poses.
+An original-audio copy may still be delivered explicitly as an unverified
+comparison alongside the native candidate, without erasing its failures;
+
 video analysis can hallucinate actions or echo supplied reference timestamps.
 Creative QA is separate from fidelity QA. Replay with the original speech and
 compare the actual cuts/framing with `meaningBeats`, especially turns and payoffs.
@@ -365,6 +381,13 @@ rhythm, not just cut count. Multiple angles with monotonous scale or no narrativ
 development remain a failed candidate, even with perfect source timing. Compare
 with the supplied inspiration's level of visual storytelling, never require its
 specific shot order, invented setting details, or actor-specific gestures.
+
+Deliver a reviewable candidate even when creative/fidelity QA fails, with those
+failures clearly recorded rather than silently accepting it. Keep the native
+picture and sound for audit. If a shared-source-audio comparison is requested,
+label it as a comparison when visual timing has not passed; this is not a
+validated lip-sync repair. Do not stop at reporting failures without providing
+the actual playable candidate.
 
 After visual timing passes, use Node FFmpeg to keep the generated picture and
 replace its entire audio with the selected original take's stream, or remove

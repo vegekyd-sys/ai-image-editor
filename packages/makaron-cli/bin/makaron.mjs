@@ -440,6 +440,7 @@ async function reconcileRunWithProjectMedia(baseUrl, headers, data) {
     if (identity.snapshotId) item.snapshot_id = identity.snapshotId;
     if (identity.taskId) item.task_id = identity.taskId;
     if (completed.posterUrl) item.poster_url = completed.posterUrl;
+    if (completed.completion_actions?.length) item.completion_actions = completed.completion_actions;
     for (const field of ['duration', 'width', 'height']) {
       if (typeof completed[field] === 'number') item[field] = completed[field];
     }
@@ -477,7 +478,7 @@ function collectCompletionActions(data) {
     if (!action?.label || !action?.prompt) return;
     const key = `${action.label}\n${action.prompt}`;
     if (items.some(i => i.key === key)) return;
-    items.push({ key, label: action.label, prompt: action.prompt, description: action.description, source });
+    items.push({ key, label: action.label, prompt: action.prompt, description: action.description, source, policy: action.policy });
   };
   for (const out of data.output || []) {
     for (const action of out.completion_actions || out.completionActions || []) add(action, out.id || out.task_id);
@@ -710,6 +711,50 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
   return { runId, results };
 }
 
+// Consume only stored auto actions. The server validates ownership, completion,
+// and policy, and derives a stable child run id across CLI/CUI/reconnects.
+async function continueAutomaticArtifacts(baseUrl, headers, data, opts) {
+  const nativeVideos = (data.output || []).filter(item => item.type === 'video' && item.status === 'completed' && item.snapshot_id);
+  const children = [];
+  for (const video of nativeVideos) {
+    for (const [actionIndex, action] of (video.completion_actions || []).entries()) {
+      if (action.policy !== 'auto') continue;
+      const res = await fetch(`${baseUrl}/api/agent/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({
+          projectId: data.project_id || data.projectId,
+          artifactContinuation: { snapshotId: video.snapshot_id, actionIndex },
+        }),
+      });
+      if (res.status === 409) return null; // Another project run still owns the turn.
+      if (!res.ok) throw new Error(`Artifact continuation failed (${res.status}): ${await res.text()}`);
+      const child = await res.json();
+      if (!child.runId) throw new Error('Artifact continuation returned no run id');
+      process.stderr.write(`\n▶️ ${action.label} (${child.runId})\n`);
+      const result = await pollRun(baseUrl, headers, child.runId, {
+        ...opts, json: true, returnDataOnly: true, followAutoActions: false,
+      });
+      children.push(result);
+    }
+  }
+  if (!children.length) return data;
+  const last = children.at(-1);
+  return {
+    ...data,
+    status: last.status,
+    incomplete: children.some(child => child.incomplete),
+    // Final MP4 first; native artifacts remain available for audit.
+    output: [...children.flatMap(child => child.output || []), ...(data.output || [])],
+    result: {
+      ...(data.result || {}),
+      videos: [...children.flatMap(child => child.result?.videos || []), ...(data.result?.videos || [])],
+      text: children.map(child => child.result?.text || '').filter(Boolean).join('\n'),
+    },
+    artifact_continuations: children.map(child => ({ id: child.id, status: child.status, output: child.output, usage: child.usage })),
+  };
+}
+
 // ─── Run + Poll (non-blocking) ──────────────────────────────────────────────
 
 async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
@@ -744,6 +789,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
     exportCompositions = false,
     publishExports = false,
     returnDataOnly = false,
+    followAutoActions = true,
   } = opts;
   if (background) return;
 
@@ -833,6 +879,11 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
     // Check terminal status
     if (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted') {
       normalizeRunResponse(data);
+      if (data.status === 'completed' && followAutoActions) {
+        const continued = await continueAutomaticArtifacts(baseUrl, headers, data, opts);
+        if (!continued) continue;
+        data = continued;
+      }
       if (printedText && !json) process.stdout.write('\n');
       if (data.status === 'completed' && exportCompositions) {
         data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, {
@@ -865,7 +916,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         printRunUsage(data.usage);
       }
 
-      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
+      if (!returnDataOnly && (data.status === 'failed' || data.status === 'aborted')) process.exit(1);
       return data;
     }
   }

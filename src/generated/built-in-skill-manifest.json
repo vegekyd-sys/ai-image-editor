@@ -86,7 +86,6 @@
     "name": "multi-angle-video",
     "description": "Turn a supplied single-camera take into multi-angle coverage whose framing and cuts express the source dialogue, emotion, and actions. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.",
     "modelPreference": [
-      "seedance-2.5",
       "fal-h3-max"
     ],
     "sourceMediaRequired": true

@@ -100,8 +100,9 @@ export function useAgentRun({ projectId, enabled, initialRunId, skipRunIdRef, is
     }
 
     const onDisconnected = (event: Event) => {
-      const runId = (event as CustomEvent<{ runId?: string }>).detail?.runId
-      if (runId) setActiveRunId(runId)
+      const detail = (event as CustomEvent<{ runId?: string; projectId?: string }>).detail
+      if (detail?.projectId && detail.projectId !== projectId) return
+      if (detail?.runId) setActiveRunId(detail.runId)
     }
     const onVisible = () => {
       if (document.visibilityState === 'visible') void poll()

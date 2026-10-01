@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
+import { resolveArtifactContinuation } from '@/lib/artifact-continuation';
 import { AgentPerf } from '@/lib/agent-perf';
 import { requireCredits, recordAgentTokenUsage } from '@/lib/billing/credits';
 import { enterBillingAttribution, resolveRequestBillingSource } from '@/lib/billing/attribution';
@@ -53,7 +54,8 @@ export async function POST(req: NextRequest) {
 
     const {
       projectId,
-      prompt,
+      prompt: requestedPrompt,
+      artifactContinuation,
       currentSnapshotIndex,
       hasAnnotation,
       isDraft,
@@ -71,6 +73,16 @@ export async function POST(req: NextRequest) {
       audioAttachments,
       clientPersistedUserMessage,
     } = requestBody;
+
+    let prompt = requestedPrompt;
+    let continuation: Awaited<ReturnType<typeof resolveArtifactContinuation>> | undefined;
+    if (artifactContinuation) {
+      continuation = await resolveArtifactContinuation(supabase, userId, projectId, artifactContinuation);
+      if ('error' in continuation) return NextResponse.json({ error: continuation.error }, { status: continuation.status });
+      prompt = continuation.prompt;
+      const { data: existing } = await supabase.from('agent_runs').select('id, status').eq('id', continuation.runId).eq('user_id', userId).eq('project_id', projectId).maybeSingle();
+      if (existing) return NextResponse.json({ runId: existing.id, status: existing.status, reused: true });
+    }
 
     const endAdmissionPreflight = perf.span('admission_preflight', { projectId: projectId || null });
     const [codexSubscriptionAllowed, skillLaunchContext, activeRun] = await Promise.all([
@@ -127,6 +139,9 @@ export async function POST(req: NextRequest) {
     };
 
     const admission = decideAgentRunAdmission(activeRun);
+    if (artifactContinuation && admission.kind !== 'create') {
+      return NextResponse.json({ error: 'Project has an active run; wait before continuing the artifact' }, { status: 409 });
+    }
     if (admission.kind === 'append') {
       await persistHeadlessUserMessage();
       const inputId = await appendAgentRunInput({
@@ -166,6 +181,7 @@ export async function POST(req: NextRequest) {
     } : undefined;
     const metadata = {
       locale,
+      ...(continuation && !('error' in continuation) ? { artifactContinuation: { snapshotId: continuation.snapshotId, actionIndex: continuation.actionIndex } } : {}),
       preferredModel,
       requestedAgentModel: requestedAgentModel ?? 'auto',
       agentModel: resolvedAgentModel.id,
@@ -206,6 +222,7 @@ export async function POST(req: NextRequest) {
     // before the browser was allowed to begin observing the run.
     const endRunCreate = perf.span('create_run', { durable: durableExecution });
     const { data: run, error: runCreateError } = await supabase.from('agent_runs').insert({
+      ...(continuation && !('error' in continuation) ? { id: continuation.runId } : {}),
       project_id: projectId,
       user_id: userId,
       status: 'running',
@@ -220,6 +237,10 @@ export async function POST(req: NextRequest) {
     }).select('id').single();
     endRunCreate({ ok: !runCreateError, runId: run?.id ?? null });
 
+    if (runCreateError?.code === '23505' && continuation && !('error' in continuation)) {
+      const { data: existing } = await supabase.from('agent_runs').select('id, status').eq('id', continuation.runId).eq('user_id', userId).eq('project_id', projectId).maybeSingle();
+      if (existing) return NextResponse.json({ runId: existing.id, status: existing.status, reused: true });
+    }
     const runId = run?.id;
     if (runCreateError || !runId) {
       return NextResponse.json({ error: runCreateError?.message || 'Failed to create run' }, { status: 500 });
