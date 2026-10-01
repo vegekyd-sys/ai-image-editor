@@ -24,6 +24,17 @@ describe('early project media handoff', () => {
     expect(container.querySelector('#ssr-skeleton')).toBeNull()
   })
 
+  it('keeps the next project preview when navigation reuses the component', () => {
+    const canvas = document.createElement('div')
+    canvas.dataset.projectCanvas = 'project'; canvas.dataset.canvasReady = 'true'
+    document.body.appendChild(canvas)
+    const { container, rerender } = render(<ProjectEntryPreview projectId="project" imageUrl="https://media.example/first.jpg" />)
+    expect(container.querySelector('#ssr-skeleton')).toBeNull()
+    rerender(<ProjectEntryPreview projectId="next" imageUrl="https://media.example/next.jpg" />)
+    expect(container.querySelector('img')?.getAttribute('src')).toContain('next.jpg')
+    canvas.remove()
+  })
+
   it('loads the selected video range before the editor without placeholder imagery', () => {
     const { container } = render(<ProjectEntryPreview projectId="project" imageUrl={null} videoUrl="https://media.example/movie.mp4#t=8,15" />)
     const video = container.querySelector('video')!

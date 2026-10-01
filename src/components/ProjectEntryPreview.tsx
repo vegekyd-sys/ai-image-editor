@@ -12,7 +12,7 @@ export interface ProjectEntryPreviewProps {
 
 /** Keep the early media visible until the editor has decoded its own canvas. */
 export default function ProjectEntryPreview({ projectId, imageUrl, videoUrl }: ProjectEntryPreviewProps) {
-  const [ready, setReady] = useState(false)
+  const [readyProjectId, setReadyProjectId] = useState<string | null>(null)
   const [failedVideoUrl, setFailedVideoUrl] = useState<string | null>(null)
   const previewVideoUrl = videoUrl && failedVideoUrl === videoUrl
     ? `${buildVideoProxyUrl(videoUrl.split('#')[0])}${videoUrl.includes('#') ? `#${videoUrl.split('#')[1]}` : ''}`
@@ -20,14 +20,14 @@ export default function ProjectEntryPreview({ projectId, imageUrl, videoUrl }: P
   useEffect(() => {
     const checkCanvas = () => {
       const canvas = document.querySelector(`[data-project-canvas="${projectId}"]`)
-      if (canvas?.getAttribute('data-canvas-ready') === 'true') setReady(true)
+      if (canvas?.getAttribute('data-canvas-ready') === 'true') setReadyProjectId(projectId)
     }
     checkCanvas()
     document.addEventListener('makaron:canvas-ready', checkCanvas)
     return () => document.removeEventListener('makaron:canvas-ready', checkCanvas)
   }, [projectId])
 
-  if (ready || (!imageUrl && !videoUrl)) return null
+  if (readyProjectId === projectId || (!imageUrl && !videoUrl)) return null
   return (
     <div id="ssr-skeleton" data-project-entry-preview={projectId} className="fixed inset-0 z-[2] pointer-events-none" style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="w-full h-full flex flex-col lg:flex-row">
