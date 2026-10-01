@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveNativeVideoPlaybackUrl } from '@/lib/video-playback-url'
 import ProjectEntryPreview from '@/components/ProjectEntryPreview'
 import type { VideoMeta } from '@/types'
+import { Suspense } from 'react'
 
 type Props = { params: Promise<{ id: string }> }
 
@@ -34,8 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default async function ProjectLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
-  const { id } = await params
+async function EarlyProjectMedia({ projectId: id }: { projectId: string }) {
   // Use the viewer's session and RLS for early media, including private projects.
   const supabase = await createClient()
   const { data } = await supabase
@@ -56,9 +56,16 @@ export default async function ProjectLayout({ children, params }: { children: Re
     ? `${resolveNativeVideoPlaybackUrl(videoSource).split('#')[0]}#t=${range?.start_sec || 0.001}${range ? `,${range.end_sec}` : ''}`
     : null
 
+  return <ProjectEntryPreview projectId={id} imageUrl={lcpUrl} videoUrl={videoUrl} />
+}
+
+export default async function ProjectLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
+  const { id } = await params
   return (
     <>
-      <ProjectEntryPreview projectId={id} imageUrl={lcpUrl} videoUrl={videoUrl} />
+      <Suspense fallback={null}>
+        <EarlyProjectMedia projectId={id} />
+      </Suspense>
       {children}
     </>
   )

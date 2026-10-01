@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useLayoutEffect, useState } from 'react'
 import { buildVideoProxyUrl } from '@/lib/video-playback-url'
 import { getTransparencyCrossOrigin } from '@/lib/image/transparency'
 
@@ -17,7 +17,7 @@ export default function ProjectEntryPreview({ projectId, imageUrl, videoUrl }: P
   const previewVideoUrl = videoUrl && failedVideoUrl === videoUrl
     ? `${buildVideoProxyUrl(videoUrl.split('#')[0])}${videoUrl.includes('#') ? `#${videoUrl.split('#')[1]}` : ''}`
     : videoUrl
-  useEffect(() => {
+  useLayoutEffect(() => {
     const checkCanvas = () => {
       const canvas = document.querySelector(`[data-project-canvas="${projectId}"]`)
       if (canvas?.getAttribute('data-canvas-ready') === 'true') setReadyProjectId(projectId)
