@@ -12,6 +12,7 @@ metadata:
     manifestVisible: true
     sourceMediaRequired: true
     modelPreference:
+      - wan-3.0-prime
       - wan-3.0
       - fal-h3-max
     tags: [video, multi-angle, multi-camera, coverage, source-edit]
@@ -55,7 +56,7 @@ direct-delivery boundary replaces its post-generation verification stage.
   cut footage, preserve its existing boundaries and plan coverage per continuous
   take. A moving camera may need more conservative angles; do not imply it is a
   locked-off take. Account for uncertain or unseen geometry when choosing shots.
-- Default Wan3 Standard accepts 2–30 second outputs and up to 15 seconds of
+- Default Wan3 Prime accepts 2–30 second outputs and up to 15 seconds of
   source video, with source seconds plus output seconds <=30 per generation.
   A 15-second source and 15-second output fit this workflow. When explicitly
   selected, H3 Max accepts 5–15 second outputs and up to 15 seconds of source.
@@ -146,7 +147,7 @@ Persist a compact coverage plan through `write_file` before paid generation:
   "directorReview": { "status": "draft", "rejectedChoices": [], "revisions": [] },
   "beats": [],
   "shots": [],
-  "generation": { "model": "wan-3.0", "resolution": "720p", "taskId": null }
+  "generation": { "model": "wan-3.0-prime", "resolution": "720p", "taskId": null }
 }
 ```
 
@@ -446,10 +447,10 @@ for the source video or create first-frame semantics.
 
 ## Submit through the supported product route
 
-Respect the user's selected model. When none is specified, use Wan3 Standard
-(`wan-3.0`) at 720p for this workflow; do not inherit the general Wan 1080p default.
-"Wan 3"/"Wan3" means `wan-3.0` Standard; use `wan-3.0-prime` only when Prime
-was selected. Respect the user's chosen resolution. Explicit FAL H3 Max
+Respect the user's selected model. When none is specified, use Wan3 Prime
+(`wan-3.0-prime`) at 720p for this workflow. An unqualified "Wan 3"/"Wan3"
+request within this Skill follows this Prime default; an explicit Standard
+request uses `wan-3.0`. Respect the user's chosen resolution. Explicit FAL H3 Max
 (`fal-h3-max`) requests use its supported default 768p unless the user chose
 another supported resolution. The distinct
 `minimax-h3-max` Turbo route cannot perform this workflow. H3 and Wan both use
