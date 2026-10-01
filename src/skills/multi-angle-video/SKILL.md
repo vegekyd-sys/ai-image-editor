@@ -1,6 +1,6 @@
 ---
 name: multi-angle-video
-description: Turn a supplied single-camera take into multi-angle coverage whose framing and cuts express the source dialogue, emotion, and actions. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.
+description: Change the camera coverage and cutting of a supplied single-camera take while preserving its recorded content, performance, dialogue and source clock. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.
 allowed-tools: read_file list_files analyze_video analyze_image transcribe_audio preview_frame generate_animation run_code write_file
 metadata:
   makaron:
@@ -13,18 +13,24 @@ metadata:
     sourceMediaRequired: true
     modelPreference:
       - fal-h3-max
+      - wan-3.0
     tags: [video, multi-angle, multi-camera, coverage, source-edit]
 ---
 
 # Multi-Angle Video
 
-Create synthetic camera coverage of the event already recorded in the source.
-The user wants a directed scene: attention, emotion, and pacing shaped through
-new viewpoints and professional cutting. Understand what is being communicated
-before deciding how to film it: spoken meaning shapes framing, attention, and
-rhythm, rather than serving only as a lip-sync clock. The performance and soundtrack remain
-the authority. New angles alone do not satisfy this skill. Complete the selected Skill workflow through Makaron tools: analyze, self-review the plan, generate, review the native result, assemble original sound when justified, and publish. A storyboard or copied prompt for a human to submit elsewhere is an intermediate artifact, never completion. Framewise fidelity is an acceptance target,
-not a guarantee made before inspecting the generated result.
+The source is a finished performance, not inspiration for a new film. Change
+only how we observe it: camera position/direction, framing, lens/focus and cuts.
+The words, people, scene, expressions, gestures, prop states, action order and
+action times remain those already recorded. Narrative direction means deciding
+what existing evidence to show when; it never means rewriting what happened.
+Content fidelity takes precedence over an impressive shot. If a proposed view
+requires a different event or an invented set, redesign the view.
+
+Complete the selected Chat workflow: inspect source facts, design coverage,
+validate the plan, submit the selected model, inspect the native candidate and
+publish a playable result with an honest fidelity verdict. A storyboard alone
+is intermediate. Model-generated preservation remains a target to verify.
 
 This is a specialized source edit. Read `prompts/animate.md` and
 `skills/video-edit/SKILL.md` before generation. Use its source-edit change/preserve
@@ -118,6 +124,7 @@ Persist a compact coverage plan through `write_file` before paid generation:
   "talkingWindows": [],
   "quietWindows": [],
   "actionAnchors": [],
+  "contentLedger": [],
   "meaningBeats": [],
   "storyArc": "an interpretation supported by the recorded actions, not a new plot",
   "centralBeat": { "id": "", "viewerUnderstands": "", "visualChange": "" },
@@ -143,9 +150,11 @@ ASR artifact rather than manually retyping long word arrays. The final submitted
 prompt and plan must have the same reviewed shot ranges and compositions; revise both when
 creative review changes the sequence.
 
-Replace example measurements with observed values. Each shot records
+Replace example measurements and model/resolution with the actual selected
+source and user-selected route. Each shot records
 `start`, `end`, `beat`, `storyFunction`, `shotSize`, `cameraPosition`, `lensFeel`,
-`focus`, `movement`, `action`, `meaningBeatIds`, and `cutReason`. Record the contrast with the
+`focus`, `movement`, `action`, `meaningBeatIds`, `cutReason`,
+`sourceStateEvidence`, and `cameraOnlyDelta`. Record the contrast with the
 preceding shot and any implied environment that needs output review.
 Shot ranges start at zero, end at the measured source duration, and
 cover the clock in order without gaps or overlaps. Preserve action-anchor
@@ -159,6 +168,40 @@ Remove contradicted action claims from the shot and prompt; retaining
 both conflicting instructions with a general "follow the source" caveat is
 insufficient. Resolve uncertain state before paid submission or mark that part
 of the plan unverified and inspect the source.
+
+## Lock content before directing attention
+
+Persist `contentLedger` alongside the measured anchors: source-clock ranges,
+visible participants and relative positions, observed action/pose and hand
+ownership, prop state changes, actual speech/captions, and evidence. Inspect
+whole-clip decoded frames, then dense source frames at consequential transitions,
+including changes of prop ownership, opening/closing and the ending. Reconcile
+these with ASR before writing coverage. A video-understanding synopsis alone is
+not enough to turn an uncertain state into a precise instruction.
+
+Keep what is said separate from what is done. Saying an inbox was closed does
+not establish that a laptop lid closed; describing a product's benefit does not
+establish a physical demonstration. Likewise, an instructor explaining a motion
+is not necessarily performing its completed result. Only observed visual states
+enter the action clock. Do not simplify a recorded gesture into an easier but
+different gesture to make the new view work.
+
+For each shot, record `sourceStateEvidence` and `cameraOnlyDelta`: which source
+frames establish its entry/exit state, and exactly which viewing variables change.
+The performer's position, movement and object states are never part of that delta.
+Validate every planned opening/closing, lift/lower, transfer, throw/catch, contact,
+and demonstrated before/after against the ledger at its own source time. When
+uncertain, inspect the source; do not fit an action to an attractive shot range.
+
+Build the camera map within the observed scene. New views can strongly change
+projection, height, foreground and scale, but must retain the same spatial
+relationships and known backdrop. Do not extend an interior into an outdoor
+location, relocate props, replace a wall/window or invent a beauty-shot setup.
+Avoid a reverse view whose dominant unseen set cannot be supported; choose a
+strong side or object-level composition inside the known geometry instead.
+Grade/color, weather, lighting, branding and overlays are preserved unless the
+user requested their change. Tight package views retain the actual package;
+do not request enhanced labels, invented small print or a replacement pack.
 
 ## Find the scene's story before choosing angles
 
@@ -256,6 +299,9 @@ Use an image description that a cinematographer could frame, in this order:
 **[start–end] narrative job / camera station and height / frame boundaries and
 foreground-background layers / focus and movement / source state in progress**.
 `compositionDelta` explains the new information versus the previous shot.
+Keep narrative interpretation in the plan. In the submitted shot, describe the
+camera operation and the measured state already occurring, rather than giving
+the actor a new performance instruction or a rewritten scene description.
 
 Choose a shot grammar that fits the beat, rather than repeating medium → tighter
 medium → medium. Useful coverage choices include:
@@ -345,9 +391,12 @@ tripods, filming rigs, lights, or crew unless already visible in the source.
 An offscreen A-camera defines an eyeline only; never materialize it in an
 over-the-shoulder view.
 
-Build one complete prompt with a short title, source marker, the observed story
-arc, and every timed shot's visual purpose and composition. Lead with the desired
-film: put the timed shot list immediately after a short creative brief. Describe
+Build one complete prompt with a neutral coverage title and source marker.
+Start with the finished-take authority: this exact source is the immutable event
+and motion clock; edit only its coverage. Then give the compact measured action
+clock and timed camera shot list. Do not open with a new genre scene, a story
+synopsis to enact, a makeover, "product beauty" posing or a weather/emotion
+transformation. The narrative purpose explains the cut, never changes content. Describe
 each shot concisely by purpose, size/viewpoint, and actual action. For speech-led
 shots, identify the relevant source phrase (a semantic label or beat ID can
 avoid repeating dialogue) and why its meaning motivates this
@@ -384,17 +433,23 @@ for the source video or create first-frame semantics.
 
 ## Submit through the supported product route
 
-Use FAL H3 Max (`fal-h3-max`) at 768p by default. It accepts feature video
-references and native audio; the distinct `minimax-h3-max` Turbo route cannot
-perform this workflow. Respect an explicitly selected capable model, but do not
-add a Seedance comparison/final pass without a user request. H3 preservation of
-performance/action timing is a target to inspect, not a guaranteed edit contract.
-Read current model capabilities when a different model is requested.
+Respect the user's selected model. Default to FAL H3 Max (`fal-h3-max`) at
+768p only when none is specified. "Wan 3"/"Wan3" means `wan-3.0` Standard;
+use `wan-3.0-prime` only when Prime was selected. Use Wan's current supported
+default resolution (currently 1080p) unless the user chose another. The distinct
+`minimax-h3-max` Turbo route cannot perform this workflow. H3 and Wan both use
+feature-reference generation in Makaron, not a guaranteed immutable-pixel edit.
+Read current capabilities; never silently substitute models. An explicitly
+requested comparison permits one candidate for each selected model per take,
+not retries or an added Seedance pass.
 
 - Call `generate_animation` yourself with the complete self-reviewed prompt:
-  `model: "fal-h3-max"`, `video_resolution: "768p"`,
+  `model` and `video_resolution` for the selected capable route,
   `video_intent: "generate"`, `video_operation: "generate"`, integer `duration`
-  matching the selected 5–15 second clock, and `output_format: "mp4"`.
+  matching the selected source clock, and `output_format: "mp4"`. H3 permits
+  5–15s; Wan permits 2–30s output, with reference-video seconds plus output
+  seconds <=30. A 15s source plus 15s output fits exactly: probe the actual
+  submitted file and retain its source clock during any deterministic repair.
 - Put only the selected timeline source's `<<<media_N>>>` in `story_prompt`.
   For a workspace reference outside Media Index, pass its actual HTTPS URL as
   `video_ref_url`, `video_ref_type: "feature"`, and describe its source authority.
@@ -404,7 +459,8 @@ Read current model capabilities when a different model is requested.
   because they are available.
 - Preserve source aspect within supported ratios. All selected source videos
   together must fit 15 seconds. Use the requested resolution when supported;
-  480p is an explicit budget draft, 1080p an explicitly requested quality pass.
+  480p is an explicit budget draft. A selected model's native default resolution
+  is a single candidate, not authorization for a second quality pass.
 - Omit unsupported `keep_original_sound`. Retain the selected source sound for
   final remuxing. For a speaking source, extract a same-clock WAV with Node media
   runtime and pass its returned HTTPS URL in `audio_refs`, identifying it as
@@ -418,6 +474,23 @@ Read current model capabilities when a different model is requested.
 - Persist source, both sequence options and director review, final plan/prompt paths, selected model, native artifact identity,
   and requested deliverable before the async boundary. Record the returned
   task ID and resume that task, never submit another merely because it is slow.
+For an explicitly requested model comparison, keep one selected source, one
+measured content ledger and one reviewed camera plan. Submit the same complete
+creative `story_prompt` and same source/audio references once per requested model;
+only model-specific resolution/capability arguments vary. Do not rewrite the
+coverage for each model, otherwise it is not a matched comparison. Save the
+shared prompt and each model's task/snapshot identities in the plan. A failed
+candidate from one model does not cancel the other authorized candidate.
+
+Use a single automatic comparison continuation on the last submission rather
+than duplicate QA actions on every output. It must name all requested models,
+the shared source/plan, known task identities, and require review of every actual
+completed candidate. Wait/resume any pending existing tasks before concluding;
+never substitute one model's artifact for another or re-generate a missing one
+without checking its task. Keep QA and final/native filenames distinct by model.
+The comparison action retains the same direct-submit authorization and no-retry
+ceiling as a single candidate.
+
 - Native generation is intermediate when source sound restoration or QA remains.
   Include one `completion_actions` entry that names this Skill, the exact source
   Media Index, plan/prompt paths and task/snapshot identity when known, and asks
@@ -433,6 +506,16 @@ Read current model capabilities when a different model is requested.
   video; do not reinterpret or re-generate the scene from the original request.
 
 ## Verify and deliver
+
+First verdict content fidelity, then coverage quality. Record whether the native
+result retains the same statements, observable action/state sequence and timing,
+participants, prop identities/counts, product package, spatial relationships and
+location. A new setting, substitute gesture, repeated action or changed claim
+fails even if the cutting is stronger. Compare decoded evidence before attributing
+a failure to the model: if the submitted plan already contradicted the source,
+record a planning failure; if a correct instruction was not followed, record an
+output failure. Better camera language cannot compensate for changed content.
+
 
 Compare actual decoded source/output frames at each shot's midpoint, every cut,
 important motion anchors, and speech close-ups. Confirm new angles are visible,
