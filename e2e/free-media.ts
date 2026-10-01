@@ -289,6 +289,7 @@ try {
     assert.ok((signature.info.width - rightmostInk) / signature.info.width < .04, 'Visible white ink has no trailing transparent padding')
     for (const [width, height] of [[320, 568], [390, 844], [1280, 900]]) {
       await web.page.setViewportSize({ width, height })
+      await web.page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
       const fits = await web.page.getByTestId('save-media-dialog').evaluate(el => {
         const box = el.getBoundingClientRect()
         const buttons = [...el.querySelectorAll<HTMLButtonElement>('button[data-testid^="save-"]')]
@@ -296,10 +297,14 @@ try {
           && buttons.every(button => button.scrollWidth <= button.clientWidth + 1)
       })
       assert.ok(fits, `${shape} save dialog fits ${width}x${height}`)
-      const frame = await web.page.getByTestId('save-media-preview').boundingBox()
-      const mark = await web.page.getByTestId('save-watermark').boundingBox()
-      assert.ok(frame && mark && mark.x > frame.x + frame.width * .6 && mark.y > frame.y + frame.height * .8)
-      assert.ok(mark.x + mark.width <= frame.x + frame.width + 1 && mark.y + mark.height <= frame.y + frame.height + 1)
+      // Measure both boxes in the same rendered frame during responsive resizing.
+      const { frame, mark } = await web.page.evaluate(() => ({
+        frame: document.querySelector('[data-testid="save-media-preview"]')!.getBoundingClientRect().toJSON(),
+        mark: document.querySelector('[data-testid="save-watermark"]')!.getBoundingClientRect().toJSON(),
+      }))
+      const geometry = JSON.stringify({ shape, width, height, frame, mark })
+      assert.ok(mark.x > frame.x + frame.width * .6 && mark.y > frame.y + frame.height * .8, 'Bottom-right position: ' + geometry)
+      assert.ok(mark.x + mark.width <= frame.x + frame.width + 1 && mark.y + mark.height <= frame.y + frame.height + 1, 'Watermark stays inside media: ' + geometry)
       if (width === 390) await web.page.screenshot({ path: path.join(artifacts, shape + '-mobile.png') })
     }
     await web.page.setViewportSize({ width: 390, height: 844 })

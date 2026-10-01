@@ -2,9 +2,13 @@ import { getSupabaseAdmin } from './supabase/service'
 import { Environment } from '@apple/app-store-server-library'
 import { assertAppleIAPEnvironmentIsolation } from './billing/apple'
 
-/** Welcome grants, intro offers and Apple Sandbox transactions do not unlock clean web downloads. */
+/** Sandbox access is opt-in on Preview only; production never treats it as a purchase. */
 export async function hasPaidMediaAccess(userId: string): Promise<boolean> {
   let appleEnvironments = 'Production'
+  if (process.env.MAKARON_PREVIEW_APPLE_MEDIA_ACCESS === '1') {
+    if (process.env.VERCEL_ENV !== 'preview') throw new Error('Apple Sandbox media access requires Vercel Preview')
+    appleEnvironments = 'Production,Sandbox'
+  }
   if (process.env.MAKARON_E2E_APPLE_MEDIA_ACCESS === '1') {
     assertAppleIAPEnvironmentIsolation([Environment.XCODE, Environment.LOCAL_TESTING])
     appleEnvironments = 'Production,Xcode,LocalTesting'

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   isNativePhotoLibraryPickerAvailable,
   isNativePhotoLibrarySaveAvailable,
+  isNativeVideoWatermarkAvailable,
   pickMediaItemsFromNativePhotoLibrary,
   pickMediaFromNativePhotoLibrary,
   saveUrlToNativePhotoLibrary,
@@ -37,6 +38,20 @@ describe('native media bridge', () => {
     vi.restoreAllMocks();
     sessionStorage.clear();
     delete window.webkit;
+    delete window.__MAKARON_NATIVE_MEDIA__;
+  });
+
+  it('defaults old shells to web and requires an explicitly supported media protocol', () => {
+    installNativeBridgeMock();expect(isNativeVideoWatermarkAvailable()).toBe(false);
+    for (const protocolVersion of [0, -1, 1.5, NaN]) {
+      window.__MAKARON_NATIVE_MEDIA__ = { protocolVersion, watermarkedVideo: true };
+      expect(isNativeVideoWatermarkAvailable()).toBe(false);
+    }
+    window.__MAKARON_NATIVE_MEDIA__ = { protocolVersion: 1, watermarkedVideo: false };
+    expect(isNativeVideoWatermarkAvailable()).toBe(false);
+    window.__MAKARON_NATIVE_MEDIA__ = { protocolVersion: 1, watermarkedVideo: true, appVersion: '1.0.9', build: '18' };
+    expect(isNativeVideoWatermarkAvailable()).toBe(true);
+    delete window.webkit;expect(isNativeVideoWatermarkAvailable()).toBe(false);
   });
 
   it('sends the exact signature and original video to native composition and receives scoped progress', async () => {

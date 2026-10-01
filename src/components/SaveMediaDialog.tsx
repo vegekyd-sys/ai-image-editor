@@ -5,7 +5,7 @@ import { Download, LoaderCircle, Pause, Play, Sparkles, X } from 'lucide-react';
 import { useLocale } from '@/lib/i18n';
 import { checkMediaDownload, savePreparedDownload, type DownloadAssetPreview, type PreparedDownload } from '@/lib/editor/download';
 import { preloadWatermarkVideo, watermarkDataUrl, watermarkGeometry, watermarkImage, watermarkVideo } from '@/lib/editor/web-watermark';
-import { isNativePhotoLibrarySaveAvailable, saveWatermarkedVideoToNativePhotoLibrary } from '@/lib/native-media';
+import { isNativeVideoWatermarkAvailable, saveWatermarkedVideoToNativePhotoLibrary } from '@/lib/native-media';
 
 interface Props {
   prepare: () => Promise<PreparedDownload>;
@@ -54,12 +54,12 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
       preparedKind = next.kind;
       setAsset(next);
       if (!preview?.source) {url = URL.createObjectURL(next.blob);setPreviewUrl(url);}
-      if (next.kind === 'video' && knownAccess === false && !isNativePhotoLibrarySaveAvailable()) preloadWatermarkVideo();
+      if (next.kind === 'video' && knownAccess === false && !isNativeVideoWatermarkAvailable()) preloadWatermarkVideo();
     }).catch(() => {if (!cancelled) setError(t('editor.savePrepareFailed'));});
     checkMediaDownload().then(access => {
       if (cancelled) return;
       knownAccess = access;
-      if (!access && preparedKind === 'video' && !isNativePhotoLibrarySaveAvailable()) preloadWatermarkVideo();
+      if (!access && preparedKind === 'video' && !isNativeVideoWatermarkAvailable()) preloadWatermarkVideo();
       setPaid(access);setAccessReady(true);
       setMarkVisible(!access || returningFromCheckout);
     }).catch(() => {if (!cancelled) setError(t('editor.savePrepareFailed'));});
@@ -123,7 +123,7 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
       if (paid) {
         if (!(await checkMediaDownload())) {setPaid(false);setMarkVisible(true);throw new Error('Access changed');}
       }
-      if (!paid && ready.kind === 'video' && isNativePhotoLibrarySaveAvailable()) {
+      if (!paid && ready.kind === 'video' && isNativeVideoWatermarkAvailable()) {
         await saveWatermarkedVideoToNativePhotoLibrary(ready.blob, ready.filename, markUrl, setProgress, controller.signal);
       } else {
         const blob = paid ? ready.blob : ready.kind === 'image' ? await watermarkImage(ready.blob)

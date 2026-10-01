@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import SaveMediaDialog from '@/components/SaveMediaDialog';
 
-const mocks = vi.hoisted(() => ({ access: vi.fn(), save: vi.fn(), image: vi.fn(), video: vi.fn(), preload: vi.fn(), native: vi.fn(), nativeVideo: vi.fn() }));
+const mocks = vi.hoisted(() => ({ access: vi.fn(), save: vi.fn(), image: vi.fn(), video: vi.fn(), preload: vi.fn(), native: vi.fn(), nativeWatermark: vi.fn(), nativeVideo: vi.fn() }));
 const translate = (key: string) => ({ 'project.save': 'Save', 'editor.removeWatermark': 'Remove watermark' }[key] || key);
 vi.mock('@/lib/i18n', () => ({ useLocale: () => ({ t: translate }) }));
 vi.mock('@/lib/editor/download', () => ({ checkMediaDownload: mocks.access, savePreparedDownload: mocks.save }));
-vi.mock('@/lib/native-media', () => ({ isNativePhotoLibrarySaveAvailable: mocks.native, saveWatermarkedVideoToNativePhotoLibrary: mocks.nativeVideo }));
+vi.mock('@/lib/native-media', () => ({ isNativeVideoWatermarkAvailable: mocks.nativeWatermark, saveWatermarkedVideoToNativePhotoLibrary: mocks.nativeVideo }));
 vi.mock('@/lib/editor/web-watermark', () => ({
   watermarkImage: mocks.image, watermarkVideo: mocks.video, preloadWatermarkVideo: mocks.preload, watermarkDataUrl: () => 'data:image/png;base64,mark',
   watermarkGeometry: () => ({ width: .28, height: .07, left: .695, top: .905 }),
@@ -22,7 +22,7 @@ describe('SaveMediaDialog choices and checkout return', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.access.mockResolvedValue(false);mocks.image.mockResolvedValue(marked);mocks.save.mockResolvedValue(undefined);
-    mocks.native.mockReturnValue(false);mocks.nativeVideo.mockResolvedValue(undefined);
+    mocks.native.mockReturnValue(false);mocks.nativeWatermark.mockReturnValue(false);mocks.nativeVideo.mockResolvedValue(undefined);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:clean-preview');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
   });
@@ -136,24 +136,46 @@ describe('SaveMediaDialog choices and checkout return', () => {
     expect(mocks.save).not.toHaveBeenCalled();expect(mocks.video).not.toHaveBeenCalled();
   });
 
-  it('uses native composition for free iOS video, without loading the WebCodecs encoder', async () => {
+  it('uses web composition and the existing saver for free iOS video, without requiring a new native action', async () => {
     mocks.native.mockReturnValue(true);
+    mocks.video.mockResolvedValue(marked);
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     render(<SaveMediaDialog {...props} prepare={async () => ({ blob: original, filename: 'work.mp4', kind: 'video' })} />);
     await waitFor(() => expect(screen.getByTestId('save-free').hasAttribute('disabled')).toBe(false));
     fireEvent.click(screen.getByTestId('save-free'));
-    await waitFor(() => expect(mocks.nativeVideo).toHaveBeenCalledWith(original, 'work.mp4', 'data:image/png;base64,mark', expect.any(Function), expect.any(AbortSignal)));
-    expect(mocks.preload).not.toHaveBeenCalled();expect(mocks.video).not.toHaveBeenCalled();expect(mocks.save).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ blob: marked, kind: 'video' })));
+    expect(mocks.video).toHaveBeenCalledWith(original, expect.any(Function), expect.any(AbortSignal));
+    expect(mocks.preload).toHaveBeenCalled();expect(mocks.nativeVideo).not.toHaveBeenCalled();
     expect(pause).toHaveBeenCalled();expect(props.onSaved).toHaveBeenCalledOnce();
   });
 
-  it('reports native export failure without saving a clean fallback', async () => {
-    mocks.native.mockReturnValue(true);mocks.nativeVideo.mockRejectedValue(new Error('Unsupported native action'));
+  it('reports web export failure on old iOS without saving a clean fallback', async () => {
+    mocks.native.mockReturnValue(true);mocks.video.mockRejectedValue(new Error('Video encoder stalled'));
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     render(<SaveMediaDialog {...props} prepare={async () => ({ blob: original, filename: 'work.mp4', kind: 'video' })} />);
     await waitFor(() => expect(screen.getByTestId('save-free').hasAttribute('disabled')).toBe(false));
     fireEvent.click(screen.getByTestId('save-free'));
     await screen.findByRole('alert');
     expect(mocks.save).not.toHaveBeenCalled();expect(props.onSaved).not.toHaveBeenCalled();
+  });
+
+  it('uses native composition only when the new shell declares support', async () => {
+    mocks.nativeWatermark.mockReturnValue(true);
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    render(<SaveMediaDialog {...props} prepare={async () => ({ blob: original, filename: 'work.mp4', kind: 'video' })} />);
+    await waitFor(() => expect(screen.getByTestId('save-free').hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByTestId('save-free'));
+    await waitFor(() => expect(props.onSaved).toHaveBeenCalledOnce());
+    expect(mocks.nativeVideo).toHaveBeenCalledWith(original, 'work.mp4', 'data:image/png;base64,mark', expect.any(Function), expect.any(AbortSignal));
+    expect(mocks.video).not.toHaveBeenCalled();expect(mocks.save).not.toHaveBeenCalled();expect(mocks.preload).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back or report success after a new native export fails', async () => {
+    mocks.nativeWatermark.mockReturnValue(true);mocks.nativeVideo.mockRejectedValue(new Error('Export failed'));
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    render(<SaveMediaDialog {...props} prepare={async () => ({ blob: original, filename: 'work.mp4', kind: 'video' })} />);
+    await waitFor(() => expect(screen.getByTestId('save-free').hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByTestId('save-free'));await screen.findByRole('alert');
+    expect(mocks.save).not.toHaveBeenCalled();expect(mocks.video).not.toHaveBeenCalled();expect(props.onSaved).not.toHaveBeenCalled();
   });
 });

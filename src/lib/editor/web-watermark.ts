@@ -91,57 +91,71 @@ export async function watermarkVideo(blob: Blob, onProgress?: (progress: number)
   signal?.throwIfAborted();
   const cached = markedVideos.get(blob);
   if (cached) {onProgress?.(1);return cached;}
-  const { Input, BlobSource, ALL_FORMATS, Output, Mp4OutputFormat, BufferTarget, Conversion, QUALITY_HIGH, canEncodeVideo } = await import('mediabunny');
+  const { Input, BlobSource, ALL_FORMATS, Output, Mp4OutputFormat, BufferTarget, VideoSampleSink, EncodedPacketSink, EncodedAudioPacketSource } = await import('mediabunny');
+  const { createWatermarkVideoSource } = await import('./watermark-video-source');
   const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
   const target = new BufferTarget();
   const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target });
-  let conversion: Awaited<ReturnType<typeof Conversion.init>> | undefined;
-  const cancel = () => { void conversion?.cancel(); };
+  const controller = new AbortController();
+  const cancel = () => {controller.abort(signal?.reason);};
+  signal?.addEventListener('abort', cancel, { once: true });
   try {
     signal?.throwIfAborted();
     // Preserve AAC priming packets by shifting every track from the earliest source timestamp.
     const start = Math.min(0, await input.getFirstTimestamp());
     const track = await input.getPrimaryVideoTrack();
-    const hardware = track && await canEncodeVideo('avc', {
-      width: track.displayWidth, height: track.displayHeight, bitrate: QUALITY_HIGH, hardwareAcceleration: 'prefer-hardware',
-    }).catch(() => false);
-    let ctx: CanvasRenderingContext2D | null = null;
-    conversion = await Conversion.init({
-      input, output, trim: { start },
-      video: {
-        codec: 'avc', bitrate: QUALITY_HIGH, hardwareAcceleration: hardware ? 'prefer-hardware' : 'no-preference',
-        process: sample => {
-          signal?.throwIfAborted();
-          if (!ctx || ctx.canvas.width !== sample.displayWidth || ctx.canvas.height !== sample.displayHeight) {
-            const canvas = document.createElement('canvas');
-            canvas.width = sample.displayWidth;canvas.height = sample.displayHeight;
-            ctx = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
-            if (!ctx) throw new Error('Canvas unavailable');
-          }
-          sample.draw(ctx, 0, 0);
-          drawWatermark(ctx, ctx.canvas.width, ctx.canvas.height);
-          return ctx.canvas;
-        },
-      },
-      showWarnings: false,
-    });
-    if (!conversion.isValid || conversion.discardedTracks.length) throw new Error('Video export unsupported');
-    signal?.throwIfAborted();
-    signal?.addEventListener('abort', cancel, { once: true });
+    if (!track || !(await track.canDecode())) throw new Error('Video export unsupported');
+    const videos = await input.getVideoTracks(), audios = await input.getAudioTracks();
+    if (videos.length !== 1 || (await input.getTracks()).length !== videos.length + audios.length) throw new Error('Video export unsupported');
+    const canvas = document.createElement('canvas');
+    canvas.width = track.displayWidth;canvas.height = track.displayHeight;
+    const ctx = canvas.getContext('2d', { alpha: false, colorSpace: 'srgb' });
+    if (!ctx) throw new Error('Canvas unavailable');
+    const video = createWatermarkVideoSource(canvas, controller.signal);
+    output.addVideoTrack(video);
+    const audio = [];
+    for (const track of audios) {
+      if (!track.codec || !output.format.getSupportedAudioCodecs().includes(track.codec)) throw new Error('Audio export unsupported');
+      const decoderConfig = await track.getDecoderConfig();
+      if (!decoderConfig) throw new Error('Audio export unsupported');
+      const source = new EncodedAudioPacketSource(track.codec);
+      output.addAudioTrack(source);
+      audio.push({ track, source, decoderConfig });
+    }
+    const duration = await track.computeDuration();
+    await output.start();
+    onProgress?.(0);
     let lastUpdate = 0;
-    conversion.onProgress = progress => {
-      const now = performance.now();
-      if (progress === 1 || now - lastUpdate >= 100) {lastUpdate = now;onProgress?.(progress);}
-    };
-    await conversion.execute();
+    for await (const sample of new VideoSampleSink(track).samples(start)) {
+      try {
+        controller.signal.throwIfAborted();
+        sample.draw(ctx, 0, 0);
+        drawWatermark(ctx, canvas.width, canvas.height);
+        await video.add(Math.max(0, sample.timestamp - start), sample.duration);
+        const now = performance.now();
+        if (now - lastUpdate >= 100) {lastUpdate = now;onProgress?.(Math.min(0.95, (sample.timestamp + sample.duration) / duration * 0.95));}
+      } finally {sample.close();}
+    }
+    video.close();
+    for (const { track, source, decoderConfig } of audio) {
+      for await (const packet of new EncodedPacketSink(track).packets()) {
+        controller.signal.throwIfAborted();
+        await source.add(packet.clone({ timestamp: packet.timestamp - start }), { decoderConfig });
+      }
+      source.close();
+    }
+    controller.signal.throwIfAborted();
+    await output.finalize();
     if (!target.buffer) throw new Error('Video export failed');
     signal?.throwIfAborted();
     const marked = new Blob([target.buffer], { type: 'video/mp4' });
     markedVideos.set(blob, marked);
+    onProgress?.(1);
     return marked;
   } finally {
     signal?.removeEventListener('abort', cancel);
-    if (conversion) await conversion.cancel();
+    controller.abort();
+    if (output.state !== 'finalized') await output.cancel();
     input.dispose();
   }
 }

@@ -112,6 +112,17 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
     }
 
     override func webView(with frame: CGRect, configuration: WKWebViewConfiguration) -> WKWebView {
+        let mediaCapabilities: [String: Any] = [
+            "protocolVersion": 1,
+            "watermarkedVideo": true,
+            "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+            "build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: mediaCapabilities),
+           let json = String(data: data, encoding: .utf8) {
+            let script = "Object.defineProperty(window, '__MAKARON_NATIVE_MEDIA__', {value: Object.freeze(\(json)), writable: false, configurable: false});"
+            configuration.userContentController.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         if #available(iOS 27.0, *),
            let data = try? JSONSerialization.data(withJSONObject: capacitorPromptConfiguration),
            let config = String(data: data, encoding: .utf8) {

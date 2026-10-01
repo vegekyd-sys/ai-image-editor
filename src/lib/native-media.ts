@@ -53,6 +53,12 @@ export interface NativePickedMedia {
 
 declare global {
   interface Window {
+    __MAKARON_NATIVE_MEDIA__?: {
+      protocolVersion: number;
+      watermarkedVideo: boolean;
+      appVersion?: string;
+      build?: string;
+    };
     webkit?: {
       messageHandlers?: {
         makaronNative?: {
@@ -72,6 +78,13 @@ export function isNativeMediaBridgeAvailable(): boolean {
 
 export function isNativePhotoLibrarySaveAvailable(): boolean {
   return isNativeMediaBridgeAvailable();
+}
+
+export function isNativeVideoWatermarkAvailable(): boolean {
+  if (!isNativeMediaBridgeAvailable()) return false;
+  const capabilities = window.__MAKARON_NATIVE_MEDIA__;
+  return Number.isInteger(capabilities?.protocolVersion)
+    && capabilities!.protocolVersion >= 1 && capabilities!.watermarkedVideo === true;
 }
 
 export function isNativePhotoLibraryPickerAvailable(): boolean {

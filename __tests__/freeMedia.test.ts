@@ -59,6 +59,19 @@ describe('web download entitlement', () => {
     expect((await GET(request())).status).toBe(503)
     expect(m.result).not.toHaveBeenCalled()
   })
+  it('accepts verified positive Sandbox purchases only on an opted-in Preview', async () => {
+    vi.stubEnv('MAKARON_PREVIEW_APPLE_MEDIA_ACCESS', '1')
+    vi.stubEnv('VERCEL_ENV', 'preview')
+    m.result.mockResolvedValue({ data: [{ id: 'sandbox-purchase' }], error: null })
+    expect(await (await GET(request())).json()).toEqual({ paid: true })
+    expect(m.or).toHaveBeenCalledWith('provider.eq.stripe,and(provider.eq.apple,apple_environment.in.(Production,Sandbox))')
+    expect(m.eq).toHaveBeenCalledWith('status', 'completed');expect(m.gt).toHaveBeenCalledWith('amount_usd', 0)
+  })
+  it.each(['production', 'development', undefined])('fails closed if Sandbox media opt-in reaches %s', async environment => {
+    vi.stubEnv('MAKARON_PREVIEW_APPLE_MEDIA_ACCESS', '1')
+    vi.stubEnv('VERCEL_ENV', environment)
+    expect((await GET(request())).status).toBe(503);expect(m.result).not.toHaveBeenCalled()
+  })
 })
 
 describe('free signup quota', () => {

@@ -1,6 +1,7 @@
 # Free Credits and Client Save
 
-Status: local candidate on `codex/free-credits-watermark`. Production flag is off.
+Status: versioned candidate on `codex/free-credits-watermark`; dedicated phone
+Preview deployed on 2026-10-01. No production rollout has been performed.
 
 ## Product Contract
 
@@ -20,8 +21,10 @@ Status: local candidate on `codex/free-credits-watermark`. Production flag is of
 - A completed positive-value Stripe or Production Apple purchase unlocks clean web
   downloads. Welcome credits, free introductory trials, Sandbox and refunded rows do not.
 - Current access is account-level purchase access. Generated media in native iOS
-  uses the same access checks. Free images use Canvas; free videos use device-local
-  AVFoundation/Core Image with the exact preview signature, then save to Photos.
+  uses the same access checks. Free images use Canvas. Free videos on old shells
+  receive their signature in the WebView, then use the existing `saveToPhotos`
+  bridge; new shells declaring native media protocol v1 and video-watermark
+  support use AVFoundation. The old-shell rollout does not require an iOS release.
   Paid originals and uploaded references retain their direct save path.
 
 ## Implementation
@@ -56,14 +59,16 @@ clears it. Larger files are not retained. Completed watermarked outputs use weak
 Blob-keyed caches, so repeated free saves neither download nor encode again while
 the original is retained. Paid access is never inferred from these media caches.
 
-`web-watermark.ts` uses Canvas for PNG and a dynamically loaded, pinned Mediabunny
-conversion for MP4. Video frames receive the same Canvas signature; source size
-and timing are retained. The conversion begins at the earliest source timestamp
-so negative AAC priming packets can be copied instead of causing an audio transcode.
+`web-watermark.ts` uses Canvas for PNG and dynamically loaded, pinned Mediabunny
+sources/sinks for MP4. Decoded video samples receive the same Canvas signature and
+are encoded at display dimensions. Audio packets are copied without re-encoding;
+all timestamps shift from the earliest source timestamp, including negative AAC
+priming packets. Muxed start times/duration can therefore differ slightly from the
+original container; frame count and encoded audio data are retained.
 The browser performs video decoding/encoding; the existing video proxy only retrieves
 bytes when provider CORS requires it. An unsupported encoder displays a retry error.
 Free video saves preload the codec module during preparation, pause the preview,
-prefer a hardware encoder only when supported, use an opaque processing canvas,
+use the available WebCodecs encoder, an opaque processing canvas,
 and throttle progress updates. They do not reduce dimensions, frame count, quality
 target or audio fidelity. Paid saves neither preload nor run the watermark encoder.
 
@@ -91,28 +96,93 @@ This client-side model is a conversion prompt, not DRM: clean media is available
 the browser for preview and through the CLI by product design. Videos still require
 re-encoding for a burned-in download, while paid originals retain their original bytes.
 
+### Native vs Web Save Timing
+
+An alternating A/B on 2026-10-01 compared the retained AVFoundation candidate
+with the new web encoder on the same official iOS 27.0 `24A434` Simulator,
+device `82B3B260-7CE8-4D0A-8A13-00FA4A2C6B32`, and the same previously built
+candidate Debug app. Both paths received identical prepared originals and the
+shared signature. Modules were preloaded; each run used a fresh Blob to bypass
+the completed-output cache. Three rounds alternated native/web order. Timings
+cover prepared-original -> successful Photos response, excluding download,
+preview preparation, artificial pre-click waits and permission prompts.
+
+| Source | Native median | Web median | Web/native time |
+| --- | --- | --- | --- |
+| 768x768, 10 seconds | 0.891s | 2.224s | 2.50x |
+| 1080x1920, 6 seconds | 2.208s | 4.425s | 2.00x |
+| 1920x1080, 4 seconds, silent | 1.144s | 2.651s | 2.32x |
+| 768x768, 30 seconds | 2.779s | 6.514s | 2.34x |
+
+All 24 Photos outputs fully decode with source dimensions/frame counts and
+unchanged encoded audio hashes (silent sources remain silent). First-run native
+initialization varies: the first 10-second native save took 2.681s, versus 2.514s
+for web; subsequent native saves were 0.841s/0.891s. The table reports medians,
+not guaranteed cold-start timings. The 30-second outputs retain all 729 frames.
+
+This compares current product settings, not equal-quality encoder limits:
+the 10-second native output is 7,519,493 bytes at roughly 5.74 Mbps video,
+while web is 1,744,122 bytes at roughly 1.18 Mbps. Web encoding currently takes
+longer despite the smaller output. Its benefit is avoiding a native release,
+not a demonstrated speed improvement. Both image paths already use Canvas.
+Physical-device performance, memory and thermal behavior remain unmeasured.
+
+Raw rounds, input/output probes, audio hashes, Photos paths and full-decode
+results: `/tmp/makaron-watermark-ab-result.json`. Reusable temporary harnesses:
+`/tmp/makaron-watermark-ab.ts`, `/tmp/makaron-build-watermark-ab.mjs`,
+`/tmp/makaron-collect-watermark-ab.mjs`. The A/B temporarily installed the
+existing candidate only on the owned QA Simulator; the unmodified old Release
+baseline was restored afterward. No source implementation or production change
+was made for this comparison.
+
 ### Native iOS
 
-WKWebView's video encoder stalled at 2% in actual Simulator acceptance. Native
-free video Save therefore uses a distinct `saveWatermarkedVideoToPhotos` action.
-AVFoundation composites the shared transparent PNG onto display-oriented frames
-on the device, preserving the source audio track. Progress and cancellation are
-scoped to the export request; closing Save or timing out cancels the export.
-An older binary rejects this action and shows a localized Save error, never a
-clean fallback. Ship the new native binary before enabling the feature for iOS.
-No watermark composition or video encoding runs on a server.
+#### Versioned Routing
 
-The Photos bridge retains PNG/JPEG bytes without JPEG recompression, preserving
-PNG transparency. Other decodable image formats use lossless PNG conversion for
-Photos. This does not change the existing upload/picker normalization.
+New native builds advertise immutable `window.__MAKARON_NATIVE_MEDIA__` at
+document start in the main frame. The descriptor contains `protocolVersion: 1`,
+`watermarkedVideo: true` and informational App version/build strings. Web checks
+both the native bridge and this supported protocol/capability before selecting
+`saveWatermarkedVideoToPhotos`. App version/UA alone never proves capability.
+Old shells advertise nothing and default to web encoding without probing an
+unsupported action or waiting for a native timeout. Browsers also use web.
+Native failures/cancellation remain failures; neither path falls back to a clean
+free download. Paid originals and image behavior are unchanged.
 
-The installed iOS 27 beta blocked Capacitor's document-start synchronous prompts
+The initial generic Mediabunny conversion stalled around 2% in WKWebView,
+including the released iOS 27 Simulator. Its WebCodecs encoder retained four
+queued frames while the conversion waited for queue backpressure. The selected
+web-only fix uses a registered `CustomVideoEncoder`, opted in only for this
+watermark source via its exact encoder configuration. It awaits a flush every
+three frames before the four-frame wait, retains quality-mode encoding, closes
+the encoder on cancellation, and bounds each flush to 15 seconds. There is no
+global `VideoEncoder` prototype patch and no new library dependency/version.
+
+Old-shell free video Save follows the web pipeline, then hands
+the finished MP4 to the old `saveToPhotos` action. Unsupported exports show the
+localized Save error and never fall back to a clean free save. No server-side
+watermark composition or video encoding is needed. The earlier candidate
+`saveWatermarkedVideoToPhotos` AVFoundation action is selected only when the new
+shell advertises support; it is not a prerequisite for enabling old-shell Save.
+
+The old App saves images by JPEG recompression: the new web watermark survives,
+but original PNG bytes/transparency are not retained. The candidate native
+PNG/JPEG byte-retention enhancement would require a separate iOS release and is
+not required for this watermark path. Existing upload/picker normalization stays
+unchanged.
+
+The earlier installed iOS 27 beta blocked Capacitor's document-start synchronous prompts
 for its Cookies and HTTP configuration flags. The native shell supplies those two
 read-only values before the Capacitor script, only on iOS 27+, and restores the
 ordinary prompt function after both reads. Other prompts retain their delegate.
-Actual registration and purchase UI now render; four focused script tests cover
+On that candidate, registration and purchase UI render; four focused script tests cover
 the flag values, delegation and restoration. Earlier iOS versions use the existing
 WebView initialization without this script.
+
+On the official iOS 27.0 runtime `24A434`, the unmodified old native baseline
+loaded the production homepage on three consecutive cold launches and saved an
+original image. The beta initialization workaround is not an established
+production incident fix or a prerequisite for this web-only rollout.
 
 Dashboard keeps Apple Restore available when a subscription is already active,
 using the existing localized restore label and the same verification/finish flow.
@@ -127,6 +197,102 @@ the Back button's center falls inside the 36px edge zone, where canceling
 Back navigation passed after this exclusion.
 
 ## Acceptance
+
+### Phone Preview Handoff
+
+- Dedicated deployment: `https://ai-image-editor-9b2af8917-vegekyd-sys-projects.vercel.app/home`.
+- Vercel identity: `dpl_AYMYgRyX13zZxnAwDNTHGXNMzijD`, target Preview, Ready.
+- The upload was staged from candidate HEAD plus only watermark/version-routing
+  files; unrelated dirty provider/H3 changes were excluded. The remote production
+  build and TypeScript checks passed. No shared Preview variables or aliases changed.
+- Per-deployment flags enable free media and `MAKARON_PREVIEW_APPLE_MEDIA_ACCESS=1`;
+  Apple verification is limited to genuine `Sandbox` receipts. The Preview-only
+  entitlement flag permits completed positive-value verified Sandbox purchase
+  rows for clean downloads. Outside `VERCEL_ENV=preview` it fails closed. No
+  Xcode/unsigned receipts are accepted; production entitlement policy is unchanged.
+- Preview and production use the shared Supabase project. Tester signup/Sandbox
+  purchases therefore write actual account/ledger data in that project, with the
+  Apple environment recorded as Sandbox. No ledger fixtures, resets or synthetic
+  purchases were applied during this handoff. Stripe Preview configuration is
+  not a test-mode guarantee; phone acceptance should use Apple Sandbox only.
+- A read-only check against existing verified Sandbox purchase rows also passed:
+  a Sandbox-only account is eligible with the Preview opt-in and not eligible
+  under production policy. No account impersonation/login or database writes
+  were needed. Evidence: `/tmp/makaron-preview-entitlement-check.json`.
+- An unchanged old native 1.0.8 Build 17 source was copied into an isolated
+  temporary staging folder. Only its generated Capacitor URL points to this
+  Preview, with production fallback disabled. It declares no new media protocol,
+  so the installed phone app genuinely follows the old-shell web path.
+- Debug development build succeeded and installed on Tianyi's wired iPhone 17 Pro,
+  physical iOS 27.0 build `24A437`. Device app inventory confirms 1.0.8 (17).
+  The initial automated launch was rejected because the phone was locked;
+  physical launch/media/Sandbox purchase acceptance remains pending user testing.
+- Browser loaded the actual Preview homepage and a rendered screenshot was
+  inspected. Logged unauthenticated subscription-usage 401 and local-network
+  address-space/CORS failures for some cover videos are not counted as a clean
+  browser console or full media acceptance.
+- Version-route/Sandbox/save/encoder tests passed 48 cases; iOS regression passed
+  138 tests in 24 suites. Type checking, focused ESLint and i18n passed. The new
+  native capability-advertisement build also compiled on the Simulator.
+- Install/launch evidence: `/tmp/makaron-watermark-phone-install.json`,
+  `/tmp/makaron-watermark-phone-launch.log`. Phone build:
+  `/tmp/makaron-watermark-preview-phone-derived/Build/Products/Debug-iphoneos/App.app`.
+  Source/upload manifest: `/tmp/makaron-watermark-preview-stage.json`.
+
+User handoff: first save an image and a video using an unpaid account and confirm
+the white watermark in Photos; then use Apple Sandbox to top up/subscribe,
+return to Save and confirm the clean original. Cancellation, repeated Save and
+Restore should also be checked. No production publication is authorized until
+the user confirms this phone acceptance.
+
+### Web-only Save on the Old Native Baseline
+
+Verified on 2026-10-01 using the released iOS 27.0 Simulator runtime `24A434`
+and device `82B3B260-7CE8-4D0A-8A13-00FA4A2C6B32`. The Release app was rebuilt
+from the unchanged old native source matching 1.0.8 Build 17 release preparation,
+with the installed Xcode 27 SDK. It is not the downloaded App Store binary.
+The real candidate `SaveMediaDialog` and encoder were injected into its production
+WebView for isolated QA, with retained media and a QA-only purchase-check stub.
+Buttons were invoked through the component DOM; physical trusted touches,
+authenticated production Editor usage and real payment sheets were not tested.
+No new native binary/action was installed or called.
+
+| Sample | Actual Photos resource | Result |
+| --- | --- | --- |
+| Real provider 10-second 768x768 video | `IMG_0008.MP4`, `IMG_0009.MP4` | 243 frames, full decode, original AAC packet hash; initial encode 3.076s, encode + save 3.505s |
+| Cancel active encode, reopen and retry | `IMG_0010.MP4` | Canceled request made no Photos save; retry succeeded |
+| 1080x1920 portrait, 6 seconds | `IMG_0011.MP4` | 180 frames, full decode, unchanged AAC packet hash; 5.847s from open including 1s before Save |
+| 1920x1080 landscape, 4 seconds, silent | `IMG_0012.MP4` | 120 frames, full decode, no audio track; 4.123s including 1s before Save |
+| Canvas-watermarked 768x1024 image | `IMG_0013.JPG` | Old image bridge saved successfully; JPEG visually inspected with bottom-right mark |
+| QA-paid original video | `IMG_0014.MP4` | SHA-256 identical to original; no watermark encode |
+| 30-second 768x768 video | `IMG_0015.MP4` | 729 frames, full decode, unchanged AAC packet hash; 8.164s including 1s before Save |
+
+All resources are in the owned device's `data/Media/DCIM/100APPLE` directory.
+Native logs confirm only the existing `saveToPhotos` action. Decoded frames show
+the bottom-right signature. The 10-second web output has PSNR 37.398dB outside
+the mark across all 243 frames; watermark encoding changes video bytes/quality,
+unlike the paid original path. These Simulator timings are not physical-device
+performance guarantees. Additional media/browser evidence is in
+`/tmp/makaron-web-watermark-qa-evidence`.
+
+Full isolated browser save acceptance also passed after this change, covering
+registration/OTP/welcome credits, seven image cases, six video aspect ratios,
+decoding/audio/color, three viewport sizes,
+local delayed-purchase returns, paid originals and refunded access. The first run
+stopped on a responsive geometry assertion despite a correctly positioned
+watermark in the failure screenshot; the test now waits two animation
+frames and reads both boxes atomically, retaining the same strict geometry
+assertions. Passing evidence: `/tmp/makaron-free-media-e2e-1790839313150/result.json`.
+Payment rows are local deterministic fixtures, not live Stripe/Apple purchases.
+The browser also logged HTTP 403 console messages, while the harness's monitored
+application HTTP errors were empty. This is Save/download acceptance, not a
+claim that every application request or console diagnostic is error-free.
+
+Final encoder/Save/old-bridge regression passed 55 tests in five suites; iOS
+TypeScript regression passed 136 tests in 23 suites. Type checking, targeted
+ESLint and the UI localization guard passed. The historical
+native/StoreKit acceptance below covers the earlier native candidate, not this
+old-binary web-only QA run. No production rollout has been performed.
 
 Reuse the isolated Supabase/Mailpit fixture at API port 55321. No resets or production
 database access. The harness rejects an unknown server/build on port 3002.
