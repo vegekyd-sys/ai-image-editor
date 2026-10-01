@@ -103,3 +103,10 @@
 | coaching | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/65c105f9-c544-43cb-9e8f-49cdb68c6c1a/uploads/cf2fdae8-0d7f-406d-8234-a9241698e197.mp4 |
 
 实际模型脚本汇总：`/Users/tianyicai/Documents/Codex/2026-10-01/multi-angle-h3-wan3-content-v4/actual-submitted-scripts-h3-wan3.md`。
+
+
+四个项目最终账单净4194 Makaron credits：H3生成2704+Wan生成1440+分析50；前次余额失败Wan1440已退。每个模型各一次成功任务，无视频重生成。
+
+提交脚本汇总记录工具调用边界 story_prompt。供应商适配器把media_1/audio_1机械替换成Video 1/Audio 1，已按代码还原保存；非provider payload抓包，Wan内部prompt_extend文本不可见。
+
+QA后的Skill修订fd1a2652已发独立Preview：https://ai-image-editor-qnpinujy9-vegekyd-sys-projects.vercel.app 。本次Wan生成和automatic QA实际测试的是06596df3；后补规则尚未用新的付费生成验证。未merge、未发production。
