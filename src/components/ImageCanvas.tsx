@@ -811,7 +811,8 @@ export default function ImageCanvas({
   }, [clipDurationFor, clipStart]);
 
   const videoFrameLoaded = Boolean(videoUrl) && videoFrameLoadedUrl === videoUrl;
-  const canvasReady = isVideoEntry
+  const usesNativeVideo = isVideoEntry && videoUrl && !(currentDesign && !isSimpleVideoWrapper(currentDesign.code));
+  const canvasReady = usesNativeVideo
     ? videoFrameLoaded
     : currentDesign ? Boolean(remotionPlayer) && !remotionLoading : imageLoaded;
   useEffect(() => {
@@ -1305,7 +1306,7 @@ export default function ImageCanvas({
         )}
 
         {/* Video entry — use native player unless design has real edits (trim/overlay) */}
-        {isVideoEntry && videoUrl && !(currentDesign && !isSimpleVideoWrapper(currentDesign.code)) ? (
+        {usesNativeVideo ? (
           <div
             className="relative w-full h-full flex items-center justify-center"
             onPointerMove={resetControlsTimer}
