@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { buildVideoProxyUrl } from '@/lib/video-playback-url'
+import { getTransparencyCrossOrigin } from '@/lib/image/transparency'
 
 export interface ProjectEntryPreviewProps {
   projectId: string
@@ -44,7 +45,7 @@ export default function ProjectEntryPreview({ projectId, imageUrl, videoUrl }: P
                 className="w-full h-full object-contain"
               />
             ) : (
-              <img src={imageUrl!} alt="" className="w-full h-full object-contain" fetchPriority="high" />
+              <img src={imageUrl!} crossOrigin={getTransparencyCrossOrigin(imageUrl!)} alt="" className="w-full h-full object-contain" fetchPriority="high" />
             )}
           </div>
           <div className="flex-shrink-0 h-[166px] lg:h-[146px]" />
