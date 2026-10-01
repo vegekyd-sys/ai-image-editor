@@ -630,7 +630,8 @@ describe('iOS App Store readiness guardrails', () => {
     const projectLoading = path.join(root, 'src/app/projects/[id]/loading.tsx');
     expect(projectContainer).toContain('getPendingProjectLaunchSync(projectId)');
     expect(projectContainer).toContain('if (isNewProject && user)');
-    expect(projectContainer).toContain('.maybeSingle()');
+    // Access and content now share the project loader's RLS query.
+    expect(fs.readFileSync(path.join(root, 'src/hooks/useProject.ts'), 'utf8')).toContain('.maybeSingle()');
     expect(editor).toContain('hasCuiHistoryState');
     expect(editor).toContain("window.addEventListener('popstate', handlePop)");
     expect(editor).toContain("viewMode === 'cui'");

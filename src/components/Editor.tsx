@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties, type TouchEvent as ReactTouchEvent } from 'react';
 import { flushSync } from 'react-dom';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoMeta, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
@@ -29,11 +30,7 @@ import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
 import VideoResultCard from '@/components/VideoResultCard';
-import AnimateSheet from '@/components/AnimateSheet';
-import DesignEditPanel from '@/components/DesignEditPanel';
 import DesignEditorFrame from '@/components/DesignEditorFrame';
-import DesignFieldEditor from '@/components/DesignFieldEditor';
-import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
 import { compressBase64Image, compressImageFile, isHeicFile } from '@/lib/imageUtils';
@@ -55,6 +52,12 @@ import type { AgentModelPreference } from '@/lib/agent-models';
 import { loadAgentModelPreference, saveAgentModelPreference } from '@/lib/agent-model-preference';
 import type { SkillLaunchContext } from '@/lib/skill-launch-context';
 import { stripAgentInternalContextForDisplay } from '@/lib/agent-response-policy';
+
+const AnimateSheet = dynamic(() => import('@/components/AnimateSheet'), { ssr: false });
+const DesignEditPanel = dynamic(() => import('@/components/DesignEditPanel'), { ssr: false });
+const DesignFieldEditor = dynamic(() => import('@/components/DesignFieldEditor'), { ssr: false });
+const CameraPanel = dynamic(() => import('@/components/CameraPanel'), { ssr: false });
+
 
 export type { AnimationState } from '@/lib/editor/types';
 
