@@ -109,6 +109,9 @@ Persist a compact coverage plan through `write_file` before paid generation:
   "actionAnchors": [],
   "meaningBeats": [],
   "storyArc": "an interpretation supported by the recorded actions, not a new plot",
+  "centralBeat": { "id": "", "viewerUnderstands": "", "visualChange": "" },
+  "sequenceOptions": [],
+  "directorReview": { "status": "draft", "rejectedChoices": [], "revisions": [] },
   "beats": [],
   "shots": [],
   "generation": { "model": "fal-h3-max", "resolution": "768p", "taskId": null },
@@ -119,7 +122,7 @@ Persist a compact coverage plan through `write_file` before paid generation:
 Parse the saved plan with Node `JSON.parse` before submission and verify that
 shot ranges form one contiguous source clock. Reference the complete persisted
 ASR artifact rather than manually retyping long word arrays. The final submitted
-prompt and plan must have the same reviewed shot ranges; revise both when
+prompt and plan must have the same reviewed shot ranges and compositions; revise both when
 creative review changes the sequence.
 
 Replace example measurements with observed values. Each shot records
@@ -193,42 +196,87 @@ the thought to land; variety must not interrupt an important reveal or sentence.
 - Shape the ending as an observed payoff or reaction. Do not spend the whole
   ending on a generic frontal medium shot if a recorded gesture can resolve it.
 
-Choose number and duration from these beats. A lively 15-second action-led take
-may support roughly 8–10 shots; a sustained emotional moment may need far fewer.
-Neither that range nor the inspiration's shot count is a template. Do not fill
-time with redundant coverage or chop every sentence for variety. Short inserts
-can accelerate a beat; a longer reaction or wide shot can let it breathe.
+## Design and challenge the coverage before submission
 
-## Compose an expressive shot progression
+Before writing the full generation prompt, design two compact, source-grounded
+sequence options with different attention/rhythm choices. These are planning
+alternatives, not two paid generations. Describe each as timed shot functions,
+not two adjective/style variations. Compare them against the actual take;
+select and revise the stronger sequence. Save both options, the rejected
+choices and actual revisions in `directorReview`. Do this within the selected
+Chat Skill; do not hand planning to the user or depend on an external director.
 
-For a scene with a visible person, setting, and handled objects, actively explore
-wide/context, medium/action, close/reaction, and detail/insert coverage. Use clear
-changes of scale, height, depth, or viewpoint, rather than a sequence of small
-left/right rotations at the same distance. If fewer functions suit the source,
-state the creative reason. The point is attention control, not lens numbers.
-When meaning calls for a wider space, specify observable composition: a smaller
-person in frame, readable landmarks and their relationship, and the depth or
-area revealed relative to the preceding shot. Calling a shot "wide" or naming
-a lens is insufficient if the result retains the source medium framing.
+Identify the central beat: what should the viewer understand or feel differently
+at the scene's main turn, reveal, correction or payoff? Specify the visual change
+that expresses it, with the exact phrase/action anchor. Design around this beat
+before filling the opening and transitions. An impressive establishing shot must
+not spend the scene's main visual reveal before the thought that motivates it.
+If an early glimpse is deliberate, explain how the later shot adds meaning.
 
-Audit the proposed sequence before generation: does each cut reveal, emphasize,
-connect, or release something? If adjacent shots serve the same purpose and only
-change azimuth, replace one with a motivated detail, perspective, or reaction,
-or merge them. Make the middle develop and the ending land. A plan dominated by
-eye-level medium shots fails creative review even when its timestamps are valid.
+For demonstrations, identify the relation the viewer needs to see (body to object,
+hand to tool, teacher to learner, or before to after). Compose those elements
+together. Use matching viewpoints for a before/after comparison when comparable
+source states exist; insert the explanatory detail between them. A close hand
+without the relevant body/object context may hide the lesson. For testimonials,
+separate the person's experience, the actual product arrival, the package detail
+and the personal conclusion; do not replace their recorded delivery with poses.
+These are attention choices, not a fixed category-specific shot template.
 
-Every shot's `cutReason` must explain why this framing belongs at this point in
-the spoken thought or observed action. Listing the current action and a lens is
-insufficient. Before generation, review the shot list with the transcript:
-does the viewer's visual attention follow the speaker's changing meaning?
-Would exactly the same sequence fit unrelated dialogue? If so, revise its
-emphasis and timing. Permit purposeful holds and speech over inserts; avoid
-forcing a new shot for every phrase.
-Check changes of framing inside a shot too: if a move provides the semantic
-reveal, describe its starting composition and how it changes on the relevant
-phrase. Repairing action continuity must preserve that visual emphasis. An
-action may continue outside the frame; showing every action in full is not a
-reason to reveal the next idea prematurely.
+At least one option must actively explore the strongest source-supported
+coverage contrast, rather than letting both options default to modest reframings.
+During comparison, distinguish a legitimate held reaction from avoidance of a
+meaningful insert or spatial viewpoint. Do not reject a close/detail solely
+because the source is a presenter portrait: ongoing speech/actions can remain
+outside its frame. Reject invented performance, not motivated camera coverage.
+For the central beat and any important insert, record `compositionDelta`: the
+specific change from the source and preceding shot, and the visible information
+it reveals. If this only says "slightly tighter" or "another medium view", redesign
+it or give a source-specific reason that a stronger contrast would harm meaning.
+
+Translate every selected shot into an observable image:
+- Name the primary subject, what occupies most of the frame, the frame boundaries,
+  and what stays secondary or outside it. Lens numbers and "wide/close" alone
+  do not establish composition. A wide shows readable spatial relationships and
+  a smaller person; an insert gives the relevant detail clear visual dominance.
+- Name the viewpoint/height only when it makes that image or relation clearer.
+  New framing is produced by the virtual camera, not by moving an actor or prop.
+  Every shot is one full-frame view. Background/context belongs to that same
+  perspective; do not satisfy a detail-plus-context request with picture-in-picture,
+  inset windows, split screens or collage unless the user explicitly requests
+  that format for the generated film. Review grids are separate presentation assets.
+  When the needed relation cannot fit the detail, choose a coherent wider view.
+- Describe the source action/hand/prop state already in progress on entry, and
+  the state on exit at consequential cuts. Resolve uncertainty from source frames.
+- Default to a stable camera within a shot. A push, reframe or focus change needs
+  a specific information reveal and a timed start/end composition; do not add
+  a slow move to every shot as a substitute for cut rhythm.
+
+Challenge the selected sequence before paid generation. For each shot ask what
+the viewer attends to now, why that attention changes at this moment, and what
+this framing adds to the preceding shot. Use phrase/frame evidence in the
+answers. Reject generic answers such as "cinematic", "variety", or repeating
+the current action. Also check the sequence as a whole:
+- Does the central beat receive its intended visual change at its own time,
+  rather than a related image somewhere else in the clip?
+- Are scale/depth/viewpoint contrasts readable, with a clear hierarchy of
+  context, explanation, intimacy or reaction as appropriate to this source?
+  Replace redundant rotated portraits or merge them into a purposeful hold.
+- Can the viewer actually understand the important physical relation? For a
+  comparison, are the two states filmed comparably instead of unrelated angles?
+- Are action continuity and the ending supported by the recorded take? Could
+  the requested framing require an invented gesture or obscure a vital action?
+- Do shot lengths allow the idea/reaction to register? Do not cut every phrase
+  or enforce a shot quota; accelerate with earned inserts and allow holds.
+
+Record concrete rejected choices and corrections, not a blanket "all passed".
+Review the final submitted prompt too: the central beat and important inserts
+must retain their observable compositions and `compositionDelta`, not be
+softened into generic presenter-plus-product/medium coverage during rewriting.
+Revise the shot list and final prompt together until these questions have
+source-grounded answers; `directorReview.status: "ready"` requires that review.
+JSON parsing/continuous timestamps check only structure, never creative quality.
+An unresolved central beat, unreadable relation or ambiguous action state is a
+reason to inspect/revise the plan before spending the one allowed generation.
 
 A semantic transition need not add a separate short bridge shot: a continuous
 reframe or focus change can let a product arrive in its real source gesture,
@@ -329,7 +377,7 @@ Read current model capabilities when a different model is requested.
   or a trusted template launch does. Selection alone does not grant paid work;
   reuse existing direct-submit authorization. One initial generation per take
   is the default budget; a failed candidate does not authorize endless retries.
-- Persist source, plan/prompt paths, selected model, native artifact identity,
+- Persist source, both sequence options and director review, final plan/prompt paths, selected model, native artifact identity,
   and requested deliverable before the async boundary. Record the returned
   task ID and resume that task, never submit another merely because it is slow.
 - Native generation is intermediate when source sound restoration or QA remains.
@@ -358,6 +406,10 @@ protected immutable sound layer. Resolve
 conflicting automated reports against the actual audio and decoded frames.
 For every claimed new/missing action, inspect the source around that event and
 ending as well as the candidate; source uncertainty is not proof of invention.
+For a fast action chain, compare its consequential states at the same source
+clock: for example release, airborne object, catch and contact. Matching the
+final held object or pose cannot certify the intervening action. Save the dense
+paired evidence and mark a missing or shifted state as failed or unverified.
 For speech, compare full utterance boundaries and sequence, not just overall
 ASR text. Sparse stills cannot establish continuous mouth/action timing. If
 native speech is overlapping or unintelligible, phrase timing remains unverified;
@@ -368,8 +420,12 @@ comparison alongside the native candidate, without erasing its failures;
 video analysis can hallucinate actions or echo supplied reference timestamps.
 Creative QA is separate from fidelity QA. Replay with the original speech and
 compare the actual cuts/framing with `meaningBeats`, especially turns and payoffs.
-Record whether each key thought receives its intended visual emphasis and whether
-the shot arrives on its phrase, not merely somewhere in the scene. A visually
+For every selected shot, record planned versus actual framing, the actual visual
+attention target, approximate observed cut/reveal time, and source evidence.
+Specifically verdict the central beat and any comparison/physical relation: the
+planned subject must be readable when its phrase/action occurs. Record whether
+each key thought receives its intended visual emphasis and whether the shot
+arrives on its phrase, not merely somewhere in the scene. A visually
 varied result still fails semantic QA if unrelated inserts distract from delivery,
 the relevant subject stays unreadable, or the key visual reveal arrives before
 or after its spoken meaning. Fix the observed mismatch before accepting it;
