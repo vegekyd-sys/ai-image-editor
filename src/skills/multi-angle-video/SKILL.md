@@ -12,8 +12,8 @@ metadata:
     manifestVisible: true
     sourceMediaRequired: true
     modelPreference:
-      - fal-h3-max
       - wan-3.0
+      - fal-h3-max
     tags: [video, multi-angle, multi-camera, coverage, source-edit]
 ---
 
@@ -52,8 +52,11 @@ motion; preserve the event. Do not use its replication profile or
   cut footage, preserve its existing boundaries and plan coverage per continuous
   take. A moving camera may need more conservative angles; do not imply it is a
   locked-off take. Account for uncertain or unseen geometry when choosing shots.
-- Default H3 Max accepts 5–15 second outputs and up to 15 seconds of source
-  video per generation. For a longer source, use the requested excerpt, or
+- Default Wan3 Standard accepts 2–30 second outputs and up to 15 seconds of
+  source video, with source seconds plus output seconds <=30 per generation.
+  A 15-second source and 15-second output fit this workflow. When explicitly
+  selected, H3 Max accepts 5–15 second outputs and up to 15 seconds of source.
+  For a longer source, use the requested excerpt, or
   plan sections and their seams without compressing the performance. Keep
   original-global and section-local times explicit. Prepare format/size repairs
   deterministically; do not silently switch models to avoid segmentation.
@@ -140,7 +143,7 @@ Persist a compact coverage plan through `write_file` before paid generation:
   "directorReview": { "status": "draft", "rejectedChoices": [], "revisions": [] },
   "beats": [],
   "shots": [],
-  "generation": { "model": "fal-h3-max", "resolution": "768p", "taskId": null },
+  "generation": { "model": "wan-3.0", "resolution": "720p", "taskId": null },
   "qa": { "status": "planned", "failures": [] }
 }
 ```
@@ -440,10 +443,12 @@ for the source video or create first-frame semantics.
 
 ## Submit through the supported product route
 
-Respect the user's selected model. Default to FAL H3 Max (`fal-h3-max`) at
-768p only when none is specified. "Wan 3"/"Wan3" means `wan-3.0` Standard;
-use `wan-3.0-prime` only when Prime was selected. Use Wan's current supported
-default resolution (currently 1080p) unless the user chose another. The distinct
+Respect the user's selected model. When none is specified, use Wan3 Standard
+(`wan-3.0`) at 720p for this workflow; do not inherit the general Wan 1080p default.
+"Wan 3"/"Wan3" means `wan-3.0` Standard; use `wan-3.0-prime` only when Prime
+was selected. Respect the user's chosen resolution. Explicit FAL H3 Max
+(`fal-h3-max`) requests use its supported default 768p unless the user chose
+another supported resolution. The distinct
 `minimax-h3-max` Turbo route cannot perform this workflow. H3 and Wan both use
 feature-reference generation in Makaron, not a guaranteed immutable-pixel edit.
 Read current capabilities; never silently substitute models. An explicitly

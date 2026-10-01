@@ -110,3 +110,5 @@
 提交脚本汇总记录工具调用边界 story_prompt。供应商适配器把media_1/audio_1机械替换成Video 1/Audio 1，已按代码还原保存；非provider payload抓包，Wan内部prompt_extend文本不可见。
 
 QA后的Skill修订fd1a2652已发独立Preview：https://ai-image-editor-qnpinujy9-vegekyd-sys-projects.vercel.app 。本次Wan生成和automatic QA实际测试的是06596df3；后补规则尚未用新的付费生成验证。未merge、未发production。
+
+用户查看四条结果后认可Wan3效果，并指定其为本Skill默认模型。默认改为Wan3 Standard（`wan-3.0`）720p（用户随后要求无需1080p），同步模型优先级、计划示例和源片时长规则；明确指定H3、Prime或其他模型时仍遵循用户选择。本次默认调整沿用已有四条生成证据，不新增付费视频生成，严格动作钟QA记录仍保留。

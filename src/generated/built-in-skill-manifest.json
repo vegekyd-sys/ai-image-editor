@@ -86,8 +86,8 @@
     "name": "multi-angle-video",
     "description": "Change the camera coverage and cutting of a supplied single-camera take while preserving its recorded content, performance, dialogue and source clock. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.",
     "modelPreference": [
-      "fal-h3-max",
-      "wan-3.0"
+      "wan-3.0",
+      "fal-h3-max"
     ],
     "sourceMediaRequired": true
   },
