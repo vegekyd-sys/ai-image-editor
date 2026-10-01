@@ -47,3 +47,13 @@
 原始请求、每次generation输入、实际成功H3输入、完整模型脚本、native视频/probe、Agent QA、账单与四格交付收据保留在证据目录。
 
 证据目录：`/Users/tianyicai/Documents/Codex/2026-10-01/multi-angle-h3-wan3-content-v4/`。
+
+
+最新Skill commit06596df3，Preview：https://ai-image-editor-hrjlwy350-vegekyd-sys-projects.vercel.app 。本轮未合并或发生产。四格已加入原测试项目；CDN新链接首次访问超时，交付保留公开origin链接。
+
+| 素材 | 项目 | 四格审查视频（Wan待生成） |
+|---|---|---|
+| 庭院 | https://ai-image-editor-hrjlwy350-vegekyd-sys-projects.vercel.app/projects/c775d289-1308-4de5-a9c3-5c2c4d3587e4 | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/c775d289-1308-4de5-a9c3-5c2c4d3587e4/uploads/1c584cf6-9534-42e5-aaa3-c7062c881d28.mp4 |
+| 电商 | https://ai-image-editor-hrjlwy350-vegekyd-sys-projects.vercel.app/projects/ee251be6-49ac-4660-a9fc-9bc33d576a7a | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/ee251be6-49ac-4660-a9fc-9bc33d576a7a/uploads/f98d2f32-18a6-4108-be82-30b0534a8240.mp4 |
+| 高尔夫 | https://ai-image-editor-hrjlwy350-vegekyd-sys-projects.vercel.app/projects/73c93915-06df-4052-9f62-c4032dfc6b74 | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/73c93915-06df-4052-9f62-c4032dfc6b74/uploads/00b175c6-e4f0-42ef-bba8-57730e7d3e9b.mp4 |
+| 教练 | https://ai-image-editor-hrjlwy350-vegekyd-sys-projects.vercel.app/projects/65c105f9-c544-43cb-9e8f-49cdb68c6c1a | https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/65c105f9-c544-43cb-9e8f-49cdb68c6c1a/uploads/3194dd1c-d42c-4a85-b107-05d3d97c1cca.mp4 |
