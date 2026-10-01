@@ -112,13 +112,19 @@ export function LocaleToggle({
   className,
   style,
   variant = 'compact',
+  onOpenChange,
 }: {
   className?: string;
   style?: CSSProperties;
   variant?: 'compact' | 'menu';
+  onOpenChange?: (open: boolean) => void;
 }) {
   const { locale, setLocale, t } = useLocale();
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    onOpenChange?.(open);
+    return () => onOpenChange?.(false);
+  }, [open, onOpenChange]);
   const [popoverPosition, setPopoverPosition] = useState<CSSProperties | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);

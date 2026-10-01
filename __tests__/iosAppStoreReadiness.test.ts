@@ -120,7 +120,7 @@ describe('iOS App Store readiness guardrails', () => {
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
     const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
     const topBar = fs.readFileSync(path.join(root, 'src/components/TopBar.tsx'), 'utf8');
-    const changelog = fs.readFileSync(path.join(root, 'src/components/Changelog.tsx'), 'utf8');
+    const changelog = fs.readFileSync(path.join(root, 'src/components/ChangelogDialog.tsx'), 'utf8');
     expect(globals).toContain('.makaron-ios-app body');
     expect(globals).toContain('padding: 0');
     expect(globals).toContain('.makaron-ios-app .makaron-ios-page');
@@ -633,7 +633,8 @@ describe('iOS App Store readiness guardrails', () => {
     const projectLoading = path.join(root, 'src/app/projects/[id]/loading.tsx');
     expect(projectContainer).toContain('getPendingProjectLaunchSync(projectId)');
     expect(projectContainer).toContain('if (isNewProject && user)');
-    expect(projectContainer).toContain('.maybeSingle()');
+    // Access and content now share the project loader's RLS query.
+    expect(fs.readFileSync(path.join(root, 'src/hooks/useProject.ts'), 'utf8')).toContain('.maybeSingle()');
     expect(editor).toContain('hasCuiHistoryState');
     expect(editor).toContain("window.addEventListener('popstate', handlePop)");
     expect(editor).toContain("viewMode === 'cui'");

@@ -27,14 +27,18 @@ export function LazyVideo({
   src,
   style,
   fallbackSrc,
+  posterSrc,
   eager = false,
   suspended = false,
+  paused = false,
 }: {
   src: string
   style: CSSProperties
   fallbackSrc?: string
+  posterSrc?: string
   eager?: boolean
   suspended?: boolean
+  paused?: boolean
 }) {
   const observerRef = useRef<HTMLSpanElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -51,8 +55,8 @@ export function LazyVideo({
   // Restore an already-generated poster near the viewport, but never launch a
   // second hidden video pipeline. The live card video captures its own first
   // frame after loadeddata instead.
-  const cachedPoster = useHomeVideoPoster(resolvedSrc, shouldAttach, false)
-  const poster = capturedPoster ?? cachedPoster
+  const cachedPoster = useHomeVideoPoster(resolvedSrc, shouldAttach && !posterSrc, false)
+  const poster = posterSrc ?? capturedPoster ?? cachedPoster
 
   useEffect(() => {
     const el = observerRef.current
@@ -82,7 +86,7 @@ export function LazyVideo({
     video.muted = true
     video.playsInline = true
 
-    if (!isVisible) {
+    if (!isVisible || paused || suspended) {
       video.pause()
       return
     }
@@ -94,7 +98,7 @@ export function LazyVideo({
       window.cancelAnimationFrame(raf)
       video.pause()
     }
-  }, [isVisible, resolvedSrc, shouldAttach, suspended])
+  }, [isVisible, resolvedSrc, shouldAttach, suspended, paused])
 
   useEffect(() => {
     captureGenerationRef.current += 1
@@ -162,7 +166,7 @@ export function LazyVideo({
             height: '100%',
             objectFit: 'cover',
             display: 'block',
-            opacity: 0.82,
+            opacity: videoReady ? 0 : 0.82,
             filter: 'blur(2px) saturate(0.82)',
             transform: 'scale(1.02)',
           }}
@@ -174,7 +178,9 @@ export function LazyVideo({
           alt=""
           aria-hidden="true"
           data-home-video-poster="true"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: videoReady ? 0 : 1 }}
         />
       )}
       {shouldAttach && (

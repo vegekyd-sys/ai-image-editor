@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useCallback, useEffect } from 'react';
+import { useTypewriterPlaceholder } from '@/hooks/useTypewriterPlaceholder';
 import type { CreateInputState } from '@/hooks/useCreateInput';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import AgentModelChip from '@/components/AgentModelChip';
@@ -70,6 +71,8 @@ export interface CreateInputBoxProps {
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
   swipeRef?: React.RefObject<HTMLDivElement | null>;
   placeholder?: string;
+  placeholderExamples?: readonly string[];
+  placeholderPaused?: boolean;
   createLabel?: string;
   promptPanel?: React.ReactNode;
   actionMode?: boolean;
@@ -116,6 +119,8 @@ export default function CreateInputBox({
   textareaRef: externalTextareaRef,
   swipeRef,
   placeholder = '',
+  placeholderExamples,
+  placeholderPaused = false,
   createLabel = 'Create',
   promptPanel,
   actionMode = false,
@@ -194,6 +199,7 @@ export default function CreateInputBox({
 
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const taRef = externalTextareaRef || internalTextareaRef;
+  useTypewriterPlaceholder(taRef, placeholderExamples, !creating && !text && !promptPanel && !actionMode, placeholderPaused);
   const liquidInputClassName = 'mkr-input-box mkr-input-box-liquid';
   const openFilePicker = useCallback(() => {
     if (onSlotClick) {
@@ -724,6 +730,8 @@ export default function CreateInputBox({
               }
             }}
             placeholder={placeholder}
+            aria-label={placeholderExamples ? placeholder : undefined}
+            className={placeholderExamples ? 'mkr-guided-placeholder' : undefined}
             disabled={creating}
             rows={2}
             style={{

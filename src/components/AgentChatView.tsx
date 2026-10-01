@@ -48,7 +48,7 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
         src={`${url}#t=0.001`}
         poster={posterUrl}
         playsInline
-        preload="metadata"
+        preload={posterUrl ? "none" : "metadata"}
         style={{ width: '100%', aspectRatio: ar, objectFit: 'cover', display: 'block' }}
         onLoadedMetadata={() => { const v = videoRef.current; if (v?.videoWidth && v.videoHeight) { const r = `${v.videoWidth}/${v.videoHeight}`; videoArCache.set(url, r); setAr(r); } }}
         onPlay={() => setPlaying(true)}

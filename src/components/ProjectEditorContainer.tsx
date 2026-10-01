@@ -134,8 +134,8 @@ export function EditorLoadingShell() {
 
 export default function ProjectEditorContainer({
   projectId,
-  className = 'page-slide-in',
-  loadingClassName = 'page-slide-in h-dvh flex items-center justify-center relative z-[1]',
+  className = 'h-dvh w-full',
+  loadingClassName = 'h-dvh flex items-center justify-center relative z-[1]',
   onBack,
   onProjectCreated,
   disableAgentLiveReload = false,
@@ -275,28 +275,7 @@ export default function ProjectEditorContainer({
       setIsPublicProject(false)
       return
     }
-    const supabase = createClient()
-    supabase
-      .from('projects')
-      .select('user_id, is_public')
-      .eq('id', projectId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          console.warn('Failed to verify project access:', error)
-          return
-        }
-        if (data) {
-          setProjectOwnerId(data.user_id)
-          setIsPublicProject(data.is_public)
-        } else if (!user) {
-          sessionStorage.setItem('mkr_return_url', `/projects/${projectId}`)
-          leaveEditor('/login')
-        } else {
-          leaveEditor('/projects')
-        }
-      })
-  }, [projectId, authLoading, user, leaveEditor, isInlineActive, isNewProject])
+  }, [authLoading, user, isInlineActive, isNewProject])
 
   useEffect(() => {
     if (!isInlineActive) return
@@ -364,14 +343,30 @@ export default function ProjectEditorContainer({
     if (!isInlineActive) return
     if (!projectId) return
     if (isNewProject) return
-    if (isPublicProject === null) return
-    if (!isPublicProject && !userId) return
+    if (authLoading) return
 
     let cancelled = false
     const pageT0 = performance.now()
-    loadProject().then(async ({ snapshots, messages, title, animations, timelineVersion: tv }) => {
+    const hydratedSnapshots = new Map<string, Snapshot>()
+    loadProject((snapshots, messages) => {
+      if (cancelled) return
+      for (const snapshot of snapshots) hydratedSnapshots.set(snapshot.id, snapshot)
+      const hydratedMessages = new Map(messages.map(m => [m.id, m]))
+      setInitialSnapshots(prev => prev?.map(s => {
+        const fresh = hydratedSnapshots.get(s.id)
+        return fresh?.design ? { ...s, design: fresh.design } : s
+      }) ?? prev)
+      setInitialMessages(prev => prev?.map(m => hydratedMessages.get(m.id) ?? m) ?? prev)
+    }).then(async ({ snapshots, messages, title, animations, timelineVersion: tv, ownerId, isPublic, musicRows }) => {
       console.log(`⏱️ [page] loadProject done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
+      if (!ownerId || (!isPublic && ownerId !== userId)) {
+        if (!userId) sessionStorage.setItem('mkr_return_url', `/projects/${projectId}`)
+        leaveEditor(userId ? '/projects' : '/login')
+        return
+      }
+      setProjectOwnerId(ownerId)
+      setIsPublicProject(isPublic)
       if (userId) cacheProjectData(projectId, snapshots, messages, title)
       setTimelineVersion(tv)
       const restoredSnapshots = dedupeVideoSnapshots(snapshots)
@@ -379,13 +374,6 @@ export default function ProjectEditorContainer({
       if (animations.length > 0) {
         setInitialAnimations(animations)
       }
-
-      const supabase = createClient()
-      const { data: musicRows } = await supabase
-        .from('project_music')
-        .select('suno_task_id, track_index, audio_url, duration, title, tags, status')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: true })
 
       if (musicRows?.length && !cancelled) {
         const pendingTask = musicRows.find(r => r.status === 'pending' || r.status === 'processing')
@@ -432,8 +420,14 @@ export default function ProjectEditorContainer({
       console.log(`⏱️ [page] patchFromImageCache done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
       shownRef.current = true
-      setInitialSnapshots(patched)
-      setInitialMessages(dedupeMessagesById(messages))
+      setInitialSnapshots(patched.map(s => {
+        const fresh = hydratedSnapshots.get(s.id)
+        return fresh?.design ? { ...s, design: fresh.design } : s
+      }))
+      setInitialMessages(dedupeMessagesById(messages.map(m => {
+        const design = restoredSnapshots.find(s => s.messageId === m.id)
+        return design?.design ? { ...m, design: design.design } : m
+      })))
       setInitialTitle(title)
       setLoaded(true)
     }).catch((err: unknown) => {
@@ -448,7 +442,7 @@ export default function ProjectEditorContainer({
     })
 
     return () => { cancelled = true }
-  }, [userId, projectId, loadProject, isPublicProject, isNewProject, isInlineActive, t])
+  }, [userId, authLoading, projectId, loadProject, isNewProject, isInlineActive, t, locale, leaveEditor])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
     return saveSnapshot(snapshot, sortOrder, onUploaded)
