@@ -686,13 +686,3 @@ npx makaron-cli admin fetch-skill https://www.makaron.app/s/4c4cbd57
 FAL video models: **fal H3 Turbo** uses `minimax-h3-max` for single-start-frame I2V/T2V. **FAL H3 Max** uses the new selector `fal-h3-max`: native T2V or image/video/audio reference-to-video, default 768p, optional 480p/1080p, integer 5–15s; at most 9 images / 3 videos / 3 audios / 12 total. Reference video/audio each 2–15s and each modality totals at most 15s. Source-video modifications use generation with feature references, not typed edit/extend. Reference input tokens are billed in addition to output video; query current pricing.
 
 The legacy `openai` image-model parameter now resolves to GPT Image 2.5 Flare.
-
-Authorized artifact completion
-
-`chat` and `responses get --wait` continue stored completion actions with
-`policy: "auto"` through Makaron Chat after the native video completes. The
-server checks project ownership and reuses one durable child run across
-reconnects. Final outputs are returned first; native video and per-step usage
-remain in `artifact_continuations`. Confirm-only actions still require a user
-choice. Background submission alone does not consume actions; collect it with
-`responses get <runId> --wait`.

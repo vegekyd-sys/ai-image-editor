@@ -112,3 +112,5 @@
 QA后的Skill修订fd1a2652已发独立Preview：https://ai-image-editor-qnpinujy9-vegekyd-sys-projects.vercel.app 。本次Wan生成和automatic QA实际测试的是06596df3；后补规则尚未用新的付费生成验证。未merge、未发production。
 
 用户查看四条结果后认可Wan3效果，并指定其为本Skill默认模型。默认改为Wan3 Standard（`wan-3.0`）720p（用户随后要求无需1080p），同步模型优先级、计划示例和源片时长规则；明确指定H3、Prime或其他模型时仍遵循用户选择。本次默认调整沿用已有四条生成证据，不新增付费视频生成，严格动作钟QA记录仍保留。
+
+用户随后取消原声恢复和生成后的后续任务。当前Skill在源片分析、分镜自审与模型提交后，以模型自身画面和声音直接交付；不创建completion_actions，不自动核验、拼接原片或替换音轨。此前为本流程新增的Chat/CLI自动接续代码及专用测试已撤回，原有手动产物操作仍使用既有实现。上文QA和原声四格均为历史实验记录，不代表当前Skill的默认交付步骤。本轮不新增付费视频生成。

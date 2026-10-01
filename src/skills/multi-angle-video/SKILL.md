@@ -28,9 +28,11 @@ Content fidelity takes precedence over an impressive shot. If a proposed view
 requires a different event or an invented set, redesign the view.
 
 Complete the selected Chat workflow: inspect source facts, design coverage,
-validate the plan, submit the selected model, inspect the native candidate and
-publish a playable result with an honest fidelity verdict. A storyboard alone
-is intermediate. Model-generated preservation remains a target to verify.
+validate the plan, and submit the selected model. The generated video with its
+model-produced soundtrack is the deliverable. Generation completes this workflow;
+do not attach post-generation tasks, restore the source audio, or schedule a
+second Agent run. A storyboard alone is intermediate. Content preservation is
+a generation target, not a verified guarantee.
 
 This is a specialized source edit. Read `prompts/animate.md` and
 `skills/video-edit/SKILL.md` before generation. Use its source-edit change/preserve
@@ -45,9 +47,8 @@ motion; preserve the event. Do not use its replication profile or
 - Probe duration, dimensions, FPS, rotation, file size, and audio streams with
   Node media runtime. Read `skills/video-ffmpeg-lab/SKILL.md` for file operations.
   Record the selected source and any trim's offset in a workspace plan.
-  Save every plan, audio reference, native copy and final under this project's
-  namespace with distinct source/native/final names; account-wide generic filenames
-  can collide across simultaneous projects.
+  Save plans and any generation references under this project's namespace;
+  account-wide generic filenames can collide across simultaneous projects.
 - Prefer a continuous, reasonably stable shot with visible actions. For already
   cut footage, preserve its existing boundaries and plan coverage per continuous
   take. A moving camera may need more conservative angles; do not imply it is a
@@ -130,7 +131,7 @@ Persist a compact coverage plan through `write_file` before paid generation:
 {
   "source": { "mediaIndex": 1, "duration": 20.08, "fps": 30, "sourceOffset": 0, "hasAudio": true },
   "aCamera": "original lens position and the performer's established eyeline",
-  "locked": ["identity", "wardrobe", "prop counts", "blocking", "action clock", "original audio"],
+  "locked": ["identity", "wardrobe", "prop counts", "blocking", "action clock", "spoken content and speech clock"],
   "talkingWindows": [],
   "quietWindows": [],
   "actionAnchors": [],
@@ -143,8 +144,7 @@ Persist a compact coverage plan through `write_file` before paid generation:
   "directorReview": { "status": "draft", "rejectedChoices": [], "revisions": [] },
   "beats": [],
   "shots": [],
-  "generation": { "model": "wan-3.0", "resolution": "720p", "taskId": null },
-  "qa": { "status": "planned", "failures": [] }
+  "generation": { "model": "wan-3.0", "resolution": "720p", "taskId": null }
 }
 ```
 
@@ -254,7 +254,7 @@ the thought to land; variety must not interrupt an important reveal or sentence.
 - Move close when a face or reaction reveals something; leave enough time to
   read it. A close-up must earn its intimacy.
 - Use a hand, object, texture, or interaction insert when that detail advances
-  attention. Dialogue may continue over it in the unchanged source soundtrack;
+  attention. Dialogue may continue over it in the source-following generated soundtrack;
   not every spoken word needs a visible face. Do not fabricate screen text.
 - Choose a meaningful point of view: over an object, through a foreground edge,
   near table height, above the action, or along an existing motion trajectory.
@@ -291,7 +291,7 @@ later reveal in the opening unless the later image adds new information.
 Make a small `cameraMap` of distinct physical vantage points around the recorded
 subject, not crop presets on the source axis. For each, name position, height,
 view direction, visible landmarks, foreground and what it can reveal. Use the
-known set and plausible adjacent space; inferred geometry gets flagged for QA.
+known set and plausible adjacent space; record uncertainty about inferred geometry.
 Choose source-compatible stations that produce visibly different projections:
 a substantial three-quarter/side view, a low object-level view, a high spatial
 view, or a reverse over a real foreground edge. The original camera is one
@@ -431,8 +431,9 @@ Source-performance contract to adapt to the observed source:
 > camera viewpoint, lens feel, framing, focus, and camera motion. Preserve the
 > source lighting, identity, wardrobe, set, and prop counts. Do not redirect the
 > performer toward the new lenses. Do not add speech or actions. No retiming,
-> repeated actions, slow motion, freezes, or duplicated objects. Preserve source
-> audio in sync. These are virtual viewpoints; do not add visible cameras,
+> repeated actions, slow motion, freezes, or duplicated objects. Keep the source
+> words and voice character, with speech synchronized to the recorded mouth
+> actions. These are virtual viewpoints; do not add visible cameras,
 > tripods, filming equipment, or crew. Follow these contiguous shot ranges:
 > [measured shot list].
 
@@ -473,17 +474,20 @@ not retries or an added Seedance pass.
   together must fit 15 seconds. Use the requested resolution when supported;
   480p is an explicit budget draft. A selected model's native default resolution
   is a single candidate, not authorization for a second quality pass.
-- Omit unsupported `keep_original_sound`. Retain the selected source sound for
-  final remuxing. For a speaking source, extract a same-clock WAV with Node media
-  runtime and pass its returned HTTPS URL in `audio_refs`, identifying it as
-  `<<<audio_1>>>` in the prompt for voice/performance reference. This does not
-  protect exact words or timing. Use one concise recorded-speech contract; do
-  not repeatedly quote dialogue in each shot, which can cause duplicate voices.
+- Omit unsupported `keep_original_sound`. Use the source video's sound as
+  generation context. If a separate voice/performance reference is needed for a
+  speaking source, extract a same-clock WAV and pass its HTTPS URL in `audio_refs`,
+  identifying it as `<<<audio_1>>>` in the prompt. This is generation input, not
+  a replacement soundtrack for the output. Use one concise recorded-speech
+  contract; repeating dialogue in each shot can cause duplicate voices.
+- Omit `completion_actions`. Deliver the model's picture and sound directly;
+  do not add a continuation, post-generation QA task, audio replacement, or
+  source/model assembly step.
 - Show the script and submit when this request explicitly authorizes generation
   or a trusted template launch does. Selection alone does not grant paid work;
   reuse existing direct-submit authorization. One initial generation per take
   is the default budget; a failed candidate does not authorize endless retries.
-- Persist source, both sequence options and director review, final plan/prompt paths, selected model, native artifact identity,
+- Persist source, both sequence options and director review, final plan/prompt paths, selected model, generation task identity,
   and requested deliverable before the async boundary. Record the returned
   task ID and resume that task, never submit another merely because it is slow.
 For an explicitly requested model comparison, keep one selected source, one
@@ -494,144 +498,22 @@ coverage for each model, otherwise it is not a matched comparison. Save the
 shared prompt and each model's task/snapshot identities in the plan. A failed
 candidate from one model does not cancel the other authorized candidate.
 
-Attach one automatic continuation to each submitted candidate, scoped to that
-model's artifact and the shared source/plan. One model's submission can fail;
-it must not prevent the other candidate's QA and original-sound delivery. Each
-continuation reviews only its own candidate once and saves model-specific QA and
-final/native filenames. Record the other requested model's status separately;
-wait/resume existing tasks before summarizing the comparison. Never substitute
-one model's artifact for another or re-generate a missing one without checking
-its task. A provider balance failure is a blocked submission, not evidence of
-model quality. Resume the persisted exact request only after the funding blocker
-is resolved; do not shorten the take or switch to Prime to evade it. The same
-direct-submit authorization and no-retry ceiling apply to each candidate.
+## Deliver the generated video
 
-- Native generation is intermediate when source sound restoration or QA remains.
-  Include one `completion_actions` entry that names this Skill, the exact source
-  Media Index, plan/prompt paths and task/snapshot identity when known, and asks
-  Makaron to review the completed native artifact, restore source sound only
-  without concealing visual drift, publish, and save QA. Use `policy: "auto"`
-  for an authorized end-to-end request; otherwise `"confirm"`. A request such as
-  "保留原声，直接生成" explicitly authorizes this same candidate's analysis,
-  generation, QA, original-sound assembly and publication: use `"auto"`, not
-  a confirmation checkpoint after generation. This authorizes no paid retry.
-  Before submission, check the stored action policy against that request.
-  The continuation must forbid new paid generation unless separately authorized.
-  On resumption, read the persisted plan and select the actual completed native
-  video; do not reinterpret or re-generate the scene from the original request.
+Record each returned task/snapshot ID and let the normal video task complete in
+Makaron's timeline. A pending task is still generating: report its state and
+resume that same task when checking progress. A slow task does not authorize
+another paid generation. For a comparison, track each selected model separately;
+one provider's failure does not cancel another model's submitted task.
 
-## Verify and deliver
-
-Probe each actual native file with the media runtime before reporting duration,
-dimensions, frame rate or audio streams. Save those measurements with the task
-identity. A video-analysis model's estimate or player display must not override
-file/container measurements; mark unavailable measurements as unverified.
-
-First verdict content fidelity, then coverage quality. Record whether the native
-result retains the same statements, observable action/state sequence and timing,
-participants, prop identities/counts, product package, spatial relationships and
-location. A new setting, substitute gesture, repeated action or changed claim
-fails even if the cutting is stronger. Compare decoded evidence before attributing
-a failure to the model: if the submitted plan already contradicted the source,
-record a planning failure; if a correct instruction was not followed, record an
-output failure. Better camera language cannot compensate for changed content.
-
-Judge content separately from the intended camera changes: a new shot size,
-viewpoint, foreground or focus is not itself a content-fidelity failure. Compare
-the visible action, prop state, participants and speech at the same source time.
-If a close-up hides an action, mark it unverified unless decoded neighboring
-frames establish that the action was omitted or changed. Do not turn a broad
-video-analysis summary, uncertain ASR or an obscured frame into a confirmed
-failure; retain the evidence and its uncertainty. Conversely, multiple visible
-angles do not prove that the measured action clock was preserved.
-
-
-Compare actual decoded source/output frames at each shot's midpoint, every cut,
-important motion anchors, and speech close-ups. Confirm new angles are visible,
-cuts are motivated, identity/props stay stable, gaze does not chase the cameras,
-mouth activity matches talking/quiet windows, and fast actions keep their timing.
-Check that the model has not drawn filming equipment into reverse/shoulder shots.
-Keep a checklist of requested versus successfully inspected timestamps. Split
-frame requests into batches that fit the tool's current limit without dropping
-the remaining timestamps. Before claiming that an ending/action is missing,
-inspect both source and candidate in the final action interval and at their last
-usable frame. A frame before the action begins cannot prove its later absence.
-Review moving playback and sound; a contact sheet alone cannot prove continuity.
-Transcribe a speech-bearing native candidate once to check omissions, repetition,
-extra words, overlapping voices, and phrase drift before any original-audio
-replacement. A repeated benefit or new claim invalidates a testimonial even if
-the product reveal lands on time. A source audio feature is a reference, not a
-protected immutable sound layer. Resolve
-conflicting automated reports against the actual audio and decoded frames.
-For every claimed new/missing action, inspect the source around that event and
-ending as well as the candidate; source uncertainty is not proof of invention.
-For a fast action chain, compare its consequential states at the same source
-clock: for example release, airborne object, catch and contact. Matching the
-final held object or pose cannot certify the intervening action. Save the dense
-paired evidence and mark a missing or shifted state as failed or unverified.
-For speech, compare full utterance boundaries and sequence, not just overall
-ASR text. Sparse stills cannot establish continuous mouth/action timing. If
-native speech is overlapping or unintelligible, phrase timing remains unverified;
-do not promote the candidate to source-audio acceptance on a few matching poses.
-An original-audio copy may still be delivered explicitly as an unverified
-comparison alongside the native candidate, without erasing its failures;
-
-video analysis can hallucinate actions or echo supplied reference timestamps.
-Creative QA is separate from fidelity QA. Replay with the original speech and
-compare the actual cuts/framing with `meaningBeats`, especially turns and payoffs.
-For every selected shot, record planned versus actual framing, the actual visual
-attention target, approximate observed cut/reveal time, and source evidence.
-Specifically verdict the central beat and any comparison/physical relation: the
-planned subject must be readable when its phrase/action occurs. Record whether
-each key thought receives its intended visual emphasis and whether the shot
-arrives on its phrase, not merely somewhere in the scene. A visually
-varied result still fails semantic QA if unrelated inserts distract from delivery,
-the relevant subject stays unreadable, or the key visual reveal arrives before
-or after its spoken meaning. Fix the observed mismatch before accepting it;
-shared audio in a comparison is not evidence of semantic or lip-sync success.
-Record actual distinct shot sizes and
-viewpoints, the inserts/reactions/context that survived, and whether the opening,
-development, and ending convey the planned arc. Evaluate shot usefulness and
-rhythm, not just cut count. Multiple angles with monotonous scale or no narrative
-development remain a failed candidate, even with perfect source timing. Compare
-with the supplied inspiration's level of visual storytelling, never require its
-specific shot order, invented setting details, or actor-specific gestures.
-
-Deliver a reviewable candidate even when creative/fidelity QA fails, with those
-failures clearly recorded rather than silently accepting it. Keep the native
-picture and sound for audit. If a shared-source-audio comparison is requested,
-label it as a comparison when visual timing has not passed; this is not a
-validated lip-sync repair. Do not stop at reporting failures without providing
-the actual playable candidate.
-
-After visual timing passes, use Node FFmpeg to keep the generated picture and
-replace its entire audio with the selected original take's stream, or remove
-generated audio when the source is silent. Stream-copy source audio if compatible
-with MP4; otherwise encode once for playback and disclose that re-encoding.
-Retain the source audio stream start offset. Verify decoded audio timing and
-source/output duration within one source frame or the codec's measured tolerance.
-Trim harmless trailing picture only after checking its clock; do not stretch,
-pad, freeze, or speed-adjust a short/drifting result to manufacture fidelity.
-Do not use `-shortest` to conceal a missing ending. If visual action or lip timing
-drifts, remuxing audio does not fix it: record the failure and revise the prompt
-or use an accepted source segment rather than claiming success.
-
-If a generated candidate truncates the ending, consider a deliberate source
-closing shot instead of a tiny appended tail. Replace the whole closing shot at
-a motivated action/reaction boundary with the same original-clock source range;
-a restrained crop may provide a useful change of scale. Check the join's action,
-eyeline, appearance, framing, and quality. This cannot fix earlier generated
-drift. Preserve the actual recorded ending and disclose the result as a hybrid
-edit with its AI/source time ranges, not a full native model output. If the join
-does not work, retain the failure and revise rather than manufacture duration.
-
-Publish the assembled workspace MP4 once with `write_file` and its exact
-`workspacePaths`. Persist final media paths and QA in the same plan. Report
-duration, resolution, shot coverage, original-audio treatment, and visible
-limitations. Distinguish a pending job, a generated candidate, and an accepted
-playable deliverable. A paid retry needs an observed failure and a concrete
-correction; keep the user's budget/retry limit, and do not loop on unchanged
-prompts. Exact reshoot fidelity that cannot be demonstrated remains unverified.
+The model output is the final asset for this workflow. Do not remux source audio,
+replace the ending with source footage, re-export an assembled MP4, or gate
+availability on a follow-up review. Once completed, provide the playable native
+video. Report the selected model, requested duration/resolution and any actual
+provider error without claiming unmeasured dimensions or verified fidelity.
+A later user request to review or revise is a separate request, not an automatic
+completion task. Keep the user's generation budget; do not retry unchanged
+prompts or silently switch models after a failure.
 
 ## Source
 

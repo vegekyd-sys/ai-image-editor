@@ -100,7 +100,6 @@ export async function GET(
         ...(description ? { description } : {}),
         ...(snapshot.design_path && type !== 'video' ? { codePath: snapshot.design_path } : {}),
         ...(videoMeta?.taskId ? { task_id: videoMeta.taskId, taskId: videoMeta.taskId } : {}),
-        ...(videoMeta?.completionActions?.length ? { completion_actions: videoMeta.completionActions } : {}),
         ...(typeof videoMeta?.duration === 'number' ? { duration: videoMeta.duration } : {}),
         ...(typeof videoMeta?.width === 'number' ? { width: videoMeta.width } : {}),
         ...(typeof videoMeta?.height === 'number' ? { height: videoMeta.height } : {}),
