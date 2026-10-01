@@ -200,6 +200,54 @@ Back navigation passed after this exclusion.
 
 ### Phone Preview Handoff
 
+#### Refreshed Preview With Latest Dev
+
+- On 2026-10-01, `dev` at `7a7ca352` was merged into this candidate in
+  `43b2a607`; web watermark/version routing was committed in `96dd7504`.
+- Build-based launch consent control was added in `ff7cb15c`. The uploaded
+  runtime snapshot is that commit, including the latest creative homepage and
+  project-entry improvements. Ten unrelated dirty provider/H3 files were excluded.
+- Current phone Preview: `https://ai-image-editor-7bumv1qq6-vegekyd-sys-projects.vercel.app/home`.
+  Deployment `dpl_FFsrMfZqaDHgHpSznWeQHpgoyGMK` is Preview/Ready; remote optimized
+  build and TypeScript checks passed. No production deployment or shared alias/env
+  update was performed.
+- Single-deployment configuration retains free media, verified Apple Sandbox
+  media access, and Sandbox receipt verification, explicitly disables local
+  Xcode media access, and sets `IOS_AI_CONSENT_REQUIRED_BUILDS=18`. Build 17 omits
+  the launch page; build 18 retains it. No consent grant is written by omission.
+- App Store Connect browser inspection confirmed 1.0.8 (17) is deliverable and
+  the latest TestFlight build is 17, testing in both existing groups. Build 18 is
+  reserved as a provisional future submission target, not uploaded by this task.
+  The browser also showed the updated developer agreement requires review;
+  no agreement was accepted or changed by this task.
+- Unchanged old native source from `dev` was built in a new temporary staging
+  folder. It is still 1.0.8 (17), development-signed, with no native media capability
+  declaration, and points only to this Preview. The prior test package was replaced
+  on Tianyi's physical iPhone 17 Pro; device app inventory confirms the version.
+- Physical launch succeeded after unlock. Console confirms the actual Preview
+  `/home`, `build:17`, `requiredBuilds:18`, and `promptRequired:false`. A read-only
+  QuickTime phone-screen preview visibly confirmed the new creative homepage,
+  rendered hero media, and absence of the launch consent page. No recording was made.
+- The launch console also contains one early `JS Eval error` without a stack
+  trace, alongside StoreKit updates without a pending web request and SDK logs.
+  The subsequent Preview boot and visible homepage succeeded; this is not a
+  zero-error-console claim or evidence of a completed new purchase.
+- iOS regression: 157 tests in 25 suites passed. Home/project-entry/watermark and
+  readiness regression: 95 tests in 14 suites passed (18 readiness tests overlap
+  the iOS run). TypeScript, focused ESLint, i18n, and owned diff whitespace checks passed.
+- Evidence: `/tmp/makaron-watermark-phone-refresh-stage.json`,
+  `/tmp/makaron-watermark-phone-refresh-install.json`,
+  `/tmp/makaron-watermark-phone-refresh-launch.log`. Installed build artifact:
+  `/tmp/makaron-watermark-phone-refresh-derived/Build/Products/Debug-iphoneos/App.app`.
+- Physical watermark Save, clean original Save after real Sandbox purchase, and
+  Restore acceptance remain user testing, not implied by successful installation.
+
+Consent policy and the review boundary are documented in
+`docs/ios-ai-consent-build-policy.md`. Production remains unchanged pending the
+user's phone acceptance.
+
+#### Initial Preview Before Dev Synchronization
+
 - Dedicated deployment: `https://ai-image-editor-9b2af8917-vegekyd-sys-projects.vercel.app/home`.
 - Vercel identity: `dpl_AYMYgRyX13zZxnAwDNTHGXNMzijD`, target Preview, Ready.
 - The upload was staged from candidate HEAD plus only watermark/version-routing

@@ -23,10 +23,18 @@ implementation. The per-deployment setting is `18`: build 17 omits the page,
 while build 18 retains it. Build 18 is a provisional next-build target, not a
 claim that this build has been submitted or approved.
 
-App Store Connect read-only inspection was blocked by a required-agreement
-error, so the latest submitted build could not be confirmed. Confirm the exact
-target before production rollout. Shared Preview configuration and production
-are not changed by this deployment.
+App Store Connect API inspection was blocked by a required-agreement error.
+The user's signed-in browser then confirmed the deliverable version is 1.0.8,
+build 17. No pending version was listed on its Distribution sidebar. The next
+submission is not created or uploaded by this task. Confirm its exact build
+before production rollout. Shared Preview configuration and production are not
+changed by this deployment.
+
+The latest TestFlight version is also 1.0.8 build 17, testing in the existing
+internal and public groups. The phone refresh was installed and launched on the
+physical iPhone. Its native console confirms `build:17`, `requiredBuilds:18`,
+`promptRequired:false`, and the current Preview `/home` URL. Phone-screen preview
+visibly confirmed the new creative homepage without the consent page.
 
 ## Review Boundary
 
