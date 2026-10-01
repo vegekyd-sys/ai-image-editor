@@ -1561,23 +1561,24 @@ function createGenerateAnimationTool(
 ) {
   const invalidRequest = createVideoValidationReporter();
   return tool({
-      description: "Submit one complete video script for rendering. Before writing the script or calling this tool, read prompts/animate.md once; it returns the full workflow, creative guide, and submission contract. Submit only after visible script confirmation, explicit direct-submit authorization in the current request, or a trusted Skill template launch supplied by the system. A skill name alone is not authorization. Native audio belongs in story_prompt, not separate audio calls. Timeline images/videos use <<<media_N>>>; external workspace assets use URL parameters. Ordinary generation/edits/extensions omit replication_contract; exact source-led replication reads skills/video-edit/SKILL.md and supplies video_intent=\"replicate\" plus measured mappings. Use the schema for arguments and the loaded submission contract for model-specific preparation, full-script submission, reference limits, variants, and continuation.",
+      description: "Submit one complete video script for rendering. Before writing the script or calling this tool, read prompts/animate.md once; it returns the full workflow, creative guide, and submission contract. Submit only after visible script confirmation, explicit direct-submit authorization in the current request, or a trusted Skill template launch supplied by the system. An active long-video-director workflow still requires its staged gates and exact-script approval. A skill name alone is not authorization. Native audio belongs in story_prompt, not separate audio calls. Timeline images/videos use <<<media_N>>>; external workspace assets use URL parameters. Ordinary generation/edits/extensions omit replication_contract; exact source-led replication reads skills/video-edit/SKILL.md and supplies video_intent=\"replicate\" plus measured mappings. Use the schema for arguments and the loaded submission contract for model-specific preparation, full-script submission, reference limits, variants, and continuation.",
       inputSchema: z.object({
         story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers. Gemini Omni 1.1 and H3 Max text-to-video follow the same no-marker rule; fal H3 Turbo image-to-video uses exactly one media marker; FAL H3 Max accepts image/video/audio references. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
         video_intent: z.enum(['generate', 'replicate']).nullish().describe('Default generate: ordinary new videos, photo animation, lookbooks, loose references, edits and extensions. Set replicate ONLY when the user wants to reproduce a supplied video\'s measured timing, action and camera with replaced content; requires replication_contract and an actual source video. Never select replicate merely to preserve a face.'),
-        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max accepts integer 5–15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
+        duration: z.number().optional().describe('Duration added by this call, in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max generates integer 5–15 seconds per call and can continue a completed video with video_operation="extend". Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can honor it. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive. Grok reference-to-video accepts supported fixed ratios.'),
         model: z.string().optional().describe('Video model/provider id. Defaults to fal-h3-max at 768p. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, wan-3.0, wan-3.0-prime, kling, grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Default to seedance-2.5 for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
-        video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. fal H3 Max supports 480p/768p/1080p (1080p uses latent refinement from 768p), default 768p. fal H3 Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
+        video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. fal H3 Max generation supports 480p/768p/1080p, default 768p; H3 Max Extend currently supports 480p/768p until 1080p reference billing is verified. fal H3 Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, MiniMax H3, and FAL H3 Max.'),
         reference_voice_ids: z.array(z.string()).max(3).optional().describe('Grok Imagine Video 1.5 preset xAI voice ids, e.g. ["eve"] or ["eve","leo"]. Reference them as <AUDIO_0>, <AUDIO_1> in story_prompt. Do not use Audio Index labels or uploaded URLs here.'),
-        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance 2.0 video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Seedance 2.5 accepts .mp4/.mov <=200MB, width/height 300-6000px, frame pixels 409,600-8,295,044, 4-30s each and <=30s total. MiniMax H3 video references must be <=50MB, width/height 256-5760px, aspect ratio 0.4-2.5, with at most 3 videos totaling <=15s. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok edit accepts one MP4 up to 8.7 seconds; Grok extend accepts one MP4 from 2 to 15 seconds.'),
-        video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use an external reference video. feature (default): reference motion/style. base: direct edit. For Gemini Omni or Seedance 2.5 continuation, also set video_operation="extend". Timeline videos are auto-routed from <<<media_N>>>.'),
+        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. FAL H3 Max Extend accepts one 1.625–60s source <=50MB, aspect 0.4–2.5. SeeDance 2.0 video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Seedance 2.5 accepts .mp4/.mov <=200MB, width/height 300-6000px, frame pixels 409,600-8,295,044, 4-30s each and <=30s total. MiniMax H3 video references must be <=50MB, width/height 256-5760px, aspect ratio 0.4-2.5, with at most 3 videos totaling <=15s. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok edit accepts one MP4 up to 8.7 seconds; Grok extend accepts one MP4 from 2 to 15 seconds.'),
+        video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use an external reference video. feature (default): reference motion/style. base: direct edit. For Gemini Omni, Seedance 2.5, or FAL H3 Max continuation, also set video_operation="extend". Timeline videos are auto-routed from <<<media_N>>>.'),
         keep_original_sound: z.boolean().optional().describe('Provider-native source-sound toggle. Use only when the selected model explicitly supports it, currently Kling video reference and Motion Control. For other models, describe the sound request naturally in story_prompt.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
         character_orientation: z.enum(['image', 'video']).optional().describe('For motion_control: match photo orientation (image, ≤10s) or video orientation (video, ≤30s). Default: image.'),
-        video_operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed video operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require a video reference. Grok edit preserves source duration/aspect and caps output at 720p; Grok extend adds 2-10s.'),
+        video_operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed video operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; FAL H3 Max supports extend only. All require a video reference. Grok edit preserves source duration/aspect and caps output at 720p; Grok extend adds 2-10s; H3 Max Extend adds integer 5-15s and returns the full extended video.'),
+        await_completion: z.boolean().optional().describe('FAL H3 Max only. Wait up to 150 seconds for this approved segment and save the completed video to the project. Completion supplies a Media Index but does not authorize the next segment. Follow the active long-video-director review gate before any further generation. If still processing, resume in a later chat turn; never extend an unfinished source.'),
         extend_direction: z.enum(['forward', 'backward']).optional().describe('Direction for Seedance 2.5 video extension. Gemini Omni only extends forward.'),
         generate_audio: z.boolean().optional().describe('Generate synchronized model-native audio. Supported providers default to true. Set false only when the user explicitly requests a silent video; otherwise describe the desired sound naturally in story_prompt and let the video model render it.'),
         content_filter: z.boolean().optional().describe('Seedance 2.5-only output content filter. Omit it for every other model. Seedance 2.5 defaults to true; set false only after explicit user confirmation, including the Mature Mode recovery action, because it costs 10% more. Never infer or auto-enable Mature Mode from prompt wording.'),
@@ -1611,7 +1612,7 @@ function createGenerateAnimationTool(
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ story_prompt, video_intent, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, replication_contract: suppliedReplicationContract, completion_actions }) => serializeVideoSubmission(async () => {
+      execute: async ({ story_prompt, video_intent, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, await_completion, extend_direction, generate_audio, content_filter, output_format, web_search, replication_contract: suppliedReplicationContract, completion_actions }) => serializeVideoSubmission(async () => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -2048,7 +2049,7 @@ function createGenerateAnimationTool(
               model: actualVideoModel,
               operation: video_operation,
               outputDuration: effectiveDuration === -1 ? referenceVideoDuration : effectiveDuration,
-              referenceVideoDuration,
+              referenceVideoDuration: skillResult.sourceDuration ?? referenceVideoDuration,
             }) || null,
             model: actualVideoModel as import('@/types').VideoModel,
             resolution: actualVideoRoute.resolution,
@@ -2113,6 +2114,62 @@ function createGenerateAnimationTool(
             }
           }
           await supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId);
+
+          if (await_completion && actualVideoModel === 'fal-h3-max' && ctx.userId && ctx.projectId) {
+            const { waitForFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video');
+            const completed = await waitForFalH3MaxVideoTask(taskId, { timeoutMs: 150_000, pollIntervalMs: 3_000 });
+            if (completed.status === 'failed') {
+              const { handleVideoFailure } = await import('@/lib/video-lifecycle');
+              await handleVideoFailure(snapshotId, completed.error);
+              return { success: false as const, taskId, message: completed.error || 'H3 Max video generation failed. Do not resubmit automatically.' };
+            }
+            if (completed.status === 'completed' && completed.videoUrl) {
+              const providerVideoUrl = completed.videoUrl;
+              videoMeta.status = 'completed';
+              videoMeta.videoUrl = providerVideoUrl;
+              videoMeta.providerUrl = providerVideoUrl;
+              if (completed.duration) videoMeta.duration = completed.duration;
+              let videoBuffer: Uint8Array | undefined;
+              try {
+                const response = await fetch(providerVideoUrl);
+                if (response.ok) {
+                  videoBuffer = new Uint8Array(await response.arrayBuffer());
+                  const { probeMP4Dimensions, probeMP4Duration } = await import('@/lib/mp4-probe');
+                  const dims = probeMP4Dimensions(videoBuffer);
+                  const physicalDuration = probeMP4Duration(videoBuffer);
+                  if (dims?.width) videoMeta.width = dims.width;
+                  if (dims?.height) videoMeta.height = dims.height;
+                  if (physicalDuration) videoMeta.duration = physicalDuration;
+                  const permanentUrl = await uploadVideo(supabase, ctx.userId, ctx.projectId, snapshotId, videoBuffer);
+                  if (permanentUrl) {
+                    videoMeta.videoUrl = permanentUrl;
+                    videoMeta.videoPath = `${ctx.userId}/${ctx.projectId}/videos/${snapshotId}.mp4`;
+                  }
+                }
+              } catch (persistError) {
+                console.warn('[generate_animation] awaited H3 video persistence failed:', persistError);
+              }
+              await supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId);
+              if (videoBuffer) {
+                const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair');
+                await ensureVideoPosterForSnapshot({
+                  admin: supabase, ownerUserId: ctx.userId, projectId: ctx.projectId, snapshotId,
+                  videoUrl: videoMeta.videoUrl, currentImageUrl: VIDEO_PLACEHOLDER_IMAGE, videoBuffer,
+                });
+              }
+              const snapshots = await refreshSnapshotUrls(ctx);
+              const mediaIndex = snapshots.findIndex(row => row.id === snapshotId) + 1;
+              ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
+              return {
+                success: true as const, taskId, status: 'completed' as const,
+                videoUrl: videoMeta.videoUrl, mediaIndex: mediaIndex || undefined,
+                duration: videoMeta.duration,
+                message: mediaIndex > 0
+                  ? `H3 Max video completed and saved as <<<media_${mediaIndex}>>>. Review this segment against the active Skill's storyboard, identity, props, sound, and seam gate before choosing the next action. Use Extend only if the approved seam plan calls for it.`
+                  : 'H3 Max video completed, but its Media Index could not be refreshed. Do not extend until the completed source is visible in the project.',
+              };
+            }
+          }
 
           if (skillResult.provider === 'grok-subscription' && ctx.userId) {
             try {

@@ -123,7 +123,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
     if (isFalH3Max) {
       const { getFalH3MaxVideoTask } = await import('../fal-h3-max-video');
       const result = await getFalH3MaxVideoTask(taskId);
-      const label = taskId.startsWith('fal-h3max-reference-') ? 'FAL H3 Max' : 'fal H3 Turbo';
+      const label = taskId.startsWith('fal-h3max-extend-') ? 'FAL H3 Max Extend' : taskId.startsWith('fal-h3max-reference-') ? 'FAL H3 Max' : 'fal H3 Turbo';
       return {
         success: result.status !== 'failed',
         status: result.status,

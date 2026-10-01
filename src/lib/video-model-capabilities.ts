@@ -504,7 +504,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     id: 'fal-h3-max', label: 'fal H3 Max',
     minOutputDuration: 5, maxOutputDuration: 15,
     maxReferenceVideoDuration: 15,
-    supportsVideoReference: true, supportsBaseVideoEdit: false,
+    supportsVideoReference: true, supportsBaseVideoEdit: false, supportsVideoExtend: true,
     defaultImageWorkflow: 'reference-to-video',
     longVideoChunkSeconds: 15,
     maxImageReferences: 9, maxVideoReferences: 3, maxAudioReferences: 3, maxTotalReferences: 12,
@@ -761,7 +761,10 @@ export function resolveVideoProviderModel(options: {
     return 'grok-imagine-video-1.5'
   }
 
-  if (route.model === 'fal-h3-max') return hasReferenceMedia ? 'minimax/h3-max/reference-to-video' : 'minimax/h3-max/text-to-video'
+  if (route.model === 'fal-h3-max') {
+    if (options.operation === 'extend') return 'minimax/h3-max/extend-video'
+    return hasReferenceMedia ? 'minimax/h3-max/reference-to-video' : 'minimax/h3-max/text-to-video'
+  }
 
   if (route.model === 'minimax-h3-max') {
     return (options.imageReferenceCount ?? 0) > 0
@@ -897,7 +900,7 @@ export function estimateVideoProviderCostUsd(options: {
   // Live fal billing 2026-09-08: 1080p refinement charged output only for video references.
   // Keep image/audio token rates from the published rate card.
   const referenceTokens = normalizedModel === 'fal-h3-max'
-    ? Math.max(0, (options.referenceImagePixels ?? 0) / 1024 + (options.referenceVideoDurationSec ?? 0) * (route.resolution === '1080p' ? 0 : route.resolution === '480p' ? 2886 : 7459.2) + (options.referenceAudioDurationSec ?? 0) * 80 - 4096)
+    ? Math.max(0, (options.referenceImagePixels ?? 0) / 1024 + (options.referenceVideoDurationSec ?? 0) * (options.operation !== 'extend' && route.resolution === '1080p' ? 0 : route.resolution === '480p' ? 2886 : 7459.2) + (options.referenceAudioDurationSec ?? 0) * 80 - 4096)
     : 0
   const standardCost = options.durationSec * perSecond
     + referenceTokens * 0.02 / 1000
@@ -961,6 +964,9 @@ export function resolveVideoOutputDuration(options: {
   if (normalizedModel === 'grok' && options.operation === 'extend') {
     return options.requestedDuration ?? 6
   }
+  if (normalizedModel === 'fal-h3-max' && options.operation === 'extend') {
+    return options.requestedDuration ?? 5
+  }
   if (options.requestedDuration != null) return options.requestedDuration
   if (normalizedModel === 'minimax-h3-max') return 5
   if (options.operation === 'extend' && normalizeVideoModelId(options.model) === 'google-omni') {
@@ -984,7 +990,7 @@ export function resolvePersistedVideoDuration(options: {
 }): number | undefined {
   if (options.outputDuration == null) return undefined
   if (
-    (normalizeVideoModelId(options.model) === 'google-omni' || normalizeVideoModelId(options.model) === 'grok')
+    (normalizeVideoModelId(options.model) === 'google-omni' || normalizeVideoModelId(options.model) === 'grok' || normalizeVideoModelId(options.model) === 'fal-h3-max')
     && options.operation === 'extend'
     && options.referenceVideoDuration != null
   ) {
@@ -1124,6 +1130,17 @@ export function validateVideoModelRequest(options: {
     return `${capability.label} supports at most ${capability.maxTotalReferences} total reference assets per request.`
   }
 
+  if (normalizedModel === 'fal-h3-max' && options.operation === 'extend') {
+    if (normalizeVideoResolution(options.model, options.resolution) === '1080p') return 'H3 Max Extend is currently enabled at 480p and 768p; 1080p reference billing needs verification.'
+    if ((options.videoReferenceCount ?? 0) !== 1 || !options.hasVideoReference) return 'H3 Max Extend requires exactly one source video.'
+    if ((options.imageReferenceCount ?? 0) > 0 || (options.audioReferenceCount ?? 0) > 0 || (options.voiceReferenceCount ?? 0) > 0) return 'H3 Max Extend accepts one source video without extra image or audio references.'
+    if (options.referenceVideoDuration != null && options.referenceVideoDuration < 1.625) return 'H3 Max Extend source video must be at least 1.625 seconds.'
+    if (options.referenceVideoDuration != null && options.referenceVideoDuration > 60) return 'H3 Max Extend source video must be 60 seconds or less.'
+    const source = options.referenceVideoMetas?.[0]
+    if (source?.fileSizeBytes != null && source.fileSizeBytes > 50 * 1024 * 1024) return 'H3 Max Extend source video must be 50 MB or smaller.'
+    if (source?.width && source?.height && (source.width / source.height < 0.4 || source.width / source.height > 2.5)) return 'H3 Max Extend source aspect ratio must be between 0.4 and 2.5.'
+  }
+
   if (options.operation === 'edit' && !capability.supportsBaseVideoEdit) {
     return `${capability.label} does not support typed video editing.`
   }
@@ -1132,7 +1149,8 @@ export function validateVideoModelRequest(options: {
     return `${capability.label} does not support video extension.`
   }
 
-  const acceptedReferenceDuration = capability.maxReferenceVideoDuration + (capability.referenceVideoDurationTolerance ?? 0)
+  const acceptedReferenceDuration = normalizedModel === 'fal-h3-max' && options.operation === 'extend'
+    ? 60 : capability.maxReferenceVideoDuration + (capability.referenceVideoDurationTolerance ?? 0)
   if (options.referenceVideoDuration != null && options.referenceVideoDuration > acceptedReferenceDuration) {
     return `${capability.label} reference video duration must be ${capability.maxReferenceVideoDuration.toFixed(1).replace(/\.0$/, '')} seconds or less. Read skills/video-ffmpeg-lab/SKILL.md, then use run_code runtime="node" with FFmpeg to split the source video first, submit one generation task per chunk, and concatenate the results.`
   }

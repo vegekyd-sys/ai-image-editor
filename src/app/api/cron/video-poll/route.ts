@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     const age = Number.isFinite(createdAtMs) ? Date.now() - createdAtMs : 0
 
     try {
-      let result: { status: string; videoUrl?: string; error?: string }
+      let result: { status: string; videoUrl?: string; duration?: number; error?: string }
 
       if (vm.taskId.startsWith('mr-wan30-')) {
         const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
@@ -99,7 +99,8 @@ export async function GET(req: NextRequest) {
       if (result.status === 'failed') {
         if (await tryHandleVideoFailure(snap.id, result.error)) processed++
       } else if (result.status === 'completed' && result.videoUrl) {
-        const updatedMeta = { ...vm, status: 'completed' as const, videoUrl: result.videoUrl, providerUrl: result.videoUrl }
+        const updatedMeta = { ...vm, status: 'completed' as const, videoUrl: result.videoUrl, providerUrl: result.videoUrl,
+          ...(result.duration && vm.taskId.startsWith('fal-h3max-extend-') ? { duration: result.duration } : {}) }
         await admin.from('snapshots').update({
           video_meta: updatedMeta,
         }).eq('id', snap.id)
