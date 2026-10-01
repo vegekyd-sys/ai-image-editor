@@ -134,8 +134,8 @@ export function EditorLoadingShell() {
 
 export default function ProjectEditorContainer({
   projectId,
-  className = 'page-slide-in',
-  loadingClassName = 'page-slide-in h-dvh flex items-center justify-center relative z-[1]',
+  className = 'h-dvh w-full',
+  loadingClassName = 'h-dvh flex items-center justify-center relative z-[1]',
   onBack,
   onProjectCreated,
   disableAgentLiveReload = false,

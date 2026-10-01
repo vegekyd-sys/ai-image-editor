@@ -3754,7 +3754,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 videoClipStart={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.start_sec : undefined}
                 videoClipEnd={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.end_sec : undefined}
                 videoTimelineIndices={videoTimelineIndices}
-                onVideoPosterCapture={(dataUrl) => {
+                onVideoPosterCapture={readOnly || currentSnap?.imageUrl?.includes('/posters/') ? undefined : (dataUrl) => {
                   const snap = snapshotsRef.current[viewIndex];
                   if (!snap || snap.type !== 'video') return;
                   if (snap.imageUrl?.includes('/posters/')) return;

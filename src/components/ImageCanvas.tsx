@@ -810,7 +810,19 @@ export default function ImageCanvas({
     setVideoCurrentTime(pct * dur);
   }, [clipDurationFor, clipStart]);
 
-  const videoFrameLoaded = videoFrameLoadedUrl === videoUrl;
+  const videoFrameLoaded = Boolean(videoUrl) && videoFrameLoadedUrl === videoUrl;
+  const canvasReady = isVideoEntry
+    ? videoFrameLoaded
+    : currentDesign ? Boolean(remotionPlayer) && !remotionLoading : imageLoaded;
+  useEffect(() => {
+    if (!canvasReady) return;
+    // Two frames let the decoded media paint before retiring the early preview.
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => document.dispatchEvent(new Event('makaron:canvas-ready')));
+    });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [canvasReady, projectId]);
 
   // External trigger to start video playback (e.g. CUI inline video tap)
   const prevPlayTrigger = useRef(videoPlayTrigger ?? 0);
@@ -1247,6 +1259,8 @@ export default function ImageCanvas({
   return (
     <div
       ref={containerRef}
+      data-project-canvas={projectId}
+      data-canvas-ready={canvasReady ? 'true' : 'false'}
       className="absolute inset-0 flex items-center justify-center touch-none select-none"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
       /* Edit mode: capture-phase intercept blocks ALL gestures before they reach any handler.
@@ -1309,7 +1323,8 @@ export default function ImageCanvas({
               crossOrigin="anonymous"
               playsInline
               muted
-              preload="metadata"
+              poster={videoPosterImage && videoPosterImage !== VIDEO_PLACEHOLDER_IMAGE ? videoPosterImage : undefined}
+              preload="auto"
               className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
                 animDir === 'left' ? 'opacity-0 -translate-x-8' :
                 animDir === 'right' ? 'opacity-0 translate-x-8' :
@@ -1356,20 +1371,14 @@ export default function ImageCanvas({
                 setVideoFrameLoadedUrl(videoUrl ?? null);
                 const v = videoRef.current;
                 if (onVideoPosterCapture && v && v.videoWidth) {
-                  const seekTo = clipStart + Math.min(0.5, clipDurationFor(v.duration || 1) * 0.1);
-                  v.currentTime = seekTo;
-                  const handler = () => {
-                    try {
-                      const canvas = document.createElement('canvas');
-                      canvas.width = v.videoWidth;
-                      canvas.height = v.videoHeight;
-                      canvas.getContext('2d')!.drawImage(v, 0, 0);
-                      onVideoPosterCapture(canvas.toDataURL('image/jpeg', 0.75));
-                    } catch {}
-                    v.currentTime = clipStart;
-                    v.removeEventListener('seeked', handler);
-                  };
-                  v.addEventListener('seeked', handler, { once: true });
+                  // Capture the decoded first frame without seeking away and back.
+                  try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = v.videoWidth;
+                    canvas.height = v.videoHeight;
+                    canvas.getContext('2d')!.drawImage(v, 0, 0);
+                    onVideoPosterCapture(canvas.toDataURL('image/jpeg', 0.75));
+                  } catch {}
                 }
               }}
               onLoadedMetadata={() => {
