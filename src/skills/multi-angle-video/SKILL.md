@@ -90,6 +90,17 @@ chewing, humming, and other vocal activity against audio and frames: ASR silence
 does not mean a closed or motionless mouth. With no speech, skip transcription.
 With no audio stream, keep the final silent unless new sound was requested.
 
+For a quick handled-object action, inspect a decoded, timestamp-labelled dense
+source sheet with `analyze_image` before paid generation. Extract with a known
+source start time and sample cadence, keeping the actual selected-frame PTS in
+a companion table; do not assign labels from an assumed first sample. Saving
+frames without inspecting them is not measurement. Persist consequential states
+(release/transfer, airborne/contact, catch/settle) as `{action, state, sourceTime,
+evidence, uncertainty}` in `actionAnchors`. If the dense sheet is ambiguous,
+inspect additional adjacent frames. An approximate action time from `analyze_video`
+cannot replace this evidence. Do not write an exact opening state for an action
+that has not been observed at that source time.
+
 Reconcile analysis with the measured speech and action clocks before planning.
 Use persisted word timings for phrase boundaries and source frames for actions;
 video analysis may round times or put an action inside the wrong utterance.
@@ -121,7 +132,13 @@ Persist a compact coverage plan through `write_file` before paid generation:
 ```
 
 Parse the saved plan with Node `JSON.parse` before submission and verify that
-shot ranges form one contiguous source clock. Reference the complete persisted
+shot ranges form one contiguous source clock. In the same pre-submit check,
+compare every consequential action claimed in a shot with its measured
+`actionAnchors`: the shot containing release, contact or catch must contain its
+source timestamp. Do not move an anchor to fit a nicer edit. Carry the same
+compact numeric action-clock table into the submitted prompt, and check its
+ranges against the plan again. A general "preserve source timing" sentence
+cannot resolve a contradictory timed shot. Reference the complete persisted
 ASR artifact rather than manually retyping long word arrays. The final submitted
 prompt and plan must have the same reviewed shot ranges and compositions; revise both when
 creative review changes the sequence.
@@ -306,7 +323,10 @@ requires concrete image-level answers and actual corrections, not "all passed".
 Structure checks do not establish creative quality. Keep the strongest observable
 compositions when translating the plan into the submitted prompt; do not soften
 an object insert into a presenter holding a product or a side view into "slightly
-oblique". Use explicit numeric time ranges in every submitted shot.
+oblique". Use explicit numeric time ranges in every submitted shot. The animate prompt
+format still applies: `Shot N (duration s): [start–end s] ...`; duration is
+end minus start and all durations sum to the requested output. Keep both fields
+when converting the plan, rather than leaving the model to infer clock ranges.
 
 Describe the original A-camera in world space. The subject's gaze remains aimed
 at that original lens or at source-observed objects. New cameras never attract
@@ -403,7 +423,11 @@ Read current model capabilities when a different model is requested.
   Media Index, plan/prompt paths and task/snapshot identity when known, and asks
   Makaron to review the completed native artifact, restore source sound only
   without concealing visual drift, publish, and save QA. Use `policy: "auto"`
-  only for an explicitly authorized end-to-end request; otherwise `"confirm"`.
+  for an authorized end-to-end request; otherwise `"confirm"`. A request such as
+  "保留原声，直接生成" explicitly authorizes this same candidate's analysis,
+  generation, QA, original-sound assembly and publication: use `"auto"`, not
+  a confirmation checkpoint after generation. This authorizes no paid retry.
+  Before submission, check the stored action policy against that request.
   The continuation must forbid new paid generation unless separately authorized.
   On resumption, read the persisted plan and select the actual completed native
   video; do not reinterpret or re-generate the scene from the original request.
