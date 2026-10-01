@@ -9,6 +9,8 @@
  */
 
 import { transform as sucraseTransform } from 'sucrase';
+import { getBabelStatus, subscribeBabelStatus, setBabelStatus } from './babel-status';
+export { getBabelStatus, subscribeBabelStatus, type BabelStatus } from './babel-status';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import * as Remotion from 'remotion';
 import { Audio, Video } from '@remotion/media';
@@ -802,37 +804,19 @@ delete REMOTION_SCOPE['__esModule'];
 
 let _babelTransform: ((code: string, opts: any) => { code: string }) | null = null;
 
-/** Observable loading state for UI feedback */
-export type BabelStatus = 'idle' | 'loading' | 'ready' | 'error';
-let _babelStatus: BabelStatus = 'idle';
-let _babelError: string | null = null;
-const _listeners: Set<() => void> = new Set();
-
-export function getBabelStatus(): { status: BabelStatus; error: string | null } {
-  return { status: _babelStatus, error: _babelError };
-}
-export function subscribeBabelStatus(fn: () => void): () => void {
-  _listeners.add(fn);
-  return () => _listeners.delete(fn);
-}
-function _notify(status: BabelStatus, error?: string) {
-  _babelStatus = status;
-  _babelError = error ?? null;
-  _listeners.forEach(fn => fn());
-}
-
 /** Load Babel from CDN (only called when Sucrase fails). 15s timeout. */
 export async function preloadBabel(): Promise<void> {
   if (_babelTransform) return;
-  if (_babelStatus === 'loading') {
+  if (getBabelStatus().status === 'loading') {
     return new Promise<void>((resolve, reject) => {
       const unsub = subscribeBabelStatus(() => {
-        if (_babelStatus === 'ready') { unsub(); resolve(); }
-        else if (_babelStatus === 'error') { unsub(); reject(new Error(_babelError || 'Babel load failed')); }
+        const { status, error } = getBabelStatus();
+        if (status === 'ready') { unsub(); resolve(); }
+        else if (status === 'error') { unsub(); reject(new Error(error || 'Babel load failed')); }
       });
     });
   }
-  _notify('loading');
+  setBabelStatus('loading');
   try {
     await new Promise<void>((resolve, reject) => {
 
@@ -846,9 +830,9 @@ export async function preloadBabel(): Promise<void> {
     });
 
     _babelTransform = (window as any).Babel.transform;
-    _notify('ready');
+    setBabelStatus('ready');
   } catch (e) {
-    _notify('error', e instanceof Error ? e.message : String(e));
+    setBabelStatus('error', e instanceof Error ? e.message : String(e));
     throw e;
   }
 }

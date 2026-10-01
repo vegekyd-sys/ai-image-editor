@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import type { PlayerRef } from '@remotion/player';
 import type { AnnotationEntry, DesignPayload, EditableField } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
-import DesignOverlay from '@/components/DesignOverlay';
+const DesignOverlay = dynamic(() => import('@/components/DesignOverlay'), { ssr: false });
 import TransparencyBackdrop from '@/components/TransparencyBackdrop';
 import { containRect } from '@/lib/image/geometry';
 import {
