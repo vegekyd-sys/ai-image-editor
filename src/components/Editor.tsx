@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties, type TouchEvent as ReactTouchEvent } from 'react';
 import { flushSync } from 'react-dom';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoMeta, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
@@ -15,7 +16,7 @@ import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
-import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
+import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/babel-status';
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
 import { buildDesignsMap, buildImageTimeline, getInitialEditorViewMode, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
@@ -29,11 +30,7 @@ import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
 import VideoResultCard from '@/components/VideoResultCard';
-import AnimateSheet from '@/components/AnimateSheet';
-import DesignEditPanel from '@/components/DesignEditPanel';
 import DesignEditorFrame from '@/components/DesignEditorFrame';
-import DesignFieldEditor from '@/components/DesignFieldEditor';
-import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
 import { compressBase64Image, compressImageFile, isHeicFile } from '@/lib/imageUtils';
@@ -55,6 +52,12 @@ import type { AgentModelPreference } from '@/lib/agent-models';
 import { loadAgentModelPreference, saveAgentModelPreference } from '@/lib/agent-model-preference';
 import type { SkillLaunchContext } from '@/lib/skill-launch-context';
 import { stripAgentInternalContextForDisplay } from '@/lib/agent-response-policy';
+
+const AnimateSheet = dynamic(() => import('@/components/AnimateSheet'), { ssr: false });
+const DesignEditPanel = dynamic(() => import('@/components/DesignEditPanel'), { ssr: false });
+const DesignFieldEditor = dynamic(() => import('@/components/DesignFieldEditor'), { ssr: false });
+const CameraPanel = dynamic(() => import('@/components/CameraPanel'), { ssr: false });
+
 
 export type { AnimationState } from '@/lib/editor/types';
 
@@ -3751,7 +3754,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 videoClipStart={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.start_sec : undefined}
                 videoClipEnd={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.end_sec : undefined}
                 videoTimelineIndices={videoTimelineIndices}
-                onVideoPosterCapture={(dataUrl) => {
+                onVideoPosterCapture={readOnly || currentSnap?.imageUrl?.includes('/posters/') ? undefined : (dataUrl) => {
                   const snap = snapshotsRef.current[viewIndex];
                   if (!snap || snap.type !== 'video') return;
                   if (snap.imageUrl?.includes('/posters/')) return;
