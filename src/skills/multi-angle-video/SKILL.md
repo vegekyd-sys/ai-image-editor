@@ -39,6 +39,8 @@ This is a specialized source edit. Read `prompts/animate.md` and
 contract: change camera placement, lens, framing, focus, and approved camera
 motion; preserve the event. Do not use its replication profile or
 `replication_contract`, which would lock the camera grammar we intend to change.
+Apply that guide's source authority and submission constraints; this Skill's
+direct-delivery boundary replaces its post-generation verification stage.
 
 ## Establish the source clock
 
