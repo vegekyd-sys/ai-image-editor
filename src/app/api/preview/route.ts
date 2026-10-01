@@ -5,6 +5,7 @@ import { generateTipsPreviewImageOpenRouter } from '@/lib/gemini';
 import { requireCredits, deductByTokens, deductCredits, isBillingEnabled } from '@/lib/billing/credits';
 import { getTokenRate } from '@/lib/billing/token-rates';
 import { getToolPrice } from '@/lib/billing/pricing';
+import { FREE_MEDIA_ENABLED } from '@/lib/free-media-policy';
 
 export const maxDuration = 120;
 
@@ -57,8 +58,9 @@ export async function POST(req: NextRequest) {
       if (!check.ok) return check.response;
     }
 
-    // Mock mode: return original image unchanged (saves API cost for tip thumbnails)
+    // Mock only the provider. The free-media acceptance path still bills and delivers normally.
     if (process.env.MOCK_AI === 'true') {
+      if (FREE_MEDIA_ENABLED) await deductCredits(user.id, null, 'preview');
       return Response.json({ image });
     }
 

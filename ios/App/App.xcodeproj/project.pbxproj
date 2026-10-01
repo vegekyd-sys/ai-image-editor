@@ -279,6 +279,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D10E00000000000000000003 /* MakaronE2E.storekit in Resources */,
+				B10E00000000000000000003 /* MakaronLocal.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -287,6 +288,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D10E00000000000000000004 /* MakaronE2E.storekit in Resources */,
+				C10E00000000000000000003 /* MakaronLocal.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

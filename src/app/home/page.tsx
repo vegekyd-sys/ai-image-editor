@@ -42,6 +42,7 @@ import {
 import { warmHomeSkillMedia } from '@/lib/home-skills-warm'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 import { isMakaronIOSApp } from '@/lib/native-app'
+import { FREE_MEDIA_ENABLED } from '@/lib/free-media-policy'
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
@@ -109,7 +110,7 @@ function HomePageInner() {
   const isDesktop = useIsDesktop()
   const isIOSAppShell = hydrated && isMakaronIOSApp()
   const preAuthAppleBilling = useAppleBillingProducts({
-    enabled: isIOSAppShell && !renderUser,
+    enabled: !FREE_MEDIA_ENABLED && isIOSAppShell && !renderUser,
   })
   const preAuthBasicMonthlyProduct = preAuthAppleBilling.findSubscription('basic', 'month')
   const preAuthBasicMonthlyTrial = getEligibleAppleIntroTrial(
@@ -119,7 +120,7 @@ function HomePageInner() {
   // Build 1.0.7 exposes only the base StoreKit product fields, so it stays on
   // the established upload -> registration -> trial flow. Build 1.0.8 adds
   // verified introductory-offer metadata and alone can enter subscribe-first.
-  const isPreAuthIOSGuest = isIOSAppShell && !renderUser && !!preAuthBasicMonthlyTrial
+  const isPreAuthIOSGuest = !FREE_MEDIA_ENABLED && isIOSAppShell && !renderUser && !!preAuthBasicMonthlyTrial
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const createInput = useCreateInput()
@@ -813,6 +814,14 @@ function HomePageInner() {
   const [placeholderIdx, setPlaceholderIdx] = useState(0)
   const [showWelcome, setShowWelcome] = useState(false)
   const [welcomeCredits, setWelcomeCredits] = useState(0)
+  const dismissWelcome = useCallback(() => {
+    setShowWelcome(false)
+    if (isMakaronIOSApp()) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('welcome')
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash)
+    }
+  }, [])
   const [showIOSTrial, setShowIOSTrial] = useState(false)
   const [showPreAuthIOSTrial, setShowPreAuthIOSTrial] = useState(false)
   const [trialContinuationVersion, setTrialContinuationVersion] = useState(0)
@@ -833,10 +842,12 @@ function HomePageInner() {
         params.delete('trial')
         const cleanSearch = params.toString()
         window.history.replaceState({}, '', `${window.location.pathname}${cleanSearch ? `?${cleanSearch}` : ''}`)
-        setShowIOSTrial(true)
+        if (!FREE_MEDIA_ENABLED) setShowIOSTrial(true)
       }
       if (params.get('welcome')) {
-        window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))
+        // Native page-stack navigation observes query changes. Keep this entry
+        // mounted until the welcome response has arrived and is dismissed.
+        if (!isMakaronIOSApp()) window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))
         fetch('/api/auth/activate', { method: 'POST' })
           .then(r => r.json())
           .then(d => {
@@ -850,9 +861,9 @@ function HomePageInner() {
             if (d.credits > 0) {
               setWelcomeCredits(d.credits); setShowWelcome(true)
               window.dispatchEvent(new Event('credits-updated'))
-            } else if (d.trialRequired && isMakaronIOSApp()) {
+            } else if (!FREE_MEDIA_ENABLED && d.trialRequired && isMakaronIOSApp()) {
               setShowIOSTrial(true)
-            } else if (d.isNew === false && !isMakaronIOSApp()) {
+            } else if (d.isNew === false && (FREE_MEDIA_ENABLED || !isMakaronIOSApp())) {
               // Already activated user revisiting with ?welcome=1 — just refresh credits
               fetch('/api/billing/credits').then(r => r.json()).then(b => {
                 writeNativeJSONCache('/api/billing/credits', b)
@@ -2933,7 +2944,7 @@ function HomePageInner() {
       {/* Welcome credits popup */}
       {showWelcome && welcomeCredits > 0 && (
         <>
-          <div onClick={() => setShowWelcome(false)} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} />
+          <div onClick={dismissWelcome} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} />
           <div style={{
             position: 'fixed', zIndex: 301, left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
             width: '92%', maxWidth: 400, background: 'linear-gradient(180deg, #18181b 0%, #0f0f12 100%)',
@@ -2945,7 +2956,7 @@ function HomePageInner() {
               {t('home.welcomeTitle')}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>
-              {t('home.welcomeGift')}
+              {t(FREE_MEDIA_ENABLED ? 'home.freeWatermarkGift' : 'home.welcomeGift')}
             </div>
             <div style={{
               marginTop: 24, padding: '20px 0', borderRadius: 16,
@@ -2962,7 +2973,7 @@ function HomePageInner() {
               </div>
             </div>
             <button
-              onClick={() => setShowWelcome(false)}
+              onClick={dismissWelcome}
               style={{
                 width: '100%', marginTop: 24, padding: 14, borderRadius: 14, border: 'none',
                 background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',

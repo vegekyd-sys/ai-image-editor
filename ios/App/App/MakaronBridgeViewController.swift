@@ -1,7 +1,10 @@
 import Capacitor
 import AuthenticationServices
+import AVFoundation
+import CoreImage
 import Photos
 import PhotosUI
+import ImageIO
 import StoreKit
 import UniformTypeIdentifiers
 import UIKit
@@ -9,12 +12,14 @@ import WebKit
 
 class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandler, PHPickerViewControllerDelegate {
     private var nativeBridgeInstalled = false
+    private var capacitorPromptConfiguration: [String: Bool] = [:]
     private var pendingPickerID: String?
     private var oauthSession: ASWebAuthenticationSession?
     private var transactionUpdatesTask: Task<Void, Never>?
     private var pendingPurchaseResponseIdsByProductId: [String: String] = [:]
     private var pendingPurchaseRequiresIntroByProductId: [String: Bool] = [:]
     private var handledTransactionIds = Set<String>()
+    private var mediaExports: [String: AVAssetExportSession] = [:]
 
 #if DEBUG && targetEnvironment(simulator)
     private var usesLocalE2EPurchase: Bool {
@@ -98,6 +103,40 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         }
     }
 
+    override func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
+        capacitorPromptConfiguration = [
+            "CapacitorCookies.isEnabled": instanceConfiguration.getPluginConfig("CapacitorCookies").getBoolean("enabled", false),
+            "CapacitorHttp": instanceConfiguration.getPluginConfig("CapacitorHttp").getBoolean("enabled", false),
+        ]
+        return super.webViewConfiguration(for: instanceConfiguration)
+    }
+
+    override func webView(with frame: CGRect, configuration: WKWebViewConfiguration) -> WKWebView {
+        if #available(iOS 27.0, *),
+           let data = try? JSONSerialization.data(withJSONObject: capacitorPromptConfiguration),
+           let config = String(data: data, encoding: .utf8) {
+            // iOS 27 can block document-start synchronous prompts. These are
+            // read-only Capacitor flags; ordinary prompts retain their delegate.
+            let script = """
+            (() => {
+              const config = \(config), original = window.prompt, seen = new Set();
+              window.prompt = function(message, defaultText) {
+                let payload;
+                try { payload = JSON.parse(message); } catch (_) {}
+                if (payload && Object.prototype.hasOwnProperty.call(config, payload.type)) {
+                  seen.add(payload.type);
+                  if (seen.size === Object.keys(config).length) window.prompt = original;
+                  return String(config[payload.type]);
+                }
+                return original.call(window, message, defaultText);
+              };
+            })();
+            """
+            configuration.userContentController.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        }
+        return super.webView(with: frame, configuration: configuration)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         configureNativeWebView()
@@ -146,6 +185,12 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             handleOpenOAuth(id: id, body: body)
         case "saveToPhotos":
             handleSaveToPhotos(id: id, body: body)
+        case "saveWatermarkedVideoToPhotos":
+            handleWatermarkedVideoSave(id: id, body: body)
+        case "cancelMediaExport":
+            if let requestId = body["requestId"] as? String {
+                mediaExports.removeValue(forKey: requestId)?.cancelExport()
+            }
         case "pickMedia":
             handlePickMedia(id: id, body: body)
         case "getProducts":
@@ -666,6 +711,96 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         ]
     }
 
+    static func videoWatermarkRect(size: CGSize, signatureSize: CGSize) -> CGRect {
+        let margin = max(2, (min(size.width, size.height) * 0.025).rounded())
+        let width = min(size.width * 0.28, size.height * 0.45, 360)
+        let height = width * signatureSize.height / signatureSize.width
+        return CGRect(x: size.width - width - margin, y: margin, width: width, height: height)
+    }
+
+    private func handleWatermarkedVideoSave(id: String, body: [String: Any]) {
+        guard let dataUrl = body["dataUrl"] as? String, let data = dataFromDataURL(dataUrl),
+              let markUrl = body["watermarkDataUrl"] as? String, let markData = dataFromDataURL(markUrl),
+              let signature = CIImage(data: markData), signature.extent.width > 0, signature.extent.height > 0 else {
+            sendNativeResponse(id: id, ok: false, error: "Could not decode video watermark")
+            return
+        }
+        let filename = body["filename"] as? String ?? "makaron-video.mp4"
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sourceURL = directory.appendingPathComponent("source.mp4")
+        let outputURL = directory.appendingPathComponent("watermarked.mp4")
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try data.write(to: sourceURL, options: .atomic)
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+            return
+        }
+        let asset = AVURLAsset(url: sourceURL)
+        guard let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
+            try? FileManager.default.removeItem(at: directory)
+            sendNativeResponse(id: id, ok: false, error: "Video export unavailable")
+            return
+        }
+        // Core Image receives display-oriented frames; audio remains on the original asset.
+        exporter.videoComposition = AVVideoComposition(asset: asset) { request in
+            let frame = request.sourceImage
+            let rect = Self.videoWatermarkRect(size: frame.extent.size, signatureSize: signature.extent.size)
+            let mark = signature.transformed(by: CGAffineTransform(scaleX: rect.width / signature.extent.width,
+                                                                   y: rect.height / signature.extent.height))
+                .transformed(by: CGAffineTransform(translationX: rect.minX + frame.extent.minX,
+                                                  y: rect.minY + frame.extent.minY))
+            request.finish(with: mark.composited(over: frame).cropped(to: frame.extent), context: nil)
+        }
+        exporter.outputURL = outputURL
+        exporter.outputFileType = .mp4
+        exporter.shouldOptimizeForNetworkUse = true
+        mediaExports[id] = exporter
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.sendMediaExportProgress(id: id, progress: exporter.progress)
+        }
+        exporter.exportAsynchronously { [weak self] in
+            DispatchQueue.main.async {
+                timer.invalidate()
+                guard let self else { try? FileManager.default.removeItem(at: directory); return }
+                guard self.mediaExports[id] != nil, exporter.status == .completed else {
+                    self.mediaExports.removeValue(forKey: id)
+                    try? FileManager.default.removeItem(at: directory)
+                    self.sendNativeResponse(id: id, ok: false, error: exporter.error?.localizedDescription ?? "Video export canceled")
+                    return
+                }
+                self.requestPhotoAddPermission { allowed in
+                    DispatchQueue.main.async {
+                        guard allowed, self.mediaExports.removeValue(forKey: id) != nil else {
+                            try? FileManager.default.removeItem(at: directory)
+                            self.sendNativeResponse(id: id, ok: false, error: allowed ? "Video export canceled" : "Photo Library permission denied")
+                            return
+                        }
+                        let options = PHAssetResourceCreationOptions()
+                        options.originalFilename = (filename as NSString).deletingPathExtension + ".mp4"
+                        var localIdentifier: String?
+                        PHPhotoLibrary.shared().performChanges({
+                            let request = PHAssetCreationRequest.forAsset()
+                            request.addResource(with: .video, fileURL: outputURL, options: options)
+                            localIdentifier = request.placeholderForCreatedAsset?.localIdentifier
+                        }) { success, error in
+                            try? FileManager.default.removeItem(at: directory)
+                            self.sendNativeResponse(id: id, ok: success, error: error?.localizedDescription,
+                                extra: ["localIdentifier": localIdentifier ?? "", "mediaType": "video"])
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func sendMediaExportProgress(id: String, progress: Float) {
+        guard let data = try? JSONSerialization.data(withJSONObject: ["id": id, "progress": progress]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('makaron-native-progress',{detail:\(json)}));", completionHandler: nil)
+    }
+
     private func handleSaveToPhotos(id: String, body: [String: Any]) {
         let mediaType = body["mediaType"] as? String ?? "image"
         let filename = body["filename"] as? String ?? defaultFilename(for: mediaType)
@@ -729,24 +864,29 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         }
     }
 
+    static func photoResourceForSave(_ data: Data, filename: String) -> (data: Data, filename: String)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let type = CGImageSourceGetType(source) as String? else { return nil }
+        let base = (filename as NSString).deletingPathExtension
+        if type == UTType.png.identifier { return (data, base + ".png") }
+        if type == UTType.jpeg.identifier { return (data, base + ".jpg") }
+        guard let image = UIImage(data: data), let png = image.pngData() else { return nil }
+        return (png, base + ".png")
+    }
+
     private func saveImageData(_ data: Data, id: String, filename: String) {
-        let photoData: Data
-        let photoFilename: String
-        if let image = UIImage(data: data), let jpegData = image.jpegData(compressionQuality: 0.95) {
-            photoData = jpegData
-            photoFilename = jpegFilename(for: filename)
-        } else {
-            photoData = data
-            photoFilename = filename
+        guard let resource = Self.photoResourceForSave(data, filename: filename) else {
+            sendNativeResponse(id: id, ok: false, error: "Could not decode image for Photos")
+            return
         }
 
         let options = PHAssetResourceCreationOptions()
-        options.originalFilename = photoFilename
+        options.originalFilename = resource.filename
         var localIdentifier: String?
 
         PHPhotoLibrary.shared().performChanges({
             let request = PHAssetCreationRequest.forAsset()
-            request.addResource(with: .photo, data: photoData, options: options)
+            request.addResource(with: .photo, data: resource.data, options: options)
             localIdentifier = request.placeholderForCreatedAsset?.localIdentifier
         }) { [weak self] success, error in
             NSLog("[Makaron] native save image result id=%@ success=%@ asset=%@ error=%@", id, String(success), localIdentifier ?? "", error?.localizedDescription ?? "")

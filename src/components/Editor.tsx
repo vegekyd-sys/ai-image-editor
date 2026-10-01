@@ -11,6 +11,7 @@ import AgentChatView, { type ComposerDraftAttachment, type PreferredModel } from
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import CreditPopup from '@/components/CreditPopup';
 import ShareButton from '@/components/ShareButton';
+import SaveMediaDialog from '@/components/SaveMediaDialog';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
@@ -24,7 +25,8 @@ import { resolveContentType, type RendererContext, type ContentType } from '@/li
 const IOS_CUI_PAN_EDGE_PX = 36;
 const IOS_CUI_PAN_COMMIT_PX = 86;
 const IOS_CUI_PAN_MIN_DX = 10;
-import { downloadAsset } from '@/lib/editor/download';
+import { downloadAsset, getDownloadAssetPreview, prepareDownloadAsset, PreparedDownloadCache, trySavePaidDownload, type DownloadAssetParams } from '@/lib/editor/download';
+import { FREE_MEDIA_ENABLED } from '@/lib/free-media-policy';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
@@ -220,6 +222,12 @@ export default function Editor({
 
   // Credit popup + status bar notification
   const [creditPopupOpen, setCreditPopupOpen] = useState(false);
+  const [watermarkCheckout, setWatermarkCheckout] = useState(false);
+  const [saveRequest, setSaveRequest] = useState<DownloadAssetParams | null>(null);
+  const saveAssetCache = useRef<PreparedDownloadCache | null>(null);
+  if (!saveAssetCache.current) saveAssetCache.current = new PreparedDownloadCache();
+  useEffect(() => () => saveAssetCache.current?.clear(), [projectId]);
+  const [returningToSave, setReturningToSave] = useState(false);
   const [cachedCredits] = useState<CreditsPayload | null>(() => readNativeJSONCache<CreditsPayload>('/api/billing/credits'));
   const [creditBalance, setCreditBalance] = useState<number>(() => cachedCredits?.balance ?? 0);
   const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(() => cachedCredits?.subscription ?? null);
@@ -3013,12 +3021,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     setTimeout(() => setSaveToast(false), 2000);
   }, []);
 
-  const handleDownload = useCallback(async () => {
-    await downloadAsset({
+  const downloadParams = useCallback(() => {
+    const video = isViewingVideo ? canvasAreaRef.current?.querySelector('video') : undefined;
+    return {
       timeline,
       viewIndex,
       isViewingVideo,
       currentVideoUrl: currentSnap?.videoMeta?.videoUrl || currentVideo?.videoUrl,
+      currentVideoSize: video?.videoWidth && video.videoHeight ? { width: video.videoWidth, height: video.videoHeight } : undefined,
       draftParentIndex: draftParentIndexRef.current,
       snapshotsRef,
       pendingVideoRef,
@@ -3027,8 +3037,47 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       showSaveToast,
       t,
       projectTitle: initialTitle,
-    });
+    };
   }, [timeline, viewIndex, isViewingVideo, currentSnap?.videoMeta?.videoUrl, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
+  const handleDownload = useCallback(async () => {
+    const generated = Boolean(currentSnap?.design || currentSnap?.messageId || isGeneratedVideoSnapshot(currentSnap) || draftParentIndexRef.current !== null);
+    if (FREE_MEDIA_ENABLED && generated) {
+      const params = downloadParams();
+      try {
+        if (!(await trySavePaidDownload(params, saveAssetCache.current!))) setSaveRequest(params);
+      } catch {
+        setAgentStatus(t(isViewingVideo ? 'editor.saveVideoFailed' : 'editor.saveFailed'));
+      }
+      return;
+    }
+    await downloadAsset(downloadParams());
+  }, [currentSnap, downloadParams, isViewingVideo, t]);
+
+  const savePreview = useMemo(() => saveRequest ? getDownloadAssetPreview(saveRequest) : undefined, [saveRequest]);
+  const prepareSave = useCallback(() => prepareDownloadAsset(saveRequest!, saveAssetCache.current!), [saveRequest]);
+  const closeSaveDialog = useCallback(() => {
+    setSaveRequest(null);setReturningToSave(false);
+    sessionStorage.removeItem('mkr_save_checkout');
+  }, []);
+
+  // Persist only the selected snapshot identity, never media bytes or signed URLs.
+  useEffect(() => {
+    if (!FREE_MEDIA_ENABLED || !projectId || saveRequest || returningToSave || !snapshots.length) return;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('mkr_save_checkout') || 'null');
+      if (!saved || saved.projectId !== projectId) return;
+      if (typeof saved.createdAt !== 'number' || Date.now() - saved.createdAt > 30 * 60_000) {
+        sessionStorage.removeItem('mkr_save_checkout');return;
+      }
+      const index = snapshots.findIndex(snap => snap.id === saved.snapshotId);
+      if (index < 0) return;
+      const snap = snapshots[index];
+      const restoredIndex = timelineFromSnap(index, draftParentIndexRef.current);
+      setViewIndex(restoredIndex);setReturningToSave(true);
+      setSaveRequest({ ...downloadParams(), viewIndex: restoredIndex,
+        isViewingVideo: snap.type === 'video', currentVideoUrl: snap.videoMeta?.videoUrl, currentVideoSize: undefined });
+    } catch { sessionStorage.removeItem('mkr_save_checkout'); }
+  }, [projectId, snapshots, saveRequest, returningToSave, downloadParams]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string) => {
@@ -3800,6 +3849,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   {onBack && (
                     <button
                       onClick={onBack}
+                      aria-label={t('editor.backToProjects')}
                       className="text-white/80 hover:text-white p-2 cursor-pointer"
                     >
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -4494,10 +4544,22 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         return null;
       })()}
 
+      {saveRequest && <SaveMediaDialog prepare={prepareSave} preview={savePreview} onClose={closeSaveDialog}
+        onSaved={showSaveToast} suspended={creditPopupOpen} returningFromCheckout={returningToSave}
+        onUpgrade={() => {
+          const index = snapFromTimeline(saveRequest.viewIndex, saveRequest.draftParentIndex) ?? saveRequest.draftParentIndex;
+          const snap = index === null ? undefined : snapshotsRef.current[index];
+          if (projectId && snap) {
+            try {sessionStorage.setItem('mkr_save_checkout', JSON.stringify({ projectId, snapshotId: snap.id, createdAt: Date.now() }));} catch { /* Checkout still works without session storage. */ }
+          }
+          setWatermarkCheckout(true);setCreditPopupOpen(true);
+        }} />}
+
       {/* Credit popup */}
       <CreditPopup
         open={creditPopupOpen}
-        onClose={() => { setCreditPopupOpen(false); setCreditExhausted(false); setCreditSuccess(false); setCreditWaiting(false); }}
+        watermarkUnlock={watermarkCheckout}
+        onClose={() => { setCreditPopupOpen(false); setWatermarkCheckout(false); setCreditExhausted(false); setCreditSuccess(false); setCreditWaiting(false); }}
         balance={creditBalance}
         subscription={creditSubscription}
         projectId={projectId ?? undefined}

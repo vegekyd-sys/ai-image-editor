@@ -28,6 +28,7 @@ const PLANS = [
 
 interface CreditPopupProps {
   open: boolean;
+  watermarkUnlock?: boolean;
   entryPoint?: 'standard' | 'ios_onboarding' | 'ios_preauth_trial';
   onClose: () => void;
   onPreAuthTrialConfirmed?: () => void | Promise<void>;
@@ -51,7 +52,7 @@ interface PendingAppleTrialVerification {
   attribution: Record<string, unknown>;
 }
 
-export default function CreditPopup({ open: externalOpen, entryPoint = 'standard', onClose: externalOnClose, onPreAuthTrialConfirmed, balance: externalBalance, needed, subscription: externalSubscription, projectId, success: externalSuccess, waiting: externalWaiting, autoDetectPayment, onBalanceUpdate }: CreditPopupProps) {
+export default function CreditPopup({ open: externalOpen, watermarkUnlock = false, entryPoint = 'standard', onClose: externalOnClose, onPreAuthTrialConfirmed, balance: externalBalance, needed, subscription: externalSubscription, projectId, success: externalSuccess, waiting: externalWaiting, autoDetectPayment, onBalanceUpdate }: CreditPopupProps) {
   const { t } = useLocale();
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<string>('pro');
@@ -99,7 +100,13 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
     if (!params.get('topped_up') && !params.get('payment') && !params.get('subscription')) return;
     trackCheckoutSuccessFromUrl(params);
     window.history.replaceState({}, '', window.location.pathname);
-    setAutoOpen(true);
+    let returnsToSave = false;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('mkr_save_checkout') || 'null');
+      returnsToSave = saved?.projectId === projectId && typeof saved.createdAt === 'number'
+        && Date.now() - saved.createdAt < 30 * 60_000;
+    } catch { /* Use the ordinary payment confirmation when no save is pending. */ }
+    setAutoOpen(!returnsToSave);
     setAutoWaiting(true);
     setAutoSuccess(false);
     setAutoFailed(false);
@@ -137,12 +144,13 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
   );
   const hasBasicMonthlyTrial = !!basicMonthlyTrial;
 
-  const [tab, setTab] = useState<'subscribe' | 'topup'>(entryPoint === 'standard' ? 'topup' : 'subscribe');
+  const [tab, setTab] = useState<'subscribe' | 'topup'>('subscribe');
+
+  useEffect(() => { if (open) setTab('subscribe'); }, [open]);
 
   // Sync tab when subscription status changes (async fetch)
   useEffect(() => {
     if (entryPoint !== 'standard' || hasSubscription || hasBasicMonthlyTrial) setTab('subscribe');
-    else if (!appleBilling.loading) setTab('topup');
 
     if (entryPoint !== 'standard' || hasBasicMonthlyTrial) {
       setSelectedPlan('basic');
@@ -267,15 +275,14 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
         }),
       });
       const data = await res.json();
-      if (data.url) {
-        sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
-        window.location.href = data.url;
-      }
+      if (!res.ok || typeof data.url !== 'string' || !data.url) throw new Error(t('billing.checkoutStartFailed'));
+      sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
+      window.location.href = data.url;
     } catch (error) {
       if (!isNativeApplePurchaseCancellation(error)) {
         console.error('[billing] top-up failed:', error);
       }
-      setPaymentError(getNativeApplePurchaseErrorMessage(error, 'Unable to start top-up.'));
+      setPaymentError(appleBillingAvailable ? getNativeApplePurchaseErrorMessage(error, 'Unable to start top-up.') : t('billing.checkoutStartFailed'));
     } finally {
       setLoading(null);
     }
@@ -351,15 +358,14 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
         }),
       });
       const data = await res.json();
-      if (data.url) {
-        sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
-        window.location.href = data.url;
-      }
+      if (!res.ok || typeof data.url !== 'string' || !data.url) throw new Error(t('billing.checkoutStartFailed'));
+      sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
+      window.location.href = data.url;
     } catch (error) {
       if (!isNativeApplePurchaseCancellation(error)) {
         console.error('[billing] subscribe failed:', error);
       }
-      setPaymentError(getNativeApplePurchaseErrorMessage(error, 'Unable to start subscription.'));
+      setPaymentError(appleBillingAvailable ? getNativeApplePurchaseErrorMessage(error, 'Unable to start subscription.') : t('billing.checkoutStartFailed'));
     } finally {
       setLoading(null);
     }
@@ -679,7 +685,7 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
             <div style={{ padding: '24px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,0.92)', letterSpacing: '-0.02em' }}>
-                  {t('billing.getMoreCredits')}
+                  {t(watermarkUnlock ? 'billing.unlockOriginal' : 'billing.getMoreCredits')}
                 </div>
                 <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
                   Balance: <span style={{ color: balance === 0 ? '#fbbf24' : 'rgba(255,255,255,0.6)' }}>{balance}</span> credits
@@ -700,21 +706,14 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
               </button>
             </div>
 
-            <div style={{ display: 'flex', gap: 4, margin: '16px 24px 0', padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
+            {watermarkUnlock && (
+              <p className="px-6 pt-3 text-sm leading-relaxed text-white/75" data-testid="watermark-checkout-description">
+                {t('billing.unlockOriginalDescription')}
+              </p>
+            )}
+            <div role="tablist" aria-label={t('billing.getMoreCredits')} style={{ display: 'flex', gap: 4, margin: '16px 24px 0', padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
               <button
-                onClick={() => setTab('topup')}
-                style={{
-                  flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
-                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  background: tab === 'topup' ? 'rgba(192,38,211,0.2)' : 'transparent',
-                  color: tab === 'topup' ? '#e879f9' : 'rgba(255,255,255,0.35)',
-                  transition: 'all 0.15s',
-                }}
-              >
-                Top Up
-              </button>
-              <button
-                onClick={() => setTab('subscribe')}
+                role="tab" aria-selected={tab === 'subscribe'} onClick={() => setTab('subscribe')}
                 style={{
                   flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
                   fontSize: 13, fontWeight: 600, cursor: 'pointer',
@@ -723,7 +722,19 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
                   transition: 'all 0.15s',
                 }}
               >
-                Upgrade
+                {t('billing.subscribe')}
+              </button>
+              <button
+                role="tab" aria-selected={tab === 'topup'} onClick={() => setTab('topup')}
+                style={{
+                  flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  background: tab === 'topup' ? 'rgba(192,38,211,0.2)' : 'transparent',
+                  color: tab === 'topup' ? '#e879f9' : 'rgba(255,255,255,0.35)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {t('billing.topUp')}
               </button>
             </div>
 

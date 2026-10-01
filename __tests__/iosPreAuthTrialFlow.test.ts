@@ -68,7 +68,7 @@ describe('iOS subscription-before-registration flow', () => {
     const login = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8')
 
     expect(home).toContain('const preAuthBasicMonthlyTrial = getEligibleAppleIntroTrial(')
-    expect(home).toContain('const isPreAuthIOSGuest = isIOSAppShell && !renderUser && !!preAuthBasicMonthlyTrial')
+    expect(home).toContain('const isPreAuthIOSGuest = !FREE_MEDIA_ENABLED && isIOSAppShell && !renderUser && !!preAuthBasicMonthlyTrial')
     expect(home).toContain("entryPoint=\"ios_preauth_trial\"")
     expect(home).toContain('{renderUploadSlots(selectedDetail, true)}')
     expect(home).not.toContain('!isPreAuthIOSSkillAction && renderUploadSlots')
@@ -153,7 +153,7 @@ describe('iOS subscription-before-registration flow', () => {
 
     expect(appScheme).not.toContain('StoreKitConfigurationFileReference')
     expect(e2eScheme).toContain('StoreKitConfigurationFileReference')
-    expect(e2eScheme).toContain('MakaronE2E.storekit')
+    expect(e2eScheme).toContain('MakaronLocal.storekit')
     expect(project).not.toContain('D10E00000000000000000001 /* MakaronE2E.storekit in Resources */')
     expect(project).not.toContain('CODE_SIGN_ENTITLEMENTS = "App/App-E2E.entitlements"')
 
@@ -161,5 +161,12 @@ describe('iOS subscription-before-registration flow', () => {
     expect(bridge).toContain('introductoryOfferOnly')
     expect(bridge).toContain('isIntroductoryOffer(transaction)')
     expect(bridge).toContain('StoreKit skipped unfinished non-intro transaction')
+  })
+
+  it('keeps the native welcome route until the async credit grant is shown and dismissed', () => {
+    const home = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8')
+    expect(home).toContain("if (!isMakaronIOSApp()) window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))")
+    expect(home).toContain("url.searchParams.delete('welcome')")
+    expect(home).toContain('onClick={dismissWelcome}')
   })
 })

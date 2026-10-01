@@ -99,7 +99,7 @@
          </BuildableReference>
       </BuildableProductRunnable>
       <StoreKitConfigurationFileReference
-         identifier = "../App/MakaronE2E.storekit">
+         identifier = "../App/MakaronLocal.storekit">
       </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction

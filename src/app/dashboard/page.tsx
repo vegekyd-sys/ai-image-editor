@@ -9,6 +9,7 @@ import { navigateBackInIOSApp } from '@/lib/native-navigation'
 import { getAttributionForRequest } from '@/lib/marketing/attribution'
 import { trackCheckoutStart } from '@/lib/marketing/meta-pixel'
 import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing'
+import { useLocale } from '@/lib/i18n'
 import {
   finishNativeAppleTransaction,
   getNativeApplePurchaseErrorMessage,
@@ -102,6 +103,7 @@ type TabType = 'subscribe' | 'topup' | 'keys' | 'usage' | 'invoices'
 const VALID_TABS: TabType[] = ['subscribe', 'topup', 'keys', 'usage', 'invoices']
 
 function DashboardInner() {
+  const { t: translate } = useLocale()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [cachedDashboard] = useState<DashboardPayload | null>(() => readNativeJSONCache<DashboardPayload>('/api/billing/dashboard'))
@@ -543,37 +545,37 @@ function DashboardInner() {
                   )
                 })}
               </div>
-              {appleBillingAvailable && (
-                <button
-                  onClick={async () => {
-                    setSubscribing('restore')
-                    setBillingActionError(null)
-                    try {
-                      const transactions = await restoreNativeApplePurchases()
-                      const transaction = transactions[0]
-                      if (!transaction) throw new Error('No active Apple subscription was found.')
-                      const res = await fetch('/api/billing/apple/verify', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
-                      })
-                      const data = await res.json()
-                      if (!res.ok) throw new Error(data.error || 'Could not restore Apple subscription.')
-                      await finishAppleTransaction(transaction.transactionId)
-                      await fetchDashboard()
-                    } catch (error) {
-                      setBillingActionError(error instanceof Error ? error.message : 'Could not restore Apple subscription.')
-                    } finally {
-                      setSubscribing(null)
-                    }
-                  }}
-                  disabled={!!subscribing}
-                  className="mt-4 w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-white/60 disabled:opacity-40"
-                >
-                  {subscribing === 'restore' ? '...' : 'Restore Apple Purchase'}
-                </button>
-              )}
             </>
+          )}
+          {appleBillingAvailable && (
+            <button
+              onClick={async () => {
+                setSubscribing('restore')
+                setBillingActionError(null)
+                try {
+                  const transactions = await restoreNativeApplePurchases()
+                  const transaction = transactions[0]
+                  if (!transaction) throw new Error('No active Apple subscription was found.')
+                  const res = await fetch('/api/billing/apple/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
+                  })
+                  const data = await res.json()
+                  if (!res.ok) throw new Error(data.error || 'Could not restore Apple subscription.')
+                  await finishAppleTransaction(transaction.transactionId)
+                  await fetchDashboard()
+                } catch (error) {
+                  setBillingActionError(error instanceof Error ? error.message : 'Could not restore Apple subscription.')
+                } finally {
+                  setSubscribing(null)
+                }
+              }}
+              disabled={!!subscribing}
+              className="mt-4 w-full rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-white/60 disabled:opacity-40"
+            >
+              {subscribing === 'restore' ? '...' : translate('billing.trial.restore')}
+            </button>
           )}
         </>
       )}

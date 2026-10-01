@@ -970,7 +970,7 @@ function ProjectsPageInner() {
 
   const isIOSProjectPanEditableTarget = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return false
-    return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
+    return Boolean(target.closest('button, a, [role="button"], input, textarea, select, [contenteditable="true"]'))
   }
 
   const isCuiOpen = () => {

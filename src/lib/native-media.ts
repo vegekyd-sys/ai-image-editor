@@ -27,11 +27,21 @@ type NativePayload = {
   url?: string;
   dataUrl?: string;
 } | {
+  action: 'saveWatermarkedVideoToPhotos';
+  mediaType: 'video';
+  filename: string;
+  dataUrl: string;
+  watermarkDataUrl: string;
+} | {
+  action: 'cancelMediaExport';
+  requestId: string;
+} | {
   action: 'pickMedia';
   allowVideo?: boolean;
   multiple?: boolean;
 });
 type NativeMessage = Omit<Extract<NativePayload, { action: 'saveToPhotos' }>, 'id'>
+  | Omit<Extract<NativePayload, { action: 'saveWatermarkedVideoToPhotos' }>, 'id'>
   | Omit<Extract<NativePayload, { action: 'pickMedia' }>, 'id'>;
 
 export interface NativePickedMedia {
@@ -68,17 +78,34 @@ export function isNativePhotoLibraryPickerAvailable(): boolean {
   return isNativeMediaBridgeAvailable();
 }
 
-function sendNativeMessage<T>(message: NativeMessage, timeoutMs: number): Promise<T> {
+function sendNativeMessage<T>(message: NativeMessage, timeoutMs: number, signal?: AbortSignal, onProgress?: (progress: number) => void): Promise<T> {
   if (!isNativeMediaBridgeAvailable()) {
     return Promise.reject(new Error('Native photo library bridge is not available'));
   }
 
   const id = `native-${Date.now().toString(36)}-${(nativeMessageId += 1).toString(36)}`;
   const nativeMessage: NativePayload = { ...message, id } as NativePayload;
+  signal?.throwIfAborted();
 
 	  return new Promise((resolve, reject) => {
-	    const timeout = window.setTimeout(() => {
+	    const cleanup = () => {
+	      window.clearTimeout(timeout);
 	      window.removeEventListener('makaron-native-response', onResponse);
+	      window.removeEventListener('makaron-native-progress', progress);
+	      signal?.removeEventListener('abort', abort);
+	    };
+	    const cancelExport = () => {
+	      if (message.action === 'saveWatermarkedVideoToPhotos') {
+	        window.webkit?.messageHandlers?.makaronNative?.postMessage({ id: `${id}-cancel`, action: 'cancelMediaExport', requestId: id });
+	      }
+	    };
+	    const abort = () => {cleanup();cancelExport();reject(new DOMException('Export canceled', 'AbortError'));};
+	    const progress = (event: Event) => {
+	      const detail = (event as CustomEvent<{ id: string; progress: number }>).detail;
+	      if (detail?.id === id && Number.isFinite(detail.progress)) onProgress?.(Math.max(0, Math.min(1, detail.progress)));
+	    };
+	    const timeout = window.setTimeout(() => {
+	      cleanup();cancelExport();
 	      try {
 	        sessionStorage.setItem(LAST_NATIVE_MEDIA_RESULT_KEY, JSON.stringify({
 	          id,
@@ -98,8 +125,7 @@ function sendNativeMessage<T>(message: NativeMessage, timeoutMs: number): Promis
     function onResponse(event: Event) {
       const detail = (event as CustomEvent<NativeResponseDetail>).detail;
       if (detail?.id !== id) return;
-      window.clearTimeout(timeout);
-      window.removeEventListener('makaron-native-response', onResponse);
+      cleanup();
       if (detail.ok) {
         try {
           sessionStorage.setItem(LAST_NATIVE_MEDIA_RESULT_KEY, JSON.stringify({ ...detail, t: Date.now() }));
@@ -118,6 +144,8 @@ function sendNativeMessage<T>(message: NativeMessage, timeoutMs: number): Promis
     }
 
 	    window.addEventListener('makaron-native-response', onResponse);
+	    window.addEventListener('makaron-native-progress', progress);
+	    signal?.addEventListener('abort', abort, { once: true });
 	    try {
 	      try {
 	        sessionStorage.setItem(LAST_NATIVE_MEDIA_RESULT_KEY, JSON.stringify({
@@ -133,8 +161,7 @@ function sendNativeMessage<T>(message: NativeMessage, timeoutMs: number): Promis
 	      }
 	      window.webkit?.messageHandlers?.makaronNative?.postMessage(nativeMessage);
 	    } catch (error) {
-	      window.clearTimeout(timeout);
-	      window.removeEventListener('makaron-native-response', onResponse);
+	      cleanup();
 	      try {
 	        sessionStorage.setItem(LAST_NATIVE_MEDIA_RESULT_KEY, JSON.stringify({
 	          id,
@@ -176,6 +203,14 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 export async function saveBlobToNativePhotoLibrary(blob: Blob, filename: string, mediaType: NativeMediaType): Promise<void> {
   const dataUrl = await blobToDataUrl(blob);
   await sendNativeSaveMessage({ dataUrl, filename, mediaType });
+}
+
+export async function saveWatermarkedVideoToNativePhotoLibrary(blob: Blob, filename: string, watermarkDataUrl: string,
+  onProgress?: (progress: number) => void, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  const dataUrl = await blobToDataUrl(blob);
+  await sendNativeMessage({ action: 'saveWatermarkedVideoToPhotos', mediaType: 'video', dataUrl,
+    filename: filename.replace(/\.[^.]+$/, '.mp4'), watermarkDataUrl }, VIDEO_SAVE_TIMEOUT_MS, signal, onProgress);
 }
 
 export function saveUrlToNativePhotoLibrary(url: string, filename: string, mediaType: NativeMediaType): Promise<void> {

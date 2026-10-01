@@ -1,9 +1,273 @@
 import XCTest
+import StoreKitTest
+import StoreKit
 
 @MainActor
 final class MakaronStoreKitUITests: XCTestCase {
+    private var storeKitSession: SKTestSession?
+
     override func setUpWithError() throws {
         continueAfterFailure = false
+    }
+
+    func testRegisterWelcomeTopupSubscriptionAndRestore() async throws {
+        let email = try await runRegistrationAndWelcome(includePayments: true)
+        try runNativeSave(paid: true, emailOverride: email, usePaidFixture: false)
+    }
+
+    func testNativeRegistrationAndWelcomeCredits() async throws {
+        _ = try await runRegistrationAndWelcome(includePayments: false)
+    }
+
+    private func configureStoreKit() throws {
+        try requireIsolatedNativeEnvironment()
+        let session = try SKTestSession(configurationFileNamed: "MakaronLocal")
+        storeKitSession = session
+        session.resetToDefaultState()
+        session.clearTransactions()
+        session.disableDialogs = true
+        session.locale = Locale(identifier: "en_US")
+        session.storefront = "USA"
+        session.timeRate = .realTime
+    }
+
+    func testNativeExistingAccountApplePurchaseAndSave() throws {
+        guard let email = ProcessInfo.processInfo.environment["MAKARON_E2E_EMAIL"] else {
+            throw XCTSkip("Requires a UI-registered isolated account")
+        }
+        try configureStoreKit()
+        let app = XCUIApplication()
+        app.launch()
+        try runApplePurchases(app, email: email)
+        try runNativeSave(paid: true, emailOverride: email, usePaidFixture: false)
+    }
+
+    private func requireIsolatedNativeEnvironment() throws {
+        guard ProcessInfo.processInfo.environment["MAKARON_E2E_NATIVE_LOCAL"] == "1" else {
+            throw XCTSkip("Requires the isolated local native regression environment")
+        }
+        let data = try synchronousData(from: URL(string: "http://127.0.0.1:3004/health")!)
+        let health = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        XCTAssertEqual(health["e2e"] as? Bool, true)
+        XCTAssertEqual(health["supabaseUrl"] as? String, "http://127.0.0.1:55321")
+    }
+
+    private func runRegistrationAndWelcome(includePayments: Bool) async throws -> String {
+        try requireIsolatedNativeEnvironment()
+        if includePayments { try configureStoreKit() }
+        let email = ProcessInfo.processInfo.environment["MAKARON_E2E_EMAIL"]
+            ?? "ios-free-media+\(UUID().uuidString.lowercased())@e2e.makaron.test"
+        print("IOS_FREE_MEDIA_EMAIL=\(email)")
+        let app = XCUIApplication()
+        app.launchArguments = ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let consent = app.buttons["Allow AI processing and continue"]
+        if consent.waitForExistence(timeout: 20) { consent.tap() }
+        if app.buttons["Open account menu"].exists {
+            tapVisible(app, label: "Open account menu")
+            tapVisible(app, label: "Sign out")
+        }
+        let emailField = app.textFields.matching(identifier: "Email").firstMatch
+        if !emailField.waitForExistence(timeout: 3) { tapVisible(app, label: "SIGN IN", timeout: 40) }
+        XCTAssertTrue(emailField.waitForExistence(timeout: 20), app.debugDescription)
+        emailField.tap()
+        emailField.typeText(email)
+        let passwords = app.secureTextFields.matching(identifier: "Password")
+        XCTAssertTrue(passwords.firstMatch.waitForExistence(timeout: 5))
+        let passwordField = passwords.allElementsBoundByIndex.first(where: { $0.isHittable }) ?? passwords.firstMatch
+        passwordField.tap()
+        passwordField.typeText("E2ePass123!")
+        tapVisible(app, label: "Continue")
+        let otp = try waitForOTP(email: email, timeout: 30)
+        for (index, digit) in otp.enumerated() {
+            let field = app.textFields["OTP digit \(index + 1)"]
+            XCTAssertTrue(field.waitForExistence(timeout: 10))
+            field.tap()
+            field.typeText(String(digit))
+        }
+        XCTAssertTrue(app.staticTexts["Welcome to Makaron!"].waitForExistence(timeout: 40), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["500"].exists)
+        XCTAssertFalse(webElement(app, identifier: "Start 3-day free trial").exists)
+        attachScreenshot(app, name: "new-01-registered-500-welcome")
+        tapVisible(app, label: "Start Creating")
+        try assertLocalBalance(email: email, expected: 500, applePurchaseCount: 0)
+        guard includePayments else { return email }
+        try runApplePurchases(app, email: email)
+        return email
+    }
+
+    private func runApplePurchases(_ app: XCUIApplication, email: String) throws {
+        let stateData = try synchronousData(from: localFixtureURL("state", email: email))
+        let state = try JSONSerialization.jsonObject(with: stateData) as! [String: Any]
+        let purchases = state["purchases"] as! [[String: Any]]
+        let appleCount = purchases.filter { ($0["provider"] as? String) == "apple" }.count
+        XCTAssertLessThanOrEqual(appleCount, 1, "Start with a new account or resume a verified top-up")
+        // Separate hosted/UI runners can reuse numeric StoreKit IDs. Advance
+        // the local test counter past retained ledger IDs without crediting
+        // any priming purchase, or leaving one for the app to resume.
+        let historyData = try synchronousData(from: localFixtureURL("storekit-history", email: email))
+        let history = try JSONSerialization.jsonObject(with: historyData) as! [String: Any]
+        let previous = history["transactions"] as! [[String: Any]]
+        if let last = previous.compactMap({ UInt($0["apple_transaction_id"] as! String) }).max() {
+            let session = try XCTUnwrap(storeKitSession)
+            var advanced = false
+            for _ in 0..<100 {
+                try session.buyProduct(productIdentifier: "app.makaron.ios.topup.starter")
+                let transaction = try XCTUnwrap(session.allTransactions().last)
+                try session.deleteTransaction(identifier: transaction.identifier)
+                if transaction.identifier >= last { advanced = true; break }
+            }
+            guard advanced else { XCTFail("Could not advance local StoreKit test counter"); return }
+        }
+        tapVisible(app, label: "Open dashboard")
+        XCTAssertTrue(app.staticTexts["Apple In-App Purchase"].waitForExistence(timeout: 20), app.debugDescription)
+        if appleCount == 0 {
+            tapVisible(app, label: "Top Up")
+            tapVisible(app, label: "$4.99", timeout: 30)
+        }
+        assertVisibleBalance(app, expected: 1000)
+        try assertLocalBalance(email: email, expected: 1000, applePurchaseCount: 1)
+        attachScreenshot(app, name: "new-02-apple-topup-credited")
+        tapVisible(app, label: "Plan")
+        tapVisible(app, label: "$19.99", timeout: 20)
+        assertVisibleBalance(app, expected: 4000)
+        try assertLocalBalance(email: email, expected: 4000, applePurchaseCount: 2)
+        attachScreenshot(app, name: "new-03-apple-subscription-credited")
+        tapVisible(app, label: "Restore Apple Purchase")
+        assertVisibleBalance(app, expected: 4000)
+        try assertLocalBalance(email: email, expected: 4000, applePurchaseCount: 2)
+        attachScreenshot(app, name: "new-04-restore-no-double-credit")
+    }
+
+    private func assertVisibleBalance(_ app: XCUIApplication, expected: Int) {
+        let formatted = NumberFormatter.localizedString(from: NSNumber(value: expected), number: .decimal)
+        let labels = [String(expected), formatted]
+        let balance = app.staticTexts.matching(NSPredicate(format: "label IN %@", labels)).firstMatch
+        XCTAssertTrue(balance.waitForExistence(timeout: 30), app.debugDescription)
+    }
+
+    private func assertLocalBalance(email: String, expected: Int, applePurchaseCount: Int) throws {
+        let data = try synchronousData(from: localFixtureURL("state", email: email))
+        let state = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let balance = state["balance"] as! [String: Any]
+        XCTAssertEqual(balance["balance"] as? Int, expected)
+        let purchases = state["purchases"] as! [[String: Any]]
+        let apple = purchases.filter { ($0["provider"] as? String) == "apple" }
+        XCTAssertEqual(apple.count, applePurchaseCount)
+        for purchase in apple {
+            XCTAssertEqual(purchase["apple_environment"] as? String, "Xcode")
+            XCTAssertEqual(purchase["status"] as? String, "completed")
+            XCTAssertGreaterThan(purchase["amount_usd"] as? Double ?? 0, 0)
+            XCTAssertFalse((purchase["apple_transaction_id"] as? String ?? "").hasPrefix("xcode-e2e-"))
+        }
+    }
+
+    func testNativeFreeImageAndVideoSave() throws {
+        try runNativeSave(paid: false)
+    }
+
+    func testNativePaidOriginalImageAndVideoSave() throws {
+        try runNativeSave(paid: true)
+    }
+
+    func testNativeApplePaidOriginalImageAndVideoSave() throws {
+        guard let email = ProcessInfo.processInfo.environment["MAKARON_E2E_EMAIL"] else {
+            throw XCTSkip("Requires a UI-registered account with genuine local Apple purchases")
+        }
+        try requireIsolatedNativeEnvironment()
+        try assertLocalBalance(email: email, expected: 4000, applePurchaseCount: 2)
+        try runNativeSave(paid: true, emailOverride: email, usePaidFixture: false)
+    }
+
+    private func runNativeSave(paid: Bool, emailOverride: String? = nil, usePaidFixture: Bool = true) throws {
+        try requireIsolatedNativeEnvironment()
+        let email = try XCTUnwrap(emailOverride ?? ProcessInfo.processInfo.environment["MAKARON_E2E_EMAIL"])
+        _ = try synchronousData(from: localFixtureURL("seed", email: email))
+        if paid && usePaidFixture { _ = try synchronousData(from: localFixtureURL("paid-fixture", email: email), method: "POST") }
+        let mode = paid ? "paid-original" : "free"
+        let app = XCUIApplication()
+        app.launch()
+        allowPhotosPermission()
+        if webElement(app, identifier: "← Back to app").waitForExistence(timeout: 5) {
+            tapVisible(app, label: "← Back to app")
+        }
+        tapVisible(app, label: "Projects", timeout: 30)
+        let kinds = ProcessInfo.processInfo.environment["MAKARON_E2E_MEDIA_KIND"].map { [$0] } ?? ["Image", "Video"]
+        for kind in kinds {
+            tapVisible(app, label: "iOS Save \(kind)", timeout: 30)
+            if webElement(app, identifier: "Back to canvas").waitForExistence(timeout: 5) {
+                tapVisible(app, label: "Back to canvas")
+            }
+            let previousPhotos = try localPhotoFiles(email: email)
+            tapVisible(app, label: "Save", timeout: 30)
+            if !paid {
+                XCTAssertTrue(app.staticTexts["Free download · Makaron watermark"].waitForExistence(timeout: 15), app.debugDescription)
+                if kind == "Video" {
+                    tapVisible(app, label: "Play preview")
+                    XCTAssertTrue(app.buttons["Pause preview"].waitForExistence(timeout: 10), app.debugDescription)
+                }
+                attachScreenshot(app, name: "native-\(mode)-\(kind)-preview")
+                tapVisible(app, label: "Save")
+            }
+            allowPhotosPermission(timeout: 5)
+            let deadline = Date().addingTimeInterval(90)
+            var added = Set<String>()
+            while Date() < deadline && added.isEmpty {
+                added = try localPhotoFiles(email: email).subtracting(previousPhotos)
+                if added.isEmpty { RunLoop.current.run(until: Date().addingTimeInterval(0.3)) }
+            }
+            XCTAssertEqual(added.count, 1, "No new Photos file: \(app.debugDescription)")
+            if kind == "Video" { XCTAssertTrue(added.first?.lowercased().hasSuffix(".mp4") == true || added.first?.lowercased().hasSuffix(".mov") == true) }
+            print("IOS_SAVED_\(mode.uppercased())_\(kind.uppercased())=\(added.sorted())")
+            if !paid { XCTAssertTrue(app.staticTexts["Free download · Makaron watermark"].waitForNonExistence(timeout: 10)) }
+            else { XCTAssertFalse(app.staticTexts["Free download · Makaron watermark"].exists) }
+            attachScreenshot(app, name: "native-\(mode)-\(kind)-saved-to-photos")
+            tapVisible(app, label: "Back to projects")
+            XCTAssertTrue(app.buttons["Back to projects"].waitForNonExistence(timeout: 10))
+        }
+    }
+
+    private func tapVisible(_ app: XCUIApplication, label: String, timeout: TimeInterval = 10) {
+        let predicate = label.hasPrefix("$")
+            ? NSPredicate(format: "label ENDSWITH %@", label)
+            : NSPredicate(format: "label ==[c] %@ OR identifier == %@", label, label)
+        let query = app.descendants(matching: .any).matching(predicate)
+        XCTAssertTrue(query.firstMatch.waitForExistence(timeout: timeout), "Missing \(label): \(app.debugDescription)")
+        // WebKit can report the covered toolbar as hittable behind a dialog.
+        let element = query.allElementsBoundByIndex.last(where: { $0.isHittable }) ?? query.firstMatch
+        let frame = element.frame
+        XCTAssertFalse(frame.isEmpty, "Empty frame for \(label)")
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY)).tap()
+    }
+
+    private func localFixtureURL(_ endpoint: String, email: String) -> URL {
+        var components = URLComponents(string: "http://127.0.0.1:3004/\(endpoint)")!
+        components.queryItems = [URLQueryItem(name: "email", value: email)]
+        // Form-style query parsing otherwise treats the email's literal + as a space.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        return components.url!
+    }
+
+    private func localPhotoFiles(email: String) throws -> Set<String> {
+        let data = try synchronousData(from: localFixtureURL("photos", email: email))
+        let response = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        return Set(response["files"] as! [String])
+    }
+
+    private func allowPhotosPermission(timeout: TimeInterval = 1) {
+        // New iOS permission sheets can be exposed under the app's remote
+        // view rather than SpringBoard's alerts collection.
+        let applications = [XCUIApplication(), XCUIApplication(bundleIdentifier: "com.apple.springboard")]
+        let predicate = NSPredicate(format: "label IN %@ OR label BEGINSWITH[c] 'Allow Access' OR label BEGINSWITH[c] 'Allow Adding'",
+                                    ["Allow", "允许", "OK"])
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            for application in applications {
+                let allow = application.buttons.matching(predicate).firstMatch
+                if allow.exists && allow.isHittable { allow.tap(); return }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.15))
+        }
     }
 
     func testSubscriptionBeforeRegistrationWithPhotoCarriesSkillAndCredits() throws {
@@ -232,12 +496,16 @@ final class MakaronStoreKitUITests: XCTestCase {
         return nil
     }
 
-    private func synchronousData(from url: URL) throws -> Data {
+    private func synchronousData(from url: URL, method: String = "GET") throws -> Data {
         let semaphore = DispatchSemaphore(value: 0)
         var result: Result<Data, Error>!
-        URLSession.shared.dataTask(with: url) { data, _, error in
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        URLSession.shared.dataTask(with: request) { data, response, error in
             if let error {
                 result = .failure(error)
+            } else if let response = response as? HTTPURLResponse, !(200..<300).contains(response.statusCode) {
+                result = .failure(URLError(.badServerResponse))
             } else {
                 result = .success(data ?? Data())
             }

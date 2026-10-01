@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   writeNativeJSONCache: vi.fn(),
   trackCheckoutStart: vi.fn(),
   suppressWebBilling: false,
+  nativeAvailable: true,
 }));
 
 vi.mock('@/lib/i18n', () => ({
@@ -21,6 +22,7 @@ vi.mock('@/lib/i18n', () => ({
     t: (key: string) => ({
       'billing.getMoreCredits': 'Get more credits',
       'billing.topUp': 'Top Up',
+      'billing.subscribe': 'Subscribe',
       'billing.credits': 'credits',
       'billing.creditsPerMonth': 'credits/month',
       'billing.perMonth': '/mo',
@@ -70,6 +72,7 @@ vi.mock('@/lib/i18n', () => ({
       'billing.trial.restore': 'Restore Apple purchase',
       'billing.trial.restoring': 'Restoring...',
       'billing.trial.verificationPending': 'Subscription complete. Tap Continue confirmation; no restore is needed.',
+      'billing.checkoutStartFailed': 'Unable to open checkout. Please try again.',
     }[key] || key),
   }),
 }));
@@ -92,7 +95,7 @@ vi.mock('@/lib/marketing/meta-pixel', () => ({
 }));
 
 vi.mock('@/lib/native-purchases', () => ({
-  isNativeApplePurchaseAvailable: () => true,
+  isNativeApplePurchaseAvailable: () => mocks.nativeAvailable,
   getNativeAppleProducts: mocks.getNativeAppleProducts,
   purchaseNativeAppleProduct: mocks.purchaseNativeAppleProduct,
   purchaseNativeAppleSubscription: mocks.purchaseNativeAppleSubscription,
@@ -157,6 +160,7 @@ describe('CreditPopup Apple purchase flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.suppressWebBilling = false;
+    mocks.nativeAvailable = true;
     mocks.getNativeAppleProducts.mockResolvedValue(nativeProducts);
     mocks.purchaseNativeAppleProduct.mockResolvedValue({
       productId: 'app.makaron.ios.topup.pro',
@@ -181,12 +185,54 @@ describe('CreditPopup Apple purchase flow', () => {
     sessionStorage.clear();
   });
 
+  it('explains watermark unlocking without starting a purchase on open', async () => {
+    render(<CreditPopup open watermarkUnlock onClose={vi.fn()} balance={120} subscription={null} />);
+    expect(screen.getByText('billing.unlockOriginal')).toBeTruthy();
+    expect(screen.getByTestId('watermark-checkout-description').textContent).toBe('billing.unlockOriginalDescription');
+    await waitFor(() => expect(mocks.getNativeAppleProducts).toHaveBeenCalled());
+    expect(mocks.purchaseNativeAppleProduct).not.toHaveBeenCalled();
+    expect(mocks.purchaseNativeAppleSubscription).not.toHaveBeenCalled();
+    expect(mocks.trackCheckoutStart).not.toHaveBeenCalled();
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent?.trim())).toEqual(['Subscribe', 'Top Up']);
+    expect(screen.getByRole('tab', { name: 'Subscribe' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it.each([
+    { ok: false, data: { error: 'Checkout unavailable' } },
+    { ok: true, data: {} },
+    { ok: false, data: { url: 'https://checkout.stripe.com/invalid' } },
+    { ok: true, data: { url: 123 } },
+  ])('shows a retryable web top-up error for an invalid checkout response: %j', async ({ ok, data }) => {
+    mocks.nativeAvailable = false;
+    const request = mockFetch();
+    request.mockImplementation(async (input) => String(input) === '/api/billing/checkout'
+      ? { ok, json: async () => data } as Response
+      : { ok: true, json: async () => ({}) } as Response);
+    vi.stubGlobal('fetch', request);
+    render(<CreditPopup open watermarkUnlock onClose={vi.fn()} balance={500} subscription={null} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Top Up' }));
+    const button = screen.getByRole('button', { name: 'Top Up 2,200 credits' });
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByText('Unable to open checkout. Please try again.')).toBeTruthy());
+    expect(button.hasAttribute('disabled')).toBe(false);
+    expect(sessionStorage.getItem('mkr_pre_topup_balance')).toBeNull();
+  });
+
+  it('shows the localized error when web checkout rejects or returns malformed JSON', async () => {
+    mocks.nativeAvailable = false;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => { throw new SyntaxError('Invalid JSON'); } }));
+    render(<CreditPopup open watermarkUnlock onClose={vi.fn()} balance={500} subscription={null} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Subscribe to Basic' }));
+    await waitFor(() => expect(screen.getByText('Unable to open checkout. Please try again.')).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'Subscribe to Basic' }).hasAttribute('disabled')).toBe(false);
+  });
+
   it('buys the selected annual subscription through Apple and verifies it server-side', async () => {
     const onBalanceUpdate = vi.fn();
     render(<CreditPopup open onClose={vi.fn()} balance={120} subscription={null} onBalanceUpdate={onBalanceUpdate} />);
 
     await waitFor(() => expect(mocks.getNativeAppleProducts).toHaveBeenCalled());
-    fireEvent.click(screen.getByText('Upgrade'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Subscribe' }));
     fireEvent.click(screen.getByText('Annual'));
     fireEvent.click(screen.getByText('Pro'));
     fireEvent.click(await screen.findByText('Subscribe · $189.99'));
@@ -216,6 +262,7 @@ describe('CreditPopup Apple purchase flow', () => {
     render(<CreditPopup open onClose={vi.fn()} balance={120} subscription={null} />);
 
     await waitFor(() => expect(mocks.getNativeAppleProducts).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('tab', { name: 'Top Up' }));
     fireEvent.click(await screen.findByText('Top Up 2,200 credits'));
 
     await waitFor(() => expect(mocks.purchaseNativeAppleProduct).toHaveBeenCalledWith(

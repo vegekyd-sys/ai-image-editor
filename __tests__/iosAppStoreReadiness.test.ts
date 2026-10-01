@@ -526,7 +526,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bridge).toContain('return (jpegData, jpegFilename(for: filename), "image/jpeg")');
     expect(bridge).toContain('PHAssetCreationRequest.forAsset()');
     expect(bridge).toContain('UIImage(data: data)');
-    expect(bridge).toContain('jpegData(compressionQuality: 0.95)');
+    expect(bridge).toContain('photoResourceForSave(data, filename: filename)');
+    expect(bridge).toContain('if type == UTType.png.identifier { return (data, base + ".png") }');
+    expect(bridge).toContain('if type == UTType.jpeg.identifier { return (data, base + ".jpg") }');
+    expect(bridge).not.toContain('jpegData(compressionQuality: 0.95)');
     expect(bridge).toContain('jpegFilename(for: filename)');
     expect(bridge).toContain('placeholderForCreatedAsset?.localIdentifier');
     expect(bridge).toContain('[Makaron] native save request');
@@ -705,6 +708,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).not.toContain("contain: 'layout paint style'");
     expect(projectsPage).toContain("isolation: 'isolate'");
     expect(projectsPage).toContain('blockNativeBackSwipe');
+    expect(projectsPage).toContain("target.closest('button, a, [role=\"button\"], input, textarea, select, [contenteditable=\"true\"]')");
     expect(projectsPage).toContain('passive: false');
     expect(projectsPage).toContain("overscrollBehaviorX: 'contain'");
     expect(projectsPage).toContain('isMakaronIOSAppShell');

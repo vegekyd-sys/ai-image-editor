@@ -1169,6 +1169,7 @@ export default function AgentChatView({
         >
           <button
             data-testid="chat-back"
+            aria-label={t('editor.backToCanvas')}
             onClick={handleBack}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm hover:bg-white/10 active:bg-white/15 transition-colors"
           >

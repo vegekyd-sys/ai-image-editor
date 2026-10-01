@@ -91,6 +91,8 @@
       "localizations": [
         {
           "customAgreement": "",
+          "description": "Makaron Pro",
+          "displayName": "Makaron Pro",
           "locale": "en_US",
           "name": "Makaron Pro"
         }
