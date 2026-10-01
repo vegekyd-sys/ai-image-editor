@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { buildVideoProxyUrl } from '@/lib/video-playback-url'
 
 export interface ProjectEntryPreviewProps {
   projectId: string
@@ -11,6 +12,10 @@ export interface ProjectEntryPreviewProps {
 /** Keep the early media visible until the editor has decoded its own canvas. */
 export default function ProjectEntryPreview({ projectId, imageUrl, videoUrl }: ProjectEntryPreviewProps) {
   const [ready, setReady] = useState(false)
+  const [failedVideoUrl, setFailedVideoUrl] = useState<string | null>(null)
+  const previewVideoUrl = videoUrl && failedVideoUrl === videoUrl
+    ? `${buildVideoProxyUrl(videoUrl.split('#')[0])}${videoUrl.includes('#') ? `#${videoUrl.split('#')[1]}` : ''}`
+    : videoUrl
   useEffect(() => {
     const checkCanvas = () => {
       const canvas = document.querySelector(`[data-project-canvas="${projectId}"]`)
@@ -28,7 +33,16 @@ export default function ProjectEntryPreview({ projectId, imageUrl, videoUrl }: P
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center bg-black p-[2px]">
             {videoUrl ? (
-              <video src={videoUrl} poster={imageUrl ?? undefined} preload="auto" muted playsInline className="w-full h-full object-contain" />
+              <video
+                src={previewVideoUrl ?? undefined}
+                crossOrigin="anonymous"
+                poster={imageUrl ?? undefined}
+                preload="auto" muted playsInline
+                onError={() => {
+                  if (!videoUrl.startsWith('/api/proxy-video?')) setFailedVideoUrl(videoUrl)
+                }}
+                className="w-full h-full object-contain"
+              />
             ) : (
               <img src={imageUrl!} alt="" className="w-full h-full object-contain" fetchPriority="high" />
             )}

@@ -1,4 +1,4 @@
-import { render, act, cleanup } from '@testing-library/react'
+import { render, act, cleanup, fireEvent } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import ProjectEntryPreview from '@/components/ProjectEntryPreview'
 
@@ -29,6 +29,17 @@ describe('early project media handoff', () => {
     const video = container.querySelector('video')!
     expect(video.getAttribute('src')).toContain('#t=8,15')
     expect(video.preload).toBe('auto')
+    expect(video.crossOrigin).toBe('anonymous')
     expect(container.querySelector('img')).toBeNull()
+  })
+
+  it('falls back once to the same proxy as the canvas while retaining the selected range', () => {
+    const { container } = render(<ProjectEntryPreview projectId="project" imageUrl={null} videoUrl="https://media.example/movie.mp4#t=8,15" />)
+    const video = container.querySelector('video')!
+    fireEvent.error(video)
+    const fallback = video.getAttribute('src')!
+    expect(fallback).toBe('/api/proxy-video?url=https%3A%2F%2Fmedia.example%2Fmovie.mp4#t=8,15')
+    fireEvent.error(video)
+    expect(video.getAttribute('src')).toBe(fallback)
   })
 })
