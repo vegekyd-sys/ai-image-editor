@@ -510,6 +510,11 @@ direct-submit authorization and no-retry ceiling apply to each candidate.
 
 ## Verify and deliver
 
+Probe each actual native file with the media runtime before reporting duration,
+dimensions, frame rate or audio streams. Save those measurements with the task
+identity. A video-analysis model's estimate or player display must not override
+file/container measurements; mark unavailable measurements as unverified.
+
 First verdict content fidelity, then coverage quality. Record whether the native
 result retains the same statements, observable action/state sequence and timing,
 participants, prop identities/counts, product package, spatial relationships and
