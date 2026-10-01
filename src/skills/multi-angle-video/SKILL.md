@@ -110,6 +110,7 @@ Persist a compact coverage plan through `write_file` before paid generation:
   "meaningBeats": [],
   "storyArc": "an interpretation supported by the recorded actions, not a new plot",
   "centralBeat": { "id": "", "viewerUnderstands": "", "visualChange": "" },
+  "cameraMap": [],
   "sequenceOptions": [],
   "directorReview": { "status": "draft", "rejectedChoices": [], "revisions": [] },
   "beats": [],
@@ -196,99 +197,116 @@ the thought to land; variety must not interrupt an important reveal or sentence.
 - Shape the ending as an observed payoff or reaction. Do not spend the whole
   ending on a generic frontal medium shot if a recorded gesture can resolve it.
 
-## Design and challenge the coverage before submission
+## Direct a sequence, not a collection of portraits
 
-Before writing the full generation prompt, design two compact, source-grounded
-sequence options with different attention/rhythm choices. These are planning
-alternatives, not two paid generations. Describe each as timed shot functions,
-not two adjective/style variations. Compare them against the actual take;
-select and revise the stronger sequence. Save both options, the rejected
-choices and actual revisions in `directorReview`. Do this within the selected
-Chat Skill; do not hand planning to the user or depend on an external director.
+The creative deliverable is a sequence of images that makes the recorded thought
+or action easier to follow. Write its visual sentence before the shot list:
+**attention → complication/question → evidence/interaction → consequence/payoff**.
+Adapt this to the actual take; it is a progression of what the viewer notices,
+not permission to invent events. A product testimonial can move from the human
+problem to the recorded arrival of its solution, to the package, to the person's
+conclusion. A demonstration can move from the whole relationship to the specific
+mechanism and back to its observable result. A casual monologue can use the
+speaker's actual objects and gestures as punctuation, with a reaction resolving
+it. Never substitute unrelated illustrative B-roll for evidence.
 
-Identify the central beat: what should the viewer understand or feel differently
-at the scene's main turn, reveal, correction or payoff? Specify the visual change
-that expresses it, with the exact phrase/action anchor. Design around this beat
-before filling the opening and transitions. An impressive establishing shot must
-not spend the scene's main visual reveal before the thought that motivates it.
-If an early glimpse is deliberate, explain how the later shot adds meaning.
+Design the central turn first. Write exactly what becomes visually apparent at
+its measured phrase/action, then the image that makes this apparent. Build the
+lead-in and payoff around that image. If the same image would suit every phrase,
+it does not yet express the turn. A comparison needs a matching perspective on
+its observed before/after states; a correction needs the body/object relationship
+that explains it, not just a flattering close-up of the teacher. Do not spend a
+later reveal in the opening unless the later image adds new information.
 
-For demonstrations, identify the relation the viewer needs to see (body to object,
-hand to tool, teacher to learner, or before to after). Compose those elements
-together. Use matching viewpoints for a before/after comparison when comparable
-source states exist; insert the explanatory detail between them. A close hand
-without the relevant body/object context may hide the lesson. For testimonials,
-separate the person's experience, the actual product arrival, the package detail
-and the personal conclusion; do not replace their recorded delivery with poses.
-These are attention choices, not a fixed category-specific shot template.
+Make a small `cameraMap` of distinct physical vantage points around the recorded
+subject, not crop presets on the source axis. For each, name position, height,
+view direction, visible landmarks, foreground and what it can reveal. Use the
+known set and plausible adjacent space; inferred geometry gets flagged for QA.
+Choose source-compatible stations that produce visibly different projections:
+a substantial three-quarter/side view, a low object-level view, a high spatial
+view, or a reverse over a real foreground edge. The original camera is one
+station, not the default for every shot. A change in lens alone is not a new angle.
 
-At least one option must actively explore the strongest source-supported
-coverage contrast, rather than letting both options default to modest reframings.
-During comparison, distinguish a legitimate held reaction from avoidance of a
-meaningful insert or spatial viewpoint. Do not reject a close/detail solely
-because the source is a presenter portrait: ongoing speech/actions can remain
-outside its frame. Reject invented performance, not motivated camera coverage.
-For the central beat and any important insert, record `compositionDelta`: the
-specific change from the source and preceding shot, and the visible information
-it reveals. If this only says "slightly tighter" or "another medium view", redesign
-it or give a source-specific reason that a stronger contrast would harm meaning.
+Explore two brief sequences and choose the stronger source-grounded visual
+sentence. At least one must use the fullest defensible contrast in viewpoint,
+scale and depth. Do not downgrade it to similar frontal portraits just because
+those are safer to describe. Record the rejected choices and resulting revisions
+in `directorReview`; these are planning alternatives, not paid generations.
 
-Translate every selected shot into an observable image:
-- Name the primary subject, what occupies most of the frame, the frame boundaries,
-  and what stays secondary or outside it. Lens numbers and "wide/close" alone
-  do not establish composition. A wide shows readable spatial relationships and
-  a smaller person; an insert gives the relevant detail clear visual dominance.
-- Name the viewpoint/height only when it makes that image or relation clearer.
-  New framing is produced by the virtual camera, not by moving an actor or prop.
-  Every shot is one full-frame view. Background/context belongs to that same
-  perspective; do not satisfy a detail-plus-context request with picture-in-picture,
-  inset windows, split screens or collage unless the user explicitly requests
-  that format for the generated film. Review grids are separate presentation assets.
-  When the needed relation cannot fit the detail, choose a coherent wider view.
-- Describe the source action/hand/prop state already in progress on entry, and
-  the state on exit at consequential cuts. Resolve uncertainty from source frames.
-- Default to a stable camera within a shot. A push, reframe or focus change needs
-  a specific information reveal and a timed start/end composition; do not add
-  a slow move to every shot as a substitute for cut rhythm.
+### Give each shot a visible job
 
-Challenge the selected sequence before paid generation. For each shot ask what
-the viewer attends to now, why that attention changes at this moment, and what
-this framing adds to the preceding shot. Use phrase/frame evidence in the
-answers. Reject generic answers such as "cinematic", "variety", or repeating
-the current action. Also check the sequence as a whole:
-- Does the central beat receive its intended visual change at its own time,
-  rather than a related image somewhere else in the clip?
-- Are scale/depth/viewpoint contrasts readable, with a clear hierarchy of
-  context, explanation, intimacy or reaction as appropriate to this source?
-  Replace redundant rotated portraits or merge them into a purposeful hold.
-- Can the viewer actually understand the important physical relation? For a
-  comparison, are the two states filmed comparably instead of unrelated angles?
-- Are action continuity and the ending supported by the recorded take? Could
-  the requested framing require an invented gesture or obscure a vital action?
-- Do shot lengths allow the idea/reaction to register? Do not cut every phrase
-  or enforce a shot quota; accelerate with earned inserts and allow holds.
+Use an image description that a cinematographer could frame, in this order:
+**[start–end] narrative job / camera station and height / frame boundaries and
+foreground-background layers / focus and movement / source state in progress**.
+`compositionDelta` explains the new information versus the previous shot.
 
-Record concrete rejected choices and corrections, not a blanket "all passed".
-Review the final submitted prompt too: the central beat and important inserts
-must retain their observable compositions and `compositionDelta`, not be
-softened into generic presenter-plus-product/medium coverage during rewriting.
-Revise the shot list and final prompt together until these questions have
-source-grounded answers; `directorReview.status: "ready"` requires that review.
-JSON parsing/continuous timestamps check only structure, never creative quality.
-An unresolved central beat, unreadable relation or ambiguous action state is a
-reason to inspect/revise the plan before spending the one allowed generation.
+Choose a shot grammar that fits the beat, rather than repeating medium → tighter
+medium → medium. Useful coverage choices include:
+- A low wide or high corner wide makes the person visibly smaller in readable
+  space: use it to introduce stakes, give a pause or restore context.
+- A tight three-quarter or side profile isolates an actual expression; crop
+  deliberately and let shallow focus remove distracting space.
+- An object-level insert puts the recorded hand/object interaction in the near
+  plane and the speaker secondary or outside the frame. Move the camera to the
+  held item; the performer does not push the item toward the lens for the shot.
+- A reverse over an existing shoulder, tool or object edge builds depth and
+  directs attention to the person or relation beyond it. Specify the real soft
+  foreground shape and the sharp subject; do not materialize camera equipment.
+- A viewpoint along the existing motion trajectory makes an action legible;
+  carry its source release/transfer/contact states across the cut without replay.
+- A matched relation shot before and after a correction lets the viewer see what
+  changed; choose enough width to include the relevant body and object together.
 
-A semantic transition need not add a separate short bridge shot: a continuous
-reframe or focus change can let a product arrive in its real source gesture,
-then become the attention target. Avoid near-identical adjacent face portraits
-and subsecond bridges that fragment a single thought without revealing anything.
+These are compositional tools, not a mandatory order. Describe frame edges,
+subject dominance, occlusion and depth explicitly; focal-length adjectives alone
+are too weak. A detail insert must visibly replace the dominant person portrait,
+and a spatial wide must actually reveal space. Full frame throughout; do not
+replace depth with PIP, split screens or collage. Reporting grids are separate.
 
-Cut at phrase boundaries, changes of attention, action initiations, or reaction
-beats. Use continuity across a cut to make a gesture feel uninterrupted. Maintain
-screen direction and spatial orientation. Favor clean hard cuts; use focus and
-foreground composition to guide attention. Avoid decorative orbits and arbitrary
-extreme angles. Tight details and low/high viewpoints are welcome when motivated
-by the action and compatible with the source.
+### Make the edit carry the thought
+
+A long meaning beat can contain several visual sub-beats: anticipation, arrival,
+contact, inspection and reaction. Use those observed micro-events to create
+coverage within a sentence while its original speech continues uninterrupted.
+Not every cut needs a new sentence, and speech does not require a visible face.
+For an active 15-second take, explore roughly 7–10 useful shots as a first draft;
+retain fewer only when a specific thought or reaction needs a sustained hold,
+and retain more only when the source has readable micro-events. This is a rhythm
+starting point, not a quota or authorization to manufacture action. Avoid spending
+most of the film in three or four similar long presenter framings.
+
+Alternate information scale deliberately: context, intimate expression, concrete
+evidence, relation, reaction. Adjacent shots should differ visibly in scale,
+projection or depth, not just yaw slightly. Give the central turn the strongest
+relevant contrast. A short insert can punctuate a motion or word; a longer held
+reaction lets its implication land. Cut on measured attention shifts and gesture
+states, maintaining screen direction and the uninterrupted source clock.
+
+Camera motion is available when it changes what we learn: a short tabletop slide
+can reveal a hand meeting an object, a low rise can reveal the space around a
+speaker, a reframing move can follow the source's product arrival, or a restrained
+arc can add parallax to a recorded release/reaction. Specify start/end images and
+time; lock the camera when a crisp cut or comparison is clearer. Do not default
+every shot to a static portrait, or animate every shot with the same slow push.
+Never require the performer to move to achieve the camera's new framing.
+
+Before paid submission, mentally play the actual sequence with source sound:
+- At the central phrase/action, does the visible image express its meaning?
+- If captions were hidden, would the important physical relation remain clear?
+- Are camera stations visibly different, with foreground/depth and real scale
+  contrast, or is this mostly the original image with crops?
+- Does every cut add evidence, change attention or reveal a reaction? Remove
+  redundant portraits, then use the freed time for a source-grounded insert.
+- Does the ending visually resolve the recorded thought or action?
+- Does each entry preserve the pose, hand ownership and prop state already in
+  progress? Resolve uncertain action state from frames before generation.
+
+Revise the shot list and final prompt together. `directorReview.status: "ready"`
+requires concrete image-level answers and actual corrections, not "all passed".
+Structure checks do not establish creative quality. Keep the strongest observable
+compositions when translating the plan into the submitted prompt; do not soften
+an object insert into a presenter holding a product or a side view into "slightly
+oblique". Use explicit numeric time ranges in every submitted shot.
 
 Describe the original A-camera in world space. The subject's gaze remains aimed
 at that original lens or at source-observed objects. New cameras never attract
