@@ -48,7 +48,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(authCallback).toContain("r='/home?skill='+encodeURIComponent(skillMatch[1])");
   });
 
-  it('requires explicit AI data-sharing consent before mounting iOS creative content', () => {
+  it('retains explicit consent on builds targeted by the web consent policy', () => {
     const layout = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
     const gate = fs.readFileSync(path.join(root, 'src/components/AIDataConsentGate.tsx'), 'utf8');
     const privacy = fs.readFileSync(path.join(root, 'src/app/privacy/page.tsx'), 'utf8');
@@ -56,6 +56,8 @@ describe('iOS App Store readiness guardrails', () => {
 
     expect(layout).toContain('userAgentHasMakaronIOSToken');
     expect(layout).toContain('initiallyAccepted={requiresAIDataConsent && hasInitialAIDataConsent}');
+    expect(layout).toContain("requiredBuilds={process.env.IOS_AI_CONSENT_REQUIRED_BUILDS ?? 'all'}");
+    expect(gate).toContain('requiresIOSAIDataConsent(requiredBuilds, build)');
     expect(layout).toContain("cookieStore.get(AI_DATA_CONSENT_COOKIE)?.value === 'v1'");
     expect(gate).toContain("'makaron:ai-data-consent:v1'");
     expect(gate).toContain("setState('declined')");

@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocale } from '@/lib/i18n';
 import { isMakaronIOSApp } from '@/lib/native-app';
+import { getIOSAIConsentAppBuild, requiresIOSAIDataConsent } from '@/lib/ios-ai-consent';
 
 export const AI_DATA_CONSENT_STORAGE_KEY = 'makaron:ai-data-consent:v1';
 export const AI_DATA_CONSENT_COOKIE = 'makaron_ai_data_consent';
@@ -34,10 +35,12 @@ export default function AIDataConsentGate({
   children,
   required,
   initiallyAccepted = false,
+  requiredBuilds = 'all',
 }: {
   children: ReactNode;
   required: boolean;
   initiallyAccepted?: boolean;
+  requiredBuilds?: string;
 }) {
   const { t } = useLocale();
   const [state, setState] = useState<ConsentState>(
@@ -55,21 +58,37 @@ export default function AIDataConsentGate({
       setState('accepted');
       return;
     }
-    if (!hasStoredConsent()) {
-      setState('prompt');
-      return;
+    let cancelled = false;
+    async function resolveConsent() {
+      const storedConsent = hasStoredConsent();
+      let promptRequired = true;
+      if (!storedConsent && !developmentPreview) {
+        const policy = requiredBuilds.trim();
+        const build = policy && policy !== 'all' && policy !== 'none'
+          ? await getIOSAIConsentAppBuild() : undefined;
+        promptRequired = requiresIOSAIDataConsent(requiredBuilds, build);
+        if (cancelled) return;
+        console.info('[makaron-ios-native] consent-policy', { build, requiredBuilds, promptRequired });
+      }
+      if (cancelled) return;
+      if (!storedConsent && promptRequired) {
+        setState('prompt');
+        return;
+      }
+      if (shouldLeaveRedirectRootAfterConsent(window.location.pathname)) {
+        // The root route is a server redirect. Mounting its already-suspended
+        // React node after the consent gate opens can reuse an invalid hook tree
+        // in React 19. Cross the redirect boundary with a clean /home request.
+        // Disabling the page is not a grant: only resync an existing consent.
+        if (storedConsent) storeConsent();
+        window.location.replace('/home');
+        return;
+      }
+      setState('accepted');
     }
-    if (shouldLeaveRedirectRootAfterConsent(window.location.pathname)) {
-      // The root route is a server redirect. Mounting its already-suspended
-      // React node after the consent gate opens can reuse an invalid hook tree
-      // in React 19. Sync the server-visible cookie, then cross the redirect
-      // boundary with a clean request to the public Skill home.
-      storeConsent();
-      window.location.replace('/home');
-      return;
-    }
-    setState('accepted');
-  }, [initiallyAccepted, required]);
+    void resolveConsent();
+    return () => { cancelled = true; };
+  }, [initiallyAccepted, required, requiredBuilds]);
 
   if (state === 'accepted') return <>{children}</>;
 

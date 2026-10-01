@@ -98,6 +98,7 @@ export default async function RootLayout({
             <AIDataConsentGate
               required={requiresAIDataConsent}
               initiallyAccepted={requiresAIDataConsent && hasInitialAIDataConsent}
+              requiredBuilds={process.env.IOS_AI_CONSENT_REQUIRED_BUILDS ?? 'all'}
             >
               <Suspense fallback={<>{children}</>}>
                 <NativeIOSPageStack>{children}</NativeIOSPageStack>
