@@ -453,10 +453,10 @@ not retries or an added Seedance pass.
 - Put only the selected timeline source's `<<<media_N>>>` in `story_prompt`.
   For a workspace reference outside Media Index, pass its actual HTTPS URL as
   `video_ref_url`, `video_ref_type: "feature"`, and describe its source authority.
-  Pass `media_refs: [N]` for that selected timeline reference, without also
-  duplicating it in `video_ref_url`; never use an empty reference list when the
-  prompt depends on source footage. Do not include other timeline videos merely
-  because they are available.
+  Timeline video selection comes from that marker: omit `media_refs` and do not
+  duplicate it in `video_ref_url`. This tool's `media_refs` accepts external image
+  URLs, not numeric timeline indices; follow its current parameter contract.
+  Do not include other timeline videos merely because they are available.
 - Preserve source aspect within supported ratios. All selected source videos
   together must fit 15 seconds. Use the requested resolution when supported;
   480p is an explicit budget draft. A selected model's native default resolution
@@ -482,14 +482,17 @@ coverage for each model, otherwise it is not a matched comparison. Save the
 shared prompt and each model's task/snapshot identities in the plan. A failed
 candidate from one model does not cancel the other authorized candidate.
 
-Use a single automatic comparison continuation on the last submission rather
-than duplicate QA actions on every output. It must name all requested models,
-the shared source/plan, known task identities, and require review of every actual
-completed candidate. Wait/resume any pending existing tasks before concluding;
-never substitute one model's artifact for another or re-generate a missing one
-without checking its task. Keep QA and final/native filenames distinct by model.
-The comparison action retains the same direct-submit authorization and no-retry
-ceiling as a single candidate.
+Attach one automatic continuation to each submitted candidate, scoped to that
+model's artifact and the shared source/plan. One model's submission can fail;
+it must not prevent the other candidate's QA and original-sound delivery. Each
+continuation reviews only its own candidate once and saves model-specific QA and
+final/native filenames. Record the other requested model's status separately;
+wait/resume existing tasks before summarizing the comparison. Never substitute
+one model's artifact for another or re-generate a missing one without checking
+its task. A provider balance failure is a blocked submission, not evidence of
+model quality. Resume the persisted exact request only after the funding blocker
+is resolved; do not shorten the take or switch to Prime to evade it. The same
+direct-submit authorization and no-retry ceiling apply to each candidate.
 
 - Native generation is intermediate when source sound restoration or QA remains.
   Include one `completion_actions` entry that names this Skill, the exact source
