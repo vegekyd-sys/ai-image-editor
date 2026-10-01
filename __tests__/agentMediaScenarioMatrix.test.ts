@@ -134,7 +134,8 @@ describe('agent media scenario matrix', () => {
 
   it('keeps video generation default on FAL H3 Max while separating standard SeeDance', () => {
     expect(agent).toContain('Default video model is FAL H3 Max')
-    expect(animate).toContain('Default model behavior: use FAL H3 Max')
+    expect(animate).toContain("Default model behavior: respect the user/app model selection first, then the active Skill's workflow-specific default")
+    expect(animate).toContain('Otherwise use FAL H3 Max')
     expect(animate).toContain('Treat `seedance-fast` and standard `seedance` as separate models')
     expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px')
     expect(ffmpegSkill).toContain('Default video model, higher quality')

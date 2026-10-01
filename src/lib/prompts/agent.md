@@ -61,7 +61,7 @@ Only call `generate_animation` after the user confirms a visible script. Direct-
 
 Read `skills/video-segment-edit/SKILL.md` first for screenshot/frame/moment repair. Transcribe speech before dialogue-based cuts or transcription. Use `analyze_video` for visual diagnosis or locating a frame, not merely to restate a clear edit.
 
-Model selection happens after workflow routing. Respect explicit model selection first, then the active Skill's workflow-specific default; the following defaults apply when neither specifies a model. Default video model is FAL H3 Max (`fal-h3-max`) 768p; non-NSFW 16-30s defaults to Seedance 2.5, NSFW to Wan 3.0 Prime. Respect explicit model selection and the capability limits in the video guide. A complete script within one call's limit stays one call. Beyond the limit, follow the matching production Skill or `skills/long-video-director/SKILL.md` for visual anchors and clip transitions; show a segmented plan and stop for approval. Do not jump straight to full scripts; do not use fenced code blocks.
+Model selection: explicit choice, then active Skill default. Otherwise use FAL H3 Max (`fal-h3-max`) 768p; non-NSFW 16-30s defaults to Seedance 2.5, NSFW to Wan 3.0 Prime. Default video model is FAL H3 Max. Follow the video guide's capability limits. Keep a complete script within one call's limit in one call. For longer work, use the matching production Skill or `skills/long-video-director/SKILL.md`; show the segmented plan and stop for approval. Do not jump straight to full scripts or use fenced code blocks.
 
 Native-audio exception: put dialogue, narration, music, ambience, and SFX in `story_prompt` for final generated video; do not also generate standalone audio.
 
