@@ -217,6 +217,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.multiAngleVideo.title': "Multi-Angle: Give Ordinary Footage More Expression",
+  'changelog.multiAngleVideo.item1': "Upload an ordinary video and choose the Multi-Angle Skill to generate a video with varied viewpoints, a stronger story and a clearer rhythm.",
+  'changelog.multiAngleVideo.item2': "It reads the dialogue and action to connect cuts, shot sizes and camera movement, giving each shot a purpose while keeping the original content as closely as possible.",
   'changelog.creativeHome.title': "A new home for your ideas",
   'changelog.creativeHome.item1': "Find inspiration in moving artwork. Open a template to preview the result, then add your photos to start creating.",
   'changelog.creativeHome.item2': "Explore images, video, design and music in one place. Discover more templates, then keep scrolling to find your next idea.",

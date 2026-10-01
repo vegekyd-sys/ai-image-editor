@@ -255,6 +255,9 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.multiAngleVideo.title': "多機位：讓普通鏡頭更有表達",
+  'changelog.multiAngleVideo.item1': "上傳一段普通影片，選擇「多機位」Skill，就能產生有敘事、有節奏的多機位成片。",
+  'changelog.multiAngleVideo.item2': "它會理解口播與動作，把切鏡、景別與運鏡結合起來，盡量保留原片內容，讓每個鏡頭都有表達。",
   'changelog.creativeHome.title': "全新創作首頁",
   'changelog.creativeHome.item1': "在會動的作品中尋找靈感，點開範本即可查看效果，加入自己的照片開始創作。",
   'changelog.creativeHome.item2': "圖片、影片、設計、音樂，一頁探索。瀏覽更多範本後，繼續向下滑就能發現新作品。",
