@@ -1,15 +1,20 @@
 # Free Credits and Client Save
 
-Status: released to production on 2026-10-02 from integrated commit `b047e97f`.
+Initial rollout: released to production on 2026-10-02 from integrated commit `b047e97f`.
 The dedicated phone Preview remains available separately. This release changes
 web/server behavior and does not upload or release a new native iOS binary.
 
 ## Product Contract
 
 - Registration grants the configured welcome credits once, shared by web and iOS.
+- Watermark Save is limited to the Makaron iOS App, identified by its existing
+  native App marker. Desktop web and ordinary H5, including iPhone/iPad Safari,
+  download clean originals without purchase checks or the watermark dialog.
+  The welcome-credit flag remains enabled on every platform; it is not the
+  platform gate. Ordinary browsers discard old watermark-checkout recovery state.
 - Generated previews, persisted originals, Agent outputs, and CLI/MCP results stay clean.
-- On web, paid users click Save to download the clean original directly, without
-  a preview dialog. Free users see a compact download preview. Save is the primary action;
+- In the iOS App, paid users click Save to download the clean original directly,
+  without a preview dialog. Free App users see a compact download preview. Save is the primary action;
   Remove watermark is secondary and opens the existing billing flow, with
   Subscription selected first and Top Up second.
 - The selected B signature is a white Spark and Makaron wordmark without a plate.
@@ -28,7 +33,8 @@ web/server behavior and does not upload or release a new native iOS binary.
   uses the same access checks. Free images use Canvas. Free videos on old shells
   receive their signature in the WebView, then use the existing `saveToPhotos`
   bridge; new shells declaring native media protocol v1 and video-watermark
-  support use AVFoundation. The old-shell rollout does not require an iOS release.
+  support use AVFoundation. Browsers bypass this watermark flow. The old-shell
+  rollout and this platform-only policy change do not require an iOS release.
   Paid originals and uploaded references retain their direct save path.
 
 ## Implementation
@@ -149,7 +155,8 @@ document start in the main frame. The descriptor contains `protocolVersion: 1`,
 both the native bridge and this supported protocol/capability before selecting
 `saveWatermarkedVideoToPhotos`. App version/UA alone never proves capability.
 Old shells advertise nothing and default to web encoding without probing an
-unsupported action or waiting for a native timeout. Browsers also use web.
+unsupported action or waiting for a native timeout. Ordinary browsers bypass
+watermark Save and retain the direct clean-download path.
 Native failures/cancellation remain failures; neither path falls back to a clean
 free download. Paid originals and image behavior are unchanged.
 
@@ -201,6 +208,31 @@ the Back button's center falls inside the 36px edge zone, where canceling
 Back navigation passed after this exclusion.
 
 ## Acceptance
+
+### iOS App-Only Save Policy (2026-10-02)
+
+- Watermark saving and checkout recovery now use the existing Makaron iOS App
+  identity, not generic iPhone/iPad detection. The welcome popup describes
+  watermark exports only inside the App. Existing four-language welcome copy
+  is reused for ordinary browsers; signup grants and verified-trial access are
+  unchanged.
+- Platform tests cover desktop Chrome, Android H5, iPhone/iPad Safari, old/new
+  native shells and server rendering, including the existing enabled/disabled
+  deployment flags. All 1,972 unit tests passed (one skipped), TypeScript and CLI
+  smoke passed, and lint/i18n guards passed with three pre-existing warnings.
+- An unauthenticated local Chrome opened a retained public generated video and
+  saved directly with no watermark dialog, at desktop and 390x844 H5 viewport.
+  Both downloads match the original SHA-256
+  `be05794ca527702c58fffb2f1bef3c94e95bcfcafaa521eb4aad2c55f1fb8153`.
+  Relevant browser error/warning logs were empty.
+- The old native shell on official iOS 27.0 opened the same local candidate.
+  Free Save still showed the watermark/Remove watermark dialog and successfully
+  wrote `IMG_0047.MP4` to Photos. Its burned-in mark was visually verified;
+  all 900 frames, 832x1108 dimensions and AAC audio remain present, and the
+  complete video decodes. No native package release is required.
+- These local candidate checks are distinct from the initial production checks
+  below. Ordinary browsers intentionally permit clean downloads regardless of
+  payment; this is a platform-specific conversion rule, not DRM.
 
 ### Production Release (2026-10-02)
 

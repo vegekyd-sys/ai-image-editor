@@ -2985,7 +2985,7 @@ function HomePageInner() {
               {t('home.welcomeTitle')}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>
-              {t(FREE_MEDIA_ENABLED ? 'home.freeWatermarkGift' : 'home.welcomeGift')}
+              {t(FREE_MEDIA_ENABLED && isIOSAppShell ? 'home.freeWatermarkGift' : 'home.welcomeGift')}
             </div>
             <div style={{
               marginTop: 24, padding: '20px 0', borderRadius: 16,

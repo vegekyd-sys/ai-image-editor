@@ -27,7 +27,7 @@ const IOS_CUI_PAN_EDGE_PX = 36;
 const IOS_CUI_PAN_COMMIT_PX = 86;
 const IOS_CUI_PAN_MIN_DX = 10;
 import { downloadAsset, getDownloadAssetPreview, prepareDownloadAsset, PreparedDownloadCache, trySavePaidDownload, type DownloadAssetParams } from '@/lib/editor/download';
-import { FREE_MEDIA_ENABLED } from '@/lib/free-media-policy';
+import { isWatermarkSaveFlowEnabled } from '@/lib/free-media-policy';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
@@ -3044,7 +3044,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [timeline, viewIndex, isViewingVideo, currentSnap?.videoMeta?.videoUrl, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
   const handleDownload = useCallback(async () => {
     const generated = Boolean(currentSnap?.design || currentSnap?.messageId || isGeneratedVideoSnapshot(currentSnap) || draftParentIndexRef.current !== null);
-    if (FREE_MEDIA_ENABLED && generated) {
+    if (isWatermarkSaveFlowEnabled() && generated) {
       const params = downloadParams();
       try {
         if (!(await trySavePaidDownload(params, saveAssetCache.current!))) setSaveRequest(params);
@@ -3065,7 +3065,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
   // Persist only the selected snapshot identity, never media bytes or signed URLs.
   useEffect(() => {
-    if (!FREE_MEDIA_ENABLED || !projectId || saveRequest || returningToSave || !snapshots.length) return;
+    if (!isWatermarkSaveFlowEnabled()) {
+      try {sessionStorage.removeItem('mkr_save_checkout');} catch { /* Storage may be unavailable. */ }
+      return;
+    }
+    if (!projectId || saveRequest || returningToSave || !snapshots.length) return;
     try {
       const saved = JSON.parse(sessionStorage.getItem('mkr_save_checkout') || 'null');
       if (!saved || saved.projectId !== projectId) return;
