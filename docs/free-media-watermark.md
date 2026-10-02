@@ -1,7 +1,8 @@
 # Free Credits and Client Save
 
-Status: versioned candidate on `codex/free-credits-watermark`; dedicated phone
-Preview deployed on 2026-10-01. No production rollout has been performed.
+Status: released to production on 2026-10-02 from integrated commit `b047e97f`.
+The dedicated phone Preview remains available separately. This release changes
+web/server behavior and does not upload or release a new native iOS binary.
 
 ## Product Contract
 
@@ -200,6 +201,56 @@ the Back button's center falls inside the 36px edge zone, where canceling
 Back navigation passed after this exclusion.
 
 ## Acceptance
+
+### Production Release (2026-10-02)
+
+- Integrated the watermark, billing UI and verified-trial correction with current
+  `dev`, including its server-runtime CRC32C packaging fixes. Full release gates
+  passed: 1,965 tests passed, one skipped; TypeScript, CLI smoke, i18n guards and
+  optimized build passed. Lint has zero errors and three pre-existing warnings.
+- Initial production deployment `dpl_FGuiaiSwZwu7EK4gFLGcBwStCJmb` was Ready and
+  served `https://www.makaron.app`. Production health reported 12 healthy services,
+  zero unhealthy and zero unavailable.
+- Production free-media flag is enabled. Both Preview Sandbox media access and
+  local StoreKit media access are disabled on production. Receipt verification
+  retains its existing Sandbox/Production compatibility, but Sandbox purchases
+  cannot unlock production clean-media access. Preview configuration is unchanged.
+- Production AI consent remains required for all builds, not selectively hidden
+  after App Review. The old shell showed the consent screen before QA login.
+- The unmodified old-shell media implementation, version 1.0.8 (17), loaded the
+  actual production site on official iOS 27.0 Simulator. Existing QA login and
+  retained generated-image opening passed. A free image saved successfully to
+  Photos; the actual new `IMG_0045.JPG` contains the expected bottom-right mark.
+- A retained 30-second production video saved through web encoding and the old
+  `saveToPhotos` bridge. The actual new `IMG_0046.MP4` fully decodes, retaining
+  832x1108 dimensions, all 900 frames and its AAC audio. Copied audio SHA-256 is
+  identical to the original (`8faa42cb39c08e738e6f3f1ba18e8c1a8b0bcbbdf69618903ed676734cf42a0a`).
+  A decoded middle frame visibly contains the burned-in mark.
+- Existing paid-user web Save downloaded the byte-identical clean original:
+  source and browser download SHA-256 both equal
+  `be05794ca527702c58fffb2f1bef3c94e95bcfcafaa521eb4aad2c55f1fb8153`.
+- An independent, unauthenticated production browser opened the publicly
+  accessible generated-video project. Save displayed the free, watermarked
+  preview. Access follows the downloader, not the project owner's subscription.
+  Uploaded references remain exempt, and this is not a CDN access-control scheme.
+- Actual production native subscription and top-up views passed UI inspection:
+  localized monthly/annual controls, native product prices, Restore purchase,
+  and no redundant Apple In-App Purchase information block.
+- Production entitlement, Agent, Apple products/verification and media
+  materialization endpoints returned their expected authentication or input
+  validation responses without server-load errors. The poll check used an empty
+  request and returned input validation, not a generated-task completion test.
+- No database migration, existing-customer entitlement injection or new real-money
+  purchase was performed. User physical-device acceptance was on the dedicated
+  Preview; this production native regression was on Simulator. New production
+  purchase, live trial activation and automatic renewal remain untested here.
+- Local evidence: `/tmp/makaron-production-free-image-save-paywall-20261002.xcresult`,
+  `/tmp/makaron-production-free-video-save-20261002.xcresult`,
+  `/tmp/makaron-production-topup-inspect-20261002.xcresult`,
+  `/tmp/makaron-production-anonymous-save-20261002.png`, and
+  `/tmp/makaron-production-free-video-frame-20261002.jpg`.
+- Pre-release rollback deployment: `dpl_GGUfLz3vUtw9fDwTf3ZUsBYbwM2X`.
+  Rolling back application code does not roll back customer orders or balances.
 
 ### Phone Preview Handoff
 
