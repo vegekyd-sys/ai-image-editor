@@ -18,8 +18,11 @@ Preview deployed on 2026-10-01. No production rollout has been performed.
   Playback controls sit below the video.
 - Uploaded references are not watermarked. Animated and static designs use their
   existing browser export/capture before the free download receives the signature.
-- A completed positive-value Stripe or Production Apple purchase unlocks clean web
-  downloads. Welcome credits, free introductory trials, Sandbox and refunded rows do not.
+- A completed positive-value Stripe or Production Apple purchase unlocks clean
+  downloads. A verified subscription in `trialing` status also unlocks clean
+  exports while its current period is valid. Welcome credits, expired or revoked
+  trials and refunded rows do not. Sandbox membership is accepted only by the
+  explicitly opted-in dedicated Preview, never by production.
 - Current access is account-level purchase access. Generated media in native iOS
   uses the same access checks. Free images use Canvas. Free videos on old shells
   receive their signature in the WebView, then use the existing `saveToPhotos`
@@ -200,6 +203,158 @@ Back navigation passed after this exclusion.
 
 ### Phone Preview Handoff
 
+#### Verified Trial Clean Export Correction (2026-10-02)
+
+- The positive-purchase-only entitlement omitted verified introductory trials:
+  their completed ledger entries have `source=trial` and `amount_usd=0`.
+  Entitlement now accepts a server-owned known-plan subscription in `trialing`
+  status only within its current period, with the existing provider/environment
+  isolation. Revoked Apple trials remain refunded even with a future expiry.
+  Existing positive-value purchases retain their behavior; welcome credits and
+  historical zero-dollar ledger rows alone do not unlock clean exports.
+- Current phone alias `https://makaron-phone-01a0eb24.vercel.app/home` points to
+  Ready deployment `dpl_rynAn4XZ5bjTxrw9waifQHQPvXL4`, immutable Preview
+  `https://ai-image-editor-cxcssyogy-vegekyd-sys-projects.vercel.app`.
+  Both build-time and runtime free-media flags are explicitly `true`;
+  verified Sandbox access is opted in and local StoreKit access is disabled.
+  This web/server correction requires no native update. Production and shared
+  Preview configuration were not changed; unrelated provider/H3 edits excluded.
+- The reported user's actual Sandbox receipt had an accelerated two-minute
+  interval, already expired when audited. Read-only replay with that exact row
+  returns true during the valid interval on this Preview, false after expiry,
+  and false in production. No purchase, credit balance or expiry was altered.
+  Evidence: `/tmp/makaron-trial-access-integration-20261002.mts`.
+- Hosted acceptance on the owned iOS 27 Simulator used old-native build 17 and
+  a fresh independent QA account. City Map template intent survived signup and
+  resumed automatically into a new project. A real provider-generated Shanghai
+  image was viewed and saved with its watermark through the native Photos bridge.
+  Photos resource `IMG_0044.JPG` is 471,064 bytes and 1360x768; actual saved pixels
+  were inspected. No paid entitlement or generation result was injected. OTP
+  delivery was not accepted: the QA-only registration code was retrieved via
+  the admin link API and entered in the app.
+- Remove watermark opened the native-priced subscription popup. Initiating the
+  Basic trial reached Apple's system account login; actual Sandbox purchase,
+  verification return and clean Photos output remain pending that login. This
+  is not a completed payment test. Physical-device automation also remains
+  blocked by the missing Xcode developer account/test-runner signing profile.
+  Evidence: `/tmp/makaron-hosted-real-generation-20261002.xcresult`,
+  `/tmp/makaron-hosted-free-save-paywall-final-20261002.xcresult`, and
+  `/tmp/makaron-hosted-trial-purchase-boundary-final-20261002.xcresult`.
+- Three focused suites passed 45 tests; the expanded seven-suite regression run
+  passed 69 tests. TypeScript, scoped ESLint and diff whitespace checks passed.
+
+#### Purchase Popup Polish (2026-10-02)
+
+- Phone Preview at that handoff was `https://makaron-phone-01a0eb24.vercel.app/home`.
+  That task-specific stable alias pointed to deployment
+  `dpl_HovcsWDS3b9EXEf8mjk4GVgCyQsu`, Preview/Ready, immutable URL
+  `https://ai-image-editor-4699olwxa-vegekyd-sys-projects.vercel.app`.
+  It includes the video-save correction below and the billing UI changes;
+  unrelated dirty provider/H3 edits remain excluded. No shared alias was changed.
+- The normal subscription/top-up popup now localizes balance, billing cycles,
+  plan names, price loading/errors and Restore in zh, zh-Hant, ja and en.
+  Subscription/top-up use quiet primary tabs; month/year use a compact secondary
+  control. The redundant Apple information card is removed. Top-ups use a
+  two-column grid retaining all five credit packs; Restore is a tertiary action
+  on both tabs. StoreKit prices, trial eligibility, renewal disclosure, purchase
+  handlers and verification are preserved.
+- Four focused suites passed 38 tests, including existing native subscription,
+  top-up and pre-auth trial checks. TypeScript, scoped ESLint, i18n guard and
+  optimized hosted build passed. Browser QA passed 24 states: four locales,
+  three viewport sizes (320x640, 402x874, 1280x900), and two tabs, including
+  annual switching and all pack selections with no horizontal text overflow or
+  browser exceptions. This browser fixture disables purchases and mocks only
+  native price availability; it is presentation acceptance, not Apple checkout.
+  Evidence: `/tmp/makaron-billing-ui-responsive-qa.json`.
+- Actual hosted Preview acceptance on the owned iOS 27 Simulator used unchanged
+  old-native build 17: retained project -> Save -> Remove watermark -> billing.
+  The native StoreKit product query returned actual prices and the eligible
+  Basic trial. Both subscription and top-up screenshots were inspected, with
+  all five top-up prices present and no Apple banner. No purchase was initiated.
+  Evidence: `/tmp/makaron-billing-ios27-subscribe.jpg` and
+  `/tmp/makaron-billing-ios27-topup.jpg`.
+- Old-native 1.0.8 (17) was rebuilt with only the new stable Preview URL and
+  installed on Tianyi's connected iPhone, installation sequence 5064. Native
+  boot logs confirm `/home` loaded from that alias. This does not assert a new
+  physical-device UI/payment acceptance. Evidence:
+  `/tmp/makaron-billing-ui-phone-install-20261002.json` and
+  `/tmp/makaron-billing-ui-phone-launch-20261002.log`.
+- Production, shared Preview configuration, Sandbox transactions and App Store
+  release were not changed. This web UI change requires no App Store update.
+
+#### Production-Build Video Save Correction (2026-10-02)
+
+- The user's 10-second H3 video failed inside the free Save dialog. This exact
+  hosted Preview + old native shell path had not been accepted; prior local
+  StoreKit/original-save and standalone watermark QA did not cover it.
+- Reproduced the same dialog error on the owned iOS 27 Simulator with unchanged
+  old-native build 17 and the retained project video, without generation charges,
+  account mutations, purchase changes, or an entitlement stub. The project was
+  opened as an unauthenticated reader, not the user's logged-in phone session.
+- The new stage diagnostic exposed `web-watermark / TypeError / options.format
+  must be an OutputFormat.` before encoding started. The standalone bundled
+  encoder and old Photos bridge succeeded with identical original bytes.
+  Pinning Turbopack's `mediabunny` alias to its supplied single ESM bundle keeps
+  class identities together and fixes the production-build failure. No library
+  version, native implementation, or paid-access policy was changed.
+- Video-fix Preview at that handoff: `https://ai-image-editor-pxtf6g8ws-vegekyd-sys-projects.vercel.app/home`,
+  deployment `dpl_7CqgbQ89kZpakrRNBmYG79HX6NZH`, Preview/Ready. It contains the
+  earlier flag correction, the media runtime alias, and URL-redacted save-stage
+  diagnostics. The ten unrelated dirty provider/H3 files remain excluded.
+  Optimized remote build and TypeScript checking passed; 36 focused unit tests
+  and scoped ESLint passed. The runtime-identity test guards the alias and actual
+  bundled classes; it does not replace the hosted native acceptance below.
+- Two cold-start runs through the actual project's Save button and Save dialog
+  completed in 16.589 and 13.423 seconds. Both saved through the existing Photos
+  bridge, with no new native watermark capability. Photos contains `IMG_0041.MP4`
+  and `IMG_0042.MP4` on Simulator `82B3B260-7CE8-4D0A-8A13-00FA4A2C6B32`.
+  Full decoding passed for both; the first has 1344x768 H.264, all 243 video frames,
+  318 AAC packets, stereo 32 kHz audio, and a visible burned-in white watermark.
+  Original and saved AAC packet hashes match. The 10.189-second output includes
+  the existing audio-priming timestamp shift, not truncated content.
+- Visual evidence: `/tmp/makaron-user-video-formal-preview-photos-frame.png`.
+  Original/proxy SHA-256:
+  `7e63b7a560f335f001b55993f8728ebd6dfa3a91d9c395479fe8e374fa6f587a`.
+  Diagnostics-only Preview `6ajxd2taq` retains the reproducible failing build;
+  previous phone Preview `ikrq7gljj` is immutable and does not contain this fix.
+- Old-native 1.0.8 (17) was rebuilt with only the Preview URL changed and installed
+  on Tianyi's iPhone, installation sequence 5056. Evidence:
+  `/tmp/makaron-video-save-fix-phone-install-20261002.json` and
+  `/tmp/makaron-video-save-fix-phone-launch-20261002.log`. Phone launch was blocked
+  by the lock screen; physical logged-in Save remains pending. The changed origin
+  may require signing in again. Production, shared aliases/env, App Store release,
+  and Sandbox transactions were not changed.
+
+#### Free Media Flag Correction (2026-10-02)
+
+- The user reported no watermark dialog while exporting with the re-registered
+  `tianyi.cai@outlook.com` test account. Read-only checks found only a zero-value
+  welcome grant and no subscription or paid purchase; no account data was changed.
+- Both October 1 phone deployments used `NEXT_PUBLIC_FREE_MEDIA_ENABLED=1`,
+  while the policy accepted only `true`. This disabled the watermark entry path.
+  Successful installation/homepage checks did not verify the export feature flag.
+- The policy now accepts exactly `true` or `1`, with all other values off. Seven
+  tests import the actual policy rather than mocking it. Policy, entitlement,
+  Save dialog, and iOS signup regressions passed: 41 tests in four suites.
+- Previous flag-corrected phone Preview: `https://ai-image-editor-ikrq7gljj-vegekyd-sys-projects.vercel.app/home`,
+  deployment `dpl_7B487513RUPahcVuAdEiM9rDShCv`, Preview/Ready. Staging contains
+  the previous `ff7cb15c` runtime plus only this policy fix, excluding unrelated
+  dirty provider/H3 changes. Build and runtime flags both use canonical `true`.
+  Sandbox access and build-18 consent settings are unchanged. Production and
+  shared aliases/environment settings were not changed.
+- Browser verification used the user's existing poster through the normal Save
+  button, without generating more media. An unauthenticated browser (not the
+  user's logged-in phone session) displayed the free Save dialog and produced a
+  PNG visibly containing the bottom-right white Makaron mark. Screenshot:
+  `/tmp/makaron-watermark-flag-fix-dialog-20261002.jpg`; downloaded artifact:
+  `/Users/tianyicai/Downloads/makaron-v的海报奇想-2.png`.
+- The same old-native 1.0.8 (17) test package was rebuilt and installed successfully
+  on Tianyi's iPhone, pointing to the corrected Preview. Evidence:
+  `/tmp/makaron-watermark-flag-fix-install-20261002.json`. A subsequent launch
+  attempt was blocked by the locked phone; logged-in physical Save and Sandbox
+  purchase/Restore acceptance remain pending. A changed Preview origin may
+  require signing in again; no passwords or account entitlements were changed.
+
 #### Refreshed Preview With Latest Dev
 
 - On 2026-10-01, `dev` at `7a7ca352` was merged into this candidate in
@@ -207,11 +362,12 @@ Back navigation passed after this exclusion.
 - Build-based launch consent control was added in `ff7cb15c`. The uploaded
   runtime snapshot is that commit, including the latest creative homepage and
   project-entry improvements. Ten unrelated dirty provider/H3 files were excluded.
-- Current phone Preview: `https://ai-image-editor-7bumv1qq6-vegekyd-sys-projects.vercel.app/home`.
+- Previous phone Preview: `https://ai-image-editor-7bumv1qq6-vegekyd-sys-projects.vercel.app/home`.
   Deployment `dpl_FFsrMfZqaDHgHpSznWeQHpgoyGMK` is Preview/Ready; remote optimized
   build and TypeScript checks passed. No production deployment or shared alias/env
   update was performed.
-- Single-deployment configuration retains free media, verified Apple Sandbox
+- Single-deployment configuration intended to enable free media (the flag
+  mismatch was later found and corrected above), retains verified Apple Sandbox
   media access, and Sandbox receipt verification, explicitly disables local
   Xcode media access, and sets `IOS_AI_CONSENT_REQUIRED_BUILDS=18`. Build 17 omits
   the launch page; build 18 retains it. No consent grant is written by omission.
@@ -410,8 +566,9 @@ transactions, and preserves the existing database ledger.
 This isolated test explicitly sets `MAKARON_E2E_APPLE_MEDIA_ACCESS=1` so those
 genuine local Apple purchases unlock the same original-save path. The switch
 requires `MAKARON_E2E=1` and loopback Supabase; shared environments fail closed.
-Default production entitlement policy remains Production Apple/positive Stripe
-only, excluding Sandbox, local testing, welcome grants, free trials and refunds.
+At that acceptance checkpoint, production entitlement excluded free trials.
+The October 2 correction now includes a verified, unexpired trial subscription;
+production still excludes Sandbox, local testing, welcome grants and refunds.
 
 Final Photos resources `IMG_0009.PNG` (1,409,603 bytes) and `IMG_0010.MP4`
 (10,188,033 bytes) are byte-identical to their clean originals. Full MP4 decoding

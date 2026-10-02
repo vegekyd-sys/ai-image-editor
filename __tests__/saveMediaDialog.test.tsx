@@ -159,6 +159,20 @@ describe('SaveMediaDialog choices and checkout return', () => {
     expect(mocks.save).not.toHaveBeenCalled();expect(props.onSaved).not.toHaveBeenCalled();
   });
 
+  it('records the failed phase without exposing media URLs in diagnostics', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mocks.video.mockRejectedValue(new TypeError('Failed https://cdn.makaron.app/video.mp4?token=private'));
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    render(<SaveMediaDialog {...props} prepare={async () => ({ blob: original, filename: 'work.mp4', kind: 'video' })} />);
+    await waitFor(() => expect(screen.getByTestId('save-free').hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByTestId('save-free'));
+    await screen.findByRole('alert');
+    expect(warn).toHaveBeenCalledWith('[media-save]', {
+      phase: 'web-watermark', kind: 'video', name: 'TypeError', message: 'Failed [url]',
+    });
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
   it('uses native composition only when the new shell declares support', async () => {
     mocks.nativeWatermark.mockReturnValue(true);
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});

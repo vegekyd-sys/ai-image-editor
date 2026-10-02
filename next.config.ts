@@ -78,6 +78,10 @@ const nextConfig: NextConfig = {
     ],
   },
   turbopack: {
+    // Keep media class identities together across lazy imports and encoder registration.
+    resolveAlias: {
+      mediabunny: './node_modules/mediabunny/dist/bundles/mediabunny.mjs',
+    },
     rules: {
       "*.md": {
         loaders: ["raw-loader"],

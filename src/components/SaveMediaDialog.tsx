@@ -117,25 +117,34 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
     videoRef.current?.pause();
     const controller = new AbortController();
     exportController.current = controller;
+    let phase = 'prepare';
     try {
       const ready = asset || await preparedAsset.current;
       controller.signal.throwIfAborted();
       if (paid) {
+        phase = 'access';
         if (!(await checkMediaDownload())) {setPaid(false);setMarkVisible(true);throw new Error('Access changed');}
       }
       if (!paid && ready.kind === 'video' && isNativeVideoWatermarkAvailable()) {
+        phase = 'native-watermark-save';
         await saveWatermarkedVideoToNativePhotoLibrary(ready.blob, ready.filename, markUrl, setProgress, controller.signal);
       } else {
+        phase = paid ? 'save' : 'web-watermark';
         const blob = paid ? ready.blob : ready.kind === 'image' ? await watermarkImage(ready.blob)
           : await watermarkVideo(ready.blob, setProgress, controller.signal);
         controller.signal.throwIfAborted();
+        phase = 'save';
         await savePreparedDownload({ ...ready, blob, filename: !paid && ready.kind === 'image'
           ? ready.filename.replace(/\.[^.]+$/, '.png') : ready.filename });
       }
       controller.signal.throwIfAborted();
       onSaved();onClose();
-    } catch {
-      if (!controller.signal.aborted) setError(t(kind === 'video' ? 'editor.saveVideoFailed' : 'editor.saveFailed'));
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        console.warn('[media-save]', { phase, kind, name: error instanceof Error ? error.name : 'UnknownError',
+          message: (error instanceof Error ? error.message : String(error)).replace(/https?:\/\/\S+/g, '[url]') });
+        setError(t(kind === 'video' ? 'editor.saveVideoFailed' : 'editor.saveFailed'));
+      }
     } finally {setSaving(false);}
   };
 

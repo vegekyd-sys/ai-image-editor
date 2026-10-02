@@ -241,6 +241,24 @@ describe('Apple billing integration', () => {
     });
   });
 
+  it('does not reactivate a revoked introductory trial with a future expiry', async () => {
+    mockSingle.mockResolvedValueOnce({ data: { value: '1500' }, error: null });
+    const { applyAppleTransaction } = await import('@/lib/billing/apple');
+    const result = await applyAppleTransaction({
+      userId: '11111111-1111-4111-8111-111111111111',
+      transaction: transaction({
+        productId: 'app.makaron.ios.subscription.basic.monthly',
+        offerType: 1,
+        expiresDate: Date.now() + 3 * 24 * 60 * 60 * 1000,
+        revocationDate: Date.now() - 1000,
+      }),
+      grantCredits: true,
+    });
+    expect(mockUpsertAppleSubscription).toHaveBeenCalledWith(expect.objectContaining({ status: 'refunded' }));
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(result.credited).toBe(false);
+  });
+
   it('keeps an accelerated Sandbox trial claim usable for three product days after signup', async () => {
     mockSingle.mockResolvedValueOnce({ data: { value: '1500' }, error: null });
     mockGetBalance.mockResolvedValue({ balance: 1500, lifetimePurchased: 0, lifetimeUsed: 0 });

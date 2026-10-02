@@ -2,6 +2,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import CreditPopup from '@/components/CreditPopup';
+import { translate, translations } from '@/lib/locales';
 
 const mocks = vi.hoisted(() => ({
   getNativeAppleProducts: vi.fn(),
@@ -19,7 +20,7 @@ vi.mock('@/lib/i18n', () => ({
   useLocale: () => ({
     locale: 'en',
     setLocale: vi.fn(),
-    t: (key: string) => ({
+    t: (key: string, ...args: unknown[]) => ({
       'billing.getMoreCredits': 'Get more credits',
       'billing.topUp': 'Top Up',
       'billing.subscribe': 'Subscribe',
@@ -73,7 +74,10 @@ vi.mock('@/lib/i18n', () => ({
       'billing.trial.restoring': 'Restoring...',
       'billing.trial.verificationPending': 'Subscription complete. Tap Continue confirmation; no restore is needed.',
       'billing.checkoutStartFailed': 'Unable to open checkout. Please try again.',
-    }[key] || key),
+    }[key] || (() => {
+      const entry = translations.en[key as keyof typeof translations.en];
+      return typeof entry === 'function' ? (entry as (...values: unknown[]) => string)(...args) : entry || key;
+    })()),
   }),
 }));
 
@@ -187,8 +191,8 @@ describe('CreditPopup Apple purchase flow', () => {
 
   it('explains watermark unlocking without starting a purchase on open', async () => {
     render(<CreditPopup open watermarkUnlock onClose={vi.fn()} balance={120} subscription={null} />);
-    expect(screen.getByText('billing.unlockOriginal')).toBeTruthy();
-    expect(screen.getByTestId('watermark-checkout-description').textContent).toBe('billing.unlockOriginalDescription');
+    expect(screen.getByText(translate('en', 'billing.unlockOriginal'))).toBeTruthy();
+    expect(screen.getByTestId('watermark-checkout-description').textContent).toBe(translate('en', 'billing.unlockOriginalDescription'));
     await waitFor(() => expect(mocks.getNativeAppleProducts).toHaveBeenCalled());
     expect(mocks.purchaseNativeAppleProduct).not.toHaveBeenCalled();
     expect(mocks.purchaseNativeAppleSubscription).not.toHaveBeenCalled();

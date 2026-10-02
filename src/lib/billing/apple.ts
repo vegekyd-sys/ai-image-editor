@@ -377,7 +377,8 @@ export async function applyAppleTransaction(args: {
   const currentPeriodEnd = isIntroTrial && overridePeriodEnd
     ? overridePeriodEnd
     : receiptPeriodEnd
-  const introTrialActive = isIntroTrial && Boolean(currentPeriodEnd && currentPeriodEnd.getTime() > Date.now())
+  const introTrialActive = isIntroTrial && !transaction.revocationDate
+    && Boolean(currentPeriodEnd && currentPeriodEnd.getTime() > Date.now())
   const status = introTrialActive ? 'trialing' : baseStatus
 
   await upsertAppleSubscription({
