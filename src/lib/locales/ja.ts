@@ -1,6 +1,8 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  "skill.multiAngle.label": "マルチアングル動画",
+  "skill.multiAngle.description": "元の演技を軸に、画角・ディテール・リアクションを組み立て、単一カメラの動画を物語性のあるマルチアングル映像にします。",
   "homeOrbit.title1": "想像を、",
   "homeOrbit.title2": "待たせない。",
   "homeOrbit.mobileDescription": "画像、映像、デザイン、音楽",
@@ -254,6 +256,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.multiAngleVideo.title': "マルチアングル：いつもの映像に表現力を",
+  'changelog.multiAngleVideo.item1': "動画をアップロードして「マルチアングル」Skillを選ぶと、ストーリーとリズムのある複数視点の動画を生成できます。",
+  'changelog.multiAngleVideo.item2': "話す内容と動きを読み取り、カット、画角、カメラワークを組み合わせて、元の内容をできるだけ保ちながら各ショットに意味を持たせます。",
   'changelog.creativeHome.title': "創作のための新しいホーム",
   'changelog.creativeHome.item1': "動く作品からインスピレーションを。テンプレートを開いて仕上がりを確認し、自分の写真で創作を始められます。",
   'changelog.creativeHome.item2': "画像、動画、デザイン、音楽をひとつのページで。「もっと見る」の後は、下にスクロールするだけで新しいテンプレートに出会えます。",

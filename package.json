@@ -6,6 +6,7 @@
     "dev": "next dev --webpack",
     "dev:ios": "MOCK_AI=true next dev --webpack -H 0.0.0.0 -p 3001",
     "build": "next build",
+    "postbuild": "node scripts/check-server-runtime.mjs",
     "start": "next start",
     "start:ios": "MOCK_AI=true next start -H 0.0.0.0 -p 3001",
     "test": "vitest run",

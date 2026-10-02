@@ -80,6 +80,7 @@ marketing/meta-ads/
 !/scripts/
 /scripts/*
 !/scripts/makaron-release-check.mjs
+!/scripts/check-server-runtime.mjs
 !/scripts/makaron-release-prod.mjs
 !/scripts/makaron-runner.mjs
 !/scripts/makaron-worktree-fastpath.mjs

@@ -1,4 +1,6 @@
 const zh = {
+  "skill.multiAngle.label": "多机位视频",
+  "skill.multiAngle.description": "围绕原片表演设计景别、细节与反应镜头，把单镜头视频变成有叙事感的多机位短片。",
   "homeOrbit.title1": "想象",
   "homeOrbit.title2": "不必等待",
   "homeOrbit.mobileDescription": "图片、电影、设计、音乐",
@@ -217,6 +219,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.multiAngleVideo.title': "多机位：让普通镜头更有表达",
+  'changelog.multiAngleVideo.item1': "上传一条普通视频，选择「多机位」Skill，就能生成有叙事、有节奏的多机位成片。",
+  'changelog.multiAngleVideo.item2': "它会理解口播和动作，把切镜、景别与运镜结合起来，尽量保留原片内容，让每个镜头都有表达。",
   'changelog.creativeHome.title': "全新创作首页",
   'changelog.creativeHome.item1': "在会动的作品中寻找灵感，点开模板即可查看效果，加入自己的照片开始创作。",
   'changelog.creativeHome.item2': "图片、视频、设计、音乐，一页探索。浏览更多模板后，继续向下滑就能发现新作品。",

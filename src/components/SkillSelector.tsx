@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useLocale } from '@/lib/i18n';
 
 export interface SkillItem {
   name: string;
@@ -35,6 +36,10 @@ export default function SkillSelector({
   overrideLabel,
   direction = 'up',
 }: SkillSelectorProps) {
+  const { t } = useLocale();
+  const displaySkills = skills.map(skill => skill.builtIn && skill.name === 'multi-angle-video'
+    ? { ...skill, label: t('skill.multiAngle.label'), description: t('skill.multiAngle.description') }
+    : { ...skill, description: undefined });
   const [open, setOpen] = useState(false);
   useEffect(() => { onOpenChange?.(open); }, [open, onOpenChange]);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -96,8 +101,10 @@ export default function SkillSelector({
     setOpen(v => !v);
   }, []);
 
-  const selectedLabel = overrideLabel
-    || (selectedSkill ? (skills.find(s => s.name === selectedSkill)?.label || selectedSkill) : null);
+  const selectedItem = displaySkills.find(skill => skill.name === selectedSkill);
+  const selectedLabel = (selectedItem?.description ? selectedItem.label : null)
+    || overrideLabel
+    || (selectedSkill ? (selectedItem?.label || selectedSkill) : null);
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative', flexShrink: 0 }}>
@@ -165,9 +172,10 @@ export default function SkillSelector({
           {skills.length === 0 && (
             <div style={{ padding: '8px 12px', color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Loading...</div>
           )}
-          {skills.map(skill => (
+          {displaySkills.map(skill => (
             <button
               key={skill.name}
+              title={skill.description}
               onClick={() => { onSkillChange(selectedSkill === skill.name ? null : skill.name); setOpen(false); }}
               className={`w-full flex items-center justify-between border-none cursor-pointer text-left transition-colors hover:bg-white/[0.06] ${selectedSkill === skill.name ? 'mkr-liquid-pill' : ''}`}
               style={{

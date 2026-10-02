@@ -25,6 +25,13 @@ npm run build
 
 `npm run lint` is useful for new errors, but this repo can have existing warnings. Do not let unrelated lint noise replace targeted tests, build, and smoke evidence.
 
+`npm run build` runs `scripts/check-server-runtime.mjs` in its `postbuild` gate.
+It checks the actual Next API file traces for the executable CRC32C entry, not
+just its package.json. This covers Agent, video polling, materialize, Remotion,
+and their cron handlers. A missing runtime blocks both local and Vercel builds.
+After release, probe the affected API routes as well as `/api/health`: health
+can pass while a different function fails to load its server dependencies.
+
 For new model/provider work, add these checks:
 
 - Dedicated task id namespace or route prefix when the provider has distinct polling/status behavior.

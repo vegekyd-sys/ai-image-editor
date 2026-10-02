@@ -17,12 +17,13 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-10-02', localeKey: 'multiAngleVideo' },
   { date: '2026-09-29', localeKey: 'creativeHome' },
   { date: '2026-09-23', localeKey: 'gpt6AgentModels' },
   { date: '2026-09-22', localeKey: 'qwenSpicy' },
@@ -968,6 +969,10 @@ const CHANGELOG: ChangelogEntry[] = [
 ];
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  multiAngleVideo: {
+    title: 'changelog.multiAngleVideo.title',
+    items: ['changelog.multiAngleVideo.item1', 'changelog.multiAngleVideo.item2'],
+  },
   creativeHome: {
     title: 'changelog.creativeHome.title',
     items: ['changelog.creativeHome.item1', 'changelog.creativeHome.item2'],

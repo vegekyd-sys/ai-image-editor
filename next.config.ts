@@ -70,7 +70,9 @@ const nextConfig: NextConfig = {
     ],
   },
   outputFileTracingIncludes: {
-    '/api/agent/**': [
+    // S3 is also loaded by export, materialize, snapshot polling, and cron routes.
+    // Keep its checksum runtime in every API bundle, including re-exported handlers.
+    '/api/**': [
       './node_modules/@aws-crypto/**',
       './node_modules/@aws-sdk/types/**',
       './node_modules/@smithy/**',

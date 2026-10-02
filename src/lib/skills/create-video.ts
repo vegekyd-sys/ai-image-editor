@@ -442,21 +442,23 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       : undefined;
     let billingUsage: VideoQuoteInput | undefined;
     if (input.onBeforeProviderSubmit) {
-      // Smart output duration is fixed before a billed MCP submission so the
-      // provider and the reservation cannot choose different defaults.
+      // Resolve smart defaults before billing, but preserve Seedance's -1
+      // source-following provider contract and quote measured seconds separately.
       const durations = h3References?.videos.map(clip => clip.durationSec) ?? resolvedReferenceVideoMetas?.map(meta => meta.durationSec);
       if (providerVideoUrls.length && (!durations || durations.length !== providerVideoUrls.length || durations.some(n => !n || !Number.isFinite(n)))) {
         return { success: false, retryable: false, message: 'Cannot measure reference-video duration for billing. Use a readable MP4/MOV before submitting.' };
       }
       const sourceSeconds = durations?.reduce<number>((sum, value) => sum + (value ?? 0), 0) ?? 0;
       const retainsSource = route.provider === 'fal-sync' || (videoOperation === 'edit' && (provider === 'grok' || provider === 'seedance-2.5'));
-      if (retainsSource && !sourceSeconds) return { success: false, message: 'A measured source duration is required for video editing.' };
-      if (resolvedDuration == null || resolvedDuration === -1) {
+      const adaptiveSourceDuration = provider === 'seedance-2.5' && providerVideoUrls.length > 0 && resolvedDuration === -1;
+      const billsSourceDuration = retainsSource || adaptiveSourceDuration;
+      if (billsSourceDuration && !sourceSeconds) return { success: false, message: 'A measured source duration is required for video editing.' };
+      if ((resolvedDuration == null || resolvedDuration === -1) && !adaptiveSourceDuration) {
         resolvedDuration = retainsSource ? sourceSeconds : Math.min(5, capability.maxOutputDuration);
       }
       billingUsage = {
         model: provider, resolution: route.resolution, operation: videoOperation,
-        durationSec: retainsSource ? sourceSeconds : resolvedDuration,
+        durationSec: billsSourceDuration ? sourceSeconds : (resolvedDuration ?? Math.min(5, capability.maxOutputDuration)),
         imageCount: filteredImages.length, referenceVideoDurationSec: sourceSeconds,
         contentFilter,
         ...(h3References ? { referenceImagePixels: h3References.referenceImagePixels, referenceVideoDurationSec: h3References.referenceVideoDurationSec, referenceAudioDurationSec: h3References.referenceAudioDurationSec } : {}),
