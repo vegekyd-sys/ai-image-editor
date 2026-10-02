@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
   sendMetaCapiEvent: vi.fn(),
   recordFirstPartyMarketingEvent: vi.fn(),
   claimPendingAppleTrial: vi.fn(),
+  freeMediaEnabled: false,
+}))
+
+vi.mock('@/lib/free-media-policy', () => ({
+  get FREE_MEDIA_ENABLED() { return mocks.freeMediaEnabled },
 }))
 
 vi.mock('@supabase/ssr', () => ({
@@ -56,6 +61,7 @@ function mockAdminState(options: { activated: boolean; hasBalance: boolean }) {
 describe('verified authentication completion route', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.freeMediaEnabled = false
     mocks.cookies.mockResolvedValue({
       getAll: () => [],
       set: vi.fn(),
@@ -136,6 +142,28 @@ describe('verified authentication completion route', () => {
     }), { onConflict: 'user_id', ignoreDuplicates: true })
     expect(mocks.getConfiguredWelcomeCredits).not.toHaveBeenCalled()
     expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+
+  it('grants welcome credits without forcing an Apple trial when free media is enabled', async () => {
+    mocks.freeMediaEnabled = true
+    mocks.getUser.mockResolvedValue({
+      data: { user: {
+        id: 'new-free-ios-user', email: 'free-ios@example.test',
+        email_confirmed_at: '2026-10-02T00:00:00Z', app_metadata: { provider: 'email' },
+      } }, error: null,
+    })
+    mockAdminState({ activated: false, hasBalance: false })
+    const response = await POST(new NextRequest('http://localhost:3001/api/auth/complete', {
+      method: 'POST', headers: { 'User-Agent': 'MakaronIOS' },
+    }))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      ok: true, isNewUser: true, credits: 500, trialRequired: false,
+      redirectUrl: '/home?welcome=1',
+    })
+    expect(mocks.rpc).toHaveBeenCalledWith('claim_welcome_credits', expect.objectContaining({
+      p_user_id: 'new-free-ios-user', p_credits: 500,
+    }))
   })
 
   it('links a pre-registration Apple trial and returns the new iOS user with 1,500 credits', async () => {
