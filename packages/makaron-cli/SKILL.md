@@ -289,7 +289,7 @@ Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <
 
 For fal H3 Turbo, use `--video-model minimax-h3-max`; it supports exactly 5/10/15s at 480p/768p and defaults to native 768p, with no image for T2V or exactly one image for I2V. It does not accept reference video/audio or multiple images.
 
-For Seedance 2.5, use `--video-model seedance-2.5`; it supports 4-30s, 480p/720p, up to 30 image + 10 video + 10 audio references, and repeatable local-file/URL flags. Typed modes use `--video-operation generate|edit|extend`, with `--extend-direction`, `--output-format mp4|mov`, and optional `--web-search`. Evolink does not expose 4K for this route.
+For Seedance 2.5, use `--video-model seedance-2.5`; it supports 4-30s, 480p/720p (defaults to economical 480p; request 720p explicitly), up to 30 image + 10 video + 10 audio references, and repeatable local-file/URL flags. Typed modes use `--video-operation generate|edit|extend`, with `--extend-direction`, `--output-format mp4|mov`, and optional `--web-search`. Evolink does not expose 4K for this route.
 
 For Wan 3.0, use `--video-model wan-3.0` or the faster `--video-model wan-3.0-prime`. Both support 2-30s generation, up to 10 image + 5 video + 5 audio feature references, native audio, and 480p/720p/1080p/2K/4K. Pass `--video-resolution 2k|4k` to use the matching FlashVSR/Pro endpoint automatically; Pro is not a separate model selector. They do not expose typed edit/extend or a relaxed-content-filter flag.
 

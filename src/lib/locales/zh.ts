@@ -127,6 +127,7 @@ const zh = {
   'mediaPricing.input_tokens_per_video_second': '每参考视频秒 token',
   'mediaPricing.input_tokens_per_audio_second': '每参考音频秒 token',
   'mediaPricing.markup': "加价倍率",
+  'mediaPricing.video_reference_usd_per_second': '视频参考费率（$/输入及输出秒）',
   'mediaPricing.unfiltered_multiplier': "特殊模式倍率",
   'mediaPricing.active': "启用",
   'mediaPricing.saving': "保存中…",

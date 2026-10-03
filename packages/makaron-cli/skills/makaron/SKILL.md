@@ -355,7 +355,7 @@ Provider integration contract: every image passed to video generation is a featu
 
 fal H3 Turbo uses the `minimax-h3-max` selector, supports exactly 5/10/15 seconds at 480p/768p, and defaults to native 768p for faster-than-real-time T2V or one-start-image I2V.
 
-Seedance 2.5 uses `--video-model seedance-2.5` and supports 4-30s at 480p/720p, up to 30 images + 10 videos + 10 audios, repeatable local/URL references, `--video-operation generate|edit|extend`, `--extend-direction`, `--output-format mp4|mov`, and `--web-search`. The Evolink route does not currently expose 4K output.
+Seedance 2.5 uses `--video-model seedance-2.5` and supports 4-30s at 480p/720p (defaults to economical 480p; request 720p explicitly), up to 30 images + 10 videos + 10 audios, repeatable local/URL references, `--video-operation generate|edit|extend`, `--extend-direction`, `--output-format mp4|mov`, and `--web-search`. The Evolink route does not currently expose 4K output.
 
 Wan 3.0 exposes two model choices: `--video-model wan-3.0` and the faster `--video-model wan-3.0-prime`. Both support 2-30s generation, native audio, up to 10 images + 5 videos + 5 audios, and 480p/720p/1080p/2K/4K. Pass `--video-resolution 2k|4k` to select the matching FlashVSR/Pro endpoint automatically; Pro is not a separate model selector. Use generation mode with feature references; typed edit/extend and the relaxed content-filter flag are not supported.
 

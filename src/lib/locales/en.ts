@@ -127,6 +127,7 @@ const en = {
   'mediaPricing.input_tokens_per_video_second': 'Tokens per reference video second',
   'mediaPricing.input_tokens_per_audio_second': 'Tokens per reference audio second',
   'mediaPricing.markup': "Markup",
+  'mediaPricing.video_reference_usd_per_second': 'Video-reference rate ($/input and output second)',
   'mediaPricing.unfiltered_multiplier': "Special-mode multiplier",
   'mediaPricing.active': "Enabled",
   'mediaPricing.saving': "Saving…",

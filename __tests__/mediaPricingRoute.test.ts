@@ -43,3 +43,11 @@ it('returns the saved row and does not cache the Admin catalog', async () => {
   expect(response.headers.get('Cache-Control')).toBe('no-store')
   expect((await response.json()).length).toBe(68)
 })
+
+it('saves and clears a video-reference tariff, rejecting zero and negative rates', async () => {
+  for (const rate of [0, -0.1]) expect((await PUT(req({ ...edit(), video_reference_usd_per_second: rate }))).status).toBe(400)
+  expect((await PUT(req({ ...edit(), video_reference_usd_per_second: 0.084 }))).status).toBe(200)
+  expect(mock.update.mock.calls.at(-1)?.[0].video_reference_usd_per_second).toBe(0.084)
+  expect((await PUT(req({ ...edit(), video_reference_usd_per_second: null }))).status).toBe(200)
+  expect(mock.update.mock.calls.at(-1)?.[0].video_reference_usd_per_second).toBeNull()
+})

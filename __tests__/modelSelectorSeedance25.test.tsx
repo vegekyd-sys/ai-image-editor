@@ -4,7 +4,7 @@ import ModelSelector from '@/components/ModelSelector';
 import { LocaleProvider } from '@/lib/i18n';
 
 describe('ModelSelector Seedance 2.5', () => {
-  it('shows the model and selects its Evolink 720p default', async () => {
+  it('shows the model and selects its economical Evolink 480p default', async () => {
     localStorage.setItem('locale', 'zh');
     const onVideoModelChange = vi.fn();
     const onVideoResolutionChange = vi.fn();
@@ -36,7 +36,7 @@ describe('ModelSelector Seedance 2.5', () => {
     fireEvent.click(await screen.findByText('Seedance 2.5'));
     await waitFor(() => {
       expect(onVideoModelChange).toHaveBeenCalledWith('seedance-2.5');
-      expect(onVideoResolutionChange).toHaveBeenCalledWith('720p');
+      expect(onVideoResolutionChange).toHaveBeenCalledWith('480p');
     });
   });
 });

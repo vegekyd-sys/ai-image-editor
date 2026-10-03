@@ -8,6 +8,7 @@ import { getMediaPrices } from '@/lib/billing/media-pricing'
 const updateSchema = z.object({
   id: z.string().min(1), updated_at: z.string().min(1),
   output_usd_per_second: z.number().finite().positive().max(10000),
+  video_reference_usd_per_second: z.number().finite().positive().max(10000).nullable().optional(),
   input_usd_per_second: z.number().finite().nonnegative().max(10000),
   input_usd_per_image: z.number().finite().nonnegative().max(10000),
   free_image_references: z.number().int().nonnegative().max(100),

@@ -129,6 +129,7 @@ const zhHant = {
   'mediaPricing.input_tokens_per_video_second': '每參考影片秒 token',
   'mediaPricing.input_tokens_per_audio_second': '每參考音訊秒 token',
   'mediaPricing.markup': "加價倍率",
+  'mediaPricing.video_reference_usd_per_second': '影片參考費率（$/輸入及輸出秒）',
   'mediaPricing.unfiltered_multiplier': "特殊模式倍率",
   'mediaPricing.active': "啟用",
   'mediaPricing.saving': "儲存中…",

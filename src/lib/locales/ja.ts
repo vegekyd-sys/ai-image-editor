@@ -128,6 +128,7 @@ const ja = {
   'mediaPricing.input_tokens_per_video_second': '参照動画1秒あたりtoken',
   'mediaPricing.input_tokens_per_audio_second': '参照音声1秒あたりtoken',
   'mediaPricing.markup': "料金倍率",
+  'mediaPricing.video_reference_usd_per_second': '動画参照単価（$/入力・出力秒）',
   'mediaPricing.unfiltered_multiplier': "特別モード倍率",
   'mediaPricing.active': "有効",
   'mediaPricing.saving': "保存中…",

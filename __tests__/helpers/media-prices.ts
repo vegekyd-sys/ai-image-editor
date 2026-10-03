@@ -14,6 +14,10 @@ export function seededMediaPrices(): MediaPrice[] {
     const [id, kind, model_id, resolution, operation, output_usd_per_second, input_usd_per_1k_tokens, free_input_tokens, input_tokens_per_image_pixel, input_tokens_per_video_second, input_tokens_per_audio_second] = JSON.parse(`[${line.slice(1, line.lastIndexOf(')')).replaceAll("'", '"')}]`)
     return { id, kind, model_id, resolution, operation, output_usd_per_second, input_usd_per_1k_tokens, free_input_tokens, input_tokens_per_image_pixel, input_tokens_per_video_second, input_tokens_per_audio_second, input_usd_per_second: 0, input_usd_per_image: 0, free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true, updated_at: '2026-09-05T00:00:00Z' }
   })
+  for (const price of existing.filter(row => row.model_id === 'seedance-2.5')) {
+    price.output_usd_per_second = price.resolution === '480p' ? 0.138 : 0.296
+    price.video_reference_usd_per_second = price.resolution === '480p' ? 0.084 : 0.180
+  }
   return [...existing, ...additions]
 }
 

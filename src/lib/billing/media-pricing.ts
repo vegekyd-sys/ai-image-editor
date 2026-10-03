@@ -8,6 +8,7 @@ export interface MediaPrice {
   resolution: string
   operation: string
   output_usd_per_second: number
+  video_reference_usd_per_second?: number | null
   input_usd_per_second: number
   input_usd_per_image: number
   free_image_references: number
@@ -90,7 +91,16 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
     + referenceAudioDurationSec * (price.input_tokens_per_audio_second ?? 0)
   const billableReferenceTokens = Math.max(0, referenceTokens - (price.free_input_tokens ?? 0))
   const multiplier = input.contentFilter === false ? price.unfiltered_multiplier : 1
-  const supplierCostUsd = (
+  if (price.video_reference_usd_per_second != null) {
+    nonNegative(price.video_reference_usd_per_second, 'video reference rate')
+    if (price.video_reference_usd_per_second === 0) throw new PricingUnavailableError('Video reference rate must be positive.')
+  }
+  const hasSeedanceVideoReference = price.model_id === 'seedance-2.5'
+    && referenceVideoDurationSec > 0 && price.video_reference_usd_per_second != null
+  // Keep the original input duration in the quote for auditing/settlement.
+  const supplierCostUsd = hasSeedanceVideoReference
+    ? (Math.max(referenceVideoDurationSec, durationSec) + durationSec) * price.video_reference_usd_per_second! * multiplier
+    : (
     durationSec * price.output_usd_per_second
     + Math.max(0, imageCount - price.free_image_references) * price.input_usd_per_image
     + referenceVideoDurationSec * price.input_usd_per_second

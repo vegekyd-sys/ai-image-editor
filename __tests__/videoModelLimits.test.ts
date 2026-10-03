@@ -212,7 +212,7 @@ describe('video model reference limits', () => {
   it('models Seedance 2.5 as an explicit 30-second Evolink route', () => {
     expect(normalizeVideoModelId('seedance-2.5')).toBe('seedance-2.5')
     expect(normalizeVideoModelId('seedance25')).toBe('seedance-2.5')
-    expect(normalizeVideoResolution('seedance-2.5', 'auto')).toBe('720p')
+    expect(normalizeVideoResolution('seedance-2.5', 'auto')).toBe('480p')
     expect(resolveVideoGenerationRoute({ model: 'seedance-2.5', resolution: '480p' })).toMatchObject({
       model: 'seedance-2.5',
       label: 'Seedance 2.5',
@@ -308,7 +308,7 @@ describe('video model reference limits', () => {
     })
 
     expect(defaultCost).toBe(standardCost)
-    expect(matureCost).toBe(Math.ceil(standardCost! * 1.1 - 1e-9))
+    expect(matureCost).toBe(Math.ceil(4 * 0.138 * 1.1 * 200 - 1e-9))
     expect(estimateVideoCredits({
       model: 'seedance-fast',
       resolution: '480p',

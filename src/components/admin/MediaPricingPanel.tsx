@@ -5,7 +5,7 @@ import { useLocale } from '@/lib/i18n'
 import type { MediaPrice } from '@/lib/billing/media-pricing'
 import { listVideoModelCapabilities } from '@/lib/video-model-capabilities'
 
-const fields = ['output_usd_per_second', 'markup', 'input_usd_per_second', 'input_usd_per_image', 'free_image_references', 'unfiltered_multiplier', 'input_usd_per_1k_tokens', 'free_input_tokens', 'input_tokens_per_image_pixel', 'input_tokens_per_video_second', 'input_tokens_per_audio_second'] as const
+const fields = ['output_usd_per_second', 'markup', 'input_usd_per_second', 'video_reference_usd_per_second', 'input_usd_per_image', 'free_image_references', 'unfiltered_multiplier', 'input_usd_per_1k_tokens', 'free_input_tokens', 'input_tokens_per_image_pixel', 'input_tokens_per_video_second', 'input_tokens_per_audio_second'] as const
 const modelLabels = new Map(listVideoModelCapabilities().map(model => [model.id, model.label]))
 // i18n-ignore: model brand, not interface copy.
 modelLabels.set('evolink-seed-audio', 'Seed Audio')
@@ -70,11 +70,11 @@ function PriceEntry({ price, editing, editingElsewhere, onEdit, onSaved }: {
     </div>
     {editing && <form onSubmit={event => { event.preventDefault(); void save() }} className="mt-5 border-t border-white/10 pt-4">
       <fieldset disabled={busy} className="grid min-w-0 grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-3">
-        {fields.map(field => <label key={field} className="min-w-0 text-xs text-white/65">
+        {fields.filter(field => field !== 'video_reference_usd_per_second' || price.model_id === 'seedance-2.5').map(field => <label key={field} className="min-w-0 text-xs text-white/65">
           {t(`mediaPricing.${field}`)}
-          <input type="number" required min={field === 'unfiltered_multiplier' ? 1 : field === 'markup' || field === 'output_usd_per_second' ? 0.000001 : 0}
-            step={field === 'free_image_references' ? 1 : 'any'} aria-label={`${price.id} ${t(`mediaPricing.${field}`)}`} value={draft[field] ?? 0}
-            onChange={event => { setDraft(previous => ({ ...previous, [field]: Number(event.target.value) })); setStatus(null) }}
+          <input type="number" required={field !== 'video_reference_usd_per_second'} min={field === 'unfiltered_multiplier' ? 1 : field === 'markup' || field === 'output_usd_per_second' || field === 'video_reference_usd_per_second' ? 0.000001 : 0}
+            step={field === 'free_image_references' ? 1 : 'any'} aria-label={`${price.id} ${t(`mediaPricing.${field}`)}`} value={draft[field] ?? (field === 'video_reference_usd_per_second' ? '' : 0)}
+            onChange={event => { setDraft(previous => ({ ...previous, [field]: field === 'video_reference_usd_per_second' && !event.target.value ? null : Number(event.target.value) })); setStatus(null) }}
             className={`mt-2 w-full min-w-0 rounded-lg border border-white/15 bg-black px-3 py-2.5 text-sm tabular-nums text-white ${focusStyle}`} />
         </label>)}
       </fieldset>

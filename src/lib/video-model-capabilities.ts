@@ -234,16 +234,15 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 10,
     maxAudioReferences: 10,
     maxTotalReferences: 50,
-    // EvoLink's public rate card still says pricing is unverified. Use the
-    // conservative reference-route rates measured from successful live tasks
-    // on 2026-08-08; revisit when EvoLink publishes the final rate card.
-    estimatedCostPerSecondUsd: 0.325,
+    // EvoLink public rate card checked 2026-10-04. Standard image/audio-only
+    // requests bill output; video references bill max(input, output) + output.
+    estimatedCostPerSecondUsd: 0.138,
     estimatedCostPerSecondUsdByResolution: {
-      '480p': 0.275,
-      '720p': 0.325,
+      '480p': 0.138,
+      '720p': 0.296,
     },
     supportedResolutions: ['480p', '720p'],
-    defaultResolution: '720p',
+    defaultResolution: '480p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     provider: 'seedance',
     providerModel: 'seedance-2.5-reference-to-video',
@@ -885,6 +884,11 @@ export function estimateVideoProviderCostUsd(options: {
   // $0.01/s. Generation/reference modes use the 1.5 resolution table above.
   const perSecond = isGrokVideoInput ? 0.07 : route.estimatedCostPerSecondUsd
   if (perSecond == null) return undefined
+  if (normalizedModel === 'seedance-2.5' && (options.referenceVideoDurationSec ?? 0) > 0) {
+    const referenceRate = route.resolution === '480p' ? 0.084 : 0.180
+    const billableInput = Math.max(options.referenceVideoDurationSec ?? 0, options.durationSec)
+    return (billableInput + options.durationSec) * referenceRate * (options.contentFilter === false ? 1.1 : 1)
+  }
   const acceptedImages = capability.maxImageReferences != null
     ? Math.min(options.imageCount ?? 0, capability.maxImageReferences)
     : (options.imageCount ?? 0)
