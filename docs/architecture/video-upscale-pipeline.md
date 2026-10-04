@@ -6,6 +6,8 @@
 
 推荐先接 **EvoLink Seedance 2.5 480p → fal.ai FlashVSR → 720p / 1080p**，对用户表现为一次视频任务。内部将超分做成独立媒体处理能力，后续可复用于其他模型和已有视频。
 
+用户 2026-10-04 补充方向：模型列表单独提供 **Seedance 2.5 经济高清 / Seedance 2.5 Eco**，默认交付 1080p。用户选择一次并提交，后台自动执行生成和超分，不再要求选择第二个模型或再次点击增强。英文 Eco 是 Makaron 的组合路由名称，不能包装为 ByteDance 官方型号。Fast 会暗示速度优势，须测速支持后再考虑；单独叫 Super Resolution 不容易说明生成模型和低价价值。
+
 第一版沿用已跑通的 FlashVSR 参数；先提供明确的“经济高清”选项，不改变现有请求中原生 720p 的含义。ByteDance Upscaler 在真实产物、排队和账单验证通过后，再评估是否成为更便宜的默认超分供应商。
 
 ## 与现有 Wan 3 的关系
@@ -20,7 +22,9 @@ FlashVSR 原项目为 [OpenImagingLab/FlashVSR](https://github.com/OpenImagingLa
 
 ## 产品合同
 
-保留 `model=seedance-2.5`，增加可选 `quality_mode=economy|native`。`video_resolution` 表示用户要求的最终交付分辨率。旧请求未带 `quality_mode` 时沿用现有原生路由；经济高清由明确选项或明确意图触发。
+原有 `model=seedance-2.5` 行为保留；新增产品路由 ID（拟）`seedance-2.5-eco`，解析为 `generationModel=seedance-2.5`、`quality_mode=economy`，缺省目标为 1080p。底层 planner 可接受 `quality_mode=economy|native`，`video_resolution` 表示用户要求的最终交付分辨率。旧请求未带新路由 / 模式时沿用现有原生路由。
+
+GUI 为模型列表的一条独立入口，附“经济高清”徽标、预计总积分和“480p 生成后超分”的说明。没有强制第二次选择；用户需要时仍可更改输出到 720p。CUI / CLI / MCP 可按新路由 ID 一次提交并轮询同一个根任务。路由名称、模型选择器、工具枚举、计费、持久化和状态查询须同步，不能只增加前端标签。
 
 | 用户选择 | 生成阶段 | 后处理阶段 |
 |---|---|---|
@@ -29,7 +33,7 @@ FlashVSR 原项目为 [OpenImagingLab/FlashVSR](https://github.com/OpenImagingLa
 | 经济高清 1080p | 原生 480p | FlashVSR 后交付 1080p |
 | 原生 720p | 原生 720p | 无 |
 
-原生 1080p 等单独验证和开放，第一版不扩展该能力。模型能力表区分原生生成分辨率与经济高清交付分辨率，不能直接把 1080p 填入现有原生支持列表。
+原生 1080p 本轮进行两条 10 秒同 prompt 对比中的一条实测；是否对产品开放仍单独决定。模型能力表区分原生生成分辨率与经济高清交付分辨率，不能直接把 1080p 填入现有原生支持列表。
 
 App、Agent、CLI、MCP 使用同一个 delivery plan。用户明确要求“原生”时不切经济模式；经济模式显示“480p 生成后超分”，提供总报价，不把产物标为原生高清。中文、繁中、日文和英文同步补齐文案。
 
