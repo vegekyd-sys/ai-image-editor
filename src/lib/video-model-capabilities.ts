@@ -555,6 +555,23 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
   longVideoChunkSeconds: 15,
 }
 
+// Eco describes final delivery, while its generation provider always receives 480p.
+MODEL_CAPABILITIES['seedance-2.5-eco'] = {
+  ...MODEL_CAPABILITIES['seedance-2.5'], id: 'seedance-2.5-eco', label: 'Seedance 2.5 Eco',
+  supportedResolutions: ['1080p', '2k', '4k'], defaultResolution: '1080p',
+  estimatedCostPerSecondUsd: .1452,
+  estimatedCostPerSecondUsdByResolution: { '1080p': .1452, '2k': .1524, '4k': .1668 },
+}
+MODEL_CAPABILITIES['bytedance-video-upscale'] = {
+  id: 'bytedance-video-upscale', label: 'ByteDance Fast', minOutputDuration: .1, maxOutputDuration: 60,
+  maxReferenceVideoDuration: 60, referenceVideoDurationTolerance: .5,
+  supportsVideoReference: true, supportsBaseVideoEdit: true, defaultImageWorkflow: 'none',
+  longVideoChunkSeconds: 60, maxImageReferences: 0, maxVideoReferences: 1, maxAudioReferences: 0,
+  supportedResolutions: ['1080p', '2k', '4k'], defaultResolution: '1080p',
+  estimatedCostPerSecondUsd: .0072,
+  estimatedCostPerSecondUsdByResolution: { '1080p': .0072, '2k': .0144, '4k': .0288 },
+}
+
 export function normalizeVideoModelId(model?: string | null): string {
   if (!model) return DEFAULT_MODEL_ID
   const normalized = String(model).trim().toLowerCase()
@@ -728,7 +745,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
   if (id === 'seedance-fast') return 'seedance-2.0-fast'
   if (id === 'seedance-mini') return 'seedance-2.0-mini'
   if (id === 'seedance') return 'seedance-2.0'
-  if (id === 'seedance-2.5') return 'seedance-2.5'
+  if (id === 'seedance-2.5' || id === 'seedance-2.5-eco') return 'seedance-2.5'
   return undefined
 }
 
@@ -872,6 +889,11 @@ export function estimateVideoProviderCostUsd(options: {
   operation?: VideoGenerationOperation
   contentFilter?: boolean
 }): number | undefined {
+  if (normalizeVideoModelId(options.model) === 'seedance-2.5-eco') {
+    const base = estimateVideoProviderCostUsd({ ...options, model: 'seedance-2.5', resolution: '480p' })
+    const upscale = estimateVideoProviderCostUsd({ model: 'bytedance-video-upscale', resolution: options.resolution, durationSec: options.durationSec })
+    return base != null && upscale != null ? base + upscale : undefined
+  }
   const capability = getVideoModelCapability(options.model)
   const route = resolveVideoGenerationRoute({
     model: options.model,
@@ -924,6 +946,12 @@ export function estimateVideoCredits(options: {
   contentFilter?: boolean
   markup?: number
 }): number | undefined {
+  if (normalizeVideoModelId(options.model) === 'seedance-2.5-eco') {
+    const resolution = normalizeVideoResolution(options.model, options.resolution)
+    const base = estimateVideoCredits({ ...options, model: 'seedance-2.5', resolution: '480p' })
+    const upscale = estimateVideoCredits({ model: 'bytedance-video-upscale', resolution, durationSec: options.durationSec, markup: options.markup })
+    return base != null && upscale != null ? base + upscale : undefined
+  }
   const costUsd = estimateVideoProviderCostUsd(options)
   if (costUsd == null) return undefined
   return Math.ceil(costUsd * 100 * (options.markup ?? 2) - 1e-9)
@@ -1070,7 +1098,7 @@ export function validateVideoModelRequest(options: {
     return 'Wan 3.0 supports generation with multimodal references, but does not expose typed video edit or extend operations. Use video_operation="generate" with feature references.'
   }
 
-  if (options.operation === 'edit' && normalizeVideoModelId(options.model) === 'seedance-2.5' && options.outputDuration !== -1) {
+  if (options.operation === 'edit' && ['seedance-2.5', 'seedance-2.5-eco'].includes(normalizeVideoModelId(options.model)) && options.outputDuration !== -1) {
     return 'Seedance 2.5 video edit requires duration=-1 so the output follows the input video.'
   }
 

@@ -15,6 +15,17 @@ export const checksumRoutes = [
   'cron/agent-executions',
   'cron/video-poll',
 ];
+export const videoMediaRoutes = ['agent', 'agent/run', 'agent/run/[id]', 'animate', 'animate/[taskId]', 'video-snapshot', 'video-snapshot/[snapshotId]', 'cron/video-poll', 'mcp'];
+export function checkVideoMediaRuntime(root = process.cwd(), routes = videoMediaRoutes) {
+  for (const route of routes) {
+    const manifest = path.join(root, '.next/server/app/api', route, 'route.js.nft.json');
+    if (!existsSync(manifest)) throw new Error(`/api/${route}: missing video runtime trace`);
+    const { files } = JSON.parse(readFileSync(manifest, 'utf8'));
+    const entry = files?.find(file => file.replaceAll('\\', '/').endsWith('/ffmpeg-static/ffmpeg'));
+    if (!entry || !existsSync(path.resolve(path.dirname(manifest), entry))) throw new Error(`/api/${route}: missing ffmpeg runtime binary`);
+  }
+  return routes.length;
+}
 
 // Vercel packages these traced files. A package.json alone lets resolution
 // succeed during the build, then crashes the function on its first request.
@@ -39,6 +50,7 @@ export function checkServerRuntime(root = process.cwd(), routes = checksumRoutes
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     console.log(`Server runtime packaging: ${checkServerRuntime()} API traces include the CRC32C entry.`);
+    console.log(`Video media runtime: ${checkVideoMediaRuntime()} API traces include FFmpeg.`);
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

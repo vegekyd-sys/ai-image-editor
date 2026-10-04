@@ -36,6 +36,7 @@ describe('Agent tool registry contract', () => {
     expect(names).toEqual([
       'generate_image',
       'generate_animation',
+      'upscale_video',
       'analyze_image',
       'analyze_video',
       'transcribe_audio',
@@ -62,6 +63,7 @@ describe('Agent tool registry contract', () => {
     expect(extractSet(source, 'DURABLE_IDEMPOTENT_TOOLS')).toEqual([
       'generate_image',
       'generate_animation',
+      'upscale_video',
       'materialize_media',
       'rotate_camera',
       'generate_audio',

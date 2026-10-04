@@ -1993,6 +1993,7 @@ Recent model choices:
   wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
   wan-3.0         Wan standard tier with the same public duration/resolution range.
   seedance-2.5    4-30s; 480p/720p; generate/edit/extend and multimodal refs.
+  seedance-2.5-eco  480p generation → ByteDance Fast; 1080p default, 2k/4k.
   minimax-h3      4-15s; 768p default or 2k; image/video/audio feature refs.
   grok            T2V/reference generation plus typed edit/extend.
   sync-lipsync-v3 Exactly one video plus one MP3/WAV replacement track.
@@ -3123,7 +3124,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       : ['wan3-prime', 'wan3.0-prime', 'wan30-prime', 'wan-3-prime', 'w3.0-video-prime', 'w3.0-video-prime-pro', 'wan-3.0-prime-pro', 'prime'].includes(videoModel)
         ? 'wan-3.0-prime'
         : (videoModel || 'fal-h3-max');
-    const isSeedance25 = selectedVideoModel === 'seedance-2.5';
+    const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco'].includes(selectedVideoModel);
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';

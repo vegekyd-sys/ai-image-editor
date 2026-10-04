@@ -4,6 +4,7 @@ import type { AgentContext } from './agent-tools';
 export const DURABLE_IDEMPOTENT_TOOLS = new Set([
   'generate_image',
   'generate_animation',
+  'upscale_video',
   'materialize_media',
   'rotate_camera',
   'generate_audio',

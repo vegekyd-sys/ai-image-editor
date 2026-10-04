@@ -6,7 +6,7 @@ import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo } from '@/lib/supabase/storage'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 export async function GET(
   req: NextRequest,
@@ -17,17 +17,19 @@ export async function GET(
 
     // Allow anonymous access for public projects; require auth otherwise
     const authResult = await authenticateRequest(req)
+    let publicOwnerUserId: string | undefined
     if ('error' in authResult) {
       const adminCheck = getSupabaseAdmin()
       const { data: animCheck } = await adminCheck
         .from('project_animations')
-        .select('project_id, projects(is_public)')
+        .select('project_id, projects(is_public, user_id)')
         .eq('piapi_task_id', taskId)
         .single()
 
       const proj = animCheck?.projects as any
       const isPublic = Array.isArray(proj) ? proj[0]?.is_public : proj?.is_public
       if (!isPublic) return authResult.error
+      publicOwnerUserId = Array.isArray(proj) ? proj[0]?.user_id : proj?.user_id
     }
 
     // Poll task — route by taskId prefix or env var
@@ -56,7 +58,10 @@ export async function GET(
       grokOwnerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id
     }
 
-    if (isMuleRouter) {
+    if (taskId.startsWith('video-pipeline-')) {
+      const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline')
+      result = { taskId, ...await advanceVideoPipeline(taskId, 'auth' in authResult ? authResult.auth.userId : publicOwnerUserId) }
+    } else if (isMuleRouter) {
       const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
       result = await getMuleRouterVideoTask(taskId)
     } else if (isEvolink) {

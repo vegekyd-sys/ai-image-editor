@@ -11,6 +11,8 @@ import { normalizeLocale, translate } from '@/lib/locales';
 import { getRunUsage } from '@/lib/billing/run-usage';
 import { getBalance } from '@/lib/billing/credits';
 
+export const maxDuration = 300;
+
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
 
 const DEFAULT_AGENT_RUN_STALE_MS = 90_000;
@@ -67,7 +69,7 @@ function dedupeLegacyVideos<T extends { videoUrl?: string; taskId?: string }>(it
   return result;
 }
 
-async function pollVideoProvider(taskId: string, userId?: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
+async function pollVideoProvider(taskId: string, userId?: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string } & Partial<import('@/lib/skills/get-video-status').GetVideoStatusResult>> {
   const isEvolink = taskId.startsWith('task-unified-');
   const isMuleRouter = taskId.startsWith('mr-wan30-');
   const isSeedance = taskId.startsWith('cgt-');
@@ -79,7 +81,10 @@ async function pollVideoProvider(taskId: string, userId?: string): Promise<{ tas
   const isSyncLipsync = taskId.startsWith('sync3-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
-  if (isMuleRouter) {
+  if (taskId.startsWith('video-pipeline-')) {
+    const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline');
+    return { taskId, ...await advanceVideoPipeline(taskId, userId) };
+  } else if (isMuleRouter) {
     const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video');
     return getMuleRouterVideoTask(taskId);
   } else if (isEvolink) {
@@ -585,7 +590,7 @@ export async function GET(
                 const taskId = videoMeta.taskId as string;
                 const pollResult = await pollVideoProvider(taskId, ownerUserId);
                 if (pollResult.status === 'completed' && pollResult.videoUrl) {
-                  const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl };
+                  const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl, ...(pollResult.stage ? { pipelineStage: pollResult.stage, baseVideoUrl: pollResult.baseVideoUrl, enhancementStatus: pollResult.enhancementStatus, requestedResolution: pollResult.requestedResolution, resolution: pollResult.actualResolution ?? videoMeta.resolution } : {}) };
                   await admin.from('snapshots')
                     .update({ video_meta: updatedMeta })
                     .eq('id', v.snapshot_id);

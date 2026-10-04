@@ -290,6 +290,7 @@ Models:
 - seedance-fast — SeeDance 2.0 Fast via Evolink, 480p/720p, default 720p
 - seedance-mini — SeeDance 2.0 Mini via Evolink, lower-cost 480p/720p route for drafts and multi-size tests
 - seedance — SeeDance 2.0 standard via Evolink, supports 480p/720p/1080p
+- seedance-2.5-eco — Seedance 2.5 480p then automatic ByteDance Fast enhancement to 1080p (default), 2K or 4K, one root task; lower cost than native HD.
 - seedance-2.5 — Seedance 2.5 via Evolink, 4-30s, multimodal references, native audio, edit and extend
 - wan-3.0 — Wan 3.0 via MuleRouter, 2-30s, 480p/720p/1080p/2k/4k, native audio, up to 10 image + 5 video + 5 audio feature references; 2k/4k use FlashVSR automatically
 - wan-3.0-prime — Wan 3.0 Prime fast tier via MuleRouter with the same duration, resolutions, and reference limits; 2k/4k use Prime FlashVSR automatically
@@ -533,6 +534,26 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP get_video_status error]', msg);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      }
+    },
+  );
+
+  server.tool(
+    'makaron_upscale_video',
+    'Upscale one existing video using ByteDance Fast; no video regeneration. Preserves source motion, frame rate and original audio. Default 1080p; supports 2K and 4K, up to 60 seconds. Higher tiers are not priced yet. Returns a durable root task ID; poll makaron_get_video_status until the permanent file is ready. Never submit another upscale while this task is processing.',
+    {
+      videoUrl: z.string().url().describe('Hosted source video URL.'),
+      resolution: z.enum(['1080p', '2k', '4k']).default('1080p'),
+      billingRequestId: z.string().uuid().optional().describe('Reuse this ID on a transport retry; do not create a second paid job.'),
+    },
+    async params => {
+      try {
+        const input: CreateVideoInput = { script: 'ByteDance Fast video enhancement', images: [], videoModel: 'bytedance-video-upscale',
+          videoResolution: params.resolution, videoUrl: params.videoUrl, userId: options?.userId, billingRequestId: params.billingRequestId };
+        const result = options?.submitVideo ? await options.submitVideo(input, 'makaron_upscale_video') : await createVideo(input);
+        return { content: [{ type: 'text' as const, text: `${result.message}${result.taskId ? `\nTask ID: ${result.taskId}` : ''}` }] };
+      } catch {
+        return { content: [{ type: 'text' as const, text: 'Cannot submit video enhancement. Check the source and configured pricing; retain any existing task ID.' }], isError: true };
       }
     },
   );

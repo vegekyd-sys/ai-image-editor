@@ -22,8 +22,13 @@ if (!factory) throw new Error('Missing generate_animation factory');
 const code = ts.transpileModule(factory.getText(parsed), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
+const upscaleFactory = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'createUpscaleVideoTool');
+if (!upscaleFactory) throw new Error('Missing upscale_video factory');
+const upscaleCode = ts.transpileModule(upscaleFactory.getText(parsed), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText;
 
-export function generateAnimationHarness() {
+export function generateAnimationHarness(kind: 'generate' | 'upscale' = 'generate') {
   const rows: Array<Record<string, any>> = [
     { id: 'original', type: 'image' }, { id: 'generated', type: 'image' },
   ];
@@ -72,7 +77,7 @@ export function generateAnimationHarness() {
       throw new Error(`Unexpected dependency: ${name}`);
     },
   });
-  const create = vm.runInContext(`${code}\ncreateGenerateAnimationTool`, context);
+  const create = vm.runInContext(`${code}\n${upscaleCode}\n${kind === 'upscale' ? 'createUpscaleVideoTool' : 'createGenerateAnimationTool'}`, context);
   const tool = create({ ctx, serializeVideoSubmission: (operation: () => unknown) => operation() });
   preserveOptionalToolFields({ generate_animation: tool }, 'codex-subscription');
   return { tool, ctx, rows, db, insert, createVideo, requireCredits, deductFixedCredits, refundCredits, probeVideoMetadataFromUrl };

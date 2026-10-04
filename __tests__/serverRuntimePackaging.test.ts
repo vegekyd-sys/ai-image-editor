@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { checkServerRuntime } = require('../scripts/check-server-runtime.mjs');
+const { checkServerRuntime, checkVideoMediaRuntime } = require('../scripts/check-server-runtime.mjs');
 const roots: string[] = [];
 
 function fixture(files: string[], entryExists = true) {
@@ -43,5 +43,14 @@ describe('server runtime packaging gate', () => {
 
   it('rejects missing API build traces', () => {
     expect(() => checkServerRuntime(fixture([entry]), ['cron/video-poll'])).toThrow('missing build trace');
+  });
+  it('requires the actual FFmpeg binary for video pipeline delivery', () => {
+    expect(() => checkVideoMediaRuntime(fixture([entry]), route)).toThrow('missing ffmpeg runtime binary');
+    const binary = '../../../../../../node_modules/ffmpeg-static/ffmpeg';
+    const root = fixture([entry, binary]);
+    const file = path.join(root, 'node_modules/ffmpeg-static/ffmpeg');
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, 'binary fixture');
+    expect(checkVideoMediaRuntime(root, route)).toBe(1);
   });
 });

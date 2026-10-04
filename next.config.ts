@@ -70,6 +70,11 @@ const nextConfig: NextConfig = {
     ],
   },
   outputFileTracingIncludes: {
+    // Durable video delivery probes and muxes with the deployment OS binary.
+    ...Object.fromEntries([
+      '/api/agent', '/api/agent/**', '/api/animate', '/api/animate/**',
+      '/api/video-snapshot', '/api/video-snapshot/**', '/api/cron/video-poll', '/api/mcp',
+    ].map(route => [route, ['./node_modules/ffmpeg-static/**']])),
     // S3 is also loaded by export, materialize, snapshot polling, and cron routes.
     // Keep its checksum runtime in every API bundle, including re-exported handlers.
     '/api/**': [

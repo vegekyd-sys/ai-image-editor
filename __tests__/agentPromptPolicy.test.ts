@@ -329,7 +329,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('To CONTINUE a video with Gemini Omni, Seedance 2.5, or Grok')
     expect(agentTs).toContain('Google Omni edit/extend accepts one source video up to 10 seconds')
     expect(agentTs).toContain("clamped to 4-15s for SeeDance 2.0 or 4-30s for SeeDance 2.5")
-    expect(agentTs).toContain("const isSeedance25Edit = videoModel === 'seedance-2.5' && video_operation === 'edit'")
+    expect(agentTs).toContain("const isSeedance25Edit = ['seedance-2.5', 'seedance-2.5-eco'].includes(videoModel) && video_operation === 'edit'")
     expect(agentTs).toContain('outputDuration: isSeedance25Edit ? -1 : duration')
     expect(agentTs).toContain('requestedDuration: isSeedance25Edit ? undefined : duration')
     expect(agentTs).not.toContain('Duration in seconds: 3, 5, 7, 10, or 15')

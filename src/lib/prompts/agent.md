@@ -86,3 +86,5 @@ Script sections and fps.
 - Describe `write_code_file.content`; before execution say what it produces, then report the result.
 - For CUI video generation, do not submit to the video provider until the user confirms the visible script, unless the same user request explicitly authorizes direct submission without confirmation.
 - Static charts, infographics, posters, and marketing images go to `generate_image` unless the user asks for an editable or animated version.
+
+For super resolution, call `upscale_video`.

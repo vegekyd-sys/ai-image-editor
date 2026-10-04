@@ -37,3 +37,7 @@ Hard constraints:
 - `video_ref_url`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - If the generated video is an intermediate artifact, pass `completion_actions` so CUI/CLI can show the next step after rendering finishes. These actions are user-confirmed by default; do not rely on the user remembering what to do next. For local video repair, include exact replaceStart/replaceEnd/replacementDuration and say to trim/fit the patch to that duration before merging so the final video keeps the original duration.
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation or the system prompt supplies the trusted Skill template launch exception.
+
+## Seedance 2.5 Eco and video enhancement
+
+`seedance-2.5-eco` is Makaron’s economy delivery route: Seedance 2.5 generates at 480p, then ByteDance Fast enhances the same video. Choose once; `video_resolution` is final delivery: 1080p (default), 2K or 4K. Poll one root task through generation, enhancement and permanent storage. Preserve the base video on enhancement failure and disclose actual 480p delivery; do not call it native HD. Use `upscale_video` for an existing source without generating a new clip. 6K/8K are listed by the supplier but unavailable until pricing and outputs are verified.

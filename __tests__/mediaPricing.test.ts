@@ -57,6 +57,23 @@ describe('database-backed media quotes', () => {
     expect((await quoteSeedAudio({ durationSeconds: 8 })).credits).toBe(4)
     expect((await quoteSeedAudio({ providerCreditsUsed: 1.36 })).credits).toBe(4)
   })
+  it('composes Eco from live base and enhancement tariffs with separate rounding', async () => {
+    const prices = seededMediaPrices()
+    prices.find(p => p.id === 'video:seedance-2.5:480p:generate')!.output_usd_per_second = .2
+    prices.find(p => p.id === 'video:bytedance-video-upscale:4k:generate')!.output_usd_per_second = .03
+    query.mockResolvedValue({ data: prices, error: null })
+    const input = { durationSec: 10, resolution: '4k' as const }
+    const eco = await quoteVideo({ ...input, model: 'seedance-2.5-eco' })
+    expect(eco).toMatchObject({ baseCredits: 400, upscaleCredits: 60, credits: 460 })
+    expect(eco.supplierCostUsd).toBeCloseTo(2.3)
+  })
+  it('charges the published 60fps band without granting a guessed 24fps discount', async () => {
+    const input = { model: 'bytedance-video-upscale', durationSec: 10, resolution: '4k' as const }
+    const thirty = await quoteVideo({ ...input, outputFps: 30 })
+    expect((await quoteVideo({ ...input, outputFps: 24 })).credits).toBe(thirty.credits)
+    expect((await quoteVideo({ ...input, outputFps: 60 })).supplierCostUsd).toBeCloseTo(thirty.supplierCostUsd * 2)
+    await expect(quoteVideo({ ...input, outputFps: 61 })).rejects.toThrow('frame rate')
+  })
   it('rejects missing, disabled, invalid and unreachable pricing', async () => {
     await expect(quoteVideo({ model: 'not-configured', durationSec: 5 })).rejects.toThrow('not configured')
     const row = seededMediaPrices()[0]

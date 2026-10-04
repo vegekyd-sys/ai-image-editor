@@ -9,6 +9,11 @@ export interface GetVideoStatusResult {
   videoUrl?: string;
   error?: string;
   queryFailed?: boolean;
+  baseVideoUrl?: string;
+  stage?: string;
+  requestedResolution?: '1080p' | '2k' | '4k';
+  actualResolution?: '480p' | '1080p' | '2k' | '4k';
+  enhancementStatus?: 'processing' | 'completed' | 'failed';
   message: string;
 }
 
@@ -24,6 +29,10 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
   }
 
   try {
+    if (taskId.startsWith('video-pipeline-')) {
+      const { advanceVideoPipeline } = await import('../video-upscale-pipeline');
+      return await advanceVideoPipeline(taskId, input.userId);
+    }
     // Route by taskId prefix: task-unified-* = Evolink, mr-wan30-* = MuleRouter Wan, cgt-* = SeeDance Volcengine, sync3-* = Sync Lipsync v3, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3
     const isEvolink = taskId.startsWith('task-unified-');
     const isMuleRouter = taskId.startsWith('mr-wan30-');

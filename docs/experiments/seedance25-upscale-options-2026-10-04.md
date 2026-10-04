@@ -1,6 +1,6 @@
 # 同源 480p 超分备选实测
 
-日期：2026-10-04。状态：实验完成；产品编排未实现、未部署。独立 worktree：`seedance25-480p`。
+日期：2026-10-04。状态：实验完成；后续产品编排已在独立分支实现，未部署。独立 worktree：`seedance25-480p`。
 
 ## 范围与命名
 
@@ -61,3 +61,18 @@
 五条新增本地视频均 FFmpeg 全片解码通过，241 帧、24fps、1920×1080；原始 AAC payload MD5 均为 `e8ffe05ea54500d3bb872071d5014e65`，与源视频一致；文件 HTTP 200 与 Content-Length 校验通过，播放器 JS 语法检查通过。浏览器工具此前被本地 URL 策略拒绝，本轮没有绕过，**没有声称本轮浏览器播放已验收**。页面交由用户查看。
 
 可复用脚本：`scripts/video-upscale-options-live.mts`；保存回执后继续同一任务，避免付费重提。`scripts/build-upscale-options-report.py` 仅构建本地播放器，无 API 调用。回执、带访问地址的响应和媒体保留在被忽略的测试目录，不提交凭据或签名 URL。
+
+## 用户选定 ByteDance 后的 2K / 4K 实测
+
+用户选择 **Seedance 2.5 Eco**，并选择 ByteDance Fast 接入独立 Agent 超分。本段新增超分 2 次，没有重新生成 Seedance；原三次测试记录不变。产品编排现已在独立分支实现，仍未生产部署或应用迁移。
+
+调用新的产品适配器 `submitByteDanceUpscale` / `pollByteDanceUpscale`，同一 fal 原片 URL、24fps、aigc、fast、high、数值 bit_depth=8。下载后使用 `finishUpscaleMedia` 复制原 AAC 音轨，视频不重编码。
+
+| 目标 | 实际交付尺寸 | 提交至本地文件就绪 | 10.08 秒超分公开估价 |
+|---|---|---:|---:|
+| 2K | 2564×1440 | 72.259 秒 | $0.145152 |
+| 4K | 3844×2160 | 84.503 秒 | $0.290304 |
+
+两项估价合计 **$0.435456**，不是账单实扣。时间包含 10 秒轮询间隔和下载，不是纯推理时间，不包含新生成或产品 Storage 上传耗时。实际维持 24fps / 241 帧 / 10.08 秒；两项全片解码通过，AAC payload MD5 都为源片的 `e8ffe05ea54500d3bb872071d5014e65`。尺寸因原片 854/480 比例和供应商偶数舍入略宽，按真实尺寸交付。
+
+播放器增加两项及“ByteDance 1080p vs 4K”按钮；高清局部窗口按视频实际尺寸映射同一画面区域。文件 `bytedance-2k-final.mp4` / `bytedance-4k-final.mp4`；验证 JSON 保留在忽略的产物目录。供应商接口列出 6K / 8K，公开价只到 4K，产品第一版仅开放 1080p / 2K / 4K。

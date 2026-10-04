@@ -508,6 +508,7 @@ export async function* runMakaronAgent(
     const nonRepeatableTools = new Set([
       'generate_image',
       'generate_animation',
+      'upscale_video',
       'transcribe_audio',
       'rotate_camera',
       'delete_file',
@@ -950,6 +951,8 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingImage') };
         } else if (event.toolName === 'generate_animation') {
           yield { type: 'status', text: translate(responseLocale, 'status.submittingVideo') };
+        } else if (event.toolName === 'upscale_video') {
+          yield { type: 'status', text: translate(responseLocale, 'status.videoUpscaling') };
         } else if (event.toolName === 'list_files') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.browsingWorkspace') };
         } else if (event.toolName === 'read_file') {

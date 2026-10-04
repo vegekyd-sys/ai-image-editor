@@ -35,6 +35,9 @@ export interface MediaQuote {
   referenceTokens?: number
   billableReferenceTokens?: number
   multiplier: number
+  /** Separately refundable post-processing part of an Eco quote. */
+  upscaleCredits?: number
+  baseCredits?: number
 }
 
 export interface VideoQuoteInput {
@@ -47,6 +50,7 @@ export interface VideoQuoteInput {
   referenceImagePixels?: number
   referenceAudioDurationSec?: number
   contentFilter?: boolean
+  outputFps?: number
 }
 
 export class PricingUnavailableError extends Error {
@@ -124,10 +128,27 @@ export function videoPriceId(input: Pick<VideoQuoteInput, 'model' | 'resolution'
 }
 
 export async function quoteVideo(input: VideoQuoteInput): Promise<MediaQuote> {
+  if (normalizeVideoModelId(input.model) === 'seedance-2.5-eco') {
+    const resolution = resolveVideoGenerationRoute(input).resolution
+    const [base, upscale] = await Promise.all([
+      quoteVideo({ ...input, model: 'seedance-2.5', resolution: '480p' }),
+      quoteVideo({ model: 'bytedance-video-upscale', resolution, durationSec: input.durationSec }),
+    ])
+    return { ...base, priceId: videoPriceId(input), priceVersion: `${base.priceVersion}|${upscale.priceVersion}`,
+      supplierCostUsd: base.supplierCostUsd + upscale.supplierCostUsd,
+      credits: base.credits + upscale.credits, baseCredits: base.credits, upscaleCredits: upscale.credits }
+  }
   const id = videoPriceId(input)
   const prices = await getMediaPrices()
   const price = prices.find(row => row.id === id)
   if (!price) throw new PricingUnavailableError(`Video pricing is not configured: ${id}`)
+  if (normalizeVideoModelId(input.model) === 'bytedance-video-upscale') {
+    const fps = input.outputFps ?? 30
+    if (!Number.isFinite(fps) || fps < 1 || fps > 60) throw new PricingUnavailableError('Unsupported enhancement frame rate.')
+    // The supplier publishes 30fps and 60fps bands; never assume a discount
+    // for 24fps or underquote a source above 30fps.
+    return calculateMediaQuote({ ...price, output_usd_per_second: price.output_usd_per_second * (fps > 30 ? 2 : 1) }, input)
+  }
   const maximum = getVideoModelCapability(input.model).maxImageReferences
   return calculateMediaQuote(price, { ...input, imageCount: maximum == null ? input.imageCount : Math.min(input.imageCount ?? 0, maximum) })
 }

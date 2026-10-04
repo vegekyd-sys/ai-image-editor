@@ -18,7 +18,12 @@ export function seededMediaPrices(): MediaPrice[] {
     price.output_usd_per_second = price.resolution === '480p' ? 0.138 : 0.296
     price.video_reference_usd_per_second = price.resolution === '480p' ? 0.084 : 0.180
   }
-  return [...existing, ...additions]
+  const upscale = readFileSync('supabase/migrations/20261004110000_video_upscale_pipeline.sql', 'utf8')
+    .split('\n').filter(line => line.startsWith("('video:bytedance-video-upscale:")).map(line => {
+      const [id, kind, model_id, resolution, operation, output_usd_per_second] = JSON.parse(`[${line.slice(1, line.lastIndexOf(')')).replaceAll("'", '"').replaceAll(/,\./g, ',0.')}]`)
+      return { id, kind, model_id, resolution, operation, output_usd_per_second, input_usd_per_second: 0, input_usd_per_image: 0, free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true, updated_at: '2026-10-04T00:00:00Z' }
+    })
+  return [...existing, ...additions, ...upscale]
 }
 
 export function seededTokenRates(): TokenRate[] {

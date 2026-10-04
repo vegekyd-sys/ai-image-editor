@@ -53,6 +53,7 @@ export interface VideoProbe {
   width?: number
   height?: number
   fps?: number
+  frameCount?: number
   codec?: string
   audioCodec?: string
   format?: unknown
@@ -116,7 +117,9 @@ function parseDuration(value?: string): number | null {
 async function probeVideoFileWithFfmpeg(filePath: string): Promise<VideoProbe> {
   const ffmpegPath = await findFfmpeg()
   try {
-    await execFileAsync(ffmpegPath, ['-i', filePath, '-f', 'null', '-'], {
+    // Header inspection intentionally exits without an output. Decoding the
+    // whole video was both expensive and discarded metadata on success.
+    await execFileAsync(ffmpegPath, ['-hide_banner', '-i', filePath], {
       timeout: 30_000,
       maxBuffer: 10 * 1024 * 1024,
     })
@@ -126,10 +129,16 @@ async function probeVideoFileWithFfmpeg(filePath: string): Promise<VideoProbe> {
       : ''
     const duration = parseDuration(stderr.match(/Duration:\s*([^,\n]+)/)?.[1])
     const sizeMatch = stderr.match(/Video:.*?,\s*(\d+)x(\d+)[,\s]/)
+    const fpsMatch = stderr.match(/Video:[^\r\n]*?([\d.]+) fps/)
+    const codecMatch = stderr.match(/Video:\s*([^\s,(]+)/)
+    const audioMatch = stderr.match(/Audio:\s*([^\s,(]+)/)
     return {
       duration,
       width: sizeMatch ? Number(sizeMatch[1]) : undefined,
       height: sizeMatch ? Number(sizeMatch[2]) : undefined,
+      fps: fpsMatch ? Number(fpsMatch[1]) : undefined,
+      codec: codecMatch?.[1],
+      audioCodec: audioMatch?.[1],
     }
   }
   return { duration: null }
@@ -158,6 +167,7 @@ export async function probeVideoFile(filePath: string): Promise<VideoProbe> {
     width: typeof video?.width === 'number' ? video.width : undefined,
     height: typeof video?.height === 'number' ? video.height : undefined,
     fps: parseFps(String(video?.avg_frame_rate || video?.r_frame_rate || '')),
+    frameCount: Number(video?.nb_frames) > 0 ? Number(video?.nb_frames) : undefined,
     codec: typeof video?.codec_name === 'string' ? video.codec_name : undefined,
     audioCodec: typeof audio?.codec_name === 'string' ? audio.codec_name : undefined,
     format: parsed.format,

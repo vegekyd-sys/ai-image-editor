@@ -41,7 +41,7 @@ it('returns the saved row and does not cache the Admin catalog', async () => {
   expect((await PUT(req(edit()))).status).toBe(200)
   const response = await GET(req({}))
   expect(response.headers.get('Cache-Control')).toBe('no-store')
-  expect((await response.json()).length).toBe(68)
+  expect((await response.json()).length).toBe(seededMediaPrices().length)
 })
 
 it('saves and clears a video-reference tariff, rejecting zero and negative rates', async () => {

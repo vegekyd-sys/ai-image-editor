@@ -1,120 +1,72 @@
-# Seedance 2.5 经济高清与通用视频超分方案
+# Seedance 2.5 Eco 与 ByteDance Fast 视频超分
 
-日期：2026-10-04。状态：方案，未实现产品编排、未部署。关联独立分支：`codex/seedance25-480p-upscale`。
+2026-10-04。状态：独立分支实现、供应商 1080p / 2K / 4K 样片验证；未部署生产，数据库迁移未应用。分支 `codex/seedance25-480p-upscale`。
 
-## 决策
+## 产品决定与用法
 
-推荐接 **EvoLink Seedance 2.5 480p → fal.ai 视频超分 → 720p / 1080p**，对用户表现为一次视频任务。内部将超分做成独立媒体处理能力，后续可复用于其他模型和已有视频。最新同源样片中，ByteDance Fast 为经济路线候选，Topaz Proteus 为较均衡的画质备选；供应商默认等待用户评审和更广样本验收。
+用户已选定名称 **Seedance 2.5 Eco** 和默认增强方案 **ByteDance Fast**。Eco 是 Makaron 组合路线名：EvoLink Seedance 2.5 生成 480p → fal 托管的 ByteDance Fast 超分；不能称为供应商官方新型号或原生高清。
 
-用户 2026-10-04 补充方向：模型列表单独提供 **Seedance 2.5 经济高清 / Seedance 2.5 Eco**，默认交付 1080p。用户选择一次并提交，后台自动执行生成和超分，不再要求选择第二个模型或再次点击增强。英文 Eco 是 Makaron 的组合路由名称，不能包装为 ByteDance 官方型号。Fast 会暗示速度优势，须测速支持后再考虑；单独叫 Super Resolution 不容易说明生成模型和低价价值。
+| 入口 | 行为 |
+|---|---|
+| 模型选择 Seedance 2.5 Eco | 一次提交，默认交付 1080p，可选 2K / 4K；生成与增强共享一个任务与时间线结果 |
+| Agent `upscale_video` | 对已有一段视频超分，无新 prompt 生成；支持 Media Index 或外部视频 URL，默认 1080p，可选 2K / 4K |
+| MCP `makaron_upscale_video` | URL + resolution，支持可重用 billingRequestId；轮询现有状态工具 |
+| CLI | `makaron chat` 驱动已有视频超分；`video create --video-model seedance-2.5-eco --video-resolution 4k` 创建 Eco 视频 |
 
-先提供明确的“经济高清”选项，不改变现有请求中原生 720p 的含义。ByteDance Fast、Topaz Proteus、Gaia CG 已跑通同一条 10 秒原片；ByteDance 与 Proteus 保留像素表情优于前次 FlashVSR。仍需用户动态评审、账单和更多场景验证，不能将单样本效果等同于稳定默认。见 [最新备选实测](../experiments/seedance25-upscale-options-2026-10-04.md)。
+既有原生 `seedance-2.5` 路由保留。GUI 与状态文案同步 zh / zh-Hant / ja / en。独立增强即使生成模型选择器被锁定，也使用 ByteDance Fast；不误带时间线图片、音频或其它视频。现有视频超分无需脚本审核；Eco 新生成遵循原有生成授权合同。
 
-## 与现有 Wan 3 的关系
+fal API 的目标枚举还包括 6K / 8K，但公开价仅列到 4K。本版上限为已定价、已实测的 4K；后续确认更高档价格与输出后扩展能力表、报价和交付校验，不推测价格或借 scale_ratio 绕过上限。
 
-当前代码中，Wan Standard / Prime 走 MuleRouter 的 CarrotHub 路由。480p / 720p / 1080p 使用普通生成接口，只有 2K / 4K 切换到包含超分的 Pro / Prime Pro 接口。Makaron 收到、轮询和结算的是一个供应商任务。
+## 持久化与交付
 
-代码入口：`src/lib/video-model-capabilities.ts`、`src/lib/mulerouter-video.ts`、`src/lib/skills/create-video.ts`。旧实验文档中的默认模型和价格不能替代当前代码。
-
-可以复用 Wan 的分辨率选择、异步任务、时间线和交付体验，但 Seedance 的生成与超分属于两个供应商，需要 Makaron 保存两个子任务并推进流程。当前代码没有经过验证的 MuleRouter / CarrotHub 独立视频超分接口；不能将 Seedance 产物作为 Wan Pro 的参考视频来替代纯超分，那会触发另一次视频生成。
-
-FlashVSR 原项目为 [OpenImagingLab/FlashVSR](https://github.com/OpenImagingLab/FlashVSR)，本次实测 API 提供商为 [fal.ai](https://fal.ai/models/fal-ai/flashvsr/upscale/video)。不同第三方服务的模型版本和处理流程可能不同，不假设 Wan 内置版本与 fal 版本效果、参数和价格一致。
-
-## 产品合同
-
-原有 `model=seedance-2.5` 行为保留；新增产品路由 ID（拟）`seedance-2.5-eco`，解析为 `generationModel=seedance-2.5`、`quality_mode=economy`，缺省目标为 1080p。底层 planner 可接受 `quality_mode=economy|native`，`video_resolution` 表示用户要求的最终交付分辨率。旧请求未带新路由 / 模式时沿用现有原生路由。
-
-GUI 为模型列表的一条独立入口，附“经济高清”徽标、预计总积分和“480p 生成后超分”的说明。没有强制第二次选择；用户需要时仍可更改输出到 720p。CUI / CLI / MCP 可按新路由 ID 一次提交并轮询同一个根任务。路由名称、模型选择器、工具枚举、计费、持久化和状态查询须同步，不能只增加前端标签。
-
-| 用户选择 | 生成阶段 | 后处理阶段 |
-|---|---|---|
-| 480p | 原生 480p | 无 |
-| 经济高清 720p | 原生 480p | 选定的超分适配器后交付 720p |
-| 经济高清 1080p | 原生 480p | 选定的超分适配器后交付 1080p |
-| 原生 720p | 原生 720p | 无 |
-
-原生 1080p 本轮进行两条 10 秒同 prompt 对比中的一条实测；是否对产品开放仍单独决定。模型能力表区分原生生成分辨率与经济高清交付分辨率，不能直接把 1080p 填入现有原生支持列表。
-
-App、Agent、CLI、MCP 使用同一个 delivery plan。用户明确要求“原生”时不切经济模式；经济模式显示“480p 生成后超分”，提供总报价，不把产物标为原生高清。中文、繁中、日文和英文同步补齐文案。
-
-只创建一张任务卡和一个时间线占位：生成中 → 已生成，正在提升清晰度 → 高清视频完成。基础视频保存后可以预览，但根任务仍在处理中；最终文件替换占位，保留基础版本供下载或重新增强。
-
-## 任务与存储
+实现入口：`src/lib/bytedance-video-upscale.ts`、`video-upscale-media.ts`、`video-upscale-pipeline.ts`。根任务为 `video-pipeline-UUID`，service-only 表 `video_upscale_jobs` 保存所有者、项目、目标、阶段、生成/增强回执、基础/最终 URL、媒体信息、超分预留积分和退款结果。
 
 ```mermaid
 flowchart LR
-  A[一次创建视频请求] --> B[EvoLink 生成 480p]
-  B --> C[永久保存基础视频并探测媒体]
-  C --> D[fal 视频超分适配器]
-  D --> E[保留原音轨并规范尺寸]
-  E --> F[永久保存高清版本并完成根任务]
-  D -->|确认失败| G[交付基础视频并标明未达到目标清晰度]
+  A[Eco 一次创建] --> B[EvoLink 480p]
+  C[已有视频超分] --> D[保存与探测原片]
+  B --> D
+  D --> E[ByteDance Fast]
+  E --> F[复制原音轨并验证媒体]
+  F --> G[永久保存高清文件]
+  E -->|Eco 增强确认失败| H[保留 480p 只退增强费用]
 ```
 
-新增持久化根任务和子阶段记录，根任务 ID 不直接等于 EvoLink 或 fal 的供应商任务 ID。保存：所有者、关联 snapshot / billing request、目标与实际分辨率、delivery plan、阶段、供应商回执、基础与高清存储地址、媒体参数、报价明细、退款状态和阶段时间。
+App snapshot、旧 animate、Agent Run、MCP 状态查询与 Cron 使用同一 `advanceVideoPipeline`。生成完成不表示 Eco 根任务完成；只在最终文件进入永久存储后交付完成。生成与增强不在创建请求内等待。轮询推进下载、探测、原音轨复用与存储；阶段保存后可续跑，当前使用 API 服务端媒体运行时，并有 FFmpeg 打包检查。
 
-顶层状态沿用 `pending / processing / completed / failed`，另加 `stage` 和增强结果状态。基础预览地址与最终交付地址分开；超分失败后有可用基础视频的终态为 `completed`，同时必须返回增强失败及实际 480p，调用方不能误认为目标 1080p 已达成。
+数据库租约与 updated_at CAS 防止旧状态轮询再次提交；调用供应商前保存 submitting_upscale 意图，付费 POST 不自动重试。请求不确定或回执无法保存时保留根任务，凭日志中的根 ID / 子任务 ID 人工核对；不把缺失回执解释为可以再生成。网络查询、下载、存储失败继续恢复同一任务。Cron 独立恢复根任务，不将生成+超分机械套入旧的单供应商 30 分钟退款规则。
 
-统一 `advanceVideoPipeline`：App 状态查询、Agent / MCP 状态查询和 Cron 都调用同一推进逻辑。供应商提交采用阶段唯一约束、数据库租约和保存回执的机制，避免浏览器轮询与 Cron 同时提交、重复付费。供应商缺失回执时进入不确定状态，不盲目重新提交；数据库锁本身不能消除供应商提交与保存回执之间的故障窗口。
+原片和高清片写入不同 Storage key。保留原帧率、画幅、时长和原音轨；不默认插帧、不重新压缩视频音频。校验短边达到 1080 / 1440 / 2160，时长差 ≤0.25s，fps 差 ≤0.02，画幅比例差 ≤0.02；ffprobe 能读取帧数时要求相同。无 ffprobe 时使用 FFmpeg 头部解析。供应商可能按源画幅舍入，实际 4K 样片为 3844×2160，不虚报精确 3840×2160。
 
-不在一次 HTTP 请求或一次 LLM 工具调用内等待两个阶段完成。长耗时下载、音轨合并、编码与探测交给可续跑的媒体处理执行环境；Cron 和状态查询仅负责触发、查询、恢复。
+独立超分初始限制为 60 秒、512MB、1–60fps；当前输出 MP4。更长片需先分段。删除时间线占位沿用原有 abandoned 行为，不等同供应商取消；当前未新增供应商取消 API 或退款承诺。
 
-现有 `get-video-status.ts`、视频 snapshot 状态接口和 `cron/video-poll` 有多处供应商分流，需要同时接入根任务解析。尤其不能在基础视频完成时就把 snapshot 的 `status` 设为完成，否则现有永久 URL 短路会跳过超分。超时按阶段和实际供应商状态判断，不机械沿用从根任务创建起算的单阶段超时。
+## 计费与失败
 
-基础与最终视频使用不同存储键。超分输入使用已永久保存的基础视频及有效访问地址，避免临时供应商 URL 过期。最终持久化完成后才标记交付完成；下载或保存失败只重试该步骤，不再次提交付费推理。
+Eco 报价从数据库读取原生 480p 和对应超分费率，分别舍入积分再相加；不重复 markup。管理员修改费率立即影响新报价，旧任务使用预留费用。独立增强先下载并测量真实时长与 fps，再预检余额并提交。30fps 档按公开费率，超过 30fps 使用公开 60fps 的双倍档，不假设 24fps 折扣。
 
-## 超分适配器与媒体合同
-
-新增通用 `video-upscale` 适配器，接口覆盖 submit、status、cancel 和 quote。当前已验证的实验接口为 `fal-ai/bytedance-upscaler/upscale/video`、`topaz/upscale/video/precision` 和 `fal-ai/flashvsr/upscale/video`。复用现有 fal 认证和队列处理模式，保持 H3 专用适配器职责不变。供应商错误须脱敏，避免回显访问 URL 或密钥。
-
-候选参数：ByteDance 使用 fast / aigc / high fidelity / 数值 bit_depth=8，目标 1080p；Topaz 使用 Proteus / 2.25 倍 / H264。目标帧率沿用输入。历史 FlashVSR 使用 regular、color fix、quality 80、preserve audio、2.25 倍，可作为可选路线，不再固定为默认。720p 先从同一高清产物降采样；倍率依实际输入短边计算，不假设所有 480p 都是横屏 854×480。
-
-交付检查：保留源帧率、时长、原始音轨和画幅；不默认插帧到 30fps。处理编码需要的偶数尺寸和供应商尺寸舍入，轻微裁边而不拉伸主体。音轨以基础视频为准，供应商音频不可靠时复制源音轨。验收须覆盖竖屏、方形和无声视频，不能仅凭横屏样片泛化。
-
-后续单独验证直接 1.5 倍到 720p，可降低像素计费；现阶段不把该路径的成本和效果当成已验证。原项目推荐 4 倍超分，应加入 2.25 倍与 4 倍后降采样的效果、耗时和实际扣费对比，再决定默认参数。
-
-## 计费、失败与取消
-
-用户看到一份总报价，内部保存生成与超分两项独立费用。生成报价继续走现有价格表；超分报价由各适配器计算，FlashVSR 按输出宽 × 高 × 帧数，ByteDance 按分辨率 / 时长 / 帧率 / tier，Topaz 按模型 / 分辨率 / 时长 / 帧率及信用点舍入。保存报价版本与计费媒体参数，不将不同供应商套进同一个像素费率。现有 markup 按统一定价合同计算，不能叠加两遍。
-
-提交前预留总额度。自动时长或编辑模式先按已支持的时长上限预留，基础视频完成后用真实帧数和尺寸复核超分预算，金额不足时保留基础产物并要求明确追加额度，不默默扩大收费范围。最终多退少补遵循既有积分合同和用户授权上限。
-
-| 情况 | 交付与结算 |
+| 结果 | 行为 |
 |---|---|
-| 生成阶段确认失败 | 根任务失败，释放 / 退回对应额度 |
-| 生成成功、超分确认失败 | 保留 480p，生成费用保留，仅结算 / 退回超分部分 |
-| 状态查询网络失败 | 标记查询不确定，继续恢复，不作为供应商终态失败退款 |
-| 超分完成、下载或存储失败 | 重试交付步骤，不重复付费超分 |
-| 用户取消 | 停止后续阶段；确认供应商是否取消、是否已计费后结算，基础产物保留 |
-| 用户重试增强 | 复用基础视频，仅创建新的增强尝试并单独报价 |
+| 生成确认失败 | 使用现有整单失败结算 |
+| Eco 增强确认失败 | 原片永久保留；completed + enhancementStatus=failed + actualResolution=480p；仅退超分预留积分 |
+| 独立增强确认失败 | 使用现有整单失败结算 |
+| 查询或交付失败 | 保存原任务、继续恢复，不再次付费推理或提前退款 |
 
-目前 MCP 失败结算是整个视频任务级别，需要扩展分阶段结算，避免基础生成已成功却整单退款。App 与 MCP 必须共用结果，不能各自实现不同规则。供应商服务繁忙时不自动切换到更贵的付费备用路由；切换条件和预算应在计划中明确。
+部分退款 RPC 锁定所有者对应根记录，减去已经退款的金额，支持 App / MCP / Cron 并发重复结算。MCP 根任务继续由原有 reservation 结算，增强失败的 Eco 返回可用原片，不触发整单退款。当前按报价预留收费；未新增按供应商实际账单或容器舍入时长的自动补扣。供应商费用下述均为公开估算。
 
-## 成本与供应商选择
+## 验证与发布边界
 
-早期报价及 4 秒实验的历史记录如下，不能作为最新默认决定。最新 10 秒同源实测中，原片实扣 $1.374，加 ByteDance Fast 超分公开价估算约 $1.447，加 Proteus 约 $1.576。超分阶段供应商返回分别为 44.4 秒与 33.4 秒，前次 FlashVSR 为 161.4 秒。超分实扣账单待核对；速度是单次样本。完整证据见 [最新备选实测](../experiments/seedance25-upscale-options-2026-10-04.md)。
+同一条原始 480p 吉祥物视频跑通 ByteDance Fast 1080p / 2K / 4K。新增 2K / 4K 两次无重试，没有新增 Seedance；生产媒体交付 helper 实际处理输出，24fps / 241 帧 / 10.08s，AAC payload 与源片相同，全片解码通过。新增 2K / 4K 估价共 $0.435456。竖屏、方形、无声的交付 helper 使用本地合成片验证；不等于这些场景的供应商画质验收。详情见实验文档。
 
-以下历史表统一比较 10 秒、16:9、24fps、无视频参考，金额是供应商美元成本，不是 Makaron 用户积分：
+回归覆盖 Agent 锁定模型后的独立增强、唯一 ready source、单时间线产物、拥有者隔离、重复/过时轮询、未知 POST、部分退款、查询失败、存储续跑和费率组合。迁移用本地 PGlite/PostgreSQL 执行，检查语法、服务权限、所有者、租约和退款幂等；退款底层账本为测试 stub，不声称生产账本验收。
 
-| 路径 | 生成 + 超分估算 | 建议 |
-|---|---:|---|
-| 原生 720p | $2.960 | 保留原生选项 |
-| 原生 1080p | $7.390 | 仅作报价对照，尚未开放 |
-| 480p + FlashVSR 1080p | 约 $1.629 | 早期跑通路线；最新评审不推荐固定为默认 |
-| 480p + ByteDance Standard 1080p | 约 $1.452 | 历史估算；最新实测使用 Fast |
-| 480p + Topaz 4 倍后降采样 | 约 $2.260 | 本次服务繁忙失败，暂不优先 |
+发布前需按 release 流程处理两个迁移及对应应用版本：先部署兼容 Seedance 480p 新计价代码，再应用既有 `20261003194718_seedance25_480p_pricing.sql` 中需要的列/报价变更；新增 `20261004110000_video_upscale_pipeline.sql` 提供表、RPC 与超分价格。实际生产应用和迁移次序应按 release 检查确认，不能将共享 Preview 当隔离数据库。当前没有应用生产迁移、合入或部署，也没有声称真实 App Agent 端到端已验收。
 
-FlashVSR 公开价为 $0.0005 / 视频百万像素，1080p / 24fps 约 $0.0249/s；其成本会随真实输出尺寸和帧数变化。相比原生 720p 和 1080p，上述 FlashVSR 路径估算分别节省约 45% 和 78%。第一版 720p 也经过 1080p 中间产物，超分成本不会因最终降采样自动降低。
+## 与 Wan 3 的关系与来源
 
-来源：[EvoLink Seedance 2.5](https://evolink.ai/seedance-2-5)、[fal FlashVSR](https://fal.ai/models/fal-ai/flashvsr/upscale/video)、[fal ByteDance Upscaler](https://fal.ai/models/fal-ai/bytedance-upscaler/upscale/video)、[EvoLink Topaz](https://evolink.ai/topaz-video-upscale)。视频参考输入另按 Seedance 的输入及输出时长计费，不适用本表。
+Wan 3 的 2K / 4K 是 MuleRouter/CarrotHub 的单供应商 Pro 任务；Eco 有两个供应商，由 Makaron 持久化根任务统一推进。复用分辨率选择、报价、任务卡、状态与时间线体验，不能把 Seedance 原片作为 Wan 参考图重生成来冒充纯超分。
 
-早期 FlashVSR 4 秒样片约 44 秒完成，原音轨及帧数保留、浏览器播放通过；背景出现额外光斑，不能声称等价原生高清。该次 ByteDance 修正参数后仍排队，已取消；最新同源 10 秒实测已成功，不再沿用历史失败作为当前判断。超分成本尚无 fal 实账，以上总价是公开价估算。
+FlashVSR 原项目为 OpenImagingLab，前次 API 托管供应商为 fal；当前选择 ByteDance Fast，Proteus 保留实验对比。单样本中经济路线主要节省成本，不能据此宣称端到端生成速度比原生 1080p 更快。
 
-## 落地顺序与验收
+来源：[fal ByteDance 参数](https://fal.ai/models/fal-ai/bytedance-upscaler/upscale/video/api)、[fal ByteDance 公开价格](https://fal.ai/models/fal-ai/bytedance-upscaler/upscale/video)、[同源超分实测](../experiments/seedance25-upscale-options-2026-10-04.md)。
 
-1. 独立超分适配器：已有视频作为输入，真实验证提交、恢复、终态、音轨、尺寸和永久交付。先覆盖横屏 / 竖屏与无声 / 有声。
-2. 两阶段根任务和分阶段结算：验证并发轮询不重复提交、回执缺失、超分失败保留基础视频、下载失败只重试交付、取消与仅增强重试。
-3. App / Agent / CLI / MCP 接入同一个 delivery plan，四语言文案与报价一致；时间线只有一份成品，项目重新打开仍可播放并保留基础版本。
-4. 小范围开放经济高清，用人脸、文字、快速运动、虚化背景、布料和重复纹理样本做连续播放对比，取得真实供应商扣费及排队数据后再决定默认与 ByteDance 路由。
-
-本方案完成不代表产品链路已实现或上线。此前实验与样片证据见 [Seedance 480p 实验报告](../experiments/seedance25-480p-upscale-2026-10-04.md)。
+本次验证结果：全量 Vitest 316 文件 / 1,994 用例通过（1 项既有 live test 跳过）；TypeScript、i18n、Agent startup、video-reference workflow 与 discovery 同步检查通过；ESLint 无错误（3 项既有警告）。共享 node_modules 的 worktree 下 Turbopack 拒绝越界 symlink，使用已有 webpack 路径完成生产构建；10 个 CRC32C 路由与 9 个媒体路由的 FFmpeg trace 检查通过。本地播放器与两条高清视频 HTTP 200、JS 语法正确；此前浏览器 URL 安全策略拒绝访问，未绕过或声称新页面真实浏览器播放已验收。

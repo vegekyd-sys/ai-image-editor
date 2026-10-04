@@ -38,8 +38,13 @@ export interface CreateVideoInput {
   /** Called before a safe subscription-to-API fallback creates a paid task. */
   onBeforeGrokApiFallback?: () => Promise<void>;
   /** Hosted billing receives the resolved, selected provider inputs before submission. */
-  onBeforeProviderSubmit?: (usage: VideoQuoteInput) => Promise<void>;
+  onBeforeProviderSubmit?: (usage: VideoQuoteInput) => Promise<void | { reservedUpscaleCredits: number }>;
   billingRequestId?: string;
+  /** Internal authenticated billing information; never accepted from a client payload. */
+  reservedUpscaleCredits?: number;
+  billingToolName?: string;
+  billingSource?: 'app' | 'mcp';
+  projectId?: string;
 }
 
 export interface CreateVideoResult {
@@ -246,6 +251,11 @@ function prepareWan30References(options: {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
+  const selected = normalizeVideoModelId(input.videoModel);
+  if (selected === 'seedance-2.5-eco' || selected === 'bytedance-video-upscale') {
+    const { createVideoPipeline } = await import('../video-upscale-pipeline');
+    return createVideoPipeline(input);
+  }
   const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', imageWorkflow, previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length || !!previousInteractionId;
   const hasAudioReference = !!audioUrls?.length;
@@ -624,7 +634,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         prompt: finalPrompt, images: filteredImages, videos: h3References.videos, audios: h3References.audios,
         duration: resolvedDuration ?? 5, aspectRatio: providerAspectRatio,
         resolution: route.resolution as '480p' | '768p' | '1080p', imagesVerified: true,
-        onBeforeSubmit: billingUsage ? () => input.onBeforeProviderSubmit!(billingUsage!) : undefined,
+        onBeforeSubmit: billingUsage ? async () => { await input.onBeforeProviderSubmit!(billingUsage!); } : undefined,
       });
       return { success: true, taskId, videoModel: provider,
         providerModel: resolveVideoProviderModel({ model: provider, imageReferenceCount: filteredImages.length, hasVideoReference }),
@@ -650,7 +660,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         duration: resolvedDuration ?? 5,
         aspectRatio: providerAspectRatio,
         resolution: route.resolution as '480p' | '768p',
-        onBeforeSubmit: billingUsage ? () => input.onBeforeProviderSubmit!(billingUsage!) : undefined,
+        onBeforeSubmit: billingUsage ? async () => { await input.onBeforeProviderSubmit!(billingUsage!); } : undefined,
       });
       console.log(`✅ [create_video] MiniMax H3 Max Turbo task created: ${taskId}`);
       return {

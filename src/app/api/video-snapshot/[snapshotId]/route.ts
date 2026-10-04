@@ -155,7 +155,7 @@ export async function GET(
           videoUrl: videoMeta.videoUrl,
           currentImageUrl: snap.image_url,
         })
-        return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
+        return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined, stage: videoMeta.pipelineStage, baseVideoUrl: videoMeta.baseVideoUrl, enhancementStatus: videoMeta.enhancementStatus, actualResolution: videoMeta.resolution, requestedResolution: videoMeta.requestedResolution })
       }
       persistProviderVideoAfterResponse({
         admin,
@@ -168,7 +168,7 @@ export async function GET(
       })
       // The provider asset is already playable. Return it while Makaron Storage
       // persistence continues in after(), matching the provider-first App contract.
-      return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
+      return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined, stage: videoMeta.pipelineStage, baseVideoUrl: videoMeta.baseVideoUrl, enhancementStatus: videoMeta.enhancementStatus, actualResolution: videoMeta.resolution, requestedResolution: videoMeta.requestedResolution })
     }
     if (videoMeta.status === 'failed') {
       return NextResponse.json({
@@ -246,10 +246,13 @@ export async function GET(
     const isFalH3Max = videoMeta.taskId.startsWith('fal-h3max-')
     const isSyncLipsync = videoMeta.taskId.startsWith('sync3-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
-    let result: { taskId: string; status: string; videoUrl?: string; error?: string }
+    let result: { taskId: string; status: string; videoUrl?: string; error?: string } & Partial<import('@/lib/skills/get-video-status').GetVideoStatusResult>
     const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
 
-    if (isMuleRouter) {
+    if (videoMeta.taskId.startsWith('video-pipeline-')) {
+      const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline')
+      result = { taskId: videoMeta.taskId, ...await advanceVideoPipeline(videoMeta.taskId, ownerUserId) }
+    } else if (isMuleRouter) {
       const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
       result = await getMuleRouterVideoTask(videoMeta.taskId)
     } else if (isEvolink) {
@@ -310,7 +313,7 @@ export async function GET(
     }
 
     if (result.status === 'completed' && result.videoUrl) {
-      const updatedMeta: VideoMeta = { ...videoMeta, status: 'completed', videoUrl: result.videoUrl, providerUrl: result.videoUrl }
+      const updatedMeta: VideoMeta = { ...videoMeta, status: 'completed', videoUrl: result.videoUrl, providerUrl: result.videoUrl, ...(result.stage ? { pipelineStage: result.stage, baseVideoUrl: result.baseVideoUrl, enhancementStatus: result.enhancementStatus, requestedResolution: result.requestedResolution, resolution: result.actualResolution ?? videoMeta.resolution } : {}) }
 
       await admin
         .from('snapshots')
@@ -329,7 +332,7 @@ export async function GET(
 
       // Return completed immediately with provider URL — frontend can play it right away
       // after() will persist to Storage in background, subsequent loads use permanent URL
-      return NextResponse.json({ status: 'completed', videoUrl: result.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
+      return NextResponse.json({ ...result, status: 'completed', snapshotId, imageUrl: snap.image_url || undefined })
     }
 
     if (result.status === 'failed') {
@@ -344,7 +347,7 @@ export async function GET(
       })
     }
 
-    return NextResponse.json({ status: result.status, snapshotId, imageUrl: snap.image_url || undefined, error: result.error })
+    return NextResponse.json({ ...result, snapshotId, imageUrl: snap.image_url || undefined })
   } catch (err) {
     console.error('video-snapshot GET error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

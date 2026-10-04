@@ -2688,7 +2688,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 ...s,
                 image: data.imageUrl || s.image,
                 imageUrl: data.imageUrl || s.imageUrl,
-                videoMeta: { ...s.videoMeta!, status: 'completed' as const, videoUrl: data.videoUrl },
+                videoMeta: { ...s.videoMeta!, status: 'completed' as const, videoUrl: data.videoUrl, pipelineStage: data.stage, baseVideoUrl: data.baseVideoUrl, enhancementStatus: data.enhancementStatus, resolution: data.actualResolution ?? s.videoMeta!.resolution, requestedResolution: data.requestedResolution },
               } : s
             ));
             // Reset animationState if this was the task being polled
@@ -2701,7 +2701,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             const videoMsg: Message = {
               id: generateId(),
               role: 'assistant',
-              content: `🎬 ${t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
+              content: `🎬 ${data.enhancementStatus === 'failed' ? t('status.videoUpscaleFailed') : t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
               timestamp: Date.now(),
             };
             setMessages(prev => {
@@ -2723,6 +2723,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 // Native playback is already available; design metadata repair is best-effort.
               }
             })();
+          } else if (data.status === 'processing' && data.stage && data.stage !== snap.videoMeta?.pipelineStage) {
+            setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, pipelineStage: data.stage, baseVideoUrl: data.baseVideoUrl, enhancementStatus: data.enhancementStatus } } : s));
           } else if (data.status === 'failed') {
             const actionLines = serializeCompletionActions(data.completionActions);
             const reason = data.error ? `\n${data.error}` : '';
@@ -2991,7 +2993,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     ?? animationState?.videoModel
     ?? null;
   const videoProcessing = snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
-  const videoRenderingStatus = isRemotionExportTaskId(processingVideoSnap?.videoMeta?.taskId)
+  const videoRenderingStatus = processingVideoSnap?.videoMeta?.taskId?.startsWith('video-pipeline-') && processingVideoSnap.videoMeta.pipelineStage && processingVideoSnap.videoMeta.pipelineStage !== 'generating'
+    ? t('status.videoUpscaling')
+    : isRemotionExportTaskId(processingVideoSnap?.videoMeta?.taskId)
     ? t('status.remotionExportRendering')
     : (isFastVideoRenderModel(processingVideoModel)
       ? t('status.videoRenderingFast')

@@ -5,7 +5,7 @@ import { getVideoStatus } from '@/lib/skills/get-video-status'
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
 import { isBillingEnabled, recordSubscriptionUsage, requireCredits } from './credits'
-import { quoteVideo, type VideoQuoteInput } from './media-pricing'
+import { quoteVideo, type MediaQuote, type VideoQuoteInput } from './media-pricing'
 
 export interface McpVideoOwner { userId: string; apiKeyId: string; toolName: string }
 
@@ -39,6 +39,7 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
   const subscription = normalizeVideoModelId(input.videoModel) === 'grok' && await isGrokSubscriptionAllowedUser(owner.userId)
   let usage: VideoQuoteInput | undefined
   let reserved = false
+  let reservedQuote: MediaQuote | undefined
   let replay: CreateVideoResult | undefined
   const reserve = async () => {
     if (reserved || !(await isBillingEnabled())) return
@@ -60,10 +61,14 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
       throw new Error('Existing billing request')
     }
     reserved = true
+    reservedQuote = quote
   }
   const result = await createVideo({
-    ...input, userId: owner.userId,
-    onBeforeProviderSubmit: async resolved => { usage = resolved; if (!subscription) await reserve() },
+    ...input, userId: owner.userId, billingToolName: owner.toolName, billingSource: 'mcp',
+    onBeforeProviderSubmit: async resolved => {
+      usage = resolved; if (!subscription) await reserve()
+      return { reservedUpscaleCredits: reservedQuote?.upscaleCredits ?? 0 }
+    },
     onBeforeGrokApiFallback: reserve,
   }).catch((error): CreateVideoResult => ({ success: false, submissionUncertain: true, message: error instanceof Error ? error.message : String(error) }))
   if (replay) return replay

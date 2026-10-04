@@ -1558,6 +1558,7 @@ function createGenerateImageTool(
 
 function createGenerateAnimationTool(
   { ctx, serializeVideoSubmission }: AgentToolFactoryScope,
+  forceUpscale = false,
 ) {
   const invalidRequest = createVideoValidationReporter();
   return tool({
@@ -1567,7 +1568,7 @@ function createGenerateAnimationTool(
         video_intent: z.enum(['generate', 'replicate']).nullish().describe('Default generate: ordinary new videos, photo animation, lookbooks, loose references, edits and extensions. Set replicate ONLY when the user wants to reproduce a supplied video\'s measured timing, action and camera with replaced content; requires replication_contract and an actual source video. Never select replicate merely to preserve a face.'),
         duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max accepts integer 5–15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can honor it. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive. Grok reference-to-video accepts supported fixed ratios.'),
-        model: z.string().optional().describe('Video model/provider id. Defaults to fal-h3-max at 768p. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, wan-3.0, wan-3.0-prime, kling, grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Default to seedance-2.5 for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
+        model: z.string().optional().describe('Video model/provider id. Defaults to fal-h3-max at 768p. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, seedance-2.5-eco, wan-3.0, wan-3.0-prime, kling, grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Default to seedance-2.5 for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
         video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. fal H3 Max supports 480p/768p/1080p (1080p uses latent refinement from 768p), default 768p. fal H3 Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, MiniMax H3, and FAL H3 Max.'),
@@ -1687,7 +1688,7 @@ function createGenerateAnimationTool(
         const replicationAwareToolResolution = replication_contract
           ? resolveVideoReplicationResolution(video_resolution)
           : video_resolution;
-        const selectedVideoRoute = requestedModel === 'sync-lipsync-v3'
+        const selectedVideoRoute = forceUpscale || requestedModel === 'sync-lipsync-v3'
           ? { model: requestedModel, resolution: video_resolution ?? 'auto', locked: false }
           : resolveAgentVideoSelection({
             appModel: (ctx as any).videoModel,
@@ -1703,7 +1704,7 @@ function createGenerateAnimationTool(
             }
           : selectedVideoRoute;
         const videoModel = videoSelection.model;
-        const isSeedance25Edit = videoModel === 'seedance-2.5' && video_operation === 'edit';
+        const isSeedance25Edit = ['seedance-2.5', 'seedance-2.5-eco'].includes(videoModel) && video_operation === 'edit';
         const videoRoute = resolveVideoGenerationRoute({
           model: videoModel,
           resolution: videoSelection.resolution,
@@ -1827,7 +1828,7 @@ function createGenerateAnimationTool(
             };
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
-          if (video_ref_url && autoVideoUrls.length > 0 && videoModel !== 'seedance-2.5' && videoModel !== 'wan-3.0' && videoModel !== 'wan-3.0-prime') {
+          if (video_ref_url && autoVideoUrls.length > 0 && videoModel !== 'seedance-2.5' && videoModel !== 'seedance-2.5-eco' && videoModel !== 'wan-3.0' && videoModel !== 'wan-3.0-prime') {
             return {
               success: false as const,
               message: 'Do not mix video_ref_url with timeline video markers in one generation. For a local segment edit, pass only the extracted segment as video_ref_url and remove any <<<media_N>>> markers that point to timeline videos.',
@@ -1874,7 +1875,7 @@ function createGenerateAnimationTool(
           });
           let providerVideoRefUrl = video_ref_url;
           let providerAutoVideoUrls = autoVideoUrls;
-          if (allVideoUrls.length > 0 && ctx.userId && ctx.projectId && !isGoogleOmniStatefulExtend) {
+          if (allVideoUrls.length > 0 && ctx.userId && ctx.projectId && !isGoogleOmniStatefulExtend && !forceUpscale) {
             const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference');
             const referenceSupabase = ctx.supabase || (await import('@/lib/supabase/service')).getSupabaseAdmin();
             const prepared = await prepareProviderVideoReferences({
@@ -1897,11 +1898,13 @@ function createGenerateAnimationTool(
 
           const createVideoInput: Parameters<typeof createVideo>[0] = {
             script: effectiveStoryPrompt,
-            images: imageUrls,
+            images: forceUpscale ? [] : imageUrls,
             duration: effectiveDuration,
             aspectRatio: selectedAspectRatio,
             videoModel,
             videoResolution: videoRoute.resolution,
+            projectId: ctx.projectId,
+            billingToolName: reservationToolName,
             videoUrl: providerVideoRefUrl,
             videoReferType: video_ref_type,
             videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
@@ -1972,11 +1975,12 @@ function createGenerateAnimationTool(
             && await isGrokSubscriptionAllowedUser(ctx.userId);
           if (grokSubscriptionPreferred) {
             createVideoInput.onBeforeGrokApiFallback = reserveGrokApiCredits;
-          } else if (videoRoute.provider === 'fal-h3-max' && ctx.userId) {
+          } else if ((videoRoute.provider === 'fal-h3-max' || forceUpscale) && ctx.userId) {
             createVideoInput.onBeforeProviderSubmit = async usage => {
               billingQuote = await quoteVideo(usage);
               creditsRequired = billingQuote.credits;
               await reserveGrokApiCredits();
+              return { reservedUpscaleCredits: reservedVideoCredits > 0 ? billingQuote.upscaleCredits ?? 0 : 0 };
             };
           } else if (ctx.userId) {
             try {
@@ -1986,6 +1990,7 @@ function createGenerateAnimationTool(
             }
           }
 
+          createVideoInput.reservedUpscaleCredits = reservedVideoCredits > 0 ? billingQuote.upscaleCredits ?? 0 : 0;
           const skillResult = isGoogleOmniAsync
             ? {
               success: true as const,
@@ -2057,7 +2062,7 @@ function createGenerateAnimationTool(
             providerMode: actualVideoRoute.providerMode,
             provider: skillResult.provider,
             operation: video_operation || 'generate',
-            contentFilter: actualVideoModel === 'seedance-2.5' ? content_filter !== false : undefined,
+            contentFilter: ['seedance-2.5', 'seedance-2.5-eco'].includes(actualVideoModel) ? content_filter !== false : undefined,
             providerUrl: skillResult.videoUrl,
             createdAt: new Date().toISOString(),
             creditsCharged: reservedVideoCredits,
@@ -2168,6 +2173,33 @@ function createGenerateAnimationTool(
         }
       }),
     });
+}
+
+function createUpscaleVideoTool(scope: AgentToolFactoryScope) {
+  const submit = createGenerateAnimationTool(scope, true);
+  return tool({
+    description: 'Enhance an existing video with ByteDance Fast. Use for requests such as upscale this video to 4K; this preserves source motion, frame rate and original audio and creates a separate timeline result. Never generate a new video or use a regeneration prompt to perform super resolution. Requires one ready source video (Media Index or hosted URL). Default 1080p; supports 2K/4K, up to 60 seconds. 6K/8K are unavailable until pricing is verified. Poll the returned root task; do not submit again while it is processing.',
+    inputSchema: z.object({
+      media_index: z.number().int().positive().optional().describe('Media Index of the source video. Provide exactly one of media_index or video_url.'),
+      video_url: z.string().url().optional().describe('Hosted source video outside the Media Index.'),
+      resolution: z.enum(['1080p', '2k', '4k']).default('1080p'),
+    }),
+    execute: async ({ media_index, video_url, resolution }, options) => {
+      if (Boolean(media_index) === Boolean(video_url)) return { success: false, message: 'Provide exactly one source video.' };
+      let url = video_url;
+      if (media_index) {
+        const rows = await scope.ctx.supabase?.from('snapshots').select('type,video_meta').eq('project_id', scope.ctx.projectId).order('sort_order');
+        const snap = rows?.data?.[media_index - 1];
+        if (rows?.error || snap?.type !== 'video' || snap.video_meta?.status !== 'completed' || !snap.video_meta?.videoUrl) return { success: false, message: 'Select a ready source video, not a poster or processing task.' };
+        url = snap.video_meta.videoUrl;
+      }
+      const { probeVideoMetadataFromUrl } = await import('./video-metadata');
+      const meta = await probeVideoMetadataFromUrl(url!, 512 * 1024 * 1024);
+      if (!meta?.duration || meta.duration > 60.5) return { success: false, message: 'Cannot measure the source, or it exceeds 60 seconds. Use a readable short clip.' };
+      return submit.execute!({ story_prompt: 'ByteDance Fast video enhancement', model: 'bytedance-video-upscale',
+        video_resolution: resolution, video_ref_url: url, video_ref_type: 'base', duration: meta.duration }, options);
+    },
+  });
 }
 
 function createAnalyzeImageTool(
@@ -5335,6 +5367,8 @@ const tools = preserveOptionalToolFields({
     generate_image: createGenerateImageTool(scope),
 
     generate_animation: createGenerateAnimationTool(scope),
+
+    upscale_video: createUpscaleVideoTool(scope),
 
     analyze_image: createAnalyzeImageTool(scope),
 

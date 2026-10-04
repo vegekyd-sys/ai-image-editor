@@ -210,6 +210,10 @@ export interface VideoMeta {
   /** Provider operation used to create this snapshot. */
   operation?: 'generate' | 'edit' | 'extend';
   providerCostUsd?: number;
+  pipelineStage?: string;
+  baseVideoUrl?: string;
+  enhancementStatus?: 'processing' | 'completed' | 'failed';
+  requestedResolution?: VideoResolution;
   /** EvoLink output moderation. False is the explicit Seedance 2.5 Mature Mode retry. */
   contentFilter?: boolean;
   createdAt?: string;

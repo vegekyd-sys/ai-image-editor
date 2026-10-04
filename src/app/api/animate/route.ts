@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
 
     const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
     const videoSec = effectiveDuration === -1 ? referenceVideoDuration ?? 10 : effectiveDuration || 10
-    let { credits: creditsRequired } = await quoteVideo({
+    let billingQuote = await quoteVideo({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
@@ -109,6 +109,7 @@ export async function POST(req: NextRequest) {
       referenceVideoDurationSec: referenceVideoDuration,
       operation: videoOperation,
     })
+    let creditsRequired = billingQuote.credits
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
     let reservedCredits = 0
     const reserveApiCredits = async () => {
@@ -138,6 +139,9 @@ export async function POST(req: NextRequest) {
         aspectRatio,
         videoModel: selectedVideoModel,
         videoResolution: videoRoute.resolution,
+        projectId,
+        billingToolName: toolName,
+        reservedUpscaleCredits: reservedCredits > 0 ? billingQuote.upscaleCredits ?? 0 : 0,
         videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
         referenceVideoDuration,
         referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
@@ -146,7 +150,8 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         onBeforeGrokApiFallback: grokSubscriptionPreferred ? reserveApiCredits : undefined,
         onBeforeProviderSubmit: videoRoute.provider === 'fal-h3-max' ? async usage => {
-          creditsRequired = (await quoteVideo(usage)).credits
+          billingQuote = await quoteVideo(usage)
+          creditsRequired = billingQuote.credits
           await reserveApiCredits()
         } : undefined,
       })

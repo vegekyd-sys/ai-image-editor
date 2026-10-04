@@ -79,7 +79,7 @@ async function handleMcp(req: Request): Promise<Response> {
         if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'GPT Image 2.5 pricing is not configured.' };
       }
       // Video is atomically reserved after resolving provider inputs.
-      if (toolName === 'makaron_create_video' || toolName === 'makaron_edit_video') {
+      if (toolName === 'makaron_create_video' || toolName === 'makaron_edit_video' || toolName === 'makaron_upscale_video') {
         return { allowed: true };
       }
       if (toolName === 'makaron_create_seed_audio') {
@@ -113,7 +113,7 @@ async function handleMcp(req: Request): Promise<Response> {
     // Post-complete: deduct credits (token-based if usage available, else per-action)
     onToolComplete: auth.type === 'user' ? async (toolName, model, durationMs, usage, meta) => {
       // Video is already reserved; analysis charges inside its shared analyzer.
-      if (['makaron_create_video', 'makaron_edit_video', 'makaron_analyze_video'].includes(toolName)) return;
+      if (['makaron_create_video', 'makaron_edit_video', 'makaron_upscale_video', 'makaron_analyze_video'].includes(toolName)) return;
       const usageSubscriptionProvider = usage?.provider === 'codex-subscription'
         || usage?.provider === 'grok-subscription'
         ? usage.provider
