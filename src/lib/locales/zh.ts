@@ -220,6 +220,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.webSearch.title': '联网搜索与来源引用',
+  'changelog.webSearch.item1': '使用支持联网搜索的 Agent 模型时，直接问最新资讯、产品资料或参考案例，Makaron 会按需搜索网页，为创作补充信息。',
+  'changelog.webSearch.item2': '回答附有可点击的来源链接，方便核对原文；引用随对话保存，刷新或重新打开项目后仍可查看。',
   'changelog.seedance25Eco.title': "自动超分：更省成本的 1080p 高清视频",
   'changelog.seedance25Eco.item1': "默认先生成 480p 视频，再自动超分到 1080p，用更低的生成成本得到高清成片。",
   'changelog.seedance25Eco.item2': "按标准模式、不带参考视频且不超过 30fps 的公开费率估算，480p 生成加 1080p 超分的供应商成本，比原生 1080p 生成低约 80%。",

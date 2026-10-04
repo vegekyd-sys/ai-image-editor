@@ -220,6 +220,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.webSearch.title': 'Web Search with Source Links',
+  'changelog.webSearch.item1': 'With an Agent model that supports web search, ask about the latest news, product details, or reference examples. Makaron searches the web when needed to inform your creative work.',
+  'changelog.webSearch.item2': 'Answers include clickable source links so you can check the original pages. Sources are saved with the conversation and remain available after refreshing or reopening the project.',
   'changelog.seedance25Eco.title': "Automatic Upscaling: Lower-Cost 1080p Video",
   'changelog.seedance25Eco.item1': "By default, generate at 480p, then automatically upscale to 1080p for a high-resolution video at a lower generation cost.",
   'changelog.seedance25Eco.item2': "At published standard rates, generating at 480p and upscaling to 1080p reduces supplier costs by about 80% compared with native 1080p generation, with no reference video and up to 30fps.",

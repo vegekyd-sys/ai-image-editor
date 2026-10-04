@@ -257,6 +257,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.webSearch.title': 'ウェブ検索と出典リンク',
+  'changelog.webSearch.item1': 'ウェブ検索に対応した Agent モデルで、最新ニュースや製品情報、参考事例を尋ねるだけ。Makaron が必要に応じてウェブを検索し、制作に役立つ情報を集めます。',
+  'changelog.webSearch.item2': '回答にはクリックできる出典リンクが付き、元のページを確認できます。出典は会話と一緒に保存され、再読み込みやプロジェクトを開き直した後も確認できます。',
   'changelog.seedance25Eco.title': "自動アップスケール：低コストで1080p動画を制作",
   'changelog.seedance25Eco.item1': "標準では480pで動画を生成した後、自動で1080pにアップスケール。生成コストを抑えて高解像度の動画に仕上げられます。",
   'changelog.seedance25Eco.item2': "標準モード・参照動画なし・30fps以下の公開料金で試算すると、480p生成と1080pへのアップスケールを合わせたプロバイダー費用は、ネイティブ1080p生成より約80%低くなります。",

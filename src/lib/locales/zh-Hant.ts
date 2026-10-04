@@ -258,6 +258,9 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.webSearch.title': '連網搜尋與來源引用',
+  'changelog.webSearch.item1': '使用支援連網搜尋的 Agent 模型時，直接詢問最新資訊、產品資料或參考案例，Makaron 會按需搜尋網頁，為創作補充資訊。',
+  'changelog.webSearch.item2': '回答附有可點擊的來源連結，方便核對原文；引用隨對話儲存，重新整理或重新開啟專案後仍可查看。',
   'changelog.seedance25Eco.title': "自動提升解析度：更省成本的 1080p 高畫質影片",
   'changelog.seedance25Eco.item1': "預設先產生 480p 影片，再自動提升至 1080p，以更低的生成成本得到高畫質成片。",
   'changelog.seedance25Eco.item2': "依標準模式、不含參考影片且不超過 30fps 的公開費率估算，480p 生成加 1080p 解析度提升的供應商成本，比原生 1080p 生成低約 80%。",
