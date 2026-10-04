@@ -221,10 +221,9 @@ const en = {
 
   // Changelog
   'changelog.seedance25Eco.title': "Automatic Upscaling: Lower-Cost 1080p Video",
-  'changelog.seedance25Eco.item1': "Generate at 480p, then automatically upscale to 1080p for a high-resolution video at a lower generation cost.",
+  'changelog.seedance25Eco.item1': "By default, generate at 480p, then automatically upscale to 1080p for a high-resolution video at a lower generation cost.",
   'changelog.seedance25Eco.item2': "At published standard rates, generating at 480p and upscaling to 1080p reduces supplier costs by about 80% compared with native 1080p generation, with no reference video and up to 30fps.",
-  'changelog.seedance25Eco.item3': "This automatic upscaling route charges the same for 720p and 1080p enhancement. Choose 1080p for higher-resolution output at the same price.",
-  'changelog.seedance25Eco.item4': "Choose your target resolution once, and generation and upscaling complete automatically. Supports videos up to 30 seconds in 720p, 1080p, 2K or 4K.",
+  'changelog.seedance25Eco.item3': "Choose your target resolution once, and generation and upscaling complete automatically. Supports videos up to 30 seconds in 720p, 1080p, 2K or 4K.",
   'changelog.byteDanceFastUpscale.title': "Upscale Your Existing Videos Too",
   'changelog.byteDanceFastUpscale.item1': "Provide an existing video in chat and ask, “Upscale this video to 4K,” to improve clarity without generating it again.",
   'changelog.byteDanceFastUpscale.item2': "Supports videos up to 60 seconds with 720p, 1080p, 2K or 4K output, preserving the original motion, aspect ratio, frame rate and audio.",

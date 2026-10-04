@@ -558,7 +558,7 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
 // Eco describes final delivery, while its generation provider always receives 480p.
 MODEL_CAPABILITIES['seedance-2.5-eco'] = {
   ...MODEL_CAPABILITIES['seedance-2.5'], id: 'seedance-2.5-eco', label: 'Seedance 2.5 Eco',
-  supportedResolutions: ['720p', '1080p', '2k', '4k'], defaultResolution: '720p',
+  supportedResolutions: ['720p', '1080p', '2k', '4k'], defaultResolution: '1080p',
   estimatedCostPerSecondUsd: .1452,
   estimatedCostPerSecondUsdByResolution: { '720p': .1452, '1080p': .1452, '2k': .1524, '4k': .1668 },
 }

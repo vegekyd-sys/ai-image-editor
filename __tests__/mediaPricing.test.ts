@@ -67,14 +67,14 @@ describe('database-backed media quotes', () => {
     expect(eco).toMatchObject({ baseCredits: 400, upscaleCredits: 60, credits: 460 })
     expect(eco.supplierCostUsd).toBeCloseTo(2.3)
   })
-  it.each([undefined, 'auto'] as const)('quotes Eco using the 720p tariff when resolution is %s', async resolution => {
+  it.each([undefined, 'auto'] as const)('quotes Eco using the 1080p tariff when resolution is %s', async resolution => {
     const prices = seededMediaPrices()
     prices.find(p => p.id === 'video:bytedance-video-upscale:720p:generate')!.output_usd_per_second = .01
     prices.find(p => p.id === 'video:bytedance-video-upscale:1080p:generate')!.output_usd_per_second = .02
     query.mockResolvedValue({ data: prices, error: null })
     const eco = await quoteVideo({ model: 'seedance-2.5-eco', durationSec: 10, resolution })
-    expect(eco).toMatchObject({ priceId: 'video:seedance-2.5-eco:720p:generate', baseCredits: 276, upscaleCredits: 20, credits: 296 })
-    expect(eco.supplierCostUsd).toBeCloseTo(1.48)
+    expect(eco).toMatchObject({ priceId: 'video:seedance-2.5-eco:1080p:generate', baseCredits: 276, upscaleCredits: 40, credits: 316 })
+    expect(eco.supplierCostUsd).toBeCloseTo(1.58)
   })
   it('charges the published 60fps band without granting a guessed 24fps discount', async () => {
     const input = { model: 'bytedance-video-upscale', durationSec: 10, resolution: '4k' as const }

@@ -973,7 +973,7 @@ const CHANGELOG: ChangelogEntry[] = [
 const LOCALIZED_CHANGELOG_KEYS = {
   seedance25Eco: {
     title: 'changelog.seedance25Eco.title',
-    items: ['changelog.seedance25Eco.item1', 'changelog.seedance25Eco.item2', 'changelog.seedance25Eco.item3', 'changelog.seedance25Eco.item4'],
+    items: ['changelog.seedance25Eco.item1', 'changelog.seedance25Eco.item2', 'changelog.seedance25Eco.item3'],
   },
   byteDanceFastUpscale: {
     title: 'changelog.byteDanceFastUpscale.title',

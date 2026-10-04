@@ -973,12 +973,12 @@ describe('video model reference limits', () => {
     expect(resolveAgentVideoSelection({ appModel: 'seedance-2.5-native', appResolution: '1080p', appAuto: false, toolModel: 'seedance-2.5-eco' })).toEqual({ model: 'seedance-2.5', resolution: '1080p', locked: true })
   })
 
-  it.each([undefined, 'auto'] as const)('delivers public Seedance 2.5 at 720p when resolution is %s', resolution => {
+  it.each([undefined, 'auto'] as const)('delivers public Seedance 2.5 at 1080p when resolution is %s', resolution => {
     const selection = resolveAgentVideoSelection({ toolModel: 'seedance-2.5', toolResolution: resolution })
-    expect(resolveVideoGenerationRoute(selection)).toMatchObject({ model: 'seedance-2.5-eco', resolution: '720p' })
-    expect(normalizeVideoResolution('seedance-2.5-eco', resolution)).toBe('720p')
+    expect(resolveVideoGenerationRoute(selection)).toMatchObject({ model: 'seedance-2.5-eco', resolution: '1080p' })
+    expect(normalizeVideoResolution('seedance-2.5-eco', resolution)).toBe('1080p')
     expect(normalizeVideoResolution('seedance-2.5-native', resolution)).toBe('480p')
-    for (const explicit of ['1080p', '2k', '4k'] as const) {
+    for (const explicit of ['720p', '1080p', '2k', '4k'] as const) {
       const requested = resolveAgentVideoSelection({ toolModel: 'seedance-2.5', toolResolution: explicit })
       expect(resolveVideoGenerationRoute(requested).resolution).toBe(explicit)
     }

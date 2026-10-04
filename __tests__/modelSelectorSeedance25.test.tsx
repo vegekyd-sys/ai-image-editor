@@ -6,7 +6,7 @@ import { LocaleProvider } from '@/lib/i18n';
 afterEach(cleanup);
 
 describe('ModelSelector Seedance 2.5', () => {
-  it('shows Eco as the Seedance 2.5 option with a 720p delivery default', async () => {
+  it('shows Eco as the Seedance 2.5 option with a 1080p delivery default', async () => {
     localStorage.setItem('locale', 'zh');
     const onVideoModelChange = vi.fn();
     const onVideoResolutionChange = vi.fn();
@@ -38,7 +38,7 @@ describe('ModelSelector Seedance 2.5', () => {
     fireEvent.click(await screen.findByText('Seedance 2.5 Eco'));
     await waitFor(() => {
       expect(onVideoModelChange).toHaveBeenCalledWith('seedance-2.5-eco');
-      expect(onVideoResolutionChange).toHaveBeenCalledWith('720p');
+      expect(onVideoResolutionChange).toHaveBeenCalledWith('1080p');
     });
   });
   it('keeps the explicit Native model name in the collapsed selector', () => {

@@ -290,7 +290,7 @@ Models:
 - seedance-fast — SeeDance 2.0 Fast via Evolink, 480p/720p, default 720p
 - seedance-mini — SeeDance 2.0 Mini via Evolink, lower-cost 480p/720p route for drafts and multi-size tests
 - seedance — SeeDance 2.0 standard via Evolink, supports 480p/720p/1080p
-- seedance-2.5-eco — Seedance 2.5 480p then automatic ByteDance Fast enhancement to 720p (default), 1080p, 2K or 4K, one root task; lower cost than native HD.
+- seedance-2.5-eco — Seedance 2.5 480p then automatic ByteDance Fast enhancement to 720p, 1080p (default), 2K or 4K, one root task; lower cost than native HD.
 - seedance-2.5 — Seedance 2.5 via Evolink, 4-30s, multimodal references, native audio, edit and extend
 - wan-3.0 — Wan 3.0 via MuleRouter, 2-30s, 480p/720p/1080p/2k/4k, native audio, up to 10 image + 5 video + 5 audio feature references; 2k/4k use FlashVSR automatically
 - wan-3.0-prime — Wan 3.0 Prime fast tier via MuleRouter with the same duration, resolutions, and reference limits; 2k/4k use Prime FlashVSR automatically
