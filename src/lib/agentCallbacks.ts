@@ -1,3 +1,4 @@
+import { videoCompletionMessageId } from '@/lib/editor/message-dedupe';
 import type { AgentStreamCallbacks } from './agentStream';
 import type { Message, Snapshot, Tip, ProjectAnimation, VideoModel } from '@/types';
 import type { DesignPayload } from '@/types';
@@ -187,12 +188,9 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const newId = serverMessageId || generateId();
       currentMsgId = newId;
       agentMsgIds.push(newId);
-      ctx.setMessages(prev => [...prev, {
-        id: newId,
-        role: 'assistant' as const,
-        content: '',
-        timestamp: Date.now(),
-      }]);
+      ctx.setMessages(prev => prev.some(m => m.id === newId)
+        ? prev.map(m => m.id === newId ? { ...m, content: '' } : m)
+        : [...prev, { id: newId, role: 'assistant' as const, content: '', timestamp: Date.now() }]);
     },
 
     onContent: (delta) => {
@@ -388,7 +386,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
         const actionLines = serializeCompletionActions(videoMeta.completionActions);
         const videoMsg: Message = {
-          id: `video-inline-${snapshotId}`,
+          id: videoCompletionMessageId(snapshotId),
           role: 'assistant',
           content: `🎬 ${ctx.t('status.videoDone')}\n${videoMeta.videoUrl}\nsnap:${snapshotId}${actionLines ? `\n${actionLines}` : ''}`,
           timestamp: Date.now(),
