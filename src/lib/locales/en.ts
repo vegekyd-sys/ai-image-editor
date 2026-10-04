@@ -220,12 +220,12 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
-  'changelog.seedance25Eco.title': "Seedance 2.5 Eco: High-Resolution Video at Lower Cost",
-  'changelog.seedance25Eco.item1': "Generate a 480p video, then upscale it automatically to deliver up to 30 seconds in 720p, 1080p, 2K or 4K at a lower cost.",
-  'changelog.seedance25Eco.item2': "Choose your model and resolution once, and generation and upscaling happen automatically. You can also tell Agent, “Make a 2K video with Seedance 2.5.”",
-  'changelog.seedance25Eco.item3': "Seedance 2.5 uses Eco by default, with 1080p output. For native generation, explicitly choose Seedance 2.5 Native.",
-  'changelog.byteDanceFastUpscale.title': "ByteDance Fast: Make Existing Videos Sharper",
-  'changelog.byteDanceFastUpscale.item1': "Provide an existing video in Agent chat or Makaron CLI chat and ask, “Upscale this video to 4K,” to improve clarity without generating it again.",
+  'changelog.seedance25Eco.title': "Automatic Upscaling: Lower Cost, Up to 4K",
+  'changelog.seedance25Eco.item1': "A new video creation option generates at 480p, then automatically upscales the result for high-resolution videos at a lower cost.",
+  'changelog.seedance25Eco.item2': "Choose your target resolution once. Generation is followed by automatic upscaling, with no extra step for you after the video is generated.",
+  'changelog.seedance25Eco.item3': "Supports 720p, 1080p, 2K and 4K, with 1080p as the default and up to 30 seconds per video.",
+  'changelog.byteDanceFastUpscale.title': "Upscale Your Existing Videos Too",
+  'changelog.byteDanceFastUpscale.item1': "Provide an existing video in chat and ask, “Upscale this video to 4K,” to improve clarity without generating it again.",
   'changelog.byteDanceFastUpscale.item2': "Supports videos up to 60 seconds with 720p, 1080p, 2K or 4K output, preserving the original motion, aspect ratio, frame rate and audio.",
   'changelog.multiAngleVideo.title': "Multi-Angle: Give Ordinary Footage More Expression",
   'changelog.multiAngleVideo.item1': "Upload an ordinary video and choose the Multi-Angle Skill to generate a video with varied viewpoints, a stronger story and a clearer rhythm.",
