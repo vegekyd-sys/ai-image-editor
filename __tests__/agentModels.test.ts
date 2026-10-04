@@ -579,12 +579,14 @@ describe('agent model catalog', () => {
     }
   });
 
-  it('exposes native web search only to Azure runtimes', () => {
+  it('exposes native web search to Azure and Codex subscription runtimes', () => {
     const previousAzureKey = process.env.AZURE_OPENAI_API_KEY;
     const previousOpenRouterKey = process.env.OPENROUTER_API_KEY;
     const previousEnabled = process.env.AGENT_WEB_SEARCH_ENABLED;
+    const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
     process.env.AZURE_OPENAI_API_KEY = 'test-key';
     process.env.OPENROUTER_API_KEY = 'test-key';
+    process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner';
     delete process.env.AGENT_WEB_SEARCH_ENABLED;
     try {
       expect(Object.keys(getAgentProviderTools(
@@ -593,10 +595,14 @@ describe('agent model catalog', () => {
       expect(Object.keys(getAgentProviderTools(
         createAgentModelRuntime('gpt-6-sol', 'project-a'),
       ))).toEqual(['web_search']);
+      const subscriptionAuto = createAgentModelRuntime('auto', 'project-a', 'azure-openai', 'owner', true);
+      expect(subscriptionAuto.spec.provider).toBe('codex-subscription');
+      expect(Object.keys(getAgentProviderTools(subscriptionAuto))).toEqual(['web_search']);
       expect(getAgentProviderTools(
         createAgentModelRuntime('grok-4.6', 'project-a'),
       )).toEqual({});
       process.env.AGENT_WEB_SEARCH_ENABLED = 'false';
+      expect(getAgentProviderTools(subscriptionAuto)).toEqual({});
       expect(getAgentProviderTools(
         createAgentModelRuntime('gpt-5.6-luna', 'project-a'),
       )).toEqual({});
@@ -607,6 +613,8 @@ describe('agent model catalog', () => {
       else process.env.OPENROUTER_API_KEY = previousOpenRouterKey;
       if (previousEnabled === undefined) delete process.env.AGENT_WEB_SEARCH_ENABLED;
       else process.env.AGENT_WEB_SEARCH_ENABLED = previousEnabled;
+      if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+      else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
     }
   });
 

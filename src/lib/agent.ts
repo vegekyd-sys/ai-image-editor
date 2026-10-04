@@ -416,7 +416,9 @@ export async function* runMakaronAgent(
   const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
   const languageDirective = buildAgentOutputLanguageDirective(options?.locale, analysisOnly || tipReactionOnly ? 'ui' : 'user');
   const skillLaunchDirective = getSkillLaunchSystemDirective(options?.skillLaunchContext);
-  const webSearchDirective = tools?.web_search ? `\n\n${webSearchPrompt}` : '';
+  const webSearchDirective = tools?.web_search
+    ? `\n\n${webSearchPrompt}\nCurrent UTC date: ${new Date().toISOString().slice(0, 10)}. Use this date when interpreting recent news and publication dates.`
+    : '';
   const systemPrompt = `${executionSystemPrompt}${languageDirective}${skillLaunchDirective}${webSearchDirective}`;
   const responseLocale = normalizeLocale(options?.locale, 'en');
   endSystemPrompt?.({ systemChars: systemPrompt.length });

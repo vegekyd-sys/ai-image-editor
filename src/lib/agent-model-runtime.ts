@@ -13,8 +13,8 @@ import {
 import { normalizeToolCallInputs } from './tool-inputs';
 import {
   createAzureOpenAIResponsesModel,
-  createAzureOpenAIWebSearchTool,
-  isAzureOpenAIWebSearchEnabled,
+  createAzureOpenAIWebSearchTool as createNativeWebSearchTool,
+  isAzureOpenAIWebSearchEnabled as isAgentWebSearchEnabled,
 } from './azure-openai-responses';
 import { createCodexSubscriptionResponsesModel } from './codex-subscription';
 import { createGrokSubscriptionFetch } from './grok-subscription';
@@ -250,11 +250,11 @@ export function resolveAzureOpenAIWebSearchMaxCalls(
 }
 
 export function getAgentProviderTools(runtime: AgentModelRuntime): Record<string, any> {
-  if (runtime.spec.provider !== 'azure-openai' || !isAzureOpenAIWebSearchEnabled()) {
+  if (!['azure-openai', 'codex-subscription'].includes(runtime.spec.provider) || !isAgentWebSearchEnabled()) {
     return {};
   }
   return {
-    web_search: createAzureOpenAIWebSearchTool(),
+    web_search: createNativeWebSearchTool(),
   };
 }
 

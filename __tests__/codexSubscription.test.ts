@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import { generateText } from 'ai';
+import { createAzureOpenAIWebSearchTool } from '@/lib/azure-openai-responses';
 import {
   assertCodexSubscriptionRateLimitsAvailable,
   CODEX_RELAY_HEADERS,
   CODEX_SUBSCRIPTION_RESPONSES_URL,
   createCodexRelaySignature,
   createCodexSubscriptionFetch,
+  createCodexSubscriptionResponsesModel,
   getCodexSubscriptionUsage,
   parseCodexSubscriptionUsage,
   parseCodexSubscriptionAccessToken,
@@ -19,6 +22,29 @@ function fakeJwt(payload: Record<string, unknown>): string {
 }
 
 describe('Codex subscription transport', () => {
+  it('serializes native web_search through the managed subscription transport', async () => {
+    let requestBody: Record<string, any> = {};
+    const model = createCodexSubscriptionResponsesModel('gpt-6-luna', 'search-project', {
+      credentials: async () => ({ accessToken: 'test-managed-token', accountId: 'test-account', expiresAtMs: Date.now() + 60_000 }),
+      fetch: async (input, init) => {
+        requestBody = JSON.parse(await new Request(input, init).text());
+        return new Response(JSON.stringify({
+          id: 'resp_search', created_at: 1, model: 'gpt-6-luna',
+          output: [{ type: 'message', id: 'msg_search', role: 'assistant', content: [{ type: 'output_text', text: 'OK', annotations: [] }] }],
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        }), { headers: { 'Content-Type': 'application/json' } });
+      },
+    });
+    await generateText({
+      model,
+      prompt: 'Search the web for current official announcements.',
+      tools: { web_search: createAzureOpenAIWebSearchTool() } as any,
+      providerOptions: { openai: { store: false } },
+    });
+    expect(requestBody.tools).toContainEqual(expect.objectContaining({ type: 'web_search', search_context_size: 'low' }));
+    expect(requestBody.store).toBe(false);
+  });
+
   it('creates a deterministic HMAC over method, path, owner, request id, and body', () => {
     expect(createCodexRelaySignature({
       method: 'post',

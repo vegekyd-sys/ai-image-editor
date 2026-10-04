@@ -363,15 +363,20 @@ export async function deductCredits(
   return { charged: price.credits, remaining }
 }
 
-/** Charge each provider-executed web search transaction separately. */
+/** Record each native search: API searches are charged; subscription searches are zero-credit usage. */
 export async function deductWebSearchCalls(
   userId: string,
   calls: number,
   model?: string,
+  provider = 'azure-openai',
 ): Promise<void> {
   const safeCalls = Number.isFinite(calls) ? Math.min(5, Math.max(0, Math.floor(calls))) : 0
   for (let index = 0; index < safeCalls; index += 1) {
-    await deductCredits(userId, null, 'web_search', model)
+    if (provider === 'codex-subscription' || provider === 'grok-subscription') {
+      await recordSubscriptionUsage(userId, provider, 'web_search', model || 'unknown')
+    } else {
+      await deductCredits(userId, null, 'web_search', model)
+    }
   }
 }
 

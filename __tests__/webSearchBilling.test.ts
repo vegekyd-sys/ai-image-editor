@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRpc = vi.fn();
 const mockPricingSelect = vi.fn();
+const mockUsageInsert = vi.fn();
 const mockFrom = vi.fn((table: string) => {
   if (table === 'app_settings') {
     return {
@@ -15,6 +16,7 @@ const mockFrom = vi.fn((table: string) => {
       select: mockPricingSelect,
     };
   }
+  if (table === 'usage_logs') return { insert: mockUsageInsert };
   throw new Error(`Unexpected table: ${table}`);
 });
 
@@ -26,6 +28,7 @@ describe('web search billing', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockRpc.mockResolvedValue({ data: 100, error: null });
+    mockUsageInsert.mockResolvedValue({ error: null });
     mockPricingSelect.mockResolvedValue({
       data: [{ tool_name: 'web_search', supplier_cost: 0.014, credits: 3, is_free: false }],
       error: null,
@@ -57,6 +60,20 @@ describe('web search billing', () => {
     mockPricingSelect.mockResolvedValue({ data: [], error: null });
     const { deductWebSearchCalls } = await import('@/lib/billing/credits');
     await expect(deductWebSearchCalls('user-1', 1, 'gpt-6-sol')).rejects.toThrow('not configured');
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('records Codex searches at zero credits without an API pricing lookup or deduction', async () => {
+    const { deductWebSearchCalls } = await import('@/lib/billing/credits');
+    await deductWebSearchCalls('owner', 2, 'gpt-6-luna', 'codex-subscription');
+    expect(mockUsageInsert).toHaveBeenCalledTimes(2);
+    expect(mockUsageInsert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'owner',
+      tool_name: 'web_search',
+      model_used: 'gpt-6-luna:codex-subscription',
+      credits_charged: 0,
+    }));
+    expect(mockPricingSelect).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
   });
 });

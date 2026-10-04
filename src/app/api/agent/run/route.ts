@@ -398,7 +398,7 @@ export async function POST(req: NextRequest) {
           }).catch(e => console.error('[agent/run] usage logging error:', e));
         }
         if (totalWebSearchCalls > 0) {
-          await deductWebSearchCalls(userId, totalWebSearchCalls, agentModel || undefined)
+          await deductWebSearchCalls(userId, totalWebSearchCalls, agentModel || undefined, agentProvider)
             .catch(e => console.error('[agent/run] web search billing error:', e));
         }
         const { data: failedRun } = await supabase.from('agent_runs')
@@ -448,7 +448,7 @@ export async function POST(req: NextRequest) {
         }).catch(e => console.error('[agent/run] usage logging error:', e));
       }
       if (totalWebSearchCalls > 0) {
-        await deductWebSearchCalls(userId, totalWebSearchCalls, agentModel || undefined)
+        await deductWebSearchCalls(userId, totalWebSearchCalls, agentModel || undefined, agentProvider)
           .catch(e => console.error('[agent/run] web search billing error:', e));
       }
       const { data: finalRun } = await supabase.from('agent_runs')

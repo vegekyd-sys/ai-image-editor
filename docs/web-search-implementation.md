@@ -1,10 +1,10 @@
-# Azure GPT Native Web Search
+# GPT Native Web Search
 
-Makaron 路由到 Azure OpenAI Responses API 的 GPT-5.6 / GPT-6 模型使用正式 `web_search`。这不是 Tavily 自定义工具，也不需要额外搜索 API key。Codex 订阅、OpenRouter 等非 Azure 路径不注入此工具。
+Makaron 的 Azure OpenAI Responses API 与 Codex 个人订阅路径均使用正式 `web_search`。这不是 Tavily 自定义工具，也不需要额外搜索 API key。OpenRouter、DeepSeek 与 Grok 路径不注入此工具。
 
 ## 运行边界
 
-- 仅 Azure 路径获得 `web_search`；Grok、DeepSeek 与个人订阅路径保持原行为。
+- Azure 与 Codex 订阅路径获得 `web_search`。具备订阅资格的用户使用 Auto 时仍优先走订阅，不为了搜索切换到 Azure。
 - 默认只在用户明确要求联网，或答案依赖新闻、价格、日程、规则等时效信息时搜索。
 - 默认向 Responses API 发送 `max_tool_calls: 2`；同时按唯一 call ID 记录实际 provider actions，避免流事件重复计费。
 - 搜索只读公开网页，不能登录、操作网页或代替完整浏览器自动化。
@@ -35,7 +35,7 @@ Responses API 返回的 URL citation 会保留在正文 Markdown 中；`source` 
 
 ## 计费
 
-模型输入输出继续按 token 计费。每次 provider 执行的 web search 事务另外记为 `web_search`：
+Azure 模型输入输出继续按 token 计费，每次搜索事务另外记为 `web_search`。Codex 订阅搜索复用个人订阅用量记录，每次记入 `usage_logs`，`credits_charged=0`；不读取 Azure 搜索价格，也不扣 Makaron 积分。Azure 搜索初始价格：
 
 - supplier cost: `$0.014`
 - Makaron 初始配置价格: `3 credits`（以当前 Admin 数据库配置为准，不使用代码 fallback）

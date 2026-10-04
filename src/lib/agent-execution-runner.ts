@@ -957,7 +957,7 @@ export async function runAgentExecutionAttempt(
     }).catch(error => console.error('[agent-execution] usage logging failed:', error));
   }
   if (webSearchCalls > 0) {
-    await deductWebSearchCalls(run.user_id, webSearchCalls, billingModel)
+    await deductWebSearchCalls(run.user_id, webSearchCalls, billingModel, billingProvider)
       .catch(error => console.error('[agent-execution] web search billing failed:', error));
   }
   await admin.from('agent_runs').update({

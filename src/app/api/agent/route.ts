@@ -660,7 +660,7 @@ export async function POST(req: NextRequest) {
             }
             if ((usageEvent.webSearchCalls ?? 0) > 0) {
               try {
-                await deductWebSearchCalls(userId, usageEvent.webSearchCalls ?? 0, usageEvent.model);
+                await deductWebSearchCalls(userId, usageEvent.webSearchCalls ?? 0, usageEvent.model, usageEvent.provider || resolvedAgentModel.provider);
               } catch (e) {
                 console.error('[billing] web search deduct error:', e);
               }
