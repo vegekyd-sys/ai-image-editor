@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo, prepareSeedance20References } from '@/lib/skills/create-video'
-import { DEFAULT_VIDEO_REPLICATION_MODEL_ID, DEFAULT_VIDEO_REPLICATION_RESOLUTION, estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { DEFAULT_VIDEO_REPLICATION_MODEL_ID, DEFAULT_VIDEO_REPLICATION_RESOLUTION, estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, resolveProductVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('maps mixed timeline image/video indices to Seedance 2.0 provider markers', () => {
@@ -962,6 +962,15 @@ describe('video model reference limits', () => {
 
     expect(result.success).toBe(false)
     expect(result.message).toContain('Gemini Omni 1.1 Flash supports at most 6 reference images per request')
+  })
+
+  it('defaults public Seedance 2.5 requests to Eco while preserving explicit Native and low-level routing', () => {
+    expect(resolveProductVideoModelId('seedance-2.5')).toBe('seedance-2.5-eco')
+    expect(resolveProductVideoModelId('seedance25')).toBe('seedance-2.5-eco')
+    expect(resolveProductVideoModelId('seedance-2.5-native')).toBe('seedance-2.5')
+    expect(normalizeVideoModelId('seedance-2.5')).toBe('seedance-2.5')
+    expect(resolveAgentVideoSelection({ toolModel: 'seedance-2.5', toolResolution: '2k' })).toEqual({ model: 'seedance-2.5-eco', resolution: '2k', locked: false })
+    expect(resolveAgentVideoSelection({ appModel: 'seedance-2.5-native', appResolution: '1080p', appAuto: false, toolModel: 'seedance-2.5-eco' })).toEqual({ model: 'seedance-2.5', resolution: '1080p', locked: true })
   })
 
   it('locks explicit app video model and resolution over agent tool guesses', () => {

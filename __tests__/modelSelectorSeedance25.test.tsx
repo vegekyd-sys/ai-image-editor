@@ -1,10 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import ModelSelector from '@/components/ModelSelector';
 import { LocaleProvider } from '@/lib/i18n';
 
+afterEach(cleanup);
+
 describe('ModelSelector Seedance 2.5', () => {
-  it('shows the model and selects its economical Evolink 480p default', async () => {
+  it('shows Eco as the Seedance 2.5 option with a 1080p delivery default', async () => {
     localStorage.setItem('locale', 'zh');
     const onVideoModelChange = vi.fn();
     const onVideoResolutionChange = vi.fn();
@@ -33,10 +35,16 @@ describe('ModelSelector Seedance 2.5', () => {
     expect(screen.getByText('快速 · 4K')).toBeTruthy();
     expect(screen.queryByText('Wan 3.0 Pro')).toBeNull();
     expect(screen.getByText('MiniMax H3')).toBeTruthy();
-    fireEvent.click(await screen.findByText('Seedance 2.5'));
+    fireEvent.click(await screen.findByText('Seedance 2.5 Eco'));
     await waitFor(() => {
-      expect(onVideoModelChange).toHaveBeenCalledWith('seedance-2.5');
-      expect(onVideoResolutionChange).toHaveBeenCalledWith('480p');
+      expect(onVideoModelChange).toHaveBeenCalledWith('seedance-2.5-eco');
+      expect(onVideoResolutionChange).toHaveBeenCalledWith('1080p');
     });
   });
+  it('keeps the explicit Native model name in the collapsed selector', () => {
+    localStorage.setItem('locale', 'zh');
+    render(<LocaleProvider><ModelSelector preferredModel="auto" onModelChange={vi.fn()} videoAuto={false} videoModel="seedance-2.5-native" videoResolution="1080p" /></LocaleProvider>);
+    expect(screen.getByTestId('model-selector').getAttribute('aria-label')).toContain('Seedance 2.5 Native');
+  });
+
 });

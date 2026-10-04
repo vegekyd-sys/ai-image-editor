@@ -40,13 +40,16 @@ export async function finishUpscaleMedia(source: Buffer, output: Buffer, target:
     const base = join(dir, 'base.mp4'), enhanced = join(dir, 'enhanced.mp4'), final = join(dir, 'final.mp4')
     await Promise.all([writeFile(base, source), writeFile(enhanced, output)])
     const [before, after] = await Promise.all([probeVideoFile(base), probeVideoFile(enhanced)])
-    const minimum = { '1080p': 1080, '2k': 1440, '4k': 2160 }[target]
+    const minimum = { '720p': 1080, '1080p': 1080, '2k': 1440, '4k': 2160 }[target]
     if (!after.width || !after.height || Math.min(after.width, after.height) < minimum) throw new Error('Upscaler output did not reach the requested resolution.')
     if (!before.duration || !after.duration || Math.abs(before.duration - after.duration) > .25) throw new Error('Upscaler changed the video duration.')
     if (!before.fps || !after.fps || Math.abs(before.fps - after.fps) > .02) throw new Error('Upscaler changed the source frame rate.')
     if (before.frameCount && after.frameCount && before.frameCount !== after.frameCount) throw new Error('Upscaler changed the source frame count.')
     if (!before.width || !before.height || Math.abs(after.width / after.height - before.width / before.height) > .02) throw new Error('Upscaler changed the source aspect ratio.')
-    await exec(await findFfmpeg(), ['-v', 'error', '-y', '-i', enhanced, '-i', base, '-map', '0:v:0', '-map', '1:a:0?', '-c', 'copy', '-movflags', '+faststart', final], { timeout: 120_000, maxBuffer: 1024 * 1024 })
+    const codecs = target === '720p'
+      ? ['-vf', after.width >= after.height ? 'scale=-2:720:flags=lanczos' : 'scale=720:-2:flags=lanczos', '-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-c:a', 'copy']
+      : ['-c', 'copy']
+    await exec(await findFfmpeg(), ['-v', 'error', '-y', '-i', enhanced, '-i', base, '-map', '0:v:0', '-map', '1:a:0?', ...codecs, '-movflags', '+faststart', final], { timeout: 120_000, maxBuffer: 1024 * 1024 })
     return { bytes: await readFile(final), meta: await probeVideoFile(final) }
   } finally { await rm(dir, { recursive: true, force: true }) }
 }

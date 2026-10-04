@@ -558,23 +558,24 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
 // Eco describes final delivery, while its generation provider always receives 480p.
 MODEL_CAPABILITIES['seedance-2.5-eco'] = {
   ...MODEL_CAPABILITIES['seedance-2.5'], id: 'seedance-2.5-eco', label: 'Seedance 2.5 Eco',
-  supportedResolutions: ['1080p', '2k', '4k'], defaultResolution: '1080p',
+  supportedResolutions: ['720p', '1080p', '2k', '4k'], defaultResolution: '1080p',
   estimatedCostPerSecondUsd: .1452,
-  estimatedCostPerSecondUsdByResolution: { '1080p': .1452, '2k': .1524, '4k': .1668 },
+  estimatedCostPerSecondUsdByResolution: { '720p': .1452, '1080p': .1452, '2k': .1524, '4k': .1668 },
 }
 MODEL_CAPABILITIES['bytedance-video-upscale'] = {
   id: 'bytedance-video-upscale', label: 'ByteDance Fast', minOutputDuration: .1, maxOutputDuration: 60,
   maxReferenceVideoDuration: 60, referenceVideoDurationTolerance: .5,
   supportsVideoReference: true, supportsBaseVideoEdit: true, defaultImageWorkflow: 'none',
   longVideoChunkSeconds: 60, maxImageReferences: 0, maxVideoReferences: 1, maxAudioReferences: 0,
-  supportedResolutions: ['1080p', '2k', '4k'], defaultResolution: '1080p',
+  supportedResolutions: ['720p', '1080p', '2k', '4k'], defaultResolution: '1080p',
   estimatedCostPerSecondUsd: .0072,
-  estimatedCostPerSecondUsdByResolution: { '1080p': .0072, '2k': .0144, '4k': .0288 },
+  estimatedCostPerSecondUsdByResolution: { '720p': .0072, '1080p': .0072, '2k': .0144, '4k': .0288 },
 }
 
 export function normalizeVideoModelId(model?: string | null): string {
   if (!model) return DEFAULT_MODEL_ID
   const normalized = String(model).trim().toLowerCase()
+  if (normalized === 'seedance-2.5-native') return 'seedance-2.5'
   if (['fal-h3-max', 'fal h3 max'].includes(normalized)) return 'fal-h3-max'
   if (['fal h3 turbo'].includes(normalized)) return 'minimax-h3-max'
   if (normalized === 'seedance2-fast' || normalized === 'seedance-2.0-fast' || normalized === 'seedance_fast') {
@@ -608,6 +609,13 @@ export function normalizeVideoModelId(model?: string | null): string {
     return 'sync-lipsync-v3'
   }
   return normalized
+}
+
+/** Public Seedance 2.5 requests default to Eco; native is an explicit opt-in.
+ * Low-level provider identity and price ids retain their canonical names. */
+export function resolveProductVideoModelId(model?: string | null): string {
+  const id = normalizeVideoModelId(model)
+  return id === 'seedance-2.5' && String(model).trim().toLowerCase() !== 'seedance-2.5-native' ? 'seedance-2.5-eco' : id
 }
 
 export function getDefaultVideoModelId(): string {
@@ -693,13 +701,13 @@ export function resolveAgentVideoSelection(options: {
   toolModel?: string | null
   toolResolution?: VideoResolutionInput
 }): { model: string; resolution: VideoResolutionInput; locked: boolean } {
-  const appModel = normalizeVideoModelId(options.appModel)
+  const appModel = resolveProductVideoModelId(options.appModel)
   const appResolution = options.appResolution ?? 'auto'
   const appAuto = options.appAuto ?? (appModel === DEFAULT_MODEL_ID && appResolution === 'auto')
   const locked = !appAuto
 
   return {
-    model: locked ? appModel : normalizeVideoModelId(options.toolModel || appModel),
+    model: locked ? appModel : resolveProductVideoModelId(options.toolModel || appModel),
     resolution: locked ? appResolution : (options.toolResolution ?? appResolution),
     locked,
   }

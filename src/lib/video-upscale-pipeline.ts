@@ -50,7 +50,7 @@ export async function createVideoPipeline(input: CreateVideoInput): Promise<Crea
   if (!process.env.FAL_KEY?.trim()) return { success: false, retryable: false, message: 'Video enhancement is not configured. No provider was submitted.' }
   const model = normalizeVideoModelId(input.videoModel), eco = model === 'seedance-2.5-eco'
   const resolution = resolveVideoGenerationRoute({ model, resolution: input.videoResolution }).resolution
-  if (!UPSCALE_RESOLUTIONS.includes(resolution as UpscaleResolution)) return { success: false, retryable: false, message: 'Supported enhancement resolutions: 1080p, 2K, 4K. Higher tiers need verified pricing first.' }
+  if (!UPSCALE_RESOLUTIONS.includes(resolution as UpscaleResolution)) return { success: false, retryable: false, message: 'Supported enhancement resolutions: 720p, 1080p, 2K, 4K. Higher tiers need verified pricing first.' }
   if (eco && input.outputFormat === 'mov') return { success: false, retryable: false, message: 'Seedance 2.5 Eco delivers MP4. Use native Seedance for a MOV grading master.' }
   if (input.motionControl) return { success: false, retryable: false, message: 'Motion control is not supported by this route.' }
   let source: Buffer | undefined, sourceMeta: Awaited<ReturnType<typeof inspectUpscaleMedia>> | undefined

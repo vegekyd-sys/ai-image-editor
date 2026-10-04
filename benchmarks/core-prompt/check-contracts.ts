@@ -16,10 +16,12 @@ async function main() {
  const coverage=paragraphs.map((text:string,index:number)=>({id:`core-${index+1}`,text,owner:core.includes(text)?'core':video.includes(text)?'video':coding.includes(text)?'coding':null}));
  assert.deepEqual(coverage.filter((x:any)=>!x.owner),[], 'Every original core paragraph needs an exact owner');
  // The frozen rollback stays byte-for-byte intact; the active guide gains
- // only the verified fal H3 Max 1080p capability requested on 2026-09-08.
+ // the verified H3 Max capability and user-selected Seedance 2.5 Eco default.
  const activeVideoDescription=baseline.toolDescriptions.video.replace(
   'reference-to-video at 480p/768p (default',
-  'reference-to-video at 480p/768p/1080p (default');
+  'reference-to-video at 480p/768p/1080p (default').replace(
+  'Use `seedance-2.5` for a non-NSFW single 16-30 second generation',
+  'Use `seedance-2.5-eco` for a non-NSFW single 16-30 second generation');
  assert.ok(video.includes(activeVideoDescription));
  assert.ok(coding.includes(baseline.toolDescriptions.coding));
  assert.ok(coding.includes(baseline.workspaceAuthoring));

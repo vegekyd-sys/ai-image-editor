@@ -1,9 +1,9 @@
 /** BytePlus VOD Fast through fal. Submission is deliberately never retried. */
 export const BYTEDANCE_UPSCALE_ENDPOINT = 'fal-ai/bytedance-upscaler/upscale/video'
 const QUEUE = 'https://queue.fal.run/fal-ai/bytedance-upscaler'
-export const UPSCALE_RESOLUTIONS = ['1080p', '2k', '4k'] as const
+export const UPSCALE_RESOLUTIONS = ['720p', '1080p', '2k', '4k'] as const
 export type UpscaleResolution = typeof UPSCALE_RESOLUTIONS[number]
-export const UPSCALE_PUBLIC_RATES = { '1080p': .0072, '2k': .0144, '4k': .0288 } as const
+export const UPSCALE_PUBLIC_RATES = { '720p': .0072, '1080p': .0072, '2k': .0144, '4k': .0288 } as const
 export type UpscalePreset = 'general' | 'ugc' | 'short_series' | 'aigc' | 'old_film'
 
 export class UpscaleSubmissionError extends Error {
@@ -17,10 +17,10 @@ function auth() {
   return { Authorization: `Key ${key}`, 'Content-Type': 'application/json' }
 }
 export function buildUpscaleInput(input: { videoUrl: string; resolution: UpscaleResolution; fps: number; preset?: UpscalePreset }) {
-  if (!UPSCALE_RESOLUTIONS.includes(input.resolution)) throw new Error('Video upscaling currently supports 1080p, 2K and 4K; 6K/8K pricing is not configured.')
+  if (!UPSCALE_RESOLUTIONS.includes(input.resolution)) throw new Error('Video upscaling currently supports 720p, 1080p, 2K and 4K; 6K/8K pricing is not configured.')
   if (!Number.isFinite(input.fps) || input.fps < 1 || input.fps > 60) throw new Error('A measured source frame rate between 1 and 60 fps is required.')
   if (!['https:', 'http:'].includes(new URL(input.videoUrl).protocol)) throw new Error('A hosted source video is required.')
-  return { video_url: input.videoUrl, target_resolution: input.resolution, target_fps: input.fps,
+  return { video_url: input.videoUrl, target_resolution: input.resolution === '720p' ? '1080p' : input.resolution, target_fps: input.fps,
     enhancement_preset: input.preset ?? 'general', enhancement_tier: 'fast', fidelity: 'high', bit_depth: 8 }
 }
 export async function submitByteDanceUpscale(input: Parameters<typeof buildUpscaleInput>[0]): Promise<string> {

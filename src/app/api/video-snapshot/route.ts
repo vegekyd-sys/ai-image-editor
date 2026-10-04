@@ -9,7 +9,7 @@ import {
   reserveFixedCredits,
 } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
-import { getVideoModelCapability, normalizeVideoModelId, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { getVideoModelCapability, resolveProductVideoModelId, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
 import { quoteVideo } from '@/lib/billing/media-pricing'
 import type { VideoMeta } from '@/types'
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       outputFormat,
       webSearch,
     } = await req.json()
-    const selectedVideoModel = normalizeVideoModelId(videoModel)
+    const selectedVideoModel = resolveProductVideoModelId(videoModel)
     const videoCapability = getVideoModelCapability(selectedVideoModel)
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []

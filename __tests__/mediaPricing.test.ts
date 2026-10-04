@@ -59,7 +59,7 @@ describe('database-backed media quotes', () => {
   })
   it('composes Eco from live base and enhancement tariffs with separate rounding', async () => {
     const prices = seededMediaPrices()
-    prices.find(p => p.id === 'video:seedance-2.5:480p:generate')!.output_usd_per_second = .2
+    prices.find(p => p.id === 'video:seedance-2.5-eco:480p:generate')!.output_usd_per_second = .2
     prices.find(p => p.id === 'video:bytedance-video-upscale:4k:generate')!.output_usd_per_second = .03
     query.mockResolvedValue({ data: prices, error: null })
     const input = { durationSec: 10, resolution: '4k' as const }

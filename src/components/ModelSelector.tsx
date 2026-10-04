@@ -711,6 +711,10 @@ export default function ModelSelector({
   const selectedAgentLabel = selectedAgentModel
     ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : /^gpt-(?:5\.6|6)-/.test(selectedAgentModel.id) ? ` · ${t('model.azureApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
     : agentModel;
+  const selectedVideoModel = videoModels.find(model => model.id === videoModel);
+  const selectedVideoLabel = selectedVideoModel
+    ? t(selectedVideoModel.nameKey as Parameters<typeof t>[0])
+    : getVideoModelCapability(videoModel).label;
   const selectedVideoCapability = getVideoModelCapability(videoModel);
   const selectedVideoResolution = videoResolution === 'auto'
     ? selectedVideoCapability.defaultResolution
@@ -718,7 +722,7 @@ export default function ModelSelector({
   const modelLabel = !imageAuto
     ? selectedImageLabel
     : !videoAuto
-      ? `${selectedVideoCapability.label} ${String(selectedVideoResolution).toUpperCase()}`
+      ? `${selectedVideoLabel} ${String(selectedVideoResolution).toUpperCase()}`
       : !agentAuto
         ? `Agent: ${selectedAgentLabel}`
         : 'auto';

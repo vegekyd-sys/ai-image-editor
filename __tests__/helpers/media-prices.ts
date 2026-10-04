@@ -23,7 +23,7 @@ export function seededMediaPrices(): MediaPrice[] {
       const [id, kind, model_id, resolution, operation, output_usd_per_second] = JSON.parse(`[${line.slice(1, line.lastIndexOf(')')).replaceAll("'", '"').replaceAll(/,\./g, ',0.')}]`)
       return { id, kind, model_id, resolution, operation, output_usd_per_second, input_usd_per_second: 0, input_usd_per_image: 0, free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true, updated_at: '2026-10-04T00:00:00Z' }
     })
-  return [...existing, ...additions, ...upscale]
+  return [...existing, ...additions, ...upscale, { ...upscale[0], id: 'video:bytedance-video-upscale:720p:generate', resolution: '720p', output_usd_per_second: .0072 }, { ...existing.find(p => p.id === 'video:seedance-2.5:480p:generate')!, id: 'video:seedance-2.5-eco:480p:generate', model_id: 'seedance-2.5-eco' }]
 }
 
 export function seededTokenRates(): TokenRate[] {

@@ -130,8 +130,11 @@ export function videoPriceId(input: Pick<VideoQuoteInput, 'model' | 'resolution'
 export async function quoteVideo(input: VideoQuoteInput): Promise<MediaQuote> {
   if (normalizeVideoModelId(input.model) === 'seedance-2.5-eco') {
     const resolution = resolveVideoGenerationRoute(input).resolution
+    const prices = await getMediaPrices()
+    const ecoBase = prices.find(p => p.id === 'video:seedance-2.5-eco:480p:generate')
+    if (!ecoBase) throw new PricingUnavailableError('Seedance Eco base pricing is not configured.')
     const [base, upscale] = await Promise.all([
-      quoteVideo({ ...input, model: 'seedance-2.5', resolution: '480p' }),
+      Promise.resolve(calculateMediaQuote({ ...ecoBase, model_id: 'seedance-2.5' }, input)),
       quoteVideo({ model: 'bytedance-video-upscale', resolution, durationSec: input.durationSec }),
     ])
     return { ...base, priceId: videoPriceId(input), priceVersion: `${base.priceVersion}|${upscale.priceVersion}`,

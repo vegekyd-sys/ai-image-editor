@@ -8,7 +8,7 @@ import { IMAGE_MODEL_INPUT_IDS } from '../lib/models/types';
 import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
-import { getDefaultVideoModelId } from '../lib/video-model-capabilities';
+import { getDefaultVideoModelId, resolveProductVideoModelId } from '../lib/video-model-capabilities';
 import { getVideoStatus } from '../lib/skills/get-video-status';
 import { analyzeVideo } from '../lib/skills/analyze-video';
 import { createAudio } from '../lib/skills/create-audio';
@@ -316,7 +316,7 @@ Style: Cinematic, warm golden light.`,
       referenceVideoDuration: z.number().positive().optional().describe('Known source-video duration in seconds. Pass this for Grok edit/extend so duration validation and input-video billing match the actual source.'),
       duration: z.number().optional().describe('Duration in seconds. fal H3 Max accepts integer 5-15s; fal H3 Turbo accepts exactly 5/10/15s. Both default to 5s. Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok reference-to-video supports fixed provider ratios.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'wan-3.0', 'wan-3.0-prime', 'kling', 'grok', 'google-omni', 'minimax-h3', 'minimax-h3-max', 'fal-h3-max', 'sync-lipsync-v3']).optional().describe('Video model. Default fal-h3-max supports image/video/audio reference-to-video at 768p. Wan exposes wan-3.0 and wan-3.0-prime; minimax-h3-max is the near-real-time T2V/single-image I2V route and does not accept reference video or audio.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native', 'wan-3.0', 'wan-3.0-prime', 'kling', 'grok', 'google-omni', 'minimax-h3', 'minimax-h3-max', 'fal-h3-max', 'sync-lipsync-v3']).optional().describe('Video model. Default fal-h3-max supports image/video/audio reference-to-video at 768p. Wan exposes wan-3.0 and wan-3.0-prime; minimax-h3-max is the near-real-time T2V/single-image I2V route and does not accept reference video or audio.'),
       videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Shared output-resolution control for every video model. fal H3 Turbo supports 480p/768p and defaults to native 768p; MiniMax H3 supports 768p/2k; other capabilities follow the selected model.'),
       operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require videoUrls. Grok and Omni extend forward only.'),
       extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction. Omit or use forward for Gemini Omni.'),
@@ -342,7 +342,7 @@ Style: Cinematic, warm golden light.`,
           referenceVideoDuration: params.referenceVideoDuration,
           duration: params.duration,
           aspectRatio: params.aspectRatio,
-          videoModel: params.videoModel,
+          videoModel: resolveProductVideoModelId(params.videoModel),
           videoResolution: params.videoResolution,
           videoOperation: params.operation,
           videoExtendDirection: params.extendDirection,
@@ -362,7 +362,7 @@ Style: Cinematic, warm golden light.`,
               ? (params.referenceVideoDuration ?? params.duration ?? 10)
               : (params.duration ?? (params.videoModel === 'minimax-h3-max' ? 5 : 10)),
             imageCount: params.images.length,
-            videoModel: params.videoModel,
+            videoModel: resolveProductVideoModelId(params.videoModel),
             videoResolution: params.videoResolution,
             videoOperation: params.operation,
             referenceVideoDurationSec: params.referenceVideoDuration,
@@ -407,7 +407,7 @@ Example: Edit a video to add cinematic color grading:
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
       duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok edit retains a source up to 8.7s and Grok extend adds 2-10s to a 2-15s source; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3', 'fal-h3-max']).optional().describe('Video model. Seedance 2.5, Grok, and Google Omni use dedicated typed edit routes; MiniMax H3 supports feature/reference video.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native', 'kling', 'grok', 'google-omni', 'minimax-h3', 'fal-h3-max']).optional().describe('Video model. Seedance 2.5, Grok, and Google Omni use dedicated typed edit routes; MiniMax H3 supports feature/reference video.'),
       videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Grok edit retains the source shape up to 720p. Use auto to follow the selected model default; Gemini Omni 1.1 supports 360p/720p/1080p/4k, and MiniMax H3 supports 768p/2k.'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Provider-native source-sound toggle. Use only when the selected route explicitly supports it, currently Kling; otherwise describe the desired sound naturally in editPrompt.'),
@@ -419,7 +419,7 @@ Example: Edit a video to add cinematic color grading:
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
-        const resolvedModel = params.videoModel ?? getDefaultVideoModelId();
+        const resolvedModel = resolveProductVideoModelId(params.videoModel ?? getDefaultVideoModelId());
         const resolvedReferType = params.referType ?? (resolvedModel === 'seedance' || resolvedModel === 'seedance-fast' || resolvedModel === 'seedance-mini' || resolvedModel === 'minimax-h3' || resolvedModel === 'fal-h3-max' ? 'feature' : 'base');
         const result = await (options?.submitVideo ?? createVideo)({
           script: params.editPrompt,
@@ -540,10 +540,10 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
 
   server.tool(
     'makaron_upscale_video',
-    'Upscale one existing video using ByteDance Fast; no video regeneration. Preserves source motion, frame rate and original audio. Default 1080p; supports 2K and 4K, up to 60 seconds. Higher tiers are not priced yet. Returns a durable root task ID; poll makaron_get_video_status until the permanent file is ready. Never submit another upscale while this task is processing.',
+    'Upscale one existing video using ByteDance Fast; no video regeneration. Preserves source motion, frame rate and original audio. Default 1080p; supports 720p, 2K and 4K, up to 60 seconds. Higher tiers are not priced yet. Returns a durable root task ID; poll makaron_get_video_status until the permanent file is ready. Never submit another upscale while this task is processing.',
     {
       videoUrl: z.string().url().describe('Hosted source video URL.'),
-      resolution: z.enum(['1080p', '2k', '4k']).default('1080p'),
+      resolution: z.enum(['720p', '1080p', '2k', '4k']).default('1080p'),
       billingRequestId: z.string().uuid().optional().describe('Reuse this ID on a transport retry; do not create a second paid job.'),
     },
     async params => {

@@ -10,7 +10,7 @@ import {
   refundCredits,
   requireCredits,
 } from '@/lib/billing/credits'
-import { getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { getVideoModelCapability, resolveProductVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
 import { quoteVideo } from '@/lib/billing/media-pricing'
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution, videoOperation, videoExtendDirection } = await req.json()
-    const selectedVideoModel = normalizeVideoModelId(videoModel)
+    const selectedVideoModel = resolveProductVideoModelId(videoModel)
     const videoCapability = getVideoModelCapability(selectedVideoModel)
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []

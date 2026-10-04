@@ -11,8 +11,8 @@ export interface GetVideoStatusResult {
   queryFailed?: boolean;
   baseVideoUrl?: string;
   stage?: string;
-  requestedResolution?: '1080p' | '2k' | '4k';
-  actualResolution?: '480p' | '1080p' | '2k' | '4k';
+  requestedResolution?: '720p' | '1080p' | '2k' | '4k';
+  actualResolution?: '480p' | '720p' | '1080p' | '2k' | '4k';
   enhancementStatus?: 'processing' | 'completed' | 'failed';
   message: string;
 }
