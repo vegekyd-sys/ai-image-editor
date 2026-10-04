@@ -33,6 +33,7 @@ interface ModelSelectorProps {
 }
 
 const ROW_HEIGHT = 68;
+const PANEL_WIDTH = 360;
 const PANEL_BODY_HEIGHT = ROW_HEIGHT * 5;
 const AUTO_TIPS_FOOTER_HEIGHT = ROW_HEIGHT + 14;
 const PANEL_CHROME_HEIGHT = 104;
@@ -277,7 +278,7 @@ function ResolutionChips({
       <div style={{ fontSize: 10, fontWeight: 700, color: 'rgba(232,121,249,0.55)', marginBottom: 6 }}>
         {label}
       </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         {options.map(resolution => {
           const active = selectedVideoResolution === resolution;
           return (
@@ -309,6 +310,7 @@ function ResolutionChips({
 }
 
 function VideoModelRow({
+  modelId,
   name,
   desc,
   badge,
@@ -319,6 +321,7 @@ function VideoModelRow({
   selectedVideoResolution,
   onResolutionSelect,
 }: {
+  modelId: string;
   name: string;
   desc: string;
   badge?: string;
@@ -342,13 +345,15 @@ function VideoModelRow({
     >
       <button
         onClick={onSelect}
+        data-model-id={modelId}
+        aria-pressed={selected}
         style={{
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           gap: 10,
           width: '100%',
-          height: ROW_HEIGHT,
-          padding: '0 12px',
+          minHeight: ROW_HEIGHT,
+          padding: '12px',
           borderRadius: 12,
           border: 'none',
           background: 'transparent',
@@ -358,6 +363,7 @@ function VideoModelRow({
       >
         <div
           style={{
+            marginTop: 2,
             width: 32,
             height: 32,
             borderRadius: 8,
@@ -373,41 +379,37 @@ function VideoModelRow({
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexWrap: 'nowrap' }}>
-            <span style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: selected ? '#e879f9' : 'rgba(255,255,255,0.85)',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}>
-              {name}
-            </span>
-            {badge && (
+          <div style={{
+            fontSize: 14,
+            fontWeight: 650,
+            lineHeight: 1.5,
+            color: selected ? '#f0abfc' : 'rgba(255,255,255,0.95)',
+            overflowWrap: 'anywhere',
+          }}>
+            {name}
+          </div>
+          {badge && (
+            <div style={{ marginTop: 4 }}>
               <span style={{
-                fontSize: 10,
-                padding: '1px 5px',
-                borderRadius: 4,
-                background: 'rgba(255,255,255,0.06)',
-                color: 'rgba(255,255,255,0.35)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                minWidth: 0,
+                display: 'inline-block',
+                fontSize: 11,
+                lineHeight: 1.5,
+                padding: '2px 7px',
+                borderRadius: 5,
+                background: selected ? 'rgba(232,121,249,0.12)' : 'rgba(255,255,255,0.07)',
+                color: selected ? '#f0abfc' : 'rgba(255,255,255,0.72)',
+                overflowWrap: 'anywhere',
               }}>
                 {badge}
               </span>
-            )}
-          </div>
+            </div>
+          )}
           <div style={{
-            fontSize: 11,
-            color: 'rgba(255,255,255,0.35)',
-            marginTop: 1,
-            lineHeight: 1.3,
-            display: '-webkit-box',
-            WebkitBoxOrient: 'vertical',
-            WebkitLineClamp: selected ? 2 : 1,
-            overflow: 'hidden',
+            fontSize: 12,
+            color: 'rgba(255,255,255,0.65)',
+            marginTop: 6,
+            lineHeight: 1.55,
+            overflowWrap: 'anywhere',
           }}>
             {desc}
           </div>
@@ -415,6 +417,7 @@ function VideoModelRow({
 
         <div
           style={{
+            marginTop: 3,
             width: 18,
             height: 18,
             borderRadius: 9,
@@ -583,7 +586,7 @@ export default function ModelSelector({
       return;
     }
 
-    const panelWidth = 300;
+    const panelWidth = PANEL_WIDTH;
     const spaceRight = window.innerWidth - rect.left;
     const spaceLeft = rect.right;
     if (spaceRight >= panelWidth + 8) {
@@ -791,7 +794,7 @@ export default function ModelSelector({
             bottom: popoverPos.bottom,
             ...(popoverPos.left != null ? { left: popoverPos.left } : {}),
             ...(popoverPos.right != null ? { right: popoverPos.right } : {}),
-            ...(popoverPos.left != null && popoverPos.right != null ? {} : { width: 300 }),
+            ...(popoverPos.left != null && popoverPos.right != null ? {} : { width: PANEL_WIDTH }),
             pointerEvents: 'auto' as const,
             background: 'linear-gradient(145deg, rgba(25,25,31,0.80), rgba(7,7,11,0.66))',
             border: '0.5px solid rgba(255,255,255,0.12)',
@@ -916,6 +919,7 @@ export default function ModelSelector({
                   return (
                     <VideoModelRow
                       key={model.id}
+                      modelId={model.id}
                       name={t(model.nameKey as Parameters<typeof t>[0])}
                       desc={t(model.descKey as Parameters<typeof t>[0])}
                       badge={model.speedLabelKey ? t(model.speedLabelKey) : model.speedLabel}
