@@ -258,6 +258,13 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.seedance25Eco.title': "Seedance 2.5 Eco：高畫質創作，更省成本",
+  'changelog.seedance25Eco.item1': "先產生 480p 影片，再自動提升解析度，支援最長 30 秒，以更低成本交付 720p、1080p、2K 或 4K 成片。",
+  'changelog.seedance25Eco.item2': "只需選擇一次模型和解析度，影片生成與解析度提升會自動完成。也可以直接告訴 Agent「用 Seedance 2.5 做一支 2K 影片」。",
+  'changelog.seedance25Eco.item3': "Seedance 2.5 預設使用 Eco，預設輸出 1080p；需要原生生成時，可明確選擇 Seedance 2.5 Native。",
+  'changelog.byteDanceFastUpscale.title': "ByteDance Fast：讓現有影片更清晰",
+  'changelog.byteDanceFastUpscale.item1': "在 Agent 對話或 Makaron CLI chat 中，提供現有影片並說「把這支影片提升至 4K」，即可提升清晰度，無需重新生成。",
+  'changelog.byteDanceFastUpscale.item2': "支援最長 60 秒的影片，輸出可選 720p、1080p、2K 或 4K，同時保留原片的動作、畫面比例、影格率和聲音。",
   'changelog.multiAngleVideo.title': "多機位：讓普通鏡頭更有表達",
   'changelog.multiAngleVideo.item1': "上傳一段普通影片，選擇「多機位」Skill，就能產生有敘事、有節奏的多機位成片。",
   'changelog.multiAngleVideo.item2': "它會理解口播與動作，把切鏡、景別與運鏡結合起來，盡量保留原片內容，讓每個鏡頭都有表達。",

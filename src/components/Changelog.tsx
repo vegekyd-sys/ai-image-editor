@@ -17,12 +17,14 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-10-05', localeKey: 'seedance25Eco' },
+  { date: '2026-10-05', localeKey: 'byteDanceFastUpscale' },
   { date: '2026-10-02', localeKey: 'multiAngleVideo' },
   { date: '2026-09-29', localeKey: 'creativeHome' },
   { date: '2026-09-23', localeKey: 'gpt6AgentModels' },
@@ -969,6 +971,14 @@ const CHANGELOG: ChangelogEntry[] = [
 ];
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  seedance25Eco: {
+    title: 'changelog.seedance25Eco.title',
+    items: ['changelog.seedance25Eco.item1', 'changelog.seedance25Eco.item2', 'changelog.seedance25Eco.item3'],
+  },
+  byteDanceFastUpscale: {
+    title: 'changelog.byteDanceFastUpscale.title',
+    items: ['changelog.byteDanceFastUpscale.item1', 'changelog.byteDanceFastUpscale.item2'],
+  },
   multiAngleVideo: {
     title: 'changelog.multiAngleVideo.title',
     items: ['changelog.multiAngleVideo.item1', 'changelog.multiAngleVideo.item2'],

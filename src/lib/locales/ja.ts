@@ -257,6 +257,13 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.seedance25Eco.title': "Seedance 2.5 Eco：高解像度の動画を、より低コストで",
+  'changelog.seedance25Eco.item1': "480pで動画を生成した後、自動でアップスケール。最長30秒の動画を、720p・1080p・2K・4Kで低コストに仕上げられます。",
+  'changelog.seedance25Eco.item2': "モデルと解像度を一度選ぶだけで、生成からアップスケールまで自動で完了します。Agentに「Seedance 2.5で2Kの動画を作って」と伝えることもできます。",
+  'changelog.seedance25Eco.item3': "Seedance 2.5は標準でEcoを使用し、1080pで出力します。ネイティブ生成を使う場合は、Seedance 2.5 Nativeを指定してください。",
+  'changelog.byteDanceFastUpscale.title': "ByteDance Fast：既存の動画をより鮮明に",
+  'changelog.byteDanceFastUpscale.item1': "Agentとの会話やMakaron CLI chatで既存の動画を渡し、「この動画を4Kにアップスケールして」と頼むだけで、再生成せずに鮮明さを高められます。",
+  'changelog.byteDanceFastUpscale.item2': "最長60秒の動画に対応し、720p・1080p・2K・4Kで出力できます。元の動き、縦横比、フレームレート、音声を保ちます。",
   'changelog.multiAngleVideo.title': "マルチアングル：いつもの映像に表現力を",
   'changelog.multiAngleVideo.item1': "動画をアップロードして「マルチアングル」Skillを選ぶと、ストーリーとリズムのある複数視点の動画を生成できます。",
   'changelog.multiAngleVideo.item2': "話す内容と動きを読み取り、カット、画角、カメラワークを組み合わせて、元の内容をできるだけ保ちながら各ショットに意味を持たせます。",
