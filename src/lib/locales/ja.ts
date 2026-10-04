@@ -257,10 +257,11 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
-  'changelog.seedance25Eco.title': "自動アップスケール：低コストで、最大4Kまで",
-  'changelog.seedance25Eco.item1': "480pで動画を生成した後、自動でアップスケールする制作方法が加わりました。低コストで高解像度の動画に仕上げられます。",
-  'changelog.seedance25Eco.item2': "出力解像度を一度選ぶだけで、生成からアップスケールまで続けて完了します。生成後にもう一度操作する必要はありません。",
-  'changelog.seedance25Eco.item3': "720p・1080p・2K・4Kに対応し、標準の出力は720pです。1本あたり最長30秒の動画を作れます。",
+  'changelog.seedance25Eco.title': "自動アップスケール：低コストで1080p動画を制作",
+  'changelog.seedance25Eco.item1': "480pで動画を生成した後、自動で1080pにアップスケール。生成コストを抑えて高解像度の動画に仕上げられます。",
+  'changelog.seedance25Eco.item2': "標準モード・参照動画なし・30fps以下の公開料金で試算すると、480p生成と1080pへのアップスケールを合わせたプロバイダー費用は、ネイティブ1080p生成より約80%低くなります。",
+  'changelog.seedance25Eco.item3': "この自動アップスケール方式では、720pと1080pの処理料金は同じです。1080pを選ぶと、同じ料金でより高解像度の動画を出力できます。",
+  'changelog.seedance25Eco.item4': "出力解像度を一度選ぶだけで、生成からアップスケールまで自動で完了します。最長30秒の動画を720p・1080p・2K・4Kで出力できます。",
   'changelog.byteDanceFastUpscale.title': "既存の動画もアップスケール",
   'changelog.byteDanceFastUpscale.item1': "会話で既存の動画を渡し、「この動画を4Kにアップスケールして」と頼むだけで、再生成せずに鮮明さを高められます。",
   'changelog.byteDanceFastUpscale.item2': "最長60秒の動画に対応し、720p・1080p・2K・4Kで出力できます。元の動き、縦横比、フレームレート、音声を保ちます。",
