@@ -81,6 +81,17 @@ describe('admin home skill i18n contract', () => {
     }))
   })
 
+  it('allows an explicitly text-only skill to require zero images', async () => {
+    const { PUT } = await import('@/app/api/admin/home-skills/route')
+    const response = await PUT(request('PUT', {
+      id: 'skill-1',
+      image_count: 0,
+    }))
+
+    expect(response.status).toBe(200)
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ image_count: 0 }))
+  })
+
   it('requires all four titles and prompts when creating a skill', async () => {
     const { POST } = await import('@/app/api/admin/home-skills/route')
     const response = await POST(request('POST', {

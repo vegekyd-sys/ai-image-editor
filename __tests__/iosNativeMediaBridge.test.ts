@@ -2,9 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   isNativePhotoLibraryPickerAvailable,
   isNativePhotoLibrarySaveAvailable,
+  isNativeVideoWatermarkAvailable,
   pickMediaItemsFromNativePhotoLibrary,
   pickMediaFromNativePhotoLibrary,
   saveUrlToNativePhotoLibrary,
+  saveWatermarkedVideoToNativePhotoLibrary,
 } from '@/lib/native-media';
 
 type NativeBridge = NonNullable<NonNullable<NonNullable<Window['webkit']>['messageHandlers']>['makaronNative']>;
@@ -32,9 +34,56 @@ function respond(message: NativeMessage, detail: Record<string, unknown> = {}) {
 
 describe('native media bridge', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     sessionStorage.clear();
     delete window.webkit;
+    delete window.__MAKARON_NATIVE_MEDIA__;
+  });
+
+  it('defaults old shells to web and requires an explicitly supported media protocol', () => {
+    installNativeBridgeMock();expect(isNativeVideoWatermarkAvailable()).toBe(false);
+    for (const protocolVersion of [0, -1, 1.5, NaN]) {
+      window.__MAKARON_NATIVE_MEDIA__ = { protocolVersion, watermarkedVideo: true };
+      expect(isNativeVideoWatermarkAvailable()).toBe(false);
+    }
+    window.__MAKARON_NATIVE_MEDIA__ = { protocolVersion: 1, watermarkedVideo: false };
+    expect(isNativeVideoWatermarkAvailable()).toBe(false);
+    window.__MAKARON_NATIVE_MEDIA__ = { protocolVersion: 1, watermarkedVideo: true, appVersion: '1.0.9', build: '18' };
+    expect(isNativeVideoWatermarkAvailable()).toBe(true);
+    delete window.webkit;expect(isNativeVideoWatermarkAvailable()).toBe(false);
+  });
+
+  it('sends the exact signature and original video to native composition and receives scoped progress', async () => {
+    const messages = installNativeBridgeMock(), progress = vi.fn();
+    const promise = saveWatermarkedVideoToNativePhotoLibrary(new Blob(['video'], { type: 'video/mp4' }), 'work.mov', 'data:image/png;base64,mark', progress);
+    await vi.waitFor(() => expect(messages).toHaveLength(1));
+    expect(messages[0]).toMatchObject({ action: 'saveWatermarkedVideoToPhotos', mediaType: 'video', filename: 'work.mp4', watermarkDataUrl: 'data:image/png;base64,mark', dataUrl: 'data:video/mp4;base64,dmlkZW8=' });
+    window.dispatchEvent(new CustomEvent('makaron-native-progress', { detail: { id: 'other', progress: .5 } }));
+    expect(progress).not.toHaveBeenCalled();
+    window.dispatchEvent(new CustomEvent('makaron-native-progress', { detail: { id: messages[0].id, progress: .5 } }));
+    expect(progress).toHaveBeenCalledWith(.5);
+    respond(messages[0]);await expect(promise).resolves.toBeUndefined();
+  });
+
+  it('cancels the native export when Save closes and never sends a clean fallback', async () => {
+    const messages = installNativeBridgeMock(), controller = new AbortController();
+    const promise = saveWatermarkedVideoToNativePhotoLibrary(new Blob(['video']), 'work.mp4', 'data:image/png;base64,mark', undefined, controller.signal);
+    const rejection = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(messages).toHaveLength(1));
+    controller.abort();await rejection;
+    expect(messages).toHaveLength(2);
+    expect(messages[1]).toMatchObject({ action: 'cancelMediaExport', requestId: messages[0].id });
+    expect(messages.every(message => message.action !== 'saveToPhotos')).toBe(true);
+  });
+
+  it('fails closed on an old native binary without video-watermark support', async () => {
+    const messages = installNativeBridgeMock();
+    const promise = saveWatermarkedVideoToNativePhotoLibrary(new Blob(['video']), 'work.mp4', 'data:image/png;base64,mark');
+    const rejection = expect(promise).rejects.toThrow('Unsupported native action');
+    await vi.waitFor(() => expect(messages).toHaveLength(1));
+    respond(messages[0], { ok: false, error: 'Unsupported native action' });
+    await rejection;expect(messages).toHaveLength(1);
   });
 
   it('sends photo library save requests through the iOS native bridge', async () => {

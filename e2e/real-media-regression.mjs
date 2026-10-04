@@ -307,8 +307,8 @@ try {
     designProjectId,
     '给这个 motion design 生成一段适合科技产品 demo 的背景音乐，轻快、有推进感、纯音乐，直接生成。',
   ))
-  const musicSummary = summarizeAgent('music_generate_suno', designProjectUrl, musicAgent, parseSse(musicAgent.text))
-  musicSummary.ok = musicSummary.ok && musicSummary.toolNames.includes('generate_music')
+  const musicSummary = summarizeAgent('music_generate_seed_audio', designProjectUrl, musicAgent, parseSse(musicAgent.text))
+  musicSummary.ok = musicSummary.ok && musicSummary.toolNames.includes('generate_audio')
   summaries.push(musicSummary)
 
   const videoProject = await retry('video project create', () => createProject({ title: 'Codex video script confirmation regression', imageBase64 }))

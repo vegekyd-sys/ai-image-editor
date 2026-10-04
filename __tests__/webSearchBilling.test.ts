@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockRpc = vi.fn();
+const mockPricingSelect = vi.fn();
 const mockFrom = vi.fn((table: string) => {
   if (table === 'app_settings') {
     return {
@@ -11,7 +12,7 @@ const mockFrom = vi.fn((table: string) => {
   }
   if (table === 'credit_pricing') {
     return {
-      select: vi.fn().mockResolvedValue({ data: [], error: null }),
+      select: mockPricingSelect,
     };
   }
   throw new Error(`Unexpected table: ${table}`);
@@ -25,13 +26,17 @@ describe('web search billing', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockRpc.mockResolvedValue({ data: 100, error: null });
+    mockPricingSelect.mockResolvedValue({
+      data: [{ tool_name: 'web_search', supplier_cost: 0.014, credits: 3, is_free: false }],
+      error: null,
+    });
     const { invalidateBillingCache } = await import('@/lib/billing/credits');
     const { invalidatePricingCache } = await import('@/lib/billing/pricing');
     invalidateBillingCache();
     invalidatePricingCache();
   });
 
-  it('falls back to three credits per search transaction', async () => {
+  it('reads the configured price for each search transaction', async () => {
     const { getToolPrice } = await import('@/lib/billing/pricing');
     await expect(getToolPrice('web_search')).resolves.toEqual({ credits: 3, isFree: false });
   });
@@ -47,5 +52,11 @@ describe('web search billing', () => {
       p_tool_name: 'web_search',
       p_model_used: 'gpt-5.6-terra',
     }));
+  });
+  it('rejects a missing search SKU instead of using a hidden fallback', async () => {
+    mockPricingSelect.mockResolvedValue({ data: [], error: null });
+    const { deductWebSearchCalls } = await import('@/lib/billing/credits');
+    await expect(deductWebSearchCalls('user-1', 1, 'gpt-6-sol')).rejects.toThrow('not configured');
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 });

@@ -25,6 +25,13 @@ npm run build
 
 `npm run lint` is useful for new errors, but this repo can have existing warnings. Do not let unrelated lint noise replace targeted tests, build, and smoke evidence.
 
+`npm run build` runs `scripts/check-server-runtime.mjs` in its `postbuild` gate.
+It checks the actual Next API file traces for the executable CRC32C entry, not
+just its package.json. This covers Agent, video polling, materialize, Remotion,
+and their cron handlers. A missing runtime blocks both local and Vercel builds.
+After release, probe the affected API routes as well as `/api/health`: health
+can pass while a different function fails to load its server dependencies.
+
 For new model/provider work, add these checks:
 
 - Dedicated task id namespace or route prefix when the provider has distinct polling/status behavior.
@@ -45,17 +52,22 @@ For model launches, the common production failure is a missing live env var, not
 
 ## Deploy
 
-Preview:
+Feature worktrees stay lightweight and do not create their own Next.js runtime
+cache. Test committed feature refs and deploy Preview from the fixed runner:
 
 ```bash
-npx vercel
+npm run runner:test -- <commit>
+npm run runner:preview -- <commit>
 ```
 
-Production:
+Production is only released from the clean canonical `dev` worktree:
 
 ```bash
-npx vercel --prod
+npm run release:prod
 ```
+
+See `docs/worktree-runtime-runner.md` for setup, dependency-lock behavior, and
+the complete worktree-to-release contract.
 
 After production deploy, verify the canonical alias and health endpoint:
 
@@ -100,4 +112,3 @@ After an important release, update the smallest matching memory surface:
 - Do not update global index/log files unless the structure or routing changed.
 
 The release is not closed until code, production, CLI surface if applicable, user-facing copy, and durable memory are consistent.
-

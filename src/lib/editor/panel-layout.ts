@@ -1,0 +1,1 @@
+export const MOBILE_EDITOR_SLOT_HEIGHT = 120.5;

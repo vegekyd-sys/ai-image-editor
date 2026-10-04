@@ -33,6 +33,8 @@ export interface VolcengineAsrTranscript {
   model: 'bigmodel-flash'
   resourceId: string
   requestId: string
+  providerLogId?: string
+  requestedLanguage?: string
   text: string
   durationMs: number | null
   utterances: TranscriptUtterance[]
@@ -44,12 +46,20 @@ export interface VolcengineAsrTranscript {
 interface VolcengineAsrOptions {
   mediaUrl: string
   localMediaPath?: string
+  sourceRange?: { startSec: number; endSec: number }
   uid?: string
   language?: string
   requestId?: string
 }
 
 type JsonRecord = Record<string, unknown>
+
+export function isAsrTranscriptCacheCompatible(
+  transcript: VolcengineAsrTranscript,
+  requestedLanguage?: string,
+): boolean {
+  return !requestedLanguage || transcript.requestedLanguage === requestedLanguage
+}
 
 function env(name: string): string | undefined {
   const value = process.env[name]?.trim()
@@ -121,7 +131,11 @@ async function downloadMedia(mediaUrl: string, dir: string): Promise<string> {
   return inputPath
 }
 
-async function extractAudioBase64(mediaUrl: string, localMediaPath?: string): Promise<{ data: string; extractedAudio: boolean }> {
+async function extractAudioBase64(
+  mediaUrl: string,
+  localMediaPath?: string,
+  sourceRange?: { startSec: number; endSec: number },
+): Promise<{ data: string; extractedAudio: boolean }> {
   const workDir = await mkdtemp(path.join(tmpdir(), 'makaron-asr-'))
   try {
     await mkdir(workDir, { recursive: true })
@@ -133,14 +147,20 @@ async function extractAudioBase64(mediaUrl: string, localMediaPath?: string): Pr
         throw new Error(`Local media is too large for ASR preprocessing (${Math.round(localStat.size / 1024 / 1024)}MB).`)
       }
       inputPath = localMediaPath
+    } else if (sourceRange) {
+      inputPath = mediaUrl
     } else {
       inputPath = await downloadMedia(mediaUrl, workDir)
     }
     const outputPath = path.join(workDir, 'audio.mp3')
     const ffmpegPath = await findFfmpeg()
 
+    const rangeArgs = sourceRange
+      ? ['-ss', String(sourceRange.startSec), '-t', String(sourceRange.endSec - sourceRange.startSec)]
+      : []
     await execFileAsync(ffmpegPath, [
       '-y',
+      ...rangeArgs,
       '-i', inputPath,
       '-vn',
       '-ac', '1',
@@ -229,21 +249,17 @@ export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions)
   const endpoint = env('VOLCENGINE_ASR_ENDPOINT') || DEFAULT_ENDPOINT
   const resourceId = env('VOLCENGINE_ASR_RESOURCE_ID') || DEFAULT_RESOURCE_ID
 
-  let audio: { url: string } | { data: string }
+  let audio: { url: string; language?: string } | { data: string; language?: string }
   let extractedAudio = false
   if (isAudioUrl(options.mediaUrl) && !options.localMediaPath) {
     audio = { url: options.mediaUrl }
   } else {
-    const extracted = await extractAudioBase64(options.mediaUrl, options.localMediaPath)
+    const extracted = await extractAudioBase64(options.mediaUrl, options.localMediaPath, options.sourceRange)
     audio = { data: extracted.data }
     extractedAudio = extracted.extractedAudio
   }
 
-  const additions: Record<string, string> = {
-    use_itn: 'True',
-    use_punc: 'True',
-  }
-  if (options.language) additions.language = options.language
+  if (options.language) audio.language = options.language
 
   const res = await fetchWithTimeout(endpoint, {
     method: 'POST',
@@ -251,8 +267,11 @@ export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions)
     body: JSON.stringify({
       user: { uid: options.uid || 'makaron-agent' },
       audio,
-      request: { model_name: 'bigmodel' },
-      additions: JSON.stringify(additions),
+      request: {
+        model_name: 'bigmodel',
+        enable_itn: true,
+        enable_punc: true,
+      },
     }),
   })
 
@@ -266,9 +285,13 @@ export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions)
 
   const statusCode = res.headers.get('x-api-status-code')
   const statusMessage = res.headers.get('x-api-message')
+  const providerLogId = res.headers.get('x-tt-logid') || undefined
   if (!res.ok || (statusCode && statusCode !== '20000000')) {
     const msg = statusMessage || (typeof body.message === 'string' ? body.message : bodyText.slice(0, 300))
-    throw new Error(`Volcengine ASR failed (${res.status}${statusCode ? `/${statusCode}` : ''}): ${msg}`)
+    throw new Error(
+      `Volcengine ASR failed (${res.status}${statusCode ? `/${statusCode}` : ''}): ${msg}`
+      + `${providerLogId ? ` (logid: ${providerLogId})` : ''}`,
+    )
   }
 
   const result = body.result && typeof body.result === 'object' ? body.result as JsonRecord : undefined
@@ -280,6 +303,8 @@ export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions)
     model: 'bigmodel-flash',
     resourceId,
     requestId,
+    providerLogId,
+    requestedLanguage: options.language,
     text,
     durationMs: parseDurationMs(body),
     utterances,

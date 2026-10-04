@@ -1,0 +1,10 @@
+--- SKILL.md
++++ SKILL.md
+@@ -15 +15 @@
+-One portrait in, one direct MiniMax H3 Max video out. No intermediate image, storyboard, cover, separate music asset, overlay, or second video. Use native instrumental BGM in the same render.
++One portrait in, one direct fal H3 Turbo video out. No intermediate image, storyboard, cover, separate music asset, overlay, or second video. Use native instrumental BGM in the same render.
+@@ -66,0 +67,4 @@
++
++## Video model
++
++Use **fal H3 Turbo**, with `model: "minimax-h3-max"` for `generate_animation` or `--video-model minimax-h3-max` for the CLI. This skill uses one source image as the video start frame.

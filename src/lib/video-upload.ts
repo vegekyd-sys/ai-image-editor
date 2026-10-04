@@ -3,7 +3,7 @@
 import { renderMediaOnWeb } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
-export const MAX_DURATION = 120; // Upload limit only. Model reference-video limits stay in generate_animation/create-video.
+export const MAX_DURATION = 900; // Upload limit only. Model reference-video limits stay in generate_animation/create-video.
 export const MAX_DURATION_TOLERANCE = 1; // Allow tiny container/audio metadata padding over the upload limit
 export const MAX_ACCEPTED_DURATION = MAX_DURATION + MAX_DURATION_TOLERANCE;
 export const MAX_FRAME_PIXELS = 2_086_876; // SeeDance limit: width × height must not exceed ~1080p

@@ -4,6 +4,16 @@ import {
   isRequiredServiceDown,
   resolveAzureOpenAIModelsRequest,
 } from '@/lib/azure-openai-health'
+import {
+  resolveCodexSubscriptionFallbackProvider,
+  resolveGPT56AgentProvider,
+} from '@/lib/agent-models'
+import { assertCodexSubscriptionAuthenticated } from '@/lib/codex-subscription'
+import {
+  assertOpenRouterGPT56ModelEndpoint,
+  REQUIRED_OPENROUTER_MODEL_IDS,
+  resolveOpenRouterAgentHealthRequest,
+} from '@/lib/openrouter-agent-health'
 
 type ServiceStatus = 'healthy' | 'unhealthy' | 'unavailable'
 
@@ -96,92 +106,32 @@ async function checkGemini(): Promise<ServiceResult> {
 }
 
 async function checkOpenRouter(): Promise<ServiceResult> {
-  const key = process.env.OPENROUTER_API_KEY
-  if (!key) return unavailable('OPENROUTER_API_KEY not set')
+  const request = resolveOpenRouterAgentHealthRequest()
+  if (!request) return unavailable('OPENROUTER_API_KEY not set')
 
   return checkWithTimeout('openrouter', async () => {
-    const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
-      headers: { Authorization: `Bearer ${key}` },
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const headers = { Authorization: `Bearer ${request.apiKey}` }
+    const [authResponse, ...modelResponses] = await Promise.all([
+      fetch(request.authUrl, { headers }),
+      ...request.modelUrls.map(url => fetch(url, { headers })),
+    ])
+    if (!authResponse.ok) throw new Error(`auth HTTP ${authResponse.status}`)
+    for (const [index, modelResponse] of modelResponses.entries()) {
+      const requiredModelId = REQUIRED_OPENROUTER_MODEL_IDS[index]
+      if (!modelResponse.ok) {
+        throw new Error(`${requiredModelId} HTTP ${modelResponse.status}`)
+      }
+      assertOpenRouterGPT56ModelEndpoint(await modelResponse.json(), requiredModelId)
+    }
   }, 5000)
 }
 
-async function checkComfyUI(
-  name: string,
-  envVar: string,
-): Promise<ServiceResult> {
-  const url = process.env[envVar]
-  if (!url) return unavailable(`${envVar} not set`)
-
-  return checkWithTimeout(name, async () => {
-    const res = await fetch(`${url}/system_stats`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  }, 3000)
-}
-
-async function checkQwen(): Promise<ServiceResult> {
-  if (process.env.QWEN_PROVIDER === 'vast') {
-    const endpoint = process.env.VAST_QWEN_ENDPOINT
-    const apiKey = process.env.VAST_API_KEY
-    if (!endpoint || !apiKey) return unavailable('Vast Qwen env not set')
-
-    return checkWithTimeout('comfyui_qwen', async () => {
-      const res = await fetch('https://run.vast.ai/route/', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ endpoint, cost: 1 }),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      if (!data?.url) throw new Error(data?.status || data?.error_msg || 'Vast worker not ready')
-    }, 5000)
-  }
-
-  return checkComfyUI('comfyui_qwen', 'COMFYUI_QWEN_URL')
-}
-
-async function checkComfyUIDiffusersModel(
-  name: string,
-  envVar: string,
-  modelEnvVar: string,
-  defaultModel: string,
-): Promise<ServiceResult> {
-  const url = process.env[envVar]
-  if (!url) return unavailable(`${envVar} not set`)
-
-  const model = process.env[modelEnvVar] || defaultModel
-  return checkWithTimeout(name, async () => {
-    const res = await fetch(`${url}/object_info/DiffusersLoader`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    const models = data?.DiffusersLoader?.input?.required?.model_path?.[0]
-    if (!Array.isArray(models)) throw new Error('DiffusersLoader model list unavailable')
-    if (!models.includes(model)) throw new Error(`${model} not available`)
-  }, 5000)
-}
-
-async function checkComfyUICheckpointModel(
-  name: string,
-  envVar: string,
-  modelEnvVar: string,
-  defaultModel: string,
-): Promise<ServiceResult> {
-  const url = process.env[envVar]
-  if (!url) return unavailable(`${envVar} not set`)
-
-  const model = process.env[modelEnvVar] || defaultModel
-  return checkWithTimeout(name, async () => {
-    const res = await fetch(`${url}/object_info/CheckpointLoaderSimple`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    const models = data?.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0]
-    if (!Array.isArray(models)) throw new Error('Checkpoint model list unavailable')
-    if (!models.includes(model)) throw new Error(`${model} not available`)
-  }, 5000)
+// These are configuration checks, not proof that a paid generation succeeds.
+// Release acceptance must still run actual Spicy edits and fal camera rotation.
+function checkImageProviderKey(envVar: 'MULEROUTER_API_KEY' | 'FAL_KEY'): ServiceResult {
+  return process.env[envVar]?.trim()
+    ? { status: 'healthy', latency: 0 }
+    : unavailable(`${envVar} not set`)
 }
 
 async function checkKling(): Promise<ServiceResult> {
@@ -218,6 +168,16 @@ async function checkAzureOpenAI(): Promise<ServiceResult> {
   }, 5000)
 }
 
+async function checkCodexSubscription(): Promise<ServiceResult> {
+  const ownerUserId = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim()
+  if (!ownerUserId) {
+    return unavailable('CODEX_SUBSCRIPTION_OWNER_USER_ID not set')
+  }
+  return checkWithTimeout('codex_subscription', async () => {
+    await assertCodexSubscriptionAuthenticated(ownerUserId)
+  }, 15_000)
+}
+
 async function checkHuggingFace(): Promise<ServiceResult> {
   const token = process.env.HF_TOKEN
   if (!token) return unavailable('HF_TOKEN not set')
@@ -239,12 +199,12 @@ export async function GET() {
     supabaseStorage,
     gemini,
     openrouter,
-    comfyuiQwen,
-    comfyuiPony,
-    comfyuiWai,
+    mulerouterImage,
+    falRotation,
     kling,
     piapi,
     azureOpenai,
+    codexSubscription,
     huggingface,
   ] = await Promise.all([
     checkSupabaseDB(),
@@ -252,22 +212,12 @@ export async function GET() {
     checkSupabaseStorage(),
     checkGemini(),
     checkOpenRouter(),
-    checkQwen(),
-    checkComfyUIDiffusersModel(
-      'comfyui_pony',
-      'COMFYUI_PONY_URL',
-      'COMFYUI_PONY_MODEL',
-      'fucktasticAnimePony_v22',
-    ),
-    checkComfyUICheckpointModel(
-      'comfyui_wai',
-      'COMFYUI_WAI_URL',
-      'COMFYUI_WAI_CHECKPOINT',
-      'waiIllustriousSDXL_v160.safetensors',
-    ),
+    checkImageProviderKey('MULEROUTER_API_KEY'),
+    checkImageProviderKey('FAL_KEY'),
     checkKling(),
     checkPiAPI(),
     checkAzureOpenAI(),
+    checkCodexSubscription(),
     checkHuggingFace(),
   ])
 
@@ -277,12 +227,12 @@ export async function GET() {
     supabase_storage: supabaseStorage,
     gemini,
     openrouter,
-    comfyui_qwen: comfyuiQwen,
-    comfyui_pony: comfyuiPony,
-    comfyui_wai: comfyuiWai,
+    mulerouter_image: mulerouterImage,
+    fal_rotation: falRotation,
     kling,
     piapi,
     azure_openai: azureOpenai,
+    codex_subscription: codexSubscription,
     huggingface,
   }
 
@@ -291,12 +241,26 @@ export async function GET() {
   const unhealthy = entries.filter(s => s.status === 'unhealthy').length
   const unavailableCount = entries.filter(s => s.status === 'unavailable').length
 
-  // Core services: if persistence, image generation, or the default Agent is down → down
+  // Core services: if persistence, image generation, or the selected default
+  // Agent provider is down -> down. The retained standby provider may degrade
+  // independently without making the active OpenRouter Agent look unavailable.
+  const selectedGPT56Provider = resolveGPT56AgentProvider(process.env.GPT56_AGENT_PROVIDER)
+  const codexOwnerConfigured = Boolean(process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim())
+  const codexFallbackHealth = resolveCodexSubscriptionFallbackProvider() === 'azure-openai'
+    ? azureOpenai
+    : openrouter
+  const selectedAgentHealth = selectedGPT56Provider === 'azure-openai'
+    ? azureOpenai
+    : selectedGPT56Provider === 'codex-subscription'
+      ? codexOwnerConfigured && codexSubscription.status !== 'healthy'
+        ? codexFallbackHealth
+        : codexSubscription
+      : openrouter
   const coreDown =
     supabaseDb.status === 'unhealthy' ||
     supabaseAuth.status === 'unhealthy' ||
     gemini.status === 'unhealthy' ||
-    isRequiredServiceDown(azureOpenai.status)
+    isRequiredServiceDown(selectedAgentHealth.status)
 
   const overallStatus = coreDown ? 'down' : unhealthy > 0 ? 'degraded' : 'healthy'
 

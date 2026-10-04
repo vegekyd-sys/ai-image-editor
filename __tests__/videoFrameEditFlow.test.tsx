@@ -84,7 +84,7 @@ describe('video frame edit GUI to CUI draft flow', () => {
     const editor = read('src/components/Editor.tsx');
     const canvas = read('src/components/ImageCanvas.tsx');
     const context = read('src/lib/agent-context.ts');
-    const agent = read('src/lib/prompts/agent.md');
+    const agent = read('src/lib/prompts/agent.md') + read('src/lib/prompts/video-workflow.md');
 
     expect(editor).toContain("t('video.frameEditDraftPrompt', mediaIndex, timeLabel)");
     expect(editor).toContain("setCuiDraftAttachments([{ id: attachmentId, type: 'image', data: dataUrl, thumbnail: dataUrl }])");

@@ -99,15 +99,17 @@ describe('makeAgentCallbacks', () => {
   });
 
   describe('onSource', () => {
-    it('attaches and deduplicates safe web sources on the current message', () => {
+    it('deduplicates source IDs while retaining multiple citations for one URL', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onNewTurn?.('msg-1');
       callbacks.onSource?.({ id: 'source-1', url: 'https://example.com/news', title: 'Example' });
+      callbacks.onSource?.({ id: 'source-1', url: 'https://example.com/news', title: 'Replay' });
       callbacks.onSource?.({ id: 'source-2', url: 'https://example.com/news', title: 'Duplicate' });
       callbacks.onSource?.({ id: 'source-3', url: 'javascript:alert(1)', title: 'Unsafe' });
 
       expect(messages[0].sources).toEqual([
         { id: 'source-1', url: 'https://example.com/news', title: 'Example' },
+        { id: 'source-2', url: 'https://example.com/news', title: 'Duplicate' },
       ]);
     });
   });
@@ -121,6 +123,26 @@ describe('makeAgentCallbacks', () => {
 
       expect(ctx.agentRunIdRef.current).toBeNull();
       expect(ctx.setAgentStatus).toHaveBeenCalledWith('editor.reconnecting');
+    });
+  });
+
+  describe('terminal run cleanup', () => {
+    it('clears the active run id when the run completes', () => {
+      ctx.agentRunIdRef.current = 'run-complete';
+      const { callbacks } = makeAgentCallbacks(ctx);
+
+      callbacks.onDone?.();
+
+      expect(ctx.agentRunIdRef.current).toBeNull();
+    });
+
+    it('clears the active run id when the run fails or is aborted', () => {
+      ctx.agentRunIdRef.current = 'run-failed';
+      const { callbacks } = makeAgentCallbacks(ctx);
+
+      callbacks.onError?.('Agent run aborted');
+
+      expect(ctx.agentRunIdRef.current).toBeNull();
     });
   });
 

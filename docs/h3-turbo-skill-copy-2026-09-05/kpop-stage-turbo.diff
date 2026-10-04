@@ -1,0 +1,7 @@
+--- SKILL.md
++++ SKILL.md
+@@ -123,0 +124,4 @@
++
++## Video model
++
++Use **fal H3 Turbo**, with `model: "minimax-h3-max"` for `generate_animation` or `--video-model minimax-h3-max` for the CLI. This skill uses one source image as the video start frame.

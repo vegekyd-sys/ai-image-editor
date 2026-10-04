@@ -118,6 +118,7 @@ async function main() {
   let run = await startPersistedStudioRun({
     id: runId,
     store,
+    agentRunId: 'studio-run-golden-agent',
     projectId,
     recipe: 'explainer-video',
     title: 'Makaron - One Man Studio',

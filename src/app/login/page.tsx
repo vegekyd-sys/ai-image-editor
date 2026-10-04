@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
@@ -11,6 +12,11 @@ import RollingTagline from '@/components/RollingTagline'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
 import { useHydrated } from '@/hooks/useHydrated'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
+import {
+  resolveAuthReturnPathForRuntime,
+  selectAuthReturnPath,
+} from '@/lib/auth-return'
+import { linkIOSPreAuthTrialContinuation } from '@/lib/ios-preauth-trial'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
@@ -29,6 +35,7 @@ function isAppleLoginEnabled(): boolean {
 
 export default function LoginPage() {
   const { t } = useLocale()
+  const router = useRouter()
   const hydrated = useHydrated()
   const [view, setView] = useState<View>('form')
   const inApp = hydrated && isInAppBrowser()
@@ -59,6 +66,7 @@ export default function LoginPage() {
 
   const supabaseRef = useRef<SupabaseClient | null>(null)
   const pageRef = useRef<HTMLDivElement | null>(null)
+  const emailRef = useRef<HTMLInputElement | null>(null)
   function getSupabase() {
     if (!supabaseRef.current) supabaseRef.current = createClient()
     return supabaseRef.current
@@ -96,41 +104,91 @@ export default function LoginPage() {
     return () => clearTimeout(timer)
   }, [resendCooldown])
 
+  useEffect(() => {
+    if (!iosApp || view !== 'form') return
+    if (new URLSearchParams(window.location.search).get('focus') !== 'email') return
+    const timer = window.setTimeout(() => {
+      emailRef.current?.focus({ preventScroll: true })
+      if (emailRef.current) keepFocusedFieldVisible(emailRef.current)
+    }, 180)
+    return () => window.clearTimeout(timer)
+  }, [iosApp, view])
+
   function getReturnUrl(): string {
-    return sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
+    const queryReturn = new URLSearchParams(window.location.search).get('next')
+    return selectAuthReturnPath(
+      queryReturn,
+      sessionStorage.getItem('mkr_return_url'),
+      localStorage.getItem('mkr_return_url'),
+    )
   }
 
   function resolveReturnUrlForRuntime(returnUrl: string): string {
-    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
-    if (!skillMatch) return returnUrl
-    const skillId = skillMatch[1]
-    if (isMakaronIOSApp()) {
+    const iosAppRuntime = isMakaronIOSApp()
+    const resolved = resolveAuthReturnPathForRuntime(returnUrl, iosAppRuntime)
+    if (!resolved.skillId) return resolved.returnPath
+    if (iosAppRuntime) {
+      const skillId = resolved.skillId
       sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
       localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
-      return '/home'
     }
-    return `/home?skill=${encodeURIComponent(skillId)}`
+    return resolved.returnPath
   }
 
-  function withWelcomeParam(url: string, welcome?: boolean): string {
-    if (!welcome) return url
+  function getOAuthCallbackUrl(nativeOAuth = false): string {
+    const callback = new URL('/api/auth/callback', window.location.origin)
+    if (nativeOAuth) callback.searchParams.set('native_oauth', '1')
+    const returnUrl = getReturnUrl()
+    if (returnUrl) callback.searchParams.set('next', returnUrl)
+    return callback.toString()
+  }
+
+  function withOnboardingParam(url: string, onboarding?: 'welcome' | 'trial'): string {
+    if (!onboarding) return url
     try {
       const parsed = new URL(url, window.location.origin)
-      parsed.searchParams.set('welcome', '1')
+      parsed.searchParams.set(onboarding, '1')
       return parsed.pathname + parsed.search + parsed.hash
     } catch {
       const sep = url.includes('?') ? '&' : '?'
-      return `${url}${sep}welcome=1`
+      return `${url}${sep}${onboarding}=1`
     }
   }
 
-  function redirectAfterAuth(options?: { fallback?: string; welcome?: boolean }) {
+  function redirectAfterAuth(options?: { fallback?: string; onboarding?: 'welcome' | 'trial' }) {
     let returnUrl = getReturnUrl()
     sessionStorage.removeItem('mkr_return_url')
     localStorage.removeItem('mkr_return_url')
     // mkr_return_text and mkr_return_skill are consumed by the home page on mount
     returnUrl = resolveReturnUrlForRuntime(returnUrl)
-    window.location.href = withWelcomeParam(returnUrl || options?.fallback || '/', options?.welcome)
+    const destination = withOnboardingParam(returnUrl || options?.fallback || '/', options?.onboarding)
+    if (isMakaronIOSApp()) {
+      router.replace(destination)
+      return
+    }
+    window.location.href = destination
+  }
+
+  async function completeAuthAndRedirect(options?: { fallback?: string }) {
+    const completeRes = await fetch('/api/auth/complete', { method: 'POST' })
+    const complete = await completeRes.json().catch(() => ({}))
+    if (!completeRes.ok) {
+      throw new Error(complete.error || 'Login could not finish')
+    }
+    if (complete.isNewUser) {
+      trackMetaEvent(
+        'CompleteRegistration',
+        {},
+        complete.metaEvents?.CompleteRegistration || createMetaEventId('registration'),
+      )
+    }
+    if (complete.appleTrialClaimed) linkIOSPreAuthTrialContinuation()
+    redirectAfterAuth({
+      fallback: options?.fallback || complete.redirectUrl || '/projects',
+      onboarding: complete.isNewUser && !complete.appleTrialClaimed
+        ? (complete.trialRequired ? 'trial' : 'welcome')
+        : undefined,
+    })
   }
 
   async function finishNativeOAuth(callbackUrl: string) {
@@ -151,16 +209,7 @@ export default function LoginPage() {
       throw exchangeError
     }
 
-    const completeRes = await fetch('/api/auth/native-complete', { method: 'POST' })
-    const complete = await completeRes.json().catch(() => ({}))
-    if (!completeRes.ok) {
-      throw new Error(complete.error || 'Google login could not finish')
-    }
-
-    redirectAfterAuth({
-      fallback: complete.redirectUrl || '/projects',
-      welcome: Boolean(complete.isNewUser),
-    })
+    await completeAuthAndRedirect()
   }
 
   // ── Google OAuth ──
@@ -172,7 +221,7 @@ export default function LoginPage() {
         const { data, error } = await getSupabase().auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/api/auth/callback?native_oauth=1`,
+            redirectTo: getOAuthCallbackUrl(true),
             skipBrowserRedirect: true,
           },
         })
@@ -191,7 +240,7 @@ export default function LoginPage() {
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: getOAuthCallbackUrl(),
       },
     })
     if (error) { setError(t('auth.networkError')); setGoogleLoading(false) }
@@ -204,7 +253,7 @@ export default function LoginPage() {
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'apple',
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: getOAuthCallbackUrl(),
       },
     })
     if (error) { setError(t('auth.networkError')); setAppleLoading(false) }
@@ -239,7 +288,7 @@ export default function LoginPage() {
 
       if (check.action === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-        if (!signInError) { redirectAfterAuth(); return }
+        if (!signInError) { await completeAuthAndRedirect(); return }
         if (signInError.message === 'Email not confirmed') {
           // Edge case: user exists but unconfirmed — send OTP
           await supabase.auth.signInWithOtp({ email })
@@ -320,19 +369,9 @@ export default function LoginPage() {
 
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
-        trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
-        let returnUrl = getReturnUrl()
-        sessionStorage.removeItem('mkr_return_url')
-        localStorage.removeItem('mkr_return_url')
-        // H5 can use ?skill=, while the iOS native shell keeps /home and reopens
-        // the detail from a pending key so the native page stack stays stable.
-        returnUrl = resolveReturnUrlForRuntime(returnUrl)
-        const target = returnUrl || '/home'
-        const sep = target.includes('?') ? '&' : '?'
-        // Small delay to ensure Supabase SDK writes session cookie before redirect
-        setTimeout(() => { window.location.href = target + sep + 'welcome=1' }, 100)
+        await completeAuthAndRedirect({ fallback: '/home' })
       } else {
-        redirectAfterAuth()
+        await completeAuthAndRedirect()
       }
     } catch {
       setOtpError(t('auth.networkError'))
@@ -393,7 +432,12 @@ export default function LoginPage() {
       const { error } = await supabase.auth.updateUser({ password: newPassword })
       if (error) { setError(mapError(error.message)); setResetLoading(false); return }
       setResetSuccess(true)
-      setTimeout(() => { redirectAfterAuth() }, 1500)
+      setTimeout(() => {
+        void completeAuthAndRedirect().catch(() => {
+          setError(t('auth.networkError'))
+          setResetLoading(false)
+        })
+      }, 1500)
     } catch {
       setError(t('auth.networkError'))
       setResetLoading(false)
@@ -545,14 +589,14 @@ export default function LoginPage() {
 
 
             <form onSubmit={handleContinue} className="space-y-4">
-              <input type="email" placeholder={t('auth.email')} value={email} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setEmail(e.target.value); setError('') }} required
+              <input ref={emailRef} data-testid="auth-email" aria-label={t('auth.email')} type="email" inputMode="email" enterKeyHint="next" autoComplete="email" placeholder={t('auth.email')} value={email} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setEmail(e.target.value); setError('') }} required
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
-              <input type="password" placeholder={t('auth.password')} value={password} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setPassword(e.target.value); setError('') }} required minLength={6}
+              <input data-testid="auth-password" aria-label={t('auth.password')} type="password" placeholder={t('auth.password')} value={password} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setPassword(e.target.value); setError('') }} required minLength={6}
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
 
               {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 
-              <button type="submit" disabled={loading}
+              <button type="submit" data-testid="auth-continue" disabled={loading}
                 className="w-full py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 style={{ background: 'linear-gradient(to right, #c026d3, #9333ea)' }}>
                 {loading && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
@@ -591,6 +635,8 @@ export default function LoginPage() {
               {otpDigits.map((digit, i) => (
                 <input
                   key={i}
+                  data-testid={`auth-otp-${i}`}
+                  aria-label={t('auth.otp.digitLabel').replace('{index}', String(i + 1))}
                   ref={el => { otpRefs.current[i] = el }}
                   type="text"
                   inputMode="numeric"
@@ -609,6 +655,7 @@ export default function LoginPage() {
             {otpError && <p className="text-red-400 text-sm mb-4">{otpError}</p>}
 
             <button
+              data-testid="auth-verify-otp"
               onClick={handleVerifyOtp}
               disabled={otpLoading || otpDigits.some(d => !d)}
               className="w-full py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mb-4"

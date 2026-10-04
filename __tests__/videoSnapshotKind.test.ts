@@ -62,6 +62,23 @@ describe('video snapshot kind', () => {
     })))).toBe(true);
   });
 
+  it('keeps external source ranges out of generated-result restoration', () => {
+    const externalRange = videoSnapshot(videoMeta({
+      origin: 'external-range',
+      videoUrl: 'https://scene.example.com/v1/assets/asset-1/media?access=signed',
+      model: 'external-range',
+      sourceRange: {
+        source_url: 'https://scene.example.com/v1/assets/asset-1/media?access=signed',
+        start_sec: 3,
+        end_sec: 8,
+      },
+    }));
+
+    expect(isGeneratedVideoSnapshot(externalRange)).toBe(false);
+    expect(isCompletedGeneratedVideoSnapshot(externalRange)).toBe(false);
+    expect(isFailedGeneratedVideoSnapshot(externalRange)).toBe(false);
+  });
+
   it('keeps exported or generated videos in the generated-result bucket', () => {
     const remotionExport = videoSnapshot(videoMeta({
       taskId: 'remotion-export-job-1',

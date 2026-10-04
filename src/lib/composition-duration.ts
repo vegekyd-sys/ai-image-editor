@@ -101,6 +101,18 @@ export function normalizeCompositionAnimation(
   }
   const inferredSeconds = Number((inferredFrames / fps).toFixed(3));
   const currentSeconds = Number(animation.durationInSeconds) || inferredSeconds;
+  // A static photo Sequence is only a lower bound when other shots are built
+  // from scene arrays. Partial inference must not truncate a declared timeline.
+  const constants = collectCompositionNumericConstants(code);
+  const hasDynamicSequences = Array.from(code.matchAll(/<Sequence\b([^>]*)>/g)).some(match => {
+    const attrs = match[1] || '';
+    return evaluateCompositionNumber(readJsxNumericAttr(attrs, 'from') || '0', constants) === null
+      || evaluateCompositionNumber(readJsxNumericAttr(attrs, 'durationInFrames'), constants) === null;
+  });
+  if (!(Number.isFinite(explicitFrames) && explicitFrames > 0)
+    && hasDynamicSequences && inferredSeconds < currentSeconds) {
+    return { ...animationOutput, fps, durationInSeconds: currentSeconds };
+  }
   // JSX regex inference can see only a tiny nested Sequence when the real
   // timeline is generated dynamically. Never shrink a credible explicit
   // duration to a sub-second partial inference.

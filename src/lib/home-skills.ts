@@ -24,6 +24,34 @@ export interface HomeSkillCategory {
   is_active?: boolean
 }
 
+type HomeSkillInputFile = {
+  name?: string
+  type?: string
+}
+
+export function getRequiredHomeSkillImageCount(
+  skill: Pick<HomeSkill, 'image_count'> | null | undefined,
+): number {
+  if (!skill) return 0
+  const configuredCount = skill.image_count
+  if (typeof configuredCount !== 'number' || !Number.isFinite(configuredCount)) return 1
+  return Math.max(0, Math.trunc(configuredCount))
+}
+
+export function countHomeSkillImageFiles(files: readonly HomeSkillInputFile[]): number {
+  return files.filter((file) => (
+    file.type?.startsWith('image/')
+    || /\.(?:heic|heif)$/i.test(file.name || '')
+  )).length
+}
+
+export function hasRequiredHomeSkillImages(
+  skill: Pick<HomeSkill, 'image_count'> | null | undefined,
+  files: readonly HomeSkillInputFile[],
+): boolean {
+  return countHomeSkillImageFiles(files) >= getRequiredHomeSkillImageCount(skill)
+}
+
 export function getLocalizedSkillPrompt(skill: HomeSkill, locale: Locale): string {
   return pickLocalizedValue(skill.prompts, locale, skill.prompt || '')
 }

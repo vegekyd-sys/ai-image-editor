@@ -210,7 +210,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (!currentMsgId || !/^https?:\/\//i.test(source.url)) return;
       const id = currentMsgId;
       ctx.setMessages(prev => prev.map(message => {
-        if (message.id !== id || message.sources?.some(item => item.url === source.url)) {
+        if (message.id !== id || message.sources?.some(item => item.id === source.id)) {
           return message;
         }
         return {
@@ -220,7 +220,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       }));
     },
 
-    onImage: (imageData, usedModel, serverSnapshotId, serverImageUrl) => {
+    onImage: (imageData, usedModel, serverSnapshotId, serverImageUrl, metadata) => {
       const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
       const genDuration = genStartTime ? ((performance.now() - genStartTime) / 1000).toFixed(1) : '?';
       console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (${usedModel || 'gemini'} took ${genDuration}s)`);
@@ -239,6 +239,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         messageId: targetMessageId,
         description: editDesc,
         ...(serverImageUrl ? { imageUrl: serverImageUrl } : {}),
+        metadata,
       };
 
       ctx.setSnapshots(prev => {
@@ -248,6 +249,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
               ...s,
               image: s.image || displayImage,
               ...(serverImageUrl && !s.imageUrl ? { imageUrl: serverImageUrl } : {}),
+              ...(metadata ? { metadata: { ...s.metadata, ...metadata } } : {}),
               messageId: s.messageId || targetMessageId,
             }
             : s);
@@ -568,6 +570,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         }
       }
 
+      ctx.agentRunIdRef.current = null;
       ctx.onCleanup?.();
     },
 
@@ -579,6 +582,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
           m.id === id ? { ...m, content: m.content || msg || ctx.t('editor.errorRetry') } : m,
         ));
       }
+      ctx.agentRunIdRef.current = null;
       ctx.onCleanup?.();
     },
 
@@ -588,6 +592,13 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       // the id here would make skipRunIdRef suppress the reconnect forever.
       if (ctx.agentRunIdRef.current === runId) ctx.agentRunIdRef.current = null;
       setStatus(ctx.t('editor.reconnecting'));
+      // Wake the reconnect hook immediately. The 15s idle poll is only a
+      // fallback for runs started from another surface (for example CLI).
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('makaron-agent-disconnected', {
+          detail: { runId },
+        }));
+      }
     },
 
     onInsufficientCredits: (balance) => {

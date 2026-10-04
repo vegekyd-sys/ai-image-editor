@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties, type TouchEvent as ReactTouchEvent } from 'react';
 import { flushSync } from 'react-dom';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoMeta, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
@@ -11,11 +12,12 @@ import AgentChatView, { type ComposerDraftAttachment, type PreferredModel } from
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import CreditPopup from '@/components/CreditPopup';
 import ShareButton from '@/components/ShareButton';
+import SaveMediaDialog from '@/components/SaveMediaDialog';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
-import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
+import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/babel-status';
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
 import { buildDesignsMap, buildImageTimeline, getInitialEditorViewMode, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
@@ -24,15 +26,13 @@ import { resolveContentType, type RendererContext, type ContentType } from '@/li
 const IOS_CUI_PAN_EDGE_PX = 36;
 const IOS_CUI_PAN_COMMIT_PX = 86;
 const IOS_CUI_PAN_MIN_DX = 10;
-import { downloadAsset } from '@/lib/editor/download';
+import { downloadAsset, getDownloadAssetPreview, prepareDownloadAsset, PreparedDownloadCache, trySavePaidDownload, type DownloadAssetParams } from '@/lib/editor/download';
+import { isWatermarkSaveFlowEnabled } from '@/lib/free-media-policy';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
 import VideoResultCard from '@/components/VideoResultCard';
-import AnimateSheet from '@/components/AnimateSheet';
-import DesignEditPanel from '@/components/DesignEditPanel';
-import DesignTextEditor from '@/components/DesignTextEditor';
-import CameraPanel from '@/components/CameraPanel';
+import DesignEditorFrame from '@/components/DesignEditorFrame';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
 import { compressBase64Image, compressImageFile, isHeicFile } from '@/lib/imageUtils';
@@ -52,6 +52,14 @@ import { appendSnapshotDedupeVideo, dedupeVideoSnapshots } from '@/lib/video-sna
 import { isGeneratedVideoSnapshot } from '@/lib/video-snapshot-kind';
 import type { AgentModelPreference } from '@/lib/agent-models';
 import { loadAgentModelPreference, saveAgentModelPreference } from '@/lib/agent-model-preference';
+import type { SkillLaunchContext } from '@/lib/skill-launch-context';
+import { stripAgentInternalContextForDisplay } from '@/lib/agent-response-policy';
+
+const AnimateSheet = dynamic(() => import('@/components/AnimateSheet'), { ssr: false });
+const DesignEditPanel = dynamic(() => import('@/components/DesignEditPanel'), { ssr: false });
+const DesignFieldEditor = dynamic(() => import('@/components/DesignFieldEditor'), { ssr: false });
+const CameraPanel = dynamic(() => import('@/components/CameraPanel'), { ssr: false });
+
 
 export type { AnimationState } from '@/lib/editor/types';
 
@@ -90,12 +98,19 @@ interface EditorProps {
   pendingVideos?: Array<{ videoUrl: string; duration: number; width: number; height: number }>;
   pendingMetadata?: PhotoMetadata;
   pendingPrompt?: string;
+  /** Agent run pre-started by the project-list text-only creation flow. */
+  pendingAgentRunId?: string;
   pendingSkill?: string;
+  pendingSkillLaunchContext?: SkillLaunchContext;
   onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void | Promise<void>;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
   onUpdateDescription?: (snapshotId: string, description: string) => void;
-  onSaveDesignProps?: (snapshotId: string, design: DesignPayload) => void;
+  onSaveDesignProps?: (
+    snapshotId: string,
+    design: DesignPayload,
+    options?: { propsOnly?: boolean; revision?: number },
+  ) => void | Promise<void>;
   initialTitle?: string;
   onRenameProject?: (title: string) => void;
   onBack?: () => void;
@@ -135,7 +150,9 @@ export default function Editor({
   pendingVideos,
   pendingMetadata,
   pendingPrompt,
+  pendingAgentRunId,
   pendingSkill,
+  pendingSkillLaunchContext,
   onSaveSnapshot,
   onSaveMessage,
   onUpdateTips,
@@ -208,6 +225,12 @@ export default function Editor({
 
   // Credit popup + status bar notification
   const [creditPopupOpen, setCreditPopupOpen] = useState(false);
+  const [watermarkCheckout, setWatermarkCheckout] = useState(false);
+  const [saveRequest, setSaveRequest] = useState<DownloadAssetParams | null>(null);
+  const saveAssetCache = useRef<PreparedDownloadCache | null>(null);
+  if (!saveAssetCache.current) saveAssetCache.current = new PreparedDownloadCache();
+  useEffect(() => () => saveAssetCache.current?.clear(), [projectId]);
+  const [returningToSave, setReturningToSave] = useState(false);
   const [cachedCredits] = useState<CreditsPayload | null>(() => readNativeJSONCache<CreditsPayload>('/api/billing/credits'));
   const [creditBalance, setCreditBalance] = useState<number>(() => cachedCredits?.balance ?? 0);
   const [creditSubscription, setCreditSubscription] = useState<{ planId: string; status: string } | null>(() => cachedCredits?.subscription ?? null);
@@ -424,6 +447,7 @@ export default function Editor({
     // Text-only/CLI projects can have an active run before their first snapshot.
     // Reconnect follows the project run, not whether GUI content already exists.
     enabled: !!projectId && !inactive,
+    initialRunId: pendingAgentRunId,
     skipRunIdRef: agentRunIdRef,
     isActiveRef: isAgentActiveRef,
   });
@@ -1047,10 +1071,12 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }));
 
     try {
+      const sourceSnapshot = snapshotsRef.current.find(s => s.id === snapshotId);
+      const background = sourceSnapshot?.metadata?.hasAlpha ? 'transparent' : undefined;
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, isNsfw: isNsfwRef.current || undefined }),
+        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, background, isNsfw: isNsfwRef.current || undefined }),
         signal: previewAbortRef.current.signal,
       });
 
@@ -1548,10 +1574,12 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number }) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayText?: string; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number; turnMediaSnapshotIds?: string[]; skillLaunchContext?: SkillLaunchContext }) => {
+    const userVisibleText = options?.displayText ?? stripAgentInternalContextForDisplay(text);
     // Freeze the selected LLM at submit time. Upload waits below must not let a
     // later selector change mutate an already-submitted request.
     const agentModelForRequest = agentModelRef.current;
+    const turnMediaSnapshotIds = [...(options?.turnMediaSnapshotIds || [])];
     // CUI reference images → append as new snapshots (so agent sees them in Media Index)
     if (attachedImages?.length && !overrideImage) {
       const newSnaps: Snapshot[] = [];
@@ -1561,6 +1589,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         newSnaps.push(snap);
       }
       if (newSnaps.length > 0) {
+        turnMediaSnapshotIds.push(...newSnaps.map((snap) => snap.id));
         const baseOrder = snapshotsRef.current.length;
         setSnapshots(prev => {
           const updated = [...prev, ...newSnaps];
@@ -1614,17 +1643,25 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
     if (!currentImage && !currentSnap?.design && snapshotsRef.current.length > 0 && !options?.silent) return;
 
-    // Prefer URL (tiny payload) over base64 for API calls — server handles both
-    // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
-    // Use 3MB limit (not 1.8MB) — agent generates images, aggressive compression destroys quality
+    // Interactive CUI always starts on the SSE fast lane. Reconnect safety comes
+    // from the run event log, not from booting the durable worker before TTFT.
+    // Only transient draft/annotation pixels need to cross this request; normal
+    // project media is rebuilt from persisted state on the server.
+    const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
+    const hasTransientPixels = Boolean(overrideImage) || isDraftMode;
+
+    // Prefer URL (tiny payload) over base64 for direct SSE calls. When URL isn't
+    // available yet, compress base64 to fit Vercel's request limit.
     const snapForApi = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
     const rawImage = snapForApi ? getImageForApi(snapForApi) : (currentImage || '');
-    const imageForApi = overrideImage
-      || (rawImage.startsWith('data:') ? await compressBase64Image(rawImage, 3_000_000) : rawImage);
+    const imageForApi = hasTransientPixels
+      ? (overrideImage
+        || (rawImage.startsWith('data:') ? await compressBase64Image(rawImage, 3_000_000) : rawImage))
+      : '';
     // Show attached/annotated images in the user message bubble (skip for silent/system-initiated requests)
     if (!options?.silent) {
       const msgImages = options?.displayImages || (overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
-      addMessage('user', text, undefined, msgImages);
+      addMessage('user', userVisibleText, undefined, msgImages);
     }
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
@@ -1642,19 +1679,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     // currentMsgId and agentMsgIds are now managed by makeAgentCallbacks factory
 
-    // UI state flags — server-side buildPromptContext handles all project context
-    const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
-
     // Snapshot images for API: prefer Storage URLs (tiny payload).
     // base64 fallback only for the current image (needed for vision); others skip if no URL yet.
-    // Wait briefly for image uploads to complete (up to 5s) if any snapshot lacks a URL
-    const hasAllUrls = () => snapshotsRef.current.every(s => s.imageUrl || s.design);
-    if (!hasAllUrls()) {
-      for (let i = 0; i < 10; i++) {
-        await new Promise(r => setTimeout(r, 500));
-        if (hasAllUrls()) break;
-      }
-    }
+    // Do not wait for every snapshot upload before a text turn. Persisted media
+    // is loaded server-side; transient media already has an in-memory fallback.
     // Build snapshot media: video snapshots use video URL, image snapshots use Storage URL/base64
     const snapshotImagesForApi = snapshotsRef.current.map((s) => {
       if (s.type === 'video' && s.videoMeta?.videoUrl) return s.videoMeta.videoUrl;
@@ -1687,7 +1715,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
       onSaveMessage,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
-      t, initialTitle, userPromptText: text,
+      t, initialTitle, userPromptText: userVisibleText,
       onInsufficientCredits: (balance) => {
         setCreditBalance(balance);
         setCreditExhausted(true);
@@ -1738,7 +1766,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0 },
+        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, ...(hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}), currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0, turnMediaSnapshotIds },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1860,9 +1888,9 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }
 
     // Step 1: Create video snapshots (use snapshotsRef for accurate current length)
+    const newVideoSnaps: Snapshot[] = [];
     if (videos?.length) {
       const { createVideoDesign } = await import('@/lib/video-design');
-      const newVideoSnaps: Snapshot[] = [];
       for (const v of videos) {
         const snapId = generateId();
         const design = createVideoDesign(v.url, v.width, v.height, v.duration);
@@ -1914,6 +1942,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       displayImages: displayAttachments.length > 0 ? displayAttachments : undefined,
       uploadedVideoCount: videos?.length,
       turnMediaCount: (imgs?.length || 0) + (videos?.length || 0),
+      turnMediaSnapshotIds: newVideoSnaps.map((snap) => snap.id),
     });
   };
 
@@ -2063,6 +2092,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       tips: [],
       messageId: assistantMsg.id,
       description: tipDesc,
+      metadata: snapshots[draftParentIndex]?.metadata?.hasAlpha
+        ? {
+            ...snapshots[draftParentIndex].metadata,
+            imageMimeType: 'image/png',
+            hasAlpha: true,
+            generationBackground: 'transparent',
+          }
+        : undefined,
     };
     setSnapshots((prev) => [...prev, newSnapshot]);
     cacheImage(`snap:${snapId}`, newSnapshot.image);
@@ -2498,49 +2535,51 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         }
       }
 
-      // ── Step 6: Analysis (if images, no prompt) ──
-      if (hasImages && !hasPrompt) {
-        if (isMulti) {
-          // Multi-image: silent analysis → greeting
-          const analyzingMsgId = generateId();
-          const analyzingText = t('editor.multiImageAnalyzing').replace('{count}', String(workSnapshots.length));
-          setMessages(prev => [...prev, { id: analyzingMsgId, role: 'assistant' as const, content: analyzingText, timestamp: Date.now() }]);
-          setIsAgentActive(true);
-          Promise.all(
-            workSnapshots.map(snap => runAutoAnalysis(snap.id, snap.image, 'initial', { silent: true }))
-          ).then(() => {
-            setIsAgentActive(false);
-            handleAgentRequest(
-              `[System] User uploaded ${workSnapshots.length} images. All images have been analyzed (see Media Index descriptions). Briefly greet the user and mention what you see in each image in 1 sentence each.`,
-              undefined, undefined, { silent: true }
-            );
-          });
-        } else {
-          // Single image: non-silent analysis (shows in CUI)
-          runAutoAnalysis(workSnapshots[0].id, workSnapshots[0].image, 'initial');
-        }
-      }
-
-      // ── Step 6b: Video analysis (if videos, no prompt) ──
-      if (hasVideos && !hasPrompt) {
-        const count = pendingVideos!.length;
-        const firstVideoIndex = Math.max(1, workSnapshots.length - count + 1);
-        const lastVideoIndex = workSnapshots.length;
-        const videoRange = count === 1
-          ? `<<<media_${firstVideoIndex}>>>`
-          : `<<<media_${firstVideoIndex}>>> to <<<media_${lastVideoIndex}>>>`;
-        const videoAnalysisPrompt = `[System] User uploaded ${count === 1 ? 'a video' : `${count} videos`} at ${videoRange}. First call analyze_video for each uploaded video media_index. Then summarize the duration, key subjects/actions, and mood in 2-3 conversational sentences.`;
-        handleAgentRequest(videoAnalysisPrompt, undefined, undefined, { silent: true, uploadedVideoCount: count });
+      // ── Step 6: First-turn media understanding (no user prompt) ──
+      if (!hasPrompt && hasImages && workSnapshots.length === 1 && !hasVideos) {
+        // Keep the single-image fast path on the lightweight analysis prompt.
+        runAutoAnalysis(workSnapshots[0].id, workSnapshots[0].image, 'initial');
+      } else if (!hasPrompt && workSnapshots.length > 0) {
+        // Multi-image, mixed image/video, and multi-video starts use one Agent
+        // request. Multimodal Agents receive every still image directly while
+        // buildPromptContext pre-analyzes missing video evidence in parallel.
+        const imageCount = workSnapshots.filter(s => s.type !== 'video').length;
+        const videoCount = workSnapshots.filter(s => s.type === 'video').length;
+        const mediaSummary = [
+          imageCount ? `${imageCount} image${imageCount === 1 ? '' : 's'}` : '',
+          videoCount ? `${videoCount} video${videoCount === 1 ? '' : 's'}` : '',
+        ].filter(Boolean).join(' and ');
+        handleAgentRequest(
+          `[System] The user just uploaded ${mediaSummary}. Inspect every attached still image and consume every verified video-evidence line in the Media Index. Briefly greet the user, then summarize each item in one concise sentence. Do not call analyze_image for attached images. Call analyze_video only if a video's verified evidence explicitly failed or cannot answer the request.`,
+          undefined,
+          undefined,
+          {
+            silent: true,
+            uploadedVideoCount: videoCount,
+            turnMediaCount: workSnapshots.length,
+            turnMediaSnapshotIds: workSnapshots.map((snap) => snap.id),
+          },
+        );
       }
 
       // ── Step 7: Agent request (if prompt) ──
       if (hasPrompt) {
-        const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
+        const skillPrefix = pendingSkill && !pendingSkillLaunchContext ? `[Active skill: ${pendingSkill}]\n` : '';
         if (!isDesktop) setViewMode('cui');
-        await handleAgentRequest(skillPrefix + pendingPrompt!, undefined, undefined, {
-          uploadedVideoCount: pendingVideos?.length || 0,
-          turnMediaCount: workSnapshots.length,
-        });
+        if (pendingAgentRunId) {
+          // The model is already running. Render/persist the user turn locally;
+          // useAgentRun's mount check replays assistant events by run id.
+          addMessage('user', pendingPrompt!);
+          setAgentStatus(t('editor.reconnecting'));
+        } else {
+          await handleAgentRequest(skillPrefix + pendingPrompt!, undefined, undefined, {
+            displayText: pendingPrompt!,
+            uploadedVideoCount: pendingVideos?.length || 0,
+            turnMediaCount: workSnapshots.length,
+            turnMediaSnapshotIds: workSnapshots.map((snap) => snap.id),
+            skillLaunchContext: pendingSkillLaunchContext,
+          });
+        }
       }
 
       // ── Step 8: CUI mode ──
@@ -2550,7 +2589,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     };
 
     init();
-  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
+  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, pendingSkillLaunchContext, pendingAgentRunId, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, addMessage, isDesktop, t]);
 
   // Existing project/current timeline item with no tips — auto-fetch once per snapshot.
   // Do not mark a snapshot attempted until it has a usable image; cached projects can
@@ -2631,23 +2670,25 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     if (!isV2) return;
     const processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing' && s.videoMeta.taskId);
     if (processing.length === 0) return;
-    const interval = setInterval(async () => {
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const pollingStartedAt = Date.now();
+    const poll = async () => {
       for (const snap of processing) {
+        if (cancelled) return;
         try {
           const res = await fetch(`/api/video-snapshot/${snap.id}`);
           const data = await res.json();
           if (data.status === 'completed' && data.videoUrl) {
-            const { createVideoDesign, probeVideoDimensions } = await import('@/lib/video-design');
-            const dims = await probeVideoDimensions(data.videoUrl);
-            const design = createVideoDesign(data.videoUrl, dims.width, dims.height, dims.duration);
+            // Expose the playable provider URL immediately. Metadata probing is
+            // useful for the editable Remotion wrapper, but must not block the
+            // native player from leaving the processing state.
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? {
                 ...s,
                 image: data.imageUrl || s.image,
                 imageUrl: data.imageUrl || s.imageUrl,
-                videoMeta: { ...s.videoMeta!, status: 'completed' as const, videoUrl: data.videoUrl },
-                design,
-                designPath: `code/${snap.id}.json`,
+                videoMeta: { ...s.videoMeta!, status: 'completed' as const, videoUrl: data.videoUrl, pipelineStage: data.stage, baseVideoUrl: data.baseVideoUrl, enhancementStatus: data.enhancementStatus, resolution: data.actualResolution ?? s.videoMeta!.resolution, requestedResolution: data.requestedResolution },
               } : s
             ));
             // Reset animationState if this was the task being polled
@@ -2660,7 +2701,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             const videoMsg: Message = {
               id: generateId(),
               role: 'assistant',
-              content: `🎬 ${t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
+              content: `🎬 ${data.enhancementStatus === 'failed' ? t('status.videoUpscaleFailed') : t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
               timestamp: Date.now(),
             };
             setMessages(prev => {
@@ -2668,6 +2709,22 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               onSaveMessage?.(videoMsg);
               return [...prev, videoMsg];
             });
+            void (async () => {
+              try {
+                const { createVideoDesign, probeVideoDimensions } = await import('@/lib/video-design');
+                const dims = await probeVideoDimensions(data.videoUrl);
+                const design = createVideoDesign(data.videoUrl, dims.width, dims.height, dims.duration);
+                setSnapshots(prev => prev.map(s =>
+                  s.id === snap.id && s.videoMeta?.videoUrl === data.videoUrl
+                    ? { ...s, design, designPath: `code/${snap.id}.json` }
+                    : s
+                ));
+              } catch {
+                // Native playback is already available; design metadata repair is best-effort.
+              }
+            })();
+          } else if (data.status === 'processing' && data.stage && data.stage !== snap.videoMeta?.pipelineStage) {
+            setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, videoMeta: { ...s.videoMeta!, pipelineStage: data.stage, baseVideoUrl: data.baseVideoUrl, enhancementStatus: data.enhancementStatus } } : s));
           } else if (data.status === 'failed') {
             const actionLines = serializeCompletionActions(data.completionActions);
             const reason = data.error ? `\n${data.error}` : '';
@@ -2688,8 +2745,18 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           }
         } catch { /* ignore */ }
       }
-    }, 4000);
-    return () => clearInterval(interval);
+      if (cancelled) return;
+      const { getVideoSnapshotPollIntervalMs } = await import('@/lib/video-snapshot-polling');
+      timeoutId = setTimeout(
+        poll,
+        getVideoSnapshotPollIntervalMs(processing, Date.now(), pollingStartedAt),
+      );
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [snapshots, isV2, inactive]);
 
 
@@ -2926,7 +2993,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     ?? animationState?.videoModel
     ?? null;
   const videoProcessing = snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
-  const videoRenderingStatus = isRemotionExportTaskId(processingVideoSnap?.videoMeta?.taskId)
+  const videoRenderingStatus = processingVideoSnap?.videoMeta?.taskId?.startsWith('video-pipeline-') && processingVideoSnap.videoMeta.pipelineStage && processingVideoSnap.videoMeta.pipelineStage !== 'generating'
+    ? t('status.videoUpscaling')
+    : isRemotionExportTaskId(processingVideoSnap?.videoMeta?.taskId)
     ? t('status.remotionExportRendering')
     : (isFastVideoRenderModel(processingVideoModel)
       ? t('status.videoRenderingFast')
@@ -2959,12 +3028,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     setTimeout(() => setSaveToast(false), 2000);
   }, []);
 
-  const handleDownload = useCallback(async () => {
-    await downloadAsset({
+  const downloadParams = useCallback(() => {
+    const video = isViewingVideo ? canvasAreaRef.current?.querySelector('video') : undefined;
+    return {
       timeline,
       viewIndex,
       isViewingVideo,
       currentVideoUrl: currentSnap?.videoMeta?.videoUrl || currentVideo?.videoUrl,
+      currentVideoSize: video?.videoWidth && video.videoHeight ? { width: video.videoWidth, height: video.videoHeight } : undefined,
       draftParentIndex: draftParentIndexRef.current,
       snapshotsRef,
       pendingVideoRef,
@@ -2973,8 +3044,51 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       showSaveToast,
       t,
       projectTitle: initialTitle,
-    });
+    };
   }, [timeline, viewIndex, isViewingVideo, currentSnap?.videoMeta?.videoUrl, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
+  const handleDownload = useCallback(async () => {
+    const generated = Boolean(currentSnap?.design || currentSnap?.messageId || isGeneratedVideoSnapshot(currentSnap) || draftParentIndexRef.current !== null);
+    if (isWatermarkSaveFlowEnabled() && generated) {
+      const params = downloadParams();
+      try {
+        if (!(await trySavePaidDownload(params, saveAssetCache.current!))) setSaveRequest(params);
+      } catch {
+        setAgentStatus(t(isViewingVideo ? 'editor.saveVideoFailed' : 'editor.saveFailed'));
+      }
+      return;
+    }
+    await downloadAsset(downloadParams());
+  }, [currentSnap, downloadParams, isViewingVideo, t]);
+
+  const savePreview = useMemo(() => saveRequest ? getDownloadAssetPreview(saveRequest) : undefined, [saveRequest]);
+  const prepareSave = useCallback(() => prepareDownloadAsset(saveRequest!, saveAssetCache.current!), [saveRequest]);
+  const closeSaveDialog = useCallback(() => {
+    setSaveRequest(null);setReturningToSave(false);
+    sessionStorage.removeItem('mkr_save_checkout');
+  }, []);
+
+  // Persist only the selected snapshot identity, never media bytes or signed URLs.
+  useEffect(() => {
+    if (!isWatermarkSaveFlowEnabled()) {
+      try {sessionStorage.removeItem('mkr_save_checkout');} catch { /* Storage may be unavailable. */ }
+      return;
+    }
+    if (!projectId || saveRequest || returningToSave || !snapshots.length) return;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('mkr_save_checkout') || 'null');
+      if (!saved || saved.projectId !== projectId) return;
+      if (typeof saved.createdAt !== 'number' || Date.now() - saved.createdAt > 30 * 60_000) {
+        sessionStorage.removeItem('mkr_save_checkout');return;
+      }
+      const index = snapshots.findIndex(snap => snap.id === saved.snapshotId);
+      if (index < 0) return;
+      const snap = snapshots[index];
+      const restoredIndex = timelineFromSnap(index, draftParentIndexRef.current);
+      setViewIndex(restoredIndex);setReturningToSave(true);
+      setSaveRequest({ ...downloadParams(), viewIndex: restoredIndex,
+        isViewingVideo: snap.type === 'video', currentVideoUrl: snap.videoMeta?.videoUrl, currentVideoSize: undefined });
+    } catch { sessionStorage.removeItem('mkr_save_checkout'); }
+  }, [projectId, snapshots, saveRequest, returningToSave, downloadParams]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
   const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string) => {
@@ -3123,27 +3237,105 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     }
   }, [onSaveSnapshot, fetchTipsForSnapshot]);
 
-  // Update a design prop (text edit or drag position) — immediate re-render via Remotion
+  // Update a design prop (text, media, trim, move, or scale) and persist it.
   const designPropsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDesignSaveRef = useRef<{
+    snapshotId: string;
+    design: DesignPayload;
+    revision: number;
+  } | null>(null);
+  const designSaveRevisionRef = useRef(0);
+  const flushPendingDesignSave = useCallback(() => {
+    if (designPropsSaveTimer.current) {
+      clearTimeout(designPropsSaveTimer.current);
+      designPropsSaveTimer.current = null;
+    }
+    const pending = pendingDesignSaveRef.current;
+    pendingDesignSaveRef.current = null;
+    if (!pending || !onSaveDesignProps) return;
+    void Promise.resolve(onSaveDesignProps(
+      pending.snapshotId,
+      pending.design,
+      { propsOnly: true, revision: pending.revision },
+    )).catch((error) => {
+      console.error('[design] prop persistence failed', error);
+    });
+  }, [onSaveDesignProps]);
+
+  useEffect(() => {
+    window.addEventListener('pagehide', flushPendingDesignSave);
+    return () => {
+      window.removeEventListener('pagehide', flushPendingDesignSave);
+      flushPendingDesignSave();
+    };
+  }, [flushPendingDesignSave]);
+
   const handleDesignPropUpdate = useCallback((key: string, value: unknown) => {
+    const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
+    if (snapIdx == null) return;
+    const current = snapshotsRef.current[snapIdx];
+    if (!current?.design) return;
+
+    const design = {
+      ...current.design,
+      props: { ...current.design.props, [key]: value },
+    };
+    const updated = snapshotsRef.current.map((snapshot, index) => (
+      index === snapIdx ? { ...snapshot, design } : snapshot
+    ));
+    snapshotsRef.current = updated;
+    setSnapshots(updated);
+
+    designSaveRevisionRef.current = Math.max(
+      Date.now(),
+      designSaveRevisionRef.current + 1,
+    );
+    pendingDesignSaveRef.current = {
+      snapshotId: current.id,
+      design,
+      revision: designSaveRevisionRef.current,
+    };
+    if (designPropsSaveTimer.current) clearTimeout(designPropsSaveTimer.current);
+    designPropsSaveTimer.current = setTimeout(flushPendingDesignSave, 500);
+  }, [viewIndex, draftParentIndex, flushPendingDesignSave]);
+
+  const designSizeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleDesignContentSize = useCallback((size: { width: number; height: number; source: 'editables' | 'scroll' }) => {
+    const measuredHeight = Math.ceil(size.height);
+    if (!Number.isFinite(measuredHeight) || measuredHeight <= 0) return;
+
+    const expandHeight = (design: DesignPayload): DesignPayload | null => {
+      if (design.animation) return null;
+      const nextHeight = Math.min(measuredHeight, 20000);
+      if (nextHeight <= design.height + 12) return null;
+      return { ...design, height: nextHeight };
+    };
+
+    const viewingDraftDesign = draftParentIndex !== null && viewIndex === draftParentIndex + 1;
+    if (viewingDraftDesign) {
+      setDraftDesign(prev => {
+        if (!prev) return prev;
+        const expanded = expandHeight(prev);
+        return expanded || prev;
+      });
+      return;
+    }
+
     setSnapshots(prev => {
       const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
-      const updated = prev.map((s, i) => {
-        if (i === snapIdx && s.design) {
-          return { ...s, design: { ...s.design, props: { ...s.design.props, [key]: value } } };
-        }
-        return s;
-      });
-      // Debounced persist to workspace (500ms)
-      if (snapIdx != null) {
-        if (designPropsSaveTimer.current) clearTimeout(designPropsSaveTimer.current);
-        const capturedIdx = snapIdx;
-        designPropsSaveTimer.current = setTimeout(() => {
-          const snap = updated[capturedIdx];
-          if (snap?.design && onSaveDesignProps) {
-            console.log('[design] saving props for', snap.id);
-            onSaveDesignProps(snap.id, snap.design);
-          }
+      if (snapIdx == null) return prev;
+      const snap = prev[snapIdx];
+      if (!snap?.design) return prev;
+      const expanded = expandHeight(snap.design);
+      if (!expanded) return prev;
+
+      const updated = prev.map((s, i) => i === snapIdx ? { ...s, design: expanded } : s);
+      if (onSaveDesignProps) {
+        if (designSizeSaveTimer.current) clearTimeout(designSizeSaveTimer.current);
+        const snapId = snap.id;
+        designSizeSaveTimer.current = setTimeout(() => {
+          console.log('[design] auto-expanded height', snap.design?.height, '→', expanded.height, `(${size.source})`);
+          onSaveDesignProps(snapId, expanded);
         }, 500);
       }
       return updated;
@@ -3448,6 +3640,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   return (
     <div
       data-testid="editor"
+      role="main"
+      aria-label={t('editor.workspace')}
       data-tips-status={isTipsFetching ? 'loading' : (currentTips.length ? 'ready' : 'empty')}
       data-tips-count={snapshots.reduce((n, s) => n + (s.tips?.length || 0), 0)}
       data-agent-status={isAgentActive ? 'active' : 'idle'}
@@ -3535,6 +3729,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             ) : (
               <ImageCanvas
                 data-testid="canvas"
+                projectId={projectId ?? undefined}
+                designSnapshotId={currentSnap?.id}
                 key={`${viewIndex}:${timeline[viewIndex] ?? ''}:${currentVideo?.videoUrl ?? ''}:${currentSnap?.videoMeta?.videoUrl ?? ''}:${annotationMode ? 'annotate' : 'browse'}`}
                 timeline={timeline}
                 currentIndex={viewIndex}
@@ -3565,6 +3761,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 })()}
                 onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
                 textEditing={textEditPos ? { x: textEditPos.x, y: textEditPos.y, text: textEditValue, textColor, bgColor: textBgEnabled ? '#000' : '' } : null}
+                hidePlaybackControls={Boolean(editingDesignFieldId)}
                 onAnimate={undefined}
 
 
@@ -3611,8 +3808,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   : snapshots[snapshots.length - 1]?.image}
                 videoPlayTrigger={videoPlayTrigger}
                 videoStartTime={videoStartTimeRef.current}
+                videoClipStart={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.start_sec : undefined}
+                videoClipEnd={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.end_sec : undefined}
                 videoTimelineIndices={videoTimelineIndices}
-                onVideoPosterCapture={(dataUrl) => {
+                onVideoPosterCapture={readOnly || currentSnap?.imageUrl?.includes('/posters/') ? undefined : (dataUrl) => {
                   const snap = snapshotsRef.current[viewIndex];
                   if (!snap || snap.type !== 'video') return;
                   if (snap.imageUrl?.includes('/posters/')) return;
@@ -3647,6 +3846,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 onUpdateProp={handleDesignPropUpdate}
                 onStartEditEditable={setEditingDesignFieldId}
                 onVisibleEditableFields={handleVisibleEditableFields}
+                onDesignContentSize={handleDesignContentSize}
+                activeTrimFieldId={editingDesignField?.type === 'video' ? editingDesignField.id : null}
               />
             )}
 
@@ -3659,6 +3860,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   {onBack && (
                     <button
                       onClick={onBack}
+                      aria-label={t('editor.backToProjects')}
                       className="text-white/80 hover:text-white p-2 cursor-pointer"
                     >
                       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3854,29 +4056,22 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           )}
 
           {/* Hidden proxy input — iOS keyboard focus anchor (must be in DOM before edit starts) */}
-          {/* Design text editor — floating panel (like AnnotationToolbar) */}
-          {editingDesignField && currentDesignSnap?.design && (
-            <div style={isDesktop ? {
-              position: 'absolute',
-              bottom: 160, left: 12,
-              zIndex: 201,
-              width: 340,
-            } : {
-              position: 'fixed',
-              bottom: editorKbInset, left: 0, right: 0,
-              zIndex: 201,
-              maxWidth: 480,
-              margin: '0 auto',
-              transition: editorKbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
-            }}>
-              <DesignTextEditor
+          {/* Design text/video editor — floating panel (like AnnotationToolbar) */}
+          {isDesktop && editingDesignField && currentDesignSnap?.design && editingDesignField.type !== 'image' && (
+            <DesignEditorFrame
+              isDesktop={isDesktop}
+              keyboardInset={editorKbInset}
+              desktopWidth={editingDesignField.type === 'video' ? 420 : 340}
+            >
+              <DesignFieldEditor
                 field={editingDesignField}
-                value={String(currentDesignSnap.design.props?.[editingDesignField.propKey] ?? '')}
-                onChangeValue={(v) => handleDesignPropUpdate(editingDesignField.propKey, v)}
+                design={currentDesignSnap.design}
+                posterImage={currentDesignSnap.image || currentDesignSnap.imageUrl || currentDisplayImage}
+                onUpdateProp={handleDesignPropUpdate}
                 onClose={() => setEditingDesignFieldId(null)}
                 isDesktop={isDesktop}
               />
-            </div>
+            </DesignEditorFrame>
           )}
 
           {/* Camera rotation panel — centered in GUI area */}
@@ -4000,6 +4195,23 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     currentDuration={videoGuiDuration}
                     isDesktop={isDesktop}
                   />
+                ) : !isDesktop && editingDesignField && currentDesignSnap?.design ? (
+                  <div data-design-editor-slot="mobile-inline">
+                    <DesignEditorFrame
+                      isDesktop={false}
+                      keyboardInset={editorKbInset}
+                      desktopWidth={editingDesignField.type === 'video' ? 420 : 340}
+                    >
+                      <DesignFieldEditor
+                        field={editingDesignField}
+                        design={currentDesignSnap.design}
+                        posterImage={currentDesignSnap.image || currentDesignSnap.imageUrl || currentDisplayImage}
+                        onUpdateProp={handleDesignPropUpdate}
+                        onClose={() => setEditingDesignFieldId(null)}
+                        isDesktop={false}
+                      />
+                    </DesignEditorFrame>
+                  </div>
                 ) : isViewingDesign && currentDesignEditables.length > 0 ? (
                   <DesignEditPanel
                     editables={visibleEditableIds.length > 0
@@ -4009,7 +4221,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     selectedFieldId={selectedEditableFieldId}
                     onSelectField={setSelectedEditableFieldId}
-                    onStartEdit={setEditingDesignFieldId}
+                    onStartEdit={(fieldId) => setEditingDesignFieldId(prev => prev === fieldId ? null : fieldId)}
                     isDesktop={isDesktop}
                   />
                 ) : (
@@ -4343,10 +4555,22 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         return null;
       })()}
 
+      {saveRequest && <SaveMediaDialog prepare={prepareSave} preview={savePreview} onClose={closeSaveDialog}
+        onSaved={showSaveToast} suspended={creditPopupOpen} returningFromCheckout={returningToSave}
+        onUpgrade={() => {
+          const index = snapFromTimeline(saveRequest.viewIndex, saveRequest.draftParentIndex) ?? saveRequest.draftParentIndex;
+          const snap = index === null ? undefined : snapshotsRef.current[index];
+          if (projectId && snap) {
+            try {sessionStorage.setItem('mkr_save_checkout', JSON.stringify({ projectId, snapshotId: snap.id, createdAt: Date.now() }));} catch { /* Checkout still works without session storage. */ }
+          }
+          setWatermarkCheckout(true);setCreditPopupOpen(true);
+        }} />}
+
       {/* Credit popup */}
       <CreditPopup
         open={creditPopupOpen}
-        onClose={() => { setCreditPopupOpen(false); setCreditExhausted(false); setCreditSuccess(false); setCreditWaiting(false); }}
+        watermarkUnlock={watermarkCheckout}
+        onClose={() => { setCreditPopupOpen(false); setWatermarkCheckout(false); setCreditExhausted(false); setCreditSuccess(false); setCreditWaiting(false); }}
         balance={creditBalance}
         subscription={creditSubscription}
         projectId={projectId ?? undefined}

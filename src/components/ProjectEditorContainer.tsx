@@ -134,8 +134,8 @@ export function EditorLoadingShell() {
 
 export default function ProjectEditorContainer({
   projectId,
-  className = 'page-slide-in',
-  loadingClassName = 'page-slide-in h-dvh flex items-center justify-center relative z-[1]',
+  className = 'h-dvh w-full',
+  loadingClassName = 'h-dvh flex items-center justify-center relative z-[1]',
   onBack,
   onProjectCreated,
   disableAgentLiveReload = false,
@@ -143,7 +143,7 @@ export default function ProjectEditorContainer({
   isInlineActive = true,
 }: ProjectEditorContainerProps) {
   const { user, loading: authLoading } = useAuth()
-  const { t } = useLocale()
+  const { locale, t } = useLocale()
   const router = useRouter()
   const navigatingRef = useRef(false)
   const leaveEditor = useCallback((path: '/projects' | '/login') => {
@@ -215,6 +215,13 @@ export default function ProjectEditorContainer({
     if (p) sessionStorage.removeItem('pendingPrompt')
     return p
   })
+  const [pendingAgentRunId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    const key = `pendingAgentRun:${projectId}`
+    const runId = sessionStorage.getItem(key)
+    if (runId) sessionStorage.removeItem(key)
+    return runId
+  })
   const [pendingSkill] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     if (pendingLaunch?.skill) return pendingLaunch.skill
@@ -222,13 +229,14 @@ export default function ProjectEditorContainer({
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
   })
+  const pendingSkillLaunchContext = pendingLaunch?.skillLaunchContext
   const [pendingVideos] = useState<Array<{ videoUrl: string; duration: number; width: number; height: number }> | null>(() => {
     if (typeof window === 'undefined') return null
     const raw = sessionStorage.getItem('pendingVideos')
     if (raw) { sessionStorage.removeItem('pendingVideos'); try { return JSON.parse(raw) } catch { return null } }
     return null
   })
-  const isNewProject = !!(pendingImages || pendingImageState.loading || pendingPrompt || pendingVideos)
+  const isNewProject = !!(pendingLaunch || pendingImages || pendingImageState.loading || pendingPrompt || pendingVideos)
 
   useEffect(() => {
     if (!pendingLaunch) return
@@ -267,28 +275,7 @@ export default function ProjectEditorContainer({
       setIsPublicProject(false)
       return
     }
-    const supabase = createClient()
-    supabase
-      .from('projects')
-      .select('user_id, is_public')
-      .eq('id', projectId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          console.warn('Failed to verify project access:', error)
-          return
-        }
-        if (data) {
-          setProjectOwnerId(data.user_id)
-          setIsPublicProject(data.is_public)
-        } else if (!user) {
-          sessionStorage.setItem('mkr_return_url', `/projects/${projectId}`)
-          leaveEditor('/login')
-        } else {
-          leaveEditor('/projects')
-        }
-      })
-  }, [projectId, authLoading, user, leaveEditor, isInlineActive, isNewProject])
+  }, [authLoading, user, isInlineActive, isNewProject])
 
   useEffect(() => {
     if (!isInlineActive) return
@@ -300,7 +287,14 @@ export default function ProjectEditorContainer({
     }
   }, [authLoading, isPublicProject, user, projectOwnerId, projectId, leaveEditor, isInlineActive])
 
-  const isOwner = user?.id === projectOwnerId
+  // A freshly staged project renders before the async ownership effect has
+  // copied the authenticated user id into projectOwnerId. Treat that one
+  // initial state as owned so Editor receives its persistence callbacks on
+  // the first render; otherwise pending media is displayed but never saved.
+  // Supabase RLS still rejects writes if a forged staged project is not owned.
+  const isOwner = Boolean(
+    user && (user.id === projectOwnerId || (isNewProject && projectOwnerId === null)),
+  )
   const readOnly = !isOwner
 
   async function patchFromImageCache(snapshots: Snapshot[]): Promise<Snapshot[]> {
@@ -349,14 +343,30 @@ export default function ProjectEditorContainer({
     if (!isInlineActive) return
     if (!projectId) return
     if (isNewProject) return
-    if (isPublicProject === null) return
-    if (!isPublicProject && !userId) return
+    if (authLoading) return
 
     let cancelled = false
     const pageT0 = performance.now()
-    loadProject().then(async ({ snapshots, messages, title, animations, timelineVersion: tv }) => {
+    const hydratedSnapshots = new Map<string, Snapshot>()
+    loadProject((snapshots, messages) => {
+      if (cancelled) return
+      for (const snapshot of snapshots) hydratedSnapshots.set(snapshot.id, snapshot)
+      const hydratedMessages = new Map(messages.map(m => [m.id, m]))
+      setInitialSnapshots(prev => prev?.map(s => {
+        const fresh = hydratedSnapshots.get(s.id)
+        return fresh?.design ? { ...s, design: fresh.design } : s
+      }) ?? prev)
+      setInitialMessages(prev => prev?.map(m => hydratedMessages.get(m.id) ?? m) ?? prev)
+    }).then(async ({ snapshots, messages, title, animations, timelineVersion: tv, ownerId, isPublic, musicRows }) => {
       console.log(`⏱️ [page] loadProject done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
+      if (!ownerId || (!isPublic && ownerId !== userId)) {
+        if (!userId) sessionStorage.setItem('mkr_return_url', `/projects/${projectId}`)
+        leaveEditor(userId ? '/projects' : '/login')
+        return
+      }
+      setProjectOwnerId(ownerId)
+      setIsPublicProject(isPublic)
       if (userId) cacheProjectData(projectId, snapshots, messages, title)
       setTimelineVersion(tv)
       const restoredSnapshots = dedupeVideoSnapshots(snapshots)
@@ -364,13 +374,6 @@ export default function ProjectEditorContainer({
       if (animations.length > 0) {
         setInitialAnimations(animations)
       }
-
-      const supabase = createClient()
-      const { data: musicRows } = await supabase
-        .from('project_music')
-        .select('suno_task_id, track_index, audio_url, duration, title, tags, status')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: true })
 
       if (musicRows?.length && !cancelled) {
         const pendingTask = musicRows.find(r => r.status === 'pending' || r.status === 'processing')
@@ -402,7 +405,7 @@ export default function ProjectEditorContainer({
       const failedVideos = restoredSnapshots.filter(isFailedGeneratedVideoSnapshot)
       for (const snap of failedVideos) {
         if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
-        const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta))
+        const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta, locale))
         const reason = snap.videoMeta?.error ? `\n${snap.videoMeta.error}` : ''
         messages.push({
           id: `video-failed-${snap.id}`,
@@ -417,8 +420,14 @@ export default function ProjectEditorContainer({
       console.log(`⏱️ [page] patchFromImageCache done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
       shownRef.current = true
-      setInitialSnapshots(patched)
-      setInitialMessages(dedupeMessagesById(messages))
+      setInitialSnapshots(patched.map(s => {
+        const fresh = hydratedSnapshots.get(s.id)
+        return fresh?.design ? { ...s, design: fresh.design } : s
+      }))
+      setInitialMessages(dedupeMessagesById(messages.map(m => {
+        const design = restoredSnapshots.find(s => s.messageId === m.id)
+        return design?.design ? { ...m, design: design.design } : m
+      })))
       setInitialTitle(title)
       setLoaded(true)
     }).catch((err: unknown) => {
@@ -433,7 +442,7 @@ export default function ProjectEditorContainer({
     })
 
     return () => { cancelled = true }
-  }, [userId, projectId, loadProject, isPublicProject, isNewProject, isInlineActive, t])
+  }, [userId, authLoading, projectId, loadProject, isNewProject, isInlineActive, t, locale, leaveEditor])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
     return saveSnapshot(snapshot, sortOrder, onUploaded)
@@ -473,7 +482,11 @@ export default function ProjectEditorContainer({
     router.push(user ? '/projects' : '/home')
   }, [onBack, router, user])
 
-  if (!loaded) {
+  // A post-registration continuation can navigate before useAuth has emitted
+  // the new session. Mounting Editor in that gap consumes pending media with
+  // no authenticated persistence callbacks, leaving the photo only in local
+  // cache. Keep the loading shell until the new-project owner is available.
+  if (!loaded || (isNewProject && (authLoading || !user))) {
     return (
       <div className={loadingClassName}>
         <EditorLoadingShell />
@@ -491,7 +504,9 @@ export default function ProjectEditorContainer({
         pendingVideos={!readOnly ? (pendingVideos ?? undefined) : undefined}
         pendingMetadata={!readOnly ? pendingMetadata : undefined}
         pendingPrompt={!readOnly ? (pendingPrompt ?? undefined) : undefined}
+        pendingAgentRunId={!readOnly ? (pendingAgentRunId ?? undefined) : undefined}
         pendingSkill={!readOnly ? (pendingSkill ?? undefined) : undefined}
+        pendingSkillLaunchContext={!readOnly ? pendingSkillLaunchContext : undefined}
         onSaveSnapshot={!readOnly ? handleSaveSnapshot : undefined}
         onSaveMessage={!readOnly ? handleSaveMessage : undefined}
         onUpdateTips={!readOnly ? handleUpdateTips : undefined}

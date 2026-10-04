@@ -10,11 +10,18 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ModelMessage } from 'ai';
+import type { AgentModelProvider } from './agent-models';
+import {
+  selectNativeVisionImages,
+  type NativeVisionImageInput,
+} from './agent-image-analysis';
 import type { DesignPayload, Tip } from '@/types';
 import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
 import { formatVideoMediaSpec } from './media-aspect';
 import { loadCompositionDraft } from './composition-draft';
+import { resolveExplicitTurnMediaIndices } from './media-provenance';
+import { formatSourceRangeHint, sourceRangeFromVideoMeta } from './media-source-range';
 import { WorkspaceStudioRunStore } from './studio-run';
 import {
   buildTypedCompactionMessage,
@@ -22,7 +29,6 @@ import {
   getAgentContextPolicy,
   normalizeExecutionSnapshot,
   selectModelHistoryWithinBudget,
-  tailModelHistoryAtomically,
   type AgentContextPolicy,
   type ContextSelectionStats,
   type DurableExecutionSnapshot,
@@ -50,6 +56,8 @@ export interface PromptContextOptions {
   uploadedVideoCount?: number;
   /** Number of timeline items created by the user's current upload batch. */
   turnMediaCount?: number;
+  /** Exact snapshot ids created by the current upload batch. */
+  turnMediaSnapshotIds?: string[];
   /** Audio references for this turn. Not part of Timeline Media Index. */
   audioAttachments?: AudioAttachmentContext[];
   /** Run being created for this request; excluded when locating a prior checkpoint. */
@@ -58,8 +66,18 @@ export interface PromptContextOptions {
   executionRunId?: string | null;
   /** Model-aware context policy. Defaults to the conservative 200K policy. */
   contextPolicy?: AgentContextPolicy;
-  /** Durable server attempt after attempt 1; use the typed handoff plus a compact atomic tail. */
+  /** Resolved model id used to validate provider-native compaction state. */
+  agentModelId?: string;
+  /** Resolved provider used to reject incompatible provider-native state. */
+  agentModelProvider?: AgentModelProvider;
+  /** Whether the resolved Agent can receive image parts in its own request. */
+  supportsImageInput?: boolean;
+  /** Durable server attempt after attempt 1. It retains the same conversation history. */
   durableContinuation?: boolean;
+  /** Trusted run objective already loaded by the durable worker. */
+  executionObjective?: string;
+  /** Trusted acceptance criteria already loaded by the durable worker. */
+  executionAcceptanceCriteria?: unknown;
 }
 
 export interface PromptContextResult {
@@ -75,8 +93,16 @@ export interface PromptContextResult {
   recoverableDesignPath?: string;
   /** Project-scoped audio refs available as audio_1, audio_2, ... (not media_N). */
   audioAttachments: AudioAttachmentContext[];
+  /** Timeline media explicitly introduced or referenced by the current user turn. */
+  explicitMediaIndices: number[];
+  /** Still images attached directly to the selected multimodal Agent request. */
+  nativeVisionImages: NativeVisionImageInput[];
   executionSnapshot?: DurableExecutionSnapshot;
+  /** Persisted Studio workflow context for model guidance only. */
+  activeStudioWorkflowStage?: string;
   contextStats: ContextSelectionStats;
+  /** Latest persisted input row represented by this context. */
+  historyBoundary?: string;
 }
 
 interface DbSnapshot {
@@ -88,7 +114,7 @@ interface DbSnapshot {
   tips: Tip[];
   sort_order: number;
   video_meta?: Record<string, unknown>;
-  metadata?: { takenAt?: string; location?: string };
+  metadata?: import('@/types').PhotoMetadata;
 }
 
 const GENERIC_MEDIA_DESCRIPTIONS = new Set([
@@ -111,24 +137,31 @@ function compactMediaEvidence(value: string, maxChars: number): string {
 async function buildVerifiedTurnMediaEvidence(
   snapshots: DbSnapshot[],
   requestedCount: number | undefined,
+  requestedSnapshotIds: string[] | undefined,
   supabase: SupabaseClient,
   userId: string,
+  supportsImageInput = false,
 ): Promise<string> {
-  const count = Math.min(snapshots.length, Math.max(0, Math.floor(requestedCount || 0)));
-  if (!count) return '';
+  const batch = selectTurnMediaBatch(snapshots, requestedCount, requestedSnapshotIds);
+  if (!batch.length) return '';
 
   const preflightStartedAt = Date.now();
-  const start = snapshots.length - count;
-  const batch = snapshots.slice(start);
-  const { analyzeImageContent, analyzeVideoContent } = await import('./gemini');
-  await Promise.all(batch.map(async (snapshot, offset) => {
-    const mediaIndex = start + offset + 1;
+  const evidenceBatch = batch
+    // Multimodal Agents inspect still images directly. Raw video is not part of
+    // their image input contract, so video evidence continues through Gemini.
+    .filter(({ snapshot }) => !supportsImageInput || snapshot.type === 'video');
+  if (!evidenceBatch.length) return '';
+
+  let analyzersPromise: Promise<typeof import('./gemini')> | undefined;
+  const loadAnalyzers = () => (analyzersPromise ??= import('./gemini'));
+  await Promise.all(evidenceBatch.map(async ({ snapshot, mediaIndex }) => {
     const itemStartedAt = Date.now();
     if (hasVerifiedMediaDescription(snapshot.description)) {
       console.info(`[turn-media-preflight] media_${mediaIndex} cached in ${Date.now() - itemStartedAt}ms`);
       return;
     }
     try {
+      const { analyzeImageContent, analyzeVideoContent } = await loadAnalyzers();
       const isVideo = snapshot.type === 'video';
       const videoMeta = snapshot.video_meta as Record<string, unknown> | undefined;
       const source = isVideo
@@ -158,12 +191,11 @@ async function buildVerifiedTurnMediaEvidence(
       console.warn(`[turn-media-preflight] media_${mediaIndex} failed in ${Date.now() - itemStartedAt}ms`, error);
     }
   }));
-  console.info(`[turn-media-preflight] completed ${count} items in ${Date.now() - preflightStartedAt}ms`);
+  console.info(`[turn-media-preflight] completed ${evidenceBatch.length} items in ${Date.now() - preflightStartedAt}ms`);
 
-  return `[Verified current upload batch — ${count} items]
-The Media Analyzer inspected every item below before the Agent began planning. This is visual evidence, not filenames or guesses:
-${batch.map((snapshot, offset) => {
-  const mediaIndex = start + offset + 1;
+  return `[Verified current upload ${supportsImageInput ? 'video ' : ''}evidence — ${evidenceBatch.length} item${evidenceBatch.length === 1 ? '' : 's'}]
+The media evidence required before Agent planning is listed below. Treat successful descriptions as visual evidence, not filenames or guesses:
+${evidenceBatch.map(({ snapshot, mediaIndex }) => {
   const type = snapshot.type === 'video' ? 'video' : 'image';
   return `- <<<media_${mediaIndex}>>> [${type}]: ${snapshot.description || '[analysis missing]'}`;
 }).join('\n')}
@@ -173,25 +205,44 @@ Use the whole batch as the source set for the user's request. Make an intentiona
 }
 
 export function buildTurnMediaInspectionContext(
-  snapshots: Array<Pick<DbSnapshot, 'type'>>,
+  snapshots: Array<Pick<DbSnapshot, 'type'> & { id?: string }>,
   requestedCount?: number,
+  nativeVision = false,
+  requestedSnapshotIds?: string[],
 ): string {
-  const turnMediaCount = Math.min(
-    snapshots.length,
-    Math.max(0, Math.floor(requestedCount || 0)),
-  );
+  const turnMedia = selectTurnMediaBatch(snapshots, requestedCount, requestedSnapshotIds);
+  const turnMediaCount = turnMedia.length;
   if (turnMediaCount === 0) return '';
 
-  const turnMediaStart = snapshots.length - turnMediaCount;
+  const evidenceInstruction = nativeVision
+    ? 'Every still image below is attached to this same Agent request after its matching Media Index marker. Inspect those images directly. Videos are not image attachments; verified video evidence follows below. If video analysis failed or is insufficient for the request, call analyze_video once with all affected media_indices.'
+    : 'A verified evidence block for this exact batch follows below; consume every line before deciding how each item contributes.';
+
   return `[Current upload batch — inspect every item before planning]
 The user added ${turnMediaCount} new Media Index item${turnMediaCount === 1 ? '' : 's'} in this turn:
-${snapshots.slice(turnMediaStart).map((snapshot, offset) => {
-  const mediaIndex = turnMediaStart + offset + 1;
+${turnMedia.map(({ snapshot, mediaIndex }) => {
   return `- <<<media_${mediaIndex}>>>: ${snapshot.type === 'video' ? 'video' : 'image'}`;
 }).join('\n')}
-Do not plan from only the current or first image. A verified evidence block for this exact batch follows below; consume every line before deciding how each item contributes.
+Do not plan from only the current or first image.
+${evidenceInstruction}
 
 `;
+}
+
+export function selectTurnMediaBatch<T extends { id?: string }>(
+  snapshots: T[],
+  requestedCount?: number,
+  requestedSnapshotIds?: string[],
+): Array<{ snapshot: T; mediaIndex: number }> {
+  const requestedIds = new Set((requestedSnapshotIds || []).filter(Boolean));
+  if (requestedIds.size > 0) {
+    return snapshots.flatMap((snapshot, index) => (
+      snapshot.id && requestedIds.has(snapshot.id) ? [{ snapshot, mediaIndex: index + 1 }] : []
+    ));
+  }
+  const count = Math.min(snapshots.length, Math.max(0, Math.floor(requestedCount || 0)));
+  const start = snapshots.length - count;
+  return snapshots.slice(start).map((snapshot, offset) => ({ snapshot, mediaIndex: start + offset + 1 }));
 }
 
 interface DbMessage {
@@ -199,6 +250,48 @@ interface DbMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+}
+
+const CONTEXT_HISTORY_PAGE_SIZE = 1_000;
+
+async function loadAllVisibleMessages(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<DbMessage[]> {
+  const rows: DbMessage[] = [];
+  for (let offset = 0; ; offset += CONTEXT_HISTORY_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id, role, content, created_at')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true })
+      .range(offset, offset + CONTEXT_HISTORY_PAGE_SIZE - 1);
+    if (error) throw new Error(`Failed to load Agent message history: ${error.message}`);
+    const page = (data ?? []) as DbMessage[];
+    rows.push(...page);
+    if (page.length < CONTEXT_HISTORY_PAGE_SIZE) return rows;
+  }
+}
+
+async function loadAllToolHistory(
+  supabase: SupabaseClient,
+  projectId: string,
+  userId: string,
+): Promise<DbToolHistoryRow[]> {
+  const rows: DbToolHistoryRow[] = [];
+  for (let offset = 0; ; offset += CONTEXT_HISTORY_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('agent_tool_history')
+      .select('created_at, run_id, step, seq, tool_call_id, tool_name, input, output')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+      .range(offset, offset + CONTEXT_HISTORY_PAGE_SIZE - 1);
+    if (error) throw new Error(`Failed to load Agent tool history: ${error.message}`);
+    const page = (data ?? []) as DbToolHistoryRow[];
+    rows.push(...page);
+    if (page.length < CONTEXT_HISTORY_PAGE_SIZE) return rows;
+  }
 }
 
 interface DbProjectMusic {
@@ -261,7 +354,7 @@ export function buildAgentRecoveryContext(
     ? `\npartial streamed code: ${String(checkpoint.streamedCodePath)} (${Number(checkpoint.streamedCodeChars) || 0} chars)`
     : '';
   const nextAction = checkpoint.studioRunId
-    ? 'Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage. Do not reread skill, prompt, director, component-library, or reference files. In Composition, write numbered source files under <project-id>/drafts/composition-parts, salvage complete definitions from any partial stream, and assemble once with composition_parts.directory. Do not restart a monolithic run_code payload or trim to an aggregate source-size target.'
+    ? 'Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage. Do not reread skill, prompt, director, component-library, or reference files. In Composition, write numbered source files under <project-id>/drafts/composition-parts and salvage complete definitions from any partial stream. The workspace automatically assembles and autosaves after each write; continue until write_file reports compositionWorkspace.status="ready", then use its designPath directly. Do not restart a monolithic run_code payload or trim to an aggregate source-size target.'
     : 'Read the draft path and apply the pending modification.';
   return `[Recoverable Agent Checkpoint]\nThe previous run stopped before completion, but durable work was saved. Resume from this exact checkpoint; do not recreate the work from the original media.${draftContext}${studioContext}${streamedCodeContext}${checkpoint.lastTool ? `\nlast completed tool: ${String(checkpoint.lastTool)}` : ''}\n${nextAction} Preview and publish the final artifact when that was the user's original request.\n\n`;
 }
@@ -275,12 +368,6 @@ export function selectPriorTerminalRun<T extends { id?: string; status?: string 
     && row.status !== 'running'
     && row.status !== 'aborted'
   ));
-}
-
-export function isStudioRunContinuationRequest(userMessage: string): boolean {
-  const message = userMessage.trim();
-  return /(?:继续|接着|恢复|续上|跑完|完成|continue|resume).{0,48}studio\s*run/i.test(message)
-    || /studio\s*run.{0,48}(?:继续|接着|恢复|续上|跑完|完成|continue|resume)/i.test(message);
 }
 
 function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
@@ -311,7 +398,7 @@ export async function buildPromptContext(
   // in parallel. Audio is a separate project-scoped index; it never occupies
   // Timeline Media Index slots like <<<media_N>>>.
   const studioRunStore = new WorkspaceStudioRunStore(supabase, userId);
-  const executionSnapshotPromise = options.executionRunId
+  const executionSnapshotPromise = options.executionRunId && options.durableContinuation
     ? supabase
         .from('agent_context_snapshots')
         .select('content, run_id')
@@ -320,38 +407,36 @@ export async function buildPromptContext(
         .limit(1)
         .maybeSingle()
     : Promise.resolve({ data: null, error: null });
-  const executionRunPromise = options.executionRunId
-    ? supabase
+  const executionRunPromise = options.executionRunId && !options.executionObjective
+      ? supabase
         .from('agent_runs')
-        .select('objective, prompt, acceptance_criteria, current_work_unit')
+        .select('objective, prompt, acceptance_criteria')
         .eq('id', options.executionRunId)
         .maybeSingle()
-    : Promise.resolve({ data: null, error: null });
-  const [snapshotsRes, recentMessagesRes, originMessageRes, toolHistoryRes, musicRes, recoverableDraft, recoverableRunRes, studioRuns, executionSnapshotRes, executionRunRes] = await Promise.all([
+      : Promise.resolve({
+          data: options.executionRunId ? {
+            objective: options.executionObjective,
+            acceptance_criteria: options.executionAcceptanceCriteria,
+          } : null,
+          error: null,
+        });
+  const projectCompactionPromise = supabase
+    .from('agent_context_snapshots')
+    .select('content, run_id, created_at')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .not('provider_compaction', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const [snapshotsRes, messages, toolHistory, musicRes, recoverableDraft, recoverableRunRes, studioRuns, executionSnapshotRes, executionRunRes, projectCompactionRes] = await Promise.all([
     supabase
       .from('snapshots')
       .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
       .eq('project_id', projectId)
       .order('sort_order', { ascending: true }),
-    supabase
-      .from('messages')
-      .select('id, role, content, created_at')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
-      .limit(400),
-    supabase
-      .from('messages')
-      .select('id, role, content, created_at')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: true })
-      .limit(1),
-    supabase
-      .from('agent_tool_history')
-      .select('created_at, run_id, step, seq, tool_call_id, tool_name, input, output')
-      .eq('project_id', projectId)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(800),
+    loadAllVisibleMessages(supabase, projectId),
+    loadAllToolHistory(supabase, projectId, userId),
     supabase
       .from('project_music')
       .select('audio_url, suno_audio_url, stream_audio_url, duration, title, track_index, status, tags')
@@ -368,26 +453,28 @@ export async function buildPromptContext(
       .eq('user_id', userId)
       .order('started_at', { ascending: false })
       .limit(10),
-    studioRunStore.listRuns(projectId).catch(() => []),
+    options.durableContinuation
+      ? studioRunStore.listRuns(projectId).catch(() => [])
+      : Promise.resolve([]),
     executionSnapshotPromise,
     executionRunPromise,
+    projectCompactionPromise,
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
+  const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
+  // Text-only Agents need Gemini evidence for every medium. Multimodal Agents
+  // inspect still images directly but retain Gemini preflight for raw videos,
+  // which are outside the Agent image-input contract.
   const verifiedTurnMediaEvidence = await buildVerifiedTurnMediaEvidence(
     snapshots,
     options.turnMediaCount,
+    options.turnMediaSnapshotIds,
     supabase,
     userId,
+    options.supportsImageInput === true,
   );
-  const recentMessages = ([...(recentMessagesRes.data ?? [])] as DbMessage[]).reverse();
-  const originMessage = (originMessageRes.data?.[0] as DbMessage | undefined);
-  const messages: DbMessage[] = originMessage && !recentMessages.some(message => (
-    message.id && originMessage.id ? message.id === originMessage.id : message.created_at === originMessage.created_at
-  ))
-    ? [originMessage, ...recentMessages]
-    : recentMessages;
-  const toolHistory: DbToolHistoryRow[] = ([...(toolHistoryRes.data ?? [])] as DbToolHistoryRow[]).reverse();
+  const originMessage = messages[0];
   const projectAudios: AudioAttachmentContext[] = ((musicRes.data ?? []) as DbProjectMusic[])
     .map((row) => {
       const audioUrl = getUsableAudioUrl(row);
@@ -407,24 +494,49 @@ export async function buildPromptContext(
     ? priorRun.metadata as Record<string, unknown> | null | undefined
     : undefined;
   const recoveryContext = buildAgentRecoveryContext(userMessage, recoverableMetadata);
-  const activeStudioRun = studioRuns.find(run => run.status === 'running' && run.currentStage);
-  const activeStudioContinuation = Boolean(
-    activeStudioRun && isStudioRunContinuationRequest(userMessage),
-  );
-  const activeStudioRunContext = activeStudioContinuation && activeStudioRun
-    ? `[Active Studio Run]\nstudio run id: ${activeStudioRun.id}\ncurrent studio stage: ${activeStudioRun.currentStage}\nstudio state path: ${activeStudioRun.projectId}/studio-runs/${activeStudioRun.id}/run.json\nCall studio_run status first, then read only the persisted artifacts required by the current stage. Do not reread skill, prompt, director, component-library, or reference files.\n\n`
+  const activeAgentRunId = options.executionRunId || options.currentRunId;
+  const activeStudioRun = activeAgentRunId
+    ? studioRuns.find(run => (
+        run.agentRunId === activeAgentRunId
+        && run.status === 'running'
+        && run.currentStage
+      ))
+    : undefined;
+  const activeStudioRunContext = activeStudioRun
+    ? `[Active Studio workflow in this Agent Run]\nworkflow invocation id: ${activeStudioRun.id}\ncurrent workflow stage: ${activeStudioRun.currentStage}\nworkflow state path: ${activeStudioRun.projectId}/studio-runs/${activeStudioRun.id}/run.json\nCall studio_run status first, then read only the persisted artifacts required by the current stage. This workflow belongs to Agent Run ${activeAgentRunId}; never search for or adopt another project's active Studio state. Do not reread skill, prompt, director, component-library, or reference files.\n\n`
     : '';
   const executionRow = executionRunRes.data as {
     objective?: string | null;
     prompt?: string | null;
     acceptance_criteria?: unknown;
-    current_work_unit?: string | null;
   } | null;
   const executionObjective = executionRow?.objective || executionRow?.prompt || originMessage?.content || userMessage;
+  const resolvedMediaIndices = resolveExplicitTurnMediaIndices({
+    totalMediaCount: snapshots.length,
+    userMessage: options.executionRunId
+      ? `${executionObjective}\n${userMessage}`
+      : userMessage,
+    turnMediaCount: options.turnMediaCount,
+    referenceImageCount,
+    uploadedVideoCount,
+  });
+  const turnMediaIndices = selectTurnMediaBatch(
+    snapshots,
+    options.turnMediaCount,
+    options.turnMediaSnapshotIds,
+  ).map(({ mediaIndex }) => mediaIndex);
+  const explicitMediaIndices = [...new Set([...turnMediaIndices, ...resolvedMediaIndices])];
+  const nativeVisionImages = selectNativeVisionImages(snapshots, {
+    supportsImageInput: options.supportsImageInput === true,
+    currentSnapshotIndex,
+    explicitMediaIndices,
+    turnMediaCount: options.turnMediaCount,
+    turnMediaSnapshotIds: options.turnMediaSnapshotIds,
+  });
   const priorSnapshot = executionSnapshotRes.data?.content
     ? normalizeExecutionSnapshot(executionSnapshotRes.data.content, {
         objective: executionObjective,
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Continue the unfinished objective from durable project artifacts.',
       })
     : undefined;
@@ -435,7 +547,7 @@ export async function buildPromptContext(
         acceptanceCriteria: Array.isArray(executionRow?.acceptance_criteria)
           ? executionRow.acceptance_criteria.filter((item): item is string => typeof item === 'string')
           : priorSnapshot.acceptanceCriteria,
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Start the current request while preserving relevant prior decisions and durable artifacts.',
       }
     : priorSnapshot;
@@ -443,7 +555,7 @@ export async function buildPromptContext(
     ? persistedSnapshot ?? normalizeExecutionSnapshot({
         objective: executionObjective,
         acceptanceCriteria: Array.isArray(executionRow?.acceptance_criteria) ? executionRow?.acceptance_criteria : [],
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Start the objective and create the first durable artifact before broad exploration.',
       }, {
         objective: executionObjective,
@@ -451,9 +563,15 @@ export async function buildPromptContext(
         nextAction: 'Start the objective.',
       })
     : undefined;
+  const projectCompactionSnapshot = projectCompactionRes.data?.content
+    ? normalizeExecutionSnapshot(projectCompactionRes.data.content, {
+        objective: '',
+        currentWorkUnit: 'agent',
+        nextAction: 'Continue with the current user request.',
+      })
+    : undefined;
   const executionContext = formatDurableExecutionSnapshot(executionSnapshot);
 
-  const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
   const currentSnap = snapshots[currentSnapshotIndex];
 
   // Load design from workspace if current snapshot has one (skip for video snapshots —
@@ -498,16 +616,27 @@ export async function buildPromptContext(
   // Conversation history — real AI SDK ModelMessage[] turns, including private
   // sanitized tool call/results. Drop trailing user messages so the current
   // turn's prompt isn't duplicated if the caller already wrote it to DB.
-  const rebuiltHistory = buildModelHistoryFromRows(messages, toolHistory, 400);
-  const typedCompaction = buildTypedCompactionMessage(executionSnapshot);
-  // A provider compaction block summarizes everything before it. Keep it typed
-  // and add only a small local tail, rather than replaying summarized input.
-  const durableHistoryTail = tailModelHistoryAtomically(rebuiltHistory, 16);
+  const compactionSnapshot = executionSnapshot?.providerCompaction
+    ? executionSnapshot
+    : projectCompactionSnapshot;
+  const typedCompaction = buildTypedCompactionMessage(
+    compactionSnapshot,
+    options.agentModelId,
+    options.agentModelProvider,
+  );
+  const compactedThrough = typedCompaction
+    ? compactionSnapshot?.providerCompaction?.compactedThrough
+    : undefined;
+  const historyMessages = compactedThrough
+    ? messages.filter(message => message.created_at > compactedThrough)
+    : messages;
+  const historyTools = compactedThrough
+    ? toolHistory.filter(row => row.created_at > compactedThrough)
+    : toolHistory;
+  const rebuiltHistory = buildModelHistoryFromRows(historyMessages, historyTools);
   const rawHistory = typedCompaction
-    ? [typedCompaction, ...durableHistoryTail]
-    : options.durableContinuation && executionSnapshot
-      ? durableHistoryTail
-      : rebuiltHistory;
+    ? [typedCompaction, ...rebuiltHistory]
+    : rebuiltHistory;
   const contextPolicy = options.contextPolicy ?? getAgentContextPolicy('default');
   const selectedHistory = selectModelHistoryWithinBudget({
     messages: rawHistory,
@@ -552,15 +681,25 @@ export async function buildPromptContext(
           : isRef ? 'reference' : isComposition ? 'composition' : 'image';
         const marker = i === currentSnapshotIndex ? '  ← YOU ARE HERE' : '';
         const videoTag = isVideo && videoMeta?.videoUrl ? ` [video: ${videoMeta.videoUrl}]` : '';
+        const sourceRangeTag = isVideo ? formatSourceRangeHint(sourceRangeFromVideoMeta(videoMeta)) : '';
         const transcriptTag = isVideo ? formatTranscriptMediaHint(videoMeta) : '';
         const codePath = s.design_path && !isVideo ? ` [composition code: ${s.design_path}]` : '';
-        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${transcriptTag}${codePath}`;
+        const alphaTag = s.metadata?.hasAlpha
+          ? ' [transparent alpha asset; preserve transparency in later image edits unless the user explicitly asks for a new background]'
+          : '';
+        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${alphaTag}${videoTag}${sourceRangeTag}${transcriptTag}${codePath}`;
       }).join('\n')}\n\n`
+    : '';
+
+  const mediaDescriptionPolicy = snapshots.length >= 1
+    ? options.supportsImageInput
+      ? `[Media description policy]\nA specific Media Index description may already contain useful prior evidence. For every still image attached to this request, inspect the pixels directly with your native vision in this same turn; do not call analyze_image to re-fetch an attached image. Use analyze_image only for a different Timeline image whose pixels were not attached and whose description is missing, generic, uncertain, or insufficient for the user's concrete question. Videos still require existing evidence, analyze_video, or preview_frame as appropriate. Never invent details beyond the supplied description or visible media.\n\n`
+      : `[Media description policy]\nA specific Media Index description may already contain media analysis supplied by an upload pipeline, asset library, earlier tool call, or another Agent. Treat that description as available evidence regardless of its provider. Read it before choosing tools. Do not call analyze_image or analyze_video merely to restate content already covered there. Analyze only when the description is missing/generic, explicitly uncertain or failed, or the user's question requires a concrete visual detail that the description does not cover. Never invent details beyond the supplied description. Use preview_frame for composition/layout/crop/boundary QA, not to repeat semantic analysis.\n\n`
     : '';
 
   // Video/composition mode warnings (mutually exclusive)
   const videoWarning = currentSnapIsVideo
-    ? `[VIDEO MODE] You are viewing a video. Use analyze_video for visual scenes/actions. Use transcribe_audio for dialogue, subtitles, word/utterance timestamps, or time-based cuts. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
+    ? `[VIDEO MODE] You are viewing a video. First consume its Media Index description as existing media understanding. Use analyze_video only for missing or uncovered visual scenes/actions. Use transcribe_audio for dialogue, subtitles, word/utterance timestamps, or speech-dependent cuts when exact timing is not already available. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
     : '';
 
   const designWarning = !currentSnapIsVideo && currentDesignPath
@@ -581,7 +720,9 @@ export async function buildPromptContext(
 
   // Frontend-only warnings
   const annotationWarning = hasAnnotation
-    ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use media_index to switch to another snapshot. Call analyze_image first (without media_index) to see the annotations, then generate_image (without media_index) to edit.\n\n`
+    ? options.supportsImageInput
+      ? `[ANNOTATION MODE] The current annotated image is attached directly to this request. Inspect the red marks with your native vision now, then generate_image (without media_index) to edit THIS image. Do not call analyze_image first and do not switch to another snapshot.\n\n`
+      : `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use media_index to switch to another snapshot. Call analyze_image first (without media_index) to see the annotations, then generate_image (without media_index) to edit.\n\n`
     : '';
 
   const draftWarning = isDraft
@@ -597,7 +738,7 @@ export async function buildPromptContext(
     ? `[Frame-anchored video edit]\nThe user attached a screenshot/frame and referenced a video moment in the text. Treat the attached image as the visual anchor for local video repair: read skills/video-segment-edit/SKILL.md, locate the moment with analyze_video({ mode: "locate_frame" }) using the screenshot + referenced video, and do not call generate_animation until the user explicitly confirms generation.\n\n`
     : '';
 
-  const videoUploadContext = uploadedVideoCount
+  const videoUploadContext = uploadedVideoCount && !options.turnMediaCount
     ? (() => {
         const total = snapshots.length;
         const startIdx = total - uploadedVideoCount + 1;
@@ -605,7 +746,12 @@ export async function buildPromptContext(
       })()
     : '';
 
-  const turnMediaInspectionContext = buildTurnMediaInspectionContext(snapshots, options.turnMediaCount);
+  const turnMediaInspectionContext = buildTurnMediaInspectionContext(
+    snapshots,
+    options.turnMediaCount,
+    options.supportsImageInput === true,
+    options.turnMediaSnapshotIds,
+  );
 
   const audioAttachmentContext = resolvedAudioAttachments.length
     ? `[Audio Index - not Timeline Media]\n${resolvedAudioAttachments.map((audio, i) => {
@@ -614,17 +760,22 @@ export async function buildPromptContext(
         const duration = typeof audio.duration === 'number' ? `, ${formatSecondsForPrompt(audio.duration)}s` : '';
         const track = typeof audio.trackIndex === 'number' ? `, project_music track_index=${audio.trackIndex}` : '';
         return `<<<${label}>>> [audio] — ${title}${duration}${track}, ${audio.audioUrl}`;
-      }).join('\n')}\nUse these as music/audio references. To use one in video generation, mention its marker in story_prompt and pass audio_refs, e.g. story_prompt includes <<<audio_1>>> and audio_refs is ["audio_1"]. Audio markers are not Timeline Media Index items and must not be referenced as <<<media_N>>>.\n\n`
+      }).join('\n')}\nUse these as music/audio references. For same-speaker translation, pass one label to generate_audio as source_voice {type:"audio_index",ref:"audio_1"}; MP3 and WAV are supported. To use one in video generation, mention its marker in story_prompt and pass audio_refs, e.g. story_prompt includes <<<audio_1>>> and audio_refs is ["audio_1"]. Audio markers are not Timeline Media Index items and must not be referenced as <<<media_N>>>.\n\n`
     : '';
 
   // Assemble
-  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${turnMediaInspectionContext}${verifiedTurnMediaEvidence}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${mediaDescriptionPolicy}${turnMediaInspectionContext}${verifiedTurnMediaEvidence}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;
     const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : '';
     return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '');
   });
+  const historyBoundary = [...messages, ...toolHistory]
+    .map(row => row.created_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
   return {
     fullPrompt,
     history,
@@ -634,8 +785,12 @@ export async function buildPromptContext(
     currentDesignPath,
     recoverableDesignPath: recoverableDraft?.path,
     audioAttachments: resolvedAudioAttachments,
+    explicitMediaIndices,
+    nativeVisionImages,
     executionSnapshot,
+    activeStudioWorkflowStage: activeStudioRun?.currentStage || undefined,
     contextStats: selectedHistory.stats,
+    historyBoundary,
   };
 }
 

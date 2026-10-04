@@ -5,7 +5,7 @@ import { join } from 'path';
 import { parseTotalDuration } from '../kling';
 import animatePrompt from '../prompts/animate.md';
 import { DEFAULT_AGENT_MODEL_ID } from '../agent-models';
-import { createAgentModelRuntime, getAgentProviderOptions } from '../agent-model-runtime';
+import { createAgentModelRuntime, getAgentProviderOptions, sumOpenRouterProviderCost } from '../agent-model-runtime';
 
 // Lazy-loaded animate.md from disk (for standalone MCP server / non-webpack environments)
 let _diskAnimatePrompt: string | null = null;
@@ -24,6 +24,7 @@ export interface WriteVideoScriptInput {
 }
 
 export interface WriteVideoScriptResult {
+  usage?: { inputTokens: number; outputTokens: number; modelId: string; provider?: string; providerCostUsd?: number };
   success: boolean;
   script?: string;           // Kling format script with <<<media_N>>> references
   title?: string;            // first line of script (2-5 words)
@@ -121,6 +122,13 @@ export async function writeVideoScript(input: WriteVideoScriptInput): Promise<Wr
       script,
       title,
       estimatedDuration,
+      usage: {
+        inputTokens: result.usage.inputTokens ?? 0,
+        outputTokens: result.usage.outputTokens ?? 0,
+        modelId: runtime.spec.billingModelId,
+        provider: runtime.spec.provider,
+        providerCostUsd: sumOpenRouterProviderCost(runtime, result.steps),
+      },
       message: `Video script generated successfully. ${estimatedDuration ? `Estimated duration: ${estimatedDuration}s.` : 'Duration: smart mode.'}`,
     };
   } catch (e) {

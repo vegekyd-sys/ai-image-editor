@@ -4,7 +4,7 @@ description: >
   Build a reusable local character animation proof with a consistent character
   spec, pose system, action beats, and frame-driven SVG, Canvas, or Remotion
   motion.
-allowed-tools: read_file studio_run prepare_visual_asset analyze_image analyze_video generate_image list_voiceover_voices generate_voiceover transcribe_audio generate_audio generate_music run_code write_file preview_frame materialize_media
+allowed-tools: read_file studio_run prepare_visual_asset analyze_image analyze_video generate_image transcribe_audio generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
     icon: "人"

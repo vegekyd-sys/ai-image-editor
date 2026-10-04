@@ -1,24 +1,20 @@
 'use client'
 
+import CorePromptSwitch from '@/components/admin/CorePromptSwitch'
+
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { navigateBackInIOSApp } from '@/lib/native-navigation'
 import { LOCALE_CONFIG, type Locale } from '@/lib/locales'
+import { useLocale } from '@/lib/i18n'
+import { DEFAULT_WELCOME_CREDITS } from '@/lib/billing/welcome-credits'
+import { DEFAULT_IOS_TRIAL_CREDITS } from '@/lib/billing/ios-trial'
+import MediaPricingPanel from '@/components/admin/MediaPricingPanel'
 
-interface InviteCode {
-  id: string
-  code: string
-  max_uses: number
-  used_count: number
-  expires_at: string | null
-  created_at: string
-  users: string[]
-}
-
-interface WaitlistEntry {
-  id: string
-  email: string
-  created_at: string
+interface CodexAllowlistUser {
+  userId: string
+  email: string | null
+  isOwner: boolean
 }
 
 interface CreditPricing {
@@ -167,9 +163,13 @@ function actionValue(insights: MetaInsightsSummary | null, actionType: string): 
 
 export default function AdminPage() {
   const router = useRouter()
-  const [tab, setTab] = useState<'codes' | 'waitlist' | 'billing' | 'skills' | 'meta'>('codes')
-  const [codes, setCodes] = useState<InviteCode[]>([])
-  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
+  const { t } = useLocale()
+  const [tab, setTab] = useState<'codex' | 'billing' | 'skills' | 'meta'>('codex')
+  const [codexAllowlist, setCodexAllowlist] = useState<CodexAllowlistUser[]>([])
+  const [codexEmail, setCodexEmail] = useState('')
+  const [codexSaving, setCodexSaving] = useState(false)
+  const [planSync, setPlanSync] = useState<Record<'codex' | 'grok', 'synced' | 'pending' | 'unavailable' | 'checking'>>({ codex: 'checking', grok: 'checking' })
+  const [codexMessage, setCodexMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [pricing, setPricing] = useState<CreditPricing[]>([])
   const [editingPricing, setEditingPricing] = useState<Record<string, { credits?: string; supplier_cost?: string }>>({})
   const [tokenRates, setTokenRates] = useState<TokenRateEntry[]>([])
@@ -177,9 +177,12 @@ export default function AdminPage() {
   const [newRate, setNewRate] = useState({ model_id: '', display_name: '', input_per_1m: '', output_per_1m: '', markup: '2.0' })
   const [billingEnabled, setBillingEnabled] = useState(false)
   const [billingToggling, setBillingToggling] = useState(false)
-  const [welcomeCredits, setWelcomeCredits] = useState(500)
+  const [welcomeCredits, setWelcomeCredits] = useState(DEFAULT_WELCOME_CREDITS)
   const [editingWelcome, setEditingWelcome] = useState(false)
-  const [welcomeInput, setWelcomeInput] = useState('500')
+  const [welcomeInput, setWelcomeInput] = useState(String(DEFAULT_WELCOME_CREDITS))
+  const [iosTrialCredits, setIOSTrialCredits] = useState(DEFAULT_IOS_TRIAL_CREDITS)
+  const [editingIOSTrial, setEditingIOSTrial] = useState(false)
+  const [iosTrialInput, setIOSTrialInput] = useState(String(DEFAULT_IOS_TRIAL_CREDITS))
   const [addCreditEmail, setAddCreditEmail] = useState('')
   const [addCreditAmount, setAddCreditAmount] = useState('100')
   const [addCreditResult, setAddCreditResult] = useState<string | null>(null)
@@ -195,24 +198,18 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // Create code form
-  const [newCode, setNewCode] = useState('')
-  const [newMaxUses, setNewMaxUses] = useState('30')
-  const [creating, setCreating] = useState(false)
-
-  const fetchCodes = useCallback(async () => {
-    const res = await fetch('/api/admin/invite-codes')
-    if (res.status === 403) { setError('Not authorized'); return }
-    const data = await res.json()
-    if (Array.isArray(data)) setCodes(data)
-  }, [])
-
-  const fetchWaitlist = useCallback(async () => {
-    const res = await fetch('/api/admin/waitlist')
-    if (res.status === 403) { setError('Not authorized'); return }
-    const data = await res.json()
-    if (Array.isArray(data)) setWaitlist(data)
-  }, [])
+  const fetchCodexAllowlist = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/personal-subscription-allowlist', { cache: 'no-store' })
+      if (!res.ok) throw new Error('allowlist unavailable')
+      const data = await res.json()
+      if (Array.isArray(data.users)) setCodexAllowlist(data.users)
+      setPlanSync(data.providers || { codex: 'unavailable', grok: 'unavailable' })
+    } catch {
+      setPlanSync({ codex: 'unavailable', grok: 'unavailable' })
+      setCodexMessage({ type: 'error', text: t('admin.personalAllowlist.loadFailed') })
+    }
+  }, [t])
 
   const fetchPricing = useCallback(async () => {
     const res = await fetch('/api/admin/credit-pricing')
@@ -247,8 +244,10 @@ export default function AdminPage() {
     if (res.status === 403) return
     const data = await res.json()
     setBillingEnabled(data.enabled ?? false)
-    setWelcomeCredits(data.welcomeCredits ?? 500)
-    setWelcomeInput(String(data.welcomeCredits ?? 500))
+    setWelcomeCredits(data.welcomeCredits ?? DEFAULT_WELCOME_CREDITS)
+    setWelcomeInput(String(data.welcomeCredits ?? DEFAULT_WELCOME_CREDITS))
+    setIOSTrialCredits(data.iosTrialCredits ?? DEFAULT_IOS_TRIAL_CREDITS)
+    setIOSTrialInput(String(data.iosTrialCredits ?? DEFAULT_IOS_TRIAL_CREDITS))
   }, [])
 
   const fetchMetaStatus = useCallback(async () => {
@@ -274,32 +273,47 @@ export default function AdminPage() {
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing(), fetchTokenRates(), fetchBillingToggle(), fetchHomeSkills(), fetchSkillCategories(), fetchMetaStatus()]).finally(() => setLoading(false))
-  }, [fetchCodes, fetchWaitlist, fetchPricing, fetchTokenRates, fetchBillingToggle, fetchHomeSkills, fetchSkillCategories, fetchMetaStatus])
+    Promise.all([fetchCodexAllowlist(), fetchPricing(), fetchTokenRates(), fetchBillingToggle(), fetchHomeSkills(), fetchSkillCategories(), fetchMetaStatus()]).finally(() => setLoading(false))
+  }, [fetchCodexAllowlist, fetchPricing, fetchTokenRates, fetchBillingToggle, fetchHomeSkills, fetchSkillCategories, fetchMetaStatus])
 
-  const handleCreate = async () => {
-    if (!newCode.trim()) return
-    setCreating(true)
+  const mutatePersonalAllowlist = async (
+    method: 'POST' | 'DELETE' | 'PUT',
+    body: { email: string } | { userId: string } | undefined,
+    success: 'added' | 'removed' | 'synchronized',
+  ) => {
+    if (codexSaving) return
+    setCodexSaving(true)
+    setCodexMessage(null)
     try {
-      const res = await fetch('/api/admin/invite-codes', {
-        method: 'POST',
+      const res = await fetch('/api/admin/personal-subscription-allowlist', {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: newCode.trim(),
-          max_uses: parseInt(newMaxUses) || 30,
-        }),
+        body: body ? JSON.stringify(body) : undefined,
       })
       const data = await res.json()
-      if (res.ok) {
-        setCodes(prev => [data, ...prev])
-        setNewCode('')
-        setNewMaxUses('30')
+      if (res.ok && Array.isArray(data.users)) {
+        setCodexAllowlist(data.users)
+        setPlanSync(data.providers || { codex: 'unavailable', grok: 'unavailable' })
+        if (method === 'POST') setCodexEmail('')
+        setCodexMessage({ type: 'success', text: t(`admin.personalAllowlist.${success}`) })
       } else {
-        alert(data.error || 'Failed to create')
+        await fetchCodexAllowlist()
+        setCodexMessage({ type: 'error', text: t(res.status === 404 ? 'admin.personalAllowlist.accountNotFound' : 'admin.personalAllowlist.updateFailed') })
       }
+    } catch {
+      await fetchCodexAllowlist()
+      setCodexMessage({ type: 'error', text: t('admin.personalAllowlist.updateFailed') })
     } finally {
-      setCreating(false)
+      setCodexSaving(false)
     }
+  }
+
+  const handleAddCodexAccount = async () => {
+    if (codexEmail.trim()) await mutatePersonalAllowlist('POST', { email: codexEmail.trim() }, 'added')
+  }
+
+  const handleRemoveCodexAccount = (userId: string) => {
+    return mutatePersonalAllowlist('DELETE', { userId }, 'removed')
   }
 
   const handleBackToApp = () => {
@@ -328,7 +342,7 @@ export default function AdminPage() {
 
   return (
     <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black text-white p-6">
-      <div className="max-w-2xl mx-auto">
+      <div className={`mx-auto ${tab === 'billing' ? 'max-w-6xl' : 'max-w-2xl'}`}>
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Admin</h1>
         <button type="button" onClick={handleBackToApp} className="text-white/40 text-sm hover:text-white/60">
@@ -336,27 +350,21 @@ export default function AdminPage() {
         </button>
       </div>
 
+      <CorePromptSwitch />
+
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-white/5 rounded-lg p-1">
+      <div className="flex gap-1 mb-6 overflow-x-auto bg-white/5 rounded-lg p-1" data-testid="admin-tabs">
         <button
-          onClick={() => setTab('codes')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
-            tab === 'codes' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
+          onClick={() => setTab('codex')}
+          className={`shrink-0 whitespace-nowrap sm:flex-1 py-2 px-3 sm:px-4 rounded-md text-sm font-medium transition-all ${
+            tab === 'codex' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >
-          Invite Codes ({codes.length})
-        </button>
-        <button
-          onClick={() => setTab('waitlist')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
-            tab === 'waitlist' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
-          }`}
-        >
-          Waitlist ({waitlist.length})
+          {t('admin.personalAllowlist.tab')} ({codexAllowlist.length})
         </button>
         <button
           onClick={() => setTab('billing')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+          className={`shrink-0 whitespace-nowrap sm:flex-1 py-2 px-3 sm:px-4 rounded-md text-sm font-medium transition-all ${
             tab === 'billing' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >
@@ -364,7 +372,7 @@ export default function AdminPage() {
         </button>
         <button
           onClick={() => setTab('skills')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+          className={`shrink-0 whitespace-nowrap sm:flex-1 py-2 px-3 sm:px-4 rounded-md text-sm font-medium transition-all ${
             tab === 'skills' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >
@@ -372,7 +380,7 @@ export default function AdminPage() {
         </button>
         <button
           onClick={() => setTab('meta')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+          className={`shrink-0 whitespace-nowrap sm:flex-1 py-2 px-3 sm:px-4 rounded-md text-sm font-medium transition-all ${
             tab === 'meta' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >
@@ -380,94 +388,78 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* ══════ INVITE CODES TAB ══════ */}
-      {tab === 'codes' && (
-        <>
-          {/* Create new code */}
-          <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10">
-            <h3 className="text-sm font-medium text-white/60 mb-3">Create new invite code</h3>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newCode}
-                onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-                placeholder="CODE"
-                className="flex-1 px-3 py-2 rounded-lg bg-white/10 text-white text-sm placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none uppercase tracking-wider font-mono"
-              />
-              <input
-                type="number"
-                value={newMaxUses}
-                onChange={(e) => setNewMaxUses(e.target.value)}
-                placeholder="Max"
-                className="w-20 px-3 py-2 rounded-lg bg-white/10 text-white text-sm placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none text-center"
-              />
-              <button
-                onClick={handleCreate}
-                disabled={creating || !newCode.trim()}
-                className="px-4 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >
-                {creating ? '...' : 'Create'}
+      {/* ══════ CODEX SUBSCRIPTION ALLOWLIST TAB ══════ */}
+      {tab === 'codex' && (
+        <div className="space-y-4">
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <h2 className="text-sm font-semibold">{t('admin.personalAllowlist.title')}</h2>
+            <p className="mt-1 text-xs leading-relaxed text-white/40">
+              {t('admin.personalAllowlist.desc')}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="personal-plan-sync">
+              {(['codex', 'grok'] as const).map(provider => (
+                <span key={provider} className={`rounded-full border px-2.5 py-1 text-xs ${planSync[provider] === 'synced' ? 'border-emerald-400/20 text-emerald-300' : 'border-amber-400/20 text-amber-200'}`}>
+                  {t(`admin.personalAllowlist.${provider}Status`, t(`admin.personalAllowlist.${planSync[provider]}`))}
+                </span>
+              ))}
+              <button type="button" disabled={codexSaving} onClick={() => void mutatePersonalAllowlist('PUT', undefined, 'synchronized')}
+                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40">
+                {t('admin.personalAllowlist.sync')}
               </button>
             </div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="email"
+                value={codexEmail}
+                onChange={(event) => setCodexEmail(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void handleAddCodexAccount()
+                }}
+                placeholder={t('admin.personalAllowlist.emailPlaceholder')}
+                aria-label={t('admin.personalAllowlist.emailPlaceholder')}
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-fuchsia-500/50"
+              />
+              <button
+                type="button"
+                onClick={handleAddCodexAccount}
+                disabled={codexSaving || !codexEmail.trim()}
+                className="rounded-lg bg-fuchsia-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {codexSaving ? t('admin.personalAllowlist.saving') : t('admin.personalAllowlist.add')}
+              </button>
+            </div>
+            {codexMessage ? (
+              <p className={`mt-3 text-xs ${codexMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`} role="status">
+                {codexMessage.text}
+              </p>
+            ) : null}
           </div>
 
-          {/* Codes list */}
           <div className="space-y-2">
-            {codes.map((c) => (
-              <div key={c.id} className="bg-white/[0.03] rounded-lg px-4 py-3 border border-white/5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-mono text-sm tracking-wider">{c.code}</span>
-                    {c.expires_at && (
-                      <span className="text-white/30 text-xs ml-2">
-                        exp {new Date(c.expires_at).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-sm">
-                      <span className={c.used_count >= c.max_uses ? 'text-red-400' : 'text-green-400'}>
-                        {c.used_count}
-                      </span>
-                      <span className="text-white/30">/{c.max_uses}</span>
-                    </div>
-                    <span className="text-white/20 text-xs">
-                      {new Date(c.created_at).toLocaleDateString()}
+            {codexAllowlist.map((user) => (
+              <div key={user.userId} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{user.email || t('admin.personalAllowlist.unknownEmail')}</span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${user.isOwner ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
+                      {user.isOwner ? t('admin.personalAllowlist.owner') : t('admin.personalAllowlist.allowed')}
                     </span>
                   </div>
+                  <div className="mt-1 truncate font-mono text-[10px] text-white/25">{user.userId}</div>
                 </div>
-                {c.users.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
-                    {c.users.map((email) => (
-                      <div key={email} className="text-white/40 text-xs pl-2">
-                        {email}
-                      </div>
-                    ))}
-                  </div>
+                {user.isOwner ? null : (
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveCodexAccount(user.userId)}
+                    disabled={codexSaving}
+                    className="shrink-0 rounded-lg border border-red-400/20 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-400/10 disabled:opacity-40"
+                  >
+                    {t('admin.personalAllowlist.remove')}
+                  </button>
                 )}
               </div>
             ))}
-            {codes.length === 0 && (
-              <p className="text-white/30 text-sm text-center py-8">No invite codes yet</p>
-            )}
           </div>
-        </>
-      )}
-
-      {/* ══════ WAITLIST TAB ══════ */}
-      {tab === 'waitlist' && (
-        <div className="space-y-2">
-          {waitlist.map((w) => (
-            <div key={w.id} className="flex items-center justify-between bg-white/[0.03] rounded-lg px-4 py-3 border border-white/5">
-              <span className="text-sm">{w.email}</span>
-              <span className="text-white/20 text-xs">
-                {new Date(w.created_at).toLocaleDateString()}
-              </span>
-            </div>
-          ))}
-          {waitlist.length === 0 && (
-            <p className="text-white/30 text-sm text-center py-8">No waitlist entries yet</p>
-          )}
         </div>
       )}
 
@@ -521,9 +513,9 @@ export default function AdminPage() {
                       await fetch('/api/admin/billing-toggle', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ welcomeCredits: parseInt(welcomeInput) || 500 }),
+                        body: JSON.stringify({ welcomeCredits: parseInt(welcomeInput) || DEFAULT_WELCOME_CREDITS }),
                       })
-                      setWelcomeCredits(parseInt(welcomeInput) || 500)
+                      setWelcomeCredits(parseInt(welcomeInput) || DEFAULT_WELCOME_CREDITS)
                       setEditingWelcome(false)
                     }}
                     className="px-2 py-1 rounded bg-fuchsia-600 text-white text-xs"
@@ -534,6 +526,49 @@ export default function AdminPage() {
                 <>
                   <span className="text-fuchsia-400 font-medium text-sm">{welcomeCredits}</span>
                   <button onClick={() => setEditingWelcome(true)} className="px-2 py-1 rounded text-white/30 text-xs hover:text-white/60 hover:bg-white/5">Edit</button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* iOS introductory trial credits config */}
+          <div className="bg-white/5 rounded-xl p-4 mb-4 border border-white/10 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium">{t('admin.iosTrialCredits')}</div>
+              <div className="text-xs text-white/40 mt-0.5">{t('admin.iosTrialCreditsDesc')}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              {editingIOSTrial ? (
+                <>
+                  <input
+                    type="number"
+                    min="0"
+                    value={iosTrialInput}
+                    onChange={(e) => setIOSTrialInput(e.target.value)}
+                    className="w-20 px-2 py-1 rounded bg-white/10 text-white text-sm text-right border border-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+                  />
+                  <button
+                    onClick={async () => {
+                      const next = Number.isFinite(Number(iosTrialInput)) && Number(iosTrialInput) >= 0
+                        ? Math.floor(Number(iosTrialInput))
+                        : DEFAULT_IOS_TRIAL_CREDITS
+                      await fetch('/api/admin/billing-toggle', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ iosTrialCredits: next }),
+                      })
+                      setIOSTrialCredits(next)
+                      setIOSTrialInput(String(next))
+                      setEditingIOSTrial(false)
+                    }}
+                    className="px-2 py-1 rounded bg-fuchsia-600 text-white text-xs"
+                  >{t('admin.save')}</button>
+                  <button onClick={() => { setEditingIOSTrial(false); setIOSTrialInput(String(iosTrialCredits)); }} className="px-2 py-1 rounded bg-white/10 text-white/50 text-xs">✕</button>
+                </>
+              ) : (
+                <>
+                  <span className="text-fuchsia-400 font-medium text-sm">{iosTrialCredits}</span>
+                  <button onClick={() => setEditingIOSTrial(true)} className="px-2 py-1 rounded text-white/30 text-xs hover:text-white/60 hover:bg-white/5">{t('admin.edit')}</button>
                 </>
               )}
             </div>
@@ -590,8 +625,9 @@ export default function AdminPage() {
             )}
           </div>
 
-          <h3 className="text-sm font-medium text-white/60 mb-3">Per-action tools (fixed credits)</h3>
-          <p className="text-xs text-white/30 mb-3">Video tools: credits = per second. Music/ComfyUI: per task. Token-based tools (Gemini, GPT-5.6, Grok, DeepSeek) use Token Rates below.</p>
+          <MediaPricingPanel />
+          <h3 className="text-sm font-medium text-white/60 mb-3">{t('mediaPricing.fixedTitle')}</h3>
+          <p className="text-xs text-white/30 mb-3">{t('mediaPricing.fixedDescription')}</p>
 
           <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
             <table className="w-full text-sm">
@@ -605,7 +641,7 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {pricing.map((p) => {
+                {pricing.filter(p => !['create_video_kling', 'edit_video_kling', 'create_video_seedance', 'create_music', 'create_seed_audio', 'create_voiceover'].includes(p.tool_name)).map((p) => {
                   const editing = editingPricing[p.tool_name]
                   const isVideo = p.tool_name.includes('video') && !p.tool_name.includes('status')
                   return (
@@ -1293,7 +1329,9 @@ function SkillEditorModal({ skill, categories, onClose, onSaved }: {
         prompt: legacyPrompt,
         categories: selectedCategories,
         skill_path: skillPath.trim() || null,
-        image_count: parseInt(imageCount) || 1,
+        image_count: Number.isFinite(Number.parseInt(imageCount, 10))
+          ? Math.max(0, Number.parseInt(imageCount, 10))
+          : 1,
         sort_order: parseInt(sortOrder) || 0,
         is_active: isActive,
         before_images: beforeImages.map(s => s.trim()).filter(Boolean),
@@ -1459,7 +1497,7 @@ function SkillEditorModal({ skill, categories, onClose, onSaved }: {
             <div className="flex-1">
               <label className="text-white/60 text-xs font-medium mb-1.5 block">Image slots</label>
               <input
-                type="number" min={1} max={10}
+                type="number" min={0} max={10}
                 value={imageCount}
                 onChange={(e) => setImageCount(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-white/5 text-white text-sm border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"

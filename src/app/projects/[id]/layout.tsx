@@ -1,6 +1,11 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import type { Metadata } from 'next'
 import { getOptimizedUrl } from '@/lib/supabase/storage'
+import { createClient } from '@/lib/supabase/server'
+import { resolveNativeVideoPlaybackUrl } from '@/lib/video-playback-url'
+import ProjectEntryPreview from '@/components/ProjectEntryPreview'
+import type { VideoMeta } from '@/types'
+import { Suspense } from 'react'
 
 type Props = { params: Promise<{ id: string }> }
 
@@ -30,40 +35,37 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default async function ProjectLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const { data } = await getSupabaseAdmin()
+async function EarlyProjectMedia({ projectId: id }: { projectId: string }) {
+  // Use the viewer's session and RLS for early media, including private projects.
+  const supabase = await createClient()
+  const { data } = await supabase
     .from('snapshots')
-    .select('image_url')
+    .select('image_url, type, video_meta, design_path')
     .eq('project_id', id)
     .order('sort_order', { ascending: false })
     .limit(1)
     .single()
 
-  const lcpUrl = data?.image_url ? getOptimizedUrl(data.image_url) : null
+  const lcpUrl = data?.image_url && data.image_url !== '/video-placeholder.png'
+    ? getOptimizedUrl(data.image_url) : null
+  const videoMeta = data?.video_meta as VideoMeta | null
+  // Edited compositions open their persisted poster, rather than the raw source video.
+  const videoSource = data?.type === 'video' && !data.design_path ? videoMeta?.videoUrl : null
+  const range = videoMeta?.sourceRange
+  const videoUrl = videoSource
+    ? `${resolveNativeVideoPlaybackUrl(videoSource).split('#')[0]}#t=${range?.start_sec || 0.001}${range ? `,${range.end_sec}` : ''}`
+    : null
 
+  return <ProjectEntryPreview projectId={id} imageUrl={lcpUrl} videoUrl={videoUrl} />
+}
+
+export default async function ProjectLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
+  const { id } = await params
   return (
     <>
-      {/* SSR skeleton: mirrors Editor layout exactly to prevent image position jump */}
-      {lcpUrl && (
-        <div id="ssr-skeleton" className="fixed inset-0 z-0 bg-black" style={{ height: '100dvh', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          {/* Desktop: flex-row (canvas left + CUI right). Mobile: flex-col (canvas + bottom bar) */}
-          <div className="w-full h-full flex flex-col lg:flex-row">
-            {/* Left: GUI panel (canvas + bottom bar) */}
-            <div className="flex-1 min-w-0 flex flex-col">
-              {/* Canvas area — slight padding so tall images (9:16) don't touch edges, hiding sub-px height mismatch with Editor */}
-              <div className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center p-[2px]">
-                { }
-                <img src={lcpUrl} alt="" className="w-full h-full object-contain" fetchPriority="high" />
-              </div>
-              {/* Bottom bar: StatusBar (46) + TipsBar/VideoCard + CategoryTabs = 166px mobile, 146px desktop */}
-              <div className="flex-shrink-0 h-[166px] lg:h-[146px]" />
-            </div>
-            {/* Right: CUI panel placeholder (desktop only) */}
-            <div className="hidden lg:block flex-shrink-0 border-l border-white/[0.08]" style={{ width: 500 }} />
-          </div>
-        </div>
-      )}
+      <Suspense fallback={null}>
+        <EarlyProjectMedia projectId={id} />
+      </Suspense>
       {children}
     </>
   )

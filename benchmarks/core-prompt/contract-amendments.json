@@ -1,0 +1,32 @@
+{
+  "src/lib/prompts/agent-coding.md": {
+    "baselineSha256": "68d78cbede74aada9f82144b80c7db5b21af7d3a308e6eafd69a947fb7d10427",
+    "sha256": "655d2d2401a5254f72e44a488f719a2a5baf316e464779ae8c4b36ac0aed27cd",
+    "reason": "Explicit requested output aspect overrides source aspect; preserve source proportions and repair in Remotion. Regression: compositionTargetAspect.test.ts."
+  },
+  "src/lib/prompts/remotion-composition.md": {
+    "baselineSha256": "92d46c86086893059985e4e5210e150f50fc0d0142fb69c8014a55217447c6c7",
+    "sha256": "3a79e4b2b562d09f7247fe30cca64ff6da666ac500b56a921b672937db4279c8",
+    "reason": "Explicit requested output aspect overrides source aspect; preserve source proportions and repair in Remotion. Regression: compositionTargetAspect.test.ts."
+  },
+  "src/lib/prompts/animate.md": {
+    "baselineSha256": "694bb707e878fdaa1487109fc5c8e059d1cd28b59f7a8109011485d0a4ecf67c",
+    "sha256": "62cfa093d17c7f4e590b13f1dfb93e60b25aca52193297473d0fdc54cc52c790",
+    "reason": "Preserve H3 Max resolution support and explicit user/app selection; an active Skill may own its workflow-specific default (Multi-Angle uses Wan 3.0 Prime 720p). General H3 Max defaults remain unchanged. Regression: agentMediaScenarioMatrix.test.ts."
+  },
+  "src/lib/prompts/image.md": {
+    "baselineSha256": "fc3ff3be94e2ce9d6921b2982a138b9a5503e1ac052426b9ceb6d5f4d0e32715",
+    "sha256": "074dc5ad03d3b93f4e07bb66a75c0b7a8109241137c09e15ca8e8c4c73388208",
+    "reason": "Retire Vast image models in the candidate: route NSFW to Qwen Spicy, map legacy Qwen to Spicy, and remove Pony/WAI selection. Preserve the prior Flare context-mode and transparency rules. Regression: vastRetirementRouting.test.ts and agentMediaScenarioMatrix.test.ts."
+  },
+  "src/lib/prompts/generate_image_tool.md": {
+    "baselineSha256": "d0dad379bc778a008f0adeaa580868085bb0cbd2483c459ed891003c12c3a3e7",
+    "sha256": "60d3a80db5bc714cd6e3b6f9114952db4b56e46364a0b5cd7f5c5f8c6fdbace6",
+    "reason": "Retire Vast image models in the candidate and route NSFW to Qwen Spicy. Preserve the prior Flare and transparent-output contracts. Regression: vastRetirementRouting.test.ts and agentMediaScenarioMatrix.test.ts."
+  },
+  "src/lib/prompts/cutout.md": {
+    "baselineSha256": "e1ffb7d39f0cad95e702d7a3971c9fdd97e4bc4f9720c7b31c7ee5ca98d6d202",
+    "sha256": "b9d61c73ed05e94e4c2d6833cc9077fdbaa70b25a157df08d6fde34b0099204a",
+    "reason": "User approved replacing Image 2 defaults with FAL GPT Image 2.5 Flare on 2026-09-10. Preserve context-mode briefs and transparent fidelity rules; migrate model names, proactive product/design routing and remove stale fixed latency promises. Regression: agentPromptPolicy.test.ts, agentMediaScenarioMatrix.test.ts, modelRouterTransparency.test.ts; 13 real scenario outputs reviewed."
+  }
+}

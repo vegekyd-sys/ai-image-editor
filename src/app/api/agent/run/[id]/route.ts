@@ -8,6 +8,10 @@ import { dispatchAgentExecutionAttempt } from '@/lib/agent-execution-dispatch';
 import { extractStudioDeliveryVideo } from '@/lib/agent-run-artifacts';
 import { resolveWorkspaceFile } from '@/lib/workspace';
 import { normalizeLocale, translate } from '@/lib/locales';
+import { getRunUsage } from '@/lib/billing/run-usage';
+import { getBalance } from '@/lib/billing/credits';
+
+export const maxDuration = 300;
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
 
@@ -65,15 +69,25 @@ function dedupeLegacyVideos<T extends { videoUrl?: string; taskId?: string }>(it
   return result;
 }
 
-async function pollVideoProvider(taskId: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
+async function pollVideoProvider(taskId: string, userId?: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string } & Partial<import('@/lib/skills/get-video-status').GetVideoStatusResult>> {
   const isEvolink = taskId.startsWith('task-unified-');
+  const isMuleRouter = taskId.startsWith('mr-wan30-');
   const isSeedance = taskId.startsWith('cgt-');
   const isMotionControl = taskId.startsWith('mc-');
   const isXai = taskId.startsWith('xai-');
   const isGoogleOmni = taskId.startsWith('google-omni-');
+  const isMinimax = taskId.startsWith('minimax-h3-');
+  const isFalH3Max = taskId.startsWith('fal-h3max-');
+  const isSyncLipsync = taskId.startsWith('sync3-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
-  if (isEvolink) {
+  if (taskId.startsWith('video-pipeline-')) {
+    const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline');
+    return { taskId, ...await advanceVideoPipeline(taskId, userId) };
+  } else if (isMuleRouter) {
+    const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video');
+    return getMuleRouterVideoTask(taskId);
+  } else if (isEvolink) {
     const { getEvolinkTask } = await import('@/lib/evolink');
     return getEvolinkTask(taskId);
   } else if (isSeedance) {
@@ -85,10 +99,19 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
     return { ...result, taskId };
   } else if (isXai) {
     const { getXaiVideoTask } = await import('@/lib/xai-video');
-    return getXaiVideoTask(taskId);
+    return getXaiVideoTask(taskId, userId);
   } else if (isGoogleOmni) {
     const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video');
     return getGoogleOmniVideoTask(taskId);
+  } else if (isMinimax) {
+    const { getMinimaxVideoTask } = await import('@/lib/minimax-video');
+    return getMinimaxVideoTask(taskId);
+  } else if (isFalH3Max) {
+    const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video');
+    return getFalH3MaxVideoTask(taskId);
+  } else if (isSyncLipsync) {
+    const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync');
+    return getSyncLipsyncTask(taskId);
   } else {
     const { getKlingTask } = await import('@/lib/kling');
     return getKlingTask(taskId);
@@ -114,14 +137,42 @@ export async function GET(
   try {
     const { id: runId } = await params;
     const admin = getSupabaseAdmin();
-    const authResult = await authenticateRequest(req);
+    const url = new URL(req.url);
+    const wantEvents = url.searchParams.get('events') === 'true';
+    const wantUsage = url.searchParams.get('usage') === 'true';
+    const streamView = wantEvents && url.searchParams.get('view') === 'stream';
+    const afterSeq = url.searchParams.has('after') ? parseInt(url.searchParams.get('after')!) : undefined;
+
+    let streamEventsQuery = admin
+      .from('agent_events')
+      .select('type, data, seq, created_at')
+      .eq('run_id', runId)
+      .order('seq')
+      .limit(1000);
+    if (afterSeq !== undefined) streamEventsQuery = streamEventsQuery.gt('seq', afterSeq);
+
+    // Authentication, run ownership, and incremental events are independent
+    // reads. Start them together so the CUI stream view costs one network
+    // round-trip instead of serializing the same Supabase latency.
+    const [authResult, runResult, streamEventsResult, latestStreamEventResult] = await Promise.all([
+      authenticateRequest(req),
+      admin.from('agent_runs')
+        .select('id, status, prompt, started_at, ended_at, metadata, project_id, user_id, execution_policy, lease_expires_at, next_attempt_at, projects(is_public)')
+        .eq('id', runId)
+        .single(),
+      streamView ? streamEventsQuery : Promise.resolve({ data: undefined, error: null }),
+      streamView
+        ? admin.from('agent_events')
+            .select('created_at')
+            .eq('run_id', runId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        : Promise.resolve({ data: undefined, error: null }),
+    ]);
     const authUserId = 'auth' in authResult ? authResult.auth.userId : null;
     const hasBearerAuth = req.headers.get('authorization')?.startsWith('Bearer ') ?? false;
-
-    const { data: run } = await admin.from('agent_runs')
-      .select('id, status, prompt, started_at, ended_at, metadata, project_id, user_id, execution_policy, lease_expires_at, next_attempt_at, projects(is_public)')
-      .eq('id', runId)
-      .single();
+    const run = runResult.data;
 
     if (!run) {
       return NextResponse.json({ error: 'Run not found' }, { status: 404 });
@@ -135,18 +186,24 @@ export async function GET(
     }
     if (hasBearerAuth && 'error' in authResult) return authResult.error;
     const ownerUserId = run.user_id as string;
+    const locale = normalizeLocale(
+      (run.metadata as Record<string, unknown> | null)?.locale as string | undefined,
+      'en',
+    );
 
     // A platform hard-kill cannot run route finally blocks. Heartbeats make
     // that failure observable: after the lease expires, atomically close the
     // run and preserve the latest saved write_file draft as a resume point.
     if (run.status === 'running') {
-      const { data: lastEvent } = await admin
-        .from('agent_events')
-        .select('created_at')
-        .eq('run_id', runId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data: lastEvent } = streamView
+        ? latestStreamEventResult
+        : await admin
+            .from('agent_events')
+            .select('created_at')
+            .eq('run_id', runId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
       const lastActivityAt = Date.parse(lastEvent?.created_at || run.started_at || '') || 0;
       if (lastActivityAt > 0 && Date.now() - lastActivityAt > getAgentRunStaleMs()) {
         const executionPolicy = run.execution_policy as Record<string, unknown> | null;
@@ -174,10 +231,6 @@ export async function GET(
         const draftPath = (draftRows || [])
           .map((row: { output?: unknown }) => extractSavedDraftPath(row.output))
           .find(Boolean);
-        const locale = normalizeLocale(
-          (run.metadata as Record<string, unknown> | null)?.locale as string | undefined,
-          'en',
-        );
         const message = draftPath
           ? translate(locale, 'agent.error.runtimeDraftSaved')
           : translate(locale, 'agent.error.runtimeNoDraft');
@@ -202,9 +255,19 @@ export async function GET(
       }
     }
 
-    const url = new URL(req.url);
-    const wantEvents = url.searchParams.get('events') === 'true';
-    const afterSeq = url.searchParams.has('after') ? parseInt(url.searchParams.get('after')!) : undefined;
+    if (streamView) {
+      const metadata = (run.metadata as Record<string, unknown> | null) ?? {};
+      const terminal = metadata.terminal as { message?: string } | undefined;
+      return NextResponse.json({
+        id: run.id,
+        status: run.status,
+        ...(run.status !== 'running' ? { agent_status: run.status } : {}),
+        first_message_id: metadata.firstMessageId,
+        events: streamEventsResult.data ?? [],
+        ...(run.status === 'running' ? { next_poll_after_ms: 250 } : {}),
+        ...(terminal?.message ? { error: { code: 'agent_error', message: terminal.message } } : {}),
+      });
+    }
 
     const { count: eventCount } = await admin
       .from('agent_events')
@@ -513,7 +576,7 @@ export async function GET(
             } else if (videoMeta.status === 'failed') {
               v.status = 'failed';
               v.error = videoMeta.error;
-              v.completion_actions = buildVideoFailureActions(videoMeta);
+              v.completion_actions = buildVideoFailureActions(videoMeta, locale);
             } else if (videoMeta.status === 'processing' && videoMeta.taskId) {
               if (typeof videoMeta.taskId === 'string' && videoMeta.taskId.startsWith('google-omni-job-') && !videoMeta.videoUrl && !videoMeta.providerUrl) {
                 v.status = 'rendering';
@@ -525,9 +588,9 @@ export async function GET(
               // Actively poll provider API
               try {
                 const taskId = videoMeta.taskId as string;
-                const pollResult = await pollVideoProvider(taskId);
+                const pollResult = await pollVideoProvider(taskId, ownerUserId);
                 if (pollResult.status === 'completed' && pollResult.videoUrl) {
-                  const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl };
+                  const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl, ...(pollResult.stage ? { pipelineStage: pollResult.stage, baseVideoUrl: pollResult.baseVideoUrl, enhancementStatus: pollResult.enhancementStatus, requestedResolution: pollResult.requestedResolution, resolution: pollResult.actualResolution ?? videoMeta.resolution } : {}) };
                   await admin.from('snapshots')
                     .update({ video_meta: updatedMeta })
                     .eq('id', v.snapshot_id);
@@ -574,7 +637,7 @@ export async function GET(
                   await handleVideoFailure(v.snapshot_id, pollResult.error);
                   v.status = 'failed';
                   v.error = pollResult.error;
-                  v.completion_actions = buildVideoFailureActions({ ...videoMeta, status: 'failed', error: pollResult.error });
+                  v.completion_actions = buildVideoFailureActions({ ...videoMeta, status: 'failed', error: pollResult.error }, locale);
                 } else {
                   v.status = 'rendering';
                   if (videoMeta.createdAt) {
@@ -593,7 +656,7 @@ export async function GET(
                 v.completion_actions = videoMeta.completionActions;
               }
               if (videoMeta.status === 'failed') {
-                v.completion_actions = buildVideoFailureActions(videoMeta);
+                v.completion_actions = buildVideoFailureActions(videoMeta, locale);
               }
             }
             return;
@@ -609,7 +672,7 @@ export async function GET(
             if (anim.status === 'processing') {
               try {
                 const taskId = v.task_id as string;
-                const result = await pollVideoProvider(taskId);
+                const result = await pollVideoProvider(taskId, ownerUserId);
                 if (result.status === 'completed' && result.videoUrl) {
                   const admin = getSupabaseAdmin();
                   await admin.from('project_animations')
@@ -761,6 +824,17 @@ export async function GET(
       events = data ?? [];
     }
 
+    // Per-run credit usage. Included once the Agent has stopped (charges are
+    // awaited before the run turns terminal) or on request with ?usage=true.
+    let usage: Awaited<ReturnType<typeof getRunUsage>> | undefined;
+    if (agentDone || wantUsage) {
+      const [summary, balance] = await Promise.all([
+        getRunUsage(admin, runId),
+        getBalance(run.user_id).then(result => result.balance).catch(() => undefined),
+      ]);
+      usage = typeof balance === 'number' ? { ...summary, balance } : summary;
+    }
+
     return NextResponse.json({
       id: run.id,
       status: effectiveStatus,
@@ -772,10 +846,15 @@ export async function GET(
       created_at: run.started_at,
       completed_at: run.ended_at,
       ...(nextPollAfterMs ? { next_poll_after_ms: nextPollAfterMs } : {}),
-      ...(agentDone && hasPendingArtifacts ? { agent_status: 'completed' } : {}),
+      // Agent execution and async artifacts have separate lifecycles. The
+      // aggregate status stays in_progress while video/music renders, but CUI
+      // clients must be able to release the composer as soon as the agent
+      // itself has stopped.
+      ...(agentDone ? { agent_status: run.status } : {}),
       output: finalOutput,
       eventCount: eventCount ?? 0,
       result, // legacy
+      ...(usage ? { usage } : {}),
       ...(errorMsg ? { error: { code: 'agent_error', message: errorMsg } } : {}),
       ...(events ? { events } : {}),
     });

@@ -1,9 +1,9 @@
 ---
 name: localization-dub
 description: >
-  Translate an existing video into subtitle, dub, or subtitle-plus-dub variants
-  while preserving source timing, protected terms, claims, and editable layout.
-allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio list_voiceover_voices generate_voiceover generate_audio run_code write_file preview_frame materialize_media
+  Produce multi-locale subtitle, dub, or subtitle-plus-dub variants from one
+  accepted source; use video-translate for the single-video translation route.
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
     icon: "文"
@@ -27,13 +27,15 @@ metadata:
 
 # Localization Dub
 
-Use for translated subtitles, dubbed versions, or both. This is transcript-first
-localization, not lip sync unless a real lip-sync path is explicitly available.
+Use for campaign-style locale variants, subtitle-only variants, or multiple
+language deliverables from one accepted source. For one translated video,
+including Talking Head or VO replacement, read and follow
+`skills/video-translate/SKILL.md` as the provider and timing contract.
 
 ## Workflow
 
 1. Read `skills/_shared/studio-production/production-contract.md`, the shared
-   audio and review contracts.
+   audio and review contracts, then `skills/video-translate/SKILL.md`.
 2. Start recipe `localization-dub`; lock source language, target locale(s),
    subtitle/dub mode, voice expectation, and source runtime.
 3. Analyze and transcribe the source. The brief lists protected product names,
@@ -42,8 +44,10 @@ localization, not lip sync unless a real lip-sync path is explicitly available.
    must preserve claims and source structure.
 5. The script artifact contains timed translated cues. Favor natural spoken
    language over literal syntax without changing meaning.
-6. For dubbing, choose and sample a voice, then fit phrasing to source timing.
-   Rewrite cues that drift more than 10% instead of extending the video.
+6. Follow `video-translate` independently for each locale: off-screen VO uses
+   Seed Audio, while a visible talking head uses SeeDance 2.0 after the source
+   edit. Fit phrasing to source timing; rewrite cues that drift more than 10%
+   instead of extending the video.
 7. Storyboard dense subtitle frames and final legal/CTA frames. Account for
    longer target-language lines and safe areas.
 8. Compose locale variants in Remotion, preview dense text and closing copy,

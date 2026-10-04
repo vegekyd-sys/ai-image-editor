@@ -27,8 +27,24 @@ const APP_URL = process.env.MAKARON_APP_URL || DEFAULT_URL;
 const NPM_PACKAGE_NAME = 'makaron-cli';
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_CHECK_TIMEOUT_MS = 400;
-const AGENT_MODELS = ['auto', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'grok-4.5', 'deepseek-v4-pro'];
 const AGENT_WAIT_TIMEOUT_SECONDS = Math.max(900, Number(process.env.MAKARON_AGENT_WAIT_TIMEOUT_SECONDS || 10_800));
+const CHAT_AGENT_MODELS = [
+  'auto',
+  'gpt-6-luna',
+  'gpt-6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-sol',
+  'gpt-5.6-luna',
+  'gpt-6-luna-codex-subscription',
+  'gpt-6-sol-codex-subscription',
+  'gpt-5.6-terra-codex-subscription',
+  'gpt-5.6-sol-codex-subscription',
+  'gpt-5.6-luna-codex-subscription',
+  'grok-4.6',
+  'grok-4.6-grok-subscription',
+  'deepseek-v4-pro',
+  'deepseek-flash',
+];
 
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
@@ -36,7 +52,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_FJFN2YYaWaQjABUKLqxQcA_fhxPLFDY';
 
 const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 50;
 const MAX_VIDEO_UPLOAD_FILE_SIZE = MAX_VIDEO_UPLOAD_FILE_SIZE_MB * 1024 * 1024;
-const MAX_VIDEO_UPLOAD_DURATION = 120;
+const MAX_VIDEO_UPLOAD_DURATION = 900;
 const MAX_VIDEO_UPLOAD_DURATION_TOLERANCE = 1;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE = 0.5;
@@ -46,19 +62,27 @@ const MAX_AUDIO_REFERENCE_DURATION_TOLERANCE = 0.5;
 const MAX_AUDIO_REFERENCE_FILE_SIZE_MB = 15;
 const MAX_AUDIO_REFERENCE_FILE_SIZE = MAX_AUDIO_REFERENCE_FILE_SIZE_MB * 1024 * 1024;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
+const SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION = 30;
+const SEEDANCE25_MAX_VIDEO_FRAME_PIXELS = 8_295_044;
 const SEEDANCE_MIN_VIDEO_FRAME_PIXELS = 409_600;
 const SEEDANCE_MIN_VIDEO_SIDE = 300;
 const SEEDANCE_MAX_VIDEO_SIDE = 6000;
 const SEEDANCE_MIN_VIDEO_ASPECT = 0.4;
 const SEEDANCE_MAX_VIDEO_ASPECT = 2.5;
+const MINIMAX_H3_MIN_VIDEO_SIDE = 256;
+const MINIMAX_H3_MAX_VIDEO_SIDE = 5760;
+const MULEROUTER_WAN_MAX_VIDEO_SIDE = 4096;
+const MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE = 100 * 1024 * 1024;
 
 function warnLegacyModelFlag(replacement) {
   process.stderr.write(`⚠️  --model is deprecated here; use ${replacement}.\n`);
 }
 
-function validateAgentModel(value) {
-  if (!AGENT_MODELS.includes(value)) {
-    process.stderr.write(`❌ Unknown agent model: ${value}\nChoose one of: ${AGENT_MODELS.join(', ')}\n`);
+function validateChatAgentModel(value) {
+  if (!value || !CHAT_AGENT_MODELS.includes(value)) {
+    process.stderr.write(`❌ Unknown Agent LLM: ${value || '(missing value)'}\n`);
+    process.stderr.write(`Choose one of: ${CHAT_AGENT_MODELS.join(', ')}\n`);
+    process.stderr.write('--agent-model selects only the Agent LLM. Put image/video model preferences in the chat prompt, or use the explicit edit/video commands.\n');
     process.exit(1);
   }
   return value;
@@ -161,6 +185,76 @@ function readJsonInput(filePath) {
   return JSON.parse(raw);
 }
 
+const MAX_MEDIA_MANIFEST_ITEMS = 20;
+
+function normalizeMediaManifest(input) {
+  const manifest = Array.isArray(input) ? { clips: input } : input;
+  if (!manifest || typeof manifest !== 'object') {
+    throw new Error('Media manifest must be a JSON object or an array of media items.');
+  }
+  const rawRanges = Array.isArray(manifest.clips) ? manifest.clips : null;
+  if (!rawRanges?.length) {
+    throw new Error('Media manifest must contain a non-empty clips array.');
+  }
+  if (rawRanges.length > MAX_MEDIA_MANIFEST_ITEMS) {
+    throw new Error(`Media manifest supports at most ${MAX_MEDIA_MANIFEST_ITEMS} media items per Makaron task.`);
+  }
+
+  const sourceRanges = rawRanges.map((raw, index) => {
+    if (!raw || typeof raw !== 'object') throw new Error(`clips[${index}] must be an object.`);
+    const sourceUrl = typeof raw.source_url === 'string' ? raw.source_url.trim() : '';
+    let parsed;
+    try {
+      parsed = new URL(sourceUrl);
+    } catch {
+      throw new Error(`clips[${index}].source_url must be a valid HTTP(S) URL.`);
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error(`clips[${index}].source_url must use HTTP or HTTPS.`);
+    }
+    const declaredType = raw.type;
+    if (declaredType !== 'image' && declaredType !== 'video') {
+      throw new Error(`clips[${index}].type must be image or video.`);
+    }
+    const description = typeof raw.description === 'string' ? raw.description.trim() : '';
+    if (declaredType === 'image') {
+      if (raw.start !== undefined || raw.end !== undefined || raw.start_sec !== undefined || raw.end_sec !== undefined) {
+        throw new Error(`clips[${index}] image items must not include start or end.`);
+      }
+      return { source_url: sourceUrl, type: 'image', description };
+    }
+    const start = Number(raw.start);
+    const end = Number(raw.end);
+    if (!Number.isFinite(start) || start < 0) {
+      throw new Error(`clips[${index}].start must be a finite number >= 0.`);
+    }
+    if (!Number.isFinite(end) || end <= start) {
+      throw new Error(`clips[${index}].end must be greater than start.`);
+    }
+    return {
+      source_url: sourceUrl,
+      type: declaredType,
+      start,
+      end,
+      description,
+    };
+  });
+
+  return {
+    sourceRanges,
+    title: typeof manifest.title === 'string' && manifest.title.trim() ? manifest.title.trim() : undefined,
+  };
+}
+
+function readMediaManifest(filePath) {
+  try {
+    return normalizeMediaManifest(readJsonInput(filePath));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid media manifest: ${message}`);
+  }
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 function loadAuth() {
@@ -214,11 +308,14 @@ async function login() {
   console.error(`   Token saved to ${AUTH_FILE}`);
 }
 
+// Identifies makaron-cli to the API so credit usage is recorded with source=cli.
+const CLIENT_HEADER = { 'X-Makaron-Client': `makaron-cli/${getCliVersion()}` };
+
 function getAuth() {
   const apiKey = process.env.MAKARON_API_KEY;
   if (apiKey) {
     return {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
+      headers: { ...CLIENT_HEADER, 'Authorization': `Bearer ${apiKey}` },
       baseUrl: process.env.MAKARON_URL || DEFAULT_URL,
     };
   }
@@ -232,14 +329,57 @@ function getAuth() {
   // Registered via `register --verify` (saved as _apiKey)
   if (auth._apiKey) {
     return {
-      headers: { 'Authorization': `Bearer ${auth._apiKey}` },
+      headers: { ...CLIENT_HEADER, 'Authorization': `Bearer ${auth._apiKey}` },
       baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL,
     };
   }
   return {
-    headers: { 'Cookie': buildCookie(auth) },
+    headers: { ...CLIENT_HEADER, 'Cookie': buildCookie(auth) },
     baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL,
   };
+}
+
+// ─── Credit usage ───────────────────────────────────────────────────────────
+
+/** One-line credit summary for a run's `usage` object (null when nothing was charged). */
+function formatRunUsage(usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  const entries = Array.isArray(usage.entries) ? usage.entries : [];
+  const net = Number(usage.credits_net ?? 0);
+  const refunded = Number(usage.credits_refunded ?? 0);
+  if (net === 0 && refunded === 0 && entries.length === 0) return null;
+  const parts = entries.filter(e => Number(e.credits) !== 0).map(e => `${e.tool_name} ${e.credits}`);
+  let line = `${net} credits used`;
+  if (parts.length) line += ` (${parts.join(' · ')})`;
+  if (refunded > 0) line += ` · ${refunded} refunded`;
+  if (typeof usage.balance === 'number') line += ` · balance ${usage.balance}`;
+  return line;
+}
+
+function printRunUsage(usage) {
+  const line = formatRunUsage(usage);
+  if (line) process.stderr.write(`💳  ${line}\n`);
+}
+
+/** Fetch the usage summary of a run (used after legacy --stream chats). */
+async function fetchRunUsage(baseUrl, headers, runId) {
+  if (!runId) return null;
+  try {
+    const res = await fetch(`${baseUrl}/api/agent/run/${runId}?usage=true`, { headers });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.usage || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Print credits charged by a direct MCP tool call (edit / video / music / analyze). */
+function printMcpCharge(res) {
+  const charged = Number(res.headers.get('X-Credits-Charged'));
+  if (!Number.isFinite(charged) || charged <= 0) return;
+  const remaining = Number(res.headers.get('X-Credits-Remaining'));
+  process.stderr.write(`💳  ${charged} credits used${Number.isFinite(remaining) ? ` · balance ${remaining}` : ''}\n`);
 }
 
 function normalizeRunResponse(data) {
@@ -247,6 +387,86 @@ function normalizeRunResponse(data) {
   if (projectId) {
     data.projectId = projectId;
     data.projectUrl = `${APP_URL}/projects/${projectId}`;
+  }
+  return data;
+}
+
+function projectMediaIdentity(item) {
+  const snapshotId = item?.snapshot_id || item?.snapshotId;
+  const taskId = item?.task_id || item?.taskId;
+  return {
+    snapshotId: typeof snapshotId === 'string' && snapshotId ? snapshotId : null,
+    taskId: typeof taskId === 'string' && taskId ? taskId : null,
+  };
+}
+
+function findMatchingCompletedProjectVideo(item, media) {
+  const identity = projectMediaIdentity(item);
+  if (!identity.snapshotId && !identity.taskId) return null;
+  return (media || []).find(candidate => {
+    if (candidate?.type !== 'video' || candidate?.status !== 'completed' || !candidate?.url) return false;
+    const candidateIdentity = projectMediaIdentity(candidate);
+    return (identity.snapshotId && candidateIdentity.snapshotId === identity.snapshotId)
+      || (identity.taskId && candidateIdentity.taskId === identity.taskId);
+  }) || null;
+}
+
+async function reconcileRunWithProjectMedia(baseUrl, headers, data) {
+  normalizeRunResponse(data);
+  const output = Array.isArray(data.output) ? data.output : [];
+  const pendingVideos = output.filter(item =>
+    item?.type === 'video' && (item.status === 'queued' || item.status === 'rendering')
+  );
+  const agentDone = data.agent_status === 'completed'
+    || (data.status === 'in_progress' && data.incomplete === true);
+  if (!agentDone || pendingVideos.length === 0 || !data.projectId) return data;
+
+  let projectMedia;
+  try {
+    const res = await fetch(`${baseUrl}/api/projects/${data.projectId}/media`, { headers });
+    if (!res.ok) return data;
+    projectMedia = await res.json();
+  } catch {
+    return data;
+  }
+
+  let reconciled = false;
+  for (const item of pendingVideos) {
+    const completed = findMatchingCompletedProjectVideo(item, projectMedia.media);
+    if (!completed) continue;
+    const identity = projectMediaIdentity(completed);
+    item.status = 'completed';
+    item.url = completed.url;
+    if (identity.snapshotId) item.snapshot_id = identity.snapshotId;
+    if (identity.taskId) item.task_id = identity.taskId;
+    if (completed.posterUrl) item.poster_url = completed.posterUrl;
+    for (const field of ['duration', 'width', 'height']) {
+      if (typeof completed[field] === 'number') item[field] = completed[field];
+    }
+
+    const legacyVideos = Array.isArray(data.result?.videos) ? data.result.videos : [];
+    const legacy = legacyVideos.find(video => {
+      const legacyIdentity = projectMediaIdentity(video);
+      return (identity.snapshotId && legacyIdentity.snapshotId === identity.snapshotId)
+        || (identity.taskId && legacyIdentity.taskId === identity.taskId);
+    });
+    if (legacy) {
+      legacy.status = 'completed';
+      legacy.videoUrl = completed.url;
+      if (identity.snapshotId && !legacy.snapshotId) legacy.snapshotId = identity.snapshotId;
+    }
+    reconciled = true;
+  }
+
+  if (!reconciled) return data;
+  const pendingArtifacts = output.some(item =>
+    (item?.type === 'video' || item?.type === 'music')
+    && (item.status === 'queued' || item.status === 'rendering')
+  );
+  if (!pendingArtifacts) {
+    data.status = 'completed';
+    data.incomplete = false;
+    delete data.next_poll_after_ms;
   }
   return data;
 }
@@ -290,15 +510,23 @@ Options:
   --image <file|url>        Attach a reference image or screenshot. Repeatable.
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
+  --media-manifest <file|-> Import typed image/video media before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
-  --image-model <name>      Image model: gemini, gemini-lite, qwen, openai, pony, or wai.
-  --video-model <name>      Preferred video model: seedance-fast, seedance-mini, seedance, kling, grok, or google-omni.
-  --agent-model <name>      Agent model: auto, gpt-5.6-terra, gpt-5.6-sol, gpt-5.6-luna, grok-4.5, or deepseek-v4-pro.
-  --video-resolution <res>  Video resolution: auto, 480p, 720p, 1080p, or 4k.
+  --agent-model <id>        Agent LLM only: auto, gpt-6-luna, gpt-6-sol, gpt-5.6-terra, gpt-5.6-sol,
+                            gpt-5.6-luna, grok-4.6, deepseek-v4-pro, deepseek-flash, or a
+                            gpt-6-*-codex-subscription, gpt-5.6-*-codex-subscription or
+                            grok-4.6-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.
-  --json                    Output structured JSON.
+  --json                    Output structured JSON (includes per-run "usage" credits).
   --stream                  Legacy live SSE stream.
   --help, -h                Show this help.
+
+Agent LLM defaults to auto (GPT-6 Luna through the Codex subscription for
+eligible accounts, including admins, or Azure API otherwise). GPT-5.6 and GPT-6
+base ids select Azure API; append -codex-subscription to
+select the personal plan explicitly. Base grok-4.6 selects OpenRouter API;
+grok-4.6-grok-subscription selects the personal SuperGrok plan. Image/video
+model routing stays automatic in chat.
 
 What you can ask:
   Image edit
@@ -313,17 +541,34 @@ What you can ask:
   Marketplace skill
     makaron chat --project auto --image selfie.jpg --skill "Football Captain" "make this cinematic"
 
+  Built-in production skill
+    makaron skills list --built-in
+    makaron skills show talking-head --built-in
+    makaron chat --project auto --video talk.mp4 --skill talking-head "make a tight captioned edit"
+
   Fix one video moment from a screenshot
     makaron chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"
 
   Video cuts and assembly
     makaron chat --project <id> --video clip.mp4 "cut out the dead air and keep the best 20 seconds"
 
+  Agent-to-agent source-range handoff
+    makaron chat --project auto --media-manifest set-01.json -b --json "make a 30s vertical video"
+
+  Compare Agent LLMs with identical inputs
+    makaron chat --project auto --agent-model deepseek-v4-pro -b --json "make a 20s badminton video"
+
+  Force the personal Codex plan
+    makaron chat --project auto --agent-model gpt-6-luna-codex-subscription -b --json "reply with the active model"
+
+  Force the personal SuperGrok plan
+    makaron chat --project auto --agent-model grok-4.6-grok-subscription -b --json "reply with the active model"
+
   Music
     makaron chat --project <id> "add calm piano background music"
 
   Reference audio / beat sync
-    makaron chat --project auto --audio beat.mp3 --video-model seedance-fast --video-resolution 480p "用这个音乐做卡点视频"
+    makaron chat --project auto --audio beat.mp3 "用 Seedance Mini 480p 做卡点视频"
     makaron chat --project <id> --audio https://example.com/beat.mp3 "add this as the soundtrack"
 
   Motion design
@@ -360,10 +605,7 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
       projectId,
       prompt,
       headless: true,
-      ...(opts.preferredModel ? { preferredModel: opts.preferredModel } : {}),
-      ...(opts.videoModel ? { videoModel: opts.videoModel } : {}),
-      ...(opts.videoResolution ? { videoResolution: opts.videoResolution } : {}),
-      ...(opts.agentModel && opts.agentModel !== 'auto' ? { agentModel: opts.agentModel } : {}),
+      ...(opts.agentModel ? { agentModel: opts.agentModel } : {}),
       ...(opts.uploadedVideoCount ? { uploadedVideoCount: opts.uploadedVideoCount } : {}),
       ...(opts.turnMediaCount ? { turnMediaCount: opts.turnMediaCount } : {}),
     }),
@@ -472,10 +714,7 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
 
 async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
   const body = { projectId, prompt };
-  if (opts.preferredModel) body.preferredModel = opts.preferredModel;
-  if (opts.agentModel && opts.agentModel !== 'auto') body.agentModel = opts.agentModel;
-  if (opts.videoModel) body.videoModel = opts.videoModel;
-  if (opts.videoResolution) body.videoResolution = opts.videoResolution;
+  if (opts.agentModel) body.agentModel = opts.agentModel;
   if (opts.currentSnapshotIndex != null) body.currentSnapshotIndex = opts.currentSnapshotIndex;
   if (opts.isNsfw) body.isNsfw = opts.isNsfw;
   if (opts.audioAttachments?.length) body.audioAttachments = opts.audioAttachments;
@@ -528,6 +767,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         continue;
       }
       data = await res.json();
+      data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
     } catch {
       continue;
     }
@@ -622,6 +862,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
           if (data.result.error) process.stderr.write(`❌  ${data.result.error}\n`);
         }
         process.stderr.write(`🔗  ${APP_URL}/projects/${data.projectId}\n`);
+        printRunUsage(data.usage);
       }
 
       if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
@@ -655,6 +896,8 @@ function applyPick(data, field) {
     case 'studio_run': return [...(data.output || [])].reverse().find(o => o.type === 'studio_run') || null;
     case 'studio_recipe': return [...(data.output || [])].reverse().find(o => o.type === 'studio_run')?.recipe || null;
     case 'project_url': return data.project_url || data.projectUrl || null;
+    case 'usage': return data.usage || null;
+    case 'credits_used': return typeof data.usage?.credits_net === 'number' ? data.usage.credits_net : null;
     case 'output': return data.output || [];
     case 'text': return data.output?.find(o => o.type === 'text')?.content || null;
     case 'status': return data.status;
@@ -680,6 +923,7 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
         continue;
       }
       data = await res.json();
+      data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
     } catch {
       await new Promise(r => setTimeout(r, interval));
       continue;
@@ -705,7 +949,8 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
 
     // Check terminal status
     if (!data.incomplete && (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted')) {
-      if (jsonl) console.log(JSON.stringify({ event: 'done', status: data.status }));
+      if (jsonl) console.log(JSON.stringify({ event: 'done', status: data.status, ...(data.usage ? { usage: data.usage } : {}) }));
+      else printRunUsage(data.usage);
       if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
       process.exit(0);
     }
@@ -840,9 +1085,36 @@ async function listProjectMedia(baseUrl, headers, projectId, opts = {}) {
     const status = item.status && item.status !== 'completed' ? ` ${item.status}` : '';
     const duration = typeof item.duration === 'number' ? ` ${item.duration}s` : '';
     const dimensions = item.width && item.height ? ` ${item.width}x${item.height}` : '';
-    const description = item.description ? ` — ${item.description}` : '';
+    const description = item.description ? ` — ${String(item.description).replace(/\s*\n\s*/g, ' | ')}` : '';
+    const sourceRange = item.source_range || item.sourceRange;
+    const range = sourceRange
+      ? ` source ${formatSeconds(sourceRange.start_sec)}-${formatSeconds(sourceRange.end_sec)}s`
+      : '';
     const url = item.url ? `\n      ${item.url}` : '';
-    console.log(`  ${String(item.index).padStart(2)}. ${ref} [${item.type}${status}${duration}${dimensions}]${description}${url}`);
+    console.log(`  ${String(item.index).padStart(2)}. ${ref} [${item.type}${status}${duration}${dimensions}${range}]${description}${url}`);
+  }
+  return data;
+}
+
+async function addProjectMediaSourceRanges(baseUrl, headers, projectId, ranges, opts = {}) {
+  const res = await fetch(`${baseUrl}/api/projects/${projectId}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ clips: ranges }),
+  });
+  if (!res.ok) { console.error('Project media add failed:', await res.text()); process.exit(1); }
+  const data = await res.json();
+  if (opts.json && !opts.silent) {
+    console.log(JSON.stringify(data, null, 2));
+    return data;
+  }
+  if (!opts.silent) {
+    for (const item of data.media || []) {
+      const range = item.type === 'video' && Number.isFinite(item.start_sec) && Number.isFinite(item.end_sec)
+        ? ` ${formatSeconds(item.start_sec)}-${formatSeconds(item.end_sec)}s`
+        : '';
+      console.log(`${item.ref} [${item.type || 'media'}] ${item.source_url}${range}${item.created ? '' : ' (existing)'}`);
+    }
   }
   return data;
 }
@@ -888,7 +1160,7 @@ async function exportComposition(baseUrl, headers, opts = {}) {
     designPath: opts.designPath,
     design: opts.design,
     outputType: opts.outputType || 'video',
-    renderProfile: opts.renderProfile || 'fast_720p',
+    renderProfile: opts.renderProfile || 'source',
     publish: opts.publish === true,
     name: opts.name,
   };
@@ -1071,12 +1343,29 @@ async function fetchBuiltInSkills(baseUrl) {
   return (data.skills || []).filter(skill => skill.builtIn);
 }
 
-function printBuiltInSkills(skills) {
+function isDiscoverableBuiltInSkill(skill) {
+  return skill.userSelectable !== false || skill.manifestVisible === true;
+}
+
+function builtInSkillSearchText(skill) {
+  return [
+    skill.name,
+    skill.label,
+    skill.description,
+    skill.studioRunRecipe,
+    skill.studioRunProfile,
+    skill.canonicalSkill,
+    ...(Array.isArray(skill.tags) ? skill.tags : []),
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function printBuiltInSkills(skills, opts = {}) {
   if (!skills.length) {
     console.log('No built-in skills found.');
     return;
   }
-  console.log(`Built-in skills: ${skills.length}\n`);
+  const heading = opts.heading || 'Built-in skills';
+  console.log(`${heading}: ${skills.length}\n`);
   for (const skill of skills) {
     const recipe = skill.studioRunRecipe ? `  [Studio Run: ${skill.studioRunRecipe}]` : '';
     const source = skill.sourceMediaRequired ? '  [source media required]' : '';
@@ -1086,6 +1375,30 @@ function printBuiltInSkills(skills) {
     console.log(`  ${skill.name}${recipe}${source}${adapter}`);
     if (skill.description) console.log(`    ${String(skill.description).replace(/\s+/g, ' ').trim()}`);
   }
+  if (opts.hint !== false) {
+    console.log('\nInspect and use a skill:');
+    console.log('  makaron skills show <name> --built-in');
+    console.log('  makaron chat --project auto --skill <name> "your request"');
+  }
+}
+
+function printBuiltInSkill(skill) {
+  const description = String(skill.description || '').replace(/\s+/g, ' ').trim();
+  console.log(`${skill.label || skill.name} (${skill.name})`);
+  if (description) console.log(`\nPurpose:\n  ${description}`);
+  console.log('\nBest input:');
+  console.log(`  ${skill.inputHint || (skill.sourceMediaRequired ? 'Source media is required. Attach it with --video, --image, or --audio as appropriate.' : 'Start from a clear brief; attach source media when the request depends on existing footage or assets.')}`);
+  if (skill.studioRunRecipe || skill.studioRunProfile) {
+    console.log('\nWorkflow:');
+    if (skill.studioRunRecipe) console.log(`  Studio Run recipe: ${skill.studioRunRecipe}`);
+    if (skill.studioRunProfile) console.log(`  Profile: ${skill.studioRunProfile}`);
+  }
+  if (Array.isArray(skill.tags) && skill.tags.length) {
+    console.log(`\nKeywords:\n  ${skill.tags.join(', ')}`);
+  }
+  console.log('\nUse with chat:');
+  const media = skill.sourceMediaRequired ? ' --video <file>' : '';
+  console.log(`  makaron chat --project auto${media} --skill ${skill.name} "describe the result you want"`);
 }
 
 function marketplaceSearchText(skill) {
@@ -1211,6 +1524,11 @@ async function callMcpTool(baseUrl, headers, toolName, args) {
   if (!res.ok) { console.error(`MCP error ${res.status}:`, await res.text()); process.exit(1); }
   const data = await res.json();
   if (data.error) { console.error(`MCP error:`, data.error.message); process.exit(1); }
+  if (data.result?.isError) {
+    console.error('MCP tool failed:', data.result.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || 'Unknown tool error');
+    process.exit(1);
+  }
+  printMcpCharge(res);
   return data.result;
 }
 
@@ -1383,7 +1701,8 @@ function getAudioMimeFromExt(ext) {
   return null;
 }
 
-function validateAudioReferenceFile(audioPath) {
+function validateAudioReferenceFile(audioPath, options = {}) {
+  const maxDuration = options.maxDuration ?? MAX_AUDIO_REFERENCE_DURATION;
   if (!fs.existsSync(audioPath)) {
     return { ok: false, error: `Audio file not found: ${audioPath}` };
   }
@@ -1406,8 +1725,8 @@ function validateAudioReferenceFile(audioPath) {
   if (duration < MIN_AUDIO_REFERENCE_DURATION) {
     return { ok: false, error: `Audio too short: ${formatSeconds(duration)}s (min ${MIN_AUDIO_REFERENCE_DURATION}s).` };
   }
-  if (duration > MAX_AUDIO_REFERENCE_DURATION + MAX_AUDIO_REFERENCE_DURATION_TOLERANCE) {
-    return { ok: false, error: `Audio too long: ${formatSeconds(duration)}s (max ${MAX_AUDIO_REFERENCE_DURATION}s, with ${MAX_AUDIO_REFERENCE_DURATION_TOLERANCE}s metadata tolerance).` };
+  if (duration > maxDuration + MAX_AUDIO_REFERENCE_DURATION_TOLERANCE) {
+    return { ok: false, error: `Audio too long: ${formatSeconds(duration)}s (max ${maxDuration}s, with ${MAX_AUDIO_REFERENCE_DURATION_TOLERANCE}s metadata tolerance).` };
   }
   return { ok: true, mime, meta: { duration, fileSizeBytes: stat.size } };
 }
@@ -1489,16 +1808,19 @@ function validateVideoFile(videoPath, options = {}) {
   const maxSide = options.maxSide ?? Infinity;
   const minAspect = options.minAspect ?? 0;
   const maxAspect = options.maxAspect ?? Infinity;
+  const allowedExtensions = options.allowedExtensions ?? ['mp4', 'mov', 'webm'];
+  const maxFramePixels = options.maxFramePixels ?? MAX_VIDEO_FRAME_PIXELS;
+  const maxFileSize = options.maxFileSize ?? MAX_VIDEO_UPLOAD_FILE_SIZE;
   if (!fs.existsSync(videoPath)) {
     return { ok: false, error: `Video file not found: ${videoPath}` };
   }
   const stat = fs.statSync(videoPath);
-  if (stat.size > MAX_VIDEO_UPLOAD_FILE_SIZE) {
-    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB). The CLI uploads directly to Storage; use the frontend to transcode larger videos first.` };
+  if (stat.size > maxFileSize) {
+    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${(maxFileSize / 1024 / 1024).toFixed(0)}MB).` };
   }
   const ext = path.extname(videoPath).slice(1).toLowerCase();
-  if (!['mp4', 'mov', 'webm'].includes(ext)) {
-    return { ok: false, error: `Unsupported video format: .${ext}. Use MP4, MOV, or WebM.` };
+  if (!allowedExtensions.includes(ext)) {
+    return { ok: false, error: `Unsupported video format: .${ext}. Use ${allowedExtensions.map(value => value.toUpperCase()).join(' or ')}.` };
   }
   const meta = probeLocalVideo(videoPath);
   if (!meta) {
@@ -1507,8 +1829,8 @@ function validateVideoFile(videoPath, options = {}) {
   if (meta.duration > maxDuration + durationTolerance) {
     return { ok: false, error: `Video too long: ${formatSeconds(meta.duration)}s (max ${maxDuration}s, with ${durationTolerance}s metadata tolerance)` };
   }
-  if (meta.width * meta.height > MAX_VIDEO_FRAME_PIXELS) {
-    return { ok: false, error: `Video resolution too high: ${meta.width}x${meta.height} (${meta.width * meta.height} px). Max is <=1080p (${MAX_VIDEO_FRAME_PIXELS} px). Re-upload through the frontend to transcode, or export a smaller video.` };
+  if (meta.width * meta.height > maxFramePixels) {
+    return { ok: false, error: `Video resolution too high: ${meta.width}x${meta.height} (${meta.width * meta.height} px). Max is ${maxFramePixels} pixels.` };
   }
   const framePixels = meta.width * meta.height;
   const aspect = meta.width / meta.height;
@@ -1552,7 +1874,22 @@ function saveMcpImage(result, outputPath) {
   const imageBlock = content.find(c => c.type === 'image');
   if (textBlock) process.stderr.write(`${textBlock.text}\n`);
   if (imageBlock) {
-    const out = outputPath || `makaron-output-${Date.now()}.jpg`;
+    const extension = imageBlock.mimeType === 'image/png'
+      ? 'png'
+      : imageBlock.mimeType === 'image/webp'
+        ? 'webp'
+        : 'jpg';
+    let out = outputPath || `makaron-output-${Date.now()}.${extension}`;
+    if (outputPath) {
+      const requestedExtension = path.extname(outputPath).slice(1).toLowerCase();
+      const compatible = extension === 'jpg'
+        ? ['jpg', 'jpeg'].includes(requestedExtension)
+        : requestedExtension === extension;
+      if (!compatible) {
+        out = `${outputPath.slice(0, outputPath.length - path.extname(outputPath).length)}.${extension}`;
+        process.stderr.write(`Output is ${imageBlock.mimeType}; saving as ${out} so bytes and filename agree.\n`);
+      }
+    }
     fs.writeFileSync(out, Buffer.from(imageBlock.data, 'base64'));
     console.log(out);
     return out;
@@ -1590,6 +1927,107 @@ function hasHelpFlag(values) {
   return values.includes('--help') || values.includes('-h');
 }
 
+function printEditHelp() {
+  console.log(`Makaron edit — generate or edit an image directly
+
+Usage:
+  makaron edit [options] "prompt"
+
+Options:
+  --image <file|url>        Base image to edit. Omit for text-to-image.
+  --ref <file|url>          Additional reference image. Repeatable, up to 3.
+  --image-model <id>        gemini, gemini-lite, qwen-spicy, openai, gpt-image-2.5-flare, gpt-image-2.5-sunburst, or wan2.7-image. Legacy qwen maps to qwen-spicy.
+  --skill <id>              enhance, creative, wild, or captions.
+  --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
+  --background <mode>       auto, opaque, or transparent.
+  --out <file>              Save the generated image to this path.
+  --help, -h                Show this help.
+
+Notes:
+  Model selection is optional. Transparent output routes strictly to GPT Image 2.5 Flare
+  and fails instead of returning an opaque fallback.
+
+Examples:
+  makaron edit --image portrait.jpg --image-model qwen-spicy --out result.jpg "cinematic warm light"
+  makaron edit --image product.jpg --ref style.png --aspect 1:1 "use this visual style"
+  makaron edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
+`);
+}
+
+function printVideoCreateHelp() {
+  console.log(`Makaron video create — call a video model directly
+
+Usage:
+  makaron video create --script "..." [media options] [generation options]
+
+Inputs:
+  --script <text>           Video prompt or shot script.
+  --script-file <file>      Read the script from a UTF-8 file.
+  --image <file|url>        Image input. Repeatable where the model supports it.
+  --video <file|url>        Video input. Repeatable where the model supports it.
+  --audio <file|url>        Audio input. Repeatable where the model supports it.
+  --voice <preset-id>       Grok preset voice. Repeatable, up to 3.
+
+Generation options:
+  --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5,
+                            wan-3.0, wan-3.0-prime, kling, grok, google-omni,
+                            minimax-h3, minimax-h3-max, fal-h3-max, or sync-lipsync-v3.
+  --duration <seconds>      Output duration supported by the selected model.
+  --video-resolution <res> auto, 480p, 720p, 768p, 1080p, 2k, or 4k.
+  --aspect <ratio>          9:16, 16:9, 1:1, or another supported ratio.
+  --video-operation <mode> generate, edit, or extend (Seedance 2.5 / Grok).
+  --extend-direction <dir> forward or backward.
+  --output-format <format>  mp4 or mov.
+  --generated-audio        Ask the provider to generate audio.
+  --no-generated-audio     Disable provider-generated audio.
+  --keep-original-sound    Preserve source-video sound where supported.
+  --web-search             Enable Seedance 2.5 web search.
+  --relaxed-content-filter Seedance 2.5 only.
+  --help, -h                Show this help.
+
+Recent model choices:
+  fal-h3-max     FAL H3 Max (default, 768p) reference-to-video: images, videos and audio;
+                 integer 5–15s, 480p/768p/1080p, default 768p. Reference inputs cost extra.
+  minimax-h3-max  fal H3 Turbo faster-than-real-time T2V or one-start-image I2V;
+                  5/10/15s; native 768p default or 480p; no video/audio/multi-image references.
+  wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
+  wan-3.0         Wan standard tier with the same public duration/resolution range.
+  seedance-2.5    4-30s; 480p/720p; generate/edit/extend and multimodal refs.
+  seedance-2.5-eco  480p generation → ByteDance Fast; 1080p default, 2k/4k.
+  minimax-h3      4-15s; 768p default or 2k; image/video/audio feature refs.
+  grok            T2V/reference generation plus typed edit/extend.
+  sync-lipsync-v3 Exactly one video plus one MP3/WAV replacement track.
+
+Examples:
+  makaron video create --script "A tiny robot runs through a sunlit studio" --duration 5 --video-model minimax-h3-max
+  makaron video create --script "The subject turns toward camera" --image start.jpg --duration 5 --video-model minimax-h3-max --video-resolution 768p
+  makaron video create --script "A crystal city wakes at dawn" --duration 5 --video-model wan-3.0-prime --video-resolution 4k
+  makaron video create --script "Continue the camera move" --video clip.mp4 --duration 4 --video-model grok --video-operation extend
+  makaron video create --script "Use the supplied audio" --video talk.mp4 --audio voice.wav --video-model sync-lipsync-v3
+
+This command returns a provider task ID and does not write to a project timeline.
+Use "makaron chat --project <id|auto> ..." for Agent-routed project work, then
+"makaron responses get <runId> --wait" to collect the result.
+`);
+}
+
+function printVideoHelp() {
+  console.log(`Video commands:
+  video script --image <file> [--image <file>] "direction"   Write video script
+  video create --script "..." --video-model minimax-h3-max   H3 Max Turbo (native 768p default)
+  video create --script "..." --video-model wan-3.0-prime    Fast Wan tier, up to 4k
+  video create --script "..." --video-model seedance-2.5     4-30s multimodal generation/edit/extend
+  video create --script "..." --video <file|url> --video-model grok --video-operation extend
+                                                               Edit or extend one MP4 with Grok
+  video create --script "..." --video <url> --audio <url> --video-model sync-lipsync-v3
+                                                               Lip-sync exact replacement audio
+  video status <taskId>                                      Check video status
+  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
+
+Run "makaron video create --help" for every model, option, example, and limit.
+`);
+}
+
 function printRootHelp() {
   console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
 
@@ -1600,16 +2038,27 @@ Commands:
   register --verify --challenge-id <id> --answer <n>  Verify and save API key
   claim                              Get claim URL for human to link account
   login                              Log in to Makaron (human interactive)
+  credits                            Show current credit balance
+  usage [--run <id>] [--project <id>] Credit usage history (chat prints per-run usage)
   list (ls)                          List all projects
   project media <projectId> --json    List timeline media for a project
+  project media add <projectId> --type image --source-url <url>
+                                     Add an external image without uploading it
+  project media add <projectId> --type video --source-url <url> --start <n> --end <n>
+                                     Add an external video range without uploading it
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   create --title "name"              Create empty project (text-to-image)
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
+  chat --project <id> --image <file> Attach an image or visual reference
   chat --project <id> --skill <id>   Use a built-in or marketplace skill
+  chat --project <id> --agent-model <id> "message"
+                                     Select only the Agent LLM (strict allowlist)
   chat --project <id> --video <file> Attach video to conversation
   chat --project <id> --audio <file> Attach song/beat/voice reference
+  chat --project auto --media-manifest <file> "message"
+                                     Create, import typed external media, and run Agent
   chat --project <id> -b "message"   Background: submit and print runId
   chat --project <id> --stream "msg" Legacy: stream SSE in real-time
   chat --project <id> --json "msg"   Output structured JSON result
@@ -1626,33 +2075,26 @@ Commands:
   abort <runId>                      Abort a running Agent
   skills list|search|show|install    Browse built-in and marketplace skills
 
-  edit [--image <file>] "prompt"     AI image edit / text-to-image
+  edit [--image <file>] "prompt"     Image edit, text-to-image, or transparent PNG
   analyze --video <file|url>         Analyze video content
-  video script|create|status         Video generation
+  video script|create|status         H3 Max, Wan, Seedance, Grok, lip-sync, and more
   music create|status                Music generation
 
-  admin                              Admin commands (skills, upload, set-admin)
-
-Model selection:
-  --agent-model <name>               Reasoning/tool model: auto, gpt-5.6-terra, gpt-5.6-sol,
-                                     gpt-5.6-luna, grok-4.5, or deepseek-v4-pro
-  --image-model <name>               Image model: gemini, gemini-lite, qwen, openai,
-                                     pony, or wai
-  --video-model <name>               Video model: seedance-fast, seedance-mini, seedance,
-                                     kling, grok, or google-omni
+  admin                              Admin commands (skills, credits, upload, set-admin)
 
 Examples:
-  makaron chat --project auto --agent-model deepseek-v4-pro "plan a launch poster"
-  makaron chat --project <id> --agent-model gpt-5.6-terra --image-model qwen "make it cinematic"
-  makaron chat --project <id> --video-model seedance-fast "turn this into a short video"
+  makaron chat --project auto --image product.jpg "plan a launch poster"
+  makaron chat --project <id> --skill "Football Captain" "make this cinematic"
+  makaron chat --project <id> "use H3 Max Turbo to make a 5-second 768p video"
+  makaron edit --background transparent --out sticker.png "a magenta star sticker"
 
 Run makaron <command> --help for command-specific options.
-The legacy --model flag is deprecated; use the role-specific flags above.
+Chat defaults the Agent LLM automatically; --agent-model can select an exact
+Agent LLM. Image and video model routing remains automatic in chat.
 
 Environment:
   MAKARON_API_KEY       API key (mk_live_xxx) — recommended for agents
   MAKARON_URL           API base (default: ${DEFAULT_URL})
-  MAKARON_AGENT_MODEL   Default Agent model; --agent-model takes precedence
 `);
 }
 
@@ -1713,7 +2155,7 @@ function printHelp(topic, subtopic) {
     else console.log(`Responses commands:
   responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
-  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output, usage, credits_used
   responses get <runId> --export-compositions --wait --pick first_video_url
                                             Export animated compositions before picking video URL
   responses get <runId> --materialize --wait --pick first_video_url
@@ -1723,10 +2165,26 @@ function printHelp(topic, subtopic) {
 `);
   } else if (topic === 'list' || topic === 'ls') {
     console.log('Usage: makaron list');
+  } else if (topic === 'credits' || topic === 'credit' || topic === 'balance') {
+    console.log('Usage: makaron credits [--json]');
+  } else if (topic === 'usage') {
+    console.log(`Usage: makaron usage [--run <runId>] [--project <projectId>] [--limit <n>] [--offset <n>] [--json]
+
+Lists credit usage rows for the current account (newest first).
+  --run <runId>        Only rows charged by one Agent run, with a summary total
+  --project <id>       Only rows charged inside one project
+  --json               Raw rows plus summary
+
+Every makaron chat prints its own credit usage when it finishes; the same data
+is available as responses get <runId> --pick usage (or --pick credits_used).`);
   } else if (topic === 'project' || topic === 'projects') {
-    if (subtopic === 'media') console.log('Usage: makaron project media <projectId> [--json]');
+    if (subtopic === 'media') console.log(`Usage: makaron project media <projectId> [--json]
+  makaron project media add <projectId> --type image --source-url <url> [--description <text>] [--json]
+  makaron project media add <projectId> --type video --source-url <url> --start <n> --end <n> [--description <text>] [--json]
+  makaron project media add <projectId> --input <media.json> [--json]`);
     else console.log(`Project commands:
   project media <projectId> --json      List timeline media for a project
+  project media add <projectId> ...     Add typed external image/video media
 `);
   } else if (topic === 'abort') {
     console.log('Usage: makaron abort <runId>');
@@ -1735,22 +2193,25 @@ function printHelp(topic, subtopic) {
   } else if (topic === 'install-skill') {
     console.log('Usage: makaron install-skill [--global] [--agent <agent>] [--yes]');
   } else if (topic === 'skills') {
-    if (subtopic === 'list') console.log('Usage: makaron skills list [--built-in] [--json]');
-    else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--json]');
-    else if (subtopic === 'show') console.log('Usage: makaron skills show <marketplace-id|label> [--json]');
+    if (subtopic === 'list') console.log('Usage: makaron skills list [--built-in] [--all] [--json]');
+    else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--built-in] [--all] [--json]');
+    else if (subtopic === 'show') console.log('Usage: makaron skills show <id|label|name> [--built-in] [--json]');
     else if (subtopic === 'install') console.log('Usage: makaron skills install <marketplace-id|label> [--json]');
     else console.log(`Skill commands:
-  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
-  skills list --built-in --openmontage
-                                      List OpenMontage-native adapters only
+  skills list --built-in              List user-facing built-in skills and what they do
+  skills list --built-in --all        Include internal/adapted helper skills
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
+  skills search <query> --built-in    Find a built-in skill by task or keyword
   skills show <id|label> --built-in   Show a built-in skill
   skills show <id|label>              Show a marketplace skill
   skills install <id|label>           Install a marketplace skill to your workspace
 
 Use with chat:
   makaron chat --project auto --skill <id|label> "your request"
+
+Not sure which built-in skill to use? Start with:
+  makaron skills list --built-in
 `);
   } else if (topic === 'materialize') {
     console.log(`Usage: makaron materialize --project <id> (--media <N> | --snapshot <snapshotId> | --design-path <path> | --design-json <file|->) [--wait] [--publish|--no-publish] [--profile fast_720p|source] [--pick url|job_id|status]`);
@@ -1763,21 +2224,14 @@ Use with chat:
   composition status <jobId> [--wait] [--json]
 `);
   } else if (topic === 'edit') {
-    console.log('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
+    printEditHelp();
   } else if (topic === 'analyze') {
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') printVideoCreateHelp();
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
-    else console.log(`Video commands:
-  video script --image <file> [--image <file>] "direction"   Write video script
-  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
-  video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|kling|google-omni]  Edit a video (standalone; Grok does not support video refs)
-  video status <taskId>                                      Check video status
-  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
-`);
+    else printVideoHelp();
   } else if (topic === 'music') {
     if (subtopic === 'create') console.log('Usage: makaron music create [--vocals] [--style "genre"] "description"');
     else if (subtopic === 'status') console.log('Usage: makaron music status <taskId>');
@@ -1790,6 +2244,7 @@ Use with chat:
     else if (subtopic === 'skill-categories') console.log('Usage: makaron admin skill-categories [--json|add|update|delete] ...');
     else if (subtopic === 'upload') console.log('Usage: makaron admin upload <local-file> <storage-path>');
     else if (subtopic === 'fetch-skill') console.log('Usage: makaron admin fetch-skill <share-code|url>');
+    else if (subtopic === 'add-credits') console.log('Usage: makaron admin add-credits <email-or-user-id> <credits> [--json]');
     else if (subtopic === 'set-admin') console.log('Usage: makaron admin set-admin <email>');
     else console.log(`Admin commands:
   admin skills                         List all marketplace skills
@@ -1802,6 +2257,7 @@ Use with chat:
   admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
+  admin add-credits <user> <credits>   Add credits by email or user ID
   admin set-admin <email>              Grant admin access to a user
 `);
   } else if (topic === 'register') {
@@ -1833,6 +2289,73 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   installAgentSkill(args.slice(1));
 } else if (command === 'login') {
   await login();
+} else if (command === 'credits' || command === 'credit' || command === 'balance') {
+  const { headers, baseUrl } = getAuth();
+  const res = await fetch(`${baseUrl}/api/billing/credits`, { headers });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data) {
+    const message = data?.error || data?.message || (res.ok ? 'Invalid response' : `HTTP ${res.status}`);
+    process.stderr.write(`Failed to get credits: ${message}\n`);
+    process.exit(1);
+  }
+  if (args.includes('--json')) {
+    console.log(JSON.stringify(data));
+  } else {
+    console.log(`Credits: ${data.balance ?? 0}`);
+    console.log(`Lifetime purchased: ${data.lifetimePurchased ?? 0}`);
+    console.log(`Lifetime used: ${data.lifetimeUsed ?? 0}`);
+    if (data.subscription) {
+      const plan = data.subscription.planId || 'unknown';
+      const status = data.subscription.status ? ` (${data.subscription.status})` : '';
+      console.log(`Subscription: ${plan}${status}`);
+    } else {
+      console.log('Subscription: none');
+    }
+  }
+} else if (command === 'usage') {
+  const { headers, baseUrl } = getAuth();
+  const params = new URLSearchParams();
+  let jsonOutput = false;
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--json') jsonOutput = true;
+    else if (args[i] === '--run' && args[i + 1]) params.set('run_id', args[++i]);
+    else if (args[i] === '--project' && args[i + 1]) params.set('project_id', args[++i]);
+    else if (args[i] === '--limit' && args[i + 1]) params.set('limit', args[++i]);
+    else if (args[i] === '--offset' && args[i + 1]) params.set('offset', args[++i]);
+    else {
+      process.stderr.write(`Unknown option: ${args[i]}\n`);
+      printHelp('usage');
+      process.exit(1);
+    }
+  }
+  const res = await fetch(`${baseUrl}/api/billing/usage${params.size ? `?${params}` : ''}`, { headers });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data) {
+    const message = data?.error || data?.message || (res.ok ? 'Invalid response' : `HTTP ${res.status}`);
+    process.stderr.write(`Failed to get usage: ${message}\n`);
+    process.exit(1);
+  }
+  if (jsonOutput) {
+    console.log(JSON.stringify(data));
+  } else {
+    const rows = data.usage || [];
+    if (!rows.length) {
+      console.log('No usage yet.');
+    } else {
+      const pad = (v, n, right = false) => { const t = String(v ?? ''); return right ? t.padStart(n) : t.padEnd(n); };
+      console.log(`${pad('Date', 16)} ${pad('Credits', 8, true)}  ${pad('Tool', 24)} ${pad('Model', 28)} ${pad('Source', 6)} Run`);
+      for (const row of rows) {
+        const when = row.created_at ? new Date(row.created_at).toISOString().slice(0, 16).replace('T', ' ') : '';
+        const run = row.run_id ? String(row.run_id).slice(0, 8) : '';
+        console.log(`${pad(when, 16)} ${pad(row.credits_charged, 8, true)}  ${pad(row.tool_name, 24)} ${pad(row.model_used || '', 28)} ${pad(row.source || '', 6)} ${run}`);
+      }
+    }
+    const total = formatRunUsage(data.summary);
+    if (total) console.log(`\nTotal: ${total}`);
+    if (data.attribution_available === false) {
+      process.stderr.write('Per-run attribution is not enabled on this server yet.\n');
+    }
+  }
 } else if (command === 'create') {
   const { headers, baseUrl } = getAuth();
   const opts = { images: [], imageUrls: [] };
@@ -1862,27 +2385,52 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let background = false;
   let jsonOutput = false;
   let activeSkill = undefined;
-  let videoModel = undefined;
-  let videoResolution = undefined;
-  let preferredModel = undefined;
-  let agentModel = process.env.MAKARON_AGENT_MODEL || 'auto';
+  let mediaManifestPath = undefined;
+  let agentModel = undefined;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
     else if (args[i] === '--video' && args[i + 1]) chatVideos.push(args[++i]);
     else if (args[i] === '--audio' && args[i + 1]) chatAudios.push(args[++i]);
+    else if (args[i] === '--media-manifest') {
+      if (!args[i + 1] || args[i + 1].startsWith('--')) {
+        process.stderr.write('❌ --media-manifest requires a JSON file path or -.\n');
+        process.exit(1);
+      }
+      mediaManifestPath = args[++i];
+    }
+    else if (args[i].startsWith('--media-manifest=')) mediaManifestPath = args[i].slice('--media-manifest='.length);
     else if (args[i] === '--skill' && args[i + 1]) activeSkill = args[++i];
     else if (args[i].startsWith('--skill=')) activeSkill = args[i].slice('--skill='.length);
+    else if (args[i] === '--agent-model') {
+      if (agentModel !== undefined) {
+        process.stderr.write('❌ Pass --agent-model only once per chat run.\n');
+        process.exit(1);
+      }
+      if (!args[i + 1] || args[i + 1].startsWith('--')) validateChatAgentModel('');
+      agentModel = validateChatAgentModel(args[++i]);
+    }
+    else if (args[i].startsWith('--agent-model=')) {
+      if (agentModel !== undefined) {
+        process.stderr.write('❌ Pass --agent-model only once per chat run.\n');
+        process.exit(1);
+      }
+      agentModel = validateChatAgentModel(args[i].slice('--agent-model='.length));
+    }
     else if (args[i] === '--stream') useStream = true;
     else if (args[i] === '--background' || args[i] === '-b') background = true;
     else if (args[i] === '--json') jsonOutput = true;
-    else if (args[i] === '--video-model' && args[i + 1]) videoModel = args[++i];
-    else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
-    else if (args[i] === '--image-model' && args[i + 1]) preferredModel = args[++i];
-    else if (args[i] === '--agent-model' && args[i + 1]) agentModel = args[++i];
-    else if (args[i] === '--model' && args[i + 1]) {
-      warnLegacyModelFlag('--image-model');
-      preferredModel = args[++i];
+    else if (args[i] === '--video-resolution' || args[i].startsWith('--video-resolution=')) {
+      process.stderr.write('❌ makaron chat chooses video model and resolution together. Put the requested resolution in your chat message, for example: "use MiniMax H3 at 2K".\n');
+      process.exit(1);
+    }
+    else if (
+      ['--image-model', '--video-model', '--model'].includes(args[i])
+      || ['--image-model=', '--video-model=', '--model='].some(prefix => args[i].startsWith(prefix))
+    ) {
+      const flag = args[i].split('=')[0];
+      process.stderr.write(`❌ ${flag} is not valid for makaron chat. Only --agent-model may select the Agent LLM; image/video routing stays automatic. Remove ${flag} and retry.\n`);
+      process.exit(1);
     }
     else promptParts.push(args[i]);
   }
@@ -1892,7 +2440,15 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.error('Run: makaron chat --help');
     process.exit(1);
   }
-  agentModel = validateAgentModel(agentModel);
+  let mediaManifest;
+  if (mediaManifestPath) {
+    try {
+      mediaManifest = readMediaManifest(mediaManifestPath);
+    } catch (error) {
+      process.stderr.write(`❌ ${error instanceof Error ? error.message : String(error)}\n`);
+      process.exit(1);
+    }
+  }
   const { headers, baseUrl } = getAuth();
   // Split images into URLs vs local files
   const imageUrlList = chatImages.filter(p => p.startsWith('http://') || p.startsWith('https://'));
@@ -1949,12 +2505,30 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const res = await fetch(`${baseUrl}/api/projects/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ title: prompt.slice(0, 50) }),
+      body: JSON.stringify({ title: mediaManifest?.title || prompt.slice(0, 50) }),
     });
     if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
     const data = await res.json();
     projectId = data.projectId;
     process.stderr.write(`📦 Project created: ${projectId}\n`);
+  }
+  let importedManifestMedia = [];
+  if (mediaManifest) {
+    const imported = await addProjectMediaSourceRanges(
+      baseUrl,
+      headers,
+      projectId,
+      mediaManifest.sourceRanges,
+      { silent: true },
+    );
+    importedManifestMedia = imported.media || [];
+    if (importedManifestMedia.length !== mediaManifest.sourceRanges.length) {
+      process.stderr.write(`❌ Imported ${importedManifestMedia.length}/${mediaManifest.sourceRanges.length} media item(s); aborting run.\n`);
+      process.exit(1);
+    }
+    uploadedTurnMediaCount += importedManifestMedia.length;
+    uploadedTurnVideoCount += importedManifestMedia.filter(item => item.type === 'video').length;
+    process.stderr.write(`📎 Imported ${importedManifestMedia.length} typed external media item(s) from media manifest\n`);
   }
   // Upload additional images to existing project
   if (imageFileList.length > 0 || imageUrlList.length > 0) {
@@ -1991,7 +2565,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const resolvedSkill = await resolveChatSkill(baseUrl, headers, activeSkill);
 
   // Upload videos to project timeline (via /api/projects/create with videoUrls)
-  let finalPrompt = resolvedSkill ? `[Active skill: ${resolvedSkill}]\n${prompt}` : prompt;
+  const finalPrompt = resolvedSkill ? `[Active skill: ${resolvedSkill}]\n${prompt}` : prompt;
   let audioAttachments = [];
   if (chatAudios.length > 0) {
     const audioImports = [];
@@ -2073,7 +2647,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         uploadedTurnVideoCount += videoSnaps.length;
         uploadedTurnMediaCount += videoSnaps.length;
       } else {
-        process.stderr.write(`⚠️ Failed to add videos: ${await res.text()}\n`);
+        process.stderr.write(`❌ Failed to add videos to the project timeline: ${await res.text()}\n`);
+        process.exit(1);
       }
     }
 
@@ -2081,10 +2656,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (useStream) {
     // Legacy SSE mode
-    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
-      videoModel,
-      videoResolution,
-      preferredModel,
+    const { runId: streamRunId, results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
       agentModel,
       uploadedVideoCount: uploadedTurnVideoCount,
       turnMediaCount: uploadedTurnMediaCount,
@@ -2093,14 +2665,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
     for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
     process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
+    printRunUsage(await fetchRunUsage(baseUrl, headers, streamRunId));
     for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId, task.snapshotId);
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
     // Default: fire-and-forget + poll
     const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, {
-      videoModel,
-      videoResolution,
-      preferredModel,
       agentModel,
       audioAttachments,
       uploadedVideoCount: uploadedTurnVideoCount,
@@ -2109,7 +2679,23 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (background) {
       // Just print runId and exit
       if (jsonOutput) {
-        console.log(JSON.stringify({ runId, projectId, projectUrl: `${APP_URL}/projects/${projectId}`, status: 'running' }));
+        console.log(JSON.stringify({
+          runId,
+          projectId,
+          projectUrl: `${APP_URL}/projects/${projectId}`,
+          status: 'running',
+          ...(importedManifestMedia.length ? {
+            importedMedia: importedManifestMedia.map(item => ({
+              ref: item.ref,
+              type: item.type,
+              source_url: item.source_url,
+              ...(item.type === 'video' ? {
+                start_sec: item.start_sec,
+                end_sec: item.end_sec,
+              } : {}),
+            })),
+          } : {}),
+        }));
       } else {
         console.log(runId);
       }
@@ -2155,7 +2741,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
       if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
       let data = await res.json();
-      normalizeRunResponse(data);
+      data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
       if (exportCompositions && data.status === 'completed') {
         data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, { publish: publishExports, quiet: jsonOutput || !!pick });
       }
@@ -2200,7 +2786,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.log(`Responses commands:
   responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
-  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output, usage, credits_used
   responses get <runId> --export-compositions --wait --pick first_video_url
                                             Export animated compositions before picking video URL
   responses get <runId> --materialize --wait --pick first_video_url
@@ -2214,7 +2800,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   await listProjects(baseUrl, headers);
 } else if (command === 'materialize') {
   const { headers, baseUrl } = getAuth();
-  const opts = { wait: true, publish: true, json: false, outputType: 'video', renderProfile: 'fast_720p', pick: null, quiet: false };
+  const opts = { wait: true, publish: true, json: false, outputType: 'video', renderProfile: 'source', pick: null, quiet: false };
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) opts.projectId = args[++i];
     else if (args[i] === '--media' && args[i + 1]) opts.mediaIndex = Number(args[++i]);
@@ -2242,7 +2828,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const { headers, baseUrl } = getAuth();
   const sub = args[1];
   if (sub === 'export') {
-    const opts = { wait: false, publish: false, json: false, outputType: 'video', renderProfile: 'fast_720p', pick: null, quiet: false };
+    const opts = { wait: false, publish: false, json: false, outputType: 'video', renderProfile: 'source', pick: null, quiet: false };
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--project' && args[i + 1]) opts.projectId = args[++i];
       else if (args[i] === '--media' && args[i + 1]) opts.mediaIndex = Number(args[++i]);
@@ -2294,25 +2880,41 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (sub === 'list') {
     const builtIn = args.includes('--built-in');
-    let skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
-    if (builtIn && args.includes('--openmontage')) {
-      skills = skills.filter(skill => skill.sourceProject === 'openmontage');
-    }
+    const allBuiltIn = args.includes('--all');
+    const fetchedSkills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
+    const skills = builtIn && !allBuiltIn
+      ? fetchedSkills.filter(isDiscoverableBuiltInSkill)
+      : fetchedSkills;
     if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
-    else if (builtIn) printBuiltInSkills(skills);
+    else if (builtIn) printBuiltInSkills(skills, {
+      heading: allBuiltIn ? 'All built-in skills' : 'Built-in skills available to use',
+    });
     else printMarketplaceSkills(skills);
   } else if (sub === 'search') {
-    const query = args.filter((arg, index) => index > 1 && arg !== '--json').join(' ').trim();
-    if (!query) { console.error('Usage: makaron skills search <query> [--json]'); process.exit(1); }
+    const builtIn = args.includes('--built-in');
+    const allBuiltIn = args.includes('--all');
+    const query = args.filter((arg, index) => index > 1 && !['--json', '--built-in', '--all'].includes(arg)).join(' ').trim();
+    if (!query) { console.error('Usage: makaron skills search <query> [--built-in] [--all] [--json]'); process.exit(1); }
     const lowerQuery = query.toLowerCase();
     const slugQuery = slugifySkill(query);
-    const skills = (await fetchMarketplaceSkills(baseUrl))
-      .filter(skill => {
-        const rawMatch = marketplaceSkillTokens(skill).some(token => token.includes(lowerQuery));
-        const slugMatch = slugQuery ? marketplaceSearchText(skill).includes(slugQuery) : false;
-        return rawMatch || slugMatch;
-      });
+    const builtInQueryTokens = slugQuery.split('-').filter(Boolean);
+    const skills = builtIn
+      ? (await fetchBuiltInSkills(baseUrl))
+        .filter(skill => allBuiltIn || isDiscoverableBuiltInSkill(skill))
+        .filter(skill => {
+          const searchText = builtInSkillSearchText(skill);
+          const slugText = slugifySkill(searchText);
+          return searchText.includes(lowerQuery)
+            || (builtInQueryTokens.length > 0 && builtInQueryTokens.every(token => slugText.includes(token)));
+        })
+      : (await fetchMarketplaceSkills(baseUrl))
+        .filter(skill => {
+          const rawMatch = marketplaceSkillTokens(skill).some(token => token.includes(lowerQuery));
+          const slugMatch = slugQuery ? marketplaceSearchText(skill).includes(slugQuery) : false;
+          return rawMatch || slugMatch;
+        });
     if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
+    else if (builtIn) printBuiltInSkills(skills, { heading: `Built-in skill matches for "${query}"` });
     else printMarketplaceSkills(skills);
   } else if (sub === 'show') {
     const identifier = args[2];
@@ -2324,7 +2926,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       : findMarketplaceSkill(skills, identifier);
     if (!skill) { console.error(`Skill not found: ${identifier}`); process.exit(1); }
     if (jsonOutput) console.log(JSON.stringify(skill, null, 2));
-    else if (builtIn) printBuiltInSkills([skill]);
+    else if (builtIn) printBuiltInSkill(skill);
     else printMarketplaceSkill(skill);
   } else if (sub === 'install') {
     const identifier = args[2];
@@ -2338,11 +2940,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else console.log(data.skillName);
   } else {
     console.log(`Skill commands:
-  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
-  skills list --built-in --openmontage
-                                      List OpenMontage-native adapters only
+  skills list --built-in              List user-facing built-in skills and what they do
+  skills list --built-in --all        Include internal/adapted helper skills
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
+  skills search <query> --built-in    Find a built-in skill by task or keyword
   skills show <id|label> --built-in   Show a built-in skill
   skills show <id|label>              Show a marketplace skill
   skills install <id|label>           Install a marketplace skill to your workspace
@@ -2352,13 +2954,47 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const { headers, baseUrl } = getAuth();
   const sub = args[1];
   if (sub === 'media') {
-    const projectId = args[2];
-    if (!projectId) { console.error('Usage: makaron project media <projectId> [--json]'); process.exit(1); }
     const jsonOutput = args.includes('--json');
-    await listProjectMedia(baseUrl, headers, projectId, { json: jsonOutput });
+    if (args[2] === 'add') {
+      const projectId = args[3];
+      if (!projectId) { console.error('Usage: makaron project media add <projectId> --type <image|video> --source-url <url> [--start <n> --end <n>]'); process.exit(1); }
+      const readOption = (name) => {
+        const index = args.indexOf(name);
+        return index >= 0 ? args[index + 1] : undefined;
+      };
+      const inputPath = readOption('--input');
+      let ranges;
+      if (inputPath) {
+        const normalized = normalizeMediaManifest(readJsonInput(inputPath));
+        ranges = normalized.sourceRanges;
+      } else {
+        const sourceUrl = readOption('--source-url');
+        const type = readOption('--type');
+        const start = readOption('--start');
+        const end = readOption('--end');
+        if (!sourceUrl || (type !== 'image' && type !== 'video')) {
+          console.error('Provide --type <image|video> and --source-url <url>, or --input <manifest.json>.');
+          process.exit(1);
+        }
+        const normalized = normalizeMediaManifest([{
+          source_url: sourceUrl,
+          type,
+          ...(start !== undefined ? { start } : {}),
+          ...(end !== undefined ? { end } : {}),
+          ...(readOption('--description') ? { description: readOption('--description') } : {}),
+        }]);
+        ranges = normalized.sourceRanges;
+      }
+      await addProjectMediaSourceRanges(baseUrl, headers, projectId, ranges, { json: jsonOutput });
+    } else {
+      const projectId = args[2];
+      if (!projectId) { console.error('Usage: makaron project media <projectId> [--json]'); process.exit(1); }
+      await listProjectMedia(baseUrl, headers, projectId, { json: jsonOutput });
+    }
   } else {
     console.log(`Project commands:
   project media <projectId> --json      List timeline media for a project
+  project media add <projectId> ...     Add typed external image/video media
 `);
   }
 } else if (command === 'abort') {
@@ -2396,11 +3032,19 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       editArgs.referenceImages.push(imageToArg(args[++i]));
     }
     else if (args[i] === '--aspect' && args[i + 1]) editArgs.aspectRatio = args[++i];
+    else if (args[i] === '--background' && args[i + 1]) {
+      const background = args[++i];
+      if (!['auto', 'opaque', 'transparent'].includes(background)) {
+        console.error('Invalid --background. Use auto, opaque, or transparent.');
+        process.exit(1);
+      }
+      editArgs.background = background;
+    }
     else if (args[i] === '--out' && args[i + 1]) outputPath = args[++i];
     else promptParts.push(args[i]);
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);
@@ -2435,12 +3079,18 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (text) console.log(text);
 
   } else if (sub === 'create') {
-    const images = [];
+    let images = [];
+    const videos = [];
+    const audios = [];
+    const referenceVoices = [];
     let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, videoResolution = undefined, wait = false;
-    let video = null, keepOriginalSound = false;
+    let keepOriginalSound = false, videoOperation = undefined, extendDirection = undefined, outputFormat = undefined;
+    let generateAudio = undefined, contentFilter = undefined, webSearch = false;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
-      else if (args[i] === '--video' && args[i + 1]) video = args[++i];
+      else if (args[i] === '--video' && args[i + 1]) videos.push(args[++i]);
+      else if (args[i] === '--audio' && args[i + 1]) audios.push(args[++i]);
+      else if (args[i] === '--voice' && args[i + 1]) referenceVoices.push(args[++i]);
       else if (args[i] === '--script' && args[i + 1]) script = args[++i];
       else if (args[i] === '--script-file' && args[i + 1]) script = fs.readFileSync(args[++i], 'utf-8');
       else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
@@ -2453,34 +3103,110 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
+      else if (args[i] === '--video-operation' && args[i + 1]) videoOperation = args[++i];
+      else if (args[i] === '--extend-direction' && args[i + 1]) extendDirection = args[++i];
+      else if (args[i] === '--output-format' && args[i + 1]) outputFormat = args[++i];
+      else if (args[i] === '--no-generated-audio') generateAudio = false;
+      else if (args[i] === '--generated-audio') generateAudio = true;
+      else if (args[i] === '--relaxed-content-filter') contentFilter = false;
+      else if (args[i] === '--web-search') webSearch = true;
       else if (args[i] === '--project') {
         console.error('Usage: video create no longer supports --project. Use: makaron chat --project <id> --video <file|url> "your request"');
         process.exit(1);
       }
       else if (args[i] === '--wait') wait = true;
     }
-    const selectedVideoModel = videoModel || 'seedance-fast';
-    const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance';
-    if (!script || (!images.length && !video && !isSeedanceModel)) {
-      console.error('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+    const selectedVideoModel = ['fal h3 turbo', 'h3 max', 'h3-max', 'h3max', 'h3 max turbo', 'h3-max-turbo', 'h3maxturbo', 'minimax-h3max', 'minimax-h3-max-turbo'].includes(videoModel)
+      ? 'minimax-h3-max'
+      : ['fal h3 max'].includes(videoModel) ? 'fal-h3-max'
+      : ['wan3', 'wan3.0', 'wan30', 'wan-3', 'wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro', 'w3.0-video-pro'].includes(videoModel)
+      ? 'wan-3.0'
+      : ['wan3-prime', 'wan3.0-prime', 'wan30-prime', 'wan-3-prime', 'w3.0-video-prime', 'w3.0-video-prime-pro', 'wan-3.0-prime-pro', 'prime'].includes(videoModel)
+        ? 'wan-3.0-prime'
+        : (videoModel || 'fal-h3-max');
+    const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco'].includes(selectedVideoModel);
+    const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
+    const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
+    const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
+    const isFalH3Max = selectedVideoModel === 'minimax-h3-max';
+    const isFalReference = selectedVideoModel === 'fal-h3-max';
+    const isGrok = selectedVideoModel === 'grok';
+    const isGoogleOmni = selectedVideoModel === 'google-omni';
+    const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
+    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
+    if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
+      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|minimax-h3|minimax-h3-max]');
       process.exit(1);
     }
+    if (isFalReference && (images.length > 9 || videos.length > 3 || audios.length > 3 || images.length + videos.length + audios.length > 12)) { console.error('FAL H3 Max accepts at most 9 images, 3 videos, 3 audios, 12 total.'); process.exit(1); }
+    if (isFalReference && duration != null && (!Number.isInteger(duration) || duration < 5 || duration > 15)) { console.error('FAL H3 Max output duration must be an integer from 5 to 15 seconds.'); process.exit(1); }
+    if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
+    if (isSeedance25 && videos.length > 10) { console.error('Seedance 2.5 supports at most 10 video references.'); process.exit(1); }
+    if (isSeedance25 && audios.length > 10) { console.error('Seedance 2.5 supports at most 10 audio references.'); process.exit(1); }
+    if (isWan30 && images.length > 10) { console.error('Wan 3.0 supports at most 10 image references.'); process.exit(1); }
+    if (isWan30 && videos.length > 5) { console.error('Wan 3.0 supports at most 5 video references.'); process.exit(1); }
+    if (isWan30 && audios.length > 5) { console.error('Wan 3.0 supports at most 5 audio references.'); process.exit(1); }
+    if (isMinimaxH3 && images.length > 9) { console.error('MiniMax H3 supports at most 9 image references.'); process.exit(1); }
+    if (isMinimaxH3 && videos.length > 3) { console.error('MiniMax H3 supports at most 3 video references.'); process.exit(1); }
+    if (isMinimaxH3 && audios.length > 3) { console.error('MiniMax H3 supports at most 3 audio references.'); process.exit(1); }
+    if (isFalH3Max && images.length > 1) { console.error('MiniMax H3 Max Turbo supports at most one start image.'); process.exit(1); }
+    if (isFalH3Max && (videos.length || audios.length)) { console.error('MiniMax H3 Max Turbo currently supports only text-to-video or one-image-to-video; remove video/audio references.'); process.exit(1); }
+    if (isFalH3Max && duration != null && ![5, 10, 15].includes(duration)) { console.error('MiniMax H3 Max Turbo duration must be 5, 10, or 15 seconds.'); process.exit(1); }
+    if (isFalH3Max && videoResolution && !['auto', '480p', '768p'].includes(videoResolution.toLowerCase())) { console.error('MiniMax H3 Max Turbo resolution must be auto, 480p, or 768p.'); process.exit(1); }
+    if (isGrok && images.length > 7) { console.error('Grok Imagine Video 1.5 supports at most 7 image references.'); process.exit(1); }
+    if (isGrok && videos.length > 1) { console.error('Grok video edit/extend accepts exactly one source video.'); process.exit(1); }
+    if (isGrok && referenceVoices.length > 3) { console.error('Grok Imagine Video 1.5 supports at most 3 preset voices.'); process.exit(1); }
+    if (!isGrok && referenceVoices.length) { console.error('--voice is currently supported only with --video-model grok.'); process.exit(1); }
+    if (isSyncLipsync && (images.length !== 0 || videos.length !== 1 || audios.length !== 1)) { console.error('Sync Lipsync v3 requires exactly one --video and one --audio, with no --image.'); process.exit(1); }
+    if (isSyncLipsync && !/<<<audio_1>>>/i.test(script)) {
+      script += '\nUse <<<audio_1>>> as the exact replacement soundtrack.';
+    }
+    if (videoOperation && !['generate', 'edit', 'extend'].includes(videoOperation)) { console.error('--video-operation must be generate, edit, or extend.'); process.exit(1); }
+    if (isWan30 && videoOperation && videoOperation !== 'generate') { console.error('Wan 3.0 supports generation with feature references, not typed edit or extend.'); process.exit(1); }
+    if (!isSeedance25 && contentFilter === false) { console.error('--relaxed-content-filter is only supported with --video-model seedance-2.5.'); process.exit(1); }
+    if (extendDirection && !['forward', 'backward'].includes(extendDirection)) { console.error('--extend-direction must be forward or backward.'); process.exit(1); }
+    if (outputFormat && !['mp4', 'mov'].includes(outputFormat)) { console.error('--output-format must be mp4 or mov.'); process.exit(1); }
 
     if (wait) {
       console.error('Usage: --wait is only supported for project timeline tasks. Use chat --project for project video generation, or poll the returned taskId with video status.');
       process.exit(1);
     }
 
-    let videoUrl = isHttpUrl(video) ? video : null;
-    let inputVideoMeta = null;
-    if (videoUrl) {
-      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; Kling requires ≤200MB and ≤2K; Google Omni accepts one reference video in Makaron; Grok does not support video references.\n`);
+    const inferredOperation = videoOperation || ((isSeedance25 || isGrok) && videos.length ? 'edit' : 'generate');
+    let providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION;
+    if (isGrok) providerMaxDuration = inferredOperation === 'edit' ? 8.7 : 15;
+    if (isSyncLipsync) providerMaxDuration = 60;
+    const providerMaxPixels = isSyncLipsync || isMinimaxH3 || isWan30 ? Infinity : isSeedance25 ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
+    const localImages = images.filter(image => !isHttpUrl(image));
+    if (localImages.length) {
+      const uploadedImages = await uploadImageFilesViaSignedUrl(baseUrl, headers, undefined, localImages);
+      const uploadedByPath = new Map(localImages.map((image, index) => [image, uploadedImages[index]]));
+      images = images.map(image => isHttpUrl(image) ? image : uploadedByPath.get(image)).filter(Boolean);
     }
-    if (video && !videoUrl) {
+    const videoUrls = [];
+    let inputVideoMeta = null;
+    for (const video of videos) {
+      if (isHttpUrl(video)) { videoUrls.push(video); continue; }
       const valid = validateVideoFile(video, {
-        maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION,
+        maxDuration: providerMaxDuration,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
-        ...(selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' ? {
+        maxFramePixels: providerMaxPixels,
+        maxFileSize: isWan30 ? MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE : isSeedance25 || isSyncLipsync ? 200 * 1024 * 1024 : MAX_VIDEO_UPLOAD_FILE_SIZE,
+        ...(isGrok ? {
+          allowedExtensions: ['mp4'],
+        } : selectedVideoModel === 'minimax-h3' ? {
+          allowedExtensions: ['mp4', 'mov'],
+          minSide: MINIMAX_H3_MIN_VIDEO_SIDE,
+          maxSide: MINIMAX_H3_MAX_VIDEO_SIDE,
+          minAspect: SEEDANCE_MIN_VIDEO_ASPECT,
+          maxAspect: SEEDANCE_MAX_VIDEO_ASPECT,
+        } : isWan30 ? {
+          minSide: 240,
+          maxSide: MULEROUTER_WAN_MAX_VIDEO_SIDE,
+          minAspect: 0.125,
+          maxAspect: 8,
+          allowedExtensions: ['mp4', 'mov'],
+        } : isSeedanceModel ? {
           minFramePixels: SEEDANCE_MIN_VIDEO_FRAME_PIXELS,
           minSide: SEEDANCE_MIN_VIDEO_SIDE,
           maxSide: SEEDANCE_MAX_VIDEO_SIDE,
@@ -2489,22 +3215,43 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         } : {}),
       });
       if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
-      inputVideoMeta = valid.meta;
+      inputVideoMeta ||= valid.meta;
       process.stderr.write(`📹 Uploading ${path.basename(video)} (${(fs.statSync(video).size/1024/1024).toFixed(1)}MB)...\n`);
-      videoUrl = await uploadFileViaSignedUrl(baseUrl, headers, undefined, video, valid.mime);
-      if (!videoUrl) process.exit(1);
+      const uploaded = await uploadFileViaSignedUrl(baseUrl, headers, undefined, video, valid.mime);
+      if (!uploaded) process.exit(1);
+      videoUrls.push(uploaded);
       process.stderr.write(`📹 Uploaded: ${path.basename(video)}\n`);
+    }
+    const audioUrls = [];
+    for (const audio of audios) {
+      if (isHttpUrl(audio)) { audioUrls.push(audio); continue; }
+      const valid = validateAudioReferenceFile(audio, { maxDuration: isSyncLipsync ? 60 : isSeedance25 ? 30 : MAX_AUDIO_REFERENCE_DURATION });
+      if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
+      process.stderr.write(`🎵 Uploading ${path.basename(audio)}...\n`);
+      const uploaded = await uploadFileViaSignedUrl(baseUrl, headers, undefined, audio, valid.mime, { uploadKind: 'audio' });
+      if (!uploaded) process.exit(1);
+      audioUrls.push(uploaded);
     }
     // Standalone MCP tool (no project timeline write)
     process.stderr.write('🎬 Submitting video...\n');
-    const vArgs = videoUrl
-      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: (selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini') ? 'feature' : 'base' }
-      : { script, images, videoModel: selectedVideoModel, videoResolution };
-    const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION, Math.round(inputVideoMeta.duration)) : undefined);
+    const resolvedOperation = inferredOperation;
+    const vArgs = isSyncLipsync
+      ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
+      : isSeedance25 || isWan30 || isGrok
+      ? { script, images, videoUrls, audioUrls, referenceVoiceIds: referenceVoices, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
+      : isMinimaxH3 || isFalReference
+        ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
+      : isFalH3Max
+        ? { script, images, videoModel: selectedVideoModel, videoResolution }
+      : videoUrls[0]
+        ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
+        : { script, images, videoModel: selectedVideoModel, videoResolution };
+    if (inputVideoMeta?.duration) vArgs.referenceVideoDuration = inputVideoMeta.duration;
+    const effectiveDuration = resolvedOperation === 'edit' ? undefined : duration || (inputVideoMeta?.duration ? Math.min(providerMaxDuration, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
-    if (keepOriginalSound && videoUrl) vArgs.keepOriginalSound = true;
-    const result = await callMcpTool(baseUrl, headers, videoUrl ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
+    if (keepOriginalSound && videoUrls.length && !isSeedance25) vArgs.keepOriginalSound = true;
+    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isWan30 && !isGrok && !isMinimaxH3 && !isFalReference && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) {
       console.log(text);
@@ -2545,14 +3292,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
 
   } else {
-    console.log(`Video commands:
-  video script --image <file> [--image <file>] "direction"   Write video script
-  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
-  video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|kling|google-omni]  Edit a video (standalone; Grok does not support video refs)
-  video status <taskId>                                      Check video status
-  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
-`);
+    printVideoHelp();
   }
 
 } else if (command === 'music') {
@@ -2755,6 +3495,31 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
     console.log(`✅ ${email} is now admin`);
 
+  } else if (sub === 'add-credits') {
+    const user = args[2]?.trim();
+    const credits = Number(args[3]);
+    if (!user || !Number.isSafeInteger(credits) || credits <= 0) {
+      console.error('Usage: makaron admin add-credits <email-or-user-id> <credits> [--json]');
+      console.error('Credits must be a positive integer.');
+      process.exit(1);
+    }
+
+    const res = await fetch(`${baseUrl}/api/admin/add-credits`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ email: user, credits }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      console.error(`Error ${res.status}:`, data?.error || 'Failed to add credits');
+      process.exit(1);
+    }
+    if (args.includes('--json')) {
+      console.log(JSON.stringify(data));
+    } else {
+      console.log(`✅ Added ${credits} credits to ${user}. New balance: ${data.newBalance}`);
+    }
+
   } else {
     console.log(`Admin commands:
   admin skills                         List all marketplace skills
@@ -2767,6 +3532,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
+  admin add-credits <user> <credits>   Add credits by email or user ID
   admin set-admin <email>              Grant admin access to a user
 `);
   }

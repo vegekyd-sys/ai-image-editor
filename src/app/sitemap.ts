@@ -69,6 +69,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.68,
     },
     {
+      url: `${SITE_URL}/mcp`,
+      lastModified: now,
+      changeFrequency: 'monthly',
+      priority: 0.66,
+    },
+    {
       url: `${SITE_URL}/privacy`,
       lastModified: now,
       changeFrequency: 'yearly',

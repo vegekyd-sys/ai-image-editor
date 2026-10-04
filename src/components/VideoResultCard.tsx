@@ -39,7 +39,7 @@ interface VideoResultCardProps {
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onFrameEdit, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
 
@@ -126,7 +126,7 @@ export default function VideoResultCard({
               ? (durationLabel ? `${durationLabel} · ${t('video.sourceUploaded')}` : t('video.sourceUploaded'))
               : (durationLabel ? `${durationLabel}${modelLabel ? ` · ${modelLabel}` : ''}` : (modelLabel || t('video.completed')));
           } else if (isProcessing) {
-            statusText = <><ElapsedTimer since={anim.createdAt} />{modelLabel ? ` · ${modelLabel}` : ''}</>;
+            statusText = <>{t('video.rendering')} · <ElapsedTimer since={anim.createdAt} />{modelLabel ? ` · ${modelLabel}` : ''}</>;
           } else if (isFailed) {
             statusText = <>{t('video.failed')}{modelLabel ? ` · ${modelLabel}` : ''}</>;
           } else {
@@ -204,7 +204,14 @@ export default function VideoResultCard({
 
               <button
                 data-makaron-editor-tap-target="true"
-                onClick={() => onViewDetail(anim)}
+                onClick={() => {
+                  if (isProcessing) {
+                    if (window.confirm(t('video.confirmAbandon'))) onAbandon(anim.taskId || anim.id);
+                    return;
+                  }
+                  onViewDetail(anim);
+                }}
+                aria-label={isProcessing ? t('video.cancel') : t('video.detail')}
                 className="mkr-liquid-pill mkr-liquid-side-action flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110"
                 style={{
                   width: detailWidth,
@@ -217,15 +224,21 @@ export default function VideoResultCard({
                   borderLeftColor: 'rgba(217,70,239,0.42)',
                 }}
               >
-                <svg
-                  width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                  className={isSelected ? 'text-fuchsia-200' : 'text-fuchsia-300/70'}
-                >
-                  <path d="m9 18 6-6-6-6" />
-                </svg>
+                {isProcessing ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-fuchsia-300/70">
+                    <rect x="7" y="7" width="10" height="10" rx="1" />
+                  </svg>
+                ) : (
+                  <svg
+                    width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    className={isSelected ? 'text-fuchsia-200' : 'text-fuchsia-300/70'}
+                  >
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                )}
                 <span className={`font-semibold ${isDesktop ? 'text-[9px]' : 'text-[10px]'} ${isSelected ? 'text-fuchsia-100/70' : 'text-fuchsia-200/70'}`}>
-                  {t('video.detail')}
+                  {isProcessing ? t('video.cancel') : t('video.detail')}
                 </span>
               </button>
             </div>

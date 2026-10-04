@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { after } from 'next/server'
 import { authenticateRequest } from '@/lib/api-auth'
 import {
+  DEFAULT_REMOTION_RENDER_PROFILE,
   createRemotionExportJob,
+  drainRemotionExportQueue,
   resolveRemotionExportDownloadUrl,
-  runRemotionExportJob,
+  shouldRunRemotionExportInline,
   type RemotionExportOutputType,
   type RemotionRenderProfile,
 } from '@/lib/remotion-export'
@@ -13,10 +15,6 @@ export const maxDuration = 1800
 
 function appUrl(req: NextRequest): string {
   return process.env.MAKARON_APP_URL || new URL(req.url).origin
-}
-
-function shouldRunInlineExportFallback(): boolean {
-  return process.env.REMOTION_EXPORT_INLINE_AFTER !== 'false'
 }
 
 export async function POST(req: NextRequest) {
@@ -30,7 +28,7 @@ export async function POST(req: NextRequest) {
     const snapshotId = body.snapshotId || body.snapshot_id
     const designPath = body.designPath || body.design_path
     const outputType = (body.outputType || body.output_type || 'video') as RemotionExportOutputType
-    const renderProfile = (body.renderProfile || body.render_profile || 'fast_720p') as RemotionRenderProfile
+    const renderProfile = (body.renderProfile || body.render_profile || DEFAULT_REMOTION_RENDER_PROFILE) as RemotionRenderProfile
     const publish = body.publish === true
     const publishSnapshotId = body.publishSnapshotId || body.publish_snapshot_id
       || (publish && outputType === 'video' ? crypto.randomUUID() : undefined)
@@ -62,12 +60,12 @@ export async function POST(req: NextRequest) {
       name,
     })
 
-    if (shouldRunInlineExportFallback()) {
+    if (shouldRunRemotionExportInline()) {
       after(async () => {
         try {
-          await runRemotionExportJob(job.id)
+          await drainRemotionExportQueue({ source: 'api/remotion/export' })
         } catch (err) {
-          console.error('[remotion/export] job failed:', err)
+          console.error('[remotion/export] queue drain failed:', err)
         }
       })
     }

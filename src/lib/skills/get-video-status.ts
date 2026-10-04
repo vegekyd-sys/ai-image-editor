@@ -1,5 +1,6 @@
 export interface GetVideoStatusInput {
   taskId: string;
+  userId?: string;
 }
 
 export interface GetVideoStatusResult {
@@ -7,6 +8,12 @@ export interface GetVideoStatusResult {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   videoUrl?: string;
   error?: string;
+  queryFailed?: boolean;
+  baseVideoUrl?: string;
+  stage?: string;
+  requestedResolution?: '720p' | '1080p' | '2k' | '4k';
+  actualResolution?: '480p' | '720p' | '1080p' | '2k' | '4k';
+  enhancementStatus?: 'processing' | 'completed' | 'failed';
   message: string;
 }
 
@@ -22,15 +29,55 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
   }
 
   try {
-    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine, xai-* = Grok, google-omni-* = Gemini Omni
+    if (taskId.startsWith('video-pipeline-')) {
+      const { advanceVideoPipeline } = await import('../video-upscale-pipeline');
+      return await advanceVideoPipeline(taskId, input.userId);
+    }
+    // Route by taskId prefix: task-unified-* = Evolink, mr-wan30-* = MuleRouter Wan, cgt-* = SeeDance Volcengine, sync3-* = Sync Lipsync v3, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3
     const isEvolink = taskId.startsWith('task-unified-');
+    const isMuleRouter = taskId.startsWith('mr-wan30-');
     const isSeedance = isEvolink || taskId.startsWith('cgt-');
     const isXai = taskId.startsWith('xai-');
     const isGoogleOmni = taskId.startsWith('google-omni-');
+    const isMinimax = taskId.startsWith('minimax-h3-');
+    const isFalH3Max = taskId.startsWith('fal-h3max-');
+    const isSyncLipsync = taskId.startsWith('sync3-');
+
+    if (isSyncLipsync) {
+      const { getSyncLipsyncTask } = await import('../sync-lipsync');
+      const result = await getSyncLipsyncTask(taskId);
+      return {
+        success: result.status !== 'failed',
+        status: result.status,
+        videoUrl: result.videoUrl,
+        error: result.error,
+        message: result.status === 'completed'
+          ? 'Lip-sync rendering completed!'
+          : result.status === 'failed'
+            ? `Lip-sync rendering failed: ${result.error || 'Unknown error'}`
+            : 'Lip-sync video is rendering.',
+      };
+    }
+
+    if (isMuleRouter) {
+      const { getMuleRouterVideoTask } = await import('../mulerouter-video');
+      const result = await getMuleRouterVideoTask(taskId);
+      return {
+        success: result.status !== 'failed',
+        status: result.status,
+        videoUrl: result.videoUrl,
+        error: result.error,
+        message: result.status === 'completed'
+          ? 'MuleRouter Wan video rendering completed!'
+          : result.status === 'failed'
+            ? `MuleRouter Wan video rendering failed: ${result.error || 'Unknown error'}`
+            : 'MuleRouter Wan video is rendering.',
+      };
+    }
 
     if (isXai) {
       const { getXaiVideoTask } = await import('../xai-video');
-      const result = await getXaiVideoTask(taskId);
+      const result = await getXaiVideoTask(taskId, input.userId);
 
       let message: string;
       switch (result.status) {
@@ -57,9 +104,45 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
         status: result.status,
         videoUrl: result.videoUrl,
         error: result.error,
+        // This synchronous API cannot retrieve a task by ID alone. Missing
+        // local output is not evidence of a failed (and refundable) generation.
+        queryFailed: result.status === 'failed',
         message: result.status === 'completed'
           ? 'Gemini Omni video completed.'
           : `Gemini Omni standalone task cannot be re-fetched from taskId alone: ${result.error || 'missing provider URL'}`,
+      };
+    }
+
+    if (isMinimax) {
+      const { getMinimaxVideoTask } = await import('../minimax-video');
+      const result = await getMinimaxVideoTask(taskId);
+      return {
+        success: result.status !== 'failed',
+        status: result.status,
+        videoUrl: result.videoUrl,
+        error: result.error,
+        message: result.status === 'completed'
+          ? 'MiniMax H3 video rendering completed!'
+          : result.status === 'failed'
+            ? `MiniMax H3 video rendering failed: ${result.error || 'Unknown error'}`
+            : 'MiniMax H3 video is rendering.',
+      };
+    }
+
+    if (isFalH3Max) {
+      const { getFalH3MaxVideoTask } = await import('../fal-h3-max-video');
+      const result = await getFalH3MaxVideoTask(taskId);
+      const label = taskId.startsWith('fal-h3max-reference-') ? 'FAL H3 Max' : 'fal H3 Turbo';
+      return {
+        success: result.status !== 'failed',
+        status: result.status,
+        videoUrl: result.videoUrl,
+        error: result.error,
+        message: result.status === 'completed'
+          ? `${label} video rendering completed!`
+          : result.status === 'failed'
+            ? `${label} video rendering failed: ${result.error || 'Unknown error'}`
+            : `${label} video is rendering.`,
       };
     }
 
@@ -178,6 +261,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
       success: false,
       status: 'failed',
       message: `Failed to query video status: ${msg}`,
+      queryFailed: true,
     };
   }
 }

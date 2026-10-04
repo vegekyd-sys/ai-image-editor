@@ -49,7 +49,7 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
         src={`${url}#t=0.001`}
         poster={posterUrl}
         playsInline
-        preload="metadata"
+        preload={posterUrl ? "none" : "metadata"}
         style={{ width: '100%', aspectRatio: ar, objectFit: 'cover', display: 'block' }}
         onLoadedMetadata={() => { const v = videoRef.current; if (v?.videoWidth && v.videoHeight) { const r = `${v.videoWidth}/${v.videoHeight}`; videoArCache.set(url, r); setAr(r); } }}
         onPlay={() => setPlaying(true)}
@@ -88,7 +88,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const inputImageLabels = [t('chat.currentImage'), t('chat.referenceImage')];
-  const modelLabels: Record<string, string> = { gemini: 'nano banana 2', 'gemini-lite': 'nano banana 2 lite', qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
+  const modelLabels: Record<string, string> = { gemini: 'nano banana 2', 'gemini-lite': 'nano banana 2 lite', 'qwen-spicy': 'qwen spicy', openai: 'OpenAI Image 2', 'gpt-image-2.5-flare': 'GPT Image 2.5 Flare', 'gpt-image-2.5-sunburst': 'GPT Image 2.5 Sunburst', 'wan2.7-image': 'Wan 2.7 Image' };
   const modelLabel = modelLabels[editModel || ''] || editModel || 'model';
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', maxWidth: 308 }}>
@@ -265,7 +265,8 @@ function MusicCard({ track, onSelect }: {
   const handleDownload = () => {
     const a = document.createElement('a');
     a.href = bestUrl;
-    a.download = `${track.title || 'music'}.mp3`;
+    const urlExtension = bestUrl.match(/\.(mp3|wav|pcm|ogg)(?:\?|$)/i)?.[1]?.toLowerCase();
+    a.download = `${track.title || 'audio'}.${urlExtension || 'wav'}`;
     a.click();
   };
 
@@ -413,6 +414,7 @@ function CitationRefChip({
   number: number;
   source?: WebSearchSource;
 }) {
+  const { t } = useLocale();
   const className = 'mx-0.5 inline-flex h-[15px] min-w-[15px] -translate-y-[1px] items-center justify-center rounded-[5px] px-1 text-[9px] font-semibold leading-none no-underline';
   if (!source || !/^https?:\/\//i.test(source.url)) {
     return null;
@@ -424,7 +426,7 @@ function CitationRefChip({
         target="_blank"
         rel="noopener noreferrer"
         title={source.title || source.url}
-        aria-label={`Source ${number}: ${source.title || source.url}`}
+        aria-label={t('agent.sources.reference', number, source.title || source.url)}
         className={className}
         style={{ background: 'rgba(192,38,211,0.16)', color: 'rgba(240,171,252,0.95)', border: '1px solid rgba(192,38,211,0.2)' }}
       >
@@ -553,6 +555,7 @@ function MarkdownBlock({ text, isPanel, snapshots, sources, onNavigateToSnapshot
 }
 
 function WebSourceLinks({ sources, text }: { sources?: WebSearchSource[]; text: string }) {
+  const { t } = useLocale();
   const citationView = resolveOpenAIWebCitations(text, sources);
   const citedSources = citationView.citations
     .filter((citation): citation is typeof citation & { source: WebSearchSource } => Boolean(citation.source && /^https?:\/\//i.test(citation.source.url)))
@@ -568,8 +571,8 @@ function WebSourceLinks({ sources, text }: { sources?: WebSearchSource[]; text: 
   if (!displaySources.length) return null;
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-1.5" aria-label="Web sources">
-      <span className="mr-0.5 text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.28)' }}>Sources</span>
+    <div className="mt-3 flex flex-wrap items-center gap-1.5" aria-label={t('agent.sources.label')}>
+      <span className="mr-0.5 text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.28)' }}>{t('agent.sources.label')}</span>
       {displaySources.map(({ number, source }) => {
         let hostname = source.url;
         try {
@@ -594,7 +597,7 @@ function WebSourceLinks({ sources, text }: { sources?: WebSearchSource[]; text: 
   );
 }
 
-export type PreferredModel = 'auto' | 'gemini' | 'gemini-lite' | 'qwen' | 'pony' | 'wai' | 'openai';
+export type PreferredModel = 'auto' | import('@/lib/models/types').ModelId;
 
 export interface ComposerDraftAttachment {
   id: string;
@@ -774,6 +777,7 @@ export default function AgentChatView({
   const [kbInset, setKbInset] = useState(0);
   const [nativeKbInset, setNativeKbInset] = useState(0);
   const syncKeyboardInsetFromViewport = useCallback(() => {
+    if (typeof window === 'undefined') return;
     const vv = window.visualViewport;
     if (!vv) return;
     const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
@@ -1268,6 +1272,7 @@ export default function AgentChatView({
         >
           <button
             data-testid="chat-back"
+            aria-label={t('editor.backToCanvas')}
             onClick={handleBack}
             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40 backdrop-blur-sm hover:bg-white/10 active:bg-white/15 transition-colors"
           >

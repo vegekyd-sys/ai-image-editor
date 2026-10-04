@@ -1,7 +1,19 @@
+import { randomUUID } from 'node:crypto'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
+import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
+import {
+  DEFAULT_REMOTION_LAMBDA_FRAMES_PER_LAMBDA,
+  resolveFramesPerLambda,
+} from '@/lib/remotion-export-capacity'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
+import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver'
+import { REMOTION_EDITABLE_RUNTIME_VERSION } from '@/lib/editor/editable-react-runtime'
+import {
+  REMOTION_FONT_CATALOG_VERSION,
+  REMOTION_FONT_RUNTIME_VERSION,
+} from '@/remotion/font-catalog'
 
 type RemotionLambdaClient = typeof import('@remotion/lambda-client')
 type LambdaRenderProgress = Awaited<ReturnType<RemotionLambdaClient['getRenderProgress']>>
@@ -36,6 +48,49 @@ export interface RemotionLambdaTimingSummary {
   functionLaunchedAt?: number | null
   compositionValidatedAt?: number | null
   serveUrlOpenedAt?: number | null
+  fontTelemetry?: RemotionLambdaFontTimingSummary
+}
+
+export interface RemotionLambdaFontTimingShard {
+  initialFrame: number
+  artifactBytes: number
+  artifactUrl: string
+  cacheHit: boolean
+  totalMs: number
+  manifestMs: number
+  selectionMs: number
+  fontFacesMs: number
+  fontsReadyMs: number
+  fontsCheckMs: number
+  faceCount: number
+  uniqueResourceCount: number
+}
+
+export interface RemotionLambdaFontTimingSummary {
+  available: boolean
+  telemetryId: string
+  collectionMs: number
+  artifactCount: number
+  shardCount: number
+  coldShardCount: number
+  warmShardCount: number
+  maxTotalMs: number | null
+  avgTotalMs: number | null
+  maxManifestMs: number | null
+  avgManifestMs: number | null
+  maxSelectionMs: number | null
+  avgSelectionMs: number | null
+  maxFontFacesMs: number | null
+  avgFontFacesMs: number | null
+  maxFontsReadyMs: number | null
+  avgFontsReadyMs: number | null
+  maxFontsCheckMs: number | null
+  avgFontsCheckMs: number | null
+  faceRequestCount: number
+  uniqueResourceRequestCount: number
+  observedTransferBytes: number
+  errors: string[]
+  shards: RemotionLambdaFontTimingShard[]
 }
 
 export interface RemotionLambdaUrlResult {
@@ -57,6 +112,89 @@ function readEnv(name: string): string | undefined {
   return value || undefined
 }
 
+export type RemotionLambdaVideoMode = 'media' | 'offthread' | 'native'
+
+export interface RemotionLambdaVideoFlags {
+  useOffthreadVideo: boolean
+  useNativeVideo: boolean
+  mode: RemotionLambdaVideoMode
+}
+
+/**
+ * Keep Lambda on the same @remotion/media decoder semantics as web export.
+ * The legacy native Html5Video path can stall when a Sequence reaches the
+ * exact end of a source file, while @remotion/media handles EOF
+ * deterministically and continues. Explicit overrides remain available for
+ * rollback.
+ */
+export function resolveRemotionLambdaVideoFlags(
+  env: Record<string, string | undefined>,
+): RemotionLambdaVideoFlags {
+  if (env.REMOTION_LAMBDA_USE_OFFTHREAD_VIDEO === 'true') {
+    return {
+      useOffthreadVideo: true,
+      useNativeVideo: false,
+      mode: 'offthread',
+    }
+  }
+  if (env.REMOTION_LAMBDA_USE_NATIVE_VIDEO === 'true') {
+    return {
+      useOffthreadVideo: false,
+      useNativeVideo: true,
+      mode: 'native',
+    }
+  }
+  return {
+    useOffthreadVideo: false,
+    useNativeVideo: false,
+    mode: 'media',
+  }
+}
+
+const runtimeMarkerCache = new Map<string, Promise<void>>()
+
+export function assertRemotionRuntimeMarker(
+  marker: unknown,
+  serveUrl: string,
+): void {
+  const value = marker && typeof marker === 'object'
+    ? marker as Record<string, unknown>
+    : {}
+  if (value.runtimeVersion !== REMOTION_FONT_RUNTIME_VERSION
+    || value.fontCatalogVersion !== REMOTION_FONT_CATALOG_VERSION
+    || value.editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION) {
+    throw new Error(
+      `Remotion render site version mismatch: ${serveUrl}. `
+      + `Expected ${REMOTION_FONT_RUNTIME_VERSION}/${REMOTION_FONT_CATALOG_VERSION}`
+      + `/${REMOTION_EDITABLE_RUNTIME_VERSION}.`,
+    )
+  }
+}
+
+async function assertPinnedRemotionRuntime(serveUrl: string): Promise<void> {
+  const markerUrl = new URL('public/remotion-runtime.json', serveUrl).href
+  let pending = runtimeMarkerCache.get(markerUrl)
+  if (!pending) {
+    pending = (async () => {
+      const response = await fetch(markerUrl, { cache: 'no-store' })
+      if (!response.ok) {
+        throw new Error(
+          `Remotion render site is not font-pinned (${response.status}): ${serveUrl}. `
+          + 'Deploy the current Remotion runtime and update REMOTION_LAMBDA_SERVE_URL.',
+        )
+      }
+      assertRemotionRuntimeMarker(await response.json(), serveUrl)
+    })()
+    runtimeMarkerCache.set(markerUrl, pending)
+  }
+  try {
+    await pending
+  } catch (error) {
+    runtimeMarkerCache.delete(markerUrl)
+    throw error
+  }
+}
+
 function readPositiveNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value?.trim())
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
@@ -65,6 +203,8 @@ function readPositiveNumber(value: string | undefined, fallback: number): number
 function readPositiveInteger(value: string | undefined, fallback: number): number {
   return Math.max(1, Math.round(readPositiveNumber(value, fallback)))
 }
+
+export { resolveFramesPerLambda } from '@/lib/remotion-export-capacity'
 
 function readBooleanEnv(name: string): boolean {
   const value = readEnv(name)
@@ -151,6 +291,54 @@ async function retryTransient<T>(
   throw lastError
 }
 
+const RETRYABLE_LAMBDA_SUBMISSION_ERRORS = [
+  /AWS Concurrency limit reached/i,
+  /ConcurrentInvocationLimitExceeded/i,
+  /TooManyRequestsException/i,
+  /Rate Exceeded/i,
+  /Runtime\.TruncatedResponse/i,
+  /Lambda function .* failed with an unhandled error/i,
+  /ECONNRESET/i,
+  /ETIMEDOUT/i,
+  /socket hang up/i,
+]
+
+export function isRetryableRemotionLambdaSubmissionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return RETRYABLE_LAMBDA_SUBMISSION_ERRORS.some((pattern) => pattern.test(message))
+}
+
+export async function retryRemotionLambdaSubmission<T>(
+  submit: () => Promise<T>,
+  options: {
+    attempts?: number
+    delayMs?: number
+    sleepFn?: (ms: number) => Promise<void>
+    randomFn?: () => number
+    onRetry?: (input: { attempt: number; nextAttempt: number; error: unknown }) => void | Promise<void>
+  } = {},
+): Promise<T> {
+  const attempts = Math.max(1, Math.round(options.attempts ?? 3))
+  const delayMs = Math.max(0, Math.round(options.delayMs ?? 1000))
+  const sleepFn = options.sleepFn || sleep
+  const randomFn = options.randomFn || Math.random
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await submit()
+    } catch (error) {
+      lastError = error
+      if (attempt === attempts || !isRetryableRemotionLambdaSubmissionError(error)) throw error
+      await options.onRetry?.({ attempt, nextAttempt: attempt + 1, error })
+      const jitter = 0.75 + Math.min(1, Math.max(0, randomFn())) * 0.5
+      await sleepFn(Math.round(delayMs * attempt * jitter))
+    }
+  }
+
+  throw lastError
+}
+
 function progressValue(progress: LambdaRenderProgress): number {
   if (typeof progress.overallProgress === 'number') return progress.overallProgress
   return progress.done ? 1 : 0
@@ -158,6 +346,116 @@ function progressValue(progress: LambdaRenderProgress): number {
 
 function numberOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function roundedMs(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+function maxOrNull(values: number[]): number | null {
+  return values.length > 0 ? Math.max(...values) : null
+}
+
+function averageOrNull(values: number[]): number | null {
+  return values.length > 0
+    ? roundedMs(values.reduce((sum, value) => sum + value, 0) / values.length)
+    : null
+}
+
+export function summarizeRemotionFontTiming(input: {
+  telemetryId: string
+  collectionMs: number
+  artifactCount: number
+  shards: RemotionLambdaFontTimingShard[]
+  errors?: string[]
+}): RemotionLambdaFontTimingSummary {
+  const shards = [...input.shards].sort((a, b) => a.initialFrame - b.initialFrame)
+  const totalMs = shards.map((shard) => shard.totalMs)
+  const manifestMs = shards.map((shard) => shard.manifestMs)
+  const selectionMs = shards.map((shard) => shard.selectionMs)
+  const fontFacesMs = shards.map((shard) => shard.fontFacesMs)
+  const fontsReadyMs = shards.map((shard) => shard.fontsReadyMs)
+  const fontsCheckMs = shards.map((shard) => shard.fontsCheckMs)
+
+  return {
+    available: shards.length > 0,
+    telemetryId: input.telemetryId,
+    collectionMs: roundedMs(input.collectionMs),
+    artifactCount: input.artifactCount,
+    shardCount: shards.length,
+    coldShardCount: shards.filter((shard) => !shard.cacheHit).length,
+    warmShardCount: shards.filter((shard) => shard.cacheHit).length,
+    maxTotalMs: maxOrNull(totalMs),
+    avgTotalMs: averageOrNull(totalMs),
+    maxManifestMs: maxOrNull(manifestMs),
+    avgManifestMs: averageOrNull(manifestMs),
+    maxSelectionMs: maxOrNull(selectionMs),
+    avgSelectionMs: averageOrNull(selectionMs),
+    maxFontFacesMs: maxOrNull(fontFacesMs),
+    avgFontFacesMs: averageOrNull(fontFacesMs),
+    maxFontsReadyMs: maxOrNull(fontsReadyMs),
+    avgFontsReadyMs: averageOrNull(fontsReadyMs),
+    maxFontsCheckMs: maxOrNull(fontsCheckMs),
+    avgFontsCheckMs: averageOrNull(fontsCheckMs),
+    faceRequestCount: shards.reduce((sum, shard) => sum + shard.faceCount, 0),
+    uniqueResourceRequestCount: shards.reduce(
+      (sum, shard) => sum + shard.uniqueResourceCount,
+      0,
+    ),
+    observedTransferBytes: 0,
+    errors: input.errors || [],
+    shards,
+  }
+}
+
+function collectFontTimingArtifacts(input: {
+  progress: LambdaRenderProgress
+  telemetryId: string
+}): RemotionLambdaFontTimingSummary {
+  const startedAt = Date.now()
+  const prefix = `makaron-font-timing-${input.telemetryId}-`
+  const artifacts = input.progress.artifacts.filter((artifact) =>
+    artifact.filename.startsWith(prefix) && artifact.filename.endsWith('.json'))
+  const uniqueArtifacts = [...new Map(artifacts.map((artifact) => [artifact.filename, artifact])).values()]
+  const errors: string[] = []
+  const shards: RemotionLambdaFontTimingShard[] = []
+  const timingPattern = new RegExp(
+    `^${input.telemetryId}-(\\d+)-[a-z0-9]+-t(\\d+)-m(\\d+)-s(\\d+)-f(\\d+)-r(\\d+)-c(\\d+)-n(\\d+)-u(\\d+)-w([01])\\.json$`,
+  )
+  for (const artifact of uniqueArtifacts) {
+    const suffix = artifact.filename.slice('makaron-font-timing-'.length)
+    const match = timingPattern.exec(suffix)
+    if (!match) {
+      errors.push(`${artifact.filename}: invalid font timing filename`)
+      continue
+    }
+    const fromToken = (value: string) => Number(value) / 100
+    shards.push({
+      initialFrame: Number(match[1]),
+      artifactBytes: artifact.sizeInBytes,
+      artifactUrl: artifact.s3Url,
+      totalMs: fromToken(match[2]),
+      manifestMs: fromToken(match[3]),
+      selectionMs: fromToken(match[4]),
+      fontFacesMs: fromToken(match[5]),
+      fontsReadyMs: fromToken(match[6]),
+      fontsCheckMs: fromToken(match[7]),
+      faceCount: Number(match[8]),
+      uniqueResourceCount: Number(match[9]),
+      cacheHit: match[10] === '1',
+    })
+  }
+  if (uniqueArtifacts.length === 0) {
+    errors.push('No font timing artifacts were returned by the Remotion runtime')
+  }
+
+  return summarizeRemotionFontTiming({
+    telemetryId: input.telemetryId,
+    collectionMs: roundedMs(Date.now() - startedAt),
+    artifactCount: uniqueArtifacts.length,
+    shards,
+    errors,
+  })
 }
 
 function readProgressTiming(progress: LambdaRenderProgress, key: string): number | null {
@@ -212,6 +510,7 @@ export async function renderDesignVideoLambdaToUrl(
   const functionName = lambdaEnv('REMOTION_LAMBDA_FUNCTION_NAME')
   const rendererFunctionName = readEnv('REMOTION_LAMBDA_RENDERER_FUNCTION_NAME')
   const serveUrl = lambdaEnv('REMOTION_LAMBDA_SERVE_URL')
+  await assertPinnedRemotionRuntime(serveUrl)
   const fps = design.animation?.fps || 30
   const dur = design.animation?.durationInSeconds || 1 / fps
   const durationInFrames = Math.max(1, Math.round(fps * dur))
@@ -222,16 +521,29 @@ export async function renderDesignVideoLambdaToUrl(
     : undefined
   const framesPerLambda = concurrency
     ? undefined
-    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), 20)
+    : resolveFramesPerLambda(
+        durationInFrames,
+        readPositiveInteger(
+          readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'),
+          DEFAULT_REMOTION_LAMBDA_FRAMES_PER_LAMBDA,
+        ),
+      )
   const pollMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_POLL_MS'), 1000)
   const x264Preset = readX264Preset()
   const jpegQuality = readPositiveInteger(readEnv('REMOTION_LAMBDA_JPEG_QUALITY'), 80)
   const deleteAfter = readEnv('REMOTION_LAMBDA_DELETE_AFTER') || null
-  const useOffthreadVideo = readEnv('REMOTION_LAMBDA_USE_OFFTHREAD_VIDEO') === 'true'
+  const videoFlags = resolveRemotionLambdaVideoFlags(process.env)
   const logLevel = readEnv('REMOTION_LAMBDA_LOG_LEVEL') || 'warn'
   const timeoutInMilliseconds = readPositiveInteger(readEnv('REMOTION_LAMBDA_TIMEOUT_MS'), 120000)
   const progressRetryAttempts = readPositiveInteger(readEnv('REMOTION_LAMBDA_PROGRESS_RETRIES'), 3)
+  const fontTelemetryId = randomUUID()
   const preparedCode = prepareRemotionCodeForSandbox(design.code)
+  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    serveUrl,
+    code: preparedCode,
+    props: design.props || {},
+    substitutions: design.fontSubstitutions || {},
+  })
   const hasAudioSources = hasRemotionAudioSources(design.code)
   const encoding = resolveRemotionLambdaEncodingSettings()
   const audioBitrate = hasAudioSources ? encoding.audioBitrate : null
@@ -239,62 +551,85 @@ export async function renderDesignVideoLambdaToUrl(
   const t0 = Date.now()
   const submitStartMs = Date.now()
 
-  const started = await withRemotionAwsCredentials(async () => {
-    const { renderMediaOnLambda } = await import('@remotion/lambda-client')
-    return renderMediaOnLambda({
-      region: region as LambdaRenderInput['region'],
-      functionName,
-      rendererFunctionName,
-      serveUrl,
-      composition: 'dynamic-design',
-      inputProps: {
-        code: preparedCode,
-        designProps: design.props || {},
-        fps,
-        durationInFrames,
-        width: design.width || 1080,
-        height: design.height || 1920,
-        skipFontLoading: true,
-        useOffthreadVideo,
-        useNativeVideo: true,
+  const submissionAttempts = readPositiveInteger(readEnv('REMOTION_LAMBDA_SUBMISSION_ATTEMPTS'), 3)
+  const submissionRetryDelayMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_SUBMISSION_RETRY_DELAY_MS'), 1000)
+  const started = await retryRemotionLambdaSubmission(
+    () => withRemotionAwsCredentials(async () => {
+      const { renderMediaOnLambda } = await import('@remotion/lambda-client')
+      return renderMediaOnLambda({
+        region: region as LambdaRenderInput['region'],
+        functionName,
+        rendererFunctionName,
+        serveUrl,
+        composition: 'dynamic-design',
+        inputProps: {
+          code: preparedCode,
+          designProps: normalizeRemotionTextValue(design.props || {}),
+          fps,
+          durationInFrames,
+          width: design.width || 1080,
+          height: design.height || 1920,
+          fontManifestUrl,
+          fontSubstitutions: design.fontSubstitutions || {},
+          fontTelemetryId,
+          useOffthreadVideo: videoFlags.useOffthreadVideo,
+          useNativeVideo: videoFlags.useNativeVideo,
+        },
+        codec: 'h264',
+        imageFormat: 'jpeg',
+        scale,
+        crf,
+        videoBitrate: encoding.videoBitrate,
+        audioBitrate,
+        x264Preset,
+        framesPerLambda,
+        concurrency,
+        concurrencyPerLambda: readPositiveInteger(readEnv('REMOTION_LAMBDA_CONCURRENCY_PER_LAMBDA'), 1),
+        chromiumOptions: { disableWebSecurity: true, gl: null },
+        muted: !hasAudioSources,
+        audioCodec: hasAudioSources ? 'aac' : null,
+        jpegQuality,
+        maxRetries: readPositiveInteger(readEnv('REMOTION_LAMBDA_MAX_RETRIES'), 1),
+        timeoutInMilliseconds,
+        logLevel: logLevel as LambdaRenderInput['logLevel'],
+        deleteAfter: deleteAfter as LambdaRenderInput['deleteAfter'],
+        privacy: options.outputDestination?.privacy,
+        outName: options.outputDestination ? {
+          bucketName: options.outputDestination.bucketName,
+          key: options.outputDestination.key,
+          s3OutputProvider: options.outputDestination.s3OutputProvider,
+        } : undefined,
+        metadata: {
+          renderer: 'makaron-remotion-lambda',
+          rendererFunctionName: rendererFunctionName || functionName,
+          x264Preset: String(x264Preset),
+          crf: crf === undefined ? '' : String(crf),
+          videoBitrate: encoding.videoBitrate || '',
+          audioBitrate: audioBitrate || '',
+          framesPerLambda: framesPerLambda ? String(framesPerLambda) : '',
+          concurrency: concurrency ? String(concurrency) : '',
+          chunkingMode: concurrency ? 'concurrency' : 'framesPerLambda',
+          videoMode: videoFlags.mode,
+        },
+      })
+    }),
+    {
+      attempts: submissionAttempts,
+      delayMs: submissionRetryDelayMs,
+      onRetry: async ({ attempt, nextAttempt, error }) => {
+        await options.onProgress?.({
+          progress: 0,
+          renderer: 'lambda',
+          phase: 'submission-retry',
+          submissionAttempt: attempt,
+          nextSubmissionAttempt: nextAttempt,
+          submissionAttempts,
+          error: error instanceof Error ? error.message : String(error),
+          elapsedSeconds: (Date.now() - t0) / 1000,
+        })
       },
-      codec: 'h264',
-      imageFormat: 'jpeg',
-      scale,
-      crf,
-      videoBitrate: encoding.videoBitrate,
-      audioBitrate,
-      x264Preset,
-      framesPerLambda,
-      concurrency,
-      concurrencyPerLambda: readPositiveInteger(readEnv('REMOTION_LAMBDA_CONCURRENCY_PER_LAMBDA'), 1),
-      chromiumOptions: { disableWebSecurity: true, gl: null },
-      muted: !hasAudioSources,
-      audioCodec: hasAudioSources ? 'aac' : null,
-      jpegQuality,
-      maxRetries: readPositiveInteger(readEnv('REMOTION_LAMBDA_MAX_RETRIES'), 1),
-      timeoutInMilliseconds,
-      logLevel: logLevel as LambdaRenderInput['logLevel'],
-      deleteAfter: deleteAfter as LambdaRenderInput['deleteAfter'],
-      privacy: options.outputDestination?.privacy,
-      outName: options.outputDestination ? {
-        bucketName: options.outputDestination.bucketName,
-        key: options.outputDestination.key,
-        s3OutputProvider: options.outputDestination.s3OutputProvider,
-      } : undefined,
-      metadata: {
-        renderer: 'makaron-remotion-lambda',
-        rendererFunctionName: rendererFunctionName || functionName,
-        x264Preset: String(x264Preset),
-        crf: crf === undefined ? '' : String(crf),
-        videoBitrate: encoding.videoBitrate || '',
-        audioBitrate: audioBitrate || '',
-        framesPerLambda: framesPerLambda ? String(framesPerLambda) : '',
-        concurrency: concurrency ? String(concurrency) : '',
-        chunkingMode: concurrency ? 'concurrency' : 'framesPerLambda',
-      },
-    })
-  })
+    },
+  )
   const submitEndMs = Date.now()
   const pollDurationsMs: number[] = []
 
@@ -350,6 +685,10 @@ export async function renderDesignVideoLambdaToUrl(
     if (progress.done) {
       if (!progress.outputFile) throw new Error('Remotion Lambda completed without an outputFile')
       const doneMs = Date.now()
+      const fontTelemetry = collectFontTimingArtifacts({
+        progress,
+        telemetryId: fontTelemetryId,
+      })
       const timings = buildTimingSummary({
         startMs: t0,
         submitStartMs,
@@ -358,6 +697,7 @@ export async function renderDesignVideoLambdaToUrl(
         pollDurationsMs,
         progress,
       })
+      timings.fontTelemetry = fontTelemetry
       return {
         url: progress.outputFile,
         renderId: started.renderId,

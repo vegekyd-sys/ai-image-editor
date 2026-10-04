@@ -72,6 +72,18 @@ describe('i18n dictionaries', () => {
     expect(translate('zh-Hant', 'auth.login')).toBe('登入');
     expect(translate('zh-Hant', 'status.videoDone')).toBe('影片已產生');
   });
+
+  it.each([
+    ['zh', '创作简报', '正在进行：创作简报', '2 个场景', '打开原始文件'],
+    ['zh-Hant', '創作簡報', '正在進行：創作簡報', '2 個場景', '開啟原始檔'],
+    ['ja', '制作概要', '進行中：制作概要', '2シーン', '元ファイルを開く'],
+    ['en', 'Creative brief', 'In progress: Creative brief', '2 scenes', 'Open source file'],
+  ] as const)('translates Studio Run chrome in %s', (locale, stage, current, scenes, openSource) => {
+    expect(translate(locale, 'studio.stage.brief')).toBe(stage);
+    expect(translate(locale, 'studio.progress.current', stage)).toBe(current);
+    expect(translate(locale, 'studio.unit.scenes', 2)).toBe(scenes);
+    expect(translate(locale, 'studio.source.open')).toBe(openSource);
+  });
 });
 
 describe('i18n shared behavior', () => {

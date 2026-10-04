@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-09-03T12:44:51.245Z",
+  "credentialSource": "Production Google key",
+  "analysis": "The person introduction labels shown near the beginning read:\n\n- **Saeka Shimada** She/Her\n- **Photographer**",
+  "usedModel": "gemini-3.8-flash",
+  "processing": "static",
+  "thinking": "low",
+  "elapsedMs": 15745,
+  "transport": "inline",
+  "processingCalls": 0,
+  "usage": {
+    "modelId": "gemini-3.8-flash",
+    "inputTokens": 5198,
+    "thoughtTokens": 0,
+    "toolUseTokens": 0,
+    "outputTokens": 27,
+    "cacheReadTokens": 0
+  }
+}

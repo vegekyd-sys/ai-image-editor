@@ -1,30 +1,32 @@
-Edit the current photo or generate a new image from text.
+Edit or generate an image.
 
-Call `read_file('prompts/image.md')` before complex image work, multi-image composition, skill routing, red annotations, restoration, model selection, captions, or layout/mockup images. Do not re-read it if already in tool-result history.
+Flare replaces Image 2. Sunburst is opt-in. No automatic 2.5 retry or fallback.
 
-For a clear direct edit such as "make this a neon poster" or "change the background to a beach", do not read the full guide first; call `generate_image` directly.
+Call `read_file('prompts/image.md')` for complex edits, references, restoration, or layout work.
 
-Core contract:
+For a clear direct edit, call `generate_image` directly.
 
-- `media_index` selects the timeline snapshot to edit. When editing a photo, pass it explicitly.
-- `reference_media_indices` sends extra timeline snapshots when `editPrompt` mentions Image 2, Image 3, another `<<<media_N>>>`, a source background/person, or timeline style reference.
-- Omit `media_index` for pure text-to-image generation.
+- For edits, pass 1-based `media_index`. Omit it for text-to-image; never pass `0`.
+- `reference_media_indices` sends extra timeline snapshots named by `editPrompt`.
+- To restore original detail, include that snapshot through `reference_media_indices`.
 - `image_refs` is only for workspace asset provider URLs, not timeline snapshots.
-- `skill` may be `enhance`, `creative`, `wild`, `captions`, or a user skill. Use it for general style intent; omit it for precise manual instructions.
-- To restore details from the original photo, edit the current snapshot with `media_index` and pass the original timeline snapshot, usually `<<<media_1>>>`, through `reference_media_indices`.
-- `model` is optional. Use `qwen` for NSFW risk; `openai` for text, identity, layout/mockup images, and director storyboard images required by `long-video-director`; `gemini-lite` only when the user asks for Nano Banana 2 Lite / Lite.
+- `skill` labels general intent; omit it for precise manual instructions.
+- `model` is optional. Use `qwen-spicy` for NSFW risk; `gpt-image-2.5-flare` for product/design or layout/mockup images, face restoration after Gemini, and `long-video-director` storyboards; `gemini-lite` only on explicit Lite requests. Pony and WAI are retired.
+- `wan2.7-image` is opt-in. Never automatically retry a failed/unknown Wan call or switch models.
+- For background removal/cutout, 去背景/抠图/抠像, or transparent PNG/sticker/overlay/alpha output, set `background: "transparent"`; wording alone is insufficient.
+- Existing-image cutout: pass its `media_index`; with no source, omit `media_index` for transparent text-to-image.
+- Pure cutout: omit `aspectRatio` to preserve the source canvas. If the user requests a new transparent layout (e.g. six stickers on 16:9), pass it; the requested layout wins.
+- Transparent output defaults to Flare, honors Sunburst, and never returns an opaque fallback. Otherwise omit `background`.
 
-Built-in skill fast-path routing is summarized in `agent.md`. If that fast path selects a built-in skill, read only that one skill prompt file once, unless it already appears in tool-result history. Do not read `prompts/image.md` just to route the skill. For precise manual instructions, omit `skill` and write the full editPrompt yourself.
+Skill routing is in `agent.md`; read only the selected skill once. Do not read `prompts/image.md` just to route the skill.
 
-Edit Mode prompt shape:
+Edit Mode prompt shape for ordinary in-place edits:
 
 1. Face rule when people are present.
 2. Exact edit instruction in detailed English.
 3. Preservation line: preserve exact composition, positions, poses, actions, and scene layout.
 4. End line: "Do NOT add any text, watermarks, or borders." Omit this if the user explicitly requested text or captions.
 
-Context Mode for `model='openai'`:
+Transparent cutout: read `prompts/cutout.md` once, follow its canonical ordered contract, and do not append ordinary composition/scene-layout preservation.
 
-- Use the user's original request as `editPrompt`.
-- Do not rewrite, translate, compress, expand, or replace the model's judgment with layout/color details.
-- In multi-turn layout/mockup image tasks, include concise prior user feedback as context.
+Context Mode for `model='gpt-image-2.5-flare'`: pass the user's request verbatim as `editPrompt`; do not rewrite, translate, expand, or invent layout/color details. Include concise prior feedback for multi-turn layout/mockup image tasks.

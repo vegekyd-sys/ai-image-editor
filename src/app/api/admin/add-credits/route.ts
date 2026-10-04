@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
 import { authenticateRequest } from '@/lib/api-auth'
 import { isAdmin } from '@/lib/admin'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
-import { addCredits } from '@/lib/billing/credits'
+import { grantCreditsAndRecordPurchase } from '@/lib/billing/credits'
 
 export async function POST(req: NextRequest) {
   const authResult = await authenticateRequest(req)
@@ -32,17 +33,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `User not found: ${email}. You can also paste a user_id (UUID).` }, { status: 404 })
   }
 
-  const newBalance = await addCredits(targetId, credits)
-
-  // Record
-  await admin.from('credit_purchases').insert({
-    user_id: targetId,
-    stripe_session_id: `admin_${Date.now()}`,
+  const grant = await grantCreditsAndRecordPurchase({
+    userId: targetId,
     credits,
-    amount_usd: 0,
-    status: 'completed',
+    amountUsd: 0,
+    stripeSessionId: `admin_${randomUUID()}`,
     source: 'admin',
   })
 
-  return NextResponse.json({ success: true, userId: targetId, email, credits, newBalance })
+  return NextResponse.json({
+    success: true,
+    userId: targetId,
+    email,
+    credits,
+    newBalance: grant.balance,
+  })
 }

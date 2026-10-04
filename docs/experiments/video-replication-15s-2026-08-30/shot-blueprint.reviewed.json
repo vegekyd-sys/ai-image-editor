@@ -1,0 +1,190 @@
+{
+  "schema_version": "0.1.0",
+  "reference": {
+    "source_name": "makaron-intro_2026-05-07_02-05-55.mp4",
+    "duration_sec": 15,
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "video_codec": "h264",
+    "audio": {
+      "present": false,
+      "codec": null,
+      "sample_rate": null
+    }
+  },
+  "analysis": {
+    "boundary_method": "adaptive_scene_plus_black_plus_frame_review",
+    "asr_status": "not_applicable",
+    "beat_status": "not_applicable",
+    "model_review_status": "complete",
+    "scene_score_threshold": 0.00152,
+    "scene_candidate_count": 7,
+    "black_candidate_count": 2,
+    "unresolved_boundary_candidates": [],
+    "warnings": [
+      "The 1.133s candidate is an internal logo reveal, not a shot boundary.",
+      "Fade centers are measurement anchors; each transition occupies a wider black/fade interval.",
+      "Text content and brand identity must be replaced even when timing and layout grammar are preserved."
+    ]
+  },
+  "global_dna": {
+    "aspect_ratio": "9:16",
+    "shot_duration_curve_sec": [5.017, 5.5, 4.483],
+    "cut_rate_per_min": 8,
+    "style": {
+      "background": "near-black with a restrained magenta-violet radial glow below the focal text",
+      "palette": ["#050506", "#ffffff", "#d946ef", "#6b7280"],
+      "typography": "bold geometric sans for primary copy, smaller neutral sans for supporting copy",
+      "rhythm": "three self-contained typographic acts separated by fades through black",
+      "spatial_pattern": "large negative space, content concentrated in the upper-middle vertical band"
+    },
+    "audio_arc": null
+  },
+  "boundaries": [
+    {
+      "time_sec": 5.017,
+      "kind": "fade_or_black",
+      "confidence": 0.92,
+      "evidence": [
+        {
+          "method": "blackdetect",
+          "time_sec": 5.017,
+          "start_sec": 4.167,
+          "end_sec": 5.867,
+          "score": 1
+        },
+        {
+          "method": "frame_review",
+          "time_sec": 5.017,
+          "frame_index": 150,
+          "note": "The title act has faded out and the feature-list act has not yet fully resolved."
+        }
+      ]
+    },
+    {
+      "time_sec": 10.517,
+      "kind": "fade_or_black",
+      "confidence": 0.92,
+      "evidence": [
+        {
+          "method": "blackdetect",
+          "time_sec": 10.517,
+          "start_sec": 10.133,
+          "end_sec": 10.9,
+          "score": 0.511111
+        },
+        {
+          "method": "frame_review",
+          "time_sec": 10.517,
+          "frame_index": 315,
+          "note": "The feature stack disappears through black before the centered CTA resolves."
+        }
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "id": "shot-001",
+      "order": 1,
+      "source_range": {"start_sec": 0, "end_sec": 5.017},
+      "duration_sec": 5.017,
+      "narrative_role": "brand hook and positioning",
+      "subject_action": "a small magenta star blooms first; the main wordmark and one-line descriptor reveal, hold, then fade away",
+      "composition": {
+        "layout": "centered stack in the upper-middle of a vertical frame",
+        "primary_anchor": {"x_norm": 0.5, "y_norm": 0.28},
+        "negative_space": "dominant below the copy"
+      },
+      "camera_motion": {"type": "locked", "movement": "none", "layer_motion": "scale/fade reveal only"},
+      "transition_in": {"type": "fade_up_from_black", "duration_sec_approx": 1.1},
+      "transition_out": {"type": "fade_through_black", "interval_sec": [4.167, 5.867]},
+      "text_layers": [
+        {"role": "brand", "content": "Makaron", "replacement": "Video DNA", "timing_sec": [1, 4]},
+        {"role": "descriptor", "content": "one man creative studio", "replacement": "shot grammar, rebuilt", "timing_sec": [1.2, 4]}
+      ],
+      "audio": null,
+      "style": {"accent": "magenta sparkle and soft violet glow", "contrast": "high"},
+      "preserve": ["duration", "order", "centered hierarchy", "locked camera", "reveal-hold-fade rhythm", "fade-through-black transition"],
+      "replace": ["brand", "copy", "logo mark"],
+      "confidence": 0.93,
+      "needs_model_review": false
+    },
+    {
+      "id": "shot-002",
+      "order": 2,
+      "source_range": {"start_sec": 5.017, "end_sec": 10.517},
+      "duration_sec": 5.5,
+      "narrative_role": "capability proof through a progressive list",
+      "subject_action": "four compact feature rows enter from top to bottom, then hold as a complete vertical stack before fading",
+      "composition": {
+        "layout": "left-aligned four-row stack in the upper-middle",
+        "primary_anchor": {"x_norm": 0.36, "y_norm": 0.34},
+        "negative_space": "large open lower half"
+      },
+      "camera_motion": {"type": "locked", "movement": "none", "layer_motion": "staggered row reveal"},
+      "transition_in": {"type": "fade_up_from_black", "interval_sec": [5.017, 5.867]},
+      "transition_out": {"type": "fade_through_black", "interval_sec": [10.133, 10.9]},
+      "text_layers": [
+        {"role": "feature_1", "content": "AI Photo Editing", "replacement": "Shot Analysis", "timing_sec": [6, 10.1]},
+        {"role": "feature_2", "content": "One-Click Video", "replacement": "Video Blueprint", "timing_sec": [6.4, 10.1]},
+        {"role": "feature_3", "content": "AI Soundtrack", "replacement": "Motion Mapping", "timing_sec": [6.8, 10.1]},
+        {"role": "feature_4", "content": "Creative Agent", "replacement": "Automatic QA", "timing_sec": [7.2, 10.1]}
+      ],
+      "audio": null,
+      "style": {"accent": "small colored icons and subtle purple row plates", "contrast": "high"},
+      "preserve": ["duration", "order", "four-row hierarchy", "stagger cadence", "locked camera", "fade-through-black transition"],
+      "replace": ["feature names", "icons", "brand styling"],
+      "confidence": 0.9,
+      "needs_model_review": false
+    },
+    {
+      "id": "shot-003",
+      "order": 3,
+      "source_range": {"start_sec": 10.517, "end_sec": 15},
+      "duration_sec": 4.483,
+      "narrative_role": "payoff and call to action",
+      "subject_action": "a bold two-line promise resolves first, followed by a magenta destination line and a muted action line; all elements hold to the end",
+      "composition": {
+        "layout": "centered three-level CTA stack in the upper-middle",
+        "primary_anchor": {"x_norm": 0.5, "y_norm": 0.36},
+        "negative_space": "large open lower half"
+      },
+      "camera_motion": {"type": "locked", "movement": "none", "layer_motion": "sequential fade/scale reveal"},
+      "transition_in": {"type": "fade_up_from_black", "interval_sec": [10.517, 10.9]},
+      "transition_out": {"type": "hold", "duration_sec_approx": 0.8},
+      "text_layers": [
+        {"role": "headline", "content": "Your Photos Deserve More", "replacement": "Your Video Has A Grammar", "timing_sec": [11, 15]},
+        {"role": "destination", "content": "makaron.app", "replacement": "extract. map. rebuild.", "timing_sec": [12, 15]},
+        {"role": "action", "content": "Try it free", "replacement": "replicate the structure", "timing_sec": [13, 15]}
+      ],
+      "audio": null,
+      "style": {"accent": "magenta destination line over restrained violet glow", "contrast": "high"},
+      "preserve": ["duration", "order", "centered CTA hierarchy", "locked camera", "hold ending"],
+      "replace": ["claim", "URL", "CTA copy", "brand styling"],
+      "confidence": 0.93,
+      "needs_model_review": false
+    }
+  ],
+  "route": {
+    "strategy": "B",
+    "reason": "One controlled whole-clip reference-to-video generation is required to test whether a provider can preserve the extracted grammar while replacing all surface content.",
+    "provider": "EvoLink Seedance 2.5",
+    "operation": "generate",
+    "resolution": "480p",
+    "duration_sec": 15,
+    "attempt_ceiling": 1
+  },
+  "qa_targets": {
+    "file_decodes": true,
+    "duration_error_frames_max": 1,
+    "shot_count": 3,
+    "shot_order_exact": true,
+    "boundary_timing_median_error_frames_max": 5,
+    "duration_curve_mape_max": 0.15,
+    "transition_class_match_required": true,
+    "composition_center_delta_frame_diagonal_max": 0.08,
+    "camera_motion_direction_match_required": true,
+    "copy_must_be_replaced": true
+  }
+}

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from '@/lib/media-markers';
+import {
+  extractUserReferencedMediaIndices,
+  resolveMediaMarkersInString,
+  resolveMediaMarkersInValue,
+} from '@/lib/media-markers';
 
 describe('Media Index marker resolution', () => {
   const media = Array.from({ length: 10 }, (_, index) => `https://cdn.example.com/media-${index + 1}.jpg`);
@@ -20,5 +24,11 @@ describe('Media Index marker resolution', () => {
       scenes: [{ src: media[1] }, { src: media[9] }],
       missing: '<<<media_11>>>',
     });
+  });
+
+  it('extracts only explicit Media Index syntax without interpreting natural language', () => {
+    expect(extractUserReferencedMediaIndices(
+      'Use @3 and <<<media_1>>>. Reuse @3, but ignore name@example.com.',
+    )).toEqual([1, 3]);
   });
 });

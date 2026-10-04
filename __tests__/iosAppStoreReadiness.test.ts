@@ -25,12 +25,14 @@ describe('iOS App Store readiness guardrails', () => {
   it('keeps Google available in Makaron iOS WebView with Apple as the equivalent App Store login option', () => {
     const loginPage = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8');
     const authCallback = fs.readFileSync(path.join(root, 'src/app/api/auth/callback/route.ts'), 'utf8');
+    const authReturn = fs.readFileSync(path.join(root, 'src/lib/auth-return.ts'), 'utf8');
     expect(loginPage).toContain('userAgentHasMakaronIOSToken');
     expect(loginPage).toContain('isMakaronIOSApp');
     expect(loginPage).toContain("const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'");
     expect(loginPage).toContain('resolveReturnUrlForRuntime');
     expect(loginPage).toContain('sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)');
-    expect(loginPage).toContain("return '/home'");
+    expect(loginPage).toContain('resolveAuthReturnPathForRuntime(returnUrl, iosAppRuntime)');
+    expect(authReturn).toContain("returnPath: isIOSApp ? '/home'");
     expect(loginPage).toContain('NEXT_PUBLIC_ENABLE_APPLE_LOGIN');
     expect(loginPage).toContain('inApp && appleLoginEnabled');
     expect(loginPage).toContain('const showGoogleOAuth = !inApp || iosApp || showAppleOAuth');
@@ -46,17 +48,22 @@ describe('iOS App Store readiness guardrails', () => {
     expect(authCallback).toContain("r='/home?skill='+encodeURIComponent(skillMatch[1])");
   });
 
-  it('requires explicit AI data-sharing consent before mounting iOS creative content', () => {
+  it('retains explicit consent on builds targeted by the web consent policy', () => {
     const layout = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
     const gate = fs.readFileSync(path.join(root, 'src/components/AIDataConsentGate.tsx'), 'utf8');
     const privacy = fs.readFileSync(path.join(root, 'src/app/privacy/page.tsx'), 'utf8');
     const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20260715000000_hide_app_review_sensitive_skills.sql'), 'utf8');
 
     expect(layout).toContain('userAgentHasMakaronIOSToken');
-    expect(layout).toContain('<AIDataConsentGate required={requiresAIDataConsent}>');
+    expect(layout).toContain('initiallyAccepted={requiresAIDataConsent && hasInitialAIDataConsent}');
+    expect(layout).toContain("requiredBuilds={process.env.IOS_AI_CONSENT_REQUIRED_BUILDS ?? 'all'}");
+    expect(gate).toContain('requiresIOSAIDataConsent(requiredBuilds, build)');
+    expect(layout).toContain("cookieStore.get(AI_DATA_CONSENT_COOKIE)?.value === 'v1'");
     expect(gate).toContain("'makaron:ai-data-consent:v1'");
     expect(gate).toContain("setState('declined')");
-    expect(gate).toContain('makaron_ai_data_consent=v1');
+    expect(gate).toContain("AI_DATA_CONSENT_COOKIE = 'makaron_ai_data_consent'");
+    expect(gate).toContain('`${AI_DATA_CONSENT_COOKIE}=v1; path=/');
+    expect(gate).toContain("window.location.replace('/home')");
     expect(privacy).toContain('Before the Makaron iOS app sends your content');
     expect(privacy).toContain('Google (Gemini)');
     expect(privacy).toContain('same or equivalent privacy and security protection');
@@ -105,6 +112,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(packageJson.scripts['ios:prod']).toContain('--reset');
     expect(helper).toContain('IOS_DEV_SERVER_URL');
     expect(helper).toContain('delete config.server.url');
+    expect(helper).toMatch(/if \(args\.includes\('--reset'\)\)[\s\S]*config\.server\.errorPath = 'index\.html'/);
+    expect(helper).toMatch(/config\.server\.url = parsed[\s\S]*delete config\.server\.errorPath/);
   });
 
   it('keeps native safe-area padding scoped to iOS editor controls instead of the body', () => {
@@ -113,7 +122,7 @@ describe('iOS App Store readiness guardrails', () => {
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
     const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
     const topBar = fs.readFileSync(path.join(root, 'src/components/TopBar.tsx'), 'utf8');
-    const changelog = fs.readFileSync(path.join(root, 'src/components/Changelog.tsx'), 'utf8');
+    const changelog = fs.readFileSync(path.join(root, 'src/components/ChangelogDialog.tsx'), 'utf8');
     expect(globals).toContain('.makaron-ios-app body');
     expect(globals).toContain('padding: 0');
     expect(globals).toContain('.makaron-ios-app .makaron-ios-page');
@@ -153,7 +162,6 @@ describe('iOS App Store readiness guardrails', () => {
     const mcp = fs.readFileSync(path.join(root, 'src/app/mcp/page.tsx'), 'utf8');
     const skillShare = fs.readFileSync(path.join(root, 'src/app/s/[code]/page.tsx'), 'utf8');
     const login = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8');
-    const activate = fs.readFileSync(path.join(root, 'src/app/activate/page.tsx'), 'utf8');
     const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
     const home = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
@@ -373,7 +381,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(agentContent).not.toContain('makaron-ios-page makaron-ios-page-x min-h-screen w-full bg-black text-gray-200 font-mono p-6 md:p-12 max-w-4xl mx-auto');
     expect(dashboard).toContain('<div className="max-w-2xl mx-auto">');
     expect(profile).toContain('<div className="max-w-lg mx-auto">');
-    expect(admin).toContain('<div className="max-w-2xl mx-auto">');
+    expect(admin).toContain("<div className={`mx-auto ${tab === 'billing' ? 'max-w-6xl' : 'max-w-2xl'}`}>");
     expect(agentContent).toContain('<div className="max-w-4xl mx-auto">');
     expect(adminStatus).toContain('makaron-ios-page');
     expect(demo3d).toContain('makaron-ios-page');
@@ -383,7 +391,6 @@ describe('iOS App Store readiness guardrails', () => {
     expect(mcp).toContain('makaron-ios-page');
     expect(skillShare).toContain('makaron-ios-page');
     expect(login).toContain('makaron-ios-page');
-    expect(activate).toContain('makaron-ios-page');
   });
 
   it('keeps the iOS in-app route surface covered by app-shell guardrails', () => {
@@ -399,7 +406,6 @@ describe('iOS App Store readiness guardrails', () => {
       { route: '/mcp', file: 'src/app/mcp/page.tsx', required: ['makaron-ios-page'] },
       { route: '/s/[code]', file: 'src/app/s/[code]/page.tsx', required: ['makaron-ios-page'] },
       { route: '/login', file: 'src/app/login/page.tsx', required: ['makaron-ios-page', 'userAgentHasMakaronIOSToken'] },
-      { route: '/activate', file: 'src/app/activate/page.tsx', required: ['makaron-ios-page'] },
       { route: '/landingpage', file: 'src/app/landingpage/page.tsx', required: ['makaron-ios-page'] },
       { route: '/moveable-test', file: 'src/app/moveable-test/page.tsx', required: ['makaron-ios-page'] },
     ];
@@ -442,7 +448,6 @@ describe('iOS App Store readiness guardrails', () => {
     walk(appDir);
 
     const shellCovered = new Set([
-      'src/app/activate/page.tsx',
       'src/app/admin/page.tsx',
       'src/app/admin/status/page.tsx',
       'src/app/claim/page.tsx',
@@ -523,7 +528,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bridge).toContain('return (jpegData, jpegFilename(for: filename), "image/jpeg")');
     expect(bridge).toContain('PHAssetCreationRequest.forAsset()');
     expect(bridge).toContain('UIImage(data: data)');
-    expect(bridge).toContain('jpegData(compressionQuality: 0.95)');
+    expect(bridge).toContain('photoResourceForSave(data, filename: filename)');
+    expect(bridge).toContain('if type == UTType.png.identifier { return (data, base + ".png") }');
+    expect(bridge).toContain('if type == UTType.jpeg.identifier { return (data, base + ".jpg") }');
+    expect(bridge).not.toContain('jpegData(compressionQuality: 0.95)');
     expect(bridge).toContain('jpegFilename(for: filename)');
     expect(bridge).toContain('placeholderForCreatedAsset?.localIdentifier');
     expect(bridge).toContain('[Makaron] native save request');
@@ -549,7 +557,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(download).toContain("setAgentStatus('Native save failed, trying fallback...')");
     expect(download).toContain('Save failed:');
     expect(download).toContain("canvas.toBlob((result) =>");
-    expect(download).toContain("'image/jpeg', 0.95");
+    expect(download).toContain("'image/png'");
+    expect(download).toContain('preserves any decoded alpha');
     expect(download).toContain('saveBlobToNativePhotoLibrary');
     expect(download).toContain('saveUrlToNativePhotoLibrary');
   });
@@ -601,7 +610,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(homePage).toContain('rememberIOSSkillReturn');
     expect(homePage).toContain("const skillId = new URLSearchParams(window.location.search).get('skill') || pathSkillId || pendingIOSSkillId");
     expect(homePage).not.toContain('useSearchParams');
-    expect(homePage).toContain('draft.homeSkillId && draft.images.length === 0');
+    expect(homePage).toContain('draft.images.length < getRequiredHomeSkillImageCount(homeSkill)');
     expect(homePage).toContain("document.documentElement.style.overflow = 'hidden'");
     expect(homePage).toContain("window.addEventListener('makaron-ios-page-stack-back', unlockIfNoDetail)");
     expect(homeSkillMedia).toContain('function SkillVideo');
@@ -626,7 +635,8 @@ describe('iOS App Store readiness guardrails', () => {
     const projectLoading = path.join(root, 'src/app/projects/[id]/loading.tsx');
     expect(projectContainer).toContain('getPendingProjectLaunchSync(projectId)');
     expect(projectContainer).toContain('if (isNewProject && user)');
-    expect(projectContainer).toContain('.maybeSingle()');
+    // Access and content now share the project loader's RLS query.
+    expect(fs.readFileSync(path.join(root, 'src/hooks/useProject.ts'), 'utf8')).toContain('.maybeSingle()');
     expect(editor).toContain('hasCuiHistoryState');
     expect(editor).toContain("window.addEventListener('popstate', handlePop)");
     expect(editor).toContain("viewMode === 'cui'");
@@ -701,6 +711,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).not.toContain("contain: 'layout paint style'");
     expect(projectsPage).toContain("isolation: 'isolate'");
     expect(projectsPage).toContain('blockNativeBackSwipe');
+    expect(projectsPage).toContain("target.closest('button, a, [role=\"button\"], input, textarea, select, [contenteditable=\"true\"]')");
     expect(projectsPage).toContain('passive: false');
     expect(projectsPage).toContain("overscrollBehaviorX: 'contain'");
     expect(projectsPage).toContain('isMakaronIOSAppShell');

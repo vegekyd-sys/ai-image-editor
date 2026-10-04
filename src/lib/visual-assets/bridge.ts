@@ -1,10 +1,11 @@
 import { createHash } from 'crypto';
 import path from 'path';
+import sharp from 'sharp';
 import { isDeepStrictEqual } from 'util';
 import * as workspace from '../workspace';
 import { preparedVisualAssetSchema, type PreparedVisualAsset, type VisualAssetMode } from './contracts';
 import { inspectEdgeVideoBuffer } from './edge-video';
-import { prepareChromaKeyCutout, renderCutoutContactSheet } from './image-cutout';
+import { prepareChromaKeyCutout, prepareNativeAlphaCutout, renderCutoutContactSheet } from './image-cutout';
 
 type SupabaseClient = any;
 
@@ -81,7 +82,7 @@ async function downloadMedia(sourceUrl: string): Promise<DownloadedMedia> {
 
 function cacheKeyFor(input: PrepareVisualAssetInput, media: DownloadedMedia): string {
   return createHash('sha256')
-    .update('visual-asset-bridge-v3\0')
+    .update('visual-asset-bridge-v4\0')
     .update(input.mode)
     .update('\0')
     .update(input.keyColor || '')
@@ -164,7 +165,20 @@ export async function prepareVisualAsset(input: PrepareVisualAssetInput): Promis
     if (!media.contentType.startsWith('image/') && media.contentType !== 'application/octet-stream') {
       throw new Error(`cutout mode requires an image, received ${media.contentType}`);
     }
-    const cutout = await prepareChromaKeyCutout(media.buffer, { keyColor: input.keyColor });
+    const metadata = await sharp(media.buffer, { failOn: 'error' }).metadata();
+    const nativeCandidate = metadata.hasAlpha
+      ? await prepareNativeAlphaCutout(media.buffer)
+      : null;
+    // Any real non-opaque pixel is provider-authored alpha and must never be
+    // reinterpreted as a chroma plate. The 8% background threshold remains a
+    // QA signal inside prepareNativeAlphaCutout, not a routing threshold.
+    const useNativeAlpha = Boolean(
+      nativeCandidate
+      && (nativeCandidate.quality.metrics?.nonOpaqueRatio ?? 0) > 0,
+    );
+    const cutout = useNativeAlpha
+      ? nativeCandidate!
+      : await prepareChromaKeyCutout(media.buffer, { keyColor: input.keyColor });
     const contactSheet = await renderCutoutContactSheet(cutout.png);
     const workspacePath = `${root}/${assetId}.png`;
     const contactSheetPath = `${root}/${assetId}-qa.png`;
@@ -187,9 +201,10 @@ export async function prepareVisualAsset(input: PrepareVisualAssetInput): Promis
       status: cutout.quality.status === 'pass' ? 'ready' : 'failed',
       sourceSnapshotId: input.sourceSnapshotId,
       hasAlpha: true,
+      alphaSource: useNativeAlpha ? 'native' : 'chroma-key',
       subjectBox: cutout.subjectBox,
       safeArea: cutout.safeArea,
-      edgePalette: [cutout.keyColor],
+      edgePalette: useNativeAlpha ? undefined : [(cutout as Awaited<ReturnType<typeof prepareChromaKeyCutout>>).keyColor],
       width: cutout.width,
       height: cutout.height,
       quality: {

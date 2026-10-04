@@ -11,7 +11,25 @@ import {
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const mainRepo = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const invocationRepo = resolve(fileURLToPath(new URL('..', import.meta.url)));
+
+function resolveCanonicalDevRepo(fallback) {
+  const result = spawnSync('git', ['worktree', 'list', '--porcelain'], {
+    cwd: fallback,
+    encoding: 'utf8',
+    shell: false,
+  });
+  if (result.status !== 0) return fallback;
+  for (const block of result.stdout.split(/\n\n+/)) {
+    const lines = block.split('\n');
+    if (!lines.includes('branch refs/heads/dev')) continue;
+    const worktreeLine = lines.find(line => line.startsWith('worktree '));
+    if (worktreeLine) return resolve(worktreeLine.slice('worktree '.length));
+  }
+  return fallback;
+}
+
+const mainRepo = resolveCanonicalDevRepo(invocationRepo);
 const mainNodeModules = resolve(mainRepo, 'node_modules');
 const defaultParent = dirname(mainRepo);
 
@@ -24,19 +42,21 @@ function usage() {
 Usage:
   node scripts/makaron-worktree-fastpath.mjs audit
   node scripts/makaron-worktree-fastpath.mjs link <worktree-path> [--force]
-  node scripts/makaron-worktree-fastpath.mjs create <name> [--branch <branch>] [--base <base>] [--path <path>]
+  node scripts/makaron-worktree-fastpath.mjs create <name> [--branch <branch>] [--base <base>] [--path <path>] [--fetch]
   node scripts/makaron-worktree-fastpath.mjs cleanup-candidates [--base dev]
 
 Commands:
   audit              Show worktrees and whether node_modules is shared/local/missing.
   link               Symlink <worktree>/node_modules to the main repo node_modules.
-  create             Add a git worktree, then symlink node_modules.
+  create             Add a lightweight git worktree, then symlink node_modules.
   cleanup-candidates List clean worktrees whose branch is merged into the base branch.
 
 Safety:
   This script does not remove worktrees or branches.
   link refuses to replace a real node_modules directory unless --force is passed.
   create defaults to ../<repo-name>-<name> and branch <name>.
+  create uses the local base ref by default. Pass --fetch only when fresh remote refs are required.
+  Feature worktrees should not run Next.js. Use the fixed runtime runner for local UI, build, and Preview tests.
 `);
 }
 
@@ -144,10 +164,13 @@ function createWorktree() {
   const worktreePath = resolve(argValue('--path', resolve(defaultParent, `${basename(mainRepo)}-${name}`)));
 
   mkdirSync(dirname(worktreePath), { recursive: true });
-  run('git', ['fetch', '--all', '--prune'], { stdio: 'inherit' });
+  if (has('--fetch')) {
+    run('git', ['fetch', '--all', '--prune'], { stdio: 'inherit' });
+  }
   run('git', ['worktree', 'add', '-b', branch, worktreePath, base], { stdio: 'inherit' });
   linkNodeModules(worktreePath);
-  console.log(`created worktree: ${worktreePath}`);
+  console.log(`created lightweight worktree: ${worktreePath}`);
+  console.log('Commit the feature, then use `npm run runner:test -- <commit>` for full local validation.');
 }
 
 function cleanupCandidates() {
@@ -184,7 +207,7 @@ function cleanupCandidates() {
 }
 
 try {
-  if (command === 'help' || command === '--help' || command === '-h') {
+  if (command === 'help' || has('--help') || has('-h')) {
     usage();
   } else if (command === 'audit') {
     audit();

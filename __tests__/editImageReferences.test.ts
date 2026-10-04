@@ -81,4 +81,56 @@ describe('editImage reference contract', () => {
       ],
     }));
   });
+
+  it('normalizes legacy Image 2 while retaining caller context', async () => {
+    await editImage(
+      { editPrompt: 'Create a polished poster.', preferredModel: 'openai' },
+      {
+        codexSubscription: {
+          userId: 'allowed-user',
+          projectId: 'project-1',
+        },
+      },
+    );
+
+    expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'gpt-image-2.5-flare',
+      codexSubscription: {
+        userId: 'allowed-user',
+        projectId: 'project-1',
+      },
+    }));
+  });
+
+  it('uses strict Flare text-to-image when transparent output has no source', async () => {
+    await editImage(
+      { editPrompt: 'Create a sticker.', background: 'transparent' },
+      {},
+    );
+
+    expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
+      image: undefined,
+      model: 'gpt-image-2.5-flare',
+      background: 'transparent',
+      references: undefined,
+    }));
+  });
+
+  it('uses strict Flare image-to-image for background removal from a source', async () => {
+    await editImage(
+      {
+        editPrompt: 'Remove the background to transparent alpha while preserving the subject.',
+        background: 'transparent',
+        preferredModel: 'gemini',
+      },
+      { currentImage: 'https://example.com/source.jpg' },
+    );
+
+    expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
+      image: 'https://example.com/source.jpg',
+      model: 'gpt-image-2.5-flare',
+      background: 'transparent',
+      references: undefined,
+    }));
+  });
 });

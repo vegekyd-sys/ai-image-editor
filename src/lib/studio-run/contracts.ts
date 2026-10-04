@@ -386,6 +386,9 @@ export const studioDecisionSchema = z.object({
 export const studioRunSchema = z.object({
   version: z.literal('1.0'),
   id: z.string().min(1),
+  // Legacy project-scoped records may not have this field. Every newly
+  // created workflow invocation is bound to its sole model-facing Agent Run.
+  agentRunId: z.string().min(1).optional(),
   projectId: z.string().min(1),
   recipe: z.string().min(1),
   title: z.string().min(1),

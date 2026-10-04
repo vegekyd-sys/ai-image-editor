@@ -6,6 +6,10 @@ export interface MarketingAttribution {
   utm_campaign?: string
   utm_content?: string
   utm_term?: string
+  campaign_id?: string
+  adset_id?: string
+  ad_id?: string
+  creative_id?: string
   fbclid?: string
   fbc?: string
   skill_id?: string
@@ -18,6 +22,7 @@ const COOKIE_KEY = 'mkr_attribution'
 const ATTR_TTL_SECONDS = 60 * 60 * 24 * 30
 
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'] as const
+const META_ID_KEYS = ['campaign_id', 'adset_id', 'ad_id', 'creative_id'] as const
 
 function readStoredAttribution(): MarketingAttribution {
   if (typeof window === 'undefined') return {}
@@ -47,6 +52,10 @@ export function captureMarketingAttribution(pathname: string, searchParams: URLS
     const value = searchParams.get(key)
     if (value) incoming[key] = value
   }
+  for (const key of META_ID_KEYS) {
+    const value = searchParams.get(key)
+    if (value) incoming[key] = value
+  }
   const fbclid = searchParams.get('fbclid')
   if (fbclid) {
     incoming.fbclid = fbclid
@@ -62,7 +71,7 @@ export function captureMarketingAttribution(pathname: string, searchParams: URLS
     ? {
         ...previous,
         ...incoming,
-        landing_path: previous.landing_path || `${pathname}${window.location.search}`,
+        landing_path: previous.landing_path || `${pathname}${searchParams.size ? `?${searchParams}` : ''}`,
         first_seen_at: previous.first_seen_at || new Date().toISOString(),
       }
     : previous

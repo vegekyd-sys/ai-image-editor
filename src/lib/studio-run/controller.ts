@@ -95,6 +95,7 @@ function assertArtifactHonorsDeliveryPromise(run: StudioRun, stage: StudioStageI
 
 export function createStudioRun(input: {
   id?: string;
+  agentRunId: string;
   projectId: string;
   recipe: string;
   title: string;
@@ -115,6 +116,7 @@ export function createStudioRun(input: {
   return studioRunSchema.parse({
     version: '1.0',
     id: input.id ?? randomUUID(),
+    agentRunId: input.agentRunId,
     projectId: input.projectId,
     recipe: input.recipe,
     title: input.title,

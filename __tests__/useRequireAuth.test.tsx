@@ -38,8 +38,22 @@ describe('useRequireAuth first interaction', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/login'))
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith('/login?next=%2Fhome'))
     expect(mocks.getSession).toHaveBeenCalledTimes(1)
     expect(sessionStorage.getItem('mkr_return_url')).toBe('/home')
+  })
+
+  it('carries a Skill template destination in the login URL as well as storage', async () => {
+    mocks.getSession.mockResolvedValue({ data: { session: null } })
+    window.history.replaceState({}, '', '/home?skill=world-cup-mvp')
+    render(<Harness />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith(
+      '/login?next=%2Fhome%3Fskill%3Dworld-cup-mvp',
+    ))
+    expect(sessionStorage.getItem('mkr_return_url')).toBe('/home?skill=world-cup-mvp')
+    expect(localStorage.getItem('mkr_return_url')).toBe('/home?skill=world-cup-mvp')
   })
 })

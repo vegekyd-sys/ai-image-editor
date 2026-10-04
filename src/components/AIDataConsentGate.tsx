@@ -3,8 +3,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocale } from '@/lib/i18n';
 import { isMakaronIOSApp } from '@/lib/native-app';
+import { getIOSAIConsentAppBuild, requiresIOSAIDataConsent } from '@/lib/ios-ai-consent';
 
 export const AI_DATA_CONSENT_STORAGE_KEY = 'makaron:ai-data-consent:v1';
+export const AI_DATA_CONSENT_COOKIE = 'makaron_ai_data_consent';
 
 type ConsentState = 'checking' | 'prompt' | 'declined' | 'accepted';
 
@@ -14,7 +16,7 @@ function storeConsent() {
     localStorage.setItem(AI_DATA_CONSENT_STORAGE_KEY, record);
   } catch {}
   const secure = window.location.protocol === 'https:' ? '; Secure' : '';
-  document.cookie = `makaron_ai_data_consent=v1; path=/; max-age=31536000; SameSite=Lax${secure}`;
+  document.cookie = `${AI_DATA_CONSENT_COOKIE}=v1; path=/; max-age=31536000; SameSite=Lax${secure}`;
 }
 
 function hasStoredConsent(): boolean {
@@ -22,28 +24,71 @@ function hasStoredConsent(): boolean {
     const record = JSON.parse(localStorage.getItem(AI_DATA_CONSENT_STORAGE_KEY) || 'null');
     if (record?.version === 1 && typeof record?.grantedAt === 'string') return true;
   } catch {}
-  return document.cookie.split(';').some((part) => part.trim() === 'makaron_ai_data_consent=v1');
+  return document.cookie.split(';').some((part) => part.trim() === `${AI_DATA_CONSENT_COOKIE}=v1`);
+}
+
+export function shouldLeaveRedirectRootAfterConsent(pathname: string): boolean {
+  return pathname === '/';
 }
 
 export default function AIDataConsentGate({
   children,
   required,
+  initiallyAccepted = false,
+  requiredBuilds = 'all',
 }: {
   children: ReactNode;
   required: boolean;
+  initiallyAccepted?: boolean;
+  requiredBuilds?: string;
 }) {
   const { t } = useLocale();
-  const [state, setState] = useState<ConsentState>(required ? 'checking' : 'accepted');
+  const [state, setState] = useState<ConsentState>(
+    required && !initiallyAccepted ? 'checking' : 'accepted',
+  );
 
   useEffect(() => {
+    if (initiallyAccepted) {
+      setState('accepted');
+      return;
+    }
     const developmentPreview = process.env.NODE_ENV === 'development'
       && new URLSearchParams(window.location.search).has('__makaron_ios_consent');
     if (!required && !isMakaronIOSApp() && !developmentPreview) {
       setState('accepted');
       return;
     }
-    setState(hasStoredConsent() ? 'accepted' : 'prompt');
-  }, [required]);
+    let cancelled = false;
+    async function resolveConsent() {
+      const storedConsent = hasStoredConsent();
+      let promptRequired = true;
+      if (!storedConsent && !developmentPreview) {
+        const policy = requiredBuilds.trim();
+        const build = policy && policy !== 'all' && policy !== 'none'
+          ? await getIOSAIConsentAppBuild() : undefined;
+        promptRequired = requiresIOSAIDataConsent(requiredBuilds, build);
+        if (cancelled) return;
+        console.info('[makaron-ios-native] consent-policy', { build, requiredBuilds, promptRequired });
+      }
+      if (cancelled) return;
+      if (!storedConsent && promptRequired) {
+        setState('prompt');
+        return;
+      }
+      if (shouldLeaveRedirectRootAfterConsent(window.location.pathname)) {
+        // The root route is a server redirect. Mounting its already-suspended
+        // React node after the consent gate opens can reuse an invalid hook tree
+        // in React 19. Cross the redirect boundary with a clean /home request.
+        // Disabling the page is not a grant: only resync an existing consent.
+        if (storedConsent) storeConsent();
+        window.location.replace('/home');
+        return;
+      }
+      setState('accepted');
+    }
+    void resolveConsent();
+    return () => { cancelled = true; };
+  }, [initiallyAccepted, required, requiredBuilds]);
 
   if (state === 'accepted') return <>{children}</>;
 
@@ -107,9 +152,15 @@ export default function AIDataConsentGate({
             <>
               <button
                 type="button"
+                aria-label={t('aiConsent.allow')}
+                data-testid="ai-data-consent-allow"
                 className="h-12 w-full bg-white px-5 text-[16px] font-semibold text-black active:bg-white/80"
                 onClick={() => {
                   storeConsent();
+                  if (shouldLeaveRedirectRootAfterConsent(window.location.pathname)) {
+                    window.location.replace('/home');
+                    return;
+                  }
                   setState('accepted');
                 }}
               >

@@ -1,0 +1,87 @@
+[
+  {
+    "id": "accept-video-t2v",
+    "domain": "video",
+    "prompt": "5秒清晨森林溪流，镜头缓慢前推，水面反射晨光，有流水与鸟鸣，无文字。 用 MiniMax H3 Max，480p，16:9，直接生成视频，不用确认。",
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "args": {
+      "model": "minimax-h3-max",
+      "duration": 5,
+      "video_resolution": "480p"
+    },
+    "noMedia": true,
+    "quality": [
+      "5s",
+      "coherent camera movement",
+      "water and bird sounds",
+      "no text"
+    ]
+  },
+  {
+    "id": "accept-video-action",
+    "domain": "video",
+    "prompt": "10秒橘猫从地面跳上窗台然后卧下晒太阳，一个连续完整动作，有脚步与自然环境音，无文字。 用 MiniMax H3 Max，480p，16:9，直接生成视频，不用确认。",
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "args": {
+      "model": "minimax-h3-max",
+      "duration": 10,
+      "video_resolution": "480p"
+    },
+    "noMedia": true,
+    "quality": [
+      "10s",
+      "ground to sill to rest",
+      "cat consistency",
+      "natural audio"
+    ]
+  },
+  {
+    "id": "accept-video-i2v",
+    "domain": "video",
+    "prompt": "让 @1 狗狗轻轻歪头看向镜头，5秒，保留它的卷毛、黄黑条纹领结和房间。 用 MiniMax H3 Max，480p，16:9，直接生成视频，不用确认。",
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "args": {
+      "model": "minimax-h3-max",
+      "duration": 5,
+      "video_resolution": "480p"
+    },
+    "fixture": "artifacts/core-prompt/acceptance/inputs/dog.webp",
+    "mediaDescription": "<<<media_1>>> original: black curly-haired dog with a yellow and black striped bow tie sitting on a blue-green cushion in a room. Current selection media_1.",
+    "quality": [
+      "same dog and bow tie",
+      "5s",
+      "subtle head movement",
+      "room preserved"
+    ]
+  },
+  {
+    "id": "accept-video-dialogue",
+    "domain": "video",
+    "prompt": "5秒一位成年人在咖啡店窗边，面向镜头用普通话说「今天也要开心」，保留轻微咖啡店环境声，无字幕，无背景音乐。 用 MiniMax H3 Max，480p，16:9，直接生成视频，不用确认。",
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "args": {
+      "model": "minimax-h3-max",
+      "duration": 5,
+      "video_resolution": "480p"
+    },
+    "noMedia": true,
+    "quality": [
+      "exact spoken sentence",
+      "speech synchronization",
+      "no subtitle",
+      "cafe ambience"
+    ]
+  }
+]

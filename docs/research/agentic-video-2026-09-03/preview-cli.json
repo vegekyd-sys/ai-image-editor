@@ -1,0 +1,54 @@
+{
+  "checkedAt": "2026-09-03T12:33:47.514Z",
+  "endpoint": "https://ai-image-editor-5pppj8hvh-vegekyd-sys-projects.vercel.app",
+  "video": "https://storage.googleapis.com/cloud-samples-data/generative-ai/video/pixel8.mp4",
+  "cases": [
+    {
+      "id": "editor-overview",
+      "question": "Describe the entire video chronologically for a creative editor. Cover subjects, setting, actions, scene changes, notable text, framing, mood, and the most useful moments. Be concise but specific."
+    },
+    {
+      "id": "visual-moment",
+      "question": "What is visibly shown around 00:46 to 00:48? Describe the camera composition and objects in this moment in at most three sentences. Do not infer from dialogue."
+    },
+    {
+      "id": "visible-text",
+      "question": "Read the person introduction labels visible near the beginning of this video, including the person name and pronouns if visible. Give only the visible labels, and say uncertain if you cannot read them."
+    },
+    {
+      "id": "makaron-intro",
+      "video": "/Users/tianyicai/ai-image-editor/makaron-intro/renders/makaron-intro_2026-05-07_02-05-55.mp4",
+      "question": "Describe the major sections of this short product video in chronological order, including the prominent text in each section and approximate transition times. Say whether any spoken dialogue or music is present. Be concise and do not invent text that is not legible."
+    }
+  ],
+  "runs": [
+    {
+      "id": "editor-overview",
+      "elapsedMs": 16037,
+      "ok": true,
+      "stdout": "Video analysis completed. (model: gemini-3.8-flash; processing: static; thinking: low)\n\nHere is a detailed, chronological breakdown of the clip:\n\n- **0:00–0:05**: Overhead tracking shot of a train passing through a quiet nighttime neighborhood in Tokyo. Cuts to a street-level tracking medium shot of Saeka Shimada, a real Google Pixel owner and photographer. She walks along illuminated sidewalks and introduces herself in Japanese (*“My name is Saeka Shimada. I'm a photographer in Tokyo.”*). Subtitles and on-screen graphics confirm her name and role.\n- **0:05–0:12**: Medium tracking shot following Saeka from behind, looking out at the city lights. She reflects on how Tokyo transforms at night. Atmosphere is contemplative and stylish.\n- **0:13–0:20**: Saeka enters a charming, narrow alleyway (yokocho) filled with warm lanterns and signage. She talks about the Pixel 8 Pro’s upcoming “Video Boost” feature, noting how it enhances low-light footage via “Night Sight.” A tight cutover to her hands holding the Pixel 8 Pro shows the camera interface capturing the vibrant streetscape in high dynamic range. Disclaimer text: *“Coming soon. Pixel 8 Pro only. Requires Google Photos app.”*\n- **0:21–0:28**: Wide and medium framing captures Saeka exploring Sangenjaya (“Sancha”), an area filled with personal memories. She pauses, framing shots of quiet alley details and retro storefronts. \n- **0:29–0:37**: Saeka crouches down to capture reflections on wet pavement. Quick close-up reveals her smiling as she checks the captured footage on her Pixel display, remarking on its beauty (*“Oh, I like this... Beautiful!”*).\n- **0:38–0:51**: A fast-paced, colorful montage displaying the rich nighttime shots captured on the Pixel: narrow lantern-lit passages, reflective puddles, interior bar scenes under warm, eclectic lamps, bicycle handlebars, and hanging yellow paper lanterns. Dynamic music underscores the creative energy.\n- **0:52–0:56**: Scene transitions smoothly to a wider cityscape. High-angle tracking shot overlooking traffic moving smoothly through Shibuya at night (*“Next, I came to Shibuya.”*). Saeka is glimpsed through transit glass before stepping onto a pedestrian bridge overlooking modern Shibuya buildings, greeting a group of friends waiting for her (*“Minna!”*).\n\n**Summary for editing:** A clean mix of urban night aesthetics, authentic user-testimonial framing, and clear feature callouts highlighting Pixel 8 Pro's low-light capabilities. Perfect for cutdowns, spec ads, or tech feature highlights emphasizing nightlife and street photography.\n",
+      "stderr": "📹 Using public video URL for analysis; provider limits apply.\n🔎 Analyzing video...\n"
+    },
+    {
+      "id": "visual-moment",
+      "elapsedMs": 6129,
+      "ok": true,
+      "stdout": "Video analysis completed. (model: gemini-3.8-flash; processing: static; thinking: low)\n\nAround 00:46 to 00:48, the shot captures the reflection of an alleyway and brightly lit signs in a puddle on the ground, shown upside down. Droplets and moisture ring the dark asphalt around the edge of the puddle frame. Glowing neon and illuminated street lanterns create sharp, colorful reflections in the center of the water.\n",
+      "stderr": "📹 Using public video URL for analysis; provider limits apply.\n🔎 Analyzing video...\n"
+    },
+    {
+      "id": "visible-text",
+      "elapsedMs": 8236,
+      "ok": true,
+      "stdout": "Video analysis completed. (model: gemini-3.8-flash; processing: static; thinking: low)\n\nThe person introduction labels shown near the beginning of the video are:\n\n- **Saeka Shimada** She/Her\n- **Photographer**\n",
+      "stderr": "📹 Using public video URL for analysis; provider limits apply.\n🔎 Analyzing video...\n"
+    },
+    {
+      "id": "makaron-intro",
+      "elapsedMs": 13065,
+      "ok": true,
+      "stdout": "Video analysis completed. (model: gemini-3.8-flash; processing: static; thinking: low)\n\nHere is a summary of the video:\n\n### Timeline & Major Sections\n\n* **0:00 – 0:04 | Title Screen**: Displays the brand name and tagline:\n  * *\"Makaron\"*\n  * *\"one man creative studio\"*\n* **0:04 – 0:10 | Feature Highlights**: Four feature pills appear sequentially:\n  * *\"AI Photo Editing\"*\n  * *\"One-Click Video\"*\n  * *\"AI Soundtrack\"*\n  * *\"Creative Agent\"*\n* **0:10 – 0:15 | Call to Action / Outro**: Displays the closing message and link:\n  * *\"Your Photos Deserve More\"*\n  * *\"makaron.app\"*\n  * *\"Try it free\"*\n\n### Audio\n* **Dialogue**: None.\n* **Music / Sound**: An upbeat electronic track plays throughout the video.\n",
+      "stderr": "📹 Uploading makaron-intro_2026-05-07_02-05-55.mp4 (1.4MB)...\n📹 Uploaded: makaron-intro_2026-05-07_02-05-55.mp4\n🔎 Analyzing video...\n"
+    }
+  ]
+}

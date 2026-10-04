@@ -1,0 +1,92 @@
+{
+  "experiment": "video-replication-15s-2026-08-30",
+  "status": "partial_pass",
+  "reference": "makaron-intro/renders/makaron-intro_2026-05-07_02-05-55.mp4",
+  "output": "docs/experiments/video-replication-15s-2026-08-30/seedance-2.5-replica-attempt-1.mp4",
+  "provider_run": {
+    "provider": "EvoLink",
+    "model": "seedance-2.5",
+    "operation": "generate",
+    "resolution": "480p",
+    "requested_duration_sec": 15,
+    "task_id": "task-unified-1788023357-rdbot51d",
+    "elapsed_sec": 187,
+    "attempt_count": 1,
+    "rerolled": false,
+    "published_provider_cost_estimate_usd": 2.52,
+    "makaron_balance_before": 33086,
+    "makaron_balance_after": 31913,
+    "observed_makaron_credit_delta": 1173,
+    "credit_note": "The Makaron balance delta is an observed interval delta, not an itemized billing ledger. It does not match the provider page's credit unit and must not be substituted for that unit."
+  },
+  "file_truth": {
+    "decodes_fully": true,
+    "codec": "h264",
+    "pixel_format": "yuv420p",
+    "width": 480,
+    "height": 854,
+    "fps": 24,
+    "frame_count": 361,
+    "duration_sec": 15.041667,
+    "audio_present": false,
+    "duration_error_output_frames": 1,
+    "gate": "pass"
+  },
+  "structure": {
+    "reference_shot_count": 3,
+    "output_shot_count": 3,
+    "order_exact": true,
+    "reference_boundaries_sec": [5.017, 10.517],
+    "output_boundaries_sec": [4.75, 10.479],
+    "boundary_absolute_errors_sec": [0.267, 0.038],
+    "boundary_absolute_errors_output_frames": [6.408, 0.912],
+    "boundary_median_error_output_frames": 3.66,
+    "boundary_p95_error_output_frames": 6.408,
+    "reference_duration_curve_sec": [5.017, 5.5, 4.483],
+    "output_duration_curve_sec": [4.75, 5.729, 4.563],
+    "duration_curve_mape": 0.037567,
+    "transition_classes_match": true,
+    "generated_p0_gate": "pass",
+    "deterministic_p95_gate": "fail"
+  },
+  "composition": {
+    "method": "normalized bright-pixel bounding-box centers on representative 2s, 7s, and 13s frames",
+    "center_delta_frame_diagonal": [0.173816, 0.078602, 0.275739],
+    "target_max": 0.08,
+    "per_shot_gate": ["fail", "pass", "fail"],
+    "gate": "fail",
+    "caveat": "This is an approximate text-led composition metric, not semantic object detection."
+  },
+  "camera_and_motion": {
+    "manual_frame_review": "locked-camera intent retained; motion remains layer reveal/fade rather than camera travel",
+    "optical_flow_verification": "not_implemented",
+    "gate": "unverified_machine"
+  },
+  "text": {
+    "original_makaron_wordmark_absent": true,
+    "target_copy_exact": false,
+    "ocr_evidence": {
+      "2s": "VIDEO DNA / shot grammar, reboult",
+      "7s": "Shot Analysis / Video Blueprint / Video Blueprint / Motion Mapping / Automatic QO",
+      "13s": "YOUR VIDEO / HAS A GRAMMAR / extract. map. rebuild / replicate the structure"
+    },
+    "failures": [
+      "rebuilt was rendered as reboult",
+      "Video Blueprint was duplicated",
+      "Automatic QA was rendered as Automatic QO"
+    ],
+    "gate": "fail"
+  },
+  "style_and_rights": {
+    "manual_style_review": "near-black background, violet glow, white type, magenta accent, and fade rhythm are strongly retained",
+    "surface_copy_risk": "The top sparkle remains visually too close to the reference mark even though the Makaron wordmark and URL were removed.",
+    "machine_color_threshold": "not_defined",
+    "gate": "partial"
+  },
+  "verdict": {
+    "part_1_skill_understanding": "pass",
+    "part_2_video_model_replication": "partial_pass",
+    "ship_ready": false,
+    "recommended_route": "C: use generation only for pixels/motion that need it, then enforce text, logo, exact layout, timeline, and QA in editable Remotion. For this particular text-heavy example, route A/Remotion may be sufficient without paid generation."
+  }
+}

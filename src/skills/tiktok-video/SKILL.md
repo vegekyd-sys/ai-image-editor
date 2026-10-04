@@ -1,0 +1,188 @@
+---
+name: tiktok-video
+description: Package accepted source-led footage for TikTok/Douyin in editable Remotion; compose first with talking-head and video-translate for visible-speaker editing or translation.
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
+metadata:
+  makaron:
+    icon: "▯"
+    color: "#ff5c72"
+    tipsEnabled: false
+    builtIn: true
+    defaultAspectRatio: "9:16"
+    sourceMediaRequired: false
+    tags: [video, tiktok, vertical, social, captions, safe-zone, remotion]
+---
+
+# TikTok Video
+Use this Skill after the Agent has chosen a source-led or explicitly editable
+Composition workflow for a TikTok/Douyin deliverable: organic edits,
+creator-style cuts, process footage, talking heads, product demos, UGC
+packaging, and deterministic platform variants. TikTok or Douyin is a delivery
+destination, not a production engine. Do not enter this Skill merely because
+the platform is named.
+
+For visible-speaker cleanup, read `skills/talking-head/SKILL.md`; for a language
+change, read `skills/video-translate/SKILL.md`. Together the order is
+`talking-head` → `video-translate` → `tiktok-video`: clean A-roll, verified
+translation, then captions, B-roll, platform layout, composition, and export in the same request. Intermediate edits, chunks, and provider results are not delivery.
+
+## Read The Conditional References
+
+- Before laying out any text, read
+  `skills/tiktok-video/references/platform-layout.md`.
+- If the final piece contains narration or useful source speech, read
+  `skills/_shared/spoken-caption.md`, then
+  `skills/tiktok-video/references/caption-direction.md` before writing the
+  Script and again before composing the caption track.
+- For the default VO-plus-BGM soundtrack and its shared timing contract, read
+  `skills/tiktok-video/references/audio-sync.md` before writing the Script.
+- Before choosing Composition dimensions or writing the Composition, read
+  `skills/tiktok-video/references/delivery-qa.md`; read it again before Review
+  or Delivery.
+- For a substantial editable production, also read
+  `skills/motion-design-video/SKILL.md`,
+  `skills/_shared/studio-production/production-contract.md`, and
+  `skills/_shared/remotion-director-contract.md`.
+
+## Choose The Production Route
+
+- Decide the visual carrier before platform packaging. When the user asks for
+  newly imagined scenes, subject performance, transformation, cinematic camera
+  action, or motion generated from text/image/video references within the
+  selected provider's single-generation limit, read `prompts/animate.md` first
+  and use `generate_animation`. Carry TikTok framing, pacing, safe placement,
+  sound, and requested text into that generation script.
+- Exact on-screen copy does not by itself require Remotion. A detailed shot
+  list also remains one provider-generation script when it fits the model's
+  duration limit. Do not generate a still and then fake the requested cinematic
+  motion with pans, gradients, UI blocks, or code.
+- Existing timeline or source footage normally calls for an editable Remotion
+  composition with a deliberate hook, sound strategy, and native close.
+- When the finished piece depends on authored captions, semantic keyword
+  emphasis, or branded text motion, keep that packaging in the editable
+  Remotion Composition. FFmpeg may normalize or trim source media, but a
+  missing `drawtext` filter is not permission to downgrade the final captions
+  to generic ASS subtitles or another renderer-owned fallback.
+- Use this editable route when the source itself is the evidence, when the user
+  asks to cut/package existing footage, or when deterministic post-production
+  and later editability are explicit requirements.
+- Unless the user explicitly asks for source sound, silence, music-only, or
+  another audio treatment, a source-footage TikTok defaults to muted clip audio
+  plus one finished soundtrack containing VO and instrumental BGM. This does
+  not require wall-to-wall narration; keep useful BGM-led breathing room.
+
+## Direct The Footage
+
+An underspecified TikTok request is an invitation to direct. Inspect the whole
+source set, propose genuinely different creator-native concepts, choose one
+emotional engine or point of view, and commit to it. The result may be playful,
+tactile, surprising, premium, intimate, urgent, quiet, or something else the
+material supports; the choice must be visible in the final frames.
+
+- Search for the strongest proof, reveal, reaction, human gesture, or tactile
+  payoff before accepting source order as story order. A finished result may
+  open and close the piece as a bookend.
+- Begin with meaningful action, a result, or a specific question. Make the
+  proposition clear in the first few seconds without spending the opening on a
+  logo or generic slate.
+- Cut on action, contact, material change, tool impact, or spoken emphasis.
+  Reframes, freezes, speed changes, match cuts, or longer satisfying holds are
+  choices, not a mandatory checklist.
+- Treat source clips as visual material by default and mute their embedded
+  audio. If the user explicitly wants real ambience or a source-sound moment,
+  preserve it as a deliberate exception rather than letting every clip leak
+  into the VO/BGM mix.
+- Turn the selected proposal into a small set of signature moves and
+  scene-specific promises, then implement them. A rich Storyboard must not
+  collapse into one reusable caption plus one reusable step label.
+
+## Keep Text Roles Distinct
+
+Use only the roles the chosen concept needs:
+
+- **Hook:** one clear curiosity, payoff, or point of view.
+- **Spoken captions:** the part of the final speech currently being said.
+- **Beat labels:** optional short reactions, proof labels, or step markers.
+- **Close:** a brief payoff, question, loop-back, or CTA.
+
+Do not render every role as the same lower-third component. One primary text
+idea per beat is usually stronger than stacked hook, caption, label, badge, and
+progress decoration.
+
+## Write Less, Say Something
+
+For process footage, write only the speech the pictures cannot communicate as
+clearly. Before approving the Script, challenge every spoken
+line with a silent-viewing test: if the action already says it, remove the line
+or compress it to a sharper observation.
+
+Unless the user explicitly asks for continuous narration, a sequence of full
+sentences covering nearly every scene is an over-written cut. Intentional
+speech-free beats are valid. When speech is used, follow the shared Spoken
+Caption micro-cue contract; do not turn Script sections into transcript cards.
+
+## Give Each Video Its Own Text Voice
+
+Typography and caption packaging belong to the current concept, not to the
+Skill itself.
+
+- There is no default font family, black subtitle rectangle, left vertical
+  rule, lower-left anchor, accent color, or pop animation.
+- Bold condensed all-caps is one possible voice, not a synonym for TikTok.
+  Match the type character to the footage: human, playful, tactile, technical,
+  premium, quiet, or another defensible direction.
+- Text-only type, a restrained outline, selective word blocks, an authored
+  shape, or no spoken-caption track at all can each be right.
+- Repeating a successful video's dark plaque, colored rail, font combination,
+  placement, and entrance across unrelated footage is a failed art-direction
+  pass, even when every element remains readable.
+- Derive motion from the action and verbal beat. A clean cut, held phrase, mask
+  reveal, tracking change, camera-attached label, word reaction, or brief settle
+  may fit. Repeating one entrance is valid only when the repetition is an
+  intentional part of the concept, not the easiest reusable implementation.
+
+When speech is present, follow the shared semantic-emphasis contract. The Agent
+still owns the visual method, which must fit this video's concept and remain
+visible at phone size.
+
+## Compose And Deliver
+
+- Deliver full-screen `1080 × 1920` for the standard high-resolution TikTok
+  composition. The `720 × 1280` placement references are not final canvas or
+  export dimensions. Keep footage full-bleed unless the concept says otherwise.
+- Keep the result editable and preserve the shared Spoken Caption host,
+  micro-cue, safe-placement, and text-integrity contract.
+- Use the final narration-containing audio master and its `transcribe_audio`
+  word timing. Do not invent caption intervals or reuse timestamps from an
+  earlier take.
+- Persist the section evidence and its word-timed micro-cue partition as one
+  data source, then derive spoken-caption Sequences, word emphasis, and linked
+  visual ranges from it. Every measured word belongs to exactly one consecutive
+  micro-cue. Do not manually retype a second schedule in JSX, FFmpeg arguments,
+  or subtitle files.
+- For generated narration, `explicit-audio-placement` and Script estimates are
+  not ASR fallbacks. If measured transcription remains unavailable after one
+  retry, preserve the work and stop before narrated Composition or Delivery.
+- Inspect every measured cue rather than trusting only the aggregate pass flag.
+  A take with a dropped final meaningful word or clipped clause is not the final
+  master: shorten or clarify that VO line and regenerate it before Storyboard.
+- Use that same measured cue sheet for captions, visual emphasis, and linked
+  scene ranges. Script estimates and BGM beats are not speech-sync evidence.
+- Review the selected concept against the rendered contact sheet. If the frames
+  are more generic than the proposal, repair the Composition.
+- Resolve any closing phrase or CTA before the timeline ends. Review both the
+  final visible frame and the preceding half-second; an unfinished close is not
+  an intentional loop unless the concept clearly completes it elsewhere.
+- The settled-font Preview is the Agent's composition gate. Studio MP4 export
+  finishes asynchronously, so batch, CLI, or later-turn acceptance must inspect
+  the encoded result rather than pretending the same Agent turn reviewed bytes
+  that did not exist yet. A clean Player does not waive a later export-only
+  collision, rewrap, or overlap.
+- Finish the same valid Studio workflow. Do not bypass a persistence or Review
+  failure by publishing a private draft from another run, and do not substitute
+  a `fast_720p` recovery export for the standard final.
+
+Official source baseline: TikTok for Business, “TikTok Auction In-Feed Ads,”
+In-Feed Standard Version LTR downloadable overlay (updated June 2026), plus the
+2026 Creative Starter Pack and Creative Center guidance on hook/body/close,
+sound, safe zones, and platform-native creative.

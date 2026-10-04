@@ -1,0 +1,33 @@
+{
+  "checkedDate": "2026-09-03",
+  "model": "gemini-3.8-flash",
+  "sameGoogleKeyLocalAndPreview": true,
+  "textOnlyGenerateContent": {
+    "status": 200
+  },
+  "videoGenerateContent": [
+    {
+      "transport": "url",
+      "status": 403,
+      "elapsedMs": 21602,
+      "error": "The caller does not have permission"
+    },
+    {
+      "transport": "inline",
+      "status": 200,
+      "elapsedMs": 13799,
+      "answer": "Saeka Shimada She/Her; Photographer"
+    }
+  ],
+  "fixedAdapterLocal": {
+    "transport": "inline",
+    "elapsedMs": 15384,
+    "model": "gemini-3.8-flash",
+    "processing": "static",
+    "thinking": "low",
+    "answer": "Saeka Shimada She/Her; Photographer",
+    "inputTokens": 5202,
+    "outputTokens": 22
+  },
+  "note": "Transcribed from the actual tool results; inference times include network. Failed runs are excluded from comparison."
+}

@@ -2,8 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const root = process.cwd();
+const skillsRoot = path.join(root, 'packages/makaron-cli/skills');
+const skillFiles = fs.readdirSync(skillsRoot, { withFileTypes: true })
+  .filter(entry => entry.isDirectory())
+  .map(entry => `packages/makaron-cli/skills/${entry.name}/SKILL.md`)
+  .filter(relative => fs.existsSync(path.join(root, relative)));
 const files = [
-  'packages/makaron-cli/skills/makaron/SKILL.md',
+  ...skillFiles,
   'packages/makaron-cli/README.md',
 ].map(relative => path.join(root, relative));
 

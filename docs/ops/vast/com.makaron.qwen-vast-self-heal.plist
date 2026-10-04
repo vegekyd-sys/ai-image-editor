@@ -15,6 +15,15 @@
   <true/>
   <key>StartInterval</key>
   <integer>300</integer>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>MAKARON_QWEN_INSTANCE_ID</key>
+    <string>48270326</string>
+    <key>MAKARON_QWEN_LABEL</key>
+    <string>makaron-qwen-a6000-prod-20260821</string>
+    <key>MAKARON_STOP_EXTRA_VAST_RUNNING</key>
+    <string>false</string>
+  </dict>
   <key>StandardOutPath</key>
   <string>/Users/tianyicai/.codex/logs/makaron-qwen-vast-self-heal.log</string>
   <key>StandardErrorPath</key>

@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
+import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel, ModelMessage } from 'ai';
 import {
-  resolveAgentModelSpec,
+  resolveAgentModelSpecForUser,
   type AgentModelPreference,
+  type AgentModelProvider,
   type AgentReasoningEffort,
   type AgentModelSpec,
 } from './agent-models';
@@ -14,6 +16,8 @@ import {
   createAzureOpenAIWebSearchTool,
   isAzureOpenAIWebSearchEnabled,
 } from './azure-openai-responses';
+import { createCodexSubscriptionResponsesModel } from './codex-subscription';
+import { createGrokSubscriptionFetch } from './grok-subscription';
 
 export interface AgentModelRuntime {
   spec: AgentModelSpec;
@@ -26,7 +30,7 @@ export function createAzureAgentPromptCacheKey(
   modelId: string,
   projectId: string,
 ): string {
-  const modelTier = modelId.replace(/^gpt-5\.6-/, '').replace(/[^a-z0-9-]/gi, '-');
+  const modelTier = modelId.replace(/^gpt-(?:5\.6|6)-/, '').replace(/[^a-z0-9-]/gi, '-');
   const projectHash = createHash('sha256').update(projectId).digest('hex').slice(0, 40);
   return `mk-${modelTier}-${projectHash}`;
 }
@@ -34,8 +38,17 @@ export function createAzureAgentPromptCacheKey(
 export function createAgentModelRuntime(
   preference: AgentModelPreference | undefined,
   projectId: string,
+  configuredGPT56Provider?: AgentModelProvider,
+  userId?: string,
+  codexSubscriptionAllowed?: boolean,
 ): AgentModelRuntime {
-  const spec = resolveAgentModelSpec(preference, process.env.AGENT_MODEL);
+  const spec = resolveAgentModelSpecForUser(
+    preference,
+    process.env.AGENT_MODEL,
+    userId,
+    configuredGPT56Provider ?? process.env.GPT56_AGENT_PROVIDER,
+    codexSubscriptionAllowed,
+  );
 
   if (spec.provider === 'azure-openai') {
     const promptCacheKey = createAzureAgentPromptCacheKey(spec.id, projectId);
@@ -47,10 +60,42 @@ export function createAgentModelRuntime(
     };
   }
 
+  if (spec.provider === 'codex-subscription') {
+    return {
+      spec,
+      model: createCodexSubscriptionResponsesModel(
+        spec.providerModelId,
+        projectId,
+        { userId },
+      ),
+      promptCacheKey: createAzureAgentPromptCacheKey(spec.id, projectId),
+      normalizeMessages: normalizeToolCallInputs,
+    };
+  }
+
+  if (spec.provider === 'grok-subscription') {
+    if (!userId) throw new Error('GROK_SUBSCRIPTION_USER_REQUIRED');
+    const grokSubscription = createOpenAI({
+      name: 'grok-subscription',
+      baseURL: 'https://grok-subscription-relay.invalid/v1',
+      apiKey: 'relay-auth-is-hmac-signed-server-side',
+      fetch: createGrokSubscriptionFetch(userId),
+    });
+    return {
+      spec,
+      model: grokSubscription.chat(spec.providerModelId),
+      normalizeMessages: normalizeToolCallInputs,
+    };
+  }
+
   if (spec.provider === 'deepseek') {
     const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
     if (!apiKey) {
-      throw new Error('DEEPSEEK_API_KEY is required for DeepSeek V4 Pro');
+      throw new Error('DEEPSEEK_API_KEY is required for DeepSeek Agent models');
+    }
+    if (spec.id === 'deepseek-flash') {
+      const deepseek = createDeepSeek({ apiKey });
+      return { spec, model: deepseek.chat(spec.providerModelId), normalizeMessages: normalizeToolCallInputs };
     }
     const deepseek = createOpenAI({
       name: 'deepseek',
@@ -64,8 +109,12 @@ export function createAgentModelRuntime(
     };
   }
 
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is required for OpenRouter Agent models');
+  }
   const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY?.trim(),
+    apiKey,
     compatibility: 'strict',
     appName: 'Makaron',
     appUrl: 'https://www.makaron.app',
@@ -85,6 +134,7 @@ export function createAgentModelRuntime(
 
 export function getAgentProviderOptions(
   runtime: AgentModelRuntime,
+  options?: { compactAtTokens?: number },
 ): Record<string, any> {
   if (runtime.spec.provider === 'azure-openai') {
     const allowedEfforts = new Set<AgentReasoningEffort>([
@@ -93,11 +143,15 @@ export function getAgentProviderOptions(
     const configuredEffort = process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT
       ?.trim()
       .toLowerCase() as AgentReasoningEffort | undefined;
-    const reasoningEffort = configuredEffort && allowedEfforts.has(configuredEffort)
-      ? configuredEffort
-      : runtime.spec.defaultReasoningEffort;
+    const reasoningEffort = runtime.spec.id === 'gpt-6-luna'
+      ? 'high'
+      : (configuredEffort && allowedEfforts.has(configuredEffort)
+        ? configuredEffort
+        : runtime.spec.defaultReasoningEffort);
     return {
       azure: {
+        // The pinned AI SDK predates GPT-6 and otherwise drops reasoning.effort.
+        ...(runtime.spec.id.startsWith('gpt-6-') ? { forceReasoning: true } : {}),
         parallelToolCalls: false,
         maxToolCalls: resolveAzureOpenAIWebSearchMaxCalls(),
         store: false,
@@ -107,11 +161,62 @@ export function getAgentProviderOptions(
           ttl: '30m',
         },
         ...(reasoningEffort ? { reasoningEffort } : {}),
+        ...(options?.compactAtTokens
+          ? {
+              contextManagement: [{
+                type: 'compaction',
+                compactThreshold: options.compactAtTokens,
+              }],
+            }
+          : {}),
       },
     };
   }
 
+  if (runtime.spec.provider === 'codex-subscription') {
+    const allowedEfforts = new Set<AgentReasoningEffort>([
+      'none', 'minimal', 'low', 'medium', 'high', 'xhigh',
+    ]);
+    const configuredEffort = process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT
+      ?.trim()
+      .toLowerCase() as AgentReasoningEffort | undefined;
+    const reasoningEffort = runtime.spec.id === 'gpt-6-luna'
+      ? 'high'
+      : (configuredEffort && allowedEfforts.has(configuredEffort)
+        ? configuredEffort
+        : runtime.spec.defaultReasoningEffort);
+    return {
+      openai: {
+        ...(runtime.spec.id.startsWith('gpt-6-') ? { forceReasoning: true } : {}),
+        parallelToolCalls: false,
+        store: false,
+        promptCacheKey: runtime.promptCacheKey,
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+        ...(options?.compactAtTokens
+          ? {
+              contextManagement: [{
+                type: 'compaction',
+                compactThreshold: options.compactAtTokens,
+              }],
+            }
+          : {}),
+      },
+    };
+  }
+
+  if (runtime.spec.id === 'deepseek-flash') {
+    return { deepseek: { thinking: { type: 'enabled' }, reasoningEffort: 'high' } };
+  }
+
   if (runtime.spec.provider === 'deepseek') {
+    return {
+      openai: {
+        parallelToolCalls: false,
+      },
+    };
+  }
+
+  if (runtime.spec.provider === 'grok-subscription') {
     return {
       openai: {
         parallelToolCalls: false,
@@ -125,9 +230,8 @@ export function getAgentProviderOptions(
   const allowedOpenRouterEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
   const openRouterEffort = configuredOpenRouterEffort && allowedOpenRouterEfforts.has(configuredOpenRouterEffort)
     ? configuredOpenRouterEffort
-    : runtime.spec.id === 'grok-4.5'
-      ? 'medium'
-      : undefined;
+    : runtime.spec.defaultReasoningEffort
+      ?? (runtime.spec.id === 'grok-4.6' ? 'medium' : undefined);
 
   return {
     openrouter: {

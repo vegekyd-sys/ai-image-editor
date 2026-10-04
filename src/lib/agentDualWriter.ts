@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentStreamEvent } from './agent';
 import { uploadImage } from './supabase/storage';
 import { sanitizeToolHistory, type ToolHistoryBudget } from './agentToolHistory';
+import * as workspace from './workspace';
 
 const EVENT_WRITE_RETRY_DELAYS_MS = [0, 75, 250, 750] as const;
 
@@ -63,6 +64,8 @@ export class AgentDualWriter {
   private seq = 0;
   private contentBuffer = '';
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private codeStreamBuffer = '';
+  private codeStreamFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private sseDisconnected = false;
 
   // Message accumulation
@@ -159,6 +162,7 @@ export class AgentDualWriter {
             tips: [],
             message_id: this.currentMessageId,
             sort_order: sortOrder,
+            metadata: event.metadata,
           }, { onConflict: 'id' });
           if (error) throw new Error(`Failed to persist generated image snapshot: ${error.message}`);
           this.currentMessageHasImage = true;
@@ -174,6 +178,7 @@ export class AgentDualWriter {
           imageUrl: imageUrl ?? undefined,
           usedModel: event.usedModel,
           description: event.description,
+          metadata: event.metadata,
         });
 
         // SSE: enriched event with server IDs
@@ -183,6 +188,7 @@ export class AgentDualWriter {
           usedModel: event.usedModel,
           snapshotId,
           imageUrl,
+          metadata: event.metadata,
         });
         return;
       }
@@ -195,15 +201,48 @@ export class AgentDualWriter {
 
         if (published) {
           // Published design — create real Snapshot in DB
-          const snapId = crypto.randomUUID();
+          const snapId = typeof (event as any).snapshotId === 'string' && (event as any).snapshotId
+            ? (event as any).snapshotId
+            : crypto.randomUUID();
           const designPath = `code/${snapId}.json`;
+          const sourceDesignPath = (event as any).sourceDesignPath as string | undefined;
 
           const designDesc = (event as any).description as string | undefined;
-          const designJson = JSON.stringify({
-            code: event.code, width: event.width, height: event.height,
-            props: event.props, animation: event.animation,
-            ...((event as Record<string, unknown>).editables ? { editables: (event as Record<string, unknown>).editables } : {}),
-          });
+          let sourceDesign: Record<string, unknown> | null = null;
+          if (sourceDesignPath) {
+            try {
+              const sourceFile = await workspace.readFile(sourceDesignPath, this.supabase, this.userId);
+              if (sourceFile?.content) {
+                sourceDesign = JSON.parse(sourceFile.content) as Record<string, unknown>;
+              }
+            } catch (error) {
+              console.warn('[agentDualWriter] Could not reload promoted design source:', sourceDesignPath, error);
+            }
+          }
+          const eventEditables = (event as Record<string, unknown>).editables;
+          const eventFontSubstitutions = (event as Record<string, unknown>).fontSubstitutions;
+          const persistedDesign = {
+            ...(sourceDesign || {}),
+            // publish_draft emits the normalized, validated composition. Keep
+            // source-only metadata, but never replace the compiled manifest
+            // with the stale pre-validation workspace JSON.
+            code: event.code,
+            width: event.width,
+            height: event.height,
+            props: event.props ?? sourceDesign?.props,
+            animation: event.animation ?? sourceDesign?.animation,
+            ...(Array.isArray(eventEditables)
+                ? { editables: eventEditables }
+                : Array.isArray(sourceDesign?.editables)
+                  ? { editables: sourceDesign.editables }
+                : {}),
+            ...(eventFontSubstitutions && typeof eventFontSubstitutions === 'object'
+                ? { fontSubstitutions: eventFontSubstitutions }
+                : sourceDesign?.fontSubstitutions && typeof sourceDesign.fontSubstitutions === 'object'
+                  ? { fontSubstitutions: sourceDesign.fontSubstitutions }
+                : {}),
+          };
+          const designJson = JSON.stringify(persistedDesign);
 
           // Upload design JSON to workspace + index in workspace_files for agent read_file
           const storagePath = `${this.userId}/workspace/${designPath}`;
@@ -246,7 +285,13 @@ export class AgentDualWriter {
           // Write agent_events
           await this.insertEvent(event.type, {
             code: event.code, width: event.width, height: event.height,
-            props: event.props, animation: event.animation, snapshotId: snapId, published: true,
+            props: event.props, animation: event.animation, snapshotId: snapId,
+            ...(Array.isArray(persistedDesign.editables) ? { editables: persistedDesign.editables } : {}),
+            ...(persistedDesign.fontSubstitutions && typeof persistedDesign.fontSubstitutions === 'object'
+              ? { fontSubstitutions: persistedDesign.fontSubstitutions }
+              : {}),
+            ...(sourceDesignPath ? { sourceDesignPath } : {}),
+            published: true,
           });
 
           // SSE: enriched with snapshotId, normalize type to 'render'
@@ -255,7 +300,14 @@ export class AgentDualWriter {
           // Draft design — preview only, no DB snapshot
           await this.insertEvent(event.type, {
             code: event.code, width: event.width, height: event.height,
-            props: event.props, animation: event.animation, published: false,
+            props: event.props, animation: event.animation,
+            ...(Array.isArray((event as Record<string, unknown>).editables)
+              ? { editables: (event as Record<string, unknown>).editables }
+              : {}),
+            ...((event as Record<string, unknown>).fontSubstitutions
+              ? { fontSubstitutions: (event as Record<string, unknown>).fontSubstitutions }
+              : {}),
+            published: false,
           });
 
           // SSE: pass through as draft (no snapshotId)
@@ -351,8 +403,17 @@ export class AgentDualWriter {
       case 'context_compaction': {
         await this.flushContent();
         await this.insertEvent('context_compaction', {
+          provider: event.provider,
+          modelId: event.modelId,
+          compactedThrough: event.compactedThrough,
           summary: event.summary,
           appliedEdits: event.appliedEdits,
+          item: event.item ? {
+            kind: event.item.kind,
+            providerKey: event.item.providerKey,
+            itemId: event.item.itemId,
+            encryptedContent: '[persisted in context snapshot]',
+          } : undefined,
           inputTokens: event.inputTokens,
         });
         // Provider compaction is model state, not visible assistant copy.
@@ -366,8 +427,17 @@ export class AgentDualWriter {
       }
 
       case 'code_stream': {
-        await this.insertEvent('code_stream', { text: event.text, done: event.done });
+        this.codeStreamBuffer += event.text;
         this.tryEnqueue(event);
+        if (event.done) {
+          await this.flushCodeStream(true);
+        } else if (this.codeStreamBuffer.length >= 1_000) {
+          await this.flushCodeStream(false);
+        } else if (!this.codeStreamFlushTimer) {
+          this.codeStreamFlushTimer = setTimeout(() => {
+            void this.flushCodeStream(false);
+          }, 300);
+        }
         return;
       }
 
@@ -415,9 +485,21 @@ export class AgentDualWriter {
     await this.insertEvent('content', { text });
   }
 
+  async flushCodeStream(done: boolean) {
+    if (this.codeStreamFlushTimer) {
+      clearTimeout(this.codeStreamFlushTimer);
+      this.codeStreamFlushTimer = null;
+    }
+    const text = this.codeStreamBuffer;
+    this.codeStreamBuffer = '';
+    if (!text && !done) return;
+    await this.insertEvent('code_stream', { text, done: done || undefined });
+  }
+
   /** Call in after() or finally block. */
   async flush() {
     await this.flushContent();
+    await this.flushCodeStream(false);
   }
 
   /** Get the current message ID (for the first message before any new_turn). */

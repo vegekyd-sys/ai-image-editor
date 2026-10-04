@@ -1,14 +1,21 @@
 import { transcodeVideoBufferToSdrMp4 } from '@/lib/provider-video-reference'
+import type { VideoGenerationOperation, VideoResolution } from '@/lib/video-model-capabilities'
 
-const GOOGLE_OMNI_MODEL = 'gemini-omni-flash-preview'
+export const GOOGLE_OMNI_MODEL = 'gemini-omni-1.1-flash'
 const GOOGLE_OMNI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions'
 const MAX_FETCH_BYTES = 55 * 1024 * 1024
+export const GOOGLE_OMNI_REQUEST_TIMEOUT_MS = 10 * 60 * 1000
+export const GOOGLE_OMNI_TIMEOUT_ERROR = 'Google Omni video generation timed out after 10 minutes. Please regenerate the video.'
 
 export interface GoogleOmniVideoTaskInput {
   prompt: string
   images: string[]
   duration?: number
   aspectRatio?: string
+  resolution?: Extract<VideoResolution, '360p' | '720p' | '1080p' | '4k'>
+  operation?: VideoGenerationOperation
+  /** Continue a Google-generated video without re-uploading its cumulative MP4. */
+  previousInteractionId?: string
   videoUrl?: string
   videoUrls?: string[]
 }
@@ -19,6 +26,23 @@ export interface GoogleOmniVideoTaskResult {
   videoUrl?: string
   error?: string
   duration?: number
+}
+
+export function isGoogleOmniPlaceholderExpired(createdAt?: string | null, now = Date.now()): boolean {
+  if (!createdAt) return false
+  const createdAtMs = Date.parse(createdAt)
+  if (!Number.isFinite(createdAtMs)) return false
+  return now - createdAtMs >= GOOGLE_OMNI_REQUEST_TIMEOUT_MS
+}
+
+function normalizeGoogleOmniFetchError(error: unknown): Error {
+  const name = error && typeof error === 'object' && 'name' in error
+    ? String((error as { name?: unknown }).name)
+    : ''
+  if (name === 'TimeoutError' || name === 'AbortError') {
+    return new Error(GOOGLE_OMNI_TIMEOUT_ERROR)
+  }
+  return error instanceof Error ? error : new Error(String(error))
 }
 
 function getGoogleApiKey(): string {
@@ -47,8 +71,17 @@ function extensionMime(url: string): string {
   return 'image/jpeg'
 }
 
-async function fetchAsBase64(url: string, fallbackMime?: string): Promise<{ data: string; mimeType: string; bytes: number }> {
-  const res = await fetch(url)
+async function fetchAsBase64(
+  url: string,
+  fallbackMime?: string,
+  signal?: AbortSignal,
+): Promise<{ data: string; mimeType: string; bytes: number }> {
+  let res: Response
+  try {
+    res = await fetch(url, { signal })
+  } catch (error) {
+    throw normalizeGoogleOmniFetchError(error)
+  }
   if (!res.ok) throw new Error(`Failed to fetch reference media ${res.status}: ${url}`)
 
   const contentLength = Number(res.headers.get('content-length') || 0)
@@ -105,10 +138,39 @@ function findOutputVideo(obj: unknown): { uri?: string; data?: string; mime_type
   return null
 }
 
-function toOmniPrompt(prompt: string, duration?: number): string {
-  const normalized = prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (_, n: string) => `reference ${n}`)
-  if (!duration) return normalized
-  return `${normalized}\n\nTarget duration: ${duration} seconds.`
+function toOmniPrompt(
+  prompt: string,
+  imageCount: number,
+  hasVideoReference: boolean,
+  hasPreviousInteraction: boolean,
+  operation: VideoGenerationOperation,
+  duration?: number,
+): string {
+  const normalized = prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (_, n: string) => {
+    const index = Number(n)
+    return `<IMAGE_REF_${Math.max(0, index - 1)}>`
+  })
+  const declarations = []
+  const guidance = []
+
+  if (hasVideoReference) {
+    declarations.push('[# Sources <VIDEO_0>@Video1]')
+    guidance.push(operation === 'extend'
+      ? 'Continue Video1 forward from its tail. Preserve its visual style, subject identity, motion, camera direction, lighting, and audio continuity unless the prompt explicitly changes them.'
+      : 'Use Video1 as the primary source video to edit.')
+  } else if (hasPreviousInteraction) {
+    guidance.push('Continue the video from the previous interaction forward from its tail. Preserve its visual style, subject identity, motion, camera direction, lighting, and audio continuity unless the prompt explicitly changes them.')
+  }
+
+  if (imageCount > 0) {
+    const refs = Array.from({ length: imageCount }, (_, index) => `<IMAGE_REF_${index}>@Image${index + 1}`).join(' ')
+    declarations.push(`[# References ${refs}]`)
+    guidance.push('Use the given images as references for video generation, not as literal initial frames.')
+  }
+
+  const parts = [declarations.join(' '), normalized, guidance.join(' ')].filter(Boolean)
+  if (duration) parts.push(`Target duration: ${duration} seconds.`)
+  return parts.join('\n\n')
 }
 
 function normalizeAspectRatio(aspectRatio?: string): '9:16' | '16:9' | undefined {
@@ -118,6 +180,7 @@ function normalizeAspectRatio(aspectRatio?: string): '9:16' | '16:9' | undefined
 
 export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput): Promise<GoogleOmniVideoTaskResult> {
   const key = getGoogleApiKey()
+  const requestSignal = AbortSignal.timeout(GOOGLE_OMNI_REQUEST_TIMEOUT_MS)
   const videoRefs = [...(input.videoUrl ? [input.videoUrl] : []), ...(input.videoUrls || [])].filter(Boolean)
   if (videoRefs.length > 1) {
     throw new Error('Google Omni supports one reference video per Makaron request. Split multi-video workflows into separate tasks.')
@@ -126,31 +189,48 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
   const imageParts = []
   for (const imageUrl of input.images.filter(Boolean)) {
     if (!imageUrl.startsWith('http')) continue
-    const image = await fetchAsBase64(imageUrl)
+    const image = await fetchAsBase64(imageUrl, undefined, requestSignal)
     imageParts.push({ type: 'image', data: image.data, mime_type: image.mimeType })
   }
 
   const videoRef = videoRefs[0]
-  const prompt = toOmniPrompt(input.prompt, input.duration)
-  const task = videoRef ? 'edit' : imageParts.length > 1 ? 'reference_to_video' : imageParts.length > 0 ? 'image_to_video' : 'text_to_video'
+  const operation = input.operation || 'generate'
+  const previousInteractionId = input.previousInteractionId?.trim()
+  if ((operation === 'edit' || operation === 'extend') && !videoRef && !previousInteractionId) {
+    throw new Error(`Google Omni ${operation} requires one source video.`)
+  }
+  if (previousInteractionId && operation !== 'extend') {
+    throw new Error('Google Omni previousInteractionId is only supported for video extension in Makaron.')
+  }
+  const prompt = toOmniPrompt(input.prompt, imageParts.length, Boolean(videoRef), Boolean(previousInteractionId), operation, input.duration)
+  const task = previousInteractionId
+    ? 'extend'
+    : videoRef
+    ? operation === 'extend' ? 'extend' : 'edit'
+    : imageParts.length > 0 ? 'reference_to_video' : 'text_to_video'
   const responseFormat: Record<string, unknown> = {
     type: 'video',
     delivery: 'uri',
+    resolution: input.resolution || '720p',
   }
   const aspectRatio = normalizeAspectRatio(input.aspectRatio)
-  if (aspectRatio && task !== 'edit') responseFormat.aspect_ratio = aspectRatio
+  if (aspectRatio && task !== 'edit' && task !== 'extend') responseFormat.aspect_ratio = aspectRatio
 
   let requestInput: unknown
   if (videoRef) {
-    const video = await fetchAsBase64(videoRef, 'video/mp4')
+    const video = await fetchAsBase64(videoRef, 'video/mp4', requestSignal)
     requestInput = [{
       type: 'user_input',
       content: [
         { type: 'video', mime_type: video.mimeType, data: video.data },
         ...imageParts,
-        { type: 'text', text: `${prompt}\n\nKeep everything else the same unless explicitly requested.` },
+        { type: 'text', text: task === 'extend' ? prompt : `${prompt}\n\nKeep everything else the same unless explicitly requested.` },
       ],
     }]
+  } else if (previousInteractionId) {
+    requestInput = imageParts.length > 0
+      ? [...imageParts, { type: 'text', text: prompt }]
+      : prompt
   } else {
     requestInput = [
       ...imageParts,
@@ -158,23 +238,32 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
     ]
   }
 
-  const res = await fetch(GOOGLE_OMNI_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': key,
-    },
-    body: JSON.stringify({
-      model: GOOGLE_OMNI_MODEL,
-      input: requestInput,
-      response_format: responseFormat,
-      generation_config: {
-        video_config: { task },
+  let res: Response
+  try {
+    res = await fetch(GOOGLE_OMNI_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': key,
       },
-      store: true,
-      stream: false,
-    }),
-  })
+      body: JSON.stringify({
+        model: GOOGLE_OMNI_MODEL,
+        input: requestInput,
+        ...(previousInteractionId ? { previous_interaction_id: previousInteractionId } : {}),
+        response_format: responseFormat,
+        ...(!previousInteractionId ? {
+          generation_config: {
+            video_config: { task },
+          },
+        } : {}),
+        store: true,
+        stream: false,
+      }),
+      signal: requestSignal,
+    })
+  } catch (error) {
+    throw normalizeGoogleOmniFetchError(error)
+  }
 
   const text = await res.text()
   let data: Record<string, unknown>

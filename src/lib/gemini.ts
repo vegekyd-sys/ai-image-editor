@@ -1,5 +1,4 @@
 import { GoogleGenAI, Chat, Type } from '@google/genai';
-import { streamText } from 'ai';
 import { Tip } from '@/types';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -7,7 +6,10 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import sharp from 'sharp';
 import fs from 'fs';
-import { getPromptLanguage, getReplyLanguageInstruction, getTipsLanguageInstruction, normalizeLocale } from './locales';
+import { getPromptLanguage, getTipsLanguageInstruction, normalizeLocale } from './locales';
+import { DEFAULT_IMAGE_EDIT_SYSTEM_PROMPT, getChatSystemPrompt } from './chat-response-policy';
+import { getTipsPromptTemplate } from './tips-response-policy';
+import type { TokenUsage } from './models/types';
 
 const LOG_FILE = '/tmp/tips-timing.log';
 function tlog(msg: string) {
@@ -50,8 +52,6 @@ type TipsProvider = 'openrouter' | 'google';
 const TIPS_PROVIDER: TipsProvider = process.env.TIPS_PROVIDER === 'google'
   ? 'google'
   : 'openrouter';
-// Temperature for tips generation — higher = more creative
-const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
 // Thinking level for tips (Gemini 3.1 Flash): minimal | low | high
 // Default: creative/wild = high, enhance/captions = minimal
 // Override with TIPS_THINKING env var to apply to ALL categories
@@ -67,31 +67,13 @@ function getAI() {
 
 // ── Shared Prompts ──────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `你是世界上最好的照片编辑AI。你能深入理解图片的每个细节——主体、情绪、光线、构图、环境、色彩、纹理、瑕疵和故事。
-
-收到图片时，用中文简短点评（2-3句话，展示你真的看懂了这张图）。
-
-当用户要求编辑图片时，你直接生成编辑后的图片。不要只是描述要做什么——直接生成图片！生成图片后用中文简短描述你做了什么（1-2句话）。
-
-人脸保持规则：
-- 每个人的身份必须保持：相同的脸型、眼睛、鼻子、嘴巴、面部结构
-- 皮肤可以优化，但骨骼结构不能变
-- 发型发色保持不变（除非编辑要求改变）
-- 表情姿势保持不变（除非编辑要求改变）
-
-小脸保护规则（全身照/合照/远景/广角等人脸占比小的图片）：
-- 小脸图片中每个人的面部必须与原图完全一致——不做任何面部修改、补光、美颜
-- 编辑时如果需要人物有反应，只用身体语言（转身、倾斜、手势），不改变面部表情`;
+const SYSTEM_PROMPT = DEFAULT_IMAGE_EDIT_SYSTEM_PROMPT;
 
 // ── Per-Category Tips Prompts ────────────────────────────────────
 // Tips are generated in 3 parallel calls (one per category) for faster loading.
 // All rules live in the .md files — this is just role + format framing.
 
 type TipCategory = 'enhance' | 'creative' | 'wild' | 'captions';
-
-export function withLocale(prompt: string, locale?: string): string {
-  return locale ? `${prompt}\n\n${getReplyLanguageInstruction(locale)}` : prompt;
-}
 
 function buildCategorySystemPrompt(category: TipCategory, count: number = 2): string {
   const labelNote = category === 'captions'
@@ -112,19 +94,20 @@ const PROMPT_TEMPLATES: Record<TipCategory, string> = {
   captions: captionsPrompt,
 };
 
-function getPromptTemplate(category: TipCategory): string {
-  return PROMPT_TEMPLATES[category];
+function getPromptTemplate(category: TipCategory, locale?: string): string {
+  return getTipsPromptTemplate(category, locale, PROMPT_TEMPLATES[category]);
 }
 
 // ── Shared Tips Prompt Builder ───────────────────────────────────
-function buildTipsPrompt(
+export function buildTipsPrompt(
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string; raw?: { lat?: number; lng?: number } },
   count: number = 2,
   existingLabels?: string[],
   skillContext?: string,
+  locale?: string,
 ) {
-  const template = getPromptTemplate(category);
+  const template = getPromptTemplate(category, locale);
   const systemPrompt = buildCategorySystemPrompt(category, count);
   const metaLines: string[] = [];
   if (metadata?.takenAt) metaLines.push(`Time: ${metadata.takenAt}`);
@@ -137,9 +120,12 @@ function buildTipsPrompt(
     ? `[DEDUP — CRITICAL] The following tips already exist. You MUST NOT repeat these directions or produce similar variations:\n${existingLabels.map(l => `- ❌ "${l}"`).join('\n')}\nChoose completely different directions from the list above.\n\n`
     : '';
   // enhance: skip image analysis — universal technical improvements don't need content analysis
+  const useEnglishControlPrompt = normalizeLocale(locale) === 'en';
   const analysisStep = category === 'enhance'
     ? ''
-    : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
+    : useEnglishControlPrompt
+      ? 'Before generating suggestions, analyze the photo for face scale, specific objects or props, and its emotional tone. Based on that analysis, '
+      : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
   // When a skill is active, use ONLY the skill template — no category .md templates.
   // A/B tested: skill-only mode produces better, more creative results than skill+category fusion.
   // But each parallel request only sees one category name, so add a one-line definition.
@@ -149,9 +135,19 @@ function buildTipsPrompt(
     wild: 'wild（疯狂脑洞：夸张变形、超现实场景）',
     captions: 'captions（创意文案：在画面上加文字标题）',
   };
+  const EN_CATEGORY_HINT: Record<string, string> = {
+    enhance: 'enhance suggestions (professional lighting, tone, texture, and depth improvements)',
+    creative: 'creative suggestions (story-rich elements and character interactions)',
+    wild: 'wild suggestions (bold transformations and surreal scenes)',
+    captions: 'caption suggestions (creative text and titles placed in the image)',
+  };
   const userText = skillContext
-    ? `${metaContext}${dedupeNote}[Active Skill]\n${skillContext}\n\n根据上面 skill 的 Tips Directions，为这张照片生成 ${count} 条 ${CATEGORY_HINT[category] || category} 编辑建议。`
-    : `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}`;
+    ? useEnglishControlPrompt
+      ? `${metaContext}${dedupeNote}[Active Skill]\n${skillContext}\n\nFollow the Skill's Tips Directions above and generate ${count} ${EN_CATEGORY_HINT[category] || category} for this photo.`
+      : `${metaContext}${dedupeNote}[Active Skill]\n${skillContext}\n\n根据上面 skill 的 Tips Directions，为这张照片生成 ${count} 条 ${CATEGORY_HINT[category] || category} 编辑建议。`
+    : useEnglishControlPrompt
+      ? `${metaContext}${dedupeNote}${analysisStep}follow every rule below and generate ${count} ${category} edit suggestions:\n\n${template}`
+      : `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}`;
   // Thinking level: env override > per-category default
   // Default: creative/wild = high, enhance/captions = minimal
   const defaultLevel = (category === 'creative' || category === 'wild') ? 'high' : 'minimal';
@@ -269,8 +265,13 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-function getOrCreateGoogleSession(projectId: string): Chat {
-  const existing = sessions.get(projectId);
+function chatSessionKey(projectId: string, locale?: string): string {
+  return `${projectId}:${normalizeLocale(locale)}`;
+}
+
+function getOrCreateGoogleSession(projectId: string, locale?: string): Chat {
+  const sessionKey = chatSessionKey(projectId, locale);
+  const existing = sessions.get(sessionKey);
   if (existing && existing.type === 'google') {
     existing.lastUsed = Date.now();
     return existing.chat;
@@ -279,17 +280,18 @@ function getOrCreateGoogleSession(projectId: string): Chat {
   const chat = getAI().chats.create({
     model: MODEL,
     config: {
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction: getChatSystemPrompt(locale),
       responseModalities: ['TEXT'],
     },
   });
 
-  sessions.set(projectId, { type: 'google', chat, lastUsed: Date.now() });
+  sessions.set(sessionKey, { type: 'google', chat, lastUsed: Date.now() });
   return chat;
 }
 
-function getOrCreateOpenRouterSession(projectId: string): OpenRouterSession {
-  const existing = sessions.get(projectId);
+function getOrCreateOpenRouterSession(projectId: string, locale?: string): OpenRouterSession {
+  const sessionKey = chatSessionKey(projectId, locale);
+  const existing = sessions.get(sessionKey);
   if (existing && existing.type === 'openrouter') {
     existing.lastUsed = Date.now();
     return existing;
@@ -297,15 +299,18 @@ function getOrCreateOpenRouterSession(projectId: string): OpenRouterSession {
 
   const session: OpenRouterSession = {
     type: 'openrouter',
-    messages: [{ role: 'system', content: SYSTEM_PROMPT }],
+    messages: [{ role: 'system', content: getChatSystemPrompt(locale) }],
     lastUsed: Date.now(),
   };
-  sessions.set(projectId, session);
+  sessions.set(sessionKey, session);
   return session;
 }
 
 export function resetSession(projectId: string): void {
   sessions.delete(projectId);
+  for (const key of sessions.keys()) {
+    if (key.startsWith(`${projectId}:`)) sessions.delete(key);
+  }
 }
 
 // ── Streaming Chat ──────────────────────────────────────────────
@@ -321,11 +326,16 @@ export async function* chatStreamWithModel(
   imageBase64?: string,
   wantImage?: boolean,
   aspectRatio?: string,
+  locale?: string,
 ): AsyncGenerator<ChatStreamEvent> {
   if (process.env.MOCK_AI === 'true') {
-    const mockText = imageBase64
-      ? '这是一张很棒的照片！构图自然，色彩和谐。我为你准备了几组编辑建议，可以从下方卡片中选择预览效果。'
-      : '好的，我来帮你处理。';
+    const mockText = normalizeLocale(locale) === 'en'
+      ? imageBase64
+        ? 'This is a strong photo with natural composition and balanced color. I prepared several editing ideas for you to preview below.'
+        : 'Sure, I can help with that.'
+      : imageBase64
+        ? '这是一张很棒的照片！构图自然，色彩和谐。我为你准备了几组编辑建议，可以从下方卡片中选择预览效果。'
+        : '好的，我来帮你处理。';
     for (let i = 0; i < mockText.length; i += 3) {
       await new Promise(r => setTimeout(r, 30));
       yield { type: 'content', text: mockText.slice(i, i + 3) };
@@ -335,9 +345,9 @@ export async function* chatStreamWithModel(
   }
 
   if (PROVIDER === 'openrouter') {
-    yield* chatStreamOpenRouter(projectId, message, imageBase64, wantImage, aspectRatio);
+    yield* chatStreamOpenRouter(projectId, message, imageBase64, wantImage, aspectRatio, locale);
   } else {
-    yield* chatStreamGoogle(projectId, message, imageBase64, wantImage, aspectRatio);
+    yield* chatStreamGoogle(projectId, message, imageBase64, wantImage, aspectRatio, locale);
   }
 }
 
@@ -348,8 +358,9 @@ async function* chatStreamGoogle(
   imageBase64?: string,
   wantImage?: boolean,
   aspectRatio?: string,
+  locale?: string,
 ): AsyncGenerator<ChatStreamEvent> {
-  const chat = getOrCreateGoogleSession(projectId);
+  const chat = getOrCreateGoogleSession(projectId, locale);
 
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
   if (imageBase64) {
@@ -395,8 +406,9 @@ async function* chatStreamOpenRouter(
   imageBase64?: string,
   wantImage?: boolean,
   aspectRatio?: string,
+  locale?: string,
 ): AsyncGenerator<ChatStreamEvent> {
-  const session = getOrCreateOpenRouterSession(projectId);
+  const session = getOrCreateOpenRouterSession(projectId, locale);
 
   // Build user message
   let userContent: string | Array<Record<string, unknown>>;
@@ -691,7 +703,7 @@ export async function generateImageWithReferences(
   aspectRatio?: string,
   thinkingEffort?: 'minimal' | 'high',
   modelOverride?: string,
-): Promise<string | null> {
+): Promise<{ image: string | null; usage?: TokenUsage }> {
   // Build a prompt that labels each image by its role
   const imageLabels = images
     .map((img, i) => `[图片${i + 1}: ${img.role}]`)
@@ -706,15 +718,15 @@ export async function generateImageWithReferences(
   }
   if (result.image) {
     console.log('✅ [generateImageWithReferences] multi-image generation succeeded');
-    return result.image;
+    return { image: result.image, usage: result.usage };
   }
   // Fallback: if multi-image failed, use single-image on the first image (edit base = images[0])
   console.warn('⚠️ [generateImageWithReferences] multi-image failed, falling back to single image');
   const base = images[0].url;
-  const fallback = PROVIDER === 'openrouter'
+  const fallback = PROVIDER === 'openrouter' || modelOverride
     ? await generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort, modelOverride)
     : await generatePreviewImageGoogle(base, editPrompt, aspectRatio);
-  return fallback.image;
+  return fallback;
 }
 
 // ── Multi-Image Generation (for experiments) ─────────────────────
@@ -725,8 +737,8 @@ export async function generateWithMultipleImages(
   wantImage: boolean,
   thinkingEffort?: 'minimal' | 'high',
   modelOverride?: string,
-): Promise<{ text?: string; image?: string }> {
-  if (PROVIDER === 'openrouter') {
+): Promise<{ text?: string; image?: string; usage?: TokenUsage }> {
+  if (PROVIDER === 'openrouter' || modelOverride) {
     return generateMultiImageOpenRouter(images, prompt, wantImage, thinkingEffort, modelOverride);
   } else {
     return generateMultiImageGoogle(images, prompt, wantImage);
@@ -737,7 +749,7 @@ async function generateMultiImageGoogle(
   images: string[],
   prompt: string,
   wantImage: boolean,
-): Promise<{ text?: string; image?: string }> {
+): Promise<{ text?: string; image?: string; usage?: TokenUsage }> {
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
 
   for (const img of images) {
@@ -759,10 +771,16 @@ async function generateMultiImageGoogle(
   });
 
   checkBlockReason(result, 'Google-Multi');
+  const meta = result.usageMetadata;
+  const usage: TokenUsage | undefined = meta ? {
+    inputTokens: meta.promptTokenCount ?? 0,
+    outputTokens: (meta.candidatesTokenCount ?? 0) + (meta.thoughtsTokenCount ?? 0),
+    modelId: MODEL,
+  } : undefined;
   const resultParts = result.candidates?.[0]?.content?.parts;
   if (!resultParts) {
     console.warn('[Google-Multi] No parts in response — model returned empty');
-    return {};
+    return { usage };
   }
 
   let text: string | undefined;
@@ -781,7 +799,7 @@ async function generateMultiImageGoogle(
   if (image) console.log(`[Google-Multi] Image generated: ${(image.length/1024).toFixed(0)}KB`);
   else if (wantImage) console.warn('[Google-Multi] No image in response');
 
-  return { text, image };
+  return { text, image, usage };
 }
 
 async function generateMultiImageOpenRouter(
@@ -790,7 +808,7 @@ async function generateMultiImageOpenRouter(
   wantImage: boolean,
   thinkingEffort?: 'minimal' | 'high',
   modelOverride?: string,
-): Promise<{ text?: string; image?: string }> {
+): Promise<{ text?: string; image?: string; usage?: TokenUsage }> {
   const modelId = modelOverride ? normalizeOpenRouterModel(modelOverride) : OPENROUTER_MODEL;
   const content: Array<Record<string, unknown>> = [];
 
@@ -826,8 +844,15 @@ async function generateMultiImageOpenRouter(
   }
 
   const data = await res.json();
+  const usage: TokenUsage | undefined = data.usage ? {
+    inputTokens: data.usage.prompt_tokens ?? 0,
+    outputTokens: data.usage.completion_tokens ?? 0,
+    modelId,
+    ...(typeof data.usage.cost === 'number' && Number.isFinite(data.usage.cost) && data.usage.cost >= 0
+      ? { providerCostUsd: data.usage.cost } : {}),
+  } : undefined;
   const choice = data.choices?.[0]?.message;
-  if (!choice) return {};
+  if (!choice) return { usage };
 
   const text: string | undefined = choice.content || undefined;
   let image: string | undefined;
@@ -844,7 +869,7 @@ async function generateMultiImageOpenRouter(
   if (image) console.log(`[OpenRouter-Multi] Image generated: ${(image.length/1024).toFixed(0)}KB`);
   else if (wantImage) console.warn('[OpenRouter-Multi] No image in response');
 
-  return { text, image };
+  return { text, image, usage };
 }
 
 // ── Streaming All Tips (single call for all 6) ─────────────────
@@ -859,6 +884,7 @@ async function* withEditPromptRetry(
   imageBase64: string,
   category: TipCategory,
   label: string,
+  locale?: string,
 ): AsyncGenerator<Tip> {
   const completedLabels = new Set<string>();
   const partialTips = new Map<string, Tip>(); // label → most recent partial tip
@@ -878,7 +904,7 @@ async function* withEditPromptRetry(
     tlog(`[tips:${label}] ⚠️ ${partialTips.size} tips missing editPrompt, generating separately...`);
     const entries = [...partialTips.values()];
     const results = await Promise.allSettled(
-      entries.map(t => generateEditPromptForTip(imageBase64, t))
+      entries.map(t => generateEditPromptForTip(imageBase64, t, locale))
     );
     for (let i = 0; i < entries.length; i++) {
       const result = results[i];
@@ -902,10 +928,15 @@ label中文3-6字动词开头。desc中文10-20字。不需要editPrompt。`;
 const FAST_TIPS_FORMAT = `\n\n请以JSON数组输出，只输出JSON：
 [{"emoji":"1个emoji","label":"中文3-6字","desc":"中文10-20字描述","category":"enhance|creative|wild"}, ...]`;
 
-export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<Tip, 'editPrompt'> & { editPrompt?: string }> {
+const FAST_TIPS_SYSTEM_EN = `You are a photo-editing ideas expert. Analyze the image quickly and provide six directions: two enhance, two creative, and two wild. Use a short verb-first label and a concise description. Do not include editPrompt.`;
+
+const FAST_TIPS_FORMAT_EN = `\n\nOutput only a JSON array:
+[{"emoji":"one emoji","label":"2-3 English words","desc":"English description under 20 words","category":"enhance|creative|wild"}, ...]`;
+
+export async function* streamFastTips(imageBase64: string, locale?: string): AsyncGenerator<Omit<Tip, 'editPrompt'> & { editPrompt?: string }> {
   if (process.env.MOCK_AI === 'true') {
     for (const cat of ['enhance', 'creative', 'wild'] as const) {
-      yield* streamTipsByCategory(imageBase64, cat);
+      yield* streamTipsByCategory(imageBase64, cat, undefined, 2, undefined, locale);
     }
     return;
   }
@@ -916,12 +947,20 @@ export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<
       model: TIPS_OPENROUTER_MODEL,
       stream: true,
       messages: [
-        { role: 'system', content: FAST_TIPS_SYSTEM },
+        {
+          role: 'system',
+          content: `${getTipsLanguageInstruction(locale)}\n\n${normalizeLocale(locale) === 'en' ? FAST_TIPS_SYSTEM_EN : FAST_TIPS_SYSTEM}`,
+        },
         {
           role: 'user',
           content: [
             toImageContent(imageBase64),
-            { type: 'text', text: `分析图片（判断人脸大小、具体物品、情绪基调），给出6条建议（2 enhance + 2 creative + 2 wild）。只输出emoji+label+desc+category。${FAST_TIPS_FORMAT}` },
+            {
+              type: 'text',
+              text: normalizeLocale(locale) === 'en'
+                ? `Analyze the image for face scale, specific objects, and emotional tone. Give six suggestions: two enhance, two creative, and two wild. Output emoji, label, desc, and category only.${FAST_TIPS_FORMAT_EN}`
+                : `分析图片（判断人脸大小、具体物品、情绪基调），给出6条建议（2 enhance + 2 creative + 2 wild）。只输出emoji+label+desc+category。${FAST_TIPS_FORMAT}`,
+            },
           ],
         },
       ],
@@ -939,9 +978,10 @@ export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<
 export async function generateEditPromptForTip(
   imageBase64: string,
   tip: { emoji: string; label: string; desc: string; category: string },
+  locale?: string,
 ): Promise<string | null> {
   const cat = tip.category as 'enhance' | 'creative' | 'wild';
-  const template = PROMPT_TEMPLATES[cat] ?? '';
+  const template = getPromptTemplate(cat, locale) ?? '';
   const systemPrompt = buildCategorySystemPrompt(cat);
 
   const res = await fetch(OPENROUTER_BASE, {
@@ -958,7 +998,9 @@ export async function generateEditPromptForTip(
             toImageContent(imageBase64),
             {
               type: 'text',
-              text: `这张图片有一条编辑建议：${tip.emoji} ${tip.label}（${tip.desc}）\n\n严格遵循以下规范，为这条建议生成详细的 editPrompt（英文，200词以内）。只输出 editPrompt 字符串本身，不要 JSON，不要解释。\n\n${template}`,
+              text: normalizeLocale(locale) === 'en'
+                ? `This photo has one editing suggestion: ${tip.emoji} ${tip.label} (${tip.desc}).\n\nFollow the rules below and generate a detailed English editPrompt under 200 words. Output only the editPrompt string, with no JSON or explanation.\n\n${template}`
+                : `这张图片有一条编辑建议：${tip.emoji} ${tip.label}（${tip.desc}）\n\n严格遵循以下规范，为这条建议生成详细的 editPrompt（英文，200词以内）。只输出 editPrompt 字符串本身，不要 JSON，不要解释。\n\n${template}`,
             },
           ],
         },
@@ -972,9 +1014,9 @@ export async function generateEditPromptForTip(
   return typeof text === 'string' ? text.trim() : null;
 }
 
-export async function* streamAllTips(imageBase64: string): AsyncGenerator<Tip> {
+export async function* streamAllTips(imageBase64: string, locale?: string): AsyncGenerator<Tip> {
   for (const cat of ['enhance', 'creative', 'wild'] as const) {
-    yield* streamTipsByCategory(imageBase64, cat);
+    yield* streamTipsByCategory(imageBase64, cat, undefined, 2, undefined, locale);
   }
 }
 
@@ -994,7 +1036,7 @@ export async function* streamTipsByCategory(
   usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
   if (process.env.MOCK_AI === 'true') {
-    const mockTips: Record<string, Tip[]> = {
+    const mockTipsZh: Record<string, Tip[]> = {
       enhance: [
         { emoji: '🌅', label: '电影感光影', desc: '增强光影对比，营造电影级氛围。', editPrompt: 'Enhance with cinematic lighting, add warm golden hour glow, increase contrast between highlights and shadows.', category: 'enhance' },
         { emoji: '📷', label: '胶片质感', desc: '添加柔和颗粒和复古色调。', editPrompt: 'Apply analog film look with soft grain, slightly faded blacks, and warm vintage color grading.', category: 'enhance' },
@@ -1012,6 +1054,25 @@ export async function* streamTipsByCategory(
         { emoji: '📝', label: '加诗意标题', desc: '用诗意语言为画面命名。', editPrompt: 'Add a photorealistic text overlay with a poetic title for this image. Use clean minimal sans-serif font in soft white color, centered at the bottom of the image with a semi-transparent overlay behind the text. Preserve the exact composition and all people\'s faces exactly.', category: 'captions' },
       ],
     };
+    const mockTipsEn: Record<string, Tip[]> = {
+      enhance: [
+        { emoji: '🌅', label: 'Cinematic Light', desc: 'Shape contrast and warmth for a cinematic atmosphere.', editPrompt: 'Enhance with cinematic lighting, add warm golden hour glow, increase contrast between highlights and shadows.', category: 'enhance' },
+        { emoji: '📷', label: 'Film Texture', desc: 'Add gentle grain and a refined vintage grade.', editPrompt: 'Apply analog film look with soft grain, slightly faded blacks, and warm vintage color grading.', category: 'enhance' },
+      ],
+      creative: [
+        { emoji: '🦋', label: 'Butterfly Visit', desc: 'Place a blue butterfly naturally on the shoulder.', editPrompt: 'Add a photorealistic blue morpho butterfly perched on the shoulder, with natural shadow and lighting matching the scene.', category: 'creative' },
+        { emoji: '🌸', label: 'Falling Blossoms', desc: 'Let a few pink petals drift through the scene.', editPrompt: 'Add several photorealistic pink cherry blossom petals gently falling through the scene with natural depth of field blur.', category: 'creative' },
+      ],
+      wild: [
+        { emoji: '🔮', label: 'Miniature World', desc: 'Turn the scene into a detailed miniature set.', editPrompt: 'Transform the entire scene into a tilt-shift miniature model with exaggerated depth of field and saturated colors.', category: 'wild' },
+        { emoji: '🌊', label: 'Underwater Dream', desc: 'Submerge the whole scene in a luminous underwater world.', editPrompt: 'Transform the scene to appear submerged underwater with light rays filtering from above, floating bubbles, and caustic light patterns.', category: 'wild' },
+      ],
+      captions: [
+        { emoji: '✍️', label: 'Creative Caption', desc: 'Add a scene-specific line with expressive typography.', editPrompt: 'Add a photorealistic text overlay with a creative caption specific to this image. Use elegant cursive script in warm cream color at the bottom-third of the image with a subtle drop shadow for readability. Preserve the exact composition and all people\'s faces exactly.', category: 'captions' },
+        { emoji: '📝', label: 'Poetic Title', desc: 'Give the image a concise poetic title.', editPrompt: 'Add a photorealistic text overlay with a poetic title for this image. Use clean minimal sans-serif font in soft white color, centered at the bottom of the image with a semi-transparent overlay behind the text. Preserve the exact composition and all people\'s faces exactly.', category: 'captions' },
+      ],
+    };
+    const mockTips = normalizeLocale(locale) === 'en' ? mockTipsEn : mockTipsZh;
     const tips = mockTips[category] || mockTips.enhance;
     for (const tip of tips) {
       await new Promise(r => setTimeout(r, 200));
@@ -1073,7 +1134,7 @@ async function* streamTipsByCategoryGoogle(
   skillContext?: string,
   usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
-  const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+  const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext, locale);
 
   const supportsStructuredOutput = MODEL.includes('gemini-3');
   const languageInstruction = getTipsLanguageInstruction(locale);
@@ -1091,7 +1152,6 @@ async function* streamTipsByCategoryGoogle(
   }
 
   const promptSuffix = supportsStructuredOutput ? '' : getJsonFormatSuffix(locale);
-  const localizedUserText = `${languageInstruction}\n\n${userText}`;
   const resolved = await ensureBase64Server(imageBase64);
   const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
   const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
@@ -1102,7 +1162,7 @@ async function* streamTipsByCategoryGoogle(
         role: 'user',
         parts: [
           { inlineData: { mimeType, data: base64Data } },
-          { text: `${localizedUserText}${promptSuffix}` },
+          { text: `${userText}${promptSuffix}` },
         ],
       },
     ],
@@ -1120,7 +1180,7 @@ async function* streamTipsByCategoryGoogle(
 
   yield* withEditPromptRetry(
     parseIncrementalTipsFromStream(streamToTextIterator(streamWithUsageCapture()), `google:${category}`, category),
-    imageBase64, category, `google:${category}`,
+    imageBase64, category, `google:${category}`, locale,
   );
 
   // Capture token usage for billing
@@ -1142,9 +1202,8 @@ async function* streamTipsByCategoryOpenRouter(
   skillContext?: string,
   usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
-  const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+  const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext, locale);
   const languageInstruction = getTipsLanguageInstruction(locale);
-  const localizedUserText = `${languageInstruction}\n\n${userText}`;
   // OpenRouter uses effort: minimal/low/medium/high
   const reasoning = { effort: thinkingLevel };
 
@@ -1163,7 +1222,7 @@ async function* streamTipsByCategoryOpenRouter(
           role: 'user',
           content: [
             toImageContent(imageBase64),
-            { type: 'text', text: `${localizedUserText}${getJsonFormatSuffix(locale)}` },
+            { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
           ],
         },
       ],
@@ -1181,7 +1240,7 @@ async function* streamTipsByCategoryOpenRouter(
   tlog(`[tips:openrouter:${category}] headers received at +${Date.now() - t0}ms`);
   yield* withEditPromptRetry(
     parseIncrementalTipsFromStream(sseToTextIterator(res, `or:${category}`, usageAccum), `or:${category}`, category),
-    imageBase64, category, `or:${category}`,
+    imageBase64, category, `or:${category}`, locale,
   );
 
   // Set model for billing — Tips output is text, use :text rate suffix
@@ -1586,54 +1645,32 @@ Return strict JSON only:
   }
 }
 
+export async function analyzeVideoContentWithUsage(
+  videoUrl: string,
+  question?: string,
+  userId?: string,
+) {
+  const { analyzeVideoWithProvider } = await import('./video-analysis');
+  const result = await analyzeVideoWithProvider(videoUrl, question);
+  if (userId) {
+    const { deductByTokens } = await import('./billing/credits');
+    const usage = result.usage;
+    await deductByTokens(
+      userId, 'analyze_video', usage.modelId,
+      usage.inputTokens - usage.cacheReadTokens, usage.outputTokens,
+      result.elapsedMs, undefined,
+      { cacheRead: usage.cacheReadTokens, cacheWrite: 0 },
+    ).catch(error => console.error('[billing] analyze_video deduct error:', error));
+  }
+  return result;
+}
+
 export async function analyzeVideoContent(
   videoUrl: string,
   question?: string,
   userId?: string,
 ): Promise<string> {
-  console.log(`[analyzeVideoContent] url=${videoUrl.substring(0, 100)}`);
-  const ai = getAI();
-  const prompt = question || 'Describe this video in detail: scenes, actions, pacing, visual style, audio/dialogue if any.';
-  const model = 'gemini-3-flash-preview';
-
-  const billUsage = (inputTokens: number, outputTokens: number) => {
-    if (!userId) return;
-    import('./billing/credits').then(({ deductByTokens }) =>
-      deductByTokens(userId, 'analyze_video', model, inputTokens, outputTokens)
-        .catch(e => console.error('[billing] analyze_video deduct error:', e))
-    );
-  };
-
-  // Default: URL mode (no download needed)
-  try {
-    const result = await ai.models.generateContent({
-      model,
-      contents: [{ role: 'user', parts: [
-        { fileData: { mimeType: 'video/mp4', fileUri: videoUrl } },
-        { text: prompt },
-      ] }],
-    });
-    const usage = result.usageMetadata;
-    if (usage) billUsage(usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
-    return result.text || '';
-  } catch {
-    // Fallback: download → base64 (if URL mode fails)
-    const res = await fetch(videoUrl);
-    if (!res.ok) throw new Error(`Failed to fetch video: ${res.status}`);
-    const buffer = await res.arrayBuffer();
-    if (buffer.byteLength > 38_500_000) throw new Error('Video too large for analysis (>38.5MB). Use preview_frame to check specific frames instead.');
-    const base64 = Buffer.from(buffer).toString('base64');
-    const result = await ai.models.generateContent({
-      model,
-      contents: [{ role: 'user', parts: [
-        { inlineData: { mimeType: 'video/mp4', data: base64 } },
-        { text: prompt },
-      ] }],
-    });
-    const usage = result.usageMetadata;
-    if (usage) billUsage(usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
-    return result.text || '';
-  }
+  return (await analyzeVideoContentWithUsage(videoUrl, question, userId)).analysis;
 }
 
 /**

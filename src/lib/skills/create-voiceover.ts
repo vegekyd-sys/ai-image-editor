@@ -18,6 +18,10 @@ export interface CreateVoiceoverResult {
   tts?: VolcengineTtsResult
 }
 
+/**
+ * @deprecated Internal legacy fallback only. Do not expose this as an Agent tool
+ * or route normal narration here; all Agent voiceover generation uses Seed Audio.
+ */
 export async function createVoiceover(input: CreateVoiceoverInput): Promise<CreateVoiceoverResult> {
   const text = input.text.trim()
   if (!text) {

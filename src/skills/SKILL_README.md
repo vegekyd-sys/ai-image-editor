@@ -80,6 +80,7 @@ zip -r ../my-character.zip SKILL.md assets/
 | `color` | string | 16 进制颜色（如 `"#4A90D9"`），用于 UI pill 高亮 |
 | `referenceImages` | string[] | 参考图路径列表（本地用 `assets/xxx`，上传后自动替换为 URL） |
 | `tags` | string[] | 标签（如 `[character, brand]`） |
+| `triggers` | string[] | 自然语言触发语义（如 `[restore old family photo, 修复老照片]`），用于 Agent 启动时的轻量 Skill 发现索引 |
 | `tipsEnabled` | boolean | 是否启用 Tips 自动生成（默认 true） |
 | `tipsCount` | number | Tips 数量 |
 | `modelPreference` | string[] | 推荐模型（如 `[gemini]`） |

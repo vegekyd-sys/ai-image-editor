@@ -1,25 +1,183 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import ChangelogDialog from '@/components/ChangelogDialog';
+import { normalizeLocale, translate, type TranslationKey } from '@/lib/locales';
 
-interface ChangelogEntry {
-  date: string;
-  en: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
-  zh: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
+interface ChangelogContent {
+  title: string;
+  items: string[];
+  link?: { label: string; href: string; variant?: 'text' | 'button' };
 }
 
+interface LegacyChangelogEntry {
+  date: string;
+  en: ChangelogContent;
+  zh: ChangelogContent;
+}
+
+type LocalizedChangelogEntry = {
+  date: string;
+  localeKey: 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+};
+
+type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
+
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-10-05', localeKey: 'seedance25Eco' },
+  { date: '2026-10-05', localeKey: 'byteDanceFastUpscale' },
+  { date: '2026-10-02', localeKey: 'multiAngleVideo' },
+  { date: '2026-09-29', localeKey: 'creativeHome' },
+  { date: '2026-09-23', localeKey: 'gpt6AgentModels' },
+  { date: '2026-09-22', localeKey: 'qwenSpicy' },
+  { date: '2026-09-19', localeKey: 'cliRunCredits' },
+  { date: '2026-09-15', localeKey: 'sceneImportReliability' },
+  { date: '2026-09-10', en: { title: 'DeepSeek V4.1 Flash', items: ['DeepSeek V4.1 Flash is now available in Agent: a fast, lower-cost option that understands images and turns a simple prompt into an editable project or finished video.'] }, zh: { title: 'DeepSeek V4.1 Flash 上线', items: ['Agent 现已支持 DeepSeek V4.1 Flash：更快、更省成本，也能看懂图片，把一句话变成可编辑项目或成片。'] } },
+  { date: '2026-09-10', localeKey: 'gptImage25' },
+  { date: '2026-09-06', localeKey: 'creativeSpeedUpgrade' },
+  { date: '2026-09-04', localeKey: 'wan27Image' },
+  { date: '2026-09-03', localeKey: 'fasterVideoAnalysis' },
+  { date: '2026-09-03', localeKey: 'videoReplication' },
+  { date: '2026-09-02', localeKey: 'minimaxH3Max' },
+  { date: '2026-09-01', en: { title: 'Personal Grok Plans for Test Accounts', items: ['Admins can now add registered test accounts to the Grok allowlist so their Agent chats and Grok Imagine videos use the owner’s personal SuperGrok plan.'] }, zh: { title: '测试账号可用个人 Grok 套餐', items: ['管理员现在可以把已注册的测试账号加入 Grok 名单，让这些账号的 Agent 对话和 Grok Imagine 视频使用 owner 的个人 SuperGrok 套餐。'] } },
+  { date: '2026-09-01', localeKey: 'fastDurableAgent' },
+  { date: '2026-09-01', localeKey: 'wan30' },
+  { date: '2026-08-31', en: { title: 'Grok 1.5 Video Editing', items: ['Edit an existing video with Grok 1.5 to change clothing, backgrounds, materials, or atmosphere while keeping the original motion and sound.', 'Generate with up to seven reference images, or use one source video for editing and extension with limits checked automatically.'] }, zh: { title: 'Grok 1.5 视频编辑', items: ['现在可以用 Grok 1.5 直接编辑现有视频，更换服装、背景、材质或整体氛围，同时保留原有动作与声音。', '生成视频最多支持 7 张参考图；编辑或续写支持 1 条源视频，并会自动检查不同模式的素材上限。'] } },
+  { date: '2026-08-30', en: { title: 'Personal Codex Plans for Test Accounts', items: ['Admins can now add registered test accounts to the Codex allowlist so their Agent chats use the owner’s personal Codex plan.'] }, zh: { title: '测试账号可用个人 Codex 套餐', items: ['管理员现在可以把已注册的测试账号加入 Codex 名单，让这些账号的 Agent 对话使用 owner 的个人 Codex 套餐。'] } },
+  { date: '2026-08-29', localeKey: 'googleOmni11' },
+  { date: '2026-08-26', localeKey: 'externalImages' },
   {
-    date: '2026-07-17',
-    en: { title: 'Studio Run + Agent Run: From One Prompt to a Finished Film', items: [
-      'Studio Run turns a creative request into a visible production: brief, concept, script, storyboard, assets, composition, review, and delivery — all inside one Makaron project.',
-      'Agent Run is now built for serious creative sessions. It can work for longer, preserve editable code and assets, recover from an interrupted connection, and continue from the exact checkpoint instead of starting over.',
-      'For video, Makaron now thinks like a director and editor: it finds a visual language for the story, builds each scene in detail, watches the real result, improves what is actually on screen, and publishes the reviewed film to your timeline.',
+    date: '2026-08-25',
+    en: { title: 'Transparent PNGs with GPT Image 2', items: ['Ask for a transparent background to create reusable stickers, design assets, and video overlays that can be placed anywhere without removing the background again.'] },
+    zh: { title: 'GPT Image 2 透明 PNG', items: ['直接说“透明底”，即可生成可复用的贴纸、设计素材和视频叠加层，放进任何画面时都不需要再次处理背景。'] },
+  },
+  {
+    date: '2026-08-25',
+    localeKey: 'videoTranslation',
+  },
+  { date: '2026-08-24', en: { title: 'Any Google Font, Preview to Export', items: ['Remotion now loads Google Fonts on demand and pins the same font files for Preview and MP4 export, removing the built-in font-list limit.'] }, zh: { title: '任意 Google Fonts，从预览到导出', items: ['Remotion 现在按需加载 Google Fonts，并让 Preview 与 MP4 导出使用同一份固定字体文件，不再受内置字体列表限制。'] } },
+  {
+    date: '2026-08-22',
+    localeKey: 'talkingHeadEditing',
+  },
+  {
+    date: '2026-08-19',
+    localeKey: 'smarterEditableDiscovery',
+  },
+  {
+    date: '2026-08-19',
+    localeKey: 'tiktokVideoSkill',
+  },
+  {
+    date: '2026-08-12',
+    localeKey: 'sourcePlayback',
+  },
+  {
+    date: '2026-08-12',
+    en: {
+      title: 'MiniMax H3 768P',
+      items: [
+        'MiniMax H3 now supports public 768P generation alongside native 2K, giving faster, lower-cost drafts without changing models.',
+        'H3 now defaults to 768P for faster, lower-cost generation; choose 2K explicitly when you need maximum final quality.',
+      ],
+    },
+    zh: {
+      title: 'MiniMax H3 开放 768P',
+      items: [
+        'MiniMax H3 现已在原生 2K 之外开放 768P，可在不切换模型的情况下生成更快、更低成本的草稿视频。',
+        'H3 现默认使用 768P，以更快、更低成本地生成视频；需要最高成片质量时可显式选择 2K。',
+      ],
+    },
+  },
+  {
+    date: '2026-08-10',
+    localeKey: 'externalSourceRanges',
+  },
+  {
+    date: '2026-08-08',
+    localeKey: 'seedance25',
+  },
+  {
+    date: '2026-08-08',
+    en: {
+      title: 'A More Reliable GPT-5.6 Agent Route',
+      items: [
+        'GPT-5.6 Terra, Sol, and Luna now run through OpenRouter by default while keeping the existing Azure provider available for an explicit rollback.',
+        'GPT Image 2 now uses the same reliable OpenRouter route by default for image generation and editing, while its Azure route remains available for an explicit rollback.',
+        'The Agent keeps the same streaming, tools, vision, reasoning, project history, and usage-based billing behavior across providers.',
+      ],
+    },
+    zh: {
+      title: 'GPT-5.6 Agent 路由更可靠',
+      items: [
+        'GPT-5.6 Terra、Sol 与 Luna 现在默认通过 OpenRouter 运行，同时保留现有 Azure Provider，随时可以显式回切。',
+        'GPT Image 2 的生图与编辑也默认切换到同一条 OpenRouter 路由，并保留 Azure 路由供显式回切。',
+        '切换 Provider 后，Agent 的流式输出、工具调用、视觉理解、推理、项目历史和按量计费保持一致。',
+      ],
+    },
+  },
+  {
+    date: '2026-08-02',
+    localeKey: 'minimaxH3',
+  },
+  {
+    date: '2026-07-29',
+    localeKey: 'multilingualAsr',
+  },
+  {
+    date: '2026-07-28',
+    localeKey: 'editableRemotion',
+  },
+  {
+    date: '2026-07-25',
+    en: { title: 'Consistent Remotion Fonts', items: ['Remotion previews and Lambda MP4 exports now use the same pinned Chinese and English fonts, so typography stays consistent from editing to delivery.'] },
+    zh: { title: 'Remotion 字体一致性修复', items: ['Remotion 预览与 Lambda MP4 导出现在使用同一套固定的中英文字体，从编辑到成片不再出现字体变化。'] },
+  },
+  {
+    date: '2026-07-24',
+    en: { title: 'Agent Coding, Without Dead Ends', items: [
+      'Makaron now gives Agent-written Node and FFmpeg programs a dedicated isolated Sandbox with real process feedback, standard Node capabilities, and npm packages installed on demand.',
+      'Editable Remotion compositions and file-level MP4 work now use separate runtimes, so the Agent can repair its own code and finish more video tasks without compatibility loops.',
     ]},
-    zh: { title: 'Studio Run + Agent Run：从一句话到成片', items: [
-      'Studio Run 把一句创作需求变成看得见的完整制作过程：创作简报、创意提案、脚本、分镜、素材、合成、审片与交付，全部发生在同一个 Makaron 项目里。',
-      'Agent Run 现在可以真正承担长时间创作：持续工作、保留可编辑代码与素材；即使页面断开或连接中断，也能从准确的进度继续，而不是重新开始。',
-      '制作视频时，Makaron 会像导演和剪辑师一样思考：为故事寻找合适的视觉语言，细致组织每一个场景，观看真实成片效果，继续修改画面中真正存在的问题，最后把审片完成的作品发布到时间线。',
+    zh: { title: 'Agent 编程，不再卡在死胡同', items: [
+      'Makaron 现在为 Agent 编写的 Node 与 FFmpeg 程序提供独立隔离 Sandbox，支持真实进程反馈、标准 Node 能力和按需安装 npm 包。',
+      '可编辑 Remotion composition 与文件级 MP4 处理现在使用独立运行时，让 Agent 能持续修复自己的代码并完成更多视频任务，不再反复陷入兼容性循环。',
+    ]},
+  },
+  {
+    date: '2026-07-23',
+    en: { title: 'Seed Audio: One Prompt, One Complete Soundtrack', items: [
+      'Voiceover, music, and sound effects are now composed together in a single Seed Audio generation, so the whole soundtrack feels like one performance instead of separate layers stitched together.',
+      'Every spoken line can carry its own emotion, pacing, and delivery direction, with expressive narration available across 20+ languages.',
+      'After generation, Makaron recovers the real spoken timing from the finished audio and uses it to synchronize Remotion scenes and subtitles with the performance.',
+      'Music now plays a more present, co-leading role in the mix and helps drive the story forward.',
+    ]},
+    zh: { title: 'Seed Audio：一个 Prompt，一条完整声轨', items: [
+      '旁白、音乐和音效现在会在一次 Seed Audio 生成中共同完成，让整条声轨像一次完整表演，而不是把多个独立音轨事后拼在一起。',
+      '每一句旁白都可以拥有自己的情绪、节奏和演绎方式，并支持 20 多种语言的情感表达。',
+      '生成完成后，Makaron 会从最终音频中还原真实口播时间点，让 Remotion 画面、场景切换和字幕跟随实际表演精准同步。',
+      '配乐现在会更有存在感，与旁白共同推进叙事。',
+    ]},
+  },
+  {
+    date: '2026-07-21',
+    en: { title: 'Smarter Video Creation', items: [
+      'Short videos now choose direct generation instead of unnecessary editing workflows, while dialogue, sound, and music stay with the video model for better sync and fewer redundant tool calls.',
+    ]},
+    zh: { title: '视频生成更懂你的意图', items: [
+      '短视频现在会优先直接生成，不再误入复杂剪辑流程；对白、音效和配乐也会交给视频模型随画面一次完成，减少重复工具调用带来的效果损失。',
+    ]},
+  },
+  {
+    date: '2026-07-19',
+    en: { title: 'Studio Run + Agent Run: Long Tasks, Uninterrupted', items: [
+      'Studio Run gives you a visible production process, while Agent Run stays fast and direct. Both now share the same durable engine.',
+      'Refresh, disconnect, or return later: Makaron continues from the last checkpoint with your assets and editable work intact.',
+      'Video code is written and saved in parts, with no total-size cap or forced trimming. You can watch it progress, and finished-video requests continue through timeline publishing and MP4 delivery.',
+    ]},
+    zh: { title: 'Studio Run + Agent Run：长任务不中断', items: [
+      'Studio Run 提供看得见的完整制作流程，普通 Agent Run 保持直接快速。两者现在共用同一套可靠底座。',
+      '刷新、断网或稍后回来，Makaron 都会从上次进度继续，素材和可编辑内容不会丢失。',
+      '视频代码会分段编写并持续保存，不限制总大小，也不强制裁剪。过程可见，明确要成片时会继续发布到时间线并交付 MP4。',
     ]},
   },
   {
@@ -130,6 +288,10 @@ const CHANGELOG: ChangelogEntry[] = [
       '现在可以从模型选择器、CUI 或 makaron-cli chat 触发，用来给短视频换风格、让单张图动起来，或快速做一版视频修改。',
       '针对品牌、知名角色和受保护 IP 等更容易触发审核的请求，Makaron 会给出更清楚的失败提示和更安全的原创替代表达。',
     ]},
+  },
+  {
+    date: '2026-07-01',
+    localeKey: 'editableLayers',
   },
   {
     date: '2026-06-30',
@@ -808,144 +970,186 @@ const CHANGELOG: ChangelogEntry[] = [
   },
 ];
 
-const changelogGlassStyle: CSSProperties = {
-  background:
-    'linear-gradient(180deg, rgba(46,47,56,0.68), rgba(17,18,24,0.75) 48%, rgba(7,8,11,0.86))',
-  border: '0.5px solid rgba(255,255,255,0.11)',
-  boxShadow:
-    '0 24px 64px rgba(0,0,0,0.50), inset 0 0.5px 0 rgba(255,255,255,0.14), inset 0 -16px 30px rgba(0,0,0,0.22)',
-  backdropFilter: 'blur(32px) saturate(158%) contrast(106%)',
-  WebkitBackdropFilter: 'blur(32px) saturate(158%) contrast(106%)',
-  isolation: 'isolate',
-};
-
-const changelogGlassHighlightStyle: CSSProperties = {
-  position: 'absolute',
-  inset: 0,
-  pointerEvents: 'none',
-  borderRadius: 'inherit',
-  background:
-    'radial-gradient(circle at 18% -8%, rgba(255,255,255,0.18), rgba(255,255,255,0.045) 24%, transparent 52%), linear-gradient(126deg, rgba(255,255,255,0.058), rgba(255,255,255,0.014) 36%, rgba(236,72,153,0.028) 74%, rgba(34,211,238,0.022))',
-  mixBlendMode: 'screen',
-  opacity: 0.66,
-};
-
-const changelogGlassEdgeStyle: CSSProperties = {
-  position: 'absolute',
-  inset: 1,
-  pointerEvents: 'none',
-  borderRadius: 'inherit',
-  boxShadow:
-    'inset 0 0 0 0.5px rgba(255,255,255,0.045), inset 0 10px 18px rgba(255,255,255,0.032), inset 0 -0.5px 0 rgba(0,0,0,0.34), inset 1px 0 0 rgba(56,189,248,0.032), inset -1px 0 0 rgba(236,72,153,0.034)',
-};
-
-const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
-const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
+const LOCALIZED_CHANGELOG_KEYS = {
+  seedance25Eco: {
+    title: 'changelog.seedance25Eco.title',
+    items: ['changelog.seedance25Eco.item1', 'changelog.seedance25Eco.item2', 'changelog.seedance25Eco.item3'],
+  },
+  byteDanceFastUpscale: {
+    title: 'changelog.byteDanceFastUpscale.title',
+    items: ['changelog.byteDanceFastUpscale.item1', 'changelog.byteDanceFastUpscale.item2'],
+  },
+  multiAngleVideo: {
+    title: 'changelog.multiAngleVideo.title',
+    items: ['changelog.multiAngleVideo.item1', 'changelog.multiAngleVideo.item2'],
+  },
+  creativeHome: {
+    title: 'changelog.creativeHome.title',
+    items: ['changelog.creativeHome.item1', 'changelog.creativeHome.item2'],
+  },
+  gpt6AgentModels: {
+    title: 'changelog.gpt6AgentModels.title',
+    items: ['changelog.gpt6AgentModels.item1', 'changelog.gpt6AgentModels.item2'],
+  },
+  qwenSpicy: {
+    title: 'changelog.qwenSpicy.title',
+    items: ['changelog.qwenSpicy.item1', 'changelog.qwenSpicy.item2'],
+  },
+  gptImage25: {
+    title: 'changelog.gptImage25.title',
+    items: ['changelog.gptImage25.item1', 'changelog.gptImage25.item2', 'changelog.gptImage25.item3'],
+  },
+  creativeSpeedUpgrade: {
+    title: 'changelog.creativeSpeedUpgrade.title',
+    items: ['changelog.creativeSpeedUpgrade.item1', 'changelog.creativeSpeedUpgrade.item2', 'changelog.creativeSpeedUpgrade.item3'],
+  },
+  wan27Image: {
+    title: 'changelog.wan27Image.title',
+    items: ['changelog.wan27Image.item1', 'changelog.wan27Image.item2'],
+  },
+  fasterVideoAnalysis: {
+    title: 'changelog.fasterVideoAnalysis.title',
+    items: ['changelog.fasterVideoAnalysis.item1'],
+  },
+  videoReplication: {
+    title: 'changelog.videoReplication.title',
+    items: [
+      'changelog.videoReplication.item1',
+      'changelog.videoReplication.item2',
+      'changelog.videoReplication.item3',
+    ],
+  },
+  minimaxH3Max: {
+    title: 'changelog.minimaxH3Max.title',
+    items: ['changelog.minimaxH3Max.item1'],
+  },
+  fastDurableAgent: {
+    title: 'changelog.fastDurableAgent.title',
+    items: ['changelog.fastDurableAgent.item1'],
+  },
+  wan30: {
+    title: 'changelog.wan30.title',
+    items: [
+      'changelog.wan30.item1',
+      'changelog.wan30.item2',
+    ],
+  },
+  googleOmni11: {
+    title: 'changelog.googleOmni11.title',
+    items: [
+      'changelog.googleOmni11.item1',
+      'changelog.googleOmni11.item2',
+    ],
+  },
+  cliRunCredits: {
+    title: 'changelog.cliRunCredits.title',
+    items: ['changelog.cliRunCredits.item1', 'changelog.cliRunCredits.item2'],
+  },
+  sceneImportReliability: {
+    title: 'changelog.sceneImportReliability.title',
+    items: ['changelog.sceneImportReliability.item1', 'changelog.sceneImportReliability.item2'],
+  },
+  externalImages: {
+    title: 'changelog.externalImages.title',
+    items: ['changelog.externalImages.item1'],
+  },
+  videoTranslation: {
+    title: 'changelog.videoTranslation.title',
+    items: [
+      'changelog.videoTranslation.item1',
+      'changelog.videoTranslation.item2',
+    ],
+  },
+  talkingHeadEditing: {
+    title: 'changelog.talkingHeadEditing.title',
+    items: [
+      'changelog.talkingHeadEditing.item1',
+      'changelog.talkingHeadEditing.item2',
+      'changelog.talkingHeadEditing.item3',
+    ],
+  },
+  smarterEditableDiscovery: {
+    title: 'changelog.smarterEditableDiscovery.title',
+    items: ['changelog.smarterEditableDiscovery.item1'],
+  },
+  tiktokVideoSkill: {
+    title: 'changelog.tiktokVideoSkill.title',
+    items: [
+      'changelog.tiktokVideoSkill.item1',
+      'changelog.tiktokVideoSkill.item2',
+      'changelog.tiktokVideoSkill.item3',
+    ],
+  },
+  sourcePlayback: {
+    title: 'changelog.sourcePlayback.title',
+    items: [
+      'changelog.sourcePlayback.item1',
+      'changelog.sourcePlayback.item2',
+    ],
+  },
+  externalSourceRanges: {
+    title: 'changelog.externalSourceRanges.title',
+    items: ['changelog.externalSourceRanges.item1'],
+  },
+  seedance25: {
+    title: 'changelog.seedance25.title',
+    items: [
+      'changelog.seedance25.item1',
+      'changelog.seedance25.item2',
+      'changelog.seedance25.item3',
+    ],
+  },
+  minimaxH3: {
+    title: 'changelog.minimaxH3.title',
+    items: [
+      'changelog.minimaxH3.item1',
+      'changelog.minimaxH3.item2',
+      'changelog.minimaxH3.item3',
+    ],
+  },
+  multilingualAsr: {
+    title: 'changelog.multilingualAsr.title',
+    items: [
+      'changelog.multilingualAsr.item1',
+    ],
+  },
+  editableRemotion: {
+    title: 'changelog.editableRemotion.title',
+    items: [
+      'changelog.editableRemotion.item1',
+      'changelog.editableRemotion.item2',
+      'changelog.editableRemotion.item3',
+    ],
+  },
+  editableLayers: {
+    title: 'changelog.editableLayers.title',
+    items: [
+      'changelog.editableLayers.item1',
+      'changelog.editableLayers.item2',
+      'changelog.editableLayers.item3',
+      'changelog.editableLayers.item4',
+    ],
+  },
+} as const satisfies Record<LocalizedChangelogEntry['localeKey'], {
+  title: TranslationKey;
+  items: readonly TranslationKey[];
+}>;
 
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
-  // Release notes stay bilingual: Simplified Chinese uses zh, every other locale falls back to en.
-  const isZh = locale === 'zh';
-  const [isIOSApp, setIsIOSApp] = useState(false);
-
-  useEffect(() => {
-    setIsIOSApp(document.documentElement.classList.contains('makaron-ios-app') || navigator.userAgent.includes('MakaronIOS'));
-  }, []);
-
-  return (
-    <div
-      className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center"
-      onClick={onClose}
-      style={isIOSApp ? {
-        boxSizing: 'border-box',
-        paddingTop: iOSAppTopGap,
-        paddingBottom: iOSAppBottomGap,
-      } : undefined}
-    >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(circle at 50% 0%, rgba(255,255,255,0.065), transparent 32%), rgba(0,0,0,0.54)',
-          backdropFilter: 'blur(5px) saturate(120%)',
-          WebkitBackdropFilter: 'blur(5px) saturate(120%)',
-        }}
-      />
-
-      {/* Modal */}
-      <div
-        className={isIOSApp
-          ? 'relative w-[calc(100%-24px)] max-w-xl rounded-[22px] overflow-hidden flex flex-col'
-          : 'relative mb-2 w-[calc(100%-24px)] max-w-xl max-h-[calc(100dvh-64px)] rounded-[22px] sm:mb-0 sm:mx-4 sm:max-h-[80dvh] overflow-hidden flex flex-col'
-        }
-        role="dialog"
-        aria-modal="true"
-        aria-label={isZh ? '更新' : 'Updates'}
-        style={{
-          ...changelogGlassStyle,
-          maxHeight: isIOSApp ? `calc(100dvh - ${iOSAppTopGap} - ${iOSAppBottomGap})` : undefined,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div style={changelogGlassHighlightStyle} />
-        <div style={changelogGlassEdgeStyle} />
-
-        {/* Header */}
-        <div
-          className="relative z-[1] flex-shrink-0 flex items-center justify-between px-5 py-4"
-          style={{
-            borderBottom: '0.5px solid rgba(255,255,255,0.07)',
-            background:
-              'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01))',
-          }}
-        >
-          <div className="flex items-center gap-2.5">
-            <span
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full"
-              style={{
-                color: 'rgba(255,255,255,0.76)',
-                background: 'rgba(255,255,255,0.045)',
-                border: '0.5px solid rgba(255,255,255,0.08)',
-                boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.12)',
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M12 3v3" />
-                <path d="M12 18v3" />
-                <path d="M3 12h3" />
-                <path d="M18 12h3" />
-                <path d="m6.4 6.4 2.1 2.1" />
-                <path d="m15.5 15.5 2.1 2.1" />
-                <path d="m17.6 6.4-2.1 2.1" />
-                <path d="m8.5 15.5-2.1 2.1" />
-              </svg>
-            </span>
-            <h2 className="text-base font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>
-              {isZh ? '更新' : 'Updates'}
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label={isZh ? '关闭更新' : 'Close updates'}
-            className="w-7 h-7 flex items-center justify-center rounded-full"
-            style={{
-              background: 'rgba(255,255,255,0.045)',
-              border: '0.5px solid rgba(255,255,255,0.08)',
-              boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.12)',
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round">
-              <line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Scrollable entries */}
-        <div className="relative z-[1] flex-1 overflow-y-auto overscroll-contain px-5 pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+  const normalizedLocale = normalizeLocale(locale, 'en');
+  const isZh = normalizedLocale === 'zh';
+  return <ChangelogDialog onClose={onClose} locale={locale}>
           {CHANGELOG.map((entry, i) => {
-            const loc = isZh ? entry.zh : entry.en;
+            const loc: ChangelogContent = 'localeKey' in entry
+              ? {
+                  title: translate(normalizedLocale, LOCALIZED_CHANGELOG_KEYS[entry.localeKey].title),
+                  items: LOCALIZED_CHANGELOG_KEYS[entry.localeKey].items.map((key) => (
+                    translate(normalizedLocale, key)
+                  )),
+                }
+              : (isZh ? entry.zh : entry.en);
             return (
-              <div key={`${entry.date}-${entry.en.title}`} className={i > 0 ? 'mt-5' : 'mt-3'}>
+              <div key={`${entry.date}-${loc.title}`} className={i > 0 ? 'mt-5' : 'mt-3'} style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 100px' }}>
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <span className="text-[11px] font-mono tabular-nums" style={{ color: 'rgba(232,121,249,0.76)' }}>
                     {entry.date}
@@ -1003,8 +1207,5 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
               </div>
             );
           })}
-        </div>
-      </div>
-    </div>
-  );
+  </ChangelogDialog>;
 }

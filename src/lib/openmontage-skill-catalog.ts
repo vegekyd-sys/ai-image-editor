@@ -94,7 +94,10 @@ const agentSkills: OpenMontageSkillCatalogEntry[] = [
   ...unavailableGroup(['avatar-video', 'faceswap', 'heygen', 'ltx2', 'video-toolkit'], 'video-generation', 'Makaron does not execute the named provider/toolkit. Routing to another video model would misrepresent the requested capability.'),
   ...group(['grok-media'], 'video-generation', 'photo-to-video', 'native'),
   ...unavailableGroup(['playwright-recording'], 'video-workflow', 'The agent media runtime does not expose browser automation or Playwright recording. Uploaded captures and synthetic screen demos remain supported separately.'),
-  ...group(['video-translate'], 'video-workflow', 'localization-dub', 'native'),
+  {
+    name: 'video-translate', sourceKind: 'agent-skill', family: 'video-workflow', supportLevel: 'native',
+    canonicalSkill: 'video-translate', userSelectable: true, sourceMediaRequired: true,
+  },
   {
     name: 'website-to-video', sourceKind: 'agent-skill', family: 'video-workflow', supportLevel: 'adapted',
     canonicalSkill: 'screen-demo', userSelectable: true, studioRunRecipe: 'website-to-video',

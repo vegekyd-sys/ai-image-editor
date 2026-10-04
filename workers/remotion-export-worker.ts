@@ -29,7 +29,16 @@ async function drainQueue() {
   let processed = 0
   const slots = Array.from({ length: concurrency }, async () => {
     while (!stopping) {
-      const result = await runNextRemotionExportJob()
+      let result
+      try {
+        result = await runNextRemotionExportJob()
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: 'remotion_export_slot_error',
+          error: error instanceof Error ? error.message : String(error),
+        }))
+        return
+      }
       if (!result) return
       processed += 1
       const job = result.job

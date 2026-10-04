@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { randomBytes } from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { generateApiKey } from '@/lib/billing/api-keys'
-import { addCredits } from '@/lib/billing/credits'
+import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
@@ -66,18 +66,22 @@ export async function POST(req: NextRequest) {
   }, { onConflict: 'id' })
 
   // Welcome credits
-  const { data: creditSetting } = await admin.from('app_settings').select('value').eq('key', 'welcome_credits').single()
-  const welcomeCredits = parseInt(creditSetting?.value || '500')
+  const welcomeCredits = await getConfiguredWelcomeCredits(admin)
 
-  await addCredits(userId, welcomeCredits)
-  await admin.from('credit_purchases').insert({
-    user_id: userId,
-    stripe_session_id: `agent_welcome_${Date.now()}`,
-    credits: welcomeCredits,
-    amount_usd: 0,
-    status: 'completed',
-    source: 'welcome',
-  }).then(() => {})
+  if (welcomeCredits > 0) {
+    const { error: welcomeError } = await admin.rpc('claim_welcome_credits', {
+      p_user_id: userId,
+      p_credits: welcomeCredits,
+      p_channel: 'agent_registration',
+    })
+    if (welcomeError) {
+      await admin.auth.admin.deleteUser(userId)
+      return NextResponse.json({
+        error: 'credit_grant_failed',
+        message: welcomeError.message,
+      }, { status: 500 })
+    }
+  }
 
   // Generate API key
   const { key } = await generateApiKey(userId, 'Agent Auto-Registration')

@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
       prompt: prompts.en || firstLocalizedValue(prompts),
       categories,
       skill_path: typeof body.skill_path === 'string' && body.skill_path.trim() ? body.skill_path.trim() : null,
-      image_count: asInteger(body.image_count, 1, 1, 10),
+      image_count: asInteger(body.image_count, 1, 0, 10),
       sort_order: asInteger(body.sort_order, 0, -100000, 100000),
       is_active: typeof body.is_active === 'boolean' ? body.is_active : true,
       before_images: sanitizeStringList(body.before_images, 3),
@@ -210,7 +210,7 @@ export async function PUT(req: NextRequest) {
   if (hasOwn(body, 'skill_path')) {
     updates.skill_path = typeof body.skill_path === 'string' && body.skill_path.trim() ? body.skill_path.trim() : null
   }
-  if (hasOwn(body, 'image_count')) updates.image_count = asInteger(body.image_count, 1, 1, 10)
+  if (hasOwn(body, 'image_count')) updates.image_count = asInteger(body.image_count, 1, 0, 10)
   if (hasOwn(body, 'sort_order')) updates.sort_order = asInteger(body.sort_order, 0, -100000, 100000)
   if (hasOwn(body, 'is_active')) {
     if (typeof body.is_active !== 'boolean') return NextResponse.json({ error: 'is_active must be boolean' }, { status: 400 })

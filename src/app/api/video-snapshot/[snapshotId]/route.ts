@@ -7,7 +7,12 @@ import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
 import type { VideoMeta } from '@/types'
 import { buildVideoFailureActions } from '@/lib/artifact-actions'
-import { getRemotionExportJob, runRemotionExportJob } from '@/lib/remotion-export'
+import {
+  drainRemotionExportQueue,
+  getRemotionExportJob,
+  shouldRunRemotionExportInline,
+} from '@/lib/remotion-export'
+import { getRequestLocale } from '@/lib/server-locale'
 
 export const maxDuration = 1800
 
@@ -20,12 +25,10 @@ function getProjectInfo(projects: SnapshotProject | null | undefined) {
 function runRemotionExportAfterResponse(jobId: string) {
   after(async () => {
     try {
-      await runRemotionExportJob(jobId)
+      if (!shouldRunRemotionExportInline()) return
+      await drainRemotionExportQueue({ source: `video-snapshot:${jobId}` })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      if (!message.includes('already rendering')) {
-        console.error(`[video-snapshot] Remotion export worker failed for ${jobId}:`, err)
-      }
+      console.error(`[video-snapshot] Remotion export queue drain failed after ${jobId}:`, err)
     }
   })
 }
@@ -111,6 +114,7 @@ export async function GET(
 ) {
   try {
     const { snapshotId } = await params
+    const locale = getRequestLocale(req)
     const admin = getSupabaseAdmin()
     const authResult = await authenticateRequest(req)
     const authUserId = 'auth' in authResult ? authResult.auth.userId : null
@@ -151,7 +155,7 @@ export async function GET(
           videoUrl: videoMeta.videoUrl,
           currentImageUrl: snap.image_url,
         })
-        return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
+        return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined, stage: videoMeta.pipelineStage, baseVideoUrl: videoMeta.baseVideoUrl, enhancementStatus: videoMeta.enhancementStatus, actualResolution: videoMeta.resolution, requestedResolution: videoMeta.requestedResolution })
       }
       persistProviderVideoAfterResponse({
         admin,
@@ -162,8 +166,9 @@ export async function GET(
         providerVideoUrl: videoMeta.videoUrl,
         currentImageUrl: snap.image_url,
       })
-      // Provider URL still in DB — persist hasn't finished yet, tell caller to keep polling
-      return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
+      // The provider asset is already playable. Return it while Makaron Storage
+      // persistence continues in after(), matching the provider-first App contract.
+      return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined, stage: videoMeta.pipelineStage, baseVideoUrl: videoMeta.baseVideoUrl, enhancementStatus: videoMeta.enhancementStatus, actualResolution: videoMeta.resolution, requestedResolution: videoMeta.requestedResolution })
     }
     if (videoMeta.status === 'failed') {
       return NextResponse.json({
@@ -171,7 +176,7 @@ export async function GET(
         snapshotId,
         imageUrl: snap.image_url || undefined,
         error: videoMeta.error,
-        completionActions: buildVideoFailureActions(videoMeta),
+        completionActions: buildVideoFailureActions(videoMeta, locale),
       })
     }
 
@@ -222,7 +227,7 @@ export async function GET(
           snapshotId,
           imageUrl: snap.image_url || undefined,
           error: updatedMeta.error,
-          completionActions: buildVideoFailureActions(updatedMeta),
+          completionActions: buildVideoFailureActions(updatedMeta, locale),
         })
       }
       runRemotionExportAfterResponse(job.id)
@@ -230,17 +235,27 @@ export async function GET(
     }
 
     // Poll provider — route by taskId prefix
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, else = Kling
+    // task-unified-* = Evolink SeeDance, mr-wan30-* = MuleRouter Wan, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
     const isEvolink = videoMeta.taskId.startsWith('task-unified-')
+    const isMuleRouter = videoMeta.taskId.startsWith('mr-wan30-')
     const isSeedance = videoMeta.taskId.startsWith('cgt-')
     const isMotionControl = videoMeta.taskId.startsWith('mc-')
     const isXai = videoMeta.taskId.startsWith('xai-')
     const isGoogleOmni = videoMeta.taskId.startsWith('google-omni-')
+    const isMinimax = videoMeta.taskId.startsWith('minimax-h3-')
+    const isFalH3Max = videoMeta.taskId.startsWith('fal-h3max-')
+    const isSyncLipsync = videoMeta.taskId.startsWith('sync3-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
-    let result: { taskId: string; status: string; videoUrl?: string; error?: string }
+    let result: { taskId: string; status: string; videoUrl?: string; error?: string } & Partial<import('@/lib/skills/get-video-status').GetVideoStatusResult>
     const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
 
-    if (isEvolink) {
+    if (videoMeta.taskId.startsWith('video-pipeline-')) {
+      const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline')
+      result = { taskId: videoMeta.taskId, ...await advanceVideoPipeline(videoMeta.taskId, ownerUserId) }
+    } else if (isMuleRouter) {
+      const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
+      result = await getMuleRouterVideoTask(videoMeta.taskId)
+    } else if (isEvolink) {
       const { getEvolinkTask } = await import('@/lib/evolink')
       result = await getEvolinkTask(videoMeta.taskId)
     } else if (isSeedance) {
@@ -252,13 +267,45 @@ export async function GET(
       result.taskId = videoMeta.taskId
     } else if (isXai) {
       const { getXaiVideoTask } = await import('@/lib/xai-video')
-      result = await getXaiVideoTask(videoMeta.taskId)
+      result = await getXaiVideoTask(videoMeta.taskId, ownerUserId)
     } else if (isGoogleOmni) {
       if (videoMeta.taskId.startsWith('google-omni-job-') && !videoMeta.videoUrl && !videoMeta.providerUrl) {
+        const {
+          GOOGLE_OMNI_TIMEOUT_ERROR,
+          isGoogleOmniPlaceholderExpired,
+        } = await import('@/lib/google-omni-video')
+        if (isGoogleOmniPlaceholderExpired(videoMeta.createdAt)) {
+          const { handleVideoFailure } = await import('@/lib/video-lifecycle')
+          await handleVideoFailure(snapshotId, GOOGLE_OMNI_TIMEOUT_ERROR)
+          const failedMeta: VideoMeta = {
+            ...videoMeta,
+            status: 'failed',
+            error: GOOGLE_OMNI_TIMEOUT_ERROR,
+          }
+          return NextResponse.json({
+            status: 'failed',
+            snapshotId,
+            imageUrl: snap.image_url || undefined,
+            error: GOOGLE_OMNI_TIMEOUT_ERROR,
+            completionActions: buildVideoFailureActions(failedMeta, locale),
+          })
+        }
         return NextResponse.json({ status: 'processing', snapshotId, imageUrl: snap.image_url || undefined })
       }
       const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
       result = await getGoogleOmniVideoTask(videoMeta.taskId, videoMeta.videoUrl || videoMeta.providerUrl)
+    } else if (isMinimax) {
+      const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
+      result = await getMinimaxVideoTask(videoMeta.taskId)
+    } else if (isFalH3Max) {
+      const { waitForFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+      // H3 Max Turbo usually finishes a 5s/768p clip in roughly the time one normal
+      // provider poll takes end-to-end. Keep this request open briefly so the
+      // App receives the Fal playback URL without several authenticated round trips.
+      result = await waitForFalH3MaxVideoTask(videoMeta.taskId)
+    } else if (isSyncLipsync) {
+      const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
+      result = await getSyncLipsyncTask(videoMeta.taskId)
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(videoMeta.taskId)
     } else {
@@ -266,7 +313,7 @@ export async function GET(
     }
 
     if (result.status === 'completed' && result.videoUrl) {
-      const updatedMeta: VideoMeta = { ...videoMeta, status: 'completed', videoUrl: result.videoUrl, providerUrl: result.videoUrl }
+      const updatedMeta: VideoMeta = { ...videoMeta, status: 'completed', videoUrl: result.videoUrl, providerUrl: result.videoUrl, ...(result.stage ? { pipelineStage: result.stage, baseVideoUrl: result.baseVideoUrl, enhancementStatus: result.enhancementStatus, requestedResolution: result.requestedResolution, resolution: result.actualResolution ?? videoMeta.resolution } : {}) }
 
       await admin
         .from('snapshots')
@@ -285,7 +332,7 @@ export async function GET(
 
       // Return completed immediately with provider URL — frontend can play it right away
       // after() will persist to Storage in background, subsequent loads use permanent URL
-      return NextResponse.json({ status: 'completed', videoUrl: result.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
+      return NextResponse.json({ ...result, status: 'completed', snapshotId, imageUrl: snap.image_url || undefined })
     }
 
     if (result.status === 'failed') {
@@ -296,11 +343,11 @@ export async function GET(
         snapshotId,
         imageUrl: snap.image_url || undefined,
         error: result.error,
-        completionActions: buildVideoFailureActions({ ...videoMeta, status: 'failed', error: result.error }),
+        completionActions: buildVideoFailureActions({ ...videoMeta, status: 'failed', error: result.error }, locale),
       })
     }
 
-    return NextResponse.json({ status: result.status, snapshotId, imageUrl: snap.image_url || undefined, error: result.error })
+    return NextResponse.json({ ...result, snapshotId, imageUrl: snap.image_url || undefined })
   } catch (err) {
     console.error('video-snapshot GET error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

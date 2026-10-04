@@ -23,7 +23,7 @@ export default function DesignEditPanel({
   onStartEdit,
   isDesktop,
 }: DesignEditPanelProps) {
-  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const { isDragging } = useHorizontalScroll(!!isDesktop);
 
   const handleCardClick = useCallback((field: EditableField) => {
@@ -31,11 +31,18 @@ export default function DesignEditPanel({
     onSelectField(field.id);
   }, [onSelectField, isDragging]);
 
-  // Scroll selected card into view
+  // Scroll selected item into view. The selected item's Edit button expands after
+  // selection, so repeat once after the width transition starts.
   useEffect(() => {
     if (!selectedFieldId) return;
-    const el = cardRefs.current.get(selectedFieldId);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    const el = itemRefs.current.get(selectedFieldId);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    const timer = window.setTimeout(() => {
+      itemRefs.current
+        .get(selectedFieldId)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }, 220);
+    return () => window.clearTimeout(timer);
   }, [selectedFieldId]);
 
   const toolbar = (
@@ -54,18 +61,30 @@ export default function DesignEditPanel({
       {editables.map((field) => {
         const isSelected = selectedFieldId === field.id;
         const value = String(props[field.propKey] ?? '');
-        const showEditButton = isSelected;
+        const canOpenEditor = field.type === 'text' || field.type === 'video';
+        const showEditButton = isSelected && canOpenEditor;
+        const icon = field.type === 'video' ? '▶' : field.type === 'image' ? '▧' : 'T';
+        const valuePreview = field.type === 'video'
+          ? 'Trim'
+          : field.type === 'image'
+            ? 'Move / scale'
+            : value;
 
         return (
-          <div key={field.id} className="flex items-stretch flex-shrink-0 animate-tip-in">
+          <div
+            key={field.id}
+            ref={(el) => {
+              if (el) itemRefs.current.set(field.id, el);
+              else itemRefs.current.delete(field.id);
+            }}
+            className="flex items-stretch flex-shrink-0 animate-tip-in"
+          >
             <div
-              ref={(el) => {
-                if (el) cardRefs.current.set(field.id, el);
-                else cardRefs.current.delete(field.id);
-              }}
               className={`mkr-liquid-pill flex items-stretch overflow-hidden border transition-all cursor-pointer active:scale-[0.97] ${isDesktop ? 'w-[176px]' : 'w-[200px]'} ${
                 isSelected
-                  ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50 rounded-l-2xl rounded-r-none border-r-0'
+                  ? showEditButton
+                    ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50 rounded-l-2xl rounded-r-none border-r-0'
+                    : 'border-fuchsia-500 ring-1 ring-fuchsia-500/50 rounded-2xl'
                   : 'border-white/10 hover:border-white/20 rounded-2xl'
               }`}
               style={{
@@ -77,14 +96,14 @@ export default function DesignEditPanel({
                 className={`flex-shrink-0 flex items-center justify-center ${isDesktop ? 'w-[64px] h-[64px]' : 'w-[72px] h-[72px]'}`}
                 style={{ background: 'rgba(255,255,255,0.045)' }}
               >
-                <span className="text-white/30 text-[20px]">T</span>
+                <span className="text-white/30 text-[20px]">{icon}</span>
               </div>
               <div className={`flex-1 min-w-0 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
                 <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
                   {field.label}
                 </div>
                 <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
-                  {value || '\u00A0'}
+                  {valuePreview || '\u00A0'}
                 </div>
               </div>
             </div>

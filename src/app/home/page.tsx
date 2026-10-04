@@ -8,7 +8,8 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useHydrated } from '@/hooks/useHydrated'
 import { isHeicFile } from '@/lib/imageUtils'
 import { pickLocalizedValue, useLocale } from '@/lib/i18n'
-import { compressCreateImageFiles, createProject, createProjectFromStagedMedia } from '@/lib/createProject'
+import { compressCreateImageFiles, createProject, createProjectFromStagedMedia, type ProjectLaunchOptions } from '@/lib/createProject'
+import { createHomeSkillLaunchContext } from '@/lib/skill-launch-context'
 import { createClient } from '@/lib/supabase/client'
 import {
   beginCreateDraftContinuation,
@@ -22,27 +23,37 @@ import {
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
-import RollingTagline from '@/components/RollingTagline'
+import HomeCreativeStudio from '@/components/HomeCreativeStudio'
+import { readHomeHeroGeometry, type HomeHeroGeometry } from '@/lib/home-hero-geometry'
+import HomeCreativeHero, { HomeMotionToggle, HomeCreativeFooter, useHomeMotion } from '@/components/HomeCreativeHero'
+import './creative-home.css'
 import TopBar from '@/components/TopBar'
 import ModeToggle from '@/components/ModeToggle'
 import AgentContent from '@/components/AgentContent'
 import {
   type HomeSkill,
   type HomeSkillCategory,
+  countHomeSkillImageFiles,
   filterHomeSkillsByCategory,
   getCachedHomeSkills,
   getLocalizedSkillPrompt,
+  getRequiredHomeSkillImageCount,
+  hasRequiredHomeSkillImages,
   getVisibleSkillCategories,
   setCachedHomeSkills,
 } from '@/lib/home-skills'
 import { warmHomeSkillMedia } from '@/lib/home-skills-warm'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 import { isMakaronIOSApp } from '@/lib/native-app'
+import { FREE_MEDIA_ENABLED } from '@/lib/free-media-policy'
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import MakaronLogo from '@/components/MakaronLogo'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
+import CreditPopup from '@/components/CreditPopup'
+import { getEligibleAppleIntroTrial } from '@/lib/billing/apple-trial'
+import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing'
 import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
 import type { AgentModelPreference } from '@/lib/agent-models'
 import { LazyVideo, SkillVideo } from '@/components/HomeSkillMedia'
@@ -55,6 +66,13 @@ import {
   resolveHomeSkillCategorySwipe,
   type HomeSkillCategorySwipeDirection,
 } from '@/lib/home-skill-category-swipe'
+import {
+  clearIOSPreAuthTrialContinuation,
+  confirmIOSPreAuthTrialContinuation,
+  linkIOSPreAuthTrialContinuation,
+  readIOSPreAuthTrialContinuation,
+  writeIOSPreAuthTrialIntent,
+} from '@/lib/ios-preauth-trial'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 const IOS_SKILL_BACK_EDGE_PX = 36
@@ -63,8 +81,8 @@ const IOS_SKILL_BACK_COMMIT_PX = 88
 const IOS_SKILL_BACK_CLOSE_MS = 180
 const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
 const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'
-const INITIAL_SKILL_CARD_COUNT = 12
-const SKILL_CARD_BATCH_SIZE = 12
+const INITIAL_SKILL_CARD_COUNT = 8
+const SKILL_CARD_BATCH_SIZE = 8
 
 function getHomeScrollContainer(node: HTMLElement | null): HTMLElement | null {
   if (!node) return null
@@ -85,6 +103,8 @@ export default function HomePage() {
 }
 
 function HomePageInner() {
+  const { paused: motionPaused, setPaused: setMotionPaused } = useHomeMotion()
+  const [homeOverlayOpen, setHomeOverlayOpen] = useState(false)
   const { user, loading: authLoading } = useAuth()
   const hydrated = useHydrated()
   const renderUser = hydrated ? user : null
@@ -94,6 +114,18 @@ function HomePageInner() {
   const pathname = usePathname()
   const isDesktop = useIsDesktop()
   const isIOSAppShell = hydrated && isMakaronIOSApp()
+  const preAuthAppleBilling = useAppleBillingProducts({
+    enabled: !FREE_MEDIA_ENABLED && isIOSAppShell && !renderUser,
+  })
+  const preAuthBasicMonthlyProduct = preAuthAppleBilling.findSubscription('basic', 'month')
+  const preAuthBasicMonthlyTrial = getEligibleAppleIntroTrial(
+    preAuthBasicMonthlyProduct,
+    preAuthAppleBilling.nativeProductFor(preAuthBasicMonthlyProduct),
+  )
+  // Build 1.0.7 exposes only the base StoreKit product fields, so it stays on
+  // the established upload -> registration -> trial flow. Build 1.0.8 adds
+  // verified introductory-offer metadata and alone can enter subscribe-first.
+  const isPreAuthIOSGuest = !FREE_MEDIA_ENABLED && isIOSAppShell && !renderUser && !!preAuthBasicMonthlyTrial
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const createInput = useCreateInput()
@@ -111,6 +143,7 @@ function HomePageInner() {
   const [activeCategory, setActiveCategory] = useState('all')
   const [categoryHasChanged, setCategoryHasChanged] = useState(false)
   const [visibleSkillCount, setVisibleSkillCount] = useState(INITIAL_SKILL_CARD_COUNT)
+  const [skillBrowseExpanded, setSkillBrowseExpanded] = useState(false)
   const skillLoadMoreRef = useRef<HTMLDivElement>(null)
   const skillSectionRef = useRef<HTMLDivElement>(null)
   const skillGridRef = useRef<HTMLDivElement>(null)
@@ -151,8 +184,11 @@ function HomePageInner() {
   const skillFileRef = useRef<HTMLInputElement>(null)
   const skillMenuRef = useRef<HTMLDivElement>(null)
   const [selectedDetail, setSelectedDetail] = useState<HomeSkill | null>(null)
-  const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
+  const [heroRect, setHeroRect] = useState<HomeHeroGeometry | null>(null)
+  const heroSourceRef = useRef<HTMLElement | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
+  const [heroArrived, setHeroArrived] = useState(false)
+  const [heroPoster, setHeroPoster] = useState<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
     setCreateAgentModel(loadCreateAgentModelPreference())
@@ -643,10 +679,11 @@ function HomePageInner() {
   }, [])
 
   const rememberIOSSkillReturn = useCallback((skillId: string | null | undefined) => {
-    if (!isIOSAppShell || !skillId) return
+    if (!skillId) return
     const returnPath = `/home/${skillId}`
     localStorage.setItem('mkr_return_url', returnPath)
     sessionStorage.setItem('mkr_return_url', returnPath)
+    if (!isIOSAppShell) return
     localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
     sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
   }, [isIOSAppShell])
@@ -685,13 +722,22 @@ function HomePageInner() {
     if (options?.skipHeroCollapse) {
       setSelectedDetail(null)
       setHeroRect(null)
+      heroSourceRef.current = null
       resetSkillBackPan()
     } else {
+      // Hover, scrolling, and viewport changes can alter the original card while
+      // the detail is open. Land on its current frame, including its tilt.
+      if (heroSourceRef.current?.isConnected) {
+        setHeroRect(readHomeHeroGeometry(heroSourceRef.current))
+      }
+      setHeroPoster(null)
+      setHeroArrived(false)
       setHeroExpanded(false)
       detailCloseTimerRef.current = window.setTimeout(() => {
         detailCloseTimerRef.current = null
         setSelectedDetail(null)
         setHeroRect(null)
+        heroSourceRef.current = null
         resetSkillBackPan()
       }, 350)
     }
@@ -783,10 +829,19 @@ function HomePageInner() {
     t('home.placeholder.6'),
     t('home.placeholder.7'),
   ]
-  const [placeholderIdx, setPlaceholderIdx] = useState(0)
   const [showWelcome, setShowWelcome] = useState(false)
   const [welcomeCredits, setWelcomeCredits] = useState(0)
-  useEffect(() => { setPlaceholderIdx(Math.floor(Math.random() * placeholders.length)) }, [])
+  const dismissWelcome = useCallback(() => {
+    setShowWelcome(false)
+    if (isMakaronIOSApp()) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('welcome')
+      window.history.replaceState({}, '', url.pathname + url.search + url.hash)
+    }
+  }, [])
+  const [showIOSTrial, setShowIOSTrial] = useState(false)
+  const [showPreAuthIOSTrial, setShowPreAuthIOSTrial] = useState(false)
+  const [trialContinuationVersion, setTrialContinuationVersion] = useState(0)
 
   // Restore state from login redirect + detect welcome
   const returnTextRef = useRef<string | null>(null)
@@ -799,8 +854,16 @@ function HomePageInner() {
     // Welcome credits popup — activates new user + grants credits
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
+      if (params.get('trial') && isMakaronIOSApp()) {
+        params.delete('trial')
+        const cleanSearch = params.toString()
+        window.history.replaceState({}, '', `${window.location.pathname}${cleanSearch ? `?${cleanSearch}` : ''}`)
+        if (!FREE_MEDIA_ENABLED) setShowIOSTrial(true)
+      }
       if (params.get('welcome')) {
-        window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))
+        // Native page-stack navigation observes query changes. Keep this entry
+        // mounted until the welcome response has arrived and is dismissed.
+        if (!isMakaronIOSApp()) window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))
         fetch('/api/auth/activate', { method: 'POST' })
           .then(r => r.json())
           .then(d => {
@@ -812,14 +875,11 @@ function HomePageInner() {
               )
             }
             if (d.credits > 0) {
-              trackMetaEvent(
-                'StartTrial',
-                { credits: d.credits },
-                d.metaEvents?.StartTrial || createMetaEventId('starttrial'),
-              )
               setWelcomeCredits(d.credits); setShowWelcome(true)
               window.dispatchEvent(new Event('credits-updated'))
-            } else if (d.isNew === false) {
+            } else if (!FREE_MEDIA_ENABLED && d.trialRequired && isMakaronIOSApp()) {
+              setShowIOSTrial(true)
+            } else if (d.isNew === false && (FREE_MEDIA_ENABLED || !isMakaronIOSApp())) {
               // Already activated user revisiting with ?welcome=1 — just refresh credits
               fetch('/api/billing/credits').then(r => r.json()).then(b => {
                 writeNativeJSONCache('/api/billing/credits', b)
@@ -894,22 +954,21 @@ function HomePageInner() {
     }
   }, [])
 
+  // One deliberate expansion, then the same incremental scroll loading as the original home.
   useEffect(() => {
     const sentinel = skillLoadMoreRef.current
-    if (!sentinel || visibleSkillCount >= filteredHomeSkills.length) return
+    if (!skillBrowseExpanded || !sentinel || visibleSkillCount >= filteredHomeSkills.length) return
     if (typeof IntersectionObserver === 'undefined') {
       startTransition(() => setVisibleSkillCount(filteredHomeSkills.length))
       return
     }
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return
-      startTransition(() => {
-        setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length))
-      })
+      startTransition(() => setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length)))
     }, { rootMargin: '200px 0px' })
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [filteredHomeSkills.length, visibleSkillCount])
+  }, [skillBrowseExpanded, filteredHomeSkills.length, visibleSkillCount])
 
   // Preload user's installed skills
   const skillsFetchedRef = useRef(false)
@@ -980,14 +1039,15 @@ function HomePageInner() {
         body: JSON.stringify({ skillPath: skill.skill_path, homeSkillId: skill.id }),
       })
       const installData = await installRes.json()
-      if (installData.skillName) {
-        setSelectedSkill(installData.skillName)
-        fetch('/api/skills').then(r => r.json()).then(d => {
-          writeNativeJSONCache('/api/skills', d)
-          if (d.skills) setAvailableSkills(d.skills)
-        }).catch(() => {})
-        return installData.skillName as string
+      if (!installRes.ok || !installData.skillName) {
+        throw new Error(installData.error || 'Failed to install Skill template')
       }
+      setSelectedSkill(installData.skillName)
+      fetch('/api/skills').then(r => r.json()).then(d => {
+        writeNativeJSONCache('/api/skills', d)
+        if (d.skills) setAvailableSkills(d.skills)
+      }).catch(() => {})
+      return installData.skillName as string
     } finally {
       setInstallingSkill(false)
     }
@@ -1430,7 +1490,7 @@ function HomePageInner() {
     const [images, metadata] = await Promise.all([
       compressCreateImageFiles(imageFiles),
       imageFiles[0]
-        ? extractPhotoMetadata(imageFiles[0]).catch(() => undefined)
+        ? extractPhotoMetadata(imageFiles[0], { allowServerFallback: false }).catch(() => undefined)
         : Promise.resolve(undefined),
     ])
     const continuationId = beginCreateDraftContinuation()
@@ -1448,8 +1508,45 @@ function HomePageInner() {
     sessionStorage.setItem('mkr_return_url', returnPath)
   }, [activeSkill, selectedDetail, selectedSkill])
 
-  const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
-    if (createInput.creating || (files.length === 0 && !prompt)) return
+  const beginPreAuthIOSTrial = useCallback((skillId?: string) => {
+    writeIOSPreAuthTrialIntent({
+      kind: skillId ? 'skill' : 'create',
+      skillId,
+    })
+    if (skillId) rememberIOSSkillReturn(skillId)
+    setShowPreAuthIOSTrial(true)
+  }, [rememberIOSSkillReturn])
+
+  const finishPreAuthIOSTrial = useCallback(async () => {
+    const continuation = confirmIOSPreAuthTrialContinuation()
+    if (!continuation) return
+
+    if (createInput.files.length > 0 || createInput.text.trim()) {
+      try {
+        await saveCreateDraftBeforeLogin(
+          createInput.files,
+          createInput.text.trim() || undefined,
+        )
+      } catch (error) {
+        console.error('Save post-purchase create draft error:', error)
+        return
+      }
+    }
+
+    const returnPath = continuation.skillId ? `/home/${continuation.skillId}` : '/home'
+    localStorage.setItem('mkr_return_url', returnPath)
+    sessionStorage.setItem('mkr_return_url', returnPath)
+    setShowPreAuthIOSTrial(false)
+    router.push('/login?focus=email')
+  }, [createInput.files, createInput.text, router, saveCreateDraftBeforeLogin])
+
+  const handleCreateProject = useCallback(async (files: File[], prompt?: string): Promise<boolean> => {
+    const homeSkill = selectedDetail || activeSkill
+    if (
+      createInput.creating
+      || (files.length === 0 && !prompt)
+      || !hasRequiredHomeSkillImages(homeSkill, files)
+    ) return false
     saveContextBeforeLogin()
     let authedUser = user
     if (!authedUser) {
@@ -1459,29 +1556,31 @@ function HomePageInner() {
       } catch (err) {
         console.error('Save create draft error:', err)
         createInput.setCreating(false)
-        return
+        return false
       }
       authedUser = await requireAuth()
-      if (!authedUser) return
+      if (!authedUser) return false
     }
     createInput.setCreating(true)
     try {
       const supabase = createClient()
       let skillName: string | undefined
-      const homeSkill = selectedDetail || activeSkill
       if (homeSkill?.skill_path) {
         skillName = await installHomeSkill(homeSkill)
       } else if (selectedSkill) {
         skillName = selectedSkill
       }
-      const opts: { prompt?: string; skill?: string } = {}
+      const opts: ProjectLaunchOptions = {}
       if (prompt) opts.prompt = prompt
       if (skillName) opts.skill = skillName
+      const skillLaunchContext = createHomeSkillLaunchContext(homeSkill, prompt, skillName)
+      if (skillLaunchContext) opts.skillLaunchContext = skillLaunchContext
       const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
       saveAgentModelPreference(result.projectId, createAgentModel)
       void clearCreateDraft()
       router.push(`/projects/${result.projectId}`)
+      return true
     } catch (err) {
       console.error('Create project error:', err)
       const msg = err instanceof Error ? err.message : String(err)
@@ -1490,24 +1589,35 @@ function HomePageInner() {
         alert(t('video.tooLong').replace('{duration}', msg.match(/\((\d+(?:\.\d+)?)s\)/)?.[1] || '?').replace('{max}', String(MAX_DURATION)))
       }
       createInput.setCreating(false)
+      return false
     }
   }, [activeSkill, createAgentModel, createInput, installHomeSkill, requireAuth, router, saveContextBeforeLogin, saveCreateDraftBeforeLogin, selectedDetail, selectedSkill, t, user])
 
   const consumeDraftRef = useRef(false)
   useEffect(() => {
     if (!user || consumeDraftRef.current) return
+    const trialContinuation = readIOSPreAuthTrialContinuation()
+    if (trialContinuation?.confirmed && !trialContinuation.linked) return
     const continuationId = getCreateDraftContinuationId()
     if (!continuationId) return
+    consumeDraftRef.current = true
     let cancelled = false
     const consume = async () => {
       const draft = await getCreateDraft()
-      if (!draft || cancelled) return
+      if (!draft || cancelled) {
+        consumeDraftRef.current = false
+        return
+      }
       if (!shouldConsumeCreateDraft(draft, continuationId)) {
         clearCreateDraftContinuation()
         return
       }
-      if (draft.homeSkillId && homeSkills.length === 0) return
-      if (draft.homeSkillId && draft.images.length === 0) {
+      if (draft.homeSkillId && homeSkills.length === 0) {
+        consumeDraftRef.current = false
+        return
+      }
+      const homeSkill = draft.homeSkillId ? homeSkills.find(skill => skill.id === draft.homeSkillId) : null
+      if (draft.homeSkillId && (!homeSkill || draft.images.length < getRequiredHomeSkillImageCount(homeSkill))) {
         await clearCreateDraft()
         return
       }
@@ -1516,25 +1626,27 @@ function HomePageInner() {
         return
       }
 
-      consumeDraftRef.current = true
       createInput.restoreDraftImages(draft.images)
       if (draft.prompt) createInput.setText(draft.prompt)
       createInput.setCreating(true)
       try {
         const supabase = createClient()
         let skillName = draft.selectedSkill
-        const homeSkill = draft.homeSkillId ? homeSkills.find(skill => skill.id === draft.homeSkillId) : null
         if (homeSkill?.skill_path) {
           skillName = await installHomeSkill(homeSkill)
         }
         const result = await createProjectFromStagedMedia(supabase, user.id, {
           images: draft.images,
+          projectId: draft.projectId,
+          continuationId: draft.continuationId,
           metadata: draft.metadata as PhotoMetadata | undefined,
           prompt: draft.prompt,
           skill: skillName,
+          skillLaunchContext: createHomeSkillLaunchContext(homeSkill, draft.prompt, skillName),
         })
         if (!result) throw new Error('Failed to create project from draft')
         await clearCreateDraft()
+        clearIOSPreAuthTrialContinuation()
         localStorage.removeItem('mkr_return_text')
         localStorage.removeItem('mkr_return_skill')
         localStorage.removeItem('mkr_return_url')
@@ -1547,14 +1659,65 @@ function HomePageInner() {
     }
     void consume()
     return () => { cancelled = true }
-  }, [createInput, homeSkills, installHomeSkill, router, user])
+  }, [createInput, homeSkills, installHomeSkill, router, trialContinuationVersion, user])
+
+  const consumePreAuthTrialRef = useRef(false)
+  const retryPreAuthTrialClaimRef = useRef(false)
+  useEffect(() => {
+    if (!user || retryPreAuthTrialClaimRef.current) return
+    const continuation = readIOSPreAuthTrialContinuation()
+    if (!continuation?.confirmed || continuation.linked) return
+
+    retryPreAuthTrialClaimRef.current = true
+    fetch('/api/auth/complete', { method: 'POST' })
+      .then(async response => ({ response, data: await response.json().catch(() => ({})) }))
+      .then(({ response, data }) => {
+        if (!response.ok || !data.appleTrialClaimed) {
+          retryPreAuthTrialClaimRef.current = false
+          return
+        }
+        linkIOSPreAuthTrialContinuation()
+        writeNativeJSONCache('/api/billing/credits', {
+          balance: data.credits,
+          trialBalance: data.credits,
+        })
+        window.dispatchEvent(new Event('credits-updated'))
+        setTrialContinuationVersion(version => version + 1)
+      })
+      .catch(() => {
+        retryPreAuthTrialClaimRef.current = false
+      })
+  }, [user])
+
+  useEffect(() => {
+    if (!user || consumePreAuthTrialRef.current) return
+    const continuation = readIOSPreAuthTrialContinuation()
+    if (!continuation?.confirmed || !continuation.linked) return
+    // A staged draft owns the continuation for both generic creation and
+    // Skill launches. Let the draft consumer preserve its images and Skill
+    // context instead of racing this empty-project fallback.
+    if (consumeDraftRef.current || getCreateDraftContinuationId()) return
+    if (continuation.kind === 'skill' && homeSkills.length === 0) return
+
+    consumePreAuthTrialRef.current = true
+    // Subscription is complete, but an editor project must always have user
+    // input. With no staged media, return to the exact Skill surface and let
+    // its existing upload guidance collect a photo instead of creating an
+    // empty project.
+    const returnPath = continuation.kind === 'skill' && continuation.skillId
+      ? `/home/${continuation.skillId}`
+      : '/home'
+    clearIOSPreAuthTrialContinuation()
+    createInput.setCreating(false)
+    router.replace(returnPath)
+  }, [createInput, homeSkills, router, trialContinuationVersion, user])
 
   const handleCreate = useCallback(async () => {
     const hasText = createInput.text.trim()
     const hasFiles = createInput.files.length > 0
     if (!hasText && !hasFiles) return
-    await handleCreateProject(hasFiles ? createInput.files : [], hasText || undefined)
-    createInput.clear()
+    const created = await handleCreateProject(hasFiles ? createInput.files : [], hasText || undefined)
+    if (created) createInput.clear()
   }, [createInput, handleCreateProject])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
@@ -1566,16 +1729,26 @@ function HomePageInner() {
     const zipFile = allFiles.find(f => f.name.endsWith('.zip'))
     const droppedFiles = allFiles.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || isHeicFile(f))
     if (!zipFile && droppedFiles.length === 0) return
+    if (isPreAuthIOSGuest) {
+      if (droppedFiles.length > 0) {
+        createInput.addFiles(droppedFiles)
+      }
+      return
+    }
     const authedUser = await requireAuth()
     if (!authedUser) return
     if (zipFile) { handleSkillUpload(zipFile); return }
     createInput.addFiles(droppedFiles)
-  }, [createInput, handleSkillUpload, requireAuth])
+  }, [createInput, handleSkillUpload, isPreAuthIOSGuest, requireAuth])
 
   const handleSlotDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files ?? []).filter(f => f.type.startsWith('image/') || isHeicFile(f))
     if (files.length === 0) return
+    if (isPreAuthIOSGuest) {
+      createInput.addFiles(files)
+      return
+    }
     if (!user && selectedDetail) {
       rememberIOSSkillReturn(selectedDetail.id)
       createInput.addFiles(files)
@@ -1584,7 +1757,7 @@ function HomePageInner() {
     const authedUser = await requireAuth()
     if (!authedUser) return
     createInput.addFiles(files)
-  }, [createInput, rememberIOSSkillReturn, requireAuth, selectedDetail, user])
+  }, [createInput, isPreAuthIOSGuest, rememberIOSSkillReturn, requireAuth, selectedDetail, user])
 
   const trackUploadIntentEvent = useCallback((source: string) => {
     if (user || !activeSkill) return
@@ -1597,23 +1770,30 @@ function HomePageInner() {
       content_type: 'skill',
       content_name: skillLabel,
       skill_id: activeSkill.id,
-      required_photo_count: Math.max(1, activeSkill.image_count ?? 1),
-      selected_photo_count: createInput.files.length,
+      required_photo_count: getRequiredHomeSkillImageCount(activeSkill),
+      selected_photo_count: countHomeSkillImageFiles(createInput.files),
       source,
     }, createMetaEventId('upload.intent'))
   }, [activeSkill, createInput.files.length, locale, user])
 
   const renderUploadSlots = useCallback((template: { image_count?: number; before_images?: string[] }, isActive: boolean) => {
-    const minSlots = template.image_count ?? 1
+    const minSlots = Math.max(0, template.image_count ?? 1)
     const count = Math.max(minSlots, createInput.files.length + 1)
     const befores = (template.before_images || []).slice(0, 3)
     const showBefores = befores.length > 0 && createInput.files.length === 0
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'visible', position: 'relative', minHeight: 64 }}>
+      <div
+        data-testid="skill-photo-slots"
+        style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'visible', position: 'relative', minHeight: 64 }}
+      >
         {Array.from({ length: count }, (_, i) => {
           const isDragTarget = slotDragOver === i
           return (
             <div key={i}
+              data-testid={`skill-photo-slot-${i}`}
+              role={isActive ? 'button' : undefined}
+              tabIndex={isActive ? 0 : undefined}
+              aria-label={isActive ? `${t('home.uploadPhoto')} ${i + 1}` : undefined}
               onClick={async () => {
                 if (!isActive || createInput.previews[i] || createInput.creating) return
                 if (!user && selectedDetail) {
@@ -1626,6 +1806,13 @@ function HomePageInner() {
                 if (u) {
                   trackUploadIntentEvent('upload_slot')
                   createInput.fileInputRef.current?.click()
+                }
+              }}
+              onKeyDown={(e) => {
+                if (!isActive || createInput.previews[i] || createInput.creating) return
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  e.currentTarget.click()
                 }
               }}
               onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
@@ -1689,7 +1876,7 @@ function HomePageInner() {
             </svg>
             {befores.map((url, i, arr) => (
 
-              <img key={i} src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt=""
+              <img key={i} data-testid="skill-before-image" src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt=""
                 style={{
                   width: 96, height: 120, objectFit: 'cover',
                   border: '3px solid rgba(255,255,255,0.95)',
@@ -1706,7 +1893,7 @@ function HomePageInner() {
         )}
       </div>
     )
-  }, [createInput, handleSlotDrop, rememberIOSSkillReturn, requireAuth, selectedDetail, slotDragOver, trackUploadIntentEvent, user])
+  }, [createInput, handleSlotDrop, rememberIOSSkillReturn, requireAuth, selectedDetail, slotDragOver, t, trackUploadIntentEvent, user])
 
   const guestSkillCreateLabel = selectedDetail && !renderUser
     ? createInput.files.length > 0
@@ -1716,22 +1903,32 @@ function HomePageInner() {
       ? t('home.tryFree')
       : t('home.create')
 
-  const requiredPhotoCount = Math.max(1, activeSkill?.image_count ?? 1)
-  const selectedPhotoCount = createInput.files.length
+  const requiredPhotoCount = getRequiredHomeSkillImageCount(activeSkill)
+  const selectedPhotoCount = countHomeSkillImageFiles(createInput.files)
   const remainingPhotoCount = Math.max(requiredPhotoCount - selectedPhotoCount, 0)
   const hasEnoughPhotos = remainingPhotoCount === 0
+  const isSkillAction = !!activeSkill
   const isGuestSkillAction = !renderUser && !!activeSkill
+  const isPreAuthIOSSkillAction = isPreAuthIOSGuest && !!activeSkill
+  const iosTrialContinuation = isPreAuthIOSGuest ? readIOSPreAuthTrialContinuation() : null
+  const pendingIOSRegistration = Boolean(
+    iosTrialContinuation?.confirmed && !iosTrialContinuation.linked,
+  )
   const shouldLoginOnEmptyCreate = !renderUser && !activeSkill
   const formatPhotoCount = (count: number) => t('home.photoCount', count)
 
-  const skillActionCreateLabel = isGuestSkillAction
-    ? hasEnoughPhotos
-      ? t('home.previewFree')
+  const skillActionCreateLabel = isSkillAction
+    ? isPreAuthIOSSkillAction
+      ? pendingIOSRegistration ? t('home.continueRegistration') : t('home.tryFree')
+      : hasEnoughPhotos
+      ? isGuestSkillAction ? t('home.previewFree') : t('home.create')
       : t('home.uploadPhoto')
     : guestSkillCreateLabel
 
   const skillActionTitle = isGuestSkillAction
-    ? hasEnoughPhotos
+    ? isPreAuthIOSSkillAction
+      ? pendingIOSRegistration ? t('home.subscriptionConfirmedTitle') : t('home.trialSurpriseTitle')
+      : hasEnoughPhotos
       ? t('home.seeYourVersion')
       : selectedPhotoCount > 0
         ? t('home.almostReady')
@@ -1739,7 +1936,9 @@ function HomePageInner() {
     : undefined
 
   const skillActionSubtitle = isGuestSkillAction
-    ? hasEnoughPhotos
+    ? isPreAuthIOSSkillAction
+      ? undefined
+      : hasEnoughPhotos
       ? t('home.previewNoCard')
       : selectedPhotoCount > 0
         ? t('home.addPhotosToPreview', formatPhotoCount(remainingPhotoCount))
@@ -1761,10 +1960,10 @@ function HomePageInner() {
       content_name: skillActionMeta || activeSkill?.id || 'skill',
       skill_id: activeSkill?.id,
       required_photo_count: requiredPhotoCount,
-      selected_photo_count: createInput.files.length,
+      selected_photo_count: selectedPhotoCount,
       source,
     }, createMetaEventId('upload.intent'))
-  }, [activeSkill?.id, createInput.files.length, isGuestSkillAction, requiredPhotoCount, skillActionMeta])
+  }, [activeSkill?.id, createInput.files.length, isGuestSkillAction, requiredPhotoCount, selectedPhotoCount, skillActionMeta])
 
   const trackFileSelected = useCallback((files: File[], source: string) => {
     if (!isGuestSkillAction || files.length === 0) return
@@ -1779,21 +1978,54 @@ function HomePageInner() {
     }, createMetaEventId('file.selected'))
   }, [activeSkill?.id, isGuestSkillAction, skillActionMeta])
 
+  const handleCreateFilesSelected = useCallback((files: File[], source: string) => {
+    trackFileSelected(files, source)
+  }, [trackFileSelected])
+
   const handleCreateOrUpload = useCallback(() => {
+    if (isPreAuthIOSGuest) {
+      const continuation = readIOSPreAuthTrialContinuation()
+      if (continuation?.confirmed && !continuation.linked) {
+        if (activeSkill?.id) rememberIOSSkillReturn(activeSkill.id)
+        void (async () => {
+          if (createInput.files.length > 0 || createInput.text.trim()) {
+            try {
+              await saveCreateDraftBeforeLogin(
+                createInput.files,
+                createInput.text.trim() || undefined,
+              )
+            } catch (error) {
+              console.error('Save pre-registration create draft error:', error)
+              return
+            }
+          }
+          router.push('/login?focus=email')
+        })()
+        return
+      }
+      beginPreAuthIOSTrial(activeSkill?.id)
+      return
+    }
     if (shouldLoginOnEmptyCreate && createInput.files.length === 0 && !createInput.text.trim()) {
       goToLoginFromEmptyCreate()
       return
     }
-    if (isGuestSkillAction && createInput.files.length < requiredPhotoCount) {
+    if (activeSkill && !hasEnoughPhotos) {
       rememberIOSSkillReturn(activeSkill?.id)
       trackUploadIntent('primary_action')
       createInput.fileInputRef.current?.click()
       return
     }
     handleCreate()
-  }, [activeSkill?.id, createInput.fileInputRef, createInput.files.length, createInput.text, goToLoginFromEmptyCreate, handleCreate, isGuestSkillAction, rememberIOSSkillReturn, requiredPhotoCount, shouldLoginOnEmptyCreate, trackUploadIntent])
+  }, [activeSkill, beginPreAuthIOSTrial, createInput.fileInputRef, createInput.files, createInput.text, goToLoginFromEmptyCreate, handleCreate, hasEnoughPhotos, isPreAuthIOSGuest, rememberIOSSkillReturn, router, saveCreateDraftBeforeLogin, shouldLoginOnEmptyCreate, trackUploadIntent])
 
   const handleInputSlotClick = useCallback(async () => {
+    if (isPreAuthIOSGuest) {
+      if (selectedDetail?.id) rememberIOSSkillReturn(selectedDetail.id)
+      trackUploadIntent('slot')
+      createInput.fileInputRef.current?.click()
+      return
+    }
     if (!user && selectedDetail) {
       rememberIOSSkillReturn(selectedDetail.id)
       trackUploadIntent('slot')
@@ -1805,7 +2037,7 @@ function HomePageInner() {
       trackUploadIntent('slot')
       createInput.fileInputRef.current?.click()
     }
-  }, [createInput.fileInputRef, rememberIOSSkillReturn, requireAuth, selectedDetail, trackUploadIntent, user])
+  }, [createInput.fileInputRef, isPreAuthIOSGuest, rememberIOSSkillReturn, requireAuth, selectedDetail, trackUploadIntent, user])
 
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
 
@@ -1819,7 +2051,7 @@ function HomePageInner() {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
       if (variant === 'thumb') {
-        return <LazyVideo src={normalizeDomain(url)} style={style} fallbackSrc={opts?.fallbackSrc} eager={opts?.priority} suspended={opts?.suspended} />
+        return <LazyVideo src={normalizeDomain(url)} style={style} fallbackSrc={opts?.fallbackSrc} eager={opts?.priority} suspended={opts?.suspended} paused={motionPaused || homeOverlayOpen} />
       }
       return <SkillVideo src={normalizeDomain(url)} style={style} eager={opts?.priority} active={opts?.active ?? true} />
     }
@@ -1851,15 +2083,39 @@ function HomePageInner() {
     clearDetailCloseTimer()
     blurHomeComposers()
     setViewMode('human')
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    setHeroRect(rect)
+    const card = e.currentTarget as HTMLElement
+    const source = card.querySelector<HTMLElement>('.creative-art-frame') || card
+    heroSourceRef.current = source
+    setHeroRect(readHomeHeroGeometry(source))
+    const video = source.querySelector('video')
+    let poster: HTMLCanvasElement | null = null
+    if (video && video.readyState >= 2) {
+      try {
+        const canvas = document.createElement('canvas')
+        const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight))
+        canvas.width = Math.max(1, Math.round(video.videoWidth * scale))
+        canvas.height = Math.max(1, Math.round(video.videoHeight * scale))
+        const context = canvas.getContext('2d')
+        if (context) {
+          context.drawImage(video, 0, 0, canvas.width, canvas.height)
+          // Retain the exact frame without synchronously encoding a JPEG on click.
+          poster = canvas
+        }
+      } catch { /* A cross-origin video can still use the live fly player. */ }
+    }
+    setHeroPoster(poster)
+    setHeroArrived(false)
     setHeroExpanded(false)
     setSelectedDetail(template)
     setSelectedSkill(template.skill_path ? template.id : null)
     applyLocalizedSkillPrompt(template)
-    const idx = filteredHomeSkills.findIndex(t => t.id === template.id)
+    const visibleInCategory = filteredHomeSkills.some(skill => skill.id === template.id)
+    if (!visibleInCategory) setActiveCategory('all')
+    const detailSkills = visibleInCategory ? filteredHomeSkills : homeSkills
+    const idx = detailSkills.findIndex(t => t.id === template.id)
     requestAnimationFrame(() => {
-      setHeroExpanded(true)
+      // Paint the source geometry before starting the transition.
+      requestAnimationFrame(() => setHeroExpanded(true))
       // Position to the clicked slide via JS transform (no scroll-snap)
       if (detailInnerRef.current && detailSnapRef.current) {
         const slideH = detailSnapRef.current.clientHeight
@@ -2076,7 +2332,7 @@ function HomePageInner() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className="mkr-page" style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="mkr-page creative-home" data-motion-paused={motionPaused || homeOverlayOpen || !!selectedDetail} data-detail-open={!!selectedDetail} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <input
           ref={skillFileRef}
           type="file"
@@ -2089,42 +2345,17 @@ function HomePageInner() {
           }}
         />
 
-        {/* Ambient glow */}
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0,
-          height: '520px', pointerEvents: 'none', zIndex: Z.AMBIENT,
-          background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
-        }} />
-
         {showAgentLanding && <AgentContent />}
 
         <div style={{ display: showAgentLanding ? 'none' : undefined }}>
-        <div style={{ display: selectedDetail ? 'none' : undefined }}>
-          <TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} />
-        </div>
-
-        {/* ── Hero: Landing-page style ── */}
-        <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
-          {/* Glow */}
-          <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
-
-          <div className="relative z-10 flex flex-col items-center text-center pt-10 lg:pt-16 px-6 max-w-[660px]">
-            <MakaronLogo
-              markSize="clamp(34px, 6vw, 52px)"
-              className="mt-4"
-              textClassName="text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]"
-            />
-            <p className="mt-3 leading-tight">
-              <RollingTagline className="text-2xl lg:text-[32px]" />
-            </p>
-            <p className="mt-6 text-[15px] lg:text-lg text-[#a1a1aa] leading-relaxed max-w-[480px]">
-              {t('landing.heroDesc1')}<br />{t('landing.heroDesc2')}
-            </p>
-          </div>
-
+        <header className="creative-header" style={{ visibility: selectedDetail ? 'hidden' : undefined }}>
+          <a href="#product" className="creative-brand" aria-label={t('homeDesign.home')}><MakaronLogo markSize={34} /></a>
+          <div className="creative-account"><TopBar page="home" onOverlayChange={setHomeOverlayOpen} authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
+        </header>
+        <HomeCreativeHero skills={homeSkills} paused={motionPaused || homeOverlayOpen || !!selectedDetail} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={showAgentLanding} onSelect={handleSkillCardClick} controls={<HomeMotionToggle paused={motionPaused} onToggle={() => setMotionPaused(value => !value)} />}>
           {/* ── Inline Input Box ── */}
           <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
-            marginTop: '32px', width: '100%', maxWidth: '480px', padding: '0 16px',
+            marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',
             ...(isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}),
           }}>
             <CreateInputBox
@@ -2136,23 +2367,25 @@ function HomePageInner() {
               boxRef={inlineBoxRef}
               textareaRef={inlineTextareaRef}
               swipeRef={inlineCardSwipeRef}
-              placeholder={placeholders[placeholderIdx]}
+              placeholder={t('home.createPlaceholder')}
+              placeholderExamples={placeholders}
+              placeholderPaused={motionPaused || homeOverlayOpen || !!selectedDetail || showAgentLanding}
               createLabel={skillActionCreateLabel}
               actionMode={isGuestSkillAction}
-              actionEyebrow={isGuestSkillAction ? t('home.previewFree') : undefined}
+              actionEyebrow={isPreAuthIOSSkillAction ? t('home.firstFree') : isGuestSkillAction ? t('home.previewFree') : undefined}
               actionTitle={skillActionTitle}
               actionSubtitle={skillActionSubtitle}
               actionMeta={skillActionMeta || undefined}
-              actionIdleNote={t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
+              actionIdleNote={isPreAuthIOSSkillAction ? t('home.trialGiftNote') : t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
               actionSelectedNote={hasEnoughPhotos
                 ? t('home.previewReady')
                 : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
               showLoginIcon={!renderUser}
               submitWhenEmpty={shouldLoginOnEmptyCreate}
-              fallbackHref={shouldLoginOnEmptyCreate ? '/login' : undefined}
+              fallbackHref={shouldLoginOnEmptyCreate && !isPreAuthIOSGuest ? '/login' : undefined}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
-              onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
+              onFilesSelected={(files) => handleCreateFilesSelected(files, 'file_input')}
               onTextareaFocus={keepSkillComposerAboveKeyboard}
               onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}
@@ -2179,10 +2412,10 @@ function HomePageInner() {
               onDrop={handleDrop}
             />
           </div>
-        </div>
+        </HomeCreativeHero>
 
         {/* ── Skill Template Grid ── */}
-        <div ref={skillSectionRef} data-testid="skill-market" style={{
+        <div id="templates" className="creative-market" ref={skillSectionRef} data-testid="skill-market" style={{
           flex: 1,
           paddingLeft: isDesktop ? '24px' : '14px',
           paddingRight: isDesktop ? '24px' : '14px',
@@ -2192,19 +2425,9 @@ function HomePageInner() {
           width: '100%',
           margin: '0 auto',
         }}>
-          <div style={{
-            textAlign: 'center',
-            marginBottom: (skillCategoriesLoading || visibleSkillCategories.length > 0)
-              ? (isDesktop ? 8 : 6)
-              : (isDesktop ? 24 : 16),
-          }}>
-            <h2 style={{
-              fontSize: isDesktop ? '1.25rem' : '1.1rem',
-              fontWeight: 700,
-              color: 'rgba(255,255,255,0.9)',
-              margin: 0,
-              letterSpacing: '-0.01em',
-            }}>{t('skills.title')}</h2>
+          <div className="creative-market-heading" data-locale={locale}>
+            <h2>{t('homeDesign.galleryTitle')}</h2>
+            <p>{t('homeDesign.galleryDescription')}</p>
           </div>
 
           {(skillCategoriesLoading || visibleSkillCategories.length > 0) && (
@@ -2254,7 +2477,7 @@ function HomePageInner() {
           <div
             ref={skillGridRef}
             id="skill-market-grid"
-            className="mkr-category-grid mkr-skill-category-swipe-region"
+            className="mkr-category-grid mkr-skill-category-swipe-region creative-market-grid"
             data-testid="skill-grid"
             data-skill-category-swipe-region="true"
             onClickCapture={handleSkillGridClickCapture}
@@ -2279,8 +2502,14 @@ function HomePageInner() {
                 key={template.id}
                 data-testid="home-skill-card"
                 data-skill-id={template.id}
+                role="button"
+                tabIndex={0}
+                aria-label={pickLocalizedValue(template.labels, locale)}
                 className={`mkr-skill-card${categoryHasChanged ? '' : ' mkr-row-enter'}`}
                 onClick={(e) => handleSkillCardClick(template, e)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() }
+                }}
                 style={{
                   position: 'relative',
                   aspectRatio: '3 / 4',
@@ -2293,8 +2522,8 @@ function HomePageInner() {
                 }}
               >
                 {renderCoverMedia(template.image, pickLocalizedValue(template.labels, locale), 'thumb', {
-                  priority: i < 1,
-                  suspended: !!selectedDetail,
+                  priority: false,
+                  suspended: !!selectedDetail || showAgentLanding,
                   fallbackSrc: template.before_images?.[0]
                     ? getThumbnailUrl(template.before_images[0], 400, 70, 533, 'cover')
                     : undefined,
@@ -2326,11 +2555,25 @@ function HomePageInner() {
               </div>
             ))}
           </div>
-          {visibleSkillCount < filteredHomeSkills.length && (
+          {visibleSkillCount < filteredHomeSkills.length && (skillBrowseExpanded ? (
             <div ref={skillLoadMoreRef} aria-hidden="true" style={{ height: 1, width: '100%' }} />
-          )}
+          ) : (
+            <button type="button" className="creative-more mkr-liquid-pill mkr-liquid-pill-strong" onClick={() => {
+              setSkillBrowseExpanded(true)
+              setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length))
+            }}>{t('homeDesign.more')}</button>
+          ))}
 
         </div>
+
+        <HomeCreativeStudio skills={homeSkills} paused={motionPaused} suspended={!!selectedDetail || showAgentLanding} onUseIdea={(prompt) => {
+          setSelectedSkill(null)
+          createInput.setText(prompt)
+          inlineTextareaRef.current?.focus({ preventScroll: true })
+          document.getElementById('create')?.scrollIntoView({ block: 'center', behavior: motionPaused ? 'instant' : 'smooth' })
+        }} />
+
+        <HomeCreativeFooter />
 
         {/* ── Bottom edge fade — fixed, below input, blends cards into system bar ── */}
         {!isDesktop && (showFixedInput || selectedDetail) && (
@@ -2375,23 +2618,25 @@ function HomePageInner() {
               boxRef={inputBoxRef}
               textareaRef={textareaRef}
               swipeRef={cardSwipeRef}
-              placeholder={placeholders[placeholderIdx]}
+              placeholder={t('home.createPlaceholder')}
+              placeholderExamples={placeholders}
+              placeholderPaused={motionPaused || homeOverlayOpen || !!selectedDetail || showAgentLanding}
               createLabel={skillActionCreateLabel}
               actionMode={isGuestSkillAction}
-              actionEyebrow={isGuestSkillAction ? t('home.previewFree') : undefined}
+              actionEyebrow={isPreAuthIOSSkillAction ? t('home.firstFree') : isGuestSkillAction ? t('home.previewFree') : undefined}
               actionTitle={skillActionTitle}
               actionSubtitle={skillActionSubtitle}
               actionMeta={skillActionMeta || undefined}
-              actionIdleNote={t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
+              actionIdleNote={isPreAuthIOSSkillAction ? t('home.trialGiftNote') : t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
               actionSelectedNote={hasEnoughPhotos
                 ? t('home.previewReady')
                 : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
               showLoginIcon={!renderUser}
               submitWhenEmpty={shouldLoginOnEmptyCreate}
-              fallbackHref={shouldLoginOnEmptyCreate ? '/login' : undefined}
+              fallbackHref={shouldLoginOnEmptyCreate && !isPreAuthIOSGuest ? '/login' : undefined}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
-              onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
+              onFilesSelected={(files) => handleCreateFilesSelected(files, 'file_input')}
               onTextareaFocus={keepSkillComposerAboveKeyboard}
               onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}
@@ -2435,37 +2680,44 @@ function HomePageInner() {
       {heroRect && selectedDetail && (() => {
         const vw = typeof window !== 'undefined' ? window.innerWidth : 1280
         const vh = typeof window !== 'undefined' ? window.innerHeight : 800
-        const cardW = 440
-        const cardH = vh * 0.75
+        const cardW = Math.min(560, vw * 0.5, vh * 0.6)
+        const cardH = Math.min(cardW * 4 / 3, vh * 0.8)
         const pb = inputWrapperHeight + 16
         const targetTop = isDesktop ? Math.max(0, (vh - cardH - pb) / 2) : 0
         const targetLeft = isDesktop ? (vw - cardW) / 2 : 0
         const targetW = isDesktop ? cardW : vw
         const targetH = isDesktop ? cardH : vh
         return (
-          <div style={{
+          <div data-testid="home-hero-fly" onTransitionEnd={event => {
+            if (event.target === event.currentTarget && ['width', 'height', 'transform'].includes(event.propertyName) && heroExpanded) setHeroArrived(true)
+          }} style={{
             position: 'fixed', zIndex: Z.HERO_FLY, pointerEvents: 'none',
             top: heroExpanded ? targetTop : heroRect.top,
             left: heroExpanded ? targetLeft : heroRect.left,
             width: heroExpanded ? targetW : heroRect.width,
             height: heroExpanded ? targetH : heroRect.height,
-            borderRadius: heroExpanded ? (isDesktop ? 24 : 0) : 16,
+            transform: `rotate(${heroExpanded ? 0 : heroRect.rotation}deg)`,
+            transformOrigin: 'center',
+            borderRadius: heroExpanded ? (isDesktop ? 24 : 0) : heroRect.borderRadius,
             overflow: 'hidden',
-            transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
-            opacity: heroExpanded ? 0 : 1,
+            transition: 'top .35s cubic-bezier(0.22,1,0.36,1), left .35s cubic-bezier(0.22,1,0.36,1), width .35s cubic-bezier(0.22,1,0.36,1), height .35s cubic-bezier(0.22,1,0.36,1), transform .35s cubic-bezier(0.22,1,0.36,1), border-radius .35s ease',
+            opacity: heroExpanded ? (heroArrived ? 0 : 1) : heroRect.opacity,
           }}>
-            { }
-            {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, extraStyle: { position: 'absolute' } })}
+            {!heroPoster && renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, active: !heroArrived, extraStyle: { position: 'absolute' } })}
+            {heroPoster && !heroArrived && <canvas aria-hidden="true" width={heroPoster.width} height={heroPoster.height} ref={canvas => {
+              canvas?.getContext('2d')?.drawImage(heroPoster, 0, 0)
+            }} style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} />}
           </div>
         )
       })()}
 
-      {/* Preload all before_images thumbnails so they appear instantly when user scrolls
-          between skill slides (overlay virtualization caches only ±window, but before images
-          are tiny and we always want them ready). */}
-      {selectedDetail && (
+      {/* Prepare neighboring content after the opening motion, outside the input frame. */}
+      {selectedDetail && heroExpanded && (!heroRect || heroArrived) && (
         <div aria-hidden style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          {homeSkills.flatMap(s => (s.before_images || []).slice(0, 3)).map((url, i) => (
+          {filteredHomeSkills.slice(
+            Math.max(0, filteredHomeSkills.findIndex(s => s.id === selectedDetail.id) - 1),
+            filteredHomeSkills.findIndex(s => s.id === selectedDetail.id) + 3,
+          ).flatMap(s => (s.before_images || []).slice(0, 3)).map((url, i) => (
 
             <img key={`preload-${i}`} src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt="" />
           ))}
@@ -2483,10 +2735,10 @@ function HomePageInner() {
           style={{
             position: 'fixed', inset: 0, zIndex: Z.OVERLAY,
             background: isDesktop ? 'rgba(0,0,0,0.7)' : '#000',
-            opacity: heroExpanded ? 1 : 0,
+            opacity: heroExpanded && (!heroRect || heroArrived) ? 1 : 0,
             pointerEvents: heroExpanded ? 'auto' : 'none',
             transform: isDesktop ? undefined : `translate3d(${skillBackPanX}px, 0, 0)`,
-            transition: skillBackPanSettling
+            transition: heroRect && heroExpanded ? 'none' : skillBackPanSettling
               ? 'opacity 0.3s ease 0.1s, transform 180ms ease-out'
               : 'opacity 0.3s ease 0.1s',
             willChange: skillBackPanActive || skillBackPanSettling ? 'transform, opacity' : 'opacity',
@@ -2657,11 +2909,11 @@ function HomePageInner() {
               }}
             >
             <div ref={detailInnerRef} style={{ position: 'relative', width: '100%', height: '100%', willChange: 'transform' }}>
-            {(() => {
+            {heroExpanded && (!heroRect || heroArrived) && (() => {
               const activeIdx = Math.max(0, filteredHomeSkills.findIndex(s => s.id === selectedDetail?.id))
-              // Window: 4 before + active + 5 after = 10 slides rendered at most.
-              const WINDOW_BEFORE = 4
-              const WINDOW_AFTER = 5
+              // Keep the active slide and its immediate neighbors ready.
+              const WINDOW_BEFORE = 1
+              const WINDOW_AFTER = 2
               return filteredHomeSkills.map((template, i) => {
                 const inWindow = i >= activeIdx - WINDOW_BEFORE && i <= activeIdx + WINDOW_AFTER
                 return (
@@ -2695,10 +2947,33 @@ function HomePageInner() {
 
       {/* Skill menu now handled by SkillSelector component */}
 
+      <CreditPopup
+        open={showPreAuthIOSTrial}
+        entryPoint="ios_preauth_trial"
+        onClose={() => setShowPreAuthIOSTrial(false)}
+        onPreAuthTrialConfirmed={() => { void finishPreAuthIOSTrial() }}
+        balance={0}
+        subscription={null}
+      />
+
+      <CreditPopup
+        open={showIOSTrial}
+        entryPoint="ios_onboarding"
+        onClose={() => setShowIOSTrial(false)}
+        balance={0}
+        subscription={null}
+        onBalanceUpdate={() => {
+          if (linkIOSPreAuthTrialContinuation()) {
+            setTrialContinuationVersion(version => version + 1)
+          }
+          setShowIOSTrial(false)
+        }}
+      />
+
       {/* Welcome credits popup */}
       {showWelcome && welcomeCredits > 0 && (
         <>
-          <div onClick={() => setShowWelcome(false)} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} />
+          <div onClick={dismissWelcome} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} />
           <div style={{
             position: 'fixed', zIndex: 301, left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
             width: '92%', maxWidth: 400, background: 'linear-gradient(180deg, #18181b 0%, #0f0f12 100%)',
@@ -2710,7 +2985,7 @@ function HomePageInner() {
               {t('home.welcomeTitle')}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>
-              {t('home.welcomeGift')}
+              {t(FREE_MEDIA_ENABLED && isIOSAppShell ? 'home.freeWatermarkGift' : 'home.welcomeGift')}
             </div>
             <div style={{
               marginTop: 24, padding: '20px 0', borderRadius: 16,
@@ -2727,7 +3002,7 @@ function HomePageInner() {
               </div>
             </div>
             <button
-              onClick={() => setShowWelcome(false)}
+              onClick={dismissWelcome}
               style={{
                 width: '100%', marginTop: 24, padding: 14, borderRadius: 14, border: 'none',
                 background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',

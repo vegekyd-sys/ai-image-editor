@@ -7,6 +7,10 @@ import {
   resolveAzureOpenAIWebSearchContextSize,
   resolveAzureOpenAIResponsesConfig,
 } from '@/lib/azure-openai-responses';
+import {
+  buildTypedCompactionMessage,
+  type DurableExecutionSnapshot,
+} from '@/lib/agent-execution';
 
 const RESPONSE_FIXTURE = {
   id: 'resp_test',
@@ -49,6 +53,19 @@ const RESPONSE_FIXTURE = {
   },
   user: null,
   metadata: {},
+};
+
+const COMPACTION_RESPONSE_FIXTURE = {
+  ...RESPONSE_FIXTURE,
+  id: 'resp_compaction',
+  output: [
+    {
+      type: 'compaction',
+      id: 'cmp_test',
+      encrypted_content: 'encrypted-compaction-state',
+    },
+    ...RESPONSE_FIXTURE.output,
+  ],
 };
 
 describe('Azure OpenAI Responses adapter', () => {
@@ -121,10 +138,43 @@ describe('Azure OpenAI Responses adapter', () => {
   });
 
   it('serializes the formal native web_search tool for Azure Responses', async () => {
-    const calls: Array<{ init?: RequestInit }> = [];
+    let body: Record<string, any> = {};
     const fakeFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      calls.push({ init });
+      body = JSON.parse(String(init?.body));
       return new Response(JSON.stringify(RESPONSE_FIXTURE), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const model = createAzureOpenAIResponsesModel('gpt-6-sol', {
+      apiKey: 'test-secret',
+      endpoint: 'https://resource.openai.azure.com/openai/responses?api-version=2025-04-01-preview',
+      fetch: fakeFetch,
+    });
+    await generateText({
+      model,
+      prompt: 'Find the current official documentation.',
+      tools: { web_search: createAzureOpenAIWebSearchTool({ contextSize: 'high' }) } as any,
+    });
+    expect(body.tools).toContainEqual(expect.objectContaining({
+      type: 'web_search',
+      search_context_size: 'high',
+    }));
+  });
+
+  it('defaults web search on with a low context budget', () => {
+    expect(isAzureOpenAIWebSearchEnabled('')).toBe(true);
+    expect(isAzureOpenAIWebSearchEnabled('false')).toBe(false);
+    expect(resolveAzureOpenAIWebSearchContextSize('')).toBe('low');
+    expect(resolveAzureOpenAIWebSearchContextSize('medium')).toBe('medium');
+    expect(resolveAzureOpenAIWebSearchContextSize('invalid')).toBe('low');
+  });
+
+  it('round-trips an encrypted compaction item through AI SDK response messages', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fakeFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify(COMPACTION_RESPONSE_FIXTURE), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -134,25 +184,106 @@ describe('Azure OpenAI Responses adapter', () => {
       endpoint: 'https://resource.openai.azure.com/openai/responses?api-version=2025-04-01-preview',
       fetch: fakeFetch,
     });
+    const providerOptions = {
+      azure: {
+        store: false,
+        contextManagement: [{ type: 'compaction' as const, compactThreshold: 650_000 }],
+      },
+    };
+
+    const first = await generateText({
+      model,
+      prompt: 'Begin a long task',
+      providerOptions,
+    });
+    expect(JSON.stringify(first.responseMessages)).toContain('openai.compaction');
+    expect(JSON.stringify(first.responseMessages)).toContain('encrypted-compaction-state');
 
     await generateText({
       model,
-      prompt: 'Find the current official documentation.',
-      tools: { web_search: createAzureOpenAIWebSearchTool({ contextSize: 'high' }) } as any,
+      messages: [
+        { role: 'user', content: 'Begin a long task' },
+        ...first.responseMessages,
+        { role: 'user', content: 'Continue' },
+      ],
+      providerOptions,
     });
 
-    const body = JSON.parse(String(calls[0].init?.body));
-    expect(body.tools).toContainEqual(expect.objectContaining({
-      type: 'web_search',
-      search_context_size: 'high',
-    }));
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toMatchObject({
+      context_management: [{ type: 'compaction', compact_threshold: 650_000 }],
+    });
+    expect(bodies[1].input).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'compaction',
+        id: 'cmp_test',
+        encrypted_content: 'encrypted-compaction-state',
+      }),
+    ]));
   });
 
-  it('defaults web search on with a low context budget', () => {
-    expect(isAzureOpenAIWebSearchEnabled(undefined)).toBe(true);
-    expect(isAzureOpenAIWebSearchEnabled('false')).toBe(false);
-    expect(resolveAzureOpenAIWebSearchContextSize(undefined)).toBe('low');
-    expect(resolveAzureOpenAIWebSearchContextSize('medium')).toBe('medium');
-    expect(resolveAzureOpenAIWebSearchContextSize('invalid')).toBe('low');
+  it('replays the durable snapshot compaction shape as an Azure Responses input item', async () => {
+    let body: Record<string, any> = {};
+    const fakeFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify(RESPONSE_FIXTURE), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const model = createAzureOpenAIResponsesModel('gpt-5.6-sol', {
+      apiKey: 'test-secret',
+      endpoint: 'https://resource.openai.azure.com/openai/responses?api-version=2025-04-01-preview',
+      fetch: fakeFetch,
+    });
+    const snapshot: DurableExecutionSnapshot = {
+      version: 1,
+      objective: 'Long task',
+      acceptanceCriteria: [],
+      decisions: [],
+      completedWork: [],
+      artifacts: [],
+      openQuestions: [],
+      currentWorkUnit: 'agent',
+      nextAction: 'Continue',
+      providerCompaction: {
+        provider: 'openai',
+        modelId: 'gpt-5.6-sol',
+        item: {
+          kind: 'openai.compaction',
+          providerKey: 'azure',
+          itemId: 'cmp_durable',
+          encryptedContent: 'durable-encrypted-state',
+        },
+      },
+    };
+    expect(buildTypedCompactionMessage(
+      snapshot,
+      'gpt-5.6-sol',
+      'openrouter',
+    )).toBeNull();
+    const compacted = buildTypedCompactionMessage(
+      snapshot,
+      'gpt-5.6-sol',
+      'azure-openai',
+    );
+    expect(compacted).not.toBeNull();
+
+    await generateText({
+      model,
+      messages: [
+        compacted!,
+        { role: 'user', content: 'Continue from the compacted state' },
+      ],
+      providerOptions: { azure: { store: false } },
+    });
+
+    expect(body.input).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'compaction',
+        id: 'cmp_durable',
+        encrypted_content: 'durable-encrypted-state',
+      }),
+    ]));
   });
 });

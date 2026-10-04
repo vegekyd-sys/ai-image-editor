@@ -13,7 +13,16 @@ export function isSourceUploadVideoSnapshot(snapshot?: Snapshot | null): boolean
 }
 
 export function isGeneratedVideoSnapshot(snapshot?: Snapshot | null): boolean {
-  return snapshot?.type === 'video' && !isSourceUploadVideoSnapshot(snapshot);
+  if (snapshot?.type !== 'video') return false;
+
+  // Newer snapshots carry explicit provenance. Respect it before applying the
+  // legacy heuristic so external source ranges stay in the Media List and are
+  // never restored into CUI as completed generated videos.
+  if (snapshot.videoMeta?.origin) {
+    return snapshot.videoMeta.origin === 'generated';
+  }
+
+  return !isSourceUploadVideoSnapshot(snapshot);
 }
 
 export function isCompletedGeneratedVideoSnapshot(snapshot?: Snapshot | null): boolean {

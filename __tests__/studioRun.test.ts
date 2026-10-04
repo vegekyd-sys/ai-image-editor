@@ -26,6 +26,7 @@ const now = '2026-07-10T00:00:00.000Z';
 function makeRun(policy: 'auto' | 'guided' = 'auto'): StudioRun {
   return createStudioRun({
     id: 'run-1',
+    agentRunId: 'agent-run-1',
     projectId: 'project-1',
     recipe: 'explainer-video',
     title: 'Makaron One Man Studio',
@@ -124,6 +125,7 @@ describe('Studio Run controller', () => {
 
     const guided = await startPersistedStudioRun({
       store,
+      agentRunId: 'agent-run-1',
       projectId: 'project-1',
       recipe: 'explainer-video',
       title: 'First attempt',
@@ -132,6 +134,7 @@ describe('Studio Run controller', () => {
     });
     const auto = await startPersistedStudioRun({
       store,
+      agentRunId: 'agent-run-1',
       projectId: 'project-1',
       recipe: 'explainer-video',
       title: 'Corrected attempt',
@@ -143,6 +146,50 @@ describe('Studio Run controller', () => {
     expect(auto.approvalPolicy).toBe('auto');
     expect(auto.title).toBe('Corrected attempt');
     expect(runs).toHaveLength(1);
+  });
+
+  it('keeps Studio workflow invocations inside one Agent Run', async () => {
+    const runs: StudioRun[] = [];
+    const store: StudioRunStore = {
+      async saveRun(run) {
+        const index = runs.findIndex(candidate => candidate.id === run.id);
+        if (index >= 0) runs[index] = run;
+        else runs.push(run);
+        return studioRunStatePath(run.projectId, run.id);
+      },
+      async saveArtifact() { return 'unused.json'; },
+      async loadRun(projectId, runId) {
+        return runs.find(run => run.projectId === projectId && run.id === runId) || null;
+      },
+      async listRuns(projectId) {
+        return runs.filter(run => run.projectId === projectId);
+      },
+    };
+    const deliveryPromise = makeRun().deliveryPromise;
+
+    const first = await startPersistedStudioRun({
+      store,
+      agentRunId: 'agent-run-1',
+      projectId: 'project-1',
+      recipe: 'explainer-video',
+      title: 'First Agent workflow',
+      approvalPolicy: 'auto',
+      deliveryPromise,
+    });
+    const second = await startPersistedStudioRun({
+      store,
+      agentRunId: 'agent-run-2',
+      projectId: 'project-1',
+      recipe: 'explainer-video',
+      title: 'Second Agent workflow',
+      approvalPolicy: 'auto',
+      deliveryPromise,
+    });
+
+    expect(first.agentRunId).toBe('agent-run-1');
+    expect(second.agentRunId).toBe('agent-run-2');
+    expect(second.id).not.toBe(first.id);
+    expect(runs).toHaveLength(2);
   });
 
   it('derives mechanical Delivery fields from reviewed Studio artifacts', () => {

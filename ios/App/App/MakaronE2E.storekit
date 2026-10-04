@@ -1,0 +1,86 @@
+{
+  "appPolicies": {
+    "eula": "",
+    "policies": [
+      {
+        "locale": "en_US",
+        "policyText": "",
+        "policyURL": ""
+      }
+    ]
+  },
+  "identifier": "4D4B4532",
+  "nonRenewingSubscriptions": [],
+  "products": [
+    {
+      "displayPrice": "0.99",
+      "familyShareable": false,
+      "internalID": "10000001",
+      "localizations": [
+        {
+          "description": "StoreKit E2E fixture",
+          "displayName": "E2E Fixture",
+          "locale": "en_US"
+        }
+      ],
+      "productID": "app.makaron.ios.e2e.fixture",
+      "referenceName": "E2E Fixture",
+      "type": "Consumable"
+    }
+  ],
+  "settings": {
+    "_failTransactionsEnabled": false,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": [
+      { "current": null, "enabled": false, "name": "Load Products" },
+      { "current": null, "enabled": false, "name": "Purchase" },
+      { "current": null, "enabled": false, "name": "Verification" },
+      { "current": null, "enabled": false, "name": "App Store Sync" },
+      { "current": null, "enabled": false, "name": "Subscription Status" },
+      { "current": null, "enabled": false, "name": "App Transaction" },
+      { "current": null, "enabled": false, "name": "Manage Subscriptions Sheet" },
+      { "current": null, "enabled": false, "name": "Refund Request Sheet" },
+      { "current": null, "enabled": false, "name": "Offer Code Redeem Sheet" }
+    ]
+  },
+  "subscriptionGroups": [
+    {
+      "id": "30000001",
+      "localizations": [],
+      "name": "Makaron E2E",
+      "subscriptions": [
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "9.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "20000001",
+          "introductoryOffer": {
+            "internalID": "2F000001",
+            "paymentMode": "free",
+            "subscriptionPeriod": "P3D"
+          },
+          "localizations": [
+            {
+              "description": "Three-day free trial, then US$9.99 per month",
+              "displayName": "Basic Monthly",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "app.makaron.ios.subscription.basic.monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Basic Monthly",
+          "subscriptionGroupID": "30000001",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
+        }
+      ]
+    }
+  ],
+  "version": {
+    "major": 4,
+    "minor": 0
+  }
+}

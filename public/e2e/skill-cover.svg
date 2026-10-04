@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="1280" viewBox="0 0 720 1280">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10051f"/>
+      <stop offset="1" stop-color="#401044"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="1280" fill="url(#bg)"/>
+  <circle cx="360" cy="500" r="190" fill="#f05bec" opacity=".18"/>
+  <path d="M360 250 395 445 575 500 395 555 360 750 325 555 145 500 325 445Z" fill="#f05bec"/>
+  <text x="360" y="960" fill="white" font-size="54" text-anchor="middle" font-family="-apple-system, sans-serif" font-weight="700">E2E Ending Spirit</text>
+</svg>

@@ -2,7 +2,44 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
-  serverExternalPackages: ['@remotion/renderer', '@remotion/bundler', '@remotion/vercel', '@vercel/sandbox', '@remotion/google-fonts'],
+  async headers() {
+    return [
+      {
+        source: '/home-hero/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      },
+      {
+        source: '/llms.txt',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Cache-Control', value: 'public, max-age=300, s-maxage=3600' },
+        ],
+      },
+      {
+        source: '/skill.md',
+        headers: [
+          { key: 'Content-Type', value: 'text/markdown; charset=utf-8' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Cache-Control', value: 'public, max-age=300, s-maxage=3600' },
+        ],
+      },
+      {
+        source: '/.well-known/agent-skills/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Cache-Control', value: 'public, max-age=300, s-maxage=3600' },
+        ],
+      },
+    ];
+  },
+  serverExternalPackages: [
+    '@remotion/renderer',
+    '@remotion/bundler',
+    '@remotion/vercel',
+    '@remotion/lambda-client',
+    '@vercel/sandbox',
+    '@remotion/google-fonts',
+  ],
   outputFileTracingExcludes: {
     '*': [
       './ios/**',
@@ -13,9 +50,45 @@ const nextConfig: NextConfig = {
       './home-perf-trace*.json*',
       './trace-editor-load*.json*',
       './tsconfig.tsbuildinfo',
+      './.claude/**',
+      './.codex/**',
+      './.tmp/**',
+      './.remotion-bundle/**',
+      './.remotion-bundle-local/**',
+      './.playwright-cli/**',
+      './.playwright-mcp/**',
+      './artifacts/**',
+      './outputs/**',
+      './output/**',
+      './screenshots/**',
+      './mcp-output/**',
+      './tmp/**',
+      './testcase/**',
+      './testcase old/**',
+      './test-results/**',
+      './app-store-assets/**',
+    ],
+  },
+  outputFileTracingIncludes: {
+    // Durable video delivery probes and muxes with the deployment OS binary.
+    ...Object.fromEntries([
+      '/api/agent', '/api/agent/**', '/api/animate', '/api/animate/**',
+      '/api/video-snapshot', '/api/video-snapshot/**', '/api/cron/video-poll', '/api/mcp',
+    ].map(route => [route, ['./node_modules/ffmpeg-static/**']])),
+    // S3 is also loaded by export, materialize, snapshot polling, and cron routes.
+    // Keep its checksum runtime in every API bundle, including re-exported handlers.
+    '/api/**': [
+      './node_modules/@aws-crypto/**',
+      './node_modules/@aws-sdk/types/**',
+      './node_modules/@smithy/**',
+      './node_modules/tslib/**',
     ],
   },
   turbopack: {
+    // Keep media class identities together across lazy imports and encoder registration.
+    resolveAlias: {
+      mediabunny: './node_modules/mediabunny/dist/bundles/mediabunny.mjs',
+    },
     rules: {
       "*.md": {
         loaders: ["raw-loader"],

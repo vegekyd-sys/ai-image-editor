@@ -181,6 +181,8 @@ export async function upsertAppleSubscription(args: {
       status: args.status,
       current_period_start: args.currentPeriodStart?.toISOString() ?? null,
       current_period_end: args.currentPeriodEnd?.toISOString() ?? null,
+      trial_started_at: args.status === 'trialing' ? args.currentPeriodStart?.toISOString() ?? null : undefined,
+      trial_ends_at: args.status === 'trialing' ? args.currentPeriodEnd?.toISOString() ?? null : undefined,
       cancel_at_period_end: args.cancelAtPeriodEnd ?? false,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { Check, LoaderCircle, RotateCcw, X } from 'lucide-react';
 import { CREDIT_TIERS } from '@/lib/billing/tiers';
 import { useLocale } from '@/lib/i18n';
 import { shouldSuppressWebBilling } from '@/lib/native-app';
@@ -8,6 +9,7 @@ import { writeNativeJSONCache } from '@/lib/native-app-cache';
 import { getAttributionForRequest } from '@/lib/marketing/attribution';
 import { trackCheckoutStart, trackCheckoutSuccessFromUrl } from '@/lib/marketing/meta-pixel';
 import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing';
+import { getEligibleAppleIntroTrial } from '@/lib/billing/apple-trial';
 import {
   finishNativeAppleTransaction,
   getNativeApplePurchaseErrorMessage,
@@ -15,7 +17,9 @@ import {
   purchaseNativeAppleProduct,
   purchaseNativeAppleSubscription,
   restoreNativeApplePurchases,
+  type NativeAppleTransaction,
 } from '@/lib/native-purchases';
+import AppleTrialCheckout from './AppleTrialCheckout';
 
 const PLANS = [
   { id: 'basic', name: 'Basic', monthlyPrice: 990, annualPrice: 9500, credits: 1200 },
@@ -25,7 +29,10 @@ const PLANS = [
 
 interface CreditPopupProps {
   open: boolean;
+  watermarkUnlock?: boolean;
+  entryPoint?: 'standard' | 'ios_onboarding' | 'ios_preauth_trial';
   onClose: () => void;
+  onPreAuthTrialConfirmed?: () => void | Promise<void>;
   balance: number;
   needed?: number;
   subscription?: { planId: string; status: string } | null;
@@ -40,20 +47,28 @@ interface CreditPopupProps {
   onBalanceUpdate?: (balance: number, subscription?: { planId: string; status: string } | null) => void;
 }
 
-export default function CreditPopup({ open: externalOpen, onClose: externalOnClose, balance: externalBalance, needed, subscription: externalSubscription, projectId, success: externalSuccess, waiting: externalWaiting, autoDetectPayment, onBalanceUpdate }: CreditPopupProps) {
-  const { t } = useLocale();
+interface PendingAppleTrialVerification {
+  transaction: NativeAppleTransaction;
+  metaEventId?: string;
+  attribution: Record<string, unknown>;
+}
+
+export default function CreditPopup({ open: externalOpen, watermarkUnlock = false, entryPoint = 'standard', onClose: externalOnClose, onPreAuthTrialConfirmed, balance: externalBalance, needed, subscription: externalSubscription, projectId, success: externalSuccess, waiting: externalWaiting, autoDetectPayment, onBalanceUpdate }: CreditPopupProps) {
+  const { t, locale } = useLocale();
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<string>('pro');
-  const [selectedPlan, setSelectedPlan] = useState<string>('basic');
+  const [selectedPlan, setSelectedPlan] = useState<(typeof PLANS)[number]['id']>('basic');
   const [selectedBillingInterval, setSelectedBillingInterval] = useState<'month' | 'year'>('month');
   const [animatedBalance, setAnimatedBalance] = useState(0);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [pendingAppleTrialVerification, setPendingAppleTrialVerification] = useState<PendingAppleTrialVerification | null>(null);
   const animatingRef = useRef(false);
 
   // Auto-detect payment state (self-managed when autoDetectPayment=true)
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoWaiting, setAutoWaiting] = useState(false);
   const [autoSuccess, setAutoSuccess] = useState(false);
+  const [autoFailed, setAutoFailed] = useState(false);
   const [autoBalance, setAutoBalance] = useState(0);
   const [autoSubscription, setAutoSubscription] = useState<{ planId: string; status: string } | null>(null);
 
@@ -65,6 +80,12 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   const suppressWebBilling = shouldSuppressWebBilling();
   const appleBilling = useAppleBillingProducts({ enabled: open });
   const appleBillingAvailable = appleBilling.available;
+  const isPreAuthTrial = entryPoint === 'ios_preauth_trial';
+  const showDedicatedTrialPaywall = entryPoint !== 'standard'
+    && suppressWebBilling
+    && !success
+    && !waiting
+    && !autoFailed;
 
   const onClose = () => {
     setAutoOpen(false);
@@ -74,14 +95,19 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   };
 
   // Auto-detect ?topped_up=1 after Stripe redirect
-  const [autoFailed, setAutoFailed] = useState(false);
   useEffect(() => {
     if (!autoDetectPayment || typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     if (!params.get('topped_up') && !params.get('payment') && !params.get('subscription')) return;
     trackCheckoutSuccessFromUrl(params);
     window.history.replaceState({}, '', window.location.pathname);
-    setAutoOpen(true);
+    let returnsToSave = false;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('mkr_save_checkout') || 'null');
+      returnsToSave = saved?.projectId === projectId && typeof saved.createdAt === 'number'
+        && Date.now() - saved.createdAt < 30 * 60_000;
+    } catch { /* Use the ordinary payment confirmation when no save is pending. */ }
+    setAutoOpen(!returnsToSave);
     setAutoWaiting(true);
     setAutoSuccess(false);
     setAutoFailed(false);
@@ -112,13 +138,26 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   }, [autoDetectPayment]);
 
   const hasSubscription = !!(subscription && subscription.status !== 'canceled');
+  const basicMonthlyProduct = appleBilling.findSubscription('basic', 'month');
+  const basicMonthlyTrial = getEligibleAppleIntroTrial(
+    basicMonthlyProduct,
+    appleBilling.nativeProductFor(basicMonthlyProduct),
+  );
+  const hasBasicMonthlyTrial = !!basicMonthlyTrial;
 
-  const [tab, setTab] = useState<'subscribe' | 'topup'>('topup');
+  const [tab, setTab] = useState<'subscribe' | 'topup'>('subscribe');
+
+  useEffect(() => { if (open) setTab('subscribe'); }, [open]);
 
   // Sync tab when subscription status changes (async fetch)
   useEffect(() => {
-    setTab(hasSubscription ? 'subscribe' : 'topup');
-  }, [hasSubscription]);
+    if (entryPoint !== 'standard' || hasSubscription || hasBasicMonthlyTrial) setTab('subscribe');
+
+    if (entryPoint !== 'standard' || hasBasicMonthlyTrial) {
+      setSelectedPlan('basic');
+      setSelectedBillingInterval('month');
+    }
+  }, [appleBilling.loading, entryPoint, hasBasicMonthlyTrial, hasSubscription]);
   const currentPlanIndex = hasSubscription ? PLANS.findIndex(p => p.id === subscription!.planId) : -1;
 
   // Animate balance count-up on success
@@ -157,26 +196,54 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     }
   };
 
+  const verifyApplePurchase = async (payload: Record<string, unknown>) => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const res = await fetch('/api/billing/apple/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (res.ok) return data;
+        const retryablePreAuthConfirmation = isPreAuthTrial
+          && data.code === 'APPLE_TRIAL_VERIFICATION_FAILED';
+        if (!retryablePreAuthConfirmation) {
+          throw new Error(data.error || 'Apple purchase verification failed');
+        }
+        if (attempt === 2) throw new Error(t('billing.trial.verificationPending'));
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
+      await new Promise(resolve => window.setTimeout(resolve, 350 * (attempt + 1)));
+    }
+    throw new Error(t('billing.trial.verificationPending'));
+  };
+
   const handleCheckout = async (tier: string) => {
     setLoading(tier);
     setPaymentError(null);
     try {
-      const tierConfig = CREDIT_TIERS.find(c => c.id === tier);
-      const metaEventId = trackCheckoutStart('topup', {
-        content_name: tier,
-        value: tierConfig ? tierConfig.price / 100 : undefined,
-        currency: 'USD',
-      });
       if (appleBillingAvailable) {
         const appleProduct = appleBilling.findTopup(tier);
         if (!appleProduct) throw new Error('Apple top-up product is not configured');
         if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple top-up product is still loading');
+        const metaEventId = trackCheckoutStart('topup', {
+          content_name: tier,
+          content_id: appleProduct.productId,
+          value: appleProduct.price / 100,
+          currency: 'USD',
+        });
         sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
         const transaction = await purchaseNativeAppleProduct(appleProduct.productId, appleBilling.appAccountToken);
         const res = await fetch('/api/billing/apple/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
+          body: JSON.stringify({
+            signedTransactionInfo: transaction.signedTransactionInfo,
+            metaEventId,
+            attribution: getAttributionForRequest(),
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Apple top-up verification failed');
@@ -192,6 +259,12 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         return;
       }
 
+      const tierConfig = CREDIT_TIERS.find(c => c.id === tier);
+      const metaEventId = trackCheckoutStart('topup', {
+        content_name: tier,
+        value: tierConfig ? tierConfig.price / 100 : undefined,
+        currency: 'USD',
+      });
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -203,15 +276,14 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         }),
       });
       const data = await res.json();
-      if (data.url) {
-        sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
-        window.location.href = data.url;
-      }
+      if (!res.ok || typeof data.url !== 'string' || !data.url) throw new Error(t('billing.checkoutStartFailed'));
+      sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
+      window.location.href = data.url;
     } catch (error) {
       if (!isNativeApplePurchaseCancellation(error)) {
         console.error('[billing] top-up failed:', error);
       }
-      setPaymentError(getNativeApplePurchaseErrorMessage(error, 'Unable to start top-up.'));
+      setPaymentError(appleBillingAvailable ? getNativeApplePurchaseErrorMessage(error, 'Unable to start top-up.') : t('billing.checkoutStartFailed'));
     } finally {
       setLoading(null);
     }
@@ -221,20 +293,44 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     setLoading(`sub-${planId}-${selectedBillingInterval}`);
     setPaymentError(null);
     try {
+      const plan = PLANS.find(p => p.id === planId);
       if (appleBillingAvailable) {
         const appleProduct = appleBilling.findSubscription(planId, selectedBillingInterval);
         if (!appleProduct) throw new Error('Apple subscription product is not configured');
         if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple subscription product is still loading');
-        sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
-        const transaction = await purchaseNativeAppleSubscription(appleProduct.productId, appleBilling.appAccountToken);
-        const res = await fetch('/api/billing/apple/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
+        let verification = isPreAuthTrial ? pendingAppleTrialVerification : null;
+        if (!verification) {
+          const metaEventId = trackCheckoutStart('subscription', {
+            content_name: planId,
+            content_id: appleProduct.productId,
+            billing_interval: selectedBillingInterval,
+            value: appleProduct.price / 100,
+            currency: 'USD',
+          });
+          const attribution = (getAttributionForRequest() ?? {}) as Record<string, unknown>;
+          sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
+          const transaction = await purchaseNativeAppleSubscription(
+            appleProduct.productId,
+            appleBilling.appAccountToken,
+            isPreAuthTrial,
+          );
+          verification = { transaction, metaEventId, attribution };
+          if (isPreAuthTrial) setPendingAppleTrialVerification(verification);
+        }
+        if (!verification) throw new Error('Apple purchase verification could not be resumed');
+        const { transaction, metaEventId, attribution } = verification;
+        const data = await verifyApplePurchase({
+          signedTransactionInfo: transaction.signedTransactionInfo,
+          metaEventId,
+          attribution,
+          ...(isPreAuthTrial ? { intent: 'preauth_trial' as const } : {}),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Apple purchase verification failed');
         await finishAppleTransaction(transaction.transactionId);
+        if (isPreAuthTrial && data.pendingClaim) {
+          setPendingAppleTrialVerification(null);
+          await onPreAuthTrialConfirmed?.();
+          return;
+        }
         writeNativeJSONCache('/api/billing/credits', data);
         setAutoOpen(true);
         setAutoWaiting(false);
@@ -246,7 +342,6 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         return;
       }
 
-      const plan = PLANS.find(p => p.id === planId);
       const metaEventId = trackCheckoutStart('subscription', {
         content_name: planId,
         value: plan ? (selectedBillingInterval === 'year' ? plan.annualPrice : plan.monthlyPrice) / 100 : undefined,
@@ -264,15 +359,14 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         }),
       });
       const data = await res.json();
-      if (data.url) {
-        sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
-        window.location.href = data.url;
-      }
+      if (!res.ok || typeof data.url !== 'string' || !data.url) throw new Error(t('billing.checkoutStartFailed'));
+      sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
+      window.location.href = data.url;
     } catch (error) {
       if (!isNativeApplePurchaseCancellation(error)) {
         console.error('[billing] subscribe failed:', error);
       }
-      setPaymentError(getNativeApplePurchaseErrorMessage(error, 'Unable to start subscription.'));
+      setPaymentError(appleBillingAvailable ? getNativeApplePurchaseErrorMessage(error, 'Unable to start subscription.') : t('billing.checkoutStartFailed'));
     } finally {
       setLoading(null);
     }
@@ -283,17 +377,29 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     setPaymentError(null);
     try {
       sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
-      const transactions = await restoreNativeApplePurchases();
+      const transactions = await restoreNativeApplePurchases(isPreAuthTrial);
       const transaction = transactions[0];
       if (!transaction) throw new Error('No active Apple subscription was found.');
       const res = await fetch('/api/billing/apple/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
+        body: JSON.stringify({
+          signedTransactionInfo: transaction.signedTransactionInfo,
+          ...(isPreAuthTrial ? { intent: 'preauth_trial' as const } : {}),
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not restore Apple subscription.');
+      if (!res.ok) {
+        if (isPreAuthTrial && data.code === 'APPLE_TRIAL_VERIFICATION_FAILED') {
+          throw new Error(t('billing.trial.verificationPending'));
+        }
+        throw new Error(data.error || 'Could not restore Apple subscription.');
+      }
       await finishAppleTransaction(transaction.transactionId);
+      if (isPreAuthTrial && data.pendingClaim) {
+        await onPreAuthTrialConfirmed?.();
+        return;
+      }
       writeNativeJSONCache('/api/billing/credits', data);
       setAutoOpen(true);
       setAutoWaiting(false);
@@ -314,6 +420,11 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   const selectedAppleTopupProduct = appleBilling.findTopup(selectedTier);
   const selectedAppleTopupReady = !appleBillingAvailable || !!appleBilling.nativeProductFor(selectedAppleTopupProduct);
   const selectedAppleSubscriptionProduct = appleBilling.findSubscription(selectedPlan, selectedBillingInterval);
+  const selectedAppleNativeSubscription = appleBilling.nativeProductFor(selectedAppleSubscriptionProduct);
+  const selectedAppleIntroTrial = getEligibleAppleIntroTrial(
+    selectedAppleSubscriptionProduct,
+    selectedAppleNativeSubscription,
+  );
   const selectedAppleSubscriptionReady = !appleBillingAvailable || !!appleBilling.nativeProductFor(selectedAppleSubscriptionProduct);
   const applePurchaseBlocked = appleBillingAvailable && (appleBilling.loading || !!appleBilling.error);
   const subscribeDisabled = !!loading
@@ -322,24 +433,24 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     || !selectedAppleSubscriptionReady;
   const topupDisabled = !!loading || applePurchaseBlocked || !selectedAppleTopupReady;
   const subscribeButtonLabel = (() => {
-    if (loading?.startsWith('sub-')) return '...';
+    if (loading?.startsWith('sub-')) return t('billing.processingPayment');
     if (appleBillingAvailable) {
-      if (appleBilling.loading) return 'Loading Apple prices...';
-      if (!selectedAppleSubscriptionReady) return 'Apple product unavailable';
-      const nativeProduct = appleBilling.nativeProductFor(selectedAppleSubscriptionProduct);
-      return `Subscribe · ${nativeProduct?.displayPrice || (selectedBillingInterval === 'year' ? 'Annual' : 'Monthly')}`;
+      if (appleBilling.loading) return t('billing.loadingPrices');
+      if (!selectedAppleSubscriptionReady) return t('billing.productUnavailable');
+      if (selectedAppleIntroTrial) return t('billing.appleTrialStart');
+      return t('billing.subscribePrice', selectedAppleNativeSubscription!.displayPrice);
     }
-    if (hasSubscription) return `${t('billing.upgradeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`;
-    return `${t('billing.subscribeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`;
+    const planName = t(`billing.plan.${selectedPlan}`);
+    if (hasSubscription) return `${t('billing.upgradeTo')} ${planName}`;
+    return `${t('billing.subscribeTo')} ${planName}`;
   })();
   const topupButtonLabel = (() => {
-    if (loading === selectedTier) return '...';
+    if (loading === selectedTier) return t('billing.processingPayment');
     if (appleBillingAvailable) {
-      if (appleBilling.loading) return 'Loading Apple prices...';
-      if (!selectedAppleTopupReady) return 'Apple product unavailable';
-      return `${t('billing.topUp')} ${selectedTopupCredits.toLocaleString()} ${t('billing.credits')}`;
+      if (appleBilling.loading) return t('billing.loadingPrices');
+      if (!selectedAppleTopupReady) return t('billing.productUnavailable');
     }
-    return `${t('billing.topUp')} ${selectedTopupCredits.toLocaleString()} ${t('billing.credits')}`;
+    return `${t('billing.topUp')} ${selectedTopupCredits.toLocaleString(locale)} ${t('billing.credits')}`;
   })();
 
   return (
@@ -357,19 +468,26 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
 
       {/* Modal */}
       <div
+        data-testid={showDedicatedTrialPaywall ? 'credit-popup-trial-shell' : 'credit-popup-modal'}
+        data-presentation={showDedicatedTrialPaywall ? 'bottom-sheet' : 'modal'}
         style={{
           position: 'fixed', zIndex: 301,
-          left: '50%', top: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: '92%', maxWidth: 480,
-          maxHeight: '85dvh',
+          left: '50%',
+          top: showDedicatedTrialPaywall ? undefined : '50%',
+          bottom: showDedicatedTrialPaywall ? 0 : undefined,
+          transform: showDedicatedTrialPaywall ? 'translateX(-50%)' : 'translate(-50%, -50%)',
+          width: showDedicatedTrialPaywall ? 'min(100%, 600px)' : '92%',
+          maxWidth: showDedicatedTrialPaywall ? 600 : 480,
+          maxHeight: showDedicatedTrialPaywall ? '90dvh' : '85dvh',
           overflowY: 'auto',
-          background: 'linear-gradient(180deg, #18181b 0%, #0f0f12 100%)',
-          borderRadius: 20,
+          background: showDedicatedTrialPaywall ? '#09090b' : 'linear-gradient(180deg, #18181b 0%, #0f0f12 100%)',
+          borderRadius: showDedicatedTrialPaywall ? '26px 26px 0 0' : 20,
           border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04)',
-          animation: 'creditScaleIn 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          borderBottom: showDedicatedTrialPaywall ? 0 : undefined,
+          boxShadow: showDedicatedTrialPaywall ? '0 -24px 80px rgba(0,0,0,0.68)' : '0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04)',
+          animation: showDedicatedTrialPaywall ? 'creditSlideUp 0.36s cubic-bezier(0.22, 1, 0.36, 1)' : 'creditScaleIn 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         }}
+        onClick={event => event.stopPropagation()}
       >
         {/* ══════ FAILED STATE ══════ */}
         {autoFailed ? (
@@ -507,6 +625,19 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
               {t('billing.continueCreating')}
             </button>
           </div>
+        ) : showDedicatedTrialPaywall ? (
+          <AppleTrialCheckout
+            nativeProduct={appleBilling.nativeProductFor(basicMonthlyProduct)}
+            loading={!appleBillingAvailable || appleBilling.loading}
+            disabled={subscribeDisabled}
+            purchasing={loading === 'sub-basic-month'}
+            confirmationPending={!!pendingAppleTrialVerification}
+            error={paymentError}
+            onStart={() => void handleSubscribe('basic')}
+            onClose={onClose}
+            onRestore={handleRestoreApplePurchases}
+            restoring={loading === 'restore-apple'}
+          />
         ) : suppressWebBilling && !appleBillingAvailable ? (
           <div data-testid="ios-billing-unavailable" style={{ padding: '32px 24px 28px', textAlign: 'center' }}>
             <div style={{
@@ -550,140 +681,113 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
           </div>
         ) : (
           /* ══════ NORMAL STATE — SUBSCRIBE / TOP UP ══════ */
-          <>
-            {/* Header */}
-            <div style={{ padding: '24px 24px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: 'rgba(255,255,255,0.92)', letterSpacing: '-0.02em' }}>
-                  {t('billing.getMoreCredits')}
-                </div>
-                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
-                  Balance: <span style={{ color: balance === 0 ? '#fbbf24' : 'rgba(255,255,255,0.6)' }}>{balance}</span> credits
-                  {needed ? <> &middot; ~{needed} needed</> : null}
-                </div>
+          <div className="credit-purchase">
+            <div className="credit-purchase-header">
+              <div className="credit-purchase-heading">
+                <h2>
+                  {t(watermarkUnlock ? 'billing.unlockOriginal' : 'billing.getMoreCredits')}
+                </h2>
+                <p className="credit-balance">
+                  {t('billing.balanceAmount', balance.toLocaleString(locale))}
+                  {needed ? <> · {t('billing.neededCredits', needed.toLocaleString(locale))}</> : null}
+                </p>
               </div>
-              <button
-                onClick={onClose}
-                style={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  background: 'rgba(255,255,255,0.06)', border: 'none',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', color: 'rgba(255,255,255,0.4)',
-                  fontSize: 16, lineHeight: 1,
-                }}
-              >
-                &times;
+              <button type="button" onClick={onClose} className="credit-close" aria-label={t('billing.close')} title={t('billing.close')}>
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 
-            <div style={{ display: 'flex', gap: 4, margin: '16px 24px 0', padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
+            {watermarkUnlock && (
+              <p className="credit-unlock-description" data-testid="watermark-checkout-description">
+                {t('billing.unlockOriginalDescription')}
+              </p>
+            )}
+            <div role="tablist" aria-label={t('billing.purchaseOptions')} className="credit-mode-tabs">
               <button
-                onClick={() => setTab('topup')}
-                style={{
-                  flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
-                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  background: tab === 'topup' ? 'rgba(192,38,211,0.2)' : 'transparent',
-                  color: tab === 'topup' ? '#e879f9' : 'rgba(255,255,255,0.35)',
-                  transition: 'all 0.15s',
-                }}
+                type="button" role="tab" aria-selected={tab === 'subscribe'} onClick={() => {setTab('subscribe');setPaymentError(null);}}
               >
-                Top Up
+                {t('billing.subscribe')}
               </button>
               <button
-                onClick={() => setTab('subscribe')}
-                style={{
-                  flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
-                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  background: tab === 'subscribe' ? 'rgba(192,38,211,0.2)' : 'transparent',
-                  color: tab === 'subscribe' ? '#e879f9' : 'rgba(255,255,255,0.35)',
-                  transition: 'all 0.15s',
-                }}
+                type="button" role="tab" aria-selected={tab === 'topup'} onClick={() => {setTab('topup');setPaymentError(null);}}
               >
-                Upgrade
+                {t('billing.topUp')}
               </button>
             </div>
 
-            {appleBillingAvailable && (
-              <div data-testid="apple-billing-banner" style={{ margin: '10px 24px 0', padding: '10px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                <div style={{ color: 'rgba(255,255,255,0.74)', fontSize: 12, fontWeight: 700 }}>
-                  Apple In-App Purchase
-                </div>
-                <div style={{ color: appleBilling.error ? '#f87171' : 'rgba(255,255,255,0.42)', fontSize: 12, marginTop: 3, lineHeight: 1.35 }}>
-                  {appleBilling.error || (appleBilling.loading ? 'Loading Apple prices...' : 'Subscriptions and top-ups are billed through Apple on iOS.')}
-                </div>
-              </div>
+            {appleBillingAvailable && appleBilling.error && (
+              <p className="credit-purchase-error" role="alert">{t('billing.pricesUnavailable')}</p>
             )}
 
             {paymentError && (
-              <div data-testid="apple-purchase-error" style={{ margin: '10px 24px 0', padding: '10px 12px', borderRadius: 12, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(248,113,113,0.22)', color: '#fecaca', fontSize: 12, lineHeight: 1.45 }}>
+              <p data-testid="apple-purchase-error" className="credit-purchase-error" role="alert">
                 {paymentError}
-              </div>
+              </p>
             )}
 
             {/* Content */}
-            <div style={{ padding: '16px 24px 24px' }}>
+            <div className="credit-purchase-body">
 
               {/* ── Subscribe tab (or only view if no subscription) ── */}
               {tab === 'subscribe' && (
                 <>
-                  <div style={{ display: 'flex', gap: 4, marginBottom: 12, padding: 3, background: 'rgba(255,255,255,0.04)', borderRadius: 10 }}>
+                  <div className="credit-period-row">
+                    <span>{t('billing.billingPeriod')}</span>
+                    <div className="credit-period" role="group" aria-label={t('billing.billingPeriod')}>
                     {(['month', 'year'] as const).map(interval => (
                       <button
-                        key={interval}
+                        type="button" key={interval} aria-pressed={selectedBillingInterval === interval}
                         onClick={() => setSelectedBillingInterval(interval)}
-                        style={{
-                          flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
-                          fontSize: 12, fontWeight: 650, cursor: 'pointer',
-                          background: selectedBillingInterval === interval ? 'rgba(192,38,211,0.2)' : 'transparent',
-                          color: selectedBillingInterval === interval ? '#e879f9' : 'rgba(255,255,255,0.35)',
-                        }}
                       >
-                        {interval === 'month' ? 'Monthly' : 'Annual'}
+                        {t(interval === 'month' ? 'billing.monthly' : 'billing.annual')}
                       </button>
                     ))}
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className="credit-plan-list">
                     {PLANS.map((plan, idx) => {
                       const isCurrent = hasSubscription && subscription!.planId === plan.id;
                       const isDowngrade = hasSubscription && idx < currentPlanIndex;
                       const isSelected = selectedPlan === plan.id;
                       const appleProduct = appleBilling.findSubscription(plan.id, selectedBillingInterval);
-                      const displayPrice = appleProduct ? appleBilling.nativeProductFor(appleProduct)?.displayPrice : undefined;
+                      const nativeProduct = appleProduct ? appleBilling.nativeProductFor(appleProduct) : undefined;
+                      const displayPrice = nativeProduct?.displayPrice;
+                      const introTrial = getEligibleAppleIntroTrial(appleProduct, nativeProduct);
                       const fallbackPrice = selectedBillingInterval === 'year' ? plan.annualPrice : plan.monthlyPrice;
                       const credits = selectedBillingInterval === 'year' ? plan.credits * 12 : plan.credits;
                       const priceLabel = appleBillingAvailable
-                        ? displayPrice || (appleBilling.loading ? '...' : 'Unavailable')
+                        ? displayPrice || t(appleBilling.loading ? 'billing.loadingPrices' : 'billing.productUnavailable')
                         : `$${(fallbackPrice / 100).toFixed(2)}`;
                       return (
                         <button
-                          key={plan.id}
+                          type="button" key={plan.id} className="credit-plan" aria-pressed={isSelected} data-current={isCurrent}
                           onClick={() => !isCurrent && !isDowngrade && setSelectedPlan(plan.id)}
                           disabled={!!(isCurrent || isDowngrade)}
                           style={{
-                            padding: '14px 18px',
-                            borderRadius: 14,
+                            padding: '14px',
+                            borderRadius: 8,
                             border: isCurrent
                               ? '1px solid rgba(255,255,255,0.08)'
                               : isSelected
-                                ? '1.5px solid rgba(192,38,211,0.5)'
+                                ? '1px solid rgba(232,121,249,0.65)'
                                 : '1px solid rgba(255,255,255,0.06)',
                             background: isCurrent
                               ? 'rgba(255,255,255,0.02)'
                               : isSelected
                                 ? 'rgba(192,38,211,0.06)'
                                 : 'rgba(255,255,255,0.02)',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                             opacity: isCurrent ? 0.45 : isDowngrade ? 0.4 : 1,
                             cursor: isCurrent || isDowngrade ? 'default' : 'pointer',
                             textAlign: 'left',
                             transition: 'all 0.15s',
                           }}
                         >
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span className="credit-selection" aria-hidden="true">{isSelected && <Check size={13} />}</span>
+                          <div className="credit-plan-copy">
+                            <div className="credit-plan-name">
                               <span style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
-                                {plan.name}
+                                {t(`billing.plan.${plan.id}`)}
                               </span>
                               {isCurrent && (
                                 <span style={{
@@ -693,122 +797,152 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                                   {t('billing.current')}
                                 </span>
                               )}
+                              {introTrial && (
+                                <span data-testid="apple-intro-trial-badge" style={{
+                                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                                  background: 'rgba(52,211,153,0.14)', color: '#6ee7b7',
+                                }}>
+                                  {t('billing.appleTrialBadge')}
+                                </span>
+                              )}
                             </div>
-                            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                              {credits.toLocaleString()} {selectedBillingInterval === 'year' ? 'credits/year' : t('billing.creditsPerMonth')}
+                            <div className="credit-plan-detail">
+                              {introTrial
+                                ? <>{introTrial.credits.toLocaleString(locale)} {t('billing.appleTrialCredits')}</>
+                                : <>{credits.toLocaleString(locale)} {t(selectedBillingInterval === 'year' ? 'billing.creditsPerYear' : 'billing.creditsPerMonth')}</>}
                             </div>
                           </div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: isSelected && !isCurrent ? '#e879f9' : 'rgba(255,255,255,0.6)' }}>
-                            {priceLabel}{!appleBillingAvailable && <span style={{ fontSize: 11, fontWeight: 400 }}>{selectedBillingInterval === 'year' ? '/yr' : '/mo'}</span>}
+                          <div className="credit-plan-price">
+                            <div style={{ fontSize: 16, fontWeight: 700, color: isSelected && !isCurrent ? '#e879f9' : 'rgba(255,255,255,0.6)' }}>
+                              {introTrial ? t('billing.appleTrialToday') : priceLabel}
+                              {!introTrial && (!appleBillingAvailable || displayPrice) && <span className="credit-price-period">{t(selectedBillingInterval === 'year' ? 'billing.perYear' : 'billing.perMonth')}</span>}
+                            </div>
+                            {introTrial && (
+                              <div className="credit-renewal">
+                                {t('billing.appleTrialThen')} {introTrial.renewalPrice}{t('billing.perMonth')}
+                              </div>
+                            )}
                           </div>
                         </button>
                       );
                     })}
                   </div>
 
-                  <button
+                  <button type="button" className="credit-purchase-primary"
                     onClick={() => handleSubscribe(selectedPlan)}
                     disabled={subscribeDisabled}
-                    style={{
-                      width: '100%', marginTop: 16,
-                      padding: 14, borderRadius: 14, border: 'none',
-                      background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
-                      color: '#fff', fontSize: 14, fontWeight: 600,
-                      cursor: subscribeDisabled ? 'wait' : 'pointer',
-                      opacity: subscribeDisabled ? 0.4 : 1,
-                      boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
-                    }}
                   >
-                    {subscribeButtonLabel}
+                    <span className="credit-purchase-primary-label">{loading?.startsWith('sub-') && <LoaderCircle size={16} className="credit-loading" aria-hidden="true" />}{subscribeButtonLabel}</span>
+                    {selectedAppleIntroTrial && (
+                      <span className="credit-purchase-disclosure">
+                        {t('billing.appleTrialDisclosure')} {selectedAppleIntroTrial.renewalPrice}{t('billing.perMonth')}
+                      </span>
+                    )}
                   </button>
 
-                  {appleBillingAvailable && (
-                    <button
-                      onClick={handleRestoreApplePurchases}
-                      disabled={!!loading}
-                      style={{
-                        width: '100%', marginTop: 10,
-                        padding: 12, borderRadius: 14, border: '1px solid rgba(255,255,255,0.08)',
-                        background: 'rgba(255,255,255,0.03)',
-                        color: 'rgba(255,255,255,0.55)', fontSize: 13, fontWeight: 600,
-                        cursor: loading ? 'wait' : 'pointer',
-                      }}
-                    >
-                      {loading === 'restore-apple' ? '...' : 'Restore Apple Purchase'}
-                    </button>
-                  )}
                 </>
               )}
 
               {/* ── Top Up tab ── */}
               {tab === 'topup' && (
                 <>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <p className="credit-topup-description">{t('billing.topUpDescription')}</p>
+                  <div className="credit-pack-grid">
                     {CREDIT_TIERS.map(tier => {
                       const appleProduct = appleBilling.findTopup(tier.id);
                       const displayPrice = appleProduct ? appleBilling.nativeProductFor(appleProduct)?.displayPrice : undefined;
                       const priceLabel = appleBillingAvailable
-                        ? displayPrice || (appleBilling.loading ? '...' : 'Unavailable')
+                        ? displayPrice || t(appleBilling.loading ? 'billing.loadingPrices' : 'billing.productUnavailable')
                         : `$${(tier.price / 100).toFixed(0)}`;
                       return (
                         <button
-                          key={tier.id}
+                          type="button" key={tier.id} className="credit-pack" aria-pressed={selectedTier === tier.id}
                           onClick={() => setSelectedTier(tier.id)}
-                          style={{
-                            padding: '14px 18px',
-                            borderRadius: 14,
-                            border: selectedTier === tier.id
-                              ? '1.5px solid rgba(192,38,211,0.5)'
-                              : '1px solid rgba(255,255,255,0.06)',
-                            background: selectedTier === tier.id
-                              ? 'rgba(192,38,211,0.06)'
-                              : 'rgba(255,255,255,0.02)',
-                            cursor: 'pointer',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            transition: 'all 0.15s',
-                            textAlign: 'left',
-                          }}
                         >
-                          <div>
-                            <div style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.9)' }}>
-                              {tier.credits.toLocaleString()} credits
-                            </div>
-                            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                              {tier.unitPrice}/credit
-                            </div>
-                          </div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: selectedTier === tier.id ? '#e879f9' : 'rgba(255,255,255,0.6)' }}>
-                            {priceLabel}
-                          </div>
+                          <span className="credit-pack-amount">{tier.credits.toLocaleString(locale)} <span>{t('billing.credits')}</span></span>
+                          <span className="credit-pack-bottom"><span className="credit-pack-price">{priceLabel}</span><span className="credit-selection" aria-hidden="true">{selectedTier === tier.id && <Check size={13} />}</span></span>
                         </button>
                       );
                     })}
                   </div>
 
-                  <button
+                  <button type="button" className="credit-purchase-primary"
                     onClick={() => handleCheckout(selectedTier)}
                     disabled={topupDisabled}
-                    style={{
-                      width: '100%', marginTop: 16,
-                      padding: 14, borderRadius: 14, border: 'none',
-                      background: 'linear-gradient(135deg, #d946ef 0%, #a855f7 50%, #7c3aed 100%)',
-                      color: '#fff', fontSize: 14, fontWeight: 600,
-                      cursor: topupDisabled ? 'wait' : 'pointer',
-                      opacity: topupDisabled ? 0.5 : 1,
-                      boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
-                    }}
                   >
-                    {topupButtonLabel}
+                    <span className="credit-purchase-primary-label">{loading === selectedTier && <LoaderCircle size={16} className="credit-loading" aria-hidden="true" />}{topupButtonLabel}</span>
                   </button>
                 </>
               )}
 
+              {appleBillingAvailable && (
+                <button type="button" onClick={handleRestoreApplePurchases} disabled={!!loading} className="credit-restore">
+                  {loading === 'restore-apple' ? <LoaderCircle size={14} className="credit-loading" aria-hidden="true" /> : <RotateCcw size={14} aria-hidden="true" />}
+                  {t(loading === 'restore-apple' ? 'billing.restoring' : 'billing.restorePurchases')}
+                </button>
+              )}
             </div>
-          </>
+          </div>
         )}
       </div>
 
+      {/* i18n-ignore */}
       <style>{`
+        .credit-purchase { color: #fafafa; letter-spacing: 0; }
+        .credit-purchase button { font-family: inherit; letter-spacing: 0; }
+        .credit-purchase button:focus-visible { outline: 2px solid #f0abfc; outline-offset: 3px; }
+        .credit-purchase-header { padding: 24px 24px 0; display: flex; gap: 12px; justify-content: space-between; align-items: flex-start; }
+        .credit-purchase-heading { min-width: 0; }
+        .credit-purchase-heading h2 { margin: 0; font-size: 20px; line-height: 1.4; font-weight: 650; overflow-wrap: anywhere; }
+        .credit-balance { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: #a1a1aa; }
+        .credit-close { width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%; background: #27272a; border: 0; color: #a1a1aa; display: grid; place-items: center; cursor: pointer; }
+        .credit-unlock-description { margin: 12px 24px 0; color: #a1a1aa; font-size: 13px; line-height: 1.7; }
+        .credit-mode-tabs { display: flex; gap: 24px; margin: 16px 24px 0; border-bottom: 1px solid #303034; }
+        .credit-mode-tabs button { min-height: 44px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #a1a1aa; font-size: 14px; font-weight: 600; cursor: pointer; }
+        .credit-mode-tabs button[aria-selected=true] { border-bottom-color: #e879f9; color: #fafafa; }
+        .credit-purchase-body { padding: 16px 24px 18px; }
+        .credit-period-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; margin-bottom: 14px; color: #a1a1aa; font-size: 12px; }
+        .credit-period { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 3px; background: #27272a; border-radius: 8px; }
+        .credit-period button { min-width: 68px; min-height: 38px; padding: 6px 12px; border: 0; border-radius: 5px; background: transparent; font-size: 12px; color: #a1a1aa; cursor: pointer; }
+        .credit-period button[aria-pressed=true] { background: #3f3f46; color: #fafafa; }
+        .credit-plan-list { display: flex; flex-direction: column; gap: 8px; }
+        .credit-plan { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-height: 76px; width: 100%; }
+        .credit-selection { width: 18px; height: 18px; flex-shrink: 0; border: 1px solid #52525b; border-radius: 50%; display: grid; place-items: center; color: #fafafa; }
+        [aria-pressed=true] > .credit-selection, [aria-pressed=true] .credit-pack-bottom > .credit-selection { background: #c026d3; border-color: #e879f9; }
+        .credit-plan-copy { min-width: 0; }
+        .credit-plan-name { display: flex; flex-wrap: wrap; gap: 5px 8px; align-items: center; }
+        .credit-plan-detail { margin-top: 5px; color: #a1a1aa; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+        .credit-plan-price { max-width: 140px; text-align: right; overflow-wrap: anywhere; }
+        .credit-price-period { font-size: 11px; font-weight: 400; white-space: nowrap; }
+        .credit-renewal { margin-top: 4px; color: #a1a1aa; font-size: 10px; line-height: 1.5; }
+        .credit-purchase-primary { width: 100%; min-height: 48px; margin-top: 18px; padding: 13px 16px; border-radius: 8px; border: 0; background: #c026d3; color: #fff; font-size: 14px; font-weight: 600; line-height: 1.5; cursor: pointer; overflow-wrap: anywhere; }
+        .credit-purchase-primary:hover:not(:disabled) { background: #a21caf; }
+        .credit-purchase-primary:disabled { opacity: 0.45; cursor: default; }
+        .credit-purchase-primary-label { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .credit-purchase-disclosure { display: block; margin-top: 4px; font-size: 11px; font-weight: 400; opacity: 0.86; }
+        .credit-restore { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px; margin-top: 8px; padding: 8px; background: transparent; border: 0; color: #a1a1aa; font-size: 12px; cursor: pointer; }
+        .credit-restore:disabled { opacity: 0.5; cursor: default; }
+        .credit-loading { flex-shrink: 0; animation: creditSpin 0.8s linear infinite; }
+        .credit-topup-description { margin: 0 0 14px; color: #a1a1aa; font-size: 12px; line-height: 1.5; }
+        .credit-pack-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .credit-pack { min-width: 0; min-height: 100px; padding: 14px; border: 1px solid #303034; border-radius: 8px; background: #1c1c20; text-align: left; cursor: pointer; }
+        .credit-pack[aria-pressed=true] { border-color: #e879f9; background: #261c2a; }
+        .credit-pack:last-child:nth-child(odd) { grid-column: 1 / -1; min-height: 82px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .credit-pack-amount { display: block; color: #fafafa; font-size: 20px; line-height: 1.3; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .credit-pack-amount > span { display: block; margin-top: 3px; color: #a1a1aa; font-size: 11px; font-weight: 400; }
+        .credit-pack-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
+        .credit-pack:last-child:nth-child(odd) .credit-pack-bottom { margin-top: 0; }
+        .credit-pack-price { min-width: 0; color: #d4d4d8; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+        .credit-purchase-error { margin: 12px 24px 0; color: #fca5a5; font-size: 12px; line-height: 1.5; }
+        @media (max-width: 380px) {
+          .credit-purchase-header { padding: 20px 18px 0; }
+          .credit-unlock-description, .credit-mode-tabs, .credit-purchase-error { margin-left: 18px; margin-right: 18px; }
+          .credit-purchase-body { padding-left: 18px; padding-right: 18px; }
+          .credit-plan { grid-template-columns: 18px minmax(0, 1fr); }
+          .credit-plan-price { grid-column: 2; max-width: none; text-align: left; }
+          .credit-pack { padding: 12px; }
+        }
+        @media (prefers-reduced-motion: reduce) { .credit-purchase .credit-loading { animation: none; } }
         @keyframes creditFadeIn {
           from { opacity: 0 }
           to { opacity: 1 }
@@ -816,6 +950,10 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
         @keyframes creditScaleIn {
           from { opacity: 0; transform: translate(-50%, -50%) scale(0.95) }
           to { opacity: 1; transform: translate(-50%, -50%) scale(1) }
+        }
+        @keyframes creditSlideUp {
+          from { opacity: 0; transform: translate(-50%, 24px) }
+          to { opacity: 1; transform: translate(-50%, 0) }
         }
         @keyframes creditSuccessPop {
           from { transform: scale(0.5); opacity: 0 }

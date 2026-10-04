@@ -4,11 +4,16 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
 import { getPublicOrigin } from '@/lib/auth/public-origin'
+import { initializeSignupCredits } from '@/lib/billing/signup-credits'
+import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
+import { appendAuthReturnParam, normalizeAuthReturnPath } from '@/lib/auth-return'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const origin = getPublicOrigin(request)
   const code = searchParams.get('code')
+  const requestedReturnPath = normalizeAuthReturnPath(searchParams.get('next'))
+  const isIOSApp = userAgentHasMakaronIOSToken(request.headers.get('user-agent') ?? undefined)
 
   if (searchParams.get('native_oauth') === '1') {
     return buildNativeOAuthCallbackPage(request)
@@ -61,7 +66,8 @@ export async function GET(request: NextRequest) {
     .single()
 
   if (profile?.activated) {
-    return buildRedirectPage(`${origin}/projects`, cookiesToSetOnResponse)
+    const redirectUrl = requestedReturnPath ? new URL(requestedReturnPath, origin).toString() : `${origin}/projects`
+    return buildRedirectPage(redirectUrl, cookiesToSetOnResponse)
   }
 
   // Auto-activate: all users who reach callback are verified
@@ -71,43 +77,21 @@ export async function GET(request: NextRequest) {
     invite_code_used: user.app_metadata?.provider === 'google' ? 'GOOGLE_OAUTH' : 'EMAIL_VERIFIED',
   }, { onConflict: 'id' })
 
-  // Grant welcome credits (only if user has no balance yet)
-  let isNewUser = false
+  const isNewUser = true
+  let trialRequired = isIOSApp
   try {
-    const { data: existingBalance } = await admin
-      .from('credit_balances')
-      .select('balance')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!existingBalance) {
-      isNewUser = true
-      const { data: setting } = await admin
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'welcome_credits')
-        .single()
-      const welcomeCredits = parseInt(setting?.value || '500')
-
-      if (welcomeCredits > 0) {
-        const { addCredits } = await import('@/lib/billing/credits')
-        await addCredits(user.id, welcomeCredits)
-
-        await admin.from('credit_purchases').insert({
-          user_id: user.id,
-          stripe_session_id: `welcome_gift_${user.app_metadata?.provider || 'email'}`,
-          credits: welcomeCredits,
-          amount_usd: 0,
-          status: 'completed',
-          source: 'welcome',
-        })
-      }
-    }
+    const result = await initializeSignupCredits({ admin, userId: user.id, isIOSApp })
+    trialRequired = result.trialRequired
   } catch (e) {
     console.error('[auth/callback] Welcome credits failed (non-blocking):', e)
   }
 
-  const redirectUrl = isNewUser ? `${origin}/home?welcome=1` : `${origin}/projects`
+  const requestedDestination = requestedReturnPath
+    ? appendAuthReturnParam(requestedReturnPath, trialRequired ? 'trial' : 'welcome', '1')
+    : ''
+  const redirectUrl = requestedDestination
+    ? new URL(requestedDestination, origin).toString()
+    : `${origin}/home?${trialRequired ? 'trial' : 'welcome'}=1`
   if (isNewUser) {
     const attribution = readAttributionCookie(request.cookies.get('mkr_attribution')?.value)
     let eventSourceUrl = `${origin}/home`
@@ -153,6 +137,7 @@ function buildRedirectPage(
 ) {
   // The HTML page reads sessionStorage for returnUrl (saved by home page before login redirect)
   // and uses it if available, otherwise falls back to the server-determined redirectUrl.
+  const serializedRedirectUrl = JSON.stringify(redirectUrl)
   const response = new NextResponse(
     `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Redirecting...</title></head><body style="background:#000;display:flex;align-items:center;justify-content:center;height:100vh"><script>
 var r=sessionStorage.getItem('mkr_return_url')||localStorage.getItem('mkr_return_url');
@@ -168,9 +153,10 @@ if(skillMatch){
     r='/home?skill='+encodeURIComponent(skillMatch[1]);
   }
 }
-var welcome="${redirectUrl}".includes('welcome=1');
-if(r){var sep=r.includes('?')?'&':'?';window.location.href=r+(welcome?sep+'welcome=1':'');}
-else{window.location.href="${redirectUrl}";}
+var fallback=${serializedRedirectUrl};
+var onboarding=fallback.includes('trial=1')?'trial=1':fallback.includes('welcome=1')?'welcome=1':'';
+if(r){var sep=r.includes('?')?'&':'?';window.location.href=r+(onboarding?sep+onboarding:'');}
+else{window.location.href=fallback;}
 </script></body></html>`,
     { status: 200, headers: { 'Content-Type': 'text/html' } }
   )

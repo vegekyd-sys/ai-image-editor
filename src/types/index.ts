@@ -1,8 +1,13 @@
+export type EditableType = 'text' | 'image' | 'video';
+
 export interface EditableField {
   id: string;           // data-editable value, e.g. "title"
-  type: 'text';         // only text for now
+  type: EditableType;
   label: string;        // UI label, e.g. "标题"
   propKey: string;      // prop key for text content, e.g. "title"
+  source?: 'literal';   // compiler-promoted visible literal
+  trimBeforePropKey?: string; // video trim start, in frames
+  trimAfterPropKey?: string;  // video trim end, in frames
 }
 
 export interface DesignPayload {
@@ -12,6 +17,8 @@ export interface DesignPayload {
   props?: Record<string, unknown>;
   animation?: { fps: number; durationInSeconds: number; format?: string };
   editables?: EditableField[];
+  /** Explicit, persisted legacy font migrations. Never inferred at render time. */
+  fontSubstitutions?: Record<string, string>;
 }
 
 export interface WebSearchSource {
@@ -72,6 +79,12 @@ export interface PhotoMetadata {
     lng?: number;
     datetime?: string;
   };
+  /** Image transport metadata. Stored with the snapshot so alpha survives
+   * reloads and can inform Agent routing, previews, Canvas, and exports. */
+  imageMimeType?: string;
+  hasAlpha?: boolean;
+  transparentRatio?: number;
+  generationBackground?: 'auto' | 'opaque' | 'transparent';
 }
 
 // ── Annotation types ──
@@ -134,7 +147,7 @@ export interface DbMessage {
 }
 
 export type VideoModel = string
-export type VideoResolution = '480p' | '720p' | '1080p' | '4k' | 'auto'
+export type VideoResolution = '360p' | '480p' | '720p' | '768p' | '1080p' | '2k' | '4k' | 'auto'
 export type VideoAspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
 
 export interface TranscriptWord {
@@ -172,9 +185,19 @@ export interface ArtifactCompletionAction {
   policy?: 'confirm' | 'auto';
 }
 
+/**
+ * Internal non-destructive representation of a bounded interval in an
+ * externally hosted source video. Public inputs use source_url + start + end.
+ */
+export interface VideoSourceRange {
+  source_url: string;
+  start_sec: number;
+  end_sec: number;
+}
+
 export interface VideoMeta {
   /** Explicit provenance for source uploads vs agent/provider outputs. */
-  origin?: 'source-upload' | 'generated';
+  origin?: 'source-upload' | 'external-range' | 'generated';
   taskId: string | null;
   videoUrl: string | null;
   providerUrl?: string;
@@ -189,15 +212,28 @@ export interface VideoMeta {
   aspectRatio?: VideoAspectRatio;
   providerModel?: string;
   providerMode?: string;
+  /** Actual transport used when a product model can route through a subscription or API. */
+  provider?: string;
+  /** Provider operation used to create this snapshot. */
+  operation?: 'generate' | 'edit' | 'extend';
   providerCostUsd?: number;
+  pipelineStage?: string;
+  baseVideoUrl?: string;
+  enhancementStatus?: 'processing' | 'completed' | 'failed';
+  requestedResolution?: VideoResolution;
+  /** EvoLink output moderation. False is the explicit Seedance 2.5 Mature Mode retry. */
+  contentFilter?: boolean;
   createdAt?: string;
   error?: string;
   width?: number;
   height?: number;
   creditsCharged?: number;
+  billingQuote?: import('@/lib/billing/media-pricing').MediaQuote;
   refunded?: boolean;
   transcript?: VideoTranscript;
   completionActions?: ArtifactCompletionAction[];
+  /** Exact original-source interval represented by this Media List item. */
+  sourceRange?: VideoSourceRange;
 }
 
 

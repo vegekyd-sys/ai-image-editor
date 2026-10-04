@@ -1,0 +1,54 @@
+{
+  "checkedAt": "2026-09-03T12:50:00.825Z",
+  "endpoint": "https://www.makaron.app",
+  "video": "https://storage.googleapis.com/cloud-samples-data/generative-ai/video/pixel8.mp4",
+  "cases": [
+    {
+      "id": "editor-overview",
+      "question": "Describe the entire video chronologically for a creative editor. Cover subjects, setting, actions, scene changes, notable text, framing, mood, and the most useful moments. Be concise but specific."
+    },
+    {
+      "id": "visual-moment",
+      "question": "What is visibly shown around 00:46 to 00:48? Describe the camera composition and objects in this moment in at most three sentences. Do not infer from dialogue."
+    },
+    {
+      "id": "visible-text",
+      "question": "Read the person introduction labels visible near the beginning of this video, including the person name and pronouns if visible. Give only the visible labels, and say uncertain if you cannot read them."
+    },
+    {
+      "id": "makaron-intro",
+      "video": "/Users/tianyicai/ai-image-editor/makaron-intro/renders/makaron-intro_2026-05-07_02-05-55.mp4",
+      "question": "Describe the major sections of this short product video in chronological order, including the prominent text in each section and approximate transition times. Say whether any spoken dialogue or music is present. Be concise and do not invent text that is not legible."
+    }
+  ],
+  "runs": [
+    {
+      "id": "editor-overview",
+      "elapsedMs": 12762,
+      "ok": true,
+      "stdout": "Video analysis completed. (model: gemini-3.8-flash; processing: static; thinking: low)\n\n- **0:00–0:05**: Aerial nighttime establishing shot of a Tokyo train track beside quiet streets. Quick cut to photographer Saeka Shimada walking through a vibrant, neon-lit Tokyo street; lower-third introduces \"Saeka Shimada | She/Her | Photographer.\" Medium close-up shows her looking around with soft bokeh lights in the background. Tone is contemplative and urban.\n- **0:05–0:12**: Tracking shot following Saeka from behind as she walks through busy pedestrian nightlife, framed against blurred streetlights. Atmospheric, setting up the city’s dual personality between day and night.\n- **0:13–0:20**: Wide shot of Saeka entering a narrow alleyway lit by paper lanterns (yokocho). Text appears: \"The new Pixel has a feature called 'Video Boost.'\" Cut to a close-up over her shoulder holding a light-blue Pixel 8 Pro, previewing low-light video capture with vibrant street colors.\n- **0:21–0:28**: Sequence of Saeka exploring Sancha: standing outside small bars, framed by hanging lanterns, panning up to capture glowing storefronts and vintage signage on her phone. Mood is nostalgic and intimate.\n- **0:29–0:37**: Saeka crouches low over a puddle to capture reflections, smiling as she frames the shot. Medium close-up reveals her enthusiastic reaction as she reviews the vibrant footage on her phone screen.\n- **0:38–0:51**: Dynamic montage of captured phone footage displaying the Video Boost/Night Sight results: sharp alleyway perspectives, colorful printed charms blowing in the wind, atmospheric bar interiors through windows, inverted puddle reflections, neon signs, parked bicycles, and yellow lanterns. Edits are rapid and punchy.\n- **0:52–0:57**: Cinematic transition: tracking high-angle shot over Shibuya traffic lanes at night. Cuts through window louvers to Saeka arriving on a high pedestrian walkway, smiling and waving to greet a group of friends waiting against modern high-rises.\n",
+      "stderr": "📹 Using public video URL for analysis; provider limits apply.\n🔎 Analyzing video...\n"
+    },
+    {
+      "id": "visual-moment",
+      "elapsedMs": 4165,
+      "ok": true,
+      "stdout": "Video analysis completed. (model: gemini-3.8-flash; processing: static; thinking: low)\n\nBetween 00:46 and 00:48, the camera captures an upside-down reflection of a nighttime alley in a puddle on the ground, with water droplets visible on the surrounding asphalt surface. The reflection reveals glowing neon signs, lit lanterns, and the front entrance of a building. The shot focuses heavily on the textures of the water and droplets against the pavement while framing the illuminated street scene within the reflection.\n",
+      "stderr": "📹 Using public video URL for analysis; provider limits apply.\n🔎 Analyzing video...\n"
+    },
+    {
+      "id": "visible-text",
+      "elapsedMs": 4671,
+      "ok": true,
+      "stdout": "Video analysis completed. (model: gemini-3.8-flash; processing: static; thinking: low)\n\nThe person introduction labels shown near the beginning of the video are:\n\n* **Saeka Shimada** (She/Her)\n* **Photographer**\n",
+      "stderr": "📹 Using public video URL for analysis; provider limits apply.\n🔎 Analyzing video...\n"
+    },
+    {
+      "id": "makaron-intro",
+      "elapsedMs": 11408,
+      "ok": true,
+      "stdout": "Video analysis completed. (model: gemini-3.8-flash; processing: static; thinking: low)\n\nHere is a chronological overview of the video's main sections:\n\n1. **Title / Branding (0:00 – 0:04):** A spinning purple asterisk leads into the bold title **\"Makaron\"** with the tagline **\"one man creative studio\"** against a dark background.\n2. **Feature Highlights (0:05 – 0:10):** Four interactive badge buttons appear on the left side:\n   - **AI Photo Editing**\n   - **One-Click Video**\n   - **AI Soundtrack**\n   - **Creative Agent**\n3. **Closing Call to Action (0:10 – 0:15):** The screen transitions to the heading **\"Your Photos Deserve More,\"** followed by the URL **\"makaron.app\"** and the prompt **\"Try it free.\"**\n\n**Audio:** Upbeat, electronic background music plays throughout; there is no spoken dialogue.\n",
+      "stderr": "📹 Uploading makaron-intro_2026-05-07_02-05-55.mp4 (1.4MB)...\n📹 Uploaded: makaron-intro_2026-05-07_02-05-55.mp4\n🔎 Analyzing video...\n"
+    }
+  ]
+}

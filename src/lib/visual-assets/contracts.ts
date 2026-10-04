@@ -53,6 +53,7 @@ export const preparedVisualAssetSchema = z.object({
   status: z.enum(['processing', 'ready', 'failed']),
   sourceSnapshotId: z.string().min(1).optional(),
   hasAlpha: z.boolean().optional(),
+  alphaSource: z.enum(['native', 'chroma-key']).optional(),
   subjectBox: pixelRectSchema.optional(),
   safeArea: pixelRectSchema.optional(),
   edgePalette: z.array(z.string().regex(/^#[0-9a-f]{6}$/i)).optional(),

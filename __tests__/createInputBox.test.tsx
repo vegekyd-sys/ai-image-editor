@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { LocaleProvider } from '@/lib/i18n'
 import CreateInputBox from '@/components/CreateInputBox'
 import { useCreateInput } from '@/hooks/useCreateInput'
 
@@ -82,7 +83,7 @@ describe('CreateInputBox', () => {
   })
 
   it('keeps mobile multi-upload card swiping working without a parent swipeRef', async () => {
-    render(<CreateInputHarness />)
+    render(<CreateInputHarness />, { wrapper: LocaleProvider })
 
     const stack = await waitFor(() => {
       const el = screen.getByTestId('mobile-upload-swipe-stack')
@@ -107,7 +108,7 @@ describe('CreateInputBox', () => {
 
   it('can submit the primary action even when the input is empty', () => {
     const onSubmit = vi.fn()
-    render(<EmptyCreateInputHarness onSubmit={onSubmit} submitWhenEmpty />)
+    render(<EmptyCreateInputHarness onSubmit={onSubmit} submitWhenEmpty />, { wrapper: LocaleProvider })
 
     fireEvent.click(screen.getByTestId('create-project'))
 
@@ -116,7 +117,7 @@ describe('CreateInputBox', () => {
 
   it('keeps an empty guest CTA on native navigation without a hydrated touch/click interception', () => {
     const onSubmit = vi.fn()
-    render(<EmptyCreateInputHarness onSubmit={onSubmit} submitWhenEmpty fallbackHref="/login" />)
+    render(<EmptyCreateInputHarness onSubmit={onSubmit} submitWhenEmpty fallbackHref="/login" />, { wrapper: LocaleProvider })
 
     const cta = screen.getByRole('link')
     expect(cta.getAttribute('href')).toBe('/login')
@@ -135,7 +136,7 @@ describe('CreateInputBox', () => {
 
   it('submits action-mode primary CTA on the first touch without a duplicate click', () => {
     const onSubmit = vi.fn()
-    render(<EmptyCreateInputHarness onSubmit={onSubmit} submitWhenEmpty actionMode />)
+    render(<EmptyCreateInputHarness onSubmit={onSubmit} submitWhenEmpty actionMode />, { wrapper: LocaleProvider })
 
     const cta = screen.getByTestId('create-project')
     fireEvent.touchStart(cta, { touches: [{ clientX: 120, clientY: 40 }] })

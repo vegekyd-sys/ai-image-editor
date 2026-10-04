@@ -1,0 +1,171 @@
+{
+  "date": "2026-09-05",
+  "model": {
+    "id": "gpt-5.6-terra",
+    "provider": "azure-openai",
+    "providerModelId": "gpt-5.6-terra",
+    "billingModelId": "gpt-5.6-terra",
+    "cacheStrategy": "automatic",
+    "supportsImageInput": true,
+    "defaultReasoningEffort": "medium"
+  },
+  "method": "10 alternating pairs per scenario; local Mac, same provider. Includes cache writes and reads; not cache-controlled or browser-to-DOM. Some other QA and local build work overlapped.",
+  "rows": [
+    {
+      "case": "chat-greeting",
+      "variant": "baseline",
+      "n": 10,
+      "passed": 10,
+      "firstTextMs": {
+        "p50": 4079.5,
+        "p90": 4956
+      },
+      "firstActionMs": null,
+      "totalMs": {
+        "p50": 4597.5,
+        "p90": 5931
+      },
+      "cacheReadZero": 1,
+      "cacheReadPositive": 9,
+      "inputTokensP50": 20962.0
+    },
+    {
+      "case": "chat-greeting",
+      "variant": "candidate",
+      "n": 10,
+      "passed": 10,
+      "firstTextMs": {
+        "p50": 3310.0,
+        "p90": 3497
+      },
+      "firstActionMs": null,
+      "totalMs": {
+        "p50": 3966.0,
+        "p90": 4135
+      },
+      "cacheReadZero": 1,
+      "cacheReadPositive": 9,
+      "inputTokensP50": 15587.0
+    },
+    {
+      "case": "chat-rewrite",
+      "variant": "baseline",
+      "n": 10,
+      "passed": 10,
+      "firstTextMs": {
+        "p50": 2453.5,
+        "p90": 3309
+      },
+      "firstActionMs": null,
+      "totalMs": {
+        "p50": 2909.5,
+        "p90": 3740
+      },
+      "cacheReadZero": 0,
+      "cacheReadPositive": 10,
+      "inputTokensP50": 20978.0
+    },
+    {
+      "case": "chat-rewrite",
+      "variant": "candidate",
+      "n": 10,
+      "passed": 10,
+      "firstTextMs": {
+        "p50": 2648.5,
+        "p90": 3752
+      },
+      "firstActionMs": null,
+      "totalMs": {
+        "p50": 3171.0,
+        "p90": 4319
+      },
+      "cacheReadZero": 0,
+      "cacheReadPositive": 10,
+      "inputTokensP50": 15603.0
+    },
+    {
+      "case": "image-direct",
+      "variant": "baseline",
+      "n": 10,
+      "passed": 10,
+      "firstTextMs": {
+        "p50": 2933.5,
+        "p90": 3830
+      },
+      "firstActionMs": {
+        "p50": 4226.0,
+        "p90": 5173
+      },
+      "totalMs": {
+        "p50": 4226.0,
+        "p90": 5174
+      },
+      "cacheReadZero": 0,
+      "cacheReadPositive": 10,
+      "inputTokensP50": 20972.0
+    },
+    {
+      "case": "image-direct",
+      "variant": "candidate",
+      "n": 10,
+      "passed": 10,
+      "firstTextMs": {
+        "p50": 2966.5,
+        "p90": 3475
+      },
+      "firstActionMs": {
+        "p50": 4127.5,
+        "p90": 5052
+      },
+      "totalMs": {
+        "p50": 4127.5,
+        "p90": 5053
+      },
+      "cacheReadZero": 0,
+      "cacheReadPositive": 10,
+      "inputTokensP50": 15597.0
+    },
+    {
+      "case": "image-enhance",
+      "variant": "baseline",
+      "n": 10,
+      "passed": 10,
+      "firstTextMs": {
+        "p50": 4464.0,
+        "p90": 5797
+      },
+      "firstActionMs": {
+        "p50": 13188.5,
+        "p90": 16117
+      },
+      "totalMs": {
+        "p50": 13188.5,
+        "p90": 16117
+      },
+      "cacheReadZero": 0,
+      "cacheReadPositive": 10,
+      "inputTokensP50": 44237.5
+    },
+    {
+      "case": "image-enhance",
+      "variant": "candidate",
+      "n": 10,
+      "passed": 10,
+      "firstTextMs": {
+        "p50": 4411.0,
+        "p90": 8409
+      },
+      "firstActionMs": {
+        "p50": 11147.0,
+        "p90": 15472
+      },
+      "totalMs": {
+        "p50": 11147.0,
+        "p90": 15473
+      },
+      "cacheReadZero": 0,
+      "cacheReadPositive": 10,
+      "inputTokensP50": 33483.5
+    }
+  ]
+}

@@ -20,9 +20,13 @@ The Remotion composition layer implements that direction. It defines:
 - `function Composition(props)` and helper components
 - `width`, `height`, `fps`, and `animation.durationInSeconds`
 - `<Sequence>` timing, `<Video>` / `<OffthreadVideo>` / `<Img>` / `<Audio>` usage
-- editable `props`, `data-editable`, and `editables`
+- top-level user-facing props and natural helper parameters
 - frame-driven animation with `useCurrentFrame()`, `interpolate()`, `spring()`, and `Easing`
 - preview/publish behavior through `preview_frame` and `write_file`
+
+Editable ownership instrumentation is runtime-owned. The implementation contract
+lives in `prompts/remotion-composition.md`; new work must not invent editor ids
+or metadata arrays in the director layer.
 
 Do not let the implementation layer invent the creative structure by accident.
 Plan the video experience first, then write the composition.
@@ -57,8 +61,30 @@ Before writing or patching composition code, create a compact internal plan:
 - **Visual carrier**: for substantial scenes, use the `visualPlan` to record the
   dominant technical media path: native, plate, cutout, or edge-video. This is
   asset routing metadata, not a limit on supporting layers or visual invention.
-- **Audio/subtitle relation**: decide whether voice, music, captions, or original sound drives timing.
+- **Audio/subtitle relation**: when narration exists, the final generated audio
+  master containing the approved VO is the clock. Generate it after Script,
+  align it with
+  `transcribe_audio(expected_sections, fps)`, and lock the measured narration
+  cue sheet before Storyboard or Composition. Storyboard scenes, Remotion
+  Sequences, subtitles, visual emphasis, and music ducking must all derive from
+  that same seconds/frame timebase. Never replace measured cues with estimated
+  reading speed or equal scene lengths. When there is no narration, decide
+  whether music, captions, or original sound drives timing. For the TikTok
+  default route, that master is one mixed VO+BGM soundtrack and source clips are
+  explicitly muted.
 - **Verification plan**: choose stable hook, middle, and ending frames to preview before publishing.
+
+## Platform Guideline Gate
+
+When the destination platform is named, its interface zones are part of the
+composition contract rather than an optional styling suggestion. For TikTok,
+read `skills/tiktok-video/SKILL.md` and keep essential content out of its
+placement-specific exclusion zones. Do not collapse several UI zones into one
+small central rectangle: titles in the clear upper lane may be substantially
+wider than subtitles beside the lower-right interaction rail. Full-bleed
+footage may extend beneath UI; subtitles, titles, logos, prices, disclaimers,
+and CTA must pass exclusion-zone collision review. Preview the densest text
+frame and the closing frame at the final aspect ratio before publishing.
 
 If a requested edit is purely mechanical, such as "trim the first two seconds"
 or "put these two clips back to back", the plan may be one sentence. If the
@@ -90,7 +116,8 @@ When moving from direction to code:
 - The canvas aspect must come from the target platform or selected timeline
   media, not from a default template.
 - The returned `animation.durationInSeconds` must match the planned timeline.
-- User-facing text must live in `props` and editable fields.
+- User-facing text must live in top-level `props`; helper components receive it
+  through ordinary parameters.
 - Media URLs belong in `props` or code as real URLs; never leave `<<<media_N>>>`
   or `<<<audio_N>>>` markers inside composition code.
 - For video sources, use `<Video>` or `<OffthreadVideo>`, not image handling.
@@ -103,4 +130,4 @@ A composition is ready only when it works as both:
 
 - a directed video: hook, pacing, hierarchy, rhythm, and ending are intentional
 - a Remotion composition: correct runtime shape, aspect, duration, props,
-  media references, editables, and verification path
+  media references, prop ownership, and verification path

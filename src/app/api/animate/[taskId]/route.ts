@@ -6,7 +6,7 @@ import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo } from '@/lib/supabase/storage'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 export async function GET(
   req: NextRequest,
@@ -17,31 +17,54 @@ export async function GET(
 
     // Allow anonymous access for public projects; require auth otherwise
     const authResult = await authenticateRequest(req)
+    let publicOwnerUserId: string | undefined
     if ('error' in authResult) {
       const adminCheck = getSupabaseAdmin()
       const { data: animCheck } = await adminCheck
         .from('project_animations')
-        .select('project_id, projects(is_public)')
+        .select('project_id, projects(is_public, user_id)')
         .eq('piapi_task_id', taskId)
         .single()
 
       const proj = animCheck?.projects as any
       const isPublic = Array.isArray(proj) ? proj[0]?.is_public : proj?.is_public
       if (!isPublic) return authResult.error
+      publicOwnerUserId = Array.isArray(proj) ? proj[0]?.user_id : proj?.user_id
     }
 
     // Poll task — route by taskId prefix or env var
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, else = Kling
+    // task-unified-* = Evolink SeeDance, mr-wan30-* = MuleRouter Wan, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
     const isEvolink = taskId.startsWith('task-unified-')
+    const isMuleRouter = taskId.startsWith('mr-wan30-')
     const isSeedance = taskId.startsWith('cgt-')
     const isMotionControl = taskId.startsWith('mc-')
     const isXai = taskId.startsWith('xai-')
     const isGoogleOmni = taskId.startsWith('google-omni-')
+    const isMinimax = taskId.startsWith('minimax-h3-')
+    const isFalH3Max = taskId.startsWith('fal-h3max-')
+    const isSyncLipsync = taskId.startsWith('sync3-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? taskId.slice(3) : taskId
+    let grokOwnerUserId: string | undefined
+    if (taskId.startsWith('xai-sub-')) {
+      const admin = getSupabaseAdmin()
+      const { data: ownerRow } = await admin
+        .from('project_animations')
+        .select('projects(user_id)')
+        .eq('piapi_task_id', taskId)
+        .maybeSingle()
+      const projects = ownerRow?.projects as any
+      grokOwnerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id
+    }
 
-    if (isEvolink) {
+    if (taskId.startsWith('video-pipeline-')) {
+      const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline')
+      result = { taskId, ...await advanceVideoPipeline(taskId, 'auth' in authResult ? authResult.auth.userId : publicOwnerUserId) }
+    } else if (isMuleRouter) {
+      const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
+      result = await getMuleRouterVideoTask(taskId)
+    } else if (isEvolink) {
       const { getEvolinkTask } = await import('@/lib/evolink')
       result = await getEvolinkTask(taskId)
     } else if (isSeedance) {
@@ -53,7 +76,7 @@ export async function GET(
       result.taskId = taskId // preserve mc- prefix for frontend
     } else if (isXai) {
       const { getXaiVideoTask } = await import('@/lib/xai-video')
-      result = await getXaiVideoTask(taskId)
+      result = await getXaiVideoTask(taskId, grokOwnerUserId)
     } else if (isGoogleOmni) {
       const admin = getSupabaseAdmin()
       const { data: anim } = await admin
@@ -63,6 +86,15 @@ export async function GET(
         .maybeSingle()
       const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
       result = await getGoogleOmniVideoTask(taskId, anim?.video_url || undefined)
+    } else if (isMinimax) {
+      const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
+      result = await getMinimaxVideoTask(taskId)
+    } else if (isFalH3Max) {
+      const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+      result = await getFalH3MaxVideoTask(taskId)
+    } else if (isSyncLipsync) {
+      const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
+      result = await getSyncLipsyncTask(taskId)
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(taskId)
     } else {

@@ -1,0 +1,10 @@
+Video DNA Replica
+Use <<<video_1>>> only as a directing and editing-grammar reference. Generate a new 15-second vertical motion-graphics film; do not reuse or reproduce its Makaron name, logo, wording, URL, or exact icons. Preserve the three-act timing, framing, reveal rhythm, fades through black, and locked-camera language.
+
+Shot 1 (0.0-5.0s): Near-black vertical canvas with a restrained violet glow below the focal area. A new small magenta film-frame sparkle blooms at top center. Reveal a large bold title "VIDEO DNA" centered in the upper-middle, then a small descriptor "shot grammar, rebuilt" below. Hold, then fade the whole stack through black around 4.2-5.8s. Locked camera; only controlled scale and opacity motion.
+
+Shot 2 (5.0-10.5s): From black, reveal a left-aligned four-row capability stack in the upper-middle. Rows appear top to bottom with compact abstract icons and subtle purple plates: "Shot Analysis", "Video Blueprint", "Motion Mapping", "Automatic QA". Preserve the staggered cadence and generous lower negative space. Hold the complete stack, then fade through black around 10.1-10.9s. Locked camera.
+
+Shot 3 (10.5-15.0s): From black, resolve a centered two-line headline "YOUR VIDEO / HAS A GRAMMAR" in bold white. Add a smaller magenta line "extract. map. rebuild." and a muted line "replicate the structure" below. Keep the black-and-violet atmosphere, high contrast, and final 0.8-second hold. Locked camera.
+
+No people, no live action, no camera movement, no new brand logo, no copied Makaron text. Silent output; no music, speech, or sound effects. Clean geometric sans typography, 9:16, high legibility, minimal premium motion design.

@@ -1,26 +1,47 @@
+import { canRunAgentExecution, normalizeAgentExecutionOrigin } from './agent-execution-origin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runMakaronAgent, type AgentStreamEvent } from './agent';
 import { AgentDualWriter } from './agentDualWriter';
+import { AgentPerf } from './agent-perf';
 import { buildPromptContext } from './agent-context';
 import { getSupabaseAdmin } from './supabase/service';
-import { deductByTokens, deductWebSearchCalls } from './billing/credits';
-import { resolveAgentModelSpec, type AgentModelPreference } from './agent-models';
+import { recordAgentTokenUsage, deductWebSearchCalls } from './billing/credits';
+import { billingAttributionFromRunMetadata, enterBillingAttribution } from './billing/attribution';
+import {
+  resolveAgentModelSpec,
+  resolveAgentModelSpecForUser,
+  resolveCodexSubscriptionFallbackProvider,
+  type AgentModelPreference,
+} from './agent-models';
 import {
   AgentExecutionStore,
+  buildRecoverablePreflightInstruction,
+  countConsecutiveRetryableProviderFailures,
   DEFAULT_ATTEMPT_BUDGET_MS,
   DEFAULT_ATTEMPT_LEASE_SECONDS,
   DEFAULT_ATTEMPT_MAX_STEPS,
   DEFAULT_MAX_ATTEMPTS,
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
-  isRetryableProviderOutage,
+  isSafeToEnterSubscriptionApiFallback,
+  MAX_SAME_PROVIDER_ATTEMPTS,
+  shouldFailoverCodexSubscriptionToApi,
+  shouldFailoverGrokSubscriptionToApi,
+  shouldFailoverAzureGPT56ToOpenRouter,
   normalizeExecutionSnapshot,
-  resolveExecutionHandoffWorkUnit,
   shouldScheduleNextAttempt,
   type DurableExecutionSnapshot,
   type ExecutionLeaseState,
 } from './agent-execution';
 import { dispatchAgentExecutionAttempt } from './agent-execution-dispatch';
+import type { SkillLaunchContext } from './skill-launch-context';
+import { normalizeLocale, translate } from './locales';
+import {
+  formatPendingAgentInputs,
+  loadPendingAgentInputs,
+  markAgentRunInputsApplied,
+} from './agent-run-admission';
+import { isDynamicCodexSubscriptionUserAllowed } from './codex-subscription-allowlist';
 
 interface ExecutionRequest {
   locale?: string;
@@ -29,15 +50,22 @@ interface ExecutionRequest {
   videoModel?: string;
   videoResolution?: import('@/types').VideoResolution;
   videoAuto?: boolean;
+  skillLaunchContext?: SkillLaunchContext;
   currentSnapshotIndex?: number;
   hasAnnotation?: boolean;
   isDraft?: boolean;
   referenceImageCount?: number;
   uploadedVideoCount?: number;
   turnMediaCount?: number;
+  turnMediaSnapshotIds?: string[];
   isNsfw?: boolean;
   audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
+  codexSubscriptionAllowed?: boolean;
   origin?: string;
+  image?: string;
+  snapshotImages?: string[];
+  currentDesign?: Record<string, unknown>;
+  currentDesignPath?: string;
 }
 
 interface ExecutionPolicy {
@@ -58,10 +86,10 @@ interface AgentRunRecord {
   prompt?: string | null;
   acceptance_criteria?: unknown;
   execution_policy?: unknown;
-  current_work_unit?: string | null;
   attempt_count?: number;
   total_input_tokens?: number;
   total_output_tokens?: number;
+  input_version?: number;
   metadata?: Record<string, unknown> | null;
 }
 
@@ -166,22 +194,27 @@ export function normalizeExecutionPolicy(value: unknown): ExecutionPolicy {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   return {
     durable: true,
-    attemptBudgetMs: numberInRange(record.attemptBudgetMs, DEFAULT_ATTEMPT_BUDGET_MS, 60_000, 600_000),
+    attemptBudgetMs: numberInRange(record.attemptBudgetMs, DEFAULT_ATTEMPT_BUDGET_MS, 60_000, 1_500_000),
     attemptMaxSteps: numberInRange(record.attemptMaxSteps, DEFAULT_ATTEMPT_MAX_STEPS, 1, 60),
-    leaseSeconds: numberInRange(record.leaseSeconds, DEFAULT_ATTEMPT_LEASE_SECONDS, 60, 900),
+    leaseSeconds: numberInRange(record.leaseSeconds, DEFAULT_ATTEMPT_LEASE_SECONDS, 60, 1_800),
     maxAttempts: numberInRange(record.maxAttempts, DEFAULT_MAX_ATTEMPTS, 1, 100),
     maxTotalInputTokens: numberInRange(record.maxTotalInputTokens, 12_000_000, 100_000, 50_000_000),
   };
 }
 
-async function resolveWorkUnit(admin: SupabaseClient, run: AgentRunRecord): Promise<string> {
+async function resolveActiveStudioWorkflowStage(
+  admin: SupabaseClient,
+  run: AgentRunRecord,
+): Promise<string | undefined> {
   try {
     const { WorkspaceStudioRunStore } = await import('./studio-run');
     const store = new WorkspaceStudioRunStore(admin, run.user_id);
-    const studioRun = (await store.listRuns(run.project_id)).find(item => item.status === 'running');
-    if (studioRun?.currentStage) return `studio:${studioRun.currentStage}`;
+    const studioRun = (await store.listRuns(run.project_id)).find(item => (
+      item.agentRunId === run.id && item.status === 'running'
+    ));
+    return studioRun?.currentStage || undefined;
   } catch { /* generic executions do not need Studio state */ }
-  return run.current_work_unit || 'agent';
+  return undefined;
 }
 
 function artifactPointers(checkpoint: Record<string, unknown> | undefined) {
@@ -208,19 +241,19 @@ async function buildHandoffSnapshot(input: {
   store: AgentExecutionStore;
   run: AgentRunRecord;
   claim: ClaimedExecution;
-  workUnit: string;
   terminal?: Extract<AgentStreamEvent, { type: 'error' }> | null;
   attemptText: string;
   providerCompaction?: DurableExecutionSnapshot['providerCompaction'];
 }): Promise<DurableExecutionSnapshot> {
   const previous = await input.store.latestSnapshot(input.run.id);
   const checkpoint = input.terminal?.checkpoint as Record<string, unknown> | undefined;
-  const handoffWorkUnit = resolveExecutionHandoffWorkUnit(input.workUnit, checkpoint);
   const acceptanceCriteria = Array.isArray(input.run.acceptance_criteria)
     ? input.run.acceptance_criteria.filter((item): item is string => typeof item === 'string')
     : previous?.acceptanceCriteria ?? [];
-  const nextAction = checkpoint?.studioRunStage
-    ? `Resume Studio Run at ${checkpoint.studioRunStage}; load its persisted stage artifacts and complete that stage.`
+  const nextAction = checkpoint?.studioRunStage === 'composition' && checkpoint?.draftPath
+    ? `Resume Studio Run at composition from ${checkpoint.draftPath}. Inspect the persisted draft before deciding the next action. If it carries __makaronScaffold: true or the numbered composition workspace is not ready, continue the existing parts until write_file reports compositionWorkspace.status="ready"; use its designPath directly and never submit the structural scaffold. If it is a complete non-scaffold draft with persisted Draft Gate evidence, reuse that exact evidence and call studio_run put_artifact without repeating valid generation, preview, or publish work.`
+    : checkpoint?.studioRunStage
+      ? `Resume Studio Run at ${checkpoint.studioRunStage}; load its persisted stage artifacts and complete that stage.`
     : checkpoint?.draftPath
       ? `Resume from ${checkpoint.draftPath} and complete the pending modification.`
       : previous?.nextAction || 'Continue the unfinished objective from durable artifacts and avoid repeated side effects.';
@@ -235,14 +268,14 @@ async function buildHandoffSnapshot(input: {
       ...artifactPointers(checkpoint),
     ],
     openQuestions: previous?.openQuestions,
-    currentWorkUnit: handoffWorkUnit,
+    currentWorkUnit: 'agent',
     nextAction,
     attemptSummary: attemptSummary || previous?.attemptSummary,
     checkpoint,
     providerCompaction: input.providerCompaction || previous?.providerCompaction,
   }, {
     objective: input.run.objective || input.claim.objective || input.run.prompt || 'Complete the requested Agent task.',
-    currentWorkUnit: handoffWorkUnit,
+    currentWorkUnit: 'agent',
     nextAction,
   });
 }
@@ -272,12 +305,46 @@ async function finishAttempt(
 
 export async function runAgentExecutionAttempt(
   runId: string,
-  options: { admin?: SupabaseClient; workerId?: string } = {},
+  options: {
+    admin?: SupabaseClient;
+    workerId?: string;
+    origin?: string;
+    controller?: ReadableStreamDefaultController;
+    encoder?: TextEncoder;
+    requestOverrides?: Partial<ExecutionRequest>;
+    preloadedRun?: AgentRunRecord;
+    timelineVersion?: number;
+    initialClaim?: {
+      attemptId: string;
+      leaseToken: string;
+      workerId: string;
+    };
+  } = {},
 ): Promise<AgentAttemptResult> {
+  const perf = new AgentPerf('agent-execution-attempt', { runId });
   const admin = options.admin ?? getSupabaseAdmin();
-  const { data: runData } = await admin.from('agent_runs').select('*').eq('id', runId).maybeSingle();
+  const endRunLoad = perf.span('load_run');
+  const { data: runData } = options.preloadedRun?.id === runId
+    ? { data: options.preloadedRun }
+    : await admin.from('agent_runs').select('*').eq('id', runId).maybeSingle();
+  endRunLoad({ found: !!runData });
   const run = runData as AgentRunRecord | null;
   if (!run || run.status !== 'running') return { claimed: false, runId };
+  // Every credit debit/refund performed by this attempt (Agent tokens, tools,
+  // video reservations) is attributed to the run for per-run usage reporting.
+  enterBillingAttribution(billingAttributionFromRunMetadata(
+    run.metadata as Record<string, unknown> | null,
+    { runId, projectId: run.project_id },
+  ));
+  const workerOrigin = normalizeAgentExecutionOrigin(options.origin);
+  const taskOrigin = typeof run.metadata?.executionOwnerOrigin === 'string'
+    ? run.metadata.executionOwnerOrigin
+    : (run.metadata?.executionRequest as ExecutionRequest | undefined)?.origin;
+  if (!canRunAgentExecution(taskOrigin, workerOrigin)) {
+    perf.mark('execution_origin_mismatch', { taskOrigin: taskOrigin || null, workerOrigin });
+    return { claimed: false, runId };
+  }
+  const inputVersionAtAttemptStart = run.input_version || 0;
 
   const policy = normalizeExecutionPolicy(run.execution_policy);
   if ((run.total_input_tokens || 0) >= policy.maxTotalInputTokens) {
@@ -295,53 +362,137 @@ export async function runAgentExecutionAttempt(
   }
 
   const workerId = options.workerId || `worker-${crypto.randomUUID()}`;
-  const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution', {
-    p_run_id: runId,
-    p_worker_id: workerId,
-    p_lease_seconds: policy.leaseSeconds,
-  });
-  if (claimError) throw new Error(`Failed to claim Agent execution: ${claimError.message}`);
-  const claim = (Array.isArray(claimData) ? claimData[0] : claimData) as ClaimedExecution | undefined;
+  let claim: ClaimedExecution | undefined;
+  if (options.initialClaim && options.preloadedRun?.id === runId) {
+    claim = {
+      run_id: runId,
+      lease_token: options.initialClaim.leaseToken,
+      attempt_no: 1,
+      user_id: run.user_id,
+      project_id: run.project_id,
+      objective: run.objective || run.prompt || '',
+      acceptance_criteria: run.acceptance_criteria,
+      execution_policy: run.execution_policy,
+      metadata: run.metadata || null,
+    };
+    perf.mark('claim_execution_preclaimed', { workerId: options.initialClaim.workerId });
+  } else {
+    const endClaim = perf.span('claim_execution');
+    const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution_for_origin', {
+      p_origin: workerOrigin,
+      p_run_id: runId,
+      p_worker_id: workerId,
+      p_lease_seconds: policy.leaseSeconds,
+    });
+    endClaim({ ok: !claimError });
+    if (claimError) throw new Error(`Failed to claim Agent execution: ${claimError.message}`);
+    claim = (Array.isArray(claimData) ? claimData[0] : claimData) as ClaimedExecution | undefined;
+  }
   if (!claim) return { claimed: false, runId };
 
   // A platform kill cannot close its attempt row. Once this worker owns the
   // execution lease, all older running attempts are definitively superseded.
   // finishAttempt only updates running rows, so a late old worker cannot
   // overwrite this terminal state.
-  await admin.from('agent_attempts').update({
-    status: 'interrupted',
-    ended_at: new Date().toISOString(),
-    terminal_code: 'lease_expired',
-  }).eq('run_id', runId).eq('status', 'running');
+  if (claim.attempt_no > 1) {
+    const endInterruptPrior = perf.span('interrupt_prior_attempts');
+    await admin.from('agent_attempts').update({
+      status: 'interrupted',
+      ended_at: new Date().toISOString(),
+      terminal_code: 'lease_expired',
+    }).eq('run_id', runId).eq('status', 'running');
+    endInterruptPrior();
+  } else {
+    perf.mark('interrupt_prior_attempts_skipped', { reason: 'first_attempt' });
+  }
 
-  const workUnit = await resolveWorkUnit(admin, run);
-  await admin.from('agent_runs').update({ current_work_unit: workUnit }).eq('id', runId).eq('lease_token', claim.lease_token);
-  const { data: attempt, error: attemptError } = await admin.from('agent_attempts').insert({
-    run_id: runId,
-    user_id: run.user_id,
-    attempt_no: claim.attempt_no,
-    work_unit_key: workUnit,
-    status: 'running',
-    lease_token: claim.lease_token,
-  }).select('id').single();
-  if (attemptError || !attempt?.id) throw new Error(`Failed to create Agent attempt: ${attemptError?.message || 'missing id'}`);
-  const attemptId = attempt.id as string;
+  const workUnit = 'agent';
+  const endAttemptSetup = perf.span('attempt_setup', { attemptNo: claim.attempt_no });
+  let activeStudioWorkflowStage: string | undefined;
+  let pendingInputs: Awaited<ReturnType<typeof loadPendingAgentInputs>> = [];
+  let attemptId: string;
+  let attemptReady: Promise<void>;
+  if (options.initialClaim && claim.attempt_no === 1) {
+    attemptId = options.initialClaim.attemptId;
+    // Reserve the ID up front so model/context preparation can proceed while
+    // the ledger insert crosses the network. Tool calls happen much later and
+    // still require this row before any durable mutation is allowed.
+    attemptReady = Promise.resolve(admin.from('agent_attempts').insert({
+      id: attemptId,
+      run_id: runId,
+      user_id: run.user_id,
+      attempt_no: claim.attempt_no,
+      work_unit_key: workUnit,
+      status: 'running',
+      lease_token: claim.lease_token,
+    })).then(({ error }) => {
+      if (error) throw new Error(`Failed to create inline Agent attempt: ${error.message}`);
+    });
+    endAttemptSetup({ activeStudioWorkflowStage: null, parallel: true });
+  } else {
+    const [, , attemptResult, loadedPendingInputs] = await Promise.all([
+      claim.attempt_no > 1
+        ? resolveActiveStudioWorkflowStage(admin, run).then(value => { activeStudioWorkflowStage = value; })
+        : Promise.resolve(),
+      claim.attempt_no > 1
+        ? admin.from('agent_runs').update({ current_work_unit: workUnit }).eq('id', runId).eq('lease_token', claim.lease_token)
+        : Promise.resolve({ error: null }),
+      admin.from('agent_attempts').insert({
+        run_id: runId,
+        user_id: run.user_id,
+        attempt_no: claim.attempt_no,
+        work_unit_key: workUnit,
+        status: 'running',
+        lease_token: claim.lease_token,
+      }).select('id').single(),
+      loadPendingAgentInputs(admin, runId),
+    ]);
+    pendingInputs = loadedPendingInputs;
+    endAttemptSetup({ activeStudioWorkflowStage: activeStudioWorkflowStage || null });
+    const { data: attempt, error: attemptError } = attemptResult;
+    if (attemptError || !attempt?.id) throw new Error(`Failed to create Agent attempt: ${attemptError?.message || 'missing id'}`);
+    attemptId = attempt.id as string;
+    attemptReady = Promise.resolve();
+  }
 
   let scaffoldResult: Awaited<ReturnType<typeof import('./studio-composition-scaffold')['ensureStudioCompositionScaffold']>> | undefined;
-  if (workUnit === 'studio:composition') {
-    const { ensureStudioCompositionScaffold } = await import('./studio-composition-scaffold');
-    scaffoldResult = await ensureStudioCompositionScaffold({
-      projectId: run.project_id,
-      userId: run.user_id,
-      supabase: admin,
-    });
-    if (scaffoldResult.created && scaffoldResult.elapsedMs > 90_000) {
-      throw new Error(`Composition scaffold exceeded the 90s durable-output SLA (${scaffoldResult.elapsedMs}ms)`);
+  let scaffoldWarning: string | undefined;
+  if (activeStudioWorkflowStage === 'composition') {
+    try {
+      const { ensureStudioCompositionScaffold } = await import('./studio-composition-scaffold');
+      scaffoldResult = await ensureStudioCompositionScaffold({
+        projectId: run.project_id,
+        userId: run.user_id,
+        supabase: admin,
+        agentRunId: run.id,
+      });
+      if (scaffoldResult.created && scaffoldResult.elapsedMs > 90_000) {
+        scaffoldWarning = `Composition scaffold exceeded the 90s durable-output SLA (${scaffoldResult.elapsedMs}ms)`;
+      }
+    } catch (error) {
+      scaffoldWarning = error instanceof Error ? error.message : String(error);
+      console.error('[agent-execution] composition scaffold unavailable; continuing without it:', error);
     }
   }
 
-  const request = ((run.metadata || {}).executionRequest || {}) as ExecutionRequest;
-  const requestedModel = resolveAgentModelSpec(request.requestedAgentModel, process.env.AGENT_MODEL);
+  const request = {
+    ...(((run.metadata || {}).executionRequest || {}) as ExecutionRequest),
+    ...(options.requestOverrides || {}),
+  } satisfies ExecutionRequest;
+  // The start route resolved this authorization immediately before creating
+  // the trusted run. Reuse it within the same run instead of repeating the
+  // allowlist DB read milliseconds later; older/recovered rows still fail
+  // closed through the live lookup.
+  const codexSubscriptionAllowed = typeof request.codexSubscriptionAllowed === 'boolean'
+    ? request.codexSubscriptionAllowed
+    : await isDynamicCodexSubscriptionUserAllowed(run.user_id, admin);
+  const requestedModel = resolveAgentModelSpecForUser(
+    request.requestedAgentModel,
+    process.env.AGENT_MODEL,
+    run.user_id,
+    undefined,
+    codexSubscriptionAllowed,
+  );
   const { data: previousAttempts } = claim.attempt_no > 1
     ? await admin
         .from('agent_attempts')
@@ -349,33 +500,129 @@ export async function runAgentExecutionAttempt(
         .eq('run_id', runId)
         .lt('attempt_no', claim.attempt_no)
         .order('attempt_no', { ascending: false })
-        .limit(6)
+        .limit(policy.maxAttempts)
     : { data: [] };
-  const latestRequestedProviderAttempt = ((previousAttempts || []) as Array<{
+  const typedPreviousAttempts = (previousAttempts || []) as Array<{
     attempt_no: number;
     terminal_code?: string | null;
     metadata?: Record<string, unknown> | null;
-  }>).find(item => item.metadata?.model === requestedModel.id);
-  const failoverAgentModel: AgentModelPreference | undefined = process.env.DEEPSEEK_API_KEY?.trim()
-    ? 'deepseek-v4-pro'
-    : process.env.OPENROUTER_API_KEY?.trim()
-      ? 'grok-4.5'
+  }>;
+  const latestRequestedProviderAttempt = typedPreviousAttempts
+    .find(item => item.metadata?.model === requestedModel.id);
+  const requestedProviderFailureCount = countConsecutiveRetryableProviderFailures(
+    typedPreviousAttempts,
+    requestedModel.id,
+  );
+  const previousProviderFailover = typedPreviousAttempts.some(item => {
+    const failover = item.metadata?.providerFailover;
+    const fromProvider = failover && typeof failover === 'object' && 'fromProvider' in failover
+      ? failover.fromProvider
       : undefined;
-  const providerFailover = requestedModel.provider === 'azure-openai'
-    && Boolean(failoverAgentModel)
-    && latestRequestedProviderAttempt?.terminal_code === 'stream_error'
-    && isRetryableProviderOutage(latestRequestedProviderAttempt.metadata?.terminalDetail);
-  const effectiveAgentModel: AgentModelPreference | undefined = providerFailover
-    ? failoverAgentModel || request.requestedAgentModel
+    return Boolean(
+      failover
+      && typeof failover === 'object'
+      && 'from' in failover
+      && failover.from === requestedModel.id
+      && (
+        !['codex-subscription', 'grok-subscription'].includes(requestedModel.provider)
+        || fromProvider === requestedModel.provider
+      ),
+    );
+  });
+  const failoverProvider = requestedModel.provider === 'codex-subscription'
+    ? resolveCodexSubscriptionFallbackProvider()
+    : 'openrouter';
+  const hasFailoverCredential = failoverProvider === 'azure-openai'
+    ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
+    : Boolean(process.env.OPENROUTER_API_KEY?.trim());
+  const latestFailureDetail = latestRequestedProviderAttempt?.metadata?.terminalDetail;
+  const subscriptionFallbackSafe = requestedModel.provider === 'codex-subscription'
+    || requestedModel.provider === 'grok-subscription'
+    ? isSafeToEnterSubscriptionApiFallback(
+        typedPreviousAttempts,
+        inputVersionAtAttemptStart,
+        requestedModel.provider,
+      )
+    : false;
+  const providerFailover = requestedModel.provider === 'codex-subscription'
+    ? shouldFailoverCodexSubscriptionToApi({
+        requestedProvider: requestedModel.provider,
+        hasApiFallback: hasFailoverCredential && subscriptionFallbackSafe,
+        previousProviderFailover,
+        retryableFailureCount: requestedProviderFailureCount,
+        latestFailureDetail,
+      })
+    : requestedModel.provider === 'grok-subscription'
+    ? shouldFailoverGrokSubscriptionToApi({
+        requestedProvider: requestedModel.provider,
+        hasApiFallback: hasFailoverCredential && subscriptionFallbackSafe,
+        previousProviderFailover,
+        retryableFailureCount: requestedProviderFailureCount,
+        latestFailureDetail,
+      })
+    : shouldFailoverAzureGPT56ToOpenRouter({
+        requestedProvider: requestedModel.provider,
+        hasOpenRouterKey: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
+        previousProviderFailover,
+        retryableFailureCount: requestedProviderFailureCount,
+      });
+  const providerRetry = (requestedModel.provider === 'azure-openai'
+    || requestedModel.provider === 'codex-subscription'
+    || requestedModel.provider === 'grok-subscription')
+    && !providerFailover
+    && requestedProviderFailureCount > 0;
+  const sameProviderAttempt = Math.min(
+    MAX_SAME_PROVIDER_ATTEMPTS,
+    requestedProviderFailureCount + 1,
+  );
+  const effectiveAgentModel = providerFailover
+    ? requestedModel.id
     : request.requestedAgentModel;
-  const resolvedModel = resolveAgentModelSpec(effectiveAgentModel, process.env.AGENT_MODEL);
+  const resolvedModel = providerFailover
+    ? resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)
+    : requestedModel;
   const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
-  const previousSnapshot = await executionStore.latestSnapshot(runId);
   const continuation = claim.attempt_no > 1;
-  const attemptPrompt = continuation
+  const previousSnapshot = continuation ? await executionStore.latestSnapshot(runId) : undefined;
+  const baseAttemptPrompt = continuation
     ? `[System durable continuation] Resume execution ${runId}, attempt ${claim.attempt_no}. ${previousSnapshot?.nextAction || 'Continue the unfinished objective from durable artifacts.'}`
     : (run.objective || claim.objective || run.prompt || 'Continue the requested task.');
+  const preflightInstruction = buildRecoverablePreflightInstruction(scaffoldWarning);
+  const pendingInputInstruction = formatPendingAgentInputs(pendingInputs);
+  const attemptPrompt = [baseAttemptPrompt, preflightInstruction, pendingInputInstruction]
+    .filter(Boolean)
+    .join('\n\n');
 
+  const firstMessageId = typeof run.metadata?.firstMessageId === 'string' ? run.metadata.firstMessageId : undefined;
+  const writer = new AgentDualWriter(
+    runId,
+    admin,
+    run.user_id,
+    run.project_id,
+    options.controller,
+    options.encoder,
+    continuation ? undefined : firstMessageId,
+  );
+  const writerReady = (async () => {
+    const endWriterReady = perf.span('writer_ready');
+    if (continuation) {
+      await writer.initializeSequence();
+      await writer.beginContinuationTurn();
+      await writer.persistHeartbeat();
+    } else {
+      // A new run has no persisted events, so seq=0 is already known. Reserve
+      // the heartbeat sequence synchronously, but keep its DB round-trip out
+      // of the first model request's critical path.
+      void writer.persistHeartbeat().catch(error => {
+        console.warn('[agent-execution] initial inline heartbeat failed', error);
+      });
+    }
+    endWriterReady();
+  })();
+  const projectPromise = options.timelineVersion !== undefined
+    ? Promise.resolve({ data: { timeline_version: options.timelineVersion }, error: null })
+    : Promise.resolve(admin.from('projects').select('timeline_version').eq('id', run.project_id).single());
+  const endContext = perf.span('build_prompt_context');
   const ctx = await buildPromptContext(run.project_id, admin, run.user_id, {
     userMessage: attemptPrompt,
     currentSnapshotIndex: request.currentSnapshotIndex,
@@ -384,42 +631,72 @@ export async function runAgentExecutionAttempt(
     referenceImageCount: request.referenceImageCount,
     uploadedVideoCount: request.uploadedVideoCount,
     turnMediaCount: request.turnMediaCount,
+    turnMediaSnapshotIds: request.turnMediaSnapshotIds,
     audioAttachments: request.audioAttachments,
     currentRunId: runId,
-    executionRunId: runId,
+    // Attempt 1 already has the original objective in userMessage. Keep the
+    // verbose durable snapshot out of that model request; recovered attempts
+    // receive the full typed continuation context.
+    executionRunId: continuation ? runId : undefined,
     contextPolicy: getAgentContextPolicy(resolvedModel.id),
+    agentModelId: resolvedModel.id,
+    agentModelProvider: resolvedModel.provider,
+    supportsImageInput: resolvedModel.supportsImageInput,
     durableContinuation: continuation,
+    executionObjective: run.objective || claim.objective || run.prompt || undefined,
+    executionAcceptanceCriteria: run.acceptance_criteria,
   });
-  await admin.from('agent_attempts').update({
+  endContext({
+    promptChars: ctx.fullPrompt.length,
+    historyTurns: ctx.history.length,
+    mediaCount: ctx.snapshotImages.length,
+  });
+  const attemptMetadataPromise = attemptReady.then(() => admin.from('agent_attempts').update({
     input_token_estimate: ctx.contextStats.estimatedTokens,
     metadata: {
       context: ctx.contextStats,
+      executionOrigin: workerOrigin,
+      workerId,
+      deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
       model: resolvedModel.id,
+      provider: resolvedModel.provider,
       requestedModel: requestedModel.id,
+      inputEpoch: inputVersionAtAttemptStart,
+      fallbackSafety: 'pending',
+      ...(providerRetry ? {
+        providerRetry: {
+          model: requestedModel.id,
+          attempt: sameProviderAttempt,
+          maxAttempts: MAX_SAME_PROVIDER_ATTEMPTS,
+          reason: String(latestRequestedProviderAttempt?.metadata?.terminalDetail || 'provider unavailable'),
+        },
+      } : {}),
       ...(providerFailover ? {
         providerFailover: {
           from: requestedModel.id,
           to: resolvedModel.id,
+          fromProvider: requestedModel.provider,
+          toProvider: resolvedModel.provider,
           reason: String(latestRequestedProviderAttempt?.metadata?.terminalDetail || 'provider unavailable'),
         },
       } : {}),
       ...(scaffoldResult ? { compositionScaffold: scaffoldResult } : {}),
+      ...(scaffoldWarning ? { compositionScaffoldWarning: scaffoldWarning } : {}),
     },
-  }).eq('id', attemptId);
+  }).eq('id', attemptId));
+  const [, projectResult, , attemptMetadataResult] = await Promise.all([
+    writerReady,
+    projectPromise,
+    attemptReady,
+    attemptMetadataPromise,
+  ]);
+  const { error: attemptMetadataError } = attemptMetadataResult;
+  if (attemptMetadataError) {
+    throw new Error(
+      `Failed to persist Agent attempt provider safety boundary: ${attemptMetadataError.message}`,
+    );
+  }
 
-  const firstMessageId = typeof run.metadata?.firstMessageId === 'string' ? run.metadata.firstMessageId : undefined;
-  const writer = new AgentDualWriter(
-    runId,
-    admin,
-    run.user_id,
-    run.project_id,
-    undefined,
-    undefined,
-    continuation ? undefined : firstMessageId,
-  );
-  await writer.initializeSequence();
-  if (continuation) await writer.beginContinuationTurn();
-  await writer.persistHeartbeat();
   if (scaffoldResult?.created) {
     await writer.processAndEnqueue({
       type: 'status',
@@ -428,20 +705,52 @@ export async function runAgentExecutionAttempt(
         : `Composition 结构骨架已在 ${scaffoldResult.elapsedMs}ms 内保存，正在按原始 Director 指导完成画面...`,
     });
   }
+  if (scaffoldWarning) {
+    await writer.processAndEnqueue({
+      type: 'status',
+      text: request.locale === 'en'
+        ? `Composition preflight found a recoverable issue and passed it to the Agent: ${scaffoldWarning.slice(0, 500)}`
+        : `Composition 预检发现可修复问题，已交给 Agent 继续处理：${scaffoldWarning.slice(0, 500)}`,
+    });
+  }
+  if (providerRetry) {
+    await writer.processAndEnqueue({
+      type: 'status',
+      text: request.locale === 'en'
+        ? `The requested model connection was interrupted; retrying ${requestedModel.id} (${sameProviderAttempt}/${MAX_SAME_PROVIDER_ATTEMPTS}) before provider failover...`
+        : `原模型连接中断，正在继续尝试 ${requestedModel.id}（第 ${sameProviderAttempt}/${MAX_SAME_PROVIDER_ATTEMPTS} 次），达到上限后才切换备用模型...`,
+    });
+  }
   if (providerFailover) {
     await writer.processAndEnqueue({
       type: 'status',
       text: request.locale === 'en'
-        ? `The requested model provider is unavailable; continuing this durable run with ${resolvedModel.id}...`
-        : `原模型服务暂不可用，当前 durable run 已切换到 ${resolvedModel.id} 继续...`,
+        ? `${requestedModel.provider} is unavailable; continuing this durable run with the same ${resolvedModel.id} model through the ${resolvedModel.provider} API backup...`
+        : `${requestedModel.provider} 暂不可用，当前 durable run 已通过 ${resolvedModel.provider} API 备用线路继续使用同一 ${resolvedModel.id} 模型...`,
     });
   }
 
-  const { getAllSkills } = await import('./workspace');
-  const allSkills = await getAllSkills(admin, run.user_id);
-  const userSkills = allSkills.filter(skill => !skill.makaron?.builtIn);
-  const { data: project } = await admin.from('projects').select('timeline_version').eq('id', run.project_id).single();
+  const { data: project } = projectResult;
   const timelineVersion = Number(project?.timeline_version ?? 1);
+  perf.mark('model_start', { model: resolvedModel.id, provider: resolvedModel.provider });
+
+  // The inline first attempt can use in-memory media/design that has not
+  // reached Storage yet. A recovered attempt deliberately falls back to the
+  // persisted project context, which is normally available by lease expiry.
+  const attemptSnapshotImages = request.snapshotImages?.length
+    ? request.snapshotImages
+    : ctx.snapshotImages;
+  const attemptCurrentSnapshotIndex = Math.max(
+    0,
+    Math.min(
+      request.currentSnapshotIndex ?? ctx.currentSnapshotIndex,
+      Math.max(attemptSnapshotImages.length - 1, 0),
+    ),
+  );
+  const attemptImage = request.image
+    || attemptSnapshotImages[attemptCurrentSnapshotIndex]
+    || ctx.snapshotImages[ctx.currentSnapshotIndex]
+    || '';
 
   const modelAbortController = new AbortController();
   let leaseHeartbeatInFlight: Promise<void> | null = null;
@@ -479,42 +788,115 @@ export async function runAgentExecutionAttempt(
   let providerCostUsd: number | undefined;
   let webSearchCalls = 0;
   let billingModel = resolvedModel.billingModelId;
+  let billingProvider = resolvedModel.provider;
+  let attemptHadVisibleOutput = false;
+  let attemptDeliveredArtifact = false;
+  const attemptCommittedTools = new Set<string>();
+  const attemptSafetyMetadata = () => ({
+    model: resolvedModel.id,
+    provider: resolvedModel.provider,
+    requestedModel: requestedModel.id,
+    inputEpoch: inputVersionAtAttemptStart,
+    fallbackSafety: !attemptHadVisibleOutput
+      && !attemptDeliveredArtifact
+      && attemptCommittedTools.size === 0
+      ? 'safe'
+      : 'blocked',
+    hadVisibleOutput: attemptHadVisibleOutput,
+    deliveredArtifact: attemptDeliveredArtifact,
+    committedTools: [...attemptCommittedTools].sort(),
+  });
 
   try {
     for await (const event of runMakaronAgent(
       ctx.fullPrompt,
-      ctx.snapshotImages[ctx.currentSnapshotIndex] || '',
+      attemptImage,
       run.project_id,
       {
         locale: request.locale,
         preferredModel: request.preferredModel as any,
         agentModel: effectiveAgentModel,
+        agentProvider: resolvedModel.provider === 'deepseek' ? undefined : resolvedModel.provider,
         videoModel: request.videoModel,
         videoResolution: request.videoResolution,
         videoAuto: request.videoAuto,
+        skillLaunchContext: request.skillLaunchContext,
         audioAttachments: ctx.audioAttachments,
-        snapshotImages: ctx.snapshotImages,
-        currentSnapshotIndex: ctx.currentSnapshotIndex,
+        snapshotImages: attemptSnapshotImages,
+        explicitMediaIndices: ctx.explicitMediaIndices,
+        nativeVisionImages: request.image && resolvedModel.supportsImageInput
+          ? [{
+              source: request.image,
+              ...(!request.hasAnnotation && !request.isDraft
+                ? { mediaIndex: attemptCurrentSnapshotIndex + 1 }
+                : {}),
+            }]
+          : ctx.nativeVisionImages,
+        currentSnapshotIndex: attemptCurrentSnapshotIndex,
         isNsfw: request.isNsfw,
-        userSkills: userSkills.length ? userSkills : undefined,
         supabase: admin,
         userId: run.user_id,
-        currentDesign: ctx.currentDesign,
-        currentDesignPath: ctx.currentDesignPath,
+        codexSubscriptionAllowed,
+        currentDesign: request.currentDesign as typeof ctx.currentDesign || ctx.currentDesign,
+        currentDesignPath: request.currentDesignPath || ctx.currentDesignPath,
         history: ctx.history,
         timelineVersion,
         abortSignal: modelAbortController.signal,
         attemptBudgetMs: policy.attemptBudgetMs,
         maxSteps: policy.attemptMaxSteps,
+        contextCompactAtTokens: ctx.contextStats.compactionRequired
+          ? getAgentContextPolicy(resolvedModel.id).providerCompactAtTokens
+          : undefined,
+        historyBoundary: ctx.historyBoundary,
         execution: {
           runId,
           attemptId,
           attemptNo: claim.attempt_no,
-          workUnitKey: workUnit,
+          inputEpoch: inputVersionAtAttemptStart,
         },
+        studioWorkflowStage: activeStudioWorkflowStage,
+        agentRunId: runId,
+        perf,
       },
     )) {
-      if (event.type === 'content') attemptText += event.text;
+      if (event.type === 'content') {
+        attemptText += event.text;
+        if (event.text.trim()) attemptHadVisibleOutput = true;
+      }
+      if (
+        event.type === 'reasoning_start'
+        || (event.type === 'reasoning' && Boolean(event.text.trim()))
+        || event.type === 'new_turn'
+        || event.type === 'tool_call'
+        || event.type === 'coding'
+        || (event.type === 'code_stream' && Boolean(event.text))
+        || event.type === 'image_analyzed'
+        || event.type === 'capture_frame'
+        || event.type === 'preview_frame_captured'
+      ) {
+        attemptHadVisibleOutput = true;
+      }
+      if (
+        event.type === 'image'
+        || event.type === 'animation_task'
+        || event.type === 'video_snapshot'
+        || event.type === 'render'
+        || event.type === 'composition'
+        || event.type === 'design'
+        || event.type === 'music_task'
+      ) {
+        attemptHadVisibleOutput = true;
+        attemptDeliveredArtifact = true;
+      }
+      if (event.type === 'tool_result') {
+        const output = event.output && typeof event.output === 'object'
+          ? event.output as Record<string, unknown>
+          : undefined;
+        const succeeded = output?.success !== false
+          && output?.status !== 'failed'
+          && !(output?.error && output?.success !== true);
+        if (succeeded) attemptCommittedTools.add(event.tool);
+      }
       if (event.type === 'done') sawDone = true;
       if (event.type === 'error') {
         terminal = event;
@@ -522,8 +904,12 @@ export async function runAgentExecutionAttempt(
       }
       if (event.type === 'context_compaction') {
         providerCompaction = {
+          provider: event.provider,
+          modelId: event.modelId,
+          compactedThrough: event.compactedThrough,
           summary: event.summary,
           appliedEdits: event.appliedEdits,
+          item: event.item,
           inputTokens: event.inputTokens,
         };
       }
@@ -535,16 +921,21 @@ export async function runAgentExecutionAttempt(
         providerCostUsd = event.providerCostUsd;
         webSearchCalls += event.webSearchCalls ?? 0;
         billingModel = event.model || billingModel;
+        billingProvider = event.provider as typeof billingProvider;
         continue;
       }
       await writer.processAndEnqueue(event);
     }
   } catch (error) {
+    console.error('[agent-execution] attempt runtime error:', error);
+    const locale = normalizeLocale(request.locale, 'en');
     terminal = {
       type: 'error',
       code: 'attempt_runtime_error',
       recoverable: true,
-      message: error instanceof Error ? error.message : String(error),
+      message: locale === 'zh'
+        ? (error instanceof Error ? error.message : String(error))
+        : translate(locale, 'agent.error.connectionEnded'),
     };
   } finally {
     clearInterval(leaseHeartbeat);
@@ -554,20 +945,19 @@ export async function runAgentExecutionAttempt(
   }
 
   if (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens) {
-    void deductByTokens(
-      run.user_id,
-      'agent',
-      billingModel,
+    await recordAgentTokenUsage({
+      userId: run.user_id,
+      provider: billingProvider,
+      modelId: billingModel,
       inputTokens,
       outputTokens,
-      undefined,
-      undefined,
-      { cacheRead: cacheReadTokens, cacheWrite: cacheWriteTokens },
+      cacheReadTokens,
+      cacheWriteTokens,
       providerCostUsd,
-    ).catch(error => console.error('[agent-execution] billing failed:', error));
+    }).catch(error => console.error('[agent-execution] usage logging failed:', error));
   }
   if (webSearchCalls > 0) {
-    void deductWebSearchCalls(run.user_id, webSearchCalls, billingModel)
+    await deductWebSearchCalls(run.user_id, webSearchCalls, billingModel)
       .catch(error => console.error('[agent-execution] web search billing failed:', error));
   }
   await admin.from('agent_runs').update({
@@ -583,7 +973,11 @@ export async function runAgentExecutionAttempt(
     expectedLeaseToken: claim.lease_token,
   });
   if (confirmedOwnershipLoss) {
-    await finishAttempt(admin, attemptId, 'aborted', { input_tokens: inputTokens, output_tokens: outputTokens });
+    await finishAttempt(admin, attemptId, 'aborted', {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      metadata: attemptSafetyMetadata(),
+    });
     return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'aborted' };
   }
   if (!currentLease.state) {
@@ -591,6 +985,12 @@ export async function runAgentExecutionAttempt(
   }
 
   if (sawDone && !terminal) {
+    await markAgentRunInputsApplied({
+      supabase: admin,
+      runId,
+      inputIds: pendingInputs.map(input => input.id),
+      attemptId,
+    });
     const previous = await executionStore.latestSnapshot(runId);
     const completedSnapshot = normalizeExecutionSnapshot({
       objective: run.objective || claim.objective || run.prompt || previous?.objective,
@@ -616,8 +1016,7 @@ export async function runAgentExecutionAttempt(
       snapshot: completedSnapshot,
       providerCompaction: providerCompaction as Record<string, unknown> | undefined,
     });
-    await finishAttempt(admin, attemptId, 'completed', { input_tokens: inputTokens, output_tokens: outputTokens });
-    await admin.from('agent_runs').update({
+    const { data: completedRun, error: completionError } = await admin.from('agent_runs').update({
       status: 'completed',
       current_work_unit: 'completed',
       ended_at: new Date().toISOString(),
@@ -625,8 +1024,30 @@ export async function runAgentExecutionAttempt(
       lease_owner: null,
       lease_expires_at: null,
       next_attempt_at: null,
-    }).eq('id', runId).eq('status', 'running').eq('lease_token', claim.lease_token);
-    return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'completed' };
+    })
+      .eq('id', runId)
+      .eq('status', 'running')
+      .eq('lease_token', claim.lease_token)
+      .eq('input_version', inputVersionAtAttemptStart)
+      .select('id')
+      .maybeSingle();
+    if (completionError) throw new Error(`Failed to finalize Agent execution: ${completionError.message}`);
+    if (completedRun) {
+      await finishAttempt(admin, attemptId, 'completed', {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        metadata: attemptSafetyMetadata(),
+      });
+      return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'completed' };
+    }
+
+    terminal = {
+      type: 'error',
+      code: 'agent_input_received',
+      recoverable: true,
+      message: 'A new instruction arrived during this Agent Run and will be handled by the next attempt.',
+    };
+    sawDone = false;
   }
 
   const canContinue = shouldScheduleNextAttempt({
@@ -640,7 +1061,6 @@ export async function runAgentExecutionAttempt(
       store: executionStore,
       run,
       claim,
-      workUnit,
       terminal,
       attemptText,
       providerCompaction,
@@ -664,12 +1084,15 @@ export async function runAgentExecutionAttempt(
       input_tokens: inputTokens,
       output_tokens: outputTokens,
       terminal_code: terminal?.code || 'missing_terminal_event',
-      ...(terminal?.checkpoint?.errorDetail
-        ? { metadata: { terminalDetail: terminal.checkpoint.errorDetail } }
-        : {}),
+      metadata: {
+        ...attemptSafetyMetadata(),
+        ...(terminal?.checkpoint?.errorDetail
+          ? { terminalDetail: terminal.checkpoint.errorDetail }
+          : {}),
+      },
     });
     await admin.from('agent_runs').update({
-      current_work_unit: snapshot.currentWorkUnit,
+      current_work_unit: 'agent',
       next_attempt_at: new Date().toISOString(),
       lease_token: null,
       lease_owner: null,
@@ -684,7 +1107,7 @@ export async function runAgentExecutionAttempt(
         },
       },
     }).eq('id', runId).eq('status', 'running').eq('lease_token', claim.lease_token);
-    void dispatchAgentExecutionAttempt(runId, request.origin);
+    void dispatchAgentExecutionAttempt(runId, workerOrigin!);
     return {
       claimed: true,
       runId,
@@ -701,6 +1124,7 @@ export async function runAgentExecutionAttempt(
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     terminal_code: terminal?.code || 'attempt_incomplete',
+    metadata: attemptSafetyMetadata(),
   });
   await admin.from('agent_runs').update({
     status: 'failed',

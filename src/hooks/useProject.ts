@@ -4,13 +4,16 @@ import { useRef, useCallback } from 'react'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { uploadImage } from '@/lib/supabase/storage'
-import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
-import { resolveVideoUrlsInCode } from '@/lib/video-url-resolver'
 import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { groupWebSearchSourcesByMessage } from '@/lib/web-citations'
+import { createPersistedEditableDesign } from '@/lib/editor/editable-persistence'
+import { cacheProjectData, getCachedProjectData } from '@/lib/imageCache'
 
 interface LoadedProject {
+  ownerId: string | null
+  isPublic: boolean
+  musicRows: Array<{ suno_task_id: string; track_index: number; audio_url: string | null; duration: number | null; title: string | null; tags: string | null; status: string }>
   snapshots: Snapshot[]
   messages: Message[]
   title: string
@@ -33,10 +36,10 @@ export function useProject(projectId: string, userId: string) {
 
   // --- Load ---
 
-  const loadProject = useCallback(async (): Promise<LoadedProject> => {
+  const loadProject = useCallback(async (onDesignsLoaded?: (snapshots: Snapshot[], messages: Message[]) => void): Promise<LoadedProject> => {
     const supabase = getSupabase()
 
-    const [snapshotsRes, messagesRes, projectRes, agentMediaEventsRes] = await Promise.all([
+    const [snapshotsRes, messagesRes, projectRes, agentMediaEventsRes, musicRes] = await Promise.all([
       supabase
         .from('snapshots')
         .select('*')
@@ -49,16 +52,25 @@ export function useProject(projectId: string, userId: string) {
         .order('created_at', { ascending: true }),
       supabase
         .from('projects')
-        .select('title, timeline_version, user_id')
+        .select('title, timeline_version, user_id, is_public')
         .eq('id', projectId)
-        .single(),
+        .maybeSingle(),
       supabase
         .from('agent_events')
         .select('type, data, created_at')
         .eq('project_id', projectId)
         .in('type', ['preview_frame_captured', 'source'])
         .order('created_at', { ascending: true }),
+      supabase
+        .from('project_music')
+        .select('suno_task_id, track_index, audio_url, duration, title, tags, status')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: true }),
     ])
+
+    if (projectRes.error) throw projectRes.error
+    if (snapshotsRes.error) throw snapshotsRes.error
+    if (messagesRes.error) throw messagesRes.error
 
     const timelineVersion: number = (projectRes.data as Record<string, unknown>)?.timeline_version as number ?? 1
 
@@ -117,10 +129,10 @@ export function useProject(projectId: string, userId: string) {
       }
     })
 
-    // Load persisted designs from workspace (async, non-blocking)
-    // Derive userId from first snapshot's image_url if userId param is empty (race condition on page load)
+    // Publish posters and history first; persisted compositions hydrate independently.
+    // Public viewers must read the owner workspace, never their own workspace.
     const projectOwnerId = (projectRes.data as Record<string, unknown>)?.user_id as string | undefined
-    const resolvedUserId = userId || projectOwnerId || (() => {
+    const resolvedUserId = projectOwnerId || (() => {
       // Extract userId (UUID) from any snapshot's image_url — skip non-user paths like /images/skills/
       const uuidRe = /\/images\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\//
       for (const s of dbSnapshots) {
@@ -130,7 +142,7 @@ export function useProject(projectId: string, userId: string) {
       }
       return ''
     })()
-    await Promise.all(snapshots.map(async (snap) => {
+    const designsReady = Promise.all(snapshots.map(async (snap) => {
       const dp = snap.designPath
       if (!dp || !resolvedUserId) return
       try {
@@ -140,10 +152,7 @@ export function useProject(projectId: string, userId: string) {
         if (urlData?.publicUrl) {
           // Cache-bust: design JSON is updated in-place via upsert, CDN caches stale version
           const bustUrl = `${urlData.publicUrl}?t=${Date.now()}`
-          const res = await Promise.race([
-            fetch(bustUrl),
-            new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
-          ])
+          const res = await fetch(bustUrl, { signal: AbortSignal.timeout(5000) })
           if (res.ok) {
             design = await res.json()
           }
@@ -151,6 +160,7 @@ export function useProject(projectId: string, userId: string) {
         if (!design) {
           const fallbackRes = await fetch(
             `/api/workspace/read?projectId=${encodeURIComponent(projectId)}&path=${encodeURIComponent(dp)}`,
+            { signal: AbortSignal.timeout(5000) },
           )
           if (fallbackRes.ok) {
             const payload = await fallbackRes.json()
@@ -159,14 +169,25 @@ export function useProject(projectId: string, userId: string) {
             }
           }
         }
-        if (design) snap.design = design as Snapshot['design']
+        if (design) {
+          // Lazy import keeps the AST compiler out of the initial editor
+          // bundle. Existing compositions upgrade in memory when opened.
+          const { normalizeLoadedDesignManifest } = await import(
+            '@/lib/editor/loaded-design-manifest'
+          )
+          snap.design = await normalizeLoadedDesignManifest(design)
+        }
       } catch (e) {
         console.warn('Failed to load design from workspace:', dp, e)
       }
     }))
 
     // Background: resolve expired audio/video URLs in design code (non-blocking, re-save for next load)
-    Promise.resolve().then(async () => {
+    void designsReady.then(async () => {
+      if (!userId || userId !== projectOwnerId || !snapshots.some(s => s.design?.code)) return
+      const [{ resolveAudioUrlsInCode }, { resolveVideoUrlsInCode }] = await Promise.all([
+        import('@/lib/audio-url-resolver'), import('@/lib/video-url-resolver'),
+      ])
       for (const snap of snapshots) {
         if (!snap.design?.code) continue
         try {
@@ -186,9 +207,9 @@ export function useProject(projectId: string, userId: string) {
           console.warn('[url-resolve] failed for snapshot:', snap.id, e)
         }
       }
-    })
+    }).catch(e => console.warn('[url-resolve] failed:', e))
 
-    const messages: Message[] = dbMessages.map((m) => {
+    const buildMessages = (): Message[] => dbMessages.map((m) => {
       // Restore inline image + design: find the snapshot linked to this message
       // Try by messageId first, then by has_image flag matching any snapshot with this message_id
       const linkedSnapshot = m.has_image
@@ -208,13 +229,37 @@ export function useProject(projectId: string, userId: string) {
       }
     })
 
+    const messages = buildMessages()
+    if (snapshots.some(s => s.designPath)) {
+      void designsReady.then(() => {
+        const hydrated = snapshots.map(s => ({ ...s }))
+        const messages = buildMessages()
+        if (userId === projectOwnerId) cacheProjectData(projectId, hydrated, messages, projectRes.data?.title ?? 'Untitled')
+        onDesignsLoaded?.(hydrated, messages)
+      })
+    }
+
     const animations: ProjectAnimation[] = (animationRes.data ?? []).map((row: Record<string, unknown>) => {
       const taskId = (row.piapi_task_id as string) ?? null;
-      const videoModel = taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
-        ? 'seedance'
-        : taskId?.startsWith('xai-')
-          ? 'grok'
-          : 'kling';
+      const videoModel = taskId?.startsWith('mr-wan30-prime-pro-') || taskId?.startsWith('mr-wan30-prime-')
+        ? 'wan-3.0-prime'
+        : taskId?.startsWith('mr-wan30-pro-') || taskId?.startsWith('mr-wan30-')
+          ? 'wan-3.0'
+          : taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
+            ? 'seedance'
+            : taskId?.startsWith('xai-')
+              ? 'grok'
+              : taskId?.startsWith('google-omni-')
+                ? 'google-omni'
+                : taskId?.startsWith('minimax-h3-')
+                  ? 'minimax-h3'
+                  : taskId?.startsWith('fal-h3max-reference-')
+                    ? 'fal-h3-max'
+                    : taskId?.startsWith('fal-h3max-')
+                    ? 'minimax-h3-max'
+                    : taskId?.startsWith('sync3-')
+                      ? 'sync-lipsync-v3'
+                      : 'kling';
       return {
         id: row.id as string,
         projectId,
@@ -228,8 +273,8 @@ export function useProject(projectId: string, userId: string) {
       };
     })
 
-    return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
-  }, [projectId])
+    return { ownerId: projectOwnerId ?? null, isPublic: projectRes.data?.is_public === true, musicRows: musicRes.data ?? [], snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
+  }, [projectId, userId])
 
   // --- Write ---
 
@@ -270,14 +315,7 @@ export function useProject(projectId: string, userId: string) {
         let designPath: string | null = null
         if (snapshot.design?.code) {
           designPath = `code/${snapshot.id}.json`
-          const designJson = JSON.stringify({
-            code: snapshot.design.code,
-            width: snapshot.design.width,
-            height: snapshot.design.height,
-            animation: snapshot.design.animation,
-            props: snapshot.design.props,
-            ...(snapshot.design.editables?.length ? { editables: snapshot.design.editables } : {}),
-          })
+          const designJson = JSON.stringify(createPersistedEditableDesign(snapshot.design))
           const bucket = supabase.storage.from('images')
           const storagePath = `${userId}/workspace/${designPath}`
           await bucket.upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
@@ -316,28 +354,40 @@ export function useProject(projectId: string, userId: string) {
     })
   }, [projectId, userId])
 
-  // Re-upload design JSON when props change (e.g. GUI text editing)
-  const saveDesignProps = useCallback((snapshotId: string, design: import('@/types').DesignPayload) => {
-    Promise.resolve().then(async () => {
-      try {
-        const supabase = getSupabase()
-        const designPath = `code/${snapshotId}.json`
-        const designJson = JSON.stringify({
-          code: design.code,
-          width: design.width,
-          height: design.height,
-          animation: design.animation,
-          props: design.props,
-          ...(design.editables?.length ? { editables: design.editables } : {}),
-        })
-        const bucket = supabase.storage.from('images')
-        const storagePath = `${userId}/workspace/${designPath}`
-        await bucket.upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
-      } catch (err) {
-        console.warn('saveDesignProps error:', err)
-      }
-    })
-  }, [userId])
+  const saveDesignProps = useCallback(async (
+    snapshotId: string,
+    design: import('@/types').DesignPayload,
+    options: { propsOnly?: boolean; revision?: number } = {},
+  ) => {
+    const response = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/snapshots/${encodeURIComponent(snapshotId)}/design`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        keepalive: options.propsOnly === true,
+        body: JSON.stringify(options.propsOnly
+          ? { props: design.props || {}, revision: options.revision }
+          : { design: createPersistedEditableDesign(design) }),
+      },
+    )
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { error?: string }
+      throw new Error(payload.error || `Composition save failed (${response.status})`)
+    }
+
+    const cached = await getCachedProjectData(projectId)
+    if (cached) {
+      cacheProjectData(
+        projectId,
+        cached.snapshots.map((snapshot: Snapshot) => (
+          snapshot.id === snapshotId ? { ...snapshot, design } : snapshot
+        )),
+        cached.messages,
+        cached.title,
+      )
+    }
+  }, [projectId])
 
   const saveMessage = useCallback((message: Message) => {
     Promise.resolve().then(async () => {

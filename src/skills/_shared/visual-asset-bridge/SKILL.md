@@ -27,12 +27,13 @@ new Agent attempt, call `prepare_visual_asset` with `mode` and `asset_id` but no
 media source before generating anything again. A cache hit returns the prepared
 asset and QA sheet without repeating generation or keying.
 
-For `cutout`, provide `key_color` only when auto-detection would be ambiguous.
-The tool removes only key-colored regions connected to the image border, so an
-isolated green detail inside a subject is preserved. It also despills edge
-color, crops the prepared PNG to a small transparent safety margin around the
-subject while preserving the original source, computes the resulting subject
-box and safe area, and renders a five-background QA sheet.
+For `cutout`, prefer a source already generated or edited with native alpha.
+The bridge detects real transparency, preserves the provider-authored matte and
+edge colors without re-keying, crops to a transparent safety margin, computes
+the subject box/safe area, and renders the same five-background QA sheet.
+Provide `key_color` only for the fallback chroma path when auto-detection would
+be ambiguous. Chroma preparation removes border-connected key regions and
+despills edges; an isolated same-color detail inside the subject is preserved.
 
 For `edge-video`, provide the intended `target_background`. Generate the clip
 with low-detail, low-motion edges in that color family and keep the subject away

@@ -34,8 +34,10 @@ describe('LocaleProvider', () => {
       </LocaleProvider>,
     );
 
-    await waitFor(() => expect(screen.getByTestId('locale-probe').textContent).toBe('ja:ログイン'));
-    expect(document.documentElement.lang).toBe('ja-JP');
+    await waitFor(() => {
+      expect(screen.getByTestId('locale-probe').textContent).toBe('ja:ログイン');
+      expect(document.documentElement.lang).toBe('ja-JP');
+    });
     fireEvent.click(screen.getByRole('button', { name: '言語を選択' }));
     expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual([
       '简体中文',

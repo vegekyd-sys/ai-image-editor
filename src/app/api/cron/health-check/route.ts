@@ -11,19 +11,9 @@ interface CheckResult {
   error?: string;
 }
 
-async function checkService(name: string, url: string, timeoutMs = 5000): Promise<CheckResult> {
-  const t0 = Date.now();
-  try {
-    const res = await Promise.race([
-      fetch(url),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
-    ]);
-    const latencyMs = Date.now() - t0;
-    if (!res.ok) return { name, url, healthy: false, latencyMs, error: `HTTP ${res.status}` };
-    return { name, url, healthy: true, latencyMs };
-  } catch (e) {
-    return { name, url, healthy: false, latencyMs: Date.now() - t0, error: e instanceof Error ? e.message : String(e) };
-  }
+function checkProviderKey(name: string, envVar: 'MULEROUTER_API_KEY' | 'FAL_KEY'): CheckResult {
+  const healthy = Boolean(process.env[envVar]?.trim());
+  return { name, url: `config:${envVar}`, healthy, latencyMs: 0, error: healthy ? undefined : `${envVar} not set` };
 }
 
 export async function GET(req: Request) {
@@ -33,19 +23,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const checks: Promise<CheckResult>[] = [];
-
-  if (process.env.COMFYUI_QWEN_URL) {
-    checks.push(checkService('comfyui_qwen', `${process.env.COMFYUI_QWEN_URL}/system_stats`));
-  }
-  if (process.env.COMFYUI_PONY_URL) {
-    checks.push(checkService('comfyui_pony', `${process.env.COMFYUI_PONY_URL}/system_stats`));
-  }
-  if (process.env.COMFYUI_WAI_URL) {
-    checks.push(checkService('comfyui_wai', `${process.env.COMFYUI_WAI_URL}/system_stats`));
-  }
-
-  const results = await Promise.all(checks);
+  // Configuration only; real paid output is checked in release acceptance.
+  // Do not keep polling the retired Vast host after the production cutover.
+  const results = [
+    checkProviderKey('mulerouter_image_key', 'MULEROUTER_API_KEY'),
+    checkProviderKey('fal_rotation_key', 'FAL_KEY'),
+  ];
   const unhealthy = results.filter(r => !r.healthy);
 
   if (unhealthy.length > 0) {

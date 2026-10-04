@@ -29,6 +29,7 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 | `model` | string | | 指定生图模型：`gemini`（默认）/ `qwen` / `pony` / `wai` / `openai`，见下方说明 |
 | `referenceImages` | string[] | | 参考图数组（最多 3 张）；需要按原图修复时，把原图放这里 |
 | `aspectRatio` | string | | 目标比例，如 `"4:5"` |
+| `background` | string | | `auto` / `opaque` / `transparent`；透明输出严格走 GPT Image 2，provider 未返回真实 PNG/WebP alpha 时失败，不降级为不透明图片 |
 
 **Skill 说明：**
 - `enhance` — 专业增强（电影感光影、色彩分级、景深）

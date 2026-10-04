@@ -1,16 +1,18 @@
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { describe, expect, it } from 'vitest'
 import { validateVideoScript } from '@/lib/video-harness'
+import { readAgentContractSource, readAgentAwareSource } from './helpers/agentRuntimeSource'
 
 const root = process.cwd()
-const read = (relativePath: string) => readFileSync(join(root, relativePath), 'utf8')
+const read = (relativePath: string) => readAgentContractSource(root, relativePath)
 
 describe('agent media scenario matrix', () => {
   const agent = read('src/lib/prompts/agent.md')
   const image = read('src/lib/prompts/image.md')
+  const cutout = read('src/lib/prompts/cutout.md')
   const generateImageTool = read('src/lib/prompts/generate_image_tool.md')
+  const stickerMaker = read('src/skills/sticker-maker/SKILL.md')
   const animate = read('src/lib/prompts/animate.md')
+  const audio = read('src/lib/prompts/audio.md')
   const coding = read('src/lib/prompts/agent-coding.md')
   const remotion = read('src/lib/prompts/remotion-composition.md')
   const remotionDirectorContract = read('src/skills/_shared/remotion-director-contract.md')
@@ -26,23 +28,27 @@ describe('agent media scenario matrix', () => {
   const compositionDuration = read('src/lib/composition-duration.ts')
   const animateRoute = read('src/app/api/animate/route.ts')
   const videoSnapshotRoute = read('src/app/api/video-snapshot/route.ts')
+  const createVideo = read('src/lib/skills/create-video.ts')
   const mcpServer = read('src/mcp/server.ts')
   const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
   it('keeps the core agent prompt as a lightweight router', () => {
-    expect(agent.length).toBeLessThan(10_000)
+    expect(readAgentAwareSource(root, 'src/lib/prompts/agent.md').length).toBeLessThan(7_500)
     expect(agent).toContain("read_file('prompts/image.md')")
     expect(agent).toContain("read_file('prompts/animate.md')")
     expect(agent).toContain('`skills/video-ffmpeg-lab/SKILL.md`')
     expect(agent).toContain('Default tool: `generate_image`')
     expect(agent).toContain('Default tool: `generate_animation`')
-    expect(agent).toContain('Default tool: `run_code` with `runtime: "node"`')
-    expect(agent).toContain('Default tool: `run_code` with `runtime: "composition"`')
+    expect(agent).toContain('Substantial scripts: `write_code_file` -> `run_code(code_path)`')
+    expect(agent).toContain('Substantial code uses `write_code_file` -> `run_code(code_path)`')
     expect(agent).toContain('transcript requests or speech-dependent edits')
     expect(agent).toContain('transcription only when exact timing matters')
     expect(agent).toContain('prompts/remotion-composition.md')
     expect(agent).toContain('skills/_shared/remotion-director-contract.md')
-    expect(agent).toContain('Use `generate_music` only when the user asks')
+    expect(agent).toContain("read_file('prompts/audio.md')")
+    expect(audio).toContain('2026-07-20')
+    expect(audio).toContain('20+ languages')
+    expect(audio).toContain('reference_voices')
     expect(agentTs).toContain('helper components must receive values through their own parameters')
   })
 
@@ -56,6 +62,8 @@ describe('agent media scenario matrix', () => {
     expect(remotionDirectorContract).toContain('Director Layer vs Composition Layer')
     expect(remotionDirectorContract).toContain('The director layer decides what the viewer experiences over time')
     expect(remotionDirectorContract).toContain('The Remotion composition layer implements that direction')
+    expect(remotionDirectorContract).toContain('Editable ownership instrumentation is runtime-owned')
+    expect(remotionDirectorContract).not.toContain('editable `props`, `data-editable`, and `editables`')
     expect(remotionDirectorContract).toContain('Do not let the implementation layer invent the creative structure by accident')
     expect(remotionDirectorContract).toContain('Do not default to hero sections, card grids')
     expect(remotionDirectorContract).toContain('The final plan must map cleanly to `<Sequence>` ranges')
@@ -73,8 +81,8 @@ describe('agent media scenario matrix', () => {
       "skill='creative'",
       "skill='wild'",
       "skill='captions'",
-      "model: 'qwen'",
-      "model: 'openai'",
+      "model: 'qwen-spicy'",
+      "model: 'gpt-image-2.5-flare'",
       'Context Mode',
       'Keep every person',
       'Do NOT add any text, watermarks, or borders',
@@ -92,7 +100,30 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain('media_index')
     expect(generateImageTool).toContain('reference_media_indices')
     expect(generateImageTool).toContain('`image_refs` is only for workspace asset provider URLs')
-    expect(generateImageTool).toContain("Context Mode for `model='openai'`")
+    expect(generateImageTool).toContain("Context Mode for `model='gpt-image-2.5-flare'`")
+  })
+
+  it('routes natural-language transparency and cutouts through the explicit tool contract', () => {
+    expect(generateImageTool).toContain('去背景/抠图/抠像')
+    expect(generateImageTool).toContain('background: "transparent"')
+    expect(generateImageTool).toContain('pass its `media_index`')
+    expect(generateImageTool).toContain('omit `media_index` for transparent text-to-image')
+    expect(generateImageTool).toContain('six stickers on 16:9')
+    expect(generateImageTool).toContain('the requested layout wins')
+    expect(image).toContain('Interpret the user\'s meaning, not a hard-coded keyword list')
+    expect(image).toContain('This is an image-to-image cutout/edit')
+    expect(image).toContain('Never fall back to an opaque image')
+    expect(image).toContain("read_file('prompts/cutout.md')")
+    expect(generateImageTool).toContain('read `prompts/cutout.md` once')
+    expect(generateImageTool).toContain('do not append ordinary composition/scene-layout preservation')
+    expect(cutout).toContain('Pixel-faithful foreground extraction, not a redesign or regeneration.')
+    expect(cutout).toContain('Keep only ...')
+    expect(cutout).toContain('Return a real transparent PNG with clean natural edges')
+    expect(cutout).toContain('Do not invent hidden body areas')
+    expect(cutout).toContain('Semi-transparent UI or effects')
+    expect(cutout).toContain('Architecture')
+    expect(stickerMaker).toContain('`prompts/cutout.md`')
+    expect(stickerMaker).toContain('does not replace the general cutout contract')
   })
 
   it('prevents Remotion helper components from reading outer props', () => {
@@ -101,9 +132,10 @@ describe('agent media scenario matrix', () => {
     expect(remotion).toContain('never reference outer `props`')
   })
 
-  it('keeps video generation default on SeeDance Fast while separating standard SeeDance', () => {
-    expect(agent).toContain('Default video model follows the app selection, usually SeeDance 2.0 Fast')
-    expect(animate).toContain('usually SeeDance 2.0 Fast')
+  it('keeps video generation default on FAL H3 Max while separating standard SeeDance', () => {
+    expect(agent).toContain('Default video model is FAL H3 Max')
+    expect(animate).toContain("Default model behavior: respect the user/app model selection first, then the active Skill's workflow-specific default")
+    expect(animate).toContain('Otherwise use FAL H3 Max')
     expect(animate).toContain('Treat `seedance-fast` and standard `seedance` as separate models')
     expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px')
     expect(ffmpegSkill).toContain('Default video model, higher quality')
@@ -113,17 +145,29 @@ describe('agent media scenario matrix', () => {
     expect(ffmpegSkill).not.toContain('Cheaper/default')
   })
 
-  it('keeps native SeeDance text-to-video reachable without generating an intermediate image', () => {
-    expect(agent).toContain('SeeDance supports native text-to-video')
+  it('keeps native default text-to-video reachable without generating an intermediate image', () => {
+    expect(agent).toContain('FAL H3 Max supports native text-to-video')
     expect(agent).toContain('Do not generate an intermediate image first')
-    expect(animate).toContain('zero images means native SeeDance text-to-video')
+    expect(animate).toContain('Zero images can use native SeeDance or Wan 3.0 text-to-video')
     expect(animate).toContain('do not call `generate_image` first')
-    expect(agentTs).toContain("videoRoute.provider !== 'seedance'")
-    expect(animateRoute).toContain("videoRoute.provider !== 'seedance'")
-    expect(videoSnapshotRoute).toContain("videoRoute.provider !== 'seedance'")
+    expect(agentTs).toContain('!supportsNativeTextToVideo(videoModel)')
+    expect(animateRoute).toContain('!supportsNativeTextToVideo(selectedVideoModel)')
+    expect(videoSnapshotRoute).toContain('!supportsNativeTextToVideo(selectedVideoModel)')
     expect(mcpServer).toContain("default([]).describe('Optional public image URLs")
+    expect(cli).toContain('const supportsNativeTextToVideo =')
     expect(cli).toContain('const isSeedanceModel =')
-    expect(cli).toContain('!images.length && !video && !isSeedanceModel')
+    expect(cli).toContain('!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo')
+  })
+
+  it('validates model image limits only after Media Index selection', () => {
+    expect(agentTs).not.toContain('imageReferenceCount: imageUrls.filter(Boolean)')
+
+    const entryPreflightStart = createVideo.indexOf('const modelError = validateVideoModelRequest({')
+    const filteredPreflightStart = createVideo.indexOf('const filteredModelError = validateVideoModelRequest({')
+    expect(entryPreflightStart).toBeGreaterThanOrEqual(0)
+    expect(filteredPreflightStart).toBeGreaterThan(entryPreflightStart)
+    expect(createVideo.slice(entryPreflightStart, filteredPreflightStart)).not.toContain('imageReferenceCount:')
+    expect(createVideo.slice(filteredPreflightStart)).toContain('imageReferenceCount: filteredImages.length')
   })
 
   it('separates generic coding, Remotion composition, and node media outputs', () => {
@@ -150,11 +194,29 @@ describe('agent media scenario matrix', () => {
     expect(coding).not.toContain('Think like a music video director')
     expect(remotion).toContain('Remotion Composition')
     expect(remotion).toContain('Canvas Aspect Contract')
-    expect(remotion).toContain('derive the Remotion canvas from the selected Media Index video dimensions')
+    expect(remotion).toContain("The user's explicit output aspect owns the Remotion canvas")
+    expect(remotion).toContain('target_aspect_ratio: "9:16"')
+    expect(remotion).toContain('Only when no output aspect or reframe is requested, derive the canvas from the selected Media Index video dimensions')
     expect(remotion).toContain('Never place 9:16 timeline videos into a 16:9 canvas')
     expect(remotion).toContain('width: 1080')
     expect(remotion).toContain('height: 1920')
-    expect(remotion).toContain('Editable Fields')
+    expect(coding).toContain('Editable Boundary')
+    expect(coding).toContain('For the full props-first text/image/video/trim rules, read `prompts/remotion-composition.md`')
+    expect(coding).not.toContain('Put `data-editable="fieldId"` on the visible measurable wrapper')
+    expect(coding).not.toContain('Video trim editables must declare `trimBeforePropKey`')
+    expect(remotion).toContain('Editable Composition Contract')
+    expect(remotion).toContain('discovers visible text/media sinks, infers the Editable Manifest')
+    expect(remotion).toContain('Do not write an `editables` array or editor-specific')
+    expect(remotion).toContain('Ordinary JSX literals, local const strings, static scene arrays')
+    expect(remotion).toContain('primary media URLs')
+    expect(remotion).toContain('Ordinary reusable React components work without editor-specific parameters')
+    expect(remotion).toContain('do not add `id`, `editableId`, marker')
+    expect(remotion).toContain('data-editable-ignore')
+    expect(remotion).toContain('add one explicit')
+    expect(remotion).toContain('Legacy explicit `editables` metadata remains')
+    expect(remotion).toContain('when patching')
+    expect(remotion).toContain('Video trim is non-destructive and belongs to the selected video node')
+    expect(remotion).toContain('Omit `editables`')
     expect(remotion).toContain('trimBefore')
     expect(remotion).toContain('<Sequence>')
     expect(remotion).toContain('put two existing timeline videos together')
@@ -164,13 +226,24 @@ describe('agent media scenario matrix', () => {
     expect(remotion).toContain('composition draft')
     expect(remotion).toContain('Visual verification is required for transitions, subtitles')
     expect(remotion).toContain('If `preview_frame` returns an image or no explicit textual error')
+    expect(remotion).toContain('do not rewrite the composition again or stop a requested MP4 delivery')
     expect(remotion).toContain('Do not tell the user a clip is 18s while returning a 20s animation')
+    expect(remotion).toContain('Never leave `durationInSeconds: 1` on a multi-scene timeline')
     expect(remotion).toContain('function Composition(props)')
     expect(remotion).not.toContain('function Design(props)')
     expect(coding).not.toContain('ALL`run_code` output')
     expect(coding).not.toContain('ALL** `run_code` output')
     expect(agentTs).toContain('\\`type: "files"\\` outputs are already saved workspace files')
     expect(agentTs).toContain("z.enum(['composition', 'design', 'node'])")
+    expect(agentTs).toContain("type: 'render' | 'composition'")
+    expect(agentTs).toContain("result.type.trim().toLowerCase()")
+    expect(agentTs).toContain("resultKind === 'composition'")
+    expect(agentTs).toContain("\\`{ type: 'composition', code, width, height, props?, animation?, fontSubstitutions? }\\`")
+    expect(agentTs).toContain('Refusing to save raw Remotion source as JSON')
+    expect(agentTs).toContain("type: z.enum(['text', 'image', 'video'])")
+    expect(agentTs).toContain('validateDesign(design)')
+    expect(agentTs).toContain('normalizedComposition.editables')
+    expect(agentTs).toContain('editables: previous?.editables')
     expect(agentTs).toContain('validateCompositionMediaAspect')
     expect(agentTs).toContain('Composition rejected: selected timeline video(s)')
     expect(agentTs).toContain('9:16 sources must return a 9:16 canvas')
@@ -179,6 +252,9 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('mediaResult.type === \'video\'')
     expect(agentTs).toContain('transcribe_audio')
     expect(agentTs).toContain('transcribeWithVolcengineAsr')
+    expect(agentTs).toContain('createOptionalNarrationCueArtifact')
+    expect(agentTs).toContain('The ASR transcript above succeeded and remains usable. Do not retranscribe')
+    expect(agentTs).not.toContain('return { error: `Narration alignment failed:')
   })
 
   it('keeps agent-visible media context on composition terminology', () => {
@@ -212,8 +288,9 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('frames: z.array(z.number()).min(2).max(6)')
     expect(agentTs).toContain('createContactSheet')
     expect(agentTs).toContain('composition: z.object({')
+    expect(agentTs).toContain('resolvedComposition && !resolvedComposition.code && executableCode.trim()')
     expect(agentTs).toContain("result = { type: 'render', ...resolvedComposition }")
-    expect(agentTs).toContain('Provide executable code, a direct composition payload, or durable composition parts.')
+    expect(agentTs).toContain('Provide executable code, a code_path, a direct composition payload, or durable composition parts.')
     expect(agentTs).toContain('raw uploaded/generated videos are extracted with FFmpeg')
     expect(agentTs).toContain('Patch failed: no base composition')
     expect(agentTs).toContain('Composition ready')
@@ -306,7 +383,29 @@ describe('video script harness old and new scenarios', () => {
     expect(validateVideoScript({
       prompt: 'Shot 1: use <<<media_3>>>.',
       imageCount: 2,
-    })).toContain('only 2 items')
+    })).toContain('has no usable media')
+  })
+
+  it('ignores failed video placeholders for native text-to-video retries', () => {
+    expect(validateVideoScript({
+      prompt: 'Boudoir Editorial\nShot 1 (4s): Tasteful fashion film.\nStyle: Premium editorial lighting.',
+      imageCount: 1,
+      availableMediaIndices: [],
+      imageUrls: ['/video-placeholder.png'],
+      model: 'seedance-2.5',
+      duration: 4,
+    })).toBeNull()
+  })
+
+  it('does not allow a failed video placeholder to be referenced', () => {
+    expect(validateVideoScript({
+      prompt: 'Shot 1 (4s): Animate <<<media_1>>>.',
+      imageCount: 1,
+      availableMediaIndices: [],
+      imageUrls: ['/video-placeholder.png'],
+      model: 'seedance-2.5',
+      duration: 4,
+    })).toContain('has no usable media')
   })
 
   it('old external reference video scenario rejects URLs embedded in prompt text', () => {
@@ -345,7 +444,7 @@ describe('video script harness old and new scenarios', () => {
     })).toBeNull()
   })
 
-  it('new Grok video scenario accepts one image and rejects multi-image references', () => {
+  it('new Grok video scenario supports one or more feature references', () => {
     expect(validateVideoScript({
       prompt: 'Shot 1 (1s): Animate <<<media_1>>> with a slow push-in.',
       imageCount: 1,
@@ -358,6 +457,13 @@ describe('video script harness old and new scenarios', () => {
       imageCount: 2,
       model: 'grok',
       duration: 1,
-    })).toContain('supports at most 1 reference image')
+    })).toBeNull()
+
+    expect(validateVideoScript({
+      prompt: 'Blend <<<media_1>>>, <<<media_2>>>, <<<media_3>>>, <<<media_4>>>, <<<media_5>>>, <<<media_6>>>, <<<media_7>>>, and <<<media_8>>>.',
+      imageCount: 8,
+      model: 'grok',
+      duration: 1,
+    })).toContain('supports at most 7 reference images')
   })
 })

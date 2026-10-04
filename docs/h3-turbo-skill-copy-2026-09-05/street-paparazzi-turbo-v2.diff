@@ -1,0 +1,13 @@
+--- SKILL.md
++++ SKILL.md
+@@ -17 +17 @@
+-Use exactly one portrait as the identity and wardrobe source. Generate one direct H3 Max Turbo video only: no intermediate image, storyboard, separate music asset, overlay, or second render. Use native audio.
++Use exactly one portrait as the identity and wardrobe source. Generate one direct fal H3 Turbo video only: no intermediate image, storyboard, separate music asset, overlay, or second render. Use native audio.
+@@ -42 +42 @@
+-Call once with MiniMax H3 Max Turbo, one source image, 9:16, 768p, generated audio enabled, and requested duration. No automatic paid retry.
++Call once with fal H3 Turbo, one source image, 9:16, 768p, generated audio enabled, and requested duration. No automatic paid retry.
+@@ -45,0 +46,4 @@
++
++## Video model
++
++Use **fal H3 Turbo**, with `model: "minimax-h3-max"` for `generate_animation` or `--video-model minimax-h3-max` for the CLI. This skill uses one source image as the video start frame.

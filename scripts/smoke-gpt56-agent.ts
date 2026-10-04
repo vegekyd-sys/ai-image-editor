@@ -7,6 +7,10 @@ import {
   getAgentProviderOptions,
 } from '../src/lib/agent-model-runtime';
 import {
+  isAgentModelId,
+  type AgentModelId,
+} from '../src/lib/agent-models';
+import {
   runMakaronAgent,
   type AgentStreamEvent,
 } from '../src/lib/agent';
@@ -19,19 +23,23 @@ async function collectAgentEvents(
   return events;
 }
 
-function assertSuccessfulAgentRun(events: AgentStreamEvent[]) {
+function assertSuccessfulAgentRun(events: AgentStreamEvent[], expectedBillingModel: string) {
   const error = events.find((event) => event.type === 'error');
   assert.equal(error, undefined, error?.message);
   assert.ok(events.some((event) => event.type === 'done'));
   const usage = events.find((event) => event.type === 'usage');
-  assert.equal(usage?.model, 'gpt-5.6-terra');
+  assert.equal(usage?.model, expectedBillingModel);
   return usage;
 }
 
 async function main() {
   process.env.AGENT_DEBUG_DUMP = '0';
-  const runtime = createAgentModelRuntime('auto', 'gpt56-live-smoke');
-  assert.equal(runtime.spec.id, 'gpt-5.6-terra');
+  const configuredModel = process.env.GPT56_AGENT_SMOKE_MODEL?.trim();
+  const agentModel: AgentModelId | 'auto' = configuredModel && isAgentModelId(configuredModel)
+    ? configuredModel
+    : 'auto';
+  const runtime = createAgentModelRuntime(agentModel, 'gpt56-live-smoke');
+  if (agentModel === 'auto') assert.equal(runtime.spec.id, 'gpt-6-luna');
 
   const streamStartedAt = Date.now();
   const stream = streamText({
@@ -70,24 +78,28 @@ async function main() {
 
   const redPng = await sharp({
     create: {
-      width: 96,
-      height: 96,
+      width: 512,
+      height: 512,
       channels: 3,
       background: { r: 255, g: 0, b: 0 },
     },
   }).png().toBuffer();
-  const visionResult = await generateText({
-    model: runtime.model,
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image', image: redPng },
-        { type: 'text', text: 'If the image is predominantly red, reply with exactly VISION_RED_OK.' },
-      ],
-    }],
-    providerOptions: getAgentProviderOptions(runtime),
-  });
-  assert.equal(visionResult.text.trim(), 'VISION_RED_OK');
+  let directVisionText = 'SKIPPED_TEXT_ONLY';
+  if (runtime.spec.supportsImageInput) {
+    const visionResult = await generateText({
+      model: runtime.model,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'file', data: redPng, mediaType: 'image/png' },
+          { type: 'text', text: 'If the image is predominantly red, reply with exactly VISION_RED_OK.' },
+        ],
+      }],
+      providerOptions: getAgentProviderOptions(runtime),
+    });
+    directVisionText = visionResult.text.trim();
+    assert.equal(directVisionText, 'VISION_RED_OK');
+  }
 
   // Exercise the real Makaron Agent with its full production system prompt and
   // complete tool schema. No persistence client is provided, so this run has no
@@ -97,15 +109,14 @@ async function main() {
     '',
     'gpt56-main-agent-smoke',
     {
-      agentModel: 'auto',
+      agentModel: runtime.spec.id,
       locale: 'en',
       disableToolCalls: true,
       snapshotImages: [],
-      userSkills: [],
       history: [],
     },
   ));
-  const mainUsage = assertSuccessfulAgentRun(mainAgentEvents);
+  const mainUsage = assertSuccessfulAgentRun(mainAgentEvents, runtime.spec.billingModelId);
   const mainText = mainAgentEvents
     .filter((event): event is Extract<AgentStreamEvent, { type: 'content' }> => event.type === 'content')
     .map((event) => event.text)
@@ -113,16 +124,16 @@ async function main() {
     .trim();
   assert.equal(mainText, 'MAIN_AGENT_OK');
 
-  // Exercise the production analyze_image tool result path. This sends the
-  // image back to the model as function-call output, which differs from a
-  // direct image in the initial user message.
+  // Exercise the production automatic image-analysis path. Multimodal Agents
+  // must receive the image in the initial user message and answer in one model
+  // step without analyze_image or the Gemini bridge.
   const redDataUrl = `data:image/png;base64,${redPng.toString('base64')}`;
   const analysisEvents = await collectAgentEvents(runMakaronAgent(
     '',
     redDataUrl,
     'gpt56-analysis-smoke',
     {
-      agentModel: 'auto',
+      agentModel: runtime.spec.id,
       analysisOnly: true,
       analysisContext: 'initial',
       locale: 'en',
@@ -130,21 +141,23 @@ async function main() {
       currentSnapshotIndex: 0,
     },
   ));
-  const analysisUsage = assertSuccessfulAgentRun(analysisEvents);
-  assert.equal(analysisEvents.filter(
+  const analysisUsage = assertSuccessfulAgentRun(analysisEvents, runtime.spec.billingModelId);
+  const expectedAnalyzeToolCalls = runtime.spec.supportsImageInput ? 0 : 1;
+  const analyzeImageToolCalls = analysisEvents.filter(
     (event) => event.type === 'tool_call' && event.tool === 'analyze_image',
-  ).length, 1);
-  assert.equal(analysisEvents.filter(
+  ).length;
+  const analyzeImageToolResults = analysisEvents.filter(
     (event) => event.type === 'tool_result' && event.tool === 'analyze_image',
-  ).length, 1);
-  assert.ok(analysisEvents.some((event) => event.type === 'image_analyzed'));
+  ).length;
+  assert.equal(analyzeImageToolCalls, expectedAnalyzeToolCalls);
+  if (runtime.spec.supportsImageInput) assert.equal(analyzeImageToolResults, 0);
   const analysisText = analysisEvents
     .filter((event): event is Extract<AgentStreamEvent, { type: 'content' }> => event.type === 'content')
     .map((event) => event.text)
     .join('')
     .trim();
   assert.ok(analysisText.length > 0);
-  assert.match(analysisText, /red|crimson/i);
+  if (runtime.spec.supportsImageInput) assert.match(analysisText, /red|crimson/i);
   assert.ok(
     (analysisUsage?.inputTokens ?? 0)
       + (analysisUsage?.cacheReadTokens ?? 0)
@@ -155,6 +168,7 @@ async function main() {
   console.log(JSON.stringify({
     model: runtime.spec.id,
     provider: runtime.spec.provider,
+    providerModel: runtime.spec.providerModelId,
     stream: {
       text: streamedText.trim(),
       firstTextMs,
@@ -167,7 +181,7 @@ async function main() {
       text: toolResult.text.trim(),
       steps: toolResult.steps.length,
     },
-    vision: visionResult.text.trim(),
+    vision: directVisionText,
     productionAgent: {
       text: mainText,
       events: mainAgentEvents.length,
@@ -178,7 +192,9 @@ async function main() {
       outputTokens: mainUsage?.outputTokens,
     },
     productionAnalysis: {
-      imageAnalyzed: true,
+      nativeImageInput: runtime.spec.supportsImageInput,
+      analyzeImageToolCalls,
+      analyzeImageToolResults,
       events: analysisEvents.length,
       inputTokens: analysisUsage?.inputTokens,
       cacheReadTokens: analysisUsage?.cacheReadTokens,

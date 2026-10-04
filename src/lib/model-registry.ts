@@ -1,3 +1,5 @@
+import type { TranslationKey } from '@/lib/locales';
+
 export type ModelCategory = 'image' | 'video' | 'agent';
 
 export interface ModelInfo {
@@ -6,26 +8,39 @@ export interface ModelInfo {
   descKey: string;
   category: ModelCategory;
   speedLabel?: string;
+  speedLabelKey?: TranslationKey;
 }
 
 export const MODEL_REGISTRY: ModelInfo[] = [
   // Image
-  { id: 'openai', nameKey: 'model.openai.name', descKey: 'model.openai.desc', category: 'image', speedLabel: '~50s' },
+  { id: 'gpt-image-2.5-flare', nameKey: 'model.image25Flare.name', descKey: 'model.image25Flare.desc', category: 'image' },
+  { id: 'gpt-image-2.5-sunburst', nameKey: 'model.image25Sunburst.name', descKey: 'model.image25Sunburst.desc', category: 'image' },
+  { id: 'wan2.7-image', nameKey: 'model.wan27Image.name', descKey: 'model.wan27Image.desc', category: 'image', speedLabel: '~10s' },
   { id: 'gemini', nameKey: 'model.gemini.name', descKey: 'model.gemini.desc', category: 'image', speedLabel: '~15s' },
   { id: 'gemini-lite', nameKey: 'model.geminiLite.name', descKey: 'model.geminiLite.desc', category: 'image', speedLabel: 'Lite' },
-  { id: 'qwen', nameKey: 'model.qwen.name', descKey: 'model.qwen.desc', category: 'image', speedLabel: '~15s' },
+  { id: 'qwen-spicy', nameKey: 'model.qwenSpicy.name', descKey: 'model.qwenSpicy.desc', category: 'image', speedLabel: '~15s' },
   // Video
+  { id: 'seedance-2.5-eco', nameKey: 'model.seedance25Eco.name', descKey: 'model.seedance25Eco.desc', category: 'video', speedLabelKey: 'model.seedance25Eco.badge' },
+  { id: 'seedance-2.5-native', nameKey: 'model.seedance25.name', descKey: 'model.seedance25.desc', category: 'video', speedLabelKey: 'model.seedance25.badge' },
   { id: 'seedance-fast', nameKey: 'model.seedanceFast.name', descKey: 'model.seedanceFast.desc', category: 'video', speedLabel: '~180s' },
   { id: 'seedance-mini', nameKey: 'model.seedanceMini.name', descKey: 'model.seedanceMini.desc', category: 'video', speedLabel: 'Mini' },
   { id: 'seedance', nameKey: 'model.seedance.name', descKey: 'model.seedance.desc', category: 'video', speedLabel: '1080p' },
+  { id: 'wan-3.0', nameKey: 'model.wan30.name', descKey: 'model.wan30.desc', category: 'video', speedLabelKey: 'model.wan30.badge' },
+  { id: 'wan-3.0-prime', nameKey: 'model.wan30Prime.name', descKey: 'model.wan30Prime.desc', category: 'video', speedLabelKey: 'model.wan30Prime.badge' },
   { id: 'kling', nameKey: 'model.kling.name', descKey: 'model.kling.desc', category: 'video', speedLabel: '4K' },
   { id: 'grok', nameKey: 'model.grok.name', descKey: 'model.grok.desc', category: 'video', speedLabel: '30-40s' },
-  { id: 'google-omni', nameKey: 'model.googleOmni.name', descKey: 'model.googleOmni.desc', category: 'video', speedLabel: '30-70s' },
+  { id: 'google-omni', nameKey: 'model.googleOmni.name', descKey: 'model.googleOmni.desc', category: 'video', speedLabel: '360p · 4K' },
+  { id: 'minimax-h3', nameKey: 'model.minimaxH3.name', descKey: 'model.minimaxH3.desc', category: 'video', speedLabel: '768P · 2K' },
+  { id: 'minimax-h3-max', nameKey: 'model.minimaxH3Max.name', descKey: 'model.minimaxH3Max.desc', category: 'video', speedLabel: '~3s' },
+  { id: 'fal-h3-max', nameKey: 'model.falH3Max.name', descKey: 'model.falH3Max.desc', category: 'video', speedLabel: '768P · Reference' },
   // Agent LLM
-  { id: 'gpt-5.6-terra', nameKey: 'model.gpt56Terra.name', descKey: 'model.gpt56Terra.desc', category: 'agent', speedLabel: 'Default' },
+  { id: 'gpt-6-luna', nameKey: 'model.gpt6Luna.name', descKey: 'model.gpt6Luna.desc', category: 'agent', speedLabel: 'Default' },
+  { id: 'gpt-6-sol', nameKey: 'model.gpt6Sol.name', descKey: 'model.gpt6Sol.desc', category: 'agent', speedLabel: 'Best' },
+  { id: 'gpt-5.6-terra', nameKey: 'model.gpt56Terra.name', descKey: 'model.gpt56Terra.desc', category: 'agent' },
   { id: 'gpt-5.6-sol', nameKey: 'model.gpt56Sol.name', descKey: 'model.gpt56Sol.desc', category: 'agent', speedLabel: 'Best' },
   { id: 'gpt-5.6-luna', nameKey: 'model.gpt56Luna.name', descKey: 'model.gpt56Luna.desc', category: 'agent', speedLabel: 'Fast' },
-  { id: 'grok-4.5', nameKey: 'model.grok45.name', descKey: 'model.grok45.desc', category: 'agent', speedLabel: 'Fast' },
+  { id: 'grok-4.6', nameKey: 'model.grok46.name', descKey: 'model.grok46.desc', category: 'agent', speedLabel: 'Fast' },
+  { id: 'deepseek-flash', nameKey: 'model.deepseekFlash.name', descKey: 'model.deepseekFlash.desc', category: 'agent', speedLabel: 'Fast' },
   { id: 'deepseek-v4-pro', nameKey: 'model.deepseekV4Pro.name', descKey: 'model.deepseekV4Pro.desc', category: 'agent', speedLabel: 'Value' },
 ];
 
@@ -38,7 +53,7 @@ export function getVideoModels(): ModelInfo[] {
 }
 
 export function getAgentModels(): ModelInfo[] {
-  return MODEL_REGISTRY.filter(m => m.category === 'agent');
+  return MODEL_REGISTRY.filter(m => m.category === 'agent' && !m.id.startsWith('gpt-5.6-'));
 }
 
 export function getModelInfo(id: string): ModelInfo | undefined {

@@ -1,11 +1,17 @@
-import { generateImage } from '../model-router';
-import type { ModelId } from '../models/types';
+import { generateImage, SpicyImageRequestError } from '../model-router';
+import type { ImageBackground, ModelId, TokenUsage } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
+import { ProviderImageInputError } from '../provider-image-preflight';
+import { isFalImage25, resolveImageModel } from '../models/types';
+import { FalImage25RequestError } from '../models/fal-image25';
+import { WanImageRequestError } from '../models/wan-image';
 
 export interface EditImageInput {
   editPrompt: string;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   aspectRatio?: string;
+  /** Explicit output background. Transparent requests default to Flare and preserve selected Sunburst. */
+  background?: ImageBackground;
   /** @deprecated Use workspace service instead. Kept for backward compat. */
   skillPrompts?: Record<string, string>;
   /** User's preferred model override — bypasses default routing */
@@ -18,7 +24,16 @@ export async function editImage(
   input: EditImageInput,
   ctx: SkillContext,
 ): Promise<SkillResult> {
-  const { editPrompt, skill, aspectRatio, preferredModel, isNsfw } = input;
+  const { editPrompt, skill, aspectRatio, background, preferredModel, isNsfw } = input;
+  if (isNsfw && background === 'transparent') {
+    return { success: false, message: 'NSFW transparent editing is not supported by Qwen Spicy. No other provider was called.' };
+  }
+  let requestedModel: ModelId | undefined;
+  try {
+    requestedModel = isNsfw ? 'qwen-spicy' : resolveImageModel(preferredModel, background);
+  } catch (error) {
+    return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.' };
+  }
   const hasReference = !!ctx.referenceImages?.length;
 
   // Agent reads skill templates via read_file and internalizes rules into editPrompt.
@@ -26,7 +41,7 @@ export async function editImage(
   const finalPrompt = editPrompt;
 
   const t0 = Date.now();
-  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} hasReference=${hasReference} model=${preferredModel ?? 'auto'}\neditPrompt: ${editPrompt.slice(0, 200)}\n`);
+  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} hasReference=${hasReference} model=${requestedModel ?? 'auto'} background=${background ?? 'default'}\neditPrompt: ${editPrompt.slice(0, 200)}\n`);
 
   // Build references array for multi-image mode
   let references: { url: string; role: string }[] | undefined;
@@ -49,27 +64,46 @@ export async function editImage(
   let usedModel: ModelId = 'gemini';
   let lastFailedModels: ModelId[] | undefined;
   let contentBlocked = false;
-  let lastUsage: { inputTokens: number; outputTokens: number; modelId: string } | undefined;
-  const MAX_ATTEMPTS = 2;
+  let lastUsage: TokenUsage | undefined;
+  let usedProvider: string | undefined;
+  // A transparent request is a strict, paid provider call. Do not fan it out
+  // or repeat it after failure; surface the capability error to the user.
+  const MAX_ATTEMPTS = isNsfw || skill === 'enhance' || background === 'transparent' || requestedModel === 'wan2.7-image' || requestedModel === 'qwen-spicy' || isFalImage25(requestedModel) ? 1 : 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const genResult = await generateImage({
-      image: references ? undefined : ctx.currentImage,
-      prompt: finalPrompt,
-      model: preferredModel,
-      category: skill,
-      aspectRatio,
-      thinkingEffort: 'minimal',
-      references,
-      fallbackPrompt: undefined,
-      isNsfw,
-    });
+    let genResult;
+    try {
+      genResult = await generateImage({
+        image: references ? undefined : ctx.currentImage,
+        prompt: finalPrompt,
+        model: requestedModel,
+        category: skill,
+        aspectRatio,
+        background,
+        thinkingEffort: 'minimal',
+        references,
+        fallbackPrompt: undefined,
+        isNsfw,
+        codexSubscription: ctx.codexSubscription,
+      });
+    } catch (error) {
+      if (error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
+        return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
+      }
+      if (error instanceof SpicyImageRequestError || requestedModel === 'wan2.7-image' || requestedModel === 'qwen-spicy' || isNsfw || skill === 'enhance' || isFalImage25(requestedModel)) {
+        // Return a durable tool result even for an unknown paid outcome. Never
+        // echo arbitrary transport errors or invite automatic paid resubmission.
+        return { success: false, message: 'Image generation did not complete. The provider outcome may be unknown. Do not retry automatically or silently switch models; explain the failure to the user. Do not bypass a failed required image edit by sending the unedited original into dependent video generation.' };
+      }
+      throw error;
+    }
 
     result = genResult.image;
     usedModel = genResult.model;
     lastFailedModels = genResult.failedModels;
     if (genResult.contentBlocked) contentBlocked = true;
     if (genResult.usage) lastUsage = genResult.usage;
+    usedProvider = genResult.provider;
 
     if (result) break;
     if (attempt < MAX_ATTEMPTS) {
@@ -79,17 +113,25 @@ export async function editImage(
 
   if (!result) {
     console.error(`❌ [edit_image] all attempts failed after ${((Date.now() - t0) / 1000).toFixed(1)}s, failedModels=${lastFailedModels}`);
+    const message = background === 'transparent'
+      ? 'Transparent image generation is not available from the configured GPT Image provider yet. No opaque fallback was returned.'
+      : 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.';
     return {
       success: false,
       contentBlocked,
-      message: 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.',
+      message,
     };
   }
 
-  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel}${preferredModel && usedModel !== preferredModel ? ` (requested=${preferredModel}, fallback from ${lastFailedModels?.join(',')})` : ''}`);
+  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel} provider=${usedProvider ?? 'default'}${requestedModel && usedModel !== requestedModel ? ` (requested=${requestedModel}, fallback from ${lastFailedModels?.join(',')})` : ''}`);
   let msg = 'Image generated successfully.';
-  if (preferredModel && usedModel !== preferredModel) {
-    msg += ` ⚠️ Note: requested model "${preferredModel}" failed, fell back to "${usedModel}". Tell the user.`;
+  if (requestedModel && usedModel !== requestedModel) {
+    msg += ` ⚠️ Note: requested model "${requestedModel}" failed, fell back to "${usedModel}". Tell the user.`;
+  } else if (background === 'transparent' && preferredModel && preferredModel !== 'openai' && !isFalImage25(preferredModel)) {
+    msg += ' Transparent output required the OpenAI image model.';
   }
-  return { success: true, message: msg, image: result, usedModel, contentBlocked, usage: lastUsage };
+  if (usedProvider === 'codex-subscription') {
+    msg += ' Provider: Codex subscription.';
+  }
+  return { success: true, message: msg, image: result, usedModel, provider: usedProvider, contentBlocked, usage: lastUsage };
 }

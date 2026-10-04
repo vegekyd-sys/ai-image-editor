@@ -1,10 +1,13 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { chatStreamWithModel, resetSession } from '@/lib/gemini';
+import { getRequestLocale } from '@/lib/server-locale';
+import { translate } from '@/lib/locales';
 
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
+  const locale = getRequestLocale(req);
   try {
     const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
@@ -33,13 +36,13 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         try {
-          for await (const event of chatStreamWithModel(sessionId, message, image, wantImage, aspectRatio)) {
+          for await (const event of chatStreamWithModel(sessionId, message, image, wantImage, aspectRatio, locale)) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
           }
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
           console.error('Chat stream error:', errMsg);
-          const userMsg = errMsg;
+          const userMsg = locale === 'en' ? translate(locale, 'agent.error.fatal') : errMsg;
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ type: 'error', message: userMsg })}\n\n`)
           );

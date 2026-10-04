@@ -84,7 +84,7 @@ scripts/                 Ops, release, SEO, billing, and testing scripts
 
 - Next.js 16, React 19, TypeScript, Tailwind CSS
 - Supabase Auth, Postgres, and Storage
-- Gemini, Qwen/ComfyUI, OpenAI Image, Kling, SeeDance, Grok, Suno, and Azure GPT-5.6 Agent routes
+- Gemini, Qwen/ComfyUI, OpenAI Image, Kling, SeeDance, Grok, Suno, and GPT-5.6 Agent routes through OpenRouter or Azure
 - Remotion and browser-side rendering for motion/design outputs
 - Stripe billing, credits, usage logs, and subscription flows
 - Vitest, Playwright test assets, ESLint, and custom doc/SEO linters
@@ -116,18 +116,29 @@ Core variables:
 
 ```text
 AZURE_OPENAI_API_KEY
-AZURE_OPENAI_RESPONSES_URL  # optional; production GPT-5.6 endpoint is the default
+AZURE_OPENAI_RESPONSES_URL  # optional; retained GPT-5.6 Azure Responses endpoint
 GOOGLE_API_KEY
 AI_PROVIDER
 IMAGE_MODEL
 OPENROUTER_API_KEY
+GPT56_AGENT_PROVIDER        # azure-openai (default), openrouter, or owner-only codex-subscription
+CODEX_SUBSCRIPTION_OWNER_USER_ID     # required for codex-subscription
+CODEX_SUBSCRIPTION_FALLBACK_PROVIDER # azure-openai (default) or openrouter
+CODEX_SUBSCRIPTION_RELAY_URL          # optional HTTPS relay for Vercel/private split runtime
+CODEX_SUBSCRIPTION_RELAY_SECRET       # shared HMAC secret; never a Codex OAuth token
+CODEX_SUBSCRIPTION_ALLOWLIST_PATH     # relay-only persisted dynamic allowlist (optional override)
+OPENAI_IMAGE_PROVIDER       # azure (default), openrouter backup, or piapi
 DEEPSEEK_API_KEY
 AGENT_MODEL
 COMFYUI_QWEN_URL
+MULEROUTER_API_KEY        # Wan 3.0 and the independent Qwen Spicy image model
 SUNOAPI_KEY
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
 ```
+
+The personal Codex subscription experiment is private-runtime only; see
+[`docs/experiments/codex-subscription-provider.md`](docs/experiments/codex-subscription-provider.md).
 
 Do not commit secrets. Vercel environment values should be written with `printf`, not `echo`, so hidden trailing newlines do not break API requests:
 

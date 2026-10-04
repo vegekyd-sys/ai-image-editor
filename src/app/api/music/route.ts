@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createMusic } from '@/lib/skills/create-music'
 import { requireCredits } from '@/lib/billing/credits'
-import { deductSeedAudioCredits, seedAudioMakaronCredits } from '@/lib/billing/seed-audio'
+import { deductSeedAudioCredits } from '@/lib/billing/seed-audio'
+import { quoteSeedAudio } from '@/lib/billing/media-pricing'
 
 export const maxDuration = 30
 
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     // Pre-flight credit check
     const creditCheck = await requireCredits(
       user.id,
-      seedAudioMakaronCredits({ durationSeconds: durationSeconds ?? 20 }) || 10,
+      (await quoteSeedAudio({ durationSeconds: durationSeconds ?? 20 })).credits,
     )
     if (!creditCheck.ok) return creditCheck.response
 

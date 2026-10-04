@@ -12,12 +12,37 @@ Do not use this as a Remotion creative guide. For editable timelines, motion gra
 
 If the task is a static poster, infographic, e-commerce page, layout image, or marketing visual, use `generate_image` unless the user explicitly asks for editable code or animation.
 
+## Code Artifact Workflow
+
+For substantial normal Agent Run coding, use `write_code_file` first and then execute the saved source with `run_code({ code_path })`. Describe the specific artifact before the `content` field so the user can see what is being built while the real source streams. The workspace file is the durable source of truth for later execution, recovery, and patching.
+
+For `runtime: "composition"`, the saved file may be a natural JS/TS/JSX/TSX Remotion module with imports/exports and a top-level `Composition`, or the legacy executable body that returns a render object. For a new natural module, pass width/height/animation as `run_code.composition` metadata while `code_path` supplies the source; do not repeat the source.
+
+```js
+const code = String.raw`
+function Composition(props) {
+  return <AbsoluteFill>{props.title}</AbsoluteFill>;
+}
+`;
+
+return {
+  type: 'render',
+  code,
+  width: 1920,
+  height: 1080,
+  props: { title: 'Hello' },
+  animation: { fps: 30, durationInSeconds: 20 },
+};
+```
+
+Use inline `run_code.code` only for small patches or short utilities. Long compositions may use numbered source files under the composition-parts workspace. Include `compositionMetadata` on the first part; `write_file` automatically assembles, validates, and autosaves after every successful write, so do not spend another model turn on an assembly-only `run_code` call. Do not shorten narration, scenes, animation, or visual detail to satisfy an aggregate character target.
+
 ## Return Shapes
 
 Return exactly one supported object:
 
 ```js
-{ type: 'render', code, width, height, editables?, props?, animation? }
+{ type: 'render', code, width, height, props?, animation? }
 { type: 'patch', edits?, props?, code_path? }
 { type: 'image', data, mimeType }
 { type: 'video', path, contentType?, description?, duration?, width?, height? }
@@ -27,6 +52,10 @@ Return exactly one supported object:
 ```
 
 Use `type: "render"` for a new composition draft, `type: "patch"` for subsequent composition edits, `type: "files"` for file batches or intermediate media, and `type: "video"` for one final MP4.
+
+## Editable Boundary
+
+Editable behavior belongs only to the Remotion composition path: `runtime: "composition"` / legacy `runtime: "design"` with `type: "render"` or `type: "patch"`. New compositions keep user-facing values in props and omit explicit `editables`; the runtime infers the Manifest. Do not add editable burden to `generate_image`, external video generation, node/FFmpeg exports, or sharp image outputs. For the full props-first text/image/video/trim rules, read `prompts/remotion-composition.md`.
 
 ## Patch Rules
 
@@ -58,7 +87,7 @@ return {
 
 Composition runtime:
 - `type: "render"` and `type: "patch"` create a draft preview and autosave it before returning success.
-- For timeline videos, preserve the selected Media Index video aspect ratio. Two 9:16 videos spliced together must return a 9:16 canvas such as `width: 1080, height: 1920`, not a 16:9 canvas.
+- For timeline videos, the user's explicit output aspect takes priority: pass `target_aspect_ratio` on `run_code` and fit sources proportionally with contain/background or authorized cropping. Without a requested reframe, preserve the selected Media Index video aspect ratio. Two 9:16 videos spliced together must return a 9:16 canvas such as `width: 1080, height: 1920`, not a 16:9 canvas.
 - `write_file({ fromLastRunCode: true, name: "slug", publish: false })` creates an optional named workspace checkpoint without creating a timeline snapshot.
 - `write_file({ fromLastRunCode: true, name: "slug" })` saves and publishes the composition to the timeline.
 - `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: 3 })` publishes recent exported workspace videos to the timeline. Use this immediately after direct FFmpeg requests that create user-facing MP4s, such as "split this into three videos", "cut out this part", "trim/export this clip", or "transcode this video".
@@ -81,14 +110,16 @@ Node media runtime:
 Read `skills/video-ffmpeg-lab/SKILL.md` before real MP4 work.
 
 Available in `runtime: "node"`:
-- `require`, `process`, `Buffer`, `fetch`, and normal Node built-ins.
-- Media packages including `sharp`, `jszip`, `exifr`, `heic-convert`, `canvas`, `remotion`, and Remotion media utilities. Arbitrary local/package require, env secrets, and escape/debug modules are blocked.
+- Standard Node `require`, ESM/CommonJS, JS/TS/JSX/TSX, `process`, `Buffer`, `fetch`, filesystem, child processes, and normal Node built-ins inside a disposable Vercel Sandbox.
+- Bare npm packages may be imported or required directly. Missing packages are installed inside the isolated Sandbox on first use, so keep valid application code instead of rewriting it around a Makaron package whitelist.
 - `ffmpegPath`, `workDir`, `inputDir`, `outputDir`, `workspaceDir`.
 - `ffprobePath` may be empty in deployment. Prefer `probeVideo(path)` instead of calling ffprobe directly.
 - `inputFiles`: local files resolved from `media_refs` and `workspace_paths`, with `{ index, kind, inputPath, contentType, source, workspacePath, duration, width, height }`.
 - `ctx.media`: full Media Index.
 - `saveOutput(localPath, workspacePath?, contentType?)`.
 - `probeVideo(path)`.
+
+When execution returns a real compile, dependency, or runtime error, inspect the exact error and continue repairing the same saved program until it produces the requested artifact. Platform fallback must not become an excuse to stop before the user-visible result exists.
 
 Prefer H.264/AAC/yuv420p with `-movflags +faststart` for mobile-compatible final MP4s.
 

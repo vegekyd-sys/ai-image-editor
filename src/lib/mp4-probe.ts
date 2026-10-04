@@ -43,3 +43,26 @@ export function probeMP4Dimensions(buffer: Uint8Array): { width: number; height:
     return null
   }
 }
+
+/** Movie-header duration for MP4/MOV reference billing; unknown is never zero. */
+export function probeMP4Duration(buffer: Uint8Array): number | undefined {
+  try {
+    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+    let offset = 0
+    while (offset + 8 <= buffer.length) {
+      const size = view.getUint32(offset)
+      const type = String.fromCharCode(...buffer.subarray(offset + 4, offset + 8))
+      if (size < 8 || offset + size > buffer.length) return undefined
+      if (type === 'moov') { offset += 8; continue }
+      if (type === 'mvhd') {
+        const v1 = buffer[offset + 8] === 1
+        const scale = view.getUint32(offset + (v1 ? 28 : 20))
+        const ticks = v1 ? Number(view.getBigUint64(offset + 32)) : view.getUint32(offset + 24)
+        const seconds = ticks / scale
+        return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined
+      }
+      offset += size
+    }
+  } catch { /* Unreadable media must be rejected by the billing caller. */ }
+  return undefined
+}

@@ -1,7 +1,49 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AgentDualWriter } from '../src/lib/agentDualWriter';
+import * as workspace from '../src/lib/workspace';
 
 describe('AgentDualWriter', () => {
+  it('keeps persisting events after the inline SSE client disconnects', async () => {
+    const inserted: Array<{ type: string; data: Record<string, unknown> }> = [];
+    let enqueueAttempts = 0;
+    const controller = {
+      enqueue: () => {
+        enqueueAttempts += 1;
+        throw new TypeError('ReadableStream is already closed');
+      },
+    } as unknown as ReadableStreamDefaultController;
+    const fakeSupabase = {
+      from: () => ({
+        insert: async (row: { type: string; data: Record<string, unknown> }) => {
+          inserted.push(row);
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter(
+      'run-id',
+      fakeSupabase as never,
+      'user-id',
+      'project-id',
+      controller,
+      new TextEncoder(),
+    );
+
+    await writer.processAndEnqueue({ type: 'content', text: 'first token' });
+    await writer.processAndEnqueue({ type: 'status', text: 'still running' });
+    await writer.flush();
+
+    expect(enqueueAttempts).toBe(1);
+    expect(inserted).toContainEqual(expect.objectContaining({
+      type: 'content',
+      data: { text: 'first token' },
+    }));
+    expect(inserted).toContainEqual(expect.objectContaining({
+      type: 'status',
+      data: { text: 'still running' },
+    }));
+  });
+
   it('retries transient event writes with one stable id and sequence', async () => {
     const rows: Array<Record<string, unknown>> = [];
     let attempts = 0;
@@ -51,6 +93,55 @@ describe('AgentDualWriter', () => {
     await Promise.all([firstFlush, secondFlush]);
 
     expect(inserted.map((row) => row.data.text)).toEqual(['first chunk', 'second chunk']);
+  });
+
+  it('batches durable code deltas without losing source order', async () => {
+    const inserted: Array<{ type: string; data: { text?: string; done?: boolean } }> = [];
+    const fakeSupabase = {
+      from: () => ({
+        insert: async (row: { type: string; data: { text?: string; done?: boolean } }) => {
+          inserted.push(row);
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await writer.processAndEnqueue({ type: 'code_stream', text: 'function Composition() {' });
+    await writer.processAndEnqueue({ type: 'code_stream', text: '\n  return null;\n}' });
+    expect(inserted).toHaveLength(0);
+
+    await writer.processAndEnqueue({ type: 'code_stream', text: '', done: true });
+
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]).toMatchObject({
+      type: 'code_stream',
+      data: {
+        text: 'function Composition() {\n  return null;\n}',
+        done: true,
+      },
+    });
+  });
+
+  it('persists partial code when a stream ends before the done marker', async () => {
+    const inserted: Array<{ type: string; data: { text?: string; done?: boolean } }> = [];
+    const fakeSupabase = {
+      from: () => ({
+        insert: async (row: { type: string; data: { text?: string; done?: boolean } }) => {
+          inserted.push(row);
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await writer.processAndEnqueue({ type: 'code_stream', text: 'const unfinished = true;' });
+    await writer.flush();
+
+    expect(inserted).toContainEqual(expect.objectContaining({
+      type: 'code_stream',
+      data: { text: 'const unfinished = true;', done: undefined },
+    }));
   });
 
   it('persists preview frame captures with the current message id', async () => {
@@ -219,6 +310,143 @@ describe('AgentDualWriter', () => {
 
     await expect(writer.processAndEnqueue({ type: 'done' }))
       .rejects.toThrow('Refusing empty agent completion');
+  });
+
+  it('honors the stable Snapshot ID supplied by explicit draft promotion', async () => {
+    const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
+    const upserts: Array<{ table: string; row: Record<string, unknown> }> = [];
+    const fakeSupabase = {
+      storage: {
+        from: () => ({
+          upload: async () => ({ error: null }),
+          getPublicUrl: () => ({ data: { publicUrl: 'https://storage.example.com/design.json' } }),
+        }),
+      },
+      rpc: async () => ({ data: 7 }),
+      from: (table: string) => ({
+        insert: async (row: Record<string, unknown>) => {
+          inserts.push({ table, row });
+          return { error: null };
+        },
+        upsert: async (row: Record<string, unknown>) => {
+          upserts.push({ table, row });
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+    const snapshotId = '2b592fcc-2bc6-5f2b-b3f1-eaff0f202bdb';
+
+    await writer.processAndEnqueue({
+      type: 'render',
+      code: 'function Composition() { return null }',
+      width: 1920,
+      height: 1080,
+      snapshotId,
+      sourceDesignPath: 'project-id/drafts/latest-composition.json',
+      published: true,
+    });
+
+    expect(upserts).toContainEqual({
+      table: 'snapshots',
+      row: expect.objectContaining({
+        id: snapshotId,
+        design_path: `code/${snapshotId}.json`,
+      }),
+    });
+    expect(inserts).toContainEqual({
+      table: 'agent_events',
+      row: expect.objectContaining({
+        type: 'render',
+        data: expect.objectContaining({
+          snapshotId,
+          sourceDesignPath: 'project-id/drafts/latest-composition.json',
+          published: true,
+        }),
+      }),
+    });
+  });
+
+  it('persists the validated render manifest instead of stale source metadata', async () => {
+    const uploads: Array<{ path: string; body: Blob }> = [];
+    const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
+    const sourceDesignPath = 'project-id/drafts/latest-composition.json';
+    const readFile = vi.spyOn(workspace, 'readFile').mockResolvedValue({
+      path: sourceDesignPath,
+      contentType: 'application/json',
+      content: JSON.stringify({
+        code: 'function Composition(props) { return <div data-editable="title">{props.title}</div> }',
+        width: 1080,
+        height: 1920,
+        props: { title: 'Hello' },
+        animation: { fps: 30, durationInSeconds: 5 },
+        editables: [
+          { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
+          { id: 'photo', type: 'image', label: 'Photo', propKey: 'photo' },
+        ],
+      }),
+    });
+    const fakeSupabase = {
+      storage: {
+        from: () => ({
+          upload: async (path: string, body: Blob) => {
+            uploads.push({ path, body });
+            return { error: null };
+          },
+          getPublicUrl: () => ({ data: { publicUrl: 'https://storage.example.com/design.json' } }),
+        }),
+      },
+      rpc: async () => ({ data: 3 }),
+      from: (table: string) => ({
+        insert: async (row: Record<string, unknown>) => {
+          inserts.push({ table, row });
+          return { error: null };
+        },
+        upsert: async () => ({ error: null }),
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await writer.processAndEnqueue({
+      type: 'render',
+      code: 'function Composition(props) { return <div data-editable={props.__makaronEditable_title}>{props.title}</div> }',
+      width: 1080,
+      height: 1920,
+      props: {
+        title: 'Hello',
+        __makaronEditable_title: 'title',
+        subtitle: 'World',
+        __makaronEditable_subtitle: 'subtitle',
+      },
+      editables: [
+        { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
+        { id: 'photo', type: 'image', label: 'Photo', propKey: 'photo' },
+        { id: 'subtitle', type: 'text', label: 'Subtitle', propKey: 'subtitle' },
+      ],
+      snapshotId: 'promoted-snapshot',
+      sourceDesignPath,
+      published: true,
+    });
+
+    const persisted = JSON.parse(await uploads[0].body.text());
+    expect(persisted.code).toContain('__makaronEditable_title');
+    expect(persisted.props.__makaronEditable_subtitle).toBe('subtitle');
+    expect(persisted.editables).toHaveLength(3);
+    expect(persisted.editables.map((editable: { type: string }) => editable.type))
+      .toEqual(['text', 'image', 'text']);
+    expect(inserts).toContainEqual({
+      table: 'agent_events',
+      row: expect.objectContaining({
+        type: 'render',
+        data: expect.objectContaining({
+          editables: persisted.editables,
+          sourceDesignPath,
+          published: true,
+        }),
+      }),
+    });
+
+    readFile.mockRestore();
   });
 
   it('backfills video snapshot description from analyze_video tool results', async () => {

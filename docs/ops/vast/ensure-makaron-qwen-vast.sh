@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-INSTANCE_ID=${MAKARON_QWEN_INSTANCE_ID:-38761988}
-PROTECTED_LABEL=${MAKARON_QWEN_LABEL:-makaron-qwen-a6000-benchmark}
+INSTANCE_ID=${MAKARON_QWEN_INSTANCE_ID:-48270326}
+PROTECTED_LABEL=${MAKARON_QWEN_LABEL:-makaron-qwen-a6000-prod-20260821}
 VAST=${VASTAI_BIN:-/Users/tianyicai/.local/bin/vastai}
 APP_HEALTH_URL=${MAKARON_APP_HEALTH_URL:-https://www.makaron.app/api/health}
 DIRECT_HEALTH_URL=${MAKARON_COMFY_HEALTH_URL:-https://comfyui.makaron.app/system_stats}
 REMOTE_ONSTART=${MAKARON_REMOTE_ONSTART:-/workspace/makaron-qwen-onstart.sh}
-STOP_EXTRA_RUNNING=${MAKARON_STOP_EXTRA_VAST_RUNNING:-true}
+STOP_EXTRA_RUNNING=${MAKARON_STOP_EXTRA_VAST_RUNNING:-false}
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z')" "$*"
@@ -22,10 +22,16 @@ json_get() {
   jq -r "$1 // empty"
 }
 
+vast_call() {
+  "$VAST" "$@" 2> >(
+    sed -E 's/(api_key=)[^& )]+/\1[REDACTED]/g' >&2
+  )
+}
+
 wait_for_instance_running() {
-  local attempt
+  local attempt offline_checks=0 reboot_attempted=false
   for attempt in $(seq 1 60); do
-    instance_json=$("$VAST" show instance "$INSTANCE_ID" --raw)
+    instance_json=$(vast_call show instance "$INSTANCE_ID" --raw)
     actual_status=$(printf '%s' "$instance_json" | json_get '.actual_status')
     cur_state=$(printf '%s' "$instance_json" | json_get '.cur_state')
     intended_status=$(printf '%s' "$instance_json" | json_get '.intended_status')
@@ -34,6 +40,16 @@ wait_for_instance_running() {
     log "instance actual=$actual_status cur=$cur_state intended=$intended_status ssh=${ssh_host:-?}:${ssh_port:-?}"
     if [ "$actual_status" = "running" ] && [ "$cur_state" = "running" ] && [ -n "$ssh_host" ] && [ -n "$ssh_port" ]; then
       return 0
+    fi
+    if [ "$actual_status" = "offline" ]; then
+      offline_checks=$((offline_checks + 1))
+      if [ "$offline_checks" -ge 3 ] && [ "$reboot_attempted" = "false" ]; then
+        log "instance remains offline; requesting one Vast reboot"
+        vast_call reboot instance "$INSTANCE_ID" || log "Vast reboot request failed"
+        reboot_attempted=true
+      fi
+    else
+      offline_checks=0
     fi
     sleep 10
   done
@@ -50,7 +66,7 @@ stop_extra_running_instances() {
   [ "$STOP_EXTRA_RUNNING" = "true" ] || return 0
 
   local instances extra_ids id
-  instances=$("$VAST" show instances --raw)
+  instances=$(vast_call show instances --raw)
   extra_ids=$(
     printf '%s' "$instances" | jq -r --argjson protected "$INSTANCE_ID" '
       .[]
@@ -63,13 +79,13 @@ stop_extra_running_instances() {
   for id in $extra_ids; do
     [ -n "$id" ] || continue
     log "stopping extra running Vast instance $id"
-    "$VAST" stop instance "$id" || log "failed to stop extra instance $id"
+    vast_call stop instance "$id" || log "failed to stop extra instance $id"
   done
 }
 
 stop_extra_running_instances
 
-instance_json=$("$VAST" show instance "$INSTANCE_ID" --raw)
+instance_json=$(vast_call show instance "$INSTANCE_ID" --raw)
 label=$(printf '%s' "$instance_json" | json_get '.label')
 actual_status=$(printf '%s' "$instance_json" | json_get '.actual_status')
 cur_state=$(printf '%s' "$instance_json" | json_get '.cur_state')
@@ -85,7 +101,7 @@ log "protected instance $INSTANCE_ID label=$label actual=$actual_status cur=$cur
 
 if [ "$actual_status" != "running" ] || [ "$cur_state" != "running" ]; then
   log "starting protected instance $INSTANCE_ID"
-  "$VAST" start instance "$INSTANCE_ID"
+  vast_call start instance "$INSTANCE_ID"
   wait_for_instance_running || die "instance did not become running"
 fi
 

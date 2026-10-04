@@ -64,6 +64,32 @@ describe('home skill video lifecycle', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
   })
 
+  it('uses a supplied poster without capturing and storing video frames at runtime', async () => {
+    const { container, unmount } = render(<LazyVideo src="/home-hero/example.mp4" posterSrc="/home-hero/example.webp" style={{}} eager />)
+    expect(container.querySelector('[data-home-video-poster]')?.getAttribute('src')).toBe('/home-hero/example.webp')
+    fireEvent.loadedData(container.querySelector('video')!)
+    await waitFor(() => expect(posterMocks.capture).not.toHaveBeenCalled())
+    unmount()
+  })
+
+  it('pauses motion without detaching the current frame and resumes on request', async () => {
+    const props = { src: 'https://cdn.makaron.app/cover.mp4', style: {}, eager: true }
+    const { container, rerender } = render(<LazyVideo {...props} />)
+    const video = container.querySelector('video') as HTMLVideoElement
+    fireEvent.loadedData(video)
+    await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled())
+    video.currentTime = 3
+    vi.mocked(HTMLMediaElement.prototype.play).mockClear()
+    rerender(<LazyVideo {...props} paused />)
+    expect(container.querySelector('video')).toBe(video)
+    expect(video.currentTime).toBe(3)
+    expect(video.style.opacity).toBe('1')
+    expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled()
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled()
+    rerender(<LazyVideo {...props} paused={false} />)
+    await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled())
+  })
+
   it('keeps a poster visible while a detached video re-enters and reloads', async () => {
     const { container } = render(
       <LazyVideo
@@ -87,6 +113,7 @@ describe('home skill video lifecycle', () => {
 
     fireEvent.loadedData(video)
     expect(video.style.opacity).toBe('1')
+    expect(container.querySelector<HTMLImageElement>('[data-home-video-poster="true"]')?.style.opacity).toBe('0')
 
     act(() => {
       MockIntersectionObserver.instances[0].trigger({ isIntersecting: false, intersectionRatio: 0 })
@@ -94,7 +121,7 @@ describe('home skill video lifecycle', () => {
     })
 
     expect(container.querySelector('video')).toBeNull()
-    expect(container.querySelector('[data-home-video-poster="true"]')).toBeTruthy()
+    expect(container.querySelector<HTMLImageElement>('[data-home-video-poster="true"]')?.style.opacity).toBe('1')
 
     act(() => {
       MockIntersectionObserver.instances[0].trigger({ isIntersecting: true, intersectionRatio: 1 })

@@ -1,0 +1,25 @@
+[Unit]
+Description=Cloudflare quick tunnel for Makaron Codex relay preview
+After=network-online.target makaron-codex-relay.service
+Wants=network-online.target makaron-codex-relay.service
+
+[Service]
+Type=simple
+User=makaron-codex
+Group=makaron-codex
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate --protocol http2 --url http://127.0.0.1:25984
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+MemoryMax=256M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

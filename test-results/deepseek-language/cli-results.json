@@ -1,0 +1,247 @@
+{
+  "base": "http://localhost:3042",
+  "model": "deepseek-v4-pro",
+  "snapshot": "e09b0af90fc656d3f242674d80cfc58be78d38af",
+  "results": [
+    {
+      "sequence": "Chinese conversation",
+      "label": "Chinese initial",
+      "expected": "zh",
+      "prompt": "我想拍一个雨天咖啡馆的小故事，只讨论想法，不调用工具、不生成媒体。用两句话给我一个故事梗概。",
+      "projectId": "75540ed3-450c-4ff8-8d62-efe5576dc371",
+      "runId": "c0080928-e68a-48ec-a84e-e5e2efb78b94",
+      "status": "completed",
+      "text": "雨天傍晚，一个忘带伞的女生躲进街角咖啡馆，点单时发现老板是多年未见、曾不告而别的旧友。雨越下越大，两人借着煮咖啡的间隙，把当年没说出口的话一点一点聊开，最后雨停时谁也没有先离开。",
+      "durationSeconds": 11.431,
+      "observedMs": 1452,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Multilingual conversation",
+      "label": "English initial",
+      "expected": "en",
+      "prompt": "I am planning a quiet seaside short film. Suggest a two-sentence story idea. Discuss only; do not call tools or generate media.",
+      "projectId": "ab5ef285-9abc-418e-b44f-fa04c70953ed",
+      "runId": "70734d27-3f54-418e-830e-c75524a23da7",
+      "status": "completed",
+      "text": "A lighthouse keeper's estranged daughter returns to pack up his cottage after his death and keeps finding notes he left describing her childhood summers there. On her last night, she discovers the final note asks her to relight the lamp one more time — and when she does, a small boat she thought had been lost years ago answers with a flash from the water.",
+      "durationSeconds": 10.349,
+      "observedMs": 17478,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Multilingual conversation",
+      "label": "English + 好",
+      "expected": "en",
+      "prompt": "好",
+      "projectId": "ab5ef285-9abc-418e-b44f-fa04c70953ed",
+      "runId": "ca68a8bc-4b86-4e6e-99cb-da12d4b2dc38",
+      "status": "completed",
+      "text": "Glad you like it. Want me to develop it further — maybe a title, a three-act beat outline, or the visual tone for each scene? Still just discussing, no tools.",
+      "durationSeconds": 14.388,
+      "observedMs": 20168,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Multilingual conversation",
+      "label": "Substantive Japanese switch",
+      "expected": "ja",
+      "prompt": "冒頭の場面はどんな構図にするとよいですか？二文で提案してください。相談だけで、ツールや画像生成は使わないでください。",
+      "projectId": "ab5ef285-9abc-418e-b44f-fa04c70953ed",
+      "runId": "e4a997fe-740b-472d-976f-a03e944ba40e",
+      "status": "completed",
+      "text": "冒頭は、娘が亡き父の灯台守小屋へ向かう後ろ姿を、荒涼とした岬の道を歩く遠景ロングショットで捉え、水平線と灯台が画面の上三分の一に収まる「広い海＋小さな人影」の構図が効果的です。そこに曇天の拡散光を当て、風に揺れる枯れ草を前景に置くことで、孤独と「帰還」の静けさを同時に感じさせられます。",
+      "durationSeconds": 12.764,
+      "observedMs": 17999,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Multilingual conversation",
+      "label": "Japanese + ok",
+      "expected": "ja",
+      "prompt": "ok",
+      "projectId": "ab5ef285-9abc-418e-b44f-fa04c70953ed",
+      "runId": "0092351a-8b38-4938-b3cc-993eba4275f6",
+      "status": "completed",
+      "text": "了解です。冒頭の構図に続けて、その後の展開シーン（小屋の内部や灯台の螺旋階段など）の構図や光のトーンも相談できます。どこから詰めましょうか？",
+      "durationSeconds": 8.94,
+      "observedMs": 14627,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Multilingual conversation",
+      "label": "Substantive Spanish switch",
+      "expected": "es",
+      "prompt": "¿Cómo iluminarías esta escena al amanecer? Responde en dos frases; solo estamos conversando, sin herramientas ni generación de medios.",
+      "projectId": "ab5ef285-9abc-418e-b44f-fa04c70953ed",
+      "runId": "6314262a-095e-4bf9-8a1f-515f92a882ca",
+      "status": "completed",
+      "text": "Al amanecer usaría una luz azulada y difusa desde el lado del mar, apenas dorada en el horizonte, de modo que la silueta de la hija quede recortada y fría mientras el camino se perfila en penumbra. Añadiría un reborde cálido muy suave en su cabello y hombros para sugerir la primera luz del sol sin romper la atmósfera nostálgica y solitaria.",
+      "durationSeconds": 10.02,
+      "observedMs": 13773,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Multilingual conversation",
+      "label": "Spanish + emoji",
+      "expected": "es",
+      "prompt": "👍",
+      "projectId": "ab5ef285-9abc-418e-b44f-fa04c70953ed",
+      "runId": "715bcfe5-0ec2-45cd-98cd-4e117bbf0b7c",
+      "status": "completed",
+      "text": "Gracias. ¿Seguimos afinando la atmósfera — por ejemplo el tono de color general o el movimiento de cámara de ese plano inicial?",
+      "durationSeconds": 6.13,
+      "observedMs": 9915,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Multilingual conversation",
+      "label": "Explicit English preference",
+      "expected": "en",
+      "prompt": "之后即使我说中文，也请一直用英文回答。简单说一下海边拍摄应该注意什么，不调用工具。",
+      "projectId": "ab5ef285-9abc-418e-b44f-fa04c70953ed",
+      "runId": "4356c2c8-710c-41a7-becd-38fbf1cb8fc4",
+      "status": "completed",
+      "text": "Understood — I'll keep replying in English from now on.\n\nWhen shooting by the sea, protect your gear from salt spray, sand, and sudden tide changes, and keep the horizon level in frame. Also shoot around golden hour or blue hour for softer, more cinematic light, and record clean ambient sound separately since wind noise can ruin dialogue.",
+      "durationSeconds": 7.893,
+      "observedMs": 10759,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Multilingual conversation",
+      "label": "Explicit preference + Chinese follow-up",
+      "expected": "en",
+      "prompt": "如果当天有大风，收音怎么办？两句话，不调用工具。",
+      "projectId": "ab5ef285-9abc-418e-b44f-fa04c70953ed",
+      "runId": "a79c193f-8505-4b85-bc2e-baacafc76979",
+      "status": "completed",
+      "text": "On a windy day, use a furry windshield (\"dead cat\") over the mic and position the subject so the wind hits the mic's back rather than its capsule. Also record room tone and plan to rely on ADR or a lavalier hidden under clothing for dialogue-heavy scenes.",
+      "durationSeconds": 7.1,
+      "observedMs": 9699,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Traditional Chinese",
+      "label": "Traditional Chinese initial",
+      "expected": "zh-Hant",
+      "prompt": "我想拍一個雨天咖啡店的小故事，請用兩句話給我一個故事梗概。我們只討論，不使用工具，也不生成圖片或影片。",
+      "projectId": "58d15953-63b5-4b2a-bc29-b38e20eab22e",
+      "runId": "2827a5bb-1912-4a8c-b735-89c29de89952",
+      "status": "completed",
+      "text": "一個男人在雨天躲進巷尾的咖啡店，發現老闆娘每天都會留一杯熱拿鐵在窗邊，給一個永遠不會出現的人。他連續造訪、慢慢拼湊出那杯咖啡背後的故事，最後發現自己竟是那個「被等待的人」——只是他早已忘了那段約定。",
+      "durationSeconds": 9.604,
+      "observedMs": 14078,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Chinese conversation",
+      "label": "Chinese + ok",
+      "expected": "zh",
+      "prompt": "ok",
+      "projectId": "75540ed3-450c-4ff8-8d62-efe5576dc371",
+      "runId": "09fa97fa-c7f0-4a38-9e39-69d0e2eb1751",
+      "status": "completed",
+      "text": "那就顺着这个方向往下聊。你想先把故事往\"遗憾重逢、和解\"走，还是加一点反转或开放式结局？也可以先定女主角的职业、咖啡馆风格这类氛围细节。",
+      "durationSeconds": 9.712,
+      "observedMs": 1040,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Chinese conversation",
+      "label": "Chinese + repeated ok",
+      "expected": "zh",
+      "prompt": "ok",
+      "projectId": "75540ed3-450c-4ff8-8d62-efe5576dc371",
+      "runId": "ee2b6617-ce79-4c45-82e3-e5eadefd6048",
+      "status": "completed",
+      "text": "那我先给个方向定个调：**遗憾重逢 + 微甜开放式结局**，避免狗血。\n\n- **女主角**：插画师，习惯用速写本记录路人，正巧在画雨景时躲进咖啡馆。\n- **老板（旧友）**：沉默寡言，靠拉花和手冲续命，一看到她的速写本就愣住——当年他消失前，她送他的那本画册他其实一直带在身边。\n- **钩子**：他认出她，却不敢认；她画完一页，纸背面落下他的名字。\n\n这样故事核心很轻，画面感也强。你想调整哪里，还是先定咖啡馆的氛围风格？",
+      "durationSeconds": 11.671,
+      "observedMs": 13103,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Chinese conversation",
+      "label": "Substantive English switch",
+      "expected": "en",
+      "prompt": "How would you frame the opening shot and light the cafe window? Please keep it to two sentences; discussion only, no tools or media generation.",
+      "projectId": "75540ed3-450c-4ff8-8d62-efe5576dc371",
+      "runId": "a62bd985-bec3-4885-82a4-b79221380369",
+      "status": "completed",
+      "text": "开场用一个低机位固定镜头，隔着被雨点打花的玻璃窗往里拍，前景的雨珠和倒映的街灯把整扇窗变成一层朦胧的柔光滤镜。窗内用暖黄的钨丝灯做主光、偏冷蓝的阴天自然光从窗外透进来做轮廓光，让女主站在明暗交界处，只照亮她半边脸和手中摊开的速写本。",
+      "durationSeconds": 7.898,
+      "observedMs": 10128,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Chinese conversation",
+      "label": "Substantive Chinese switch",
+      "expected": "zh",
+      "prompt": "如果只用手机拍，怎样保持窗外的雨丝清晰？两句话说一下，只讨论、不调用工具。",
+      "projectId": "75540ed3-450c-4ff8-8d62-efe5576dc371",
+      "runId": "498e441f-a6bf-4eaf-a049-f7d8bba5b081",
+      "status": "completed",
+      "text": "用手机拍摄时先手动锁定对焦和曝光（长按屏幕锁定），再把曝光略微往下压，避免玻璃反光和过曝把雨丝吞掉。雨丝要清晰，关键是让雨滴处于逆光或侧面光里：打开手机闪光灯斜着照向窗外，或用一盏暖灯放在窗外一侧，背景压暗后雨丝会变成亮晶晶的线条。",
+      "durationSeconds": 7.469,
+      "observedMs": 9399,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Chinese conversation",
+      "label": "English artifact request",
+      "expected": "English title (intentional)",
+      "prompt": "给这个故事起一个英文标题，只输出标题，不调用工具。",
+      "projectId": "75540ed3-450c-4ff8-8d62-efe5576dc371",
+      "runId": "ca1e92a7-b985-473f-ae27-a4ddcc13cb3a",
+      "status": "completed",
+      "text": "Rain on the Counter",
+      "durationSeconds": 6.35,
+      "observedMs": 9980,
+      "outputTypes": [
+        "text"
+      ]
+    },
+    {
+      "sequence": "Chinese conversation",
+      "label": "English artifact + ok",
+      "expected": "zh",
+      "prompt": "ok",
+      "projectId": "75540ed3-450c-4ff8-8d62-efe5576dc371",
+      "runId": "f45860fa-d376-4453-a1cb-5358078cb675",
+      "status": "completed",
+      "text": "标题就先用 **Rain on the Counter**。接下来想聊哪块？我可以帮你细化分镜、定影调/配乐，或者写两三句台词。",
+      "durationSeconds": 7.732,
+      "observedMs": 10643,
+      "outputTypes": [
+        "text"
+      ]
+    }
+  ]
+}

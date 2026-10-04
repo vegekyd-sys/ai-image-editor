@@ -3,7 +3,6 @@ import {
   buildModelHistoryFromRows,
   sanitizeToolHistory,
   TOOL_HISTORY_MAX_OUTPUT_CHARS,
-  TOOL_HISTORY_MAX_ROWS_PER_RUN,
 } from '../src/lib/agentToolHistory';
 
 describe('agent tool history sanitizer', () => {
@@ -64,16 +63,45 @@ describe('agent tool history sanitizer', () => {
     expect(image.omitted).toContain('removed_binary_payload');
   });
 
-  it('enforces run budget with compact summary', () => {
+  it('preserves preview_frame errors instead of treating them as image pixels', () => {
+    const preview = sanitizeToolHistory(
+      'preview_frame',
+      { design_path: 'project/drafts/latest-composition.json', frames: [0, 90, 180] },
+      { error: 'Failed to capture contact sheet: Failed to compile design code' },
+      { rows: 0, chars: 0 },
+    );
+
+    expect(preview.output.type).toBe('error-text');
+    expect(JSON.stringify(preview.output)).toContain('Failed to compile design code');
+    expect(preview.omitted).not.toContain('removed_preview_frame_pixels');
+  });
+
+  it('removes unlabelled large base64 strings while preserving useful data objects', () => {
+    const result = sanitizeToolHistory(
+      'custom_tool',
+      { payload: 'a'.repeat(8_192), data: { assetId: 'asset-1', width: 1280 } },
+      { screenshotBytes: 'b'.repeat(8_192), data: { snapshotId: 'snap-1' } },
+      { rows: 0, chars: 0 },
+    );
+
+    const json = JSON.stringify(result);
+    expect(json).not.toContain('a'.repeat(100));
+    expect(json).not.toContain('b'.repeat(100));
+    expect(json).toContain('asset-1');
+    expect(json).toContain('snap-1');
+    expect(result.omitted).toContain('removed_base64_payload');
+  });
+
+  it('keeps compact tool evidence after hundreds of calls in one run', () => {
     const result = sanitizeToolHistory(
       'read_file',
       { path: 'prompts/animate.md' },
       { path: 'prompts/animate.md', type: 'text/markdown', content: 'full prompt' },
-      { rows: TOOL_HISTORY_MAX_ROWS_PER_RUN, chars: 10 },
+      { rows: 500, chars: 8_000_000 },
     );
 
-    expect(result.omitted).toContain('run_budget_exceeded');
-    expect(JSON.stringify(result.output)).toContain('tool history run budget exceeded');
+    expect(JSON.stringify(result.output)).toContain('full prompt');
+    expect(result.omitted).not.toContain('run_budget_exceeded');
   });
 
   it('keeps write_file path without storing composition code', () => {
@@ -95,9 +123,180 @@ describe('agent tool history sanitizer', () => {
     expect(json).toContain('https://cdn.example.com/code/snapshot-123.json');
     expect(json).not.toContain('function Composition');
   });
+
+  it('labels compact transcript history so it cannot be mistaken for full word timing', () => {
+    const words = Array.from({ length: 45 }, (_, index) => ({
+      text: `词${index}`,
+      startMs: index * 100,
+      endMs: (index + 1) * 100,
+    }));
+    const result = sanitizeToolHistory(
+      'transcribe_audio',
+      { media_index: 1 },
+      {
+        transcriptPath: 'project/transcripts/asr-request.json',
+        transcript: {
+          provider: 'volcengine',
+          model: 'bigmodel-flash',
+          text: words.map(word => word.text).join(''),
+          utterances: [{ text: '长句', startMs: 0, endMs: 4_500, words }],
+        },
+      },
+      { rows: 0, chars: 0 },
+    );
+
+    expect(JSON.stringify(result.output)).toContain('"historyWordTimingTruncated":true');
+    expect(JSON.stringify(result.output)).toContain('Read transcriptPath');
+    expect(result.omitted).toContain('truncated_transcript_words');
+  });
+
+  it('stores write_code_file as a workspace pointer instead of replaying source', () => {
+    const source = `function Composition() { return '${'scene'.repeat(8_000)}'; }`;
+    const result = sanitizeToolHistory(
+      'write_code_file',
+      {
+        description: 'Build the complete illustrated timeline',
+        path: 'project-1/code/illustrated-timeline.js',
+        runtime: 'composition',
+        content: source,
+      },
+      {
+        success: true,
+        path: 'project-1/code/illustrated-timeline.js',
+        message: 'Code file saved',
+        codeChars: source.length,
+      },
+      { rows: 0, chars: 0 },
+    );
+
+    const json = JSON.stringify(result);
+    expect(json).toContain('project-1/code/illustrated-timeline.js');
+    expect(json).toContain(`source persisted in workspace: ${source.length} chars`);
+    expect(json).not.toContain('scenescenescene');
+    expect(result.omitted).toContain('code_file_content_replaced_by_pointer');
+  });
 });
 
 describe('agent tool history reconstruction', () => {
+  it('normalizes legacy audio tool names before model replay', () => {
+    const history = buildModelHistoryFromRows([], [
+      {
+        created_at: '2026-06-01T00:00:00.000Z',
+        run_id: 'legacy-audio',
+        step: 0,
+        seq: 0,
+        tool_call_id: 'voice-call',
+        tool_name: 'generate_voiceover',
+        input: { text: '旧旁白', voice_id: 'legacy-voice' },
+        output: { type: 'json', value: { success: true, audioUrl: 'https://example.com/voice.wav' } },
+      },
+      {
+        created_at: '2026-06-01T00:00:01.000Z',
+        run_id: 'legacy-audio',
+        step: 0,
+        seq: 1,
+        tool_call_id: 'catalog-call',
+        tool_name: 'list_voiceover_voices',
+        input: {},
+        output: { type: 'json', value: { voices: [] } },
+      },
+      {
+        created_at: '2026-06-01T00:00:02.000Z',
+        run_id: 'legacy-audio',
+        step: 0,
+        seq: 2,
+        tool_call_id: 'music-call',
+        tool_name: 'generate_music',
+        input: { prompt: '轻快音乐', duration_seconds: 12 },
+        output: { type: 'json', value: { success: true, audioUrl: 'https://example.com/music.wav' } },
+      },
+    ]);
+
+    const json = JSON.stringify(history);
+    expect(json).not.toContain('generate_voiceover');
+    expect(json).not.toContain('list_voiceover_voices');
+    expect(json).not.toContain('generate_music');
+    expect(json).toContain('"toolName":"generate_audio"');
+    expect(json).toContain('"kind":"voiceover"');
+    expect(json).toContain('"kind":"music"');
+  });
+
+  it('reconstructs 200 complete chat rounds with tool evidence without truncation', () => {
+    const visible = Array.from({ length: 200 }, (_, round) => {
+      const base = round * 3;
+      return [
+        {
+          id: `u-${round}`,
+          role: 'user' as const,
+          content: `request-${round}`,
+          created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, base)).toISOString(),
+        },
+        {
+          id: `a-${round}`,
+          role: 'assistant' as const,
+          content: `result-${round}`,
+          created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, base + 2)).toISOString(),
+        },
+      ];
+    }).flat();
+    const tools = Array.from({ length: 200 }, (_, round) => ({
+      created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, round * 3 + 1)).toISOString(),
+      run_id: `run-${round}`,
+      step: round,
+      seq: 0,
+      tool_call_id: `tool-${round}`,
+      tool_name: 'read_file',
+      input: { path: `code/round-${round}.js` },
+      output: { type: 'text' as const, value: `evidence-${round}` },
+    }));
+
+    const startedAt = performance.now();
+    const history = buildModelHistoryFromRows(visible, tools);
+    const elapsedMs = performance.now() - startedAt;
+
+    expect(history).toHaveLength(800);
+    expect(JSON.stringify(history)).toContain('request-0');
+    expect(JSON.stringify(history)).toContain('evidence-199');
+    expect(JSON.stringify(history)).toContain('result-199');
+    expect(elapsedMs).toBeLessThan(1_000);
+  });
+
+  it('keeps hundreds of visible turns instead of applying a fixed turn cap', () => {
+    const visible = Array.from({ length: 601 }, (_, index) => ({
+      id: `m${index}`,
+      role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
+      content: `turn-${index}`,
+      created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(),
+    }));
+
+    const history = buildModelHistoryFromRows(visible, []);
+
+    expect(history).toHaveLength(600);
+    expect(history[0]).toMatchObject({ role: 'user', content: 'turn-0' });
+    expect(history.at(-1)).toMatchObject({ role: 'assistant', content: 'turn-599' });
+  });
+
+  it('sanitizes legacy tool rows again before replaying them to the model', () => {
+    const history = buildModelHistoryFromRows([
+      { id: 'u1', role: 'user', content: '看截图', created_at: '2026-06-01T00:00:00.000Z' },
+      { id: 'a1', role: 'assistant', content: '看完了。', created_at: '2026-06-01T00:00:02.000Z' },
+    ], [{
+      created_at: '2026-06-01T00:00:01.000Z',
+      run_id: 'legacy-run',
+      step: 0,
+      seq: 0,
+      tool_call_id: 'legacy-call',
+      tool_name: 'custom_tool',
+      input: { path: 'frame.png' },
+      output: { type: 'json', value: { screenshotBytes: 'c'.repeat(8_192), assetId: 'asset-2' } },
+    }]);
+
+    const json = JSON.stringify(history);
+    expect(json).not.toContain('c'.repeat(100));
+    expect(json).toContain('asset-2');
+    expect(json).toContain('omitted base64 payload');
+  });
+
   it('rebuilds AI SDK model messages from visible messages and tool rows', () => {
     const history = buildModelHistoryFromRows([
       { id: 'u1', role: 'user', content: '好看点', created_at: '2026-06-01T00:00:00.000Z' },
@@ -208,5 +407,25 @@ describe('agent tool history reconstruction', () => {
     const json = JSON.stringify(history);
     expect(json).toContain('"toolName":"run_code"');
     expect(json).toContain('微信成长');
+  });
+
+  it('replays run_code calls that execute a persisted code_path', () => {
+    const history = buildModelHistoryFromRows([
+      { id: 'u1', role: 'user', content: '执行刚才写好的代码', created_at: '2026-06-01T00:00:00.000Z' },
+      { id: 'a1', role: 'assistant', content: '已经执行。', created_at: '2026-06-01T00:00:02.000Z' },
+    ], [{
+      created_at: '2026-06-01T00:00:01.000Z',
+      run_id: 'run-1',
+      step: 0,
+      seq: 0,
+      tool_call_id: 'call-code-path',
+      tool_name: 'run_code',
+      input: { runtime: 'composition', code_path: 'project-1/code/illustrated-timeline.js' },
+      output: { type: 'json', value: { content: 'Draft saved' } },
+    }]);
+
+    const json = JSON.stringify(history);
+    expect(json).toContain('"toolName":"run_code"');
+    expect(json).toContain('project-1/code/illustrated-timeline.js');
   });
 });

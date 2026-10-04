@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { handleVideoFailure } from '@/lib/video-lifecycle'
 import type { VideoMeta } from '@/types'
+import { reconcileMcpVideos } from '@/lib/billing/mcp-video'
 
 export const maxDuration = 1800
 
@@ -21,31 +22,56 @@ function getPublishedSnapshotIds(metadata: Record<string, unknown> | null | unde
     : []
 }
 
+async function tryHandleVideoFailure(snapshotId: string, error?: string): Promise<boolean> {
+  try {
+    return await handleVideoFailure(snapshotId, error)
+  } catch (failureError) {
+    console.error(`[cron/video-poll] Failed to persist terminal state for ${snapshotId}:`, failureError)
+    return false
+  }
+}
+
 export async function GET(req: NextRequest) {
   if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const admin = getSupabaseAdmin()
+  const pipelineReconciliation = import('@/lib/video-upscale-pipeline').then(m => m.reconcileVideoPipelines()).catch(() => 0)
+  const mcpReconciliation = reconcileMcpVideos().catch(error => {
+    console.error('[cron/video-poll] MCP billing reconciliation failed:', error)
+    return 0
+  })
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
 
   const { data: stale } = await admin
     .from('snapshots')
-    .select('id, project_id, image_url, video_meta, projects(user_id)')
+    .select('id, project_id, image_url, video_meta, created_at, projects(user_id)')
     .eq('type', 'video')
     .lt('created_at', tenMinAgo)
     .filter('video_meta->>status', 'eq', 'processing')
+    .order('created_at', { ascending: true })
     .limit(20)
 
   let processed = 0
   for (const snap of stale || []) {
     const vm = snap.video_meta as VideoMeta
     if (!vm?.taskId) continue
+    const ownerUserId = getProjectInfo(snap.projects as SnapshotProject)?.user_id
+    const createdAt = vm.createdAt || snap.created_at
+    const createdAtMs = new Date(createdAt).getTime()
+    const age = Number.isFinite(createdAtMs) ? Date.now() - createdAtMs : 0
 
     try {
-      let result: { status: string; videoUrl?: string; error?: string }
+      let result: { taskId?: string; status: string; videoUrl?: string; error?: string } & Partial<import('@/lib/skills/get-video-status').GetVideoStatusResult>
 
-      if (vm.taskId.startsWith('task-unified-')) {
+      if (vm.taskId.startsWith('video-pipeline-')) {
+        const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline')
+        result = { taskId: vm.taskId, ...await advanceVideoPipeline(vm.taskId, ownerUserId) }
+      } else if (vm.taskId.startsWith('mr-wan30-')) {
+        const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
+        result = await getMuleRouterVideoTask(vm.taskId)
+      } else if (vm.taskId.startsWith('task-unified-')) {
         const { getEvolinkTask } = await import('@/lib/evolink')
         result = await getEvolinkTask(vm.taskId)
       } else if (vm.taskId.startsWith('cgt-')) {
@@ -56,21 +82,31 @@ export async function GET(req: NextRequest) {
         result = await getKlingMotionControlTask(vm.taskId.slice(3))
       } else if (vm.taskId.startsWith('xai-')) {
         const { getXaiVideoTask } = await import('@/lib/xai-video')
-        result = await getXaiVideoTask(vm.taskId)
+        result = await getXaiVideoTask(vm.taskId, ownerUserId)
+      } else if (vm.taskId.startsWith('google-omni-')) {
+        const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
+        result = await getGoogleOmniVideoTask(vm.taskId, vm.videoUrl || vm.providerUrl)
+      } else if (vm.taskId.startsWith('minimax-h3-')) {
+        const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
+        result = await getMinimaxVideoTask(vm.taskId)
+      } else if (vm.taskId.startsWith('fal-h3max-')) {
+        const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+        result = await getFalH3MaxVideoTask(vm.taskId)
+      } else if (vm.taskId.startsWith('sync3-')) {
+        const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
+        result = await getSyncLipsyncTask(vm.taskId)
       } else {
         const { getKlingTask } = await import('@/lib/kling')
         result = await getKlingTask(vm.taskId)
       }
 
       if (result.status === 'failed') {
-        await handleVideoFailure(snap.id, result.error)
-        processed++
+        if (await tryHandleVideoFailure(snap.id, result.error)) processed++
       } else if (result.status === 'completed' && result.videoUrl) {
-        const updatedMeta = { ...vm, status: 'completed' as const, videoUrl: result.videoUrl, providerUrl: result.videoUrl }
+        const updatedMeta = { ...vm, status: 'completed' as const, videoUrl: result.videoUrl, providerUrl: result.videoUrl, ...(result.stage ? { pipelineStage: result.stage, baseVideoUrl: result.baseVideoUrl, enhancementStatus: result.enhancementStatus, requestedResolution: result.requestedResolution, resolution: result.actualResolution ?? vm.resolution } : {}) }
         await admin.from('snapshots').update({
           video_meta: updatedMeta,
         }).eq('id', snap.id)
-        const ownerUserId = getProjectInfo(snap.projects as SnapshotProject)?.user_id
         if (ownerUserId) {
           const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair')
           await ensureVideoPosterForSnapshot({
@@ -85,13 +121,14 @@ export async function GET(req: NextRequest) {
         processed++
       }
       // still processing after 30min → mark timeout
-      const age = Date.now() - new Date(vm.createdAt || '').getTime()
-      if (result.status !== 'completed' && result.status !== 'failed' && age > 30 * 60 * 1000) {
-        await handleVideoFailure(snap.id, 'Timed out after 30 minutes')
-        processed++
+      if (result.status !== 'completed' && result.status !== 'failed' && !vm.taskId.startsWith('video-pipeline-') && age > 30 * 60 * 1000) {
+        if (await tryHandleVideoFailure(snap.id, 'Timed out after 30 minutes')) processed++
       }
     } catch (e) {
       console.error(`[cron/video-poll] Error polling ${snap.id}:`, e)
+      if (!vm.taskId.startsWith('video-pipeline-') && age > 30 * 60 * 1000) {
+        if (await tryHandleVideoFailure(snap.id, 'Provider polling failed after 30 minutes')) processed++
+      }
     }
   }
 
@@ -132,6 +169,8 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     processed,
+    mcpProcessed: await mcpReconciliation,
+    pipelineProcessed: await pipelineReconciliation,
     total: stale?.length || 0,
     remotionProcessed,
     ...(remotionError ? { remotionError } : {}),

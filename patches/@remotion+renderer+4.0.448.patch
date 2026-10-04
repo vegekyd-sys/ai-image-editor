@@ -1,0 +1,38 @@
+diff --git a/node_modules/@remotion/renderer/dist/esm/index.mjs b/node_modules/@remotion/renderer/dist/esm/index.mjs
+index dc8a234..f973397 100644
+--- a/node_modules/@remotion/renderer/dist/esm/index.mjs
++++ b/node_modules/@remotion/renderer/dist/esm/index.mjs
+@@ -5475,12 +5475,13 @@ var internalOpenBrowser = async ({
+     Log.verbose({ indent, logLevel, tag: "openBrowser()" }, `Using custom user agent: ${chromiumOptions.userAgent}`);
+   }
+   const userDataDir = await fs10.promises.mkdtemp(path9.join(os6.tmpdir(), "puppeteer_dev_chrome_profile-"));
++  const browserLaunchTimeout = Number(process.env.REMOTION_BROWSER_LAUNCH_TIMEOUT_MS) || 25e3;
+   const browserInstance = await launchChrome({
+     executablePath,
+     logLevel,
+     indent,
+     userDataDir,
+-    timeout: 25000,
++    timeout: browserLaunchTimeout,
+     args: [
+       "about:blank",
+       "--allow-pre-commit-input",
+diff --git a/node_modules/@remotion/renderer/dist/open-browser.js b/node_modules/@remotion/renderer/dist/open-browser.js
+index db42c28..387083f 100644
+--- a/node_modules/@remotion/renderer/dist/open-browser.js
++++ b/node_modules/@remotion/renderer/dist/open-browser.js
+@@ -78,12 +78,13 @@ const internalOpenBrowser = async ({ browser, browserExecutable, chromiumOptions
+         logger_1.Log.verbose({ indent, logLevel, tag: 'openBrowser()' }, `Using custom user agent: ${chromiumOptions.userAgent}`);
+     }
+     const userDataDir = await node_fs_1.default.promises.mkdtemp(node_path_1.default.join(node_os_1.default.tmpdir(), 'puppeteer_dev_chrome_profile-'));
++    const browserLaunchTimeout = Number(process.env.REMOTION_BROWSER_LAUNCH_TIMEOUT_MS) || 25000;
+     const browserInstance = await (0, Launcher_1.launchChrome)({
+         executablePath,
+         logLevel,
+         indent,
+         userDataDir,
+-        timeout: 25000,
++        timeout: browserLaunchTimeout,
+         args: [
+             'about:blank',
+             '--allow-pre-commit-input',

@@ -163,6 +163,16 @@ async function browserLogin(browser: Browser, email: string, password: string) {
   return { context, page }
 }
 
+async function launchBrowser(): Promise<Browser> {
+  try {
+    return await chromium.launch({ headless: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (!message.includes('Executable doesn\'t exist')) throw error
+    return chromium.launch({ headless: true, channel: 'chrome' })
+  }
+}
+
 async function cleanup(userId: string, projectIds: string[], tmpDir: string) {
   const admin = getSupabaseAdmin()
   const ignore = async (value: PromiseLike<unknown>) => {
@@ -305,7 +315,7 @@ async function main() {
   const { key, id: keyId } = await generateApiKey(userId, 'frontend-agent-remotion-e2e')
   const projectIds: string[] = []
   let browser: Browser | null = null
-  const server = spawn('npx', ['next', 'dev', '-H', '127.0.0.1', '-p', String(port)], {
+  const server = spawn('npx', ['next', 'dev', '--webpack', '-H', '127.0.0.1', '-p', String(port)], {
     env: {
       ...process.env,
       MAKARON_APP_URL: baseUrl,
@@ -323,7 +333,7 @@ async function main() {
     const agentProject = await createProjectWithComposition(userId, 'agent-materialize-remotion-e2e')
     projectIds.push(agentProject.projectId)
 
-    browser = await chromium.launch({ headless: true })
+    browser = await launchBrowser()
     const frontend = await runFrontendSaveE2E(browser, email, password, frontendProject.projectId, tmpDir)
     const agent = await runAgentE2E(key, agentProject.projectId, tmpDir)
 

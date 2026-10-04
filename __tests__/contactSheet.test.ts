@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
-import { createContactSheet } from '@/lib/contact-sheet';
+import { createContactSheet, renderContactSheetLabelSvg } from '@/lib/contact-sheet';
 
 describe('composition contact sheet', () => {
   it('combines representative frames into one labeled review image', async () => {
@@ -27,5 +27,14 @@ describe('composition contact sheet', () => {
 
     await expect(createContactSheet([{ image, label: 'only' }], 10, 10))
       .rejects.toThrow('at least two frames');
+  });
+
+  it('renders labels without relying on server fonts', () => {
+    const svg = renderContactSheetLabelSvg('#1  frame 0  0.0s', 203, 34).toString();
+
+    expect(svg).not.toContain('<text');
+    expect(svg).not.toContain('font-family');
+    expect(svg).not.toContain('Arial');
+    expect(svg).toContain('fill="#f3f3f5"');
   });
 });

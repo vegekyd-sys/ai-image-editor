@@ -4,14 +4,25 @@ Treat audio as part of the edit, not a final attachment.
 
 ## Voice
 
-- Decide who is speaking, to whom, with what intent, pace, energy, and pause
-  behavior before generating voiceover.
-- Use `list_voiceover_voices` and choose a voice for the role, not only gender
-  or accent.
+- Lock one audio architecture before generation. If the finished track contains
+  narration/dialogue plus music, ambience, or SFX, call
+  `generate_audio({ kind: "mixed", ... })` exactly once with every layer in the
+  same prompt. Do not generate a voice track and supporting track separately.
+- Use `generate_audio({ kind: "voiceover", ... })` only for an intentionally
+  isolated narration/VO master. Do not search for a separate voiceover,
+  voice-catalog, or music tool.
+- Before generation, write a Voice Performance Brief: who is speaking, who is
+  listening, dramatic intent, emotional starting point, turning point, ending
+  state, pace, energy, pauses, breaths, emphasis, restraint, and behaviors to
+  avoid.
+- For a unified track, Seed Audio must create the emotional voice, supporting
+  bed, spot effects, ducking, and intentional ending in the same model
+  generation. Do not request stems.
 - Generate a short sample when voice identity materially affects the piece.
-- When measured speech timing materially improves the edit, transcribe the
-  generated narration and use those timecodes as editorial reference. Do not
-  create a separate caption artifact or renderer.
+- For every narrated Remotion/Studio composition, call `transcribe_audio` with
+  the approved Script sections and fps, persist its narration cue sheet, and
+  use those measured seconds/frames as the master clock. This standardizes
+  timing data, not subtitle styling or rendering.
 - If speech exceeds the locked duration by more than 10%, rewrite or tighten it;
   do not casually lengthen the video.
 
