@@ -223,7 +223,7 @@ const zh = {
   'changelog.seedance25Eco.title': "自动超分：更省成本，最高 4K",
   'changelog.seedance25Eco.item1': "新增自动超分的视频生成方式：先生成 480p 视频，再自动提升清晰度，以更低成本得到高清成片。",
   'changelog.seedance25Eco.item2': "只需选择目标清晰度，生成和超分就会连续完成，不用等视频生成后再操作一次。",
-  'changelog.seedance25Eco.item3': "支持 720p、1080p、2K 和 4K，默认输出 1080p，单条视频最长 30 秒。",
+  'changelog.seedance25Eco.item3': "支持 720p、1080p、2K 和 4K，默认输出 720p，单条视频最长 30 秒。",
   'changelog.byteDanceFastUpscale.title': "已有视频也能超分",
   'changelog.byteDanceFastUpscale.item1': "在对话中提供一条已有视频，再说「把这条视频超分到 4K」，就能提升清晰度，无需重新生成。",
   'changelog.byteDanceFastUpscale.item2': "支持最长 60 秒的视频，输出可选 720p、1080p、2K 或 4K，同时保留原片的动作、画幅比例、帧率和声音。",

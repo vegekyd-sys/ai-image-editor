@@ -558,7 +558,7 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
 // Eco describes final delivery, while its generation provider always receives 480p.
 MODEL_CAPABILITIES['seedance-2.5-eco'] = {
   ...MODEL_CAPABILITIES['seedance-2.5'], id: 'seedance-2.5-eco', label: 'Seedance 2.5 Eco',
-  supportedResolutions: ['720p', '1080p', '2k', '4k'], defaultResolution: '1080p',
+  supportedResolutions: ['720p', '1080p', '2k', '4k'], defaultResolution: '720p',
   estimatedCostPerSecondUsd: .1452,
   estimatedCostPerSecondUsdByResolution: { '720p': .1452, '1080p': .1452, '2k': .1524, '4k': .1668 },
 }
@@ -898,8 +898,9 @@ export function estimateVideoProviderCostUsd(options: {
   contentFilter?: boolean
 }): number | undefined {
   if (normalizeVideoModelId(options.model) === 'seedance-2.5-eco') {
+    const resolution = normalizeVideoResolution(options.model, options.resolution)
     const base = estimateVideoProviderCostUsd({ ...options, model: 'seedance-2.5', resolution: '480p' })
-    const upscale = estimateVideoProviderCostUsd({ model: 'bytedance-video-upscale', resolution: options.resolution, durationSec: options.durationSec })
+    const upscale = estimateVideoProviderCostUsd({ model: 'bytedance-video-upscale', resolution, durationSec: options.durationSec })
     return base != null && upscale != null ? base + upscale : undefined
   }
   const capability = getVideoModelCapability(options.model)

@@ -54,6 +54,20 @@ beforeEach(() => {
   mocks.upload.mockResolvedValue({ error: null }); mocks.refund.mockResolvedValue({ error: null })
 })
 describe('recoverable Eco and independent enhancement', () => {
+  it.each([undefined, 'auto'] as const)('generates 480p then bills and submits 720p delivery when resolution is %s', async videoResolution => {
+    const reserve = vi.fn().mockResolvedValue({ reservedUpscaleCredits: 15 })
+    mocks.create.mockImplementationOnce(async input => {
+      await input.onBeforeProviderSubmit({ model: 'seedance-2.5', resolution: '480p', durationSec: 10 })
+      return { success: true, taskId: 'task-unified-generation' }
+    })
+    const result = await createVideoPipeline({ script: 'Mascot', images: [], userId: owner, videoModel: 'seedance-2.5-eco', videoResolution, duration: 10, onBeforeProviderSubmit: reserve })
+    expect(result.success).toBe(true)
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ videoModel: 'seedance-2.5', videoResolution: '480p' }))
+    expect(reserve).toHaveBeenCalledWith({ model: 'seedance-2.5-eco', resolution: '720p', durationSec: 10 })
+    expect(mocks.job).toMatchObject({ resolution: '720p', reserved_upscale_credits: 15 })
+    await advanceVideoPipeline(result.taskId!, owner)
+    expect(mocks.submit).toHaveBeenCalledWith({ videoUrl: mocks.job.base_url, resolution: '720p', fps: 24, preset: 'aigc' })
+  })
   it('creates Eco at 480p and preserves the requested final 4K route', async () => {
     const result = await createVideoPipeline({ script: 'Mascot', images: [], userId: owner, videoModel: 'seedance-2.5-eco', videoResolution: '4k', duration: 10, reservedUpscaleCredits: 58 })
     expect(result).toMatchObject({ success: true, videoModel: 'seedance-2.5-eco' })

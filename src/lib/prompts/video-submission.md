@@ -40,6 +40,6 @@ Hard constraints:
 
 ## Seedance 2.5 Eco and video enhancement
 
-`seedance-2.5-eco` is Makaron’s economy delivery route: Seedance 2.5 generates at 480p, then ByteDance Fast enhances the same video. Choose once; `video_resolution` is final delivery: 720p, 1080p (default), 2K or 4K. Poll one root task through generation, enhancement and permanent storage. Preserve the base video on enhancement failure and disclose actual 480p delivery; do not call it native HD. Use `upscale_video` for an existing source without generating a new clip. 6K/8K are listed by the supplier but unavailable until pricing and outputs are verified.
+`seedance-2.5-eco` is Makaron’s economy delivery route: Seedance 2.5 generates at 480p, then ByteDance Fast enhances the same video. Choose once; `video_resolution` is final delivery: 720p (default), 1080p, 2K or 4K. Poll one root task through generation, enhancement and permanent storage. Preserve the base video on enhancement failure and disclose actual 480p delivery; do not call it native HD. Use `upscale_video` for an existing source without generating a new clip. 6K/8K are listed by the supplier but unavailable until pricing and outputs are verified.
 
 A user request naming Seedance 2.5 defaults to `seedance-2.5-eco`, including 720p/1080p/2K/4K. Select `seedance-2.5-native` only when the user explicitly requests native output or unenhanced 480p. Do not silently replace Eco with another model.

@@ -261,7 +261,7 @@ const zhHant = {
   'changelog.seedance25Eco.title': "自動提升解析度：更省成本，最高 4K",
   'changelog.seedance25Eco.item1': "新增自動提升解析度的影片生成方式：先產生 480p 影片，再自動提升清晰度，以更低成本得到高畫質成片。",
   'changelog.seedance25Eco.item2': "只需選擇目標解析度，影片生成和解析度提升就會連續完成，不必等影片產生後再操作一次。",
-  'changelog.seedance25Eco.item3': "支援 720p、1080p、2K 和 4K，預設輸出 1080p，單支影片最長 30 秒。",
+  'changelog.seedance25Eco.item3': "支援 720p、1080p、2K 和 4K，預設輸出 720p，單支影片最長 30 秒。",
   'changelog.byteDanceFastUpscale.title': "現有影片也能提升解析度",
   'changelog.byteDanceFastUpscale.item1': "在對話中提供一支現有影片，再說「把這支影片提升至 4K」，就能提升清晰度，無需重新生成。",
   'changelog.byteDanceFastUpscale.item2': "支援最長 60 秒的影片，輸出可選 720p、1080p、2K 或 4K，同時保留原片的動作、畫面比例、影格率和聲音。",
