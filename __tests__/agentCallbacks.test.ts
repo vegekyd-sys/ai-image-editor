@@ -66,6 +66,19 @@ describe('makeAgentCallbacks', () => {
       expect(messages[0].content).toBe('');
     });
 
+    it('replays an existing turn in place without duplicating its text or other video cards', () => {
+      messages = [
+        { id: 'server-msg-123', role: 'assistant', content: 'old reply', timestamp: 1 },
+        { id: 'video-completion-snap-2', role: 'assistant', content: '🎬 done\nsnap:snap-2', timestamp: 2 },
+      ];
+      const { callbacks } = makeAgentCallbacks(ctx);
+      callbacks.onNewTurn?.('server-msg-123');
+      callbacks.onContent?.('replayed reply');
+      expect(messages).toHaveLength(2);
+      expect(messages[0]).toMatchObject({ id: 'server-msg-123', content: 'replayed reply', timestamp: 1 });
+      expect(messages[1].id).toBe('video-completion-snap-2');
+    });
+
     it('generates client ID if no server ID', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onNewTurn?.();

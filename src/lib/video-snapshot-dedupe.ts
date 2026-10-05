@@ -10,7 +10,10 @@ function videoIdentity(snapshot: Snapshot): string | null {
 }
 
 function mergeSnapshot(existing: Snapshot, incoming: Snapshot): Snapshot {
-  const videoMeta = existing.videoMeta && incoming.videoMeta
+  const staleReplay = existing.videoMeta?.status === 'completed'
+    && incoming.videoMeta?.status === 'processing'
+    && existing.videoMeta.taskId === incoming.videoMeta.taskId;
+  const videoMeta = staleReplay ? existing.videoMeta : existing.videoMeta && incoming.videoMeta
     ? {
         ...existing.videoMeta,
         ...incoming.videoMeta,

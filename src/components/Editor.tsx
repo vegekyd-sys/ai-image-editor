@@ -1,11 +1,14 @@
 'use client';
 
+import { dedupeEditorMessages, videoCompletionMessageId } from '@/lib/editor/message-dedupe';
+
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties, type TouchEvent as ReactTouchEvent } from 'react';
 import { flushSync } from 'react-dom';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoMeta, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
+import { getEditorCanvasKey } from '@/lib/editor/canvas-key';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type ComposerDraftAttachment, type PreferredModel } from '@/components/AgentChatView';
@@ -72,16 +75,6 @@ function isPreviewGenerationStatus(status: string): boolean {
   return PREVIEW_STATUS_PREFIXES.some((prefix) => status.startsWith(prefix));
 }
 
-function dedupeMessagesById(messages: Message[]): Message[] {
-  const byId = new Map<string, Message>();
-  for (const message of messages) {
-    const existing = byId.get(message.id);
-    if (!existing || (!existing.content && message.content)) {
-      byId.set(message.id, message);
-    }
-  }
-  return Array.from(byId.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-}
 
 function formatFrameEditTime(seconds: number) {
   if (!seconds || !isFinite(seconds)) return '0:00';
@@ -166,7 +159,6 @@ export default function Editor({
   initialMusicTaskId,
   timelineVersion = 1,
   readOnly,
-  disableAgentLiveReload = false,
   disableBodyScrollLock = false,
   inactive = false,
 }: EditorProps = {}) {
@@ -184,7 +176,7 @@ export default function Editor({
   }, [readOnly, router]);
   const [cuiPanelWidth, setCuiPanelWidth] = useState(500);
   const cuiPanelRef = useRef<HTMLDivElement>(null);
-  const [messages, setMessages] = useState<Message[]>(() => dedupeMessagesById(initialMessages ?? []));
+  const [messages, setMessages] = useState<Message[]>(() => dedupeEditorMessages(initialMessages ?? []));
   const [snapshots, setSnapshots] = useState<Snapshot[]>(dedupeVideoSnapshots(initialSnapshots ?? []));
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -430,14 +422,14 @@ export default function Editor({
 
   useEffect(() => {
     if (!initialMessages?.length) return;
-    const dedupedInitialMessages = dedupeMessagesById(initialMessages);
+    const dedupedInitialMessages = dedupeEditorMessages(initialMessages);
     setMessages(prev => {
       if (prev.length === 0) return dedupedInitialMessages;
-      // Strict ID-based dedup: build complete list from initialMessages, then append any live messages not in it
+      // Merge restored history and live delivery by snapshot identity as well as message ID.
       const initialIds = new Set(dedupedInitialMessages.map(m => m.id));
       const liveOnly = prev.filter(m => !initialIds.has(m.id));
       if (liveOnly.length === 0) return dedupedInitialMessages;
-      return dedupeMessagesById([...dedupedInitialMessages, ...liveOnly]);
+      return dedupeEditorMessages([...dedupedInitialMessages, ...liveOnly]);
     });
   }, [initialMessages]);
 
@@ -1804,62 +1796,46 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     agentDisconnect();
   }, [agentDisconnect]);
 
-  // ── Reconnect to active background agent run ──
-  // Mount-time detection: use standard reconnect flow (replay + realtime).
-  // Live detection (CLI triggers run while page already loaded): standalone
-  // project pages may reload for a clean reconnect. iOS inline project overlays
-  // must never schedule a page reload because the timeout can outlive the
-  // overlay and reload /projects after the user taps Back.
-  const mountReconnectHandledRef = useRef(false);
+  // Reconnect every background run in place, preserving canvas and scroll state.
   useEffect(() => {
     if (inactive) return;
     if (!activeRunId || isAgentActive) return;
 
-    if (!mountReconnectHandledRef.current || disableAgentLiveReload) {
-      // First detection after mount — use standard reconnect
-      mountReconnectHandledRef.current = true;
-      setIsAgentActive(true);
-      setAgentStatus(t('editor.reconnecting'));
+    setIsAgentActive(true);
+    setAgentStatus(t('editor.reconnecting'));
 
-      const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
-        projectId: projectId ?? '',
-        setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
-        setDesignDraftParent: (idx) => {
-          if (idx !== null) {
-            setActiveDraftType('design');
-            setPreviewingTipIndex(null);
-            setDraftParentIndex(idx);
-            setViewIndex(idx + 1);
-          } else {
-            setActiveDraftType(null);
-            setDraftParentIndex(null);
-          }
-        },
-        setPendingNotification, setSelectedVideoId, setAnimationState,
-        snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
-        pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
-        agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
-        pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
-        draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
-        cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
-        onSaveMessage,
-        triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
-        t,
-        onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
-        onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
-        hasBackgroundTaskRef,
-      });
+    const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
+      projectId: projectId ?? '',
+      setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+      setDesignDraftParent: (idx) => {
+        if (idx !== null) {
+          setActiveDraftType('design');
+          setPreviewingTipIndex(null);
+          setDraftParentIndex(idx);
+          setViewIndex(idx + 1);
+        } else {
+          setActiveDraftType(null);
+          setDraftParentIndex(null);
+        }
+      },
+      setPendingNotification, setSelectedVideoId, setAnimationState,
+      snapshotsRef, isNsfwRef, lastEditPromptRef, lastEditInputImagesRef,
+      pendingDesignMsgIdRef, pendingDesignSnapIdRef, codeStreamRef,
+      agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
+      pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
+      draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
+      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+      onSaveMessage,
+      triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
+      t,
+      onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
+      onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
+      hasBackgroundTaskRef,
+    });
 
-      agentReconnect(reconnectCallbacks);
-      return () => { agentDisconnect(); };
-    }
-
-    // Live detection — reload page for clean reconnect
-    // Delay slightly to ensure DualWriter has flushed user message to DB
-    const reloadTimer = window.setTimeout(() => window.location.reload(), 1500);
-    return () => window.clearTimeout(reloadTimer);
-
-  }, [activeRunId, disableAgentLiveReload, inactive]);
+    agentReconnect(reconnectCallbacks);
+    return () => { agentDisconnect(); };
+  }, [activeRunId, inactive]);
 
   // Shared: merge annotations → send to agent, then exit annotation mode
   // NOTE: no compressBase64 here — annotated image is used as generation base,
@@ -2699,7 +2675,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             // Add CUI message for completed video (dedup against latest state)
             const actionLines = serializeCompletionActions(snap.videoMeta?.completionActions);
             const videoMsg: Message = {
-              id: generateId(),
+              id: videoCompletionMessageId(snap.id),
               role: 'assistant',
               content: `🎬 ${data.enhancementStatus === 'failed' ? t('status.videoUpscaleFailed') : t('status.videoDone')}\n${data.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
               timestamp: Date.now(),
@@ -3731,7 +3707,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 data-testid="canvas"
                 projectId={projectId ?? undefined}
                 designSnapshotId={currentSnap?.id}
-                key={`${viewIndex}:${timeline[viewIndex] ?? ''}:${currentVideo?.videoUrl ?? ''}:${currentSnap?.videoMeta?.videoUrl ?? ''}:${annotationMode ? 'annotate' : 'browse'}`}
+                key={getEditorCanvasKey({ viewIndex, image: timeline[viewIndex], videoId: isViewingVideoV2 ? currentSnap?.id : isViewingVideo ? currentVideo?.id || 'legacy-video' : undefined, videoUrl: currentVideo?.videoUrl, snapshotVideoUrl: currentSnap?.videoMeta?.videoUrl, annotationMode })}
                 timeline={timeline}
                 currentIndex={viewIndex}
                 onIndexChange={handleIndexChange}

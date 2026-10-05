@@ -1,5 +1,7 @@
 'use client'
 
+import { dedupeEditorMessages, videoCompletionMessageId } from '@/lib/editor/message-dedupe';
+
 import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
 import { useRouter } from 'next/navigation'
@@ -36,16 +38,6 @@ interface ProjectEditorContainerProps {
   isInlineActive?: boolean
 }
 
-function dedupeMessagesById(messages: Message[]): Message[] {
-  const byId = new Map<string, Message>()
-  for (const message of messages) {
-    const existing = byId.get(message.id)
-    if (!existing || (!existing.content && message.content)) {
-      byId.set(message.id, message)
-    }
-  }
-  return Array.from(byId.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
-}
 
 export function EditorLoadingShell() {
   return (
@@ -171,7 +163,7 @@ export default function ProjectEditorContainer({
   })
   const [initialMessages, setInitialMessages] = useState<Message[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
-    return sync ? dedupeMessagesById(sync.messages as Message[]) : null
+    return sync ? dedupeEditorMessages(sync.messages as Message[]) : null
   })
   const [initialTitle, setInitialTitle] = useState<string>(() => {
     const sync = getCachedProjectDataSync(projectId)
@@ -330,7 +322,7 @@ export default function ProjectEditorContainer({
       if (cancelled || shownRef.current) return
       shownRef.current = true
       setInitialSnapshots(dedupeVideoSnapshots(patched))
-      setInitialMessages(dedupeMessagesById(cached.messages as Message[]))
+      setInitialMessages(dedupeEditorMessages(cached.messages as Message[]))
       setInitialTitle(cached.title)
       setLoaded(true)
     })
@@ -395,7 +387,7 @@ export default function ProjectEditorContainer({
         if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
         const actionLines = serializeCompletionActions(snap.videoMeta?.completionActions)
         messages.push({
-          id: `video-action-${snap.id}`,
+          id: videoCompletionMessageId(snap.id),
           role: 'assistant',
           content: `🎬 ${t('status.videoDone')}\n${snap.videoMeta!.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
           timestamp: Date.now(),
@@ -424,7 +416,7 @@ export default function ProjectEditorContainer({
         const fresh = hydratedSnapshots.get(s.id)
         return fresh?.design ? { ...s, design: fresh.design } : s
       }))
-      setInitialMessages(dedupeMessagesById(messages.map(m => {
+      setInitialMessages(dedupeEditorMessages(messages.map(m => {
         const design = restoredSnapshots.find(s => s.messageId === m.id)
         return design?.design ? { ...m, design: design.design } : m
       })))

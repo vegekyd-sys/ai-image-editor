@@ -37,6 +37,12 @@ describe('video snapshot timeline dedupe', () => {
     expect(deduped.map(s => s.id)).toEqual(['a', 'c'])
   })
 
+  it('does not rewind a completed Eco snapshot when reconnect replays its submission event', () => {
+    const existing = videoSnapshot('a', 'https://cdn.example.com/final.mp4', 5)
+    const replay = { ...existing, videoMeta: { ...existing.videoMeta!, status: 'processing' as const, videoUrl: null } }
+    expect(appendSnapshotDedupeVideo([existing], replay)[0].videoMeta).toEqual(existing.videoMeta)
+  })
+
   it('merges duplicate video metadata when appending an already-known result', () => {
     const existing = videoSnapshot('a', 'https://cdn.example.com/final.mp4?v=old', 20)
     const incoming = videoSnapshot('b', 'https://cdn.example.com/final.mp4?v=new#t=0.1', 15)

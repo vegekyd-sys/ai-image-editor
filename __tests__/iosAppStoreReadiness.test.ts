@@ -641,7 +641,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(editor).toContain("window.addEventListener('popstate', handlePop)");
     expect(editor).toContain("viewMode === 'cui'");
     expect(editor).toContain('disableAgentLiveReload');
-    expect(editor).toContain('window.clearTimeout(reloadTimer)');
+    expect(editor).not.toContain('window.location.reload()');
     expect(editor).toContain('disableBodyScrollLock');
     expect(editor).toContain('inactive?: boolean');
     expect(editor).toContain('inactive = false');
