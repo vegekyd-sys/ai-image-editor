@@ -107,3 +107,15 @@ Tips 文案另做 12 组同图同提示词 A/B（每请求 2 条，覆盖 Creati
 2.1 文案成本约 7.7 倍、耗时约 2.7 倍，仍有 4/12 组缺完整编辑指令；旧模型也有首轮缺字段问题。2.1 未达到直接替换文案主模型的速度/成本/合同稳定性标准，暂保留旧模型。可用 `TIPS_MODEL` 独立配置后续文案实验，图片模型不跟着变。
 
 脚本：`docs/spikes/nano-banana-21-tips-text-ab.cjs`；原始证据：`test-results/nano-banana-21-tips-text-ab-v1/{nb2,nb21,summary}.json`。实验已报告总费用 $0.6166225，没有付费补写。文案标签与英文 editPrompt 已检查；未作长期质量盲评或 Tips 文案驱动生成的端到端胜率结论。
+
+## 默认替换的发布检查
+
+应用代码 `9ee3ba04` 已通过独立 runner 的完整发布检查：TypeScript、2059 项测试（另 1 项跳过）、CLI smoke、Webpack 生产构建及 CRC32C/FFmpeg 打包检查。远端 Vercel Preview 的 Turbopack 构建也已通过。四种语言的新模型说明与更新日志、i18n、Agent startup 检查通过；ESLint 无新错误，保留一处既存 locale 参数警告。
+
+Preview：<https://ai-image-editor-8ugjmf4k3-vegekyd-sys-projects.vercel.app>。Production 与 Preview 的关键模型变量均已核对：`IMAGE_MODEL=gemini-3.1-flash-image-preview`，未覆盖 `TIPS_MODEL` 和 `TIPS_PREVIEW_IMAGE_MODEL`，因此旧模型手动选项和文案保留旧模型，普通图片与 Tips 图片通过新代码默认使用 2.1。只追加 2.1 的独立 text 定价行，避免后续实验把文案误按图片 token 计价。
+
+新的 Tips 默认 helper 实际调用成功一次：1024×1024，完整返回 12.6 秒，供应商成本 $0.037338。产物 `test-results/nano-banana-21/default-tips-preview-1k.png` 已完整解码并查看，保留瓶子造型与“向前一步”中文标签，蓝色背景与石台按指令完成。这是新默认路径的功能烟测，不计入前面的匹配 A/B 汇总。
+
+GUI 自动切换到 2.1、手动选旧 Nano Banana 2、Agent 自动 2K 预检、MCP 无 model 自动调用 2.1 并按实际费用扣费，均有回归测试。生产尚未合并或部署，没有把 Preview 成功当作生产编辑器上传、保存、重开的验收。
+
+私人 Sites 报告已更新：<https://makaron-nano-banana-21-report.tianyi595926.chatgpt.site>，附 20 组图片对比和 12 组 Tips 文案 A/B 数据。
