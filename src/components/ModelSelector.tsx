@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import type { PreferredModel } from './AgentChatView';
 import type { VideoModel, VideoResolution } from '@/types';
 import { getAgentModels, getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
-import { resolveImageModel } from '@/lib/models/types';
+import { DEFAULT_IMAGE_MODEL, resolveImageModel } from '@/lib/models/types';
 import {
   getCodexSubscriptionAgentModelPreference,
   GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
@@ -635,7 +635,7 @@ export default function ModelSelector({
     if (on) {
       onModelChange('auto');
     } else {
-      onModelChange('gemini');
+      onModelChange(DEFAULT_IMAGE_MODEL);
     }
   }, [activeTab, onAgentModelChange, onModelChange, onVideoAutoChange]);
 

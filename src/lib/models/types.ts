@@ -4,6 +4,8 @@ export const IMAGE_MODEL_IDS = ['gemini', 'gemini-2.1', 'gemini-lite', 'qwen-spi
 export const IMAGE_MODEL_INPUT_IDS = [...IMAGE_MODEL_IDS, 'qwen'] as const;
 /** Keep old IDs at the input boundary so existing clients get a deliberate migration/error. */
 export type ModelId = typeof IMAGE_MODEL_IDS[number] | 'qwen' | 'pony' | 'wai';
+/** Default for ordinary photo edits and image generation; legacy gemini remains selectable. */
+export const DEFAULT_IMAGE_MODEL: ModelId = 'gemini-2.1';
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type ImageBackground = 'auto' | 'opaque' | 'transparent';
 

@@ -4,14 +4,11 @@ Flare replaces Image 2. Sunburst is opt-in. No automatic 2.5 retry or fallback.
 
 Call `read_file('prompts/image.md')` for complex edits, references, restoration, or layout work.
 
-For a clear direct edit, call `generate_image` directly.
-
 - For edits, pass 1-based `media_index`. Omit it for text-to-image; never pass `0`.
 - `reference_media_indices` sends extra timeline snapshots named by `editPrompt`.
-- To restore original detail, include that snapshot through `reference_media_indices`.
 - `image_refs` is only for workspace asset provider URLs, not timeline snapshots.
 - `skill` labels general intent; omit it for precise manual instructions.
-- `model` is optional. Use `qwen-spicy` for NSFW risk; `gpt-image-2.5-flare` for product/design or layout/mockup images, face restoration after Gemini, and `long-video-director` storyboards; `gemini-lite` only on explicit Lite requests. Explicit Nano Banana 2.1 requests use `gemini-2.1` (1K default; optional `imageResolution: 2K/4K`, up to 14 total input images). Keep base/reference roles explicit; a drawn mask or annotation is an image reference, not a dedicated mask field. Pony and WAI are retired.
+- `model`: ordinary default `gemini-2.1` (Nano Banana 2.1, 1K; optional `imageResolution: 2K/4K`, up to 14 inputs); explicit Nano Banana 2 = `gemini`, Lite = `gemini-lite`. Use `qwen-spicy` for NSFW, `gpt-image-2.5-flare` for product/design or layout/mockup images, face restoration, and `long-video-director` storyboards. Keep reference roles explicit. Pony/WAI are retired.
 - `wan2.7-image` is opt-in. Never automatically retry a failed/unknown Wan call or switch models.
 - For background removal/cutout, 去背景/抠图/抠像, or transparent PNG/sticker/overlay/alpha output, set `background: "transparent"`; wording alone is insufficient.
 - Existing-image cutout: pass its `media_index`; with no source, omit `media_index` for transparent text-to-image.
@@ -27,6 +24,6 @@ Edit Mode prompt shape for ordinary in-place edits:
 3. Preservation line: preserve exact composition, positions, poses, actions, and scene layout.
 4. End line: "Do NOT add any text, watermarks, or borders." Omit this if the user explicitly requested text or captions.
 
-Transparent cutout: read `prompts/cutout.md` once, follow its canonical ordered contract, and do not append ordinary composition/scene-layout preservation.
+For cutout, read `prompts/cutout.md` once; do not append ordinary composition/scene-layout preservation.
 
-Context Mode for `model='gpt-image-2.5-flare'`: pass the user's request verbatim as `editPrompt`; do not rewrite, translate, expand, or invent layout/color details. Include concise prior feedback for multi-turn layout/mockup image tasks.
+Context Mode for `model='gpt-image-2.5-flare'`: pass the user's request verbatim as `editPrompt`; do not rewrite, translate, expand, or invent layout/color details. Include prior feedback for multi-turn layout/mockup image tasks.

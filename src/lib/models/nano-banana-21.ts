@@ -4,7 +4,9 @@ import type { GenerateImageRequest, ModelBackend } from './types';
 export const NANO_BANANA_21_MODEL = 'google/gemini-nano-banana-2.1';
 const RATIOS = ['auto', '1:1', '3:2', '2:3', '3:4', '1:4', '4:1', '4:3', '4:5', '5:4', '1:8', '8:1', '9:16', '16:9', '21:9'];
 
-export class NanoBanana21RequestError extends Error {}
+export class NanoBanana21RequestError extends Error {
+  constructor(message: string, public readonly contentBlocked = false) { super(message); }
+}
 
 export function buildNanoBanana21Request(req: GenerateImageRequest) {
   const images = [...(req.image ? [{ url: req.image, role: 'Base image to edit' }] : []), ...(req.references ?? [])];
@@ -61,7 +63,12 @@ export const nanoBanana21Backend: ModelBackend = {
       });
       const data = await response.json();
       requestId = typeof data.id === 'string' ? data.id : undefined;
-      if (!response.ok || data.error) throw new NanoBanana21RequestError(`Nano Banana 2.1 provider rejected the request (HTTP ${response.status}).`);
+      if (!response.ok || data.error) {
+        const blocked = data.error?.metadata?.block_reason === 'PROHIBITED_CONTENT'
+          || data.error?.metadata?.finish_reason === 'PROHIBITED_CONTENT'
+          || data.error?.metadata?.error_type === 'content_policy_violation';
+        throw new NanoBanana21RequestError(`Nano Banana 2.1 provider rejected the request (HTTP ${response.status}).`, blocked);
+      }
       const images = data.data;
       if (!Array.isArray(images) || images.length !== 1) throw new NanoBanana21RequestError('Nano Banana 2.1 returned no single completed image.');
       const mediaType = images[0]?.media_type;
@@ -85,7 +92,7 @@ export const nanoBanana21Backend: ModelBackend = {
       } };
     } catch (error) {
       const reason = error instanceof NanoBanana21RequestError ? error.message : 'Nano Banana 2.1 request did not complete; provider outcome may be unknown.';
-      throw new NanoBanana21RequestError(`${reason}${requestId ? ` Request: ${requestId}.` : ''} No automatic retry or model fallback.`);
+      throw new NanoBanana21RequestError(`${reason}${requestId ? ` Request: ${requestId}.` : ''} No automatic retry or model fallback.`, error instanceof NanoBanana21RequestError && error.contentBlocked);
     }
   },
 };

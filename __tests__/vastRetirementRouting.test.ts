@@ -1,3 +1,4 @@
+import { NanoBanana21RequestError } from '@/lib/models/nano-banana-21';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 vi.mock('@/lib/models', () => ({ getBackend: vi.fn() }));
 vi.mock('@/lib/gemini', () => ({ ContentBlockedError: class extends Error {} }));
@@ -49,9 +50,9 @@ describe('Vast retirement image routing', () => {
   });
 
   it('does not repeat an auto-fallback paid Spicy request after an unknown outcome', async () => {
-    const geminiGenerate = vi.fn().mockResolvedValue({ image: null });
+    const geminiGenerate = vi.fn().mockRejectedValue(new NanoBanana21RequestError('blocked', true));
     const spicyGenerate = vi.fn().mockRejectedValue(new Error('provider task completed but output download failed'));
-    vi.mocked(getBackend).mockImplementation(id => id === 'gemini'
+    vi.mocked(getBackend).mockImplementation(id => id === 'gemini-2.1'
       ? { id, canHandle: () => true, generate: geminiGenerate }
       : { id: 'qwen-spicy', canHandle: () => true, generate: spicyGenerate });
 
@@ -62,9 +63,9 @@ describe('Vast retirement image routing', () => {
   });
 
   it('does not repeat an auto-fallback paid Spicy request after a null image', async () => {
-    const geminiGenerate = vi.fn().mockResolvedValue({ image: null });
+    const geminiGenerate = vi.fn().mockRejectedValue(new NanoBanana21RequestError('blocked', true));
     const spicyGenerate = vi.fn().mockResolvedValue({ image: null });
-    vi.mocked(getBackend).mockImplementation(id => id === 'gemini'
+    vi.mocked(getBackend).mockImplementation(id => id === 'gemini-2.1'
       ? { id, canHandle: () => true, generate: geminiGenerate }
       : { id: 'qwen-spicy', canHandle: () => true, generate: spicyGenerate });
 

@@ -3,7 +3,8 @@
  * Resolves model chain based on request, tries each in order with fallback.
  */
 import type { ModelId, GenerateImageRequest, GenerateImageResult } from './models/types';
-import { isFalImage25, resolveImageModel } from './models/types';
+import { DEFAULT_IMAGE_MODEL, isFalImage25, resolveImageModel } from './models/types';
+import { NanoBanana21RequestError } from './models/nano-banana-21';
 import { getBackend } from './models';
 import { ContentBlockedError } from './gemini';
 
@@ -19,7 +20,7 @@ function getFallbacks(model: ModelId): ModelId[] {
     case 'gemini-lite': return ['gemini', 'qwen-spicy'];
     case 'qwen-spicy': return [];
     case 'openai': return ['gemini', 'qwen-spicy'];
-    default:       return ['gemini'];
+    default:       return [DEFAULT_IMAGE_MODEL];
   }
 }
 
@@ -38,13 +39,15 @@ export function resolveModelChain(req: GenerateImageRequest): ModelId[] {
   if (req.model === 'wan2.7-image') return ['wan2.7-image'];
   // 1. Explicit model → that model + fallbacks
   if (model) return [model, ...getFallbacks(model)];
-  // 2. Multi-image references → Gemini, then Spicy (up to three images).
-  if (req.references?.length) return ['gemini', 'qwen-spicy'];
-  // 3. Text-to-image → Gemini, then Spicy's Z-Image generator.
-  if (!req.image) return ['gemini', 'qwen-spicy'];
+  // Ordinary auto requests use 2.1. Spicy is only reached after a definite
+  // moderation rejection, never an uncertain paid 2.1 outcome.
+  if (req.references?.length || !req.image) {
+    const imageCount = (req.image ? 1 : 0) + (req.references?.length ?? 0);
+    return imageCount <= 3 ? [DEFAULT_IMAGE_MODEL, 'qwen-spicy'] : [DEFAULT_IMAGE_MODEL];
+  }
   // 4. Enhance keeps the Qwen-family primary route.
-  if (req.category === 'enhance') return ['qwen-spicy', 'gemini'];
-  return ['gemini', 'qwen-spicy'];
+  if (req.category === 'enhance') return ['qwen-spicy', DEFAULT_IMAGE_MODEL];
+  return [DEFAULT_IMAGE_MODEL, 'qwen-spicy'];
 }
 
 export async function generateImage(req: GenerateImageRequest): Promise<GenerateImageResult> {
@@ -76,6 +79,7 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
       if (modelId === 'qwen-spicy') {
         throw new SpicyImageRequestError('Qwen Spicy returned no image. A paid request may have completed; do not submit again automatically.');
       }
+      if (modelId === 'gemini-2.1') throw new NanoBanana21RequestError('Nano Banana 2.1 returned no image. Do not retry automatically.');
       console.log(`[model-router] ${modelId} returned null, trying next...`);
       failedModels.push(modelId);
     } catch (e) {
@@ -86,7 +90,15 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
           ? e
           : new SpicyImageRequestError(e instanceof Error ? e.message : 'Qwen Spicy request outcome unknown.');
       }
-      if (modelId === 'gemini-2.1' || modelId === 'wan2.7-image' || isFalImage25(modelId)) throw e;
+      if (modelId === 'gemini-2.1') {
+        if (e instanceof NanoBanana21RequestError && e.contentBlocked && !req.model && chain.includes('qwen-spicy')) {
+          contentBlocked = true;
+          failedModels.push(modelId);
+          continue;
+        }
+        throw e;
+      }
+      if (modelId === 'wan2.7-image' || isFalImage25(modelId)) throw e;
       if (e instanceof ContentBlockedError) {
         console.warn(`[model-router] ${modelId} content blocked (NSFW), trying fallback...`);
         contentBlocked = true;

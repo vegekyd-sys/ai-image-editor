@@ -220,6 +220,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.nanoBanana21.title': 'Nano Banana 2.1',
+  'changelog.nanoBanana21.item1': 'Ordinary images and creative Tips images now default to Nano Banana 2.1, with multiple references and output up to 4K.',
+  'changelog.nanoBanana21.item2': 'Classic Nano Banana 2 remains available for manual selection. Tips text keeps its existing model.',
   'changelog.webSearch.title': 'Web Search with Source Links',
   'changelog.webSearch.item1': 'With an Agent model that supports web search, ask about the latest news, product details, or reference examples. Makaron searches the web when needed to inform your creative work.',
   'changelog.webSearch.item2': 'Answers include clickable source links so you can check the original pages. Sources are saved with the conversation and remain available after refreshing or reopening the project.',
@@ -608,10 +611,10 @@ const en = {
   'model.tab.video': 'Video',
   'model.tab.agent': 'Agent',
   'model.gemini.name': 'Nano Banana 2',
-  'model.gemini.desc': 'Fast and versatile. Default for most edits.',
+  'model.gemini.desc': 'Classic Nano Banana 2, available for manual selection.',
   'model.geminiLite.name': 'Nano Banana 2 Lite',
   'model.gemini21.name': 'Nano Banana 2.1',
-  'model.gemini21.desc': 'Improved visuals and text, with multi-image fusion and 4K output.',
+  'model.gemini21.desc': 'Default image model, with multi-image fusion and 4K output.',
   'model.geminiLite.desc': 'Lower-cost path for fast drafts.',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': 'Best face preservation. Handles NSFW content.',

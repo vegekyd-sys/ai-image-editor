@@ -30,7 +30,7 @@ vi.mock('@/lib/supabase/service', () => ({ getSupabaseAdmin: () => ({
   from: (table: string) => {
     const data = table === 'app_settings' ? { value: String(state.enabled) }
       : table === 'credit_balances' ? { balance: state.balance, lifetime_used: 0, lifetime_purchased: 100 }
-      : table === 'credit_pricing' ? (state.configured ? [{ tool_name: 'edit_image_wan2.7-image', credits: state.credits, is_free: state.free, supplier_cost: 0.03 }] : [])
+      : table === 'credit_pricing' ? (state.configured ? ['edit_image_qwen-spicy', 'generate_image_qwen-spicy'].map(tool_name => ({tool_name, credits: state.credits, is_free: state.free, supplier_cost: 0.03})) : [])
       : table === 'token_rates' ? (state.configured ? [{ model_id: 'google/gemini-nano-banana-2.1', markup: 2, input_per_1m: 1.5, output_per_1m: 30, is_active: true }] : []) : null;
     const chain = { data, error: null, select: () => chain, eq: () => chain, order: () => chain, single: async () => ({ data, error: null }) };
     return chain;
@@ -41,11 +41,11 @@ import { POST } from '@/app/api/mcp/route';
 import { invalidateBillingCache } from '@/lib/billing/credits';
 import { invalidatePricingCache } from '@/lib/billing/pricing';
 
-async function callNano() {
+async function callNano(model: string | undefined = 'gemini-2.1') {
   const response = await POST(new Request('http://localhost/api/mcp', {
     method: 'POST',
     headers: { Authorization: 'Bearer mk_live_test', 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'makaron_edit_image', arguments: { editPrompt: 'A red mug.', model: 'gemini-2.1', aspectRatio: '16:9', imageResolution: '2K' } } }),
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'makaron_edit_image', arguments: { editPrompt: 'A red mug.', model: model === 'auto-omitted' ? undefined : model, aspectRatio: '16:9', imageResolution: '2K' } } }),
   }));
   return { response, payload: await response.json() };
 }
@@ -89,4 +89,12 @@ describe('Nano Banana 2.1 MCP → shared skill → provider → billing', () => 
     expect(payload.result.isError).toBe(true);
     expect(state.fetch).not.toHaveBeenCalled();
   });
+  it('routes omitted model to 2.1, accepts 2K and charges actual cost once', async () => {
+    // JSON omits the undefined field, exercising the actual automatic MCP path.
+    const { payload } = await callNano('auto-omitted');
+    expect(payload.result.content[0].text).toContain('(model: gemini-2.1)');
+    expect(state.fetch).toHaveBeenCalledTimes(1);
+    expect(state.rpc.mock.calls.filter(([name]) => name === 'deduct_and_log')).toHaveLength(1);
+  });
+
 });

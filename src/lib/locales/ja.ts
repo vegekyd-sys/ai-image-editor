@@ -257,6 +257,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.nanoBanana21.title': 'Nano Banana 2.1',
+  'changelog.nanoBanana21.item1': '通常の画像とクリエイティブTips画像はNano Banana 2.1が標準に。複数参照画像と最大4K出力に対応。',
+  'changelog.nanoBanana21.item2': '従来のNano Banana 2も手動で選択できます。Tipsの文章は従来のモデルを使用します。',
   'changelog.webSearch.title': 'ウェブ検索と出典リンク',
   'changelog.webSearch.item1': 'ウェブ検索に対応した Agent モデルで、最新ニュースや製品情報、参考事例を尋ねるだけ。Makaron が必要に応じてウェブを検索し、制作に役立つ情報を集めます。',
   'changelog.webSearch.item2': '回答にはクリックできる出典リンクが付き、元のページを確認できます。出典は会話と一緒に保存され、再読み込みやプロジェクトを開き直した後も確認できます。',
@@ -831,10 +834,10 @@ const ja = {
   'model.tab.video': '動画',
   'model.tab.agent': 'Agent',
   'model.gemini.name': 'Nano Banana 2',
-  'model.gemini.desc': '高速で汎用的。ほとんどの編集におすすめです。',
+  'model.gemini.desc': '従来のNano Banana 2。手動で選択できます。',
   'model.geminiLite.name': 'Nano Banana 2 Lite',
   'model.gemini21.name': 'Nano Banana 2.1',
-  'model.gemini21.desc': '画質と文字の精度が向上。複数画像の融合と4K出力に対応。',
+  'model.gemini21.desc': '標準画像モデル。複数画像の融合と4K出力に対応。',
   'model.geminiLite.desc': '高速な下書きに適した低コストモデルです。',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': '顔の再現性に優れ、NSFWコンテンツにも対応します。',

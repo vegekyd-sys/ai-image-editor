@@ -1,4 +1,4 @@
-import { resolveImageModel } from '../lib/models/types';
+import { resolveModelChain } from '../lib/model-router';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
@@ -96,7 +96,7 @@ export interface McpServerOptions {
     },
   ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
-  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: '1K' | '2K' | '4K' }) => Promise<{ allowed: boolean; message?: string }>;
+  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: '1K' | '2K' | '4K'; spicyReachable?: boolean }) => Promise<{ allowed: boolean; message?: string }>;
   /** Called only before a Grok personal-plan request safely falls back to the paid API. */
   onBeforeGrokApiFallback?: (toolName: string, model?: string) => Promise<void>;
 }
@@ -135,19 +135,20 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback. For ordinary edits, use specific English editing instructions'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
-      model: z.enum(IMAGE_MODEL_INPUT_IDS).nullish().describe('Default to gpt-image-2.5-flare for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockups, face-identity restoration after a Gemini edit, and director storyboards. GPT Image 2 and the legacy openai parameter now resolve to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality with no subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; legacy qwen maps to qwen-spicy. Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite; Nano Banana 2.1 = gemini-2.1 (explicit requests, OpenRouter, up to 14 total input images). Otherwise omit model for auto routing.'),
+      model: z.enum(IMAGE_MODEL_INPUT_IDS).nullish().describe('Default to gpt-image-2.5-flare for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockups, face-identity restoration after a Gemini edit, and director storyboards. GPT Image 2 and the legacy openai parameter now resolve to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality with no subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; legacy qwen maps to qwen-spicy. Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite; Nano Banana 2.1 = gemini-2.1 (ordinary image default, OpenRouter, up to 14 total input images); classic Nano Banana 2 = gemini. Otherwise omit model for auto routing.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5 supports up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
-      imageResolution: z.enum(['1K', '2K', '4K']).nullish().describe('Nano Banana 2.1 output resolution (default 1K). Only supported with model gemini-2.1.'),
+      imageResolution: z.enum(['1K', '2K', '4K']).nullish().describe('Nano Banana 2.1 output resolution (default 1K). Supported with automatic routing or model gemini-2.1.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2.5 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
     },
     async (params) => {
       try {
-        if (params.imageResolution && params.model !== 'gemini-2.1') return { isError: true, content: [{ type: 'text' as const, text: 'imageResolution requires Nano Banana 2.1.' }] };
+        const chain = resolveModelChain({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined });
+        if (params.imageResolution && chain[0] !== 'gemini-2.1') return { isError: true, content: [{ type: 'text' as const, text: 'imageResolution requires Nano Banana 2.1.' }] };
         const imageInputCount = (params.image ? 1 : 0) + (params.referenceImages?.length ?? 0);
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', resolveImageModel(params.model ?? undefined, params.background ?? undefined), { imageInputCount, imageResolution: params.imageResolution ?? undefined });
+          const check = await options.onToolStart('makaron_edit_image', chain[0], { imageInputCount, imageResolution: params.imageResolution ?? undefined, spicyReachable: chain.includes('qwen-spicy') });
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();

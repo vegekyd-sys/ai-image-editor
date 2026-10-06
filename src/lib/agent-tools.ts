@@ -1,4 +1,4 @@
-import { isFalImage25, resolveImageModel } from './models/types';
+import { isFalImage25 } from './models/types';
 import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
 import { after } from 'next/server';
@@ -1388,7 +1388,7 @@ function createGenerateImageTool(
       inputSchema: z.object({
         editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite; Nano Banana 2.1 = gemini-2.1 (explicit requests, OpenRouter, up to 14 input images). Otherwise omit model for normal auto routing.'),
+        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite; Nano Banana 2.1 = gemini-2.1 (ordinary image default, OpenRouter, up to 14 input images); classic Nano Banana 2 = gemini. Otherwise omit model for normal auto routing.'),
         imageResolution: z.enum(['1K', '2K', '4K']).optional().describe('Nano Banana 2.1 output resolution; defaults to 1K. Use 2K/4K only when requested. Other image models do not support this parameter.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2.5 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
@@ -1424,23 +1424,17 @@ function createGenerateImageTool(
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         let billingModel: ModelId | undefined;
+        let modelChain: ModelId[];
         try {
-          billingModel = ctx.isNsfw ? 'qwen-spicy' : resolveImageModel(resolvedModel, background);
+          modelChain = resolveModelChain({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, background, isNsfw: ctx.isNsfw });
+          billingModel = modelChain[0];
         } catch (error) {
           return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: 'model_retired' };
         }
         if (imageResolution && billingModel !== 'gemini-2.1') return { success: false, message: 'imageResolution requires Nano Banana 2.1.', error: 'unsupported_parameter' };
         const imageInputCount = (editTarget ? 1 : 0) + resolvedRefs.length;
         const spicyReachable = imageInputCount <= 3 && !(ctx.isNsfw && background === 'transparent')
-          && resolveModelChain({
-            image: editTarget,
-            references: resolvedRefs.length ? resolvedRefs.map(url => ({ url, role: 'reference' })) : undefined,
-            prompt: editPrompt,
-            model: billingModel,
-            category: skill,
-            background,
-            isNsfw: ctx.isNsfw,
-          }).includes('qwen-spicy');
+          && modelChain.includes('qwen-spicy');
         if (ctx.userId && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
           let requiredCredits = 0;
           if (billingModel === 'gemini-2.1') {

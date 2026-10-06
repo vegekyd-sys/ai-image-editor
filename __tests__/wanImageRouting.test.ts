@@ -13,8 +13,8 @@ beforeEach(() => {
 
 describe('explicit Wan routing', () => {
   it('preserves Auto and transparent contracts but never switches an explicit Wan call', () => {
-    expect(resolveModelChain({ prompt: 'A mug.' })).toEqual(['gemini', 'qwen-spicy']);
-    expect(resolveModelChain({ prompt: 'Enhance.', image: 'https://example.com/a.jpg', category: 'enhance' })).toEqual(['qwen-spicy', 'gemini']);
+    expect(resolveModelChain({ prompt: 'A mug.' })).toEqual(['gemini-2.1', 'qwen-spicy']);
+    expect(resolveModelChain({ prompt: 'Enhance.', image: 'https://example.com/a.jpg', category: 'enhance' })).toEqual(['qwen-spicy', 'gemini-2.1']);
     expect(resolveModelChain({ prompt: 'Edit.', model: 'wan2.7-image', isNsfw: true })).toEqual(['qwen-spicy']);
     expect(resolveModelChain({ prompt: 'Cutout.', model: 'wan2.7-image', background: 'transparent' })).toEqual(['gpt-image-2.5-flare']);
   });

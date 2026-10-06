@@ -1,8 +1,10 @@
+vi.mock('@/lib/gemini', () => ({ ContentBlockedError: class extends Error {} }));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { editImage } from '@/lib/skills/edit-image';
 import { generateImage } from '@/lib/model-router';
 
-vi.mock('@/lib/model-router', () => ({
+vi.mock('@/lib/model-router', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/model-router')>(),
   generateImage: vi.fn(),
 }));
 

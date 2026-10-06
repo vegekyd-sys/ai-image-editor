@@ -78,7 +78,13 @@ async function handleMcp(req: Request): Promise<Response> {
         const rate = await getTokenRate('google/gemini-nano-banana-2.1');
         if (!rate || rate.model_id !== 'google/gemini-nano-banana-2.1' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Nano Banana 2.1 pricing is not configured.' };
         const outputCost = meta?.imageResolution === '4K' ? 0.0756 : meta?.imageResolution === '2K' ? 0.0504 : 0.0336;
-        const credits = Math.ceil((outputCost + (meta?.imageInputCount ?? 0) * 1120 * 1.5 / 1_000_000) * rate.markup / 0.01);
+        let credits = Math.ceil((outputCost + (meta?.imageInputCount ?? 0) * 1120 * 1.5 / 1_000_000) * rate.markup / 0.01);
+        if (meta?.spicyReachable && (meta.imageInputCount ?? 0) <= 3) {
+          const name = resolveToolName(toolName, 'qwen-spicy', meta.imageInputCount);
+          const price = await getToolPrice(name);
+          if (!price) return { allowed: false, message: `${name} pricing is not configured.` };
+          if (!price.isFree) credits = Math.max(credits, price.credits);
+        }
         const check = await requireCredits(auth.userId!, credits);
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }

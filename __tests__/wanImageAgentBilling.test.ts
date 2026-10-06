@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
-import { IMAGE_MODEL_IDS, isFalImage25, resolveImageModel } from '@/lib/models/types';
+import { IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, type ModelId } from '@/lib/models/types';
 import { normalizeGenerateImageMediaIndex } from '@/lib/generate-image-input';
 import { resolveToolName } from '@/lib/billing/pricing';
 
@@ -24,8 +24,8 @@ function setup(provider = 'azure') {
   const getToolPrice = vi.fn().mockResolvedValue({ credits: 6, isFree: false });
   const getTokenRate = vi.fn().mockResolvedValue({ model_id: 'gpt-image-2.5-flare', markup: 2, is_active: true });
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
-  const resolveModelChain = vi.fn(({ model }: { model?: string }) => model ? [model] : ['gemini', 'qwen-spicy']);
-  const ctx = { preferredModel: 'wan2.7-image', userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined };
+  const resolveModelChain = vi.fn(({ model }: { model?: ModelId }) => model ? [resolveImageModel(model)] : ['gemini-2.1', 'qwen-spicy']);
+  const ctx = { preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined };
   const context = vm.createContext({
     tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, resolveModelChain, getTokenRate,
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex,
@@ -189,4 +189,15 @@ describe('Nano Banana 2.1 Agent execution and billing', () => {
     expect(deductCredits).not.toHaveBeenCalled();
     expect(ctx.generatedImages).toHaveLength(1);
   });
+});
+
+
+it('preflights the default Nano Banana 2.1 route and accepts its resolution', async () => {
+  const {tool,ctx,getTokenRate,requireCredits,editImage}=setup();
+  ctx.preferredModel=undefined;
+  getTokenRate.mockResolvedValue({model_id:'google/gemini-nano-banana-2.1',markup:2,is_active:true});
+  await tool.execute({editPrompt:'A forest scene',imageResolution:'2K'});
+  expect(getTokenRate).toHaveBeenCalledWith('google/gemini-nano-banana-2.1');
+  expect(requireCredits).toHaveBeenCalledWith('test-user',11);
+  expect(editImage).toHaveBeenCalledWith(expect.objectContaining({preferredModel:undefined,imageResolution:'2K'}),expect.anything());
 });

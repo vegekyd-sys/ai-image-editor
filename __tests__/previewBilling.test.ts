@@ -16,7 +16,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({ auth: { getSession: async () => ({ data: { session: { user: { id: 'user-1' } } } }) } }),
 }))
 vi.mock('@/lib/model-router', () => ({ generateImage: mocks.generateImage }))
-vi.mock('@/lib/gemini', () => ({ generateTipsPreviewImageOpenRouter: mocks.generateLite }))
+vi.mock('@/lib/gemini', () => ({ generateTipsPreviewImageOpenRouter: mocks.generateLite, TIPS_PREVIEW_IMAGE_MODEL: 'google/gemini-nano-banana-2.1' }))
 vi.mock('@/lib/billing/credits', () => ({
   requireCredits: mocks.requireCredits,
   deductByTokens: mocks.deductByTokens,
@@ -27,6 +27,7 @@ vi.mock('@/lib/billing/token-rates', () => ({ getTokenRate: mocks.getTokenRate }
 vi.mock('@/lib/billing/pricing', () => ({ getToolPrice: mocks.getToolPrice }))
 
 import { POST } from '@/app/api/preview/route'
+import { NanoBanana21RequestError } from '@/lib/models/nano-banana-21'
 
 function request(extra: Record<string, unknown> = {}) {
   return new NextRequest('http://localhost/api/preview', {
@@ -44,7 +45,8 @@ describe('Tips preview billing', () => {
       isFree: false,
     }))
     mocks.requireCredits.mockResolvedValue({ ok: true, balance: 100 })
-    mocks.generateLite.mockResolvedValue({ image: null })
+    mocks.generateLite.mockRejectedValue(new NanoBanana21RequestError('Blocked', true))
+    mocks.getTokenRate.mockResolvedValue({ model_id: 'google/gemini-nano-banana-2.1', markup: 2 })
     mocks.generateImage.mockResolvedValue({ image: 'spicy-image', model: 'qwen-spicy', fallbackUsed: false })
     mocks.deductCredits.mockResolvedValue({ charged: 8, remaining: 92 })
     mocks.deductByTokens.mockResolvedValue({ charged: 2, remaining: 98 })
@@ -64,12 +66,12 @@ describe('Tips preview billing', () => {
     expect(mocks.deductCredits).toHaveBeenCalledWith('user-1', null, 'edit_image_qwen-spicy')
   })
 
-  it('checks the Spicy price again before a Lite failure can fall back to it', async () => {
+  it('checks the Spicy price again before a definite 2.1 rejection can fall back to it', async () => {
     mocks.requireCredits.mockResolvedValueOnce({ ok: true, balance: 2 })
       .mockResolvedValueOnce({ ok: false, balance: 2, response: Response.json({ error: 'insufficient_credits' }, { status: 402 }) })
     const response = await POST(request({ category: 'creative' }))
     expect(response.status).toBe(402)
-    expect(mocks.requireCredits.mock.calls.map(call => call[1])).toEqual([2, 8])
+    expect(mocks.requireCredits.mock.calls.map(call => call[1])).toEqual([8, 8])
     expect(mocks.generateImage).not.toHaveBeenCalled()
     expect(mocks.deductCredits).not.toHaveBeenCalled()
   })
@@ -81,10 +83,10 @@ describe('Tips preview billing', () => {
     expect(await response.json()).toMatchObject({ code: 'billing_reconciliation_required' })
   })
 
-  it('charges Lite token usage before returning its image', async () => {
+  it('charges actual 2.1 cost before returning its image', async () => {
     mocks.generateLite.mockResolvedValue({
       image: 'lite-image',
-      usage: { modelId: 'google/gemini-3.1-flash-lite-image', inputTokens: 10, outputTokens: 20 },
+      usage: { modelId: 'google/gemini-nano-banana-2.1', inputTokens: 10, outputTokens: 20, providerCostUsd: 0.04 },
     })
     const response = await POST(request({ category: 'creative' }))
     expect(response.status).toBe(200)
@@ -107,4 +109,23 @@ describe('Tips preview billing', () => {
     expect(mocks.deductCredits).not.toHaveBeenCalled()
     expect(mocks.deductByTokens).not.toHaveBeenCalled()
   })
+  it('does not submit another paid model after an uncertain 2.1 outcome', async () => {
+    mocks.generateLite.mockRejectedValue(new Error('network timeout'))
+    const response = await POST(request({ category: 'wild' }))
+    expect(response.status).toBe(503)
+    expect(mocks.generateImage).not.toHaveBeenCalled()
+    expect(mocks.deductByTokens).not.toHaveBeenCalled()
+  })
+  it('fails closed before submission if the 2.1 price is absent', async () => {
+    mocks.getTokenRate.mockResolvedValue(null)
+    expect((await POST(request())).status).toBe(503)
+    expect(mocks.generateLite).not.toHaveBeenCalled()
+  })
+  it('marks moderation fallback and submits Spicy directly once', async () => {
+    const response = await POST(request({ category: 'creative' }))
+    expect(await response.json()).toMatchObject({ contentBlocked: true })
+    expect(mocks.generateImage).toHaveBeenCalledWith(expect.objectContaining({ model: 'qwen-spicy' }))
+    expect(mocks.generateLite).toHaveBeenCalledTimes(1)
+  })
+
 })

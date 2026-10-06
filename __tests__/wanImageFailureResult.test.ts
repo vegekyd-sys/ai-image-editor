@@ -1,10 +1,11 @@
+vi.mock('@/lib/gemini', () => ({ ContentBlockedError: class extends Error {} }));
 // @vitest-environment node
 import { afterEach, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 import { editImage } from '@/lib/skills/edit-image';
-vi.mock('@/lib/model-router', async () => {
+vi.mock('@/lib/model-router', async (importOriginal) => {
   const { wanImageBackend } = await import('@/lib/models/wan-image');
-  return { generateImage: wanImageBackend.generate };
+  return { ...await importOriginal<typeof import('@/lib/model-router')>(), generateImage: wanImageBackend.generate };
 });
 
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });

@@ -1,3 +1,4 @@
+vi.mock('@/lib/gemini', () => ({ ContentBlockedError: class extends Error {} }))
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 

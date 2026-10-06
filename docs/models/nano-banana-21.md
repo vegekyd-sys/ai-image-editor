@@ -1,6 +1,6 @@
 # Nano Banana 2.1 接入与供应商对比
 
-Nano Banana 2.1 已在独立 worktree 接入 Makaron，优先使用 OpenRouter Image API。1K 商品图和 2K 编辑的真实费用明显低于 fal 公布的 $0.08 基础单价。先作为独立模型选项使用，默认图片模型与 Tips 预览保持现有选择；生产应用尚未发布。
+Nano Banana 2.1 已在独立 worktree 接入 Makaron，优先使用 OpenRouter Image API。1K 商品图和 2K 编辑的真实费用明显低于 fal 公布的 $0.08 基础单价。候选版本的普通图片与 Tips 图片预览默认切为 2.1；保留经典 Nano Banana 2 手动选项，Tips 文案继续使用旧模型。生产应用尚未发布。
 
 核对日期为 2026 年 10 月 7 日（北京时间）。Google 模型卡记录发布日为 10 月 6 日。
 
@@ -54,7 +54,7 @@ CLI 代码已更新，但没有发布新的 npm 版本。GUI 选择器负责选�
 
 供应商调用使用 `/api/v1/images`。OpenRouter 的聊天接口对 2.1 的全景比例仍有旧模型校验，实际返回 HTTP 400，声明只有旧 Flash Preview 可用 4:1；Image API 的实时能力目录正确列出 2.1 的全景比例，真实调用成功。不要把该模型接回聊天接口来处理全景图片。
 
-单次只发一个付费 POST，失败不自动重发、不丢弃参考图降级，也不换到另一模型。只有完整图片通过解码且供应商成本有效，才交给现有持久化/计费链路。透明背景沿用现有 GPT Image 2.5 路由。返回的是栅格图，不承担 run_code 的 editable 合同。Image API 没有开放本次可验证的 thinking 控制与像素流式输出。
+2.1 单次只发一个付费 POST，结果不明时不自动重发或换模型，也不丢弃参考图降级。明确选择 2.1 时不换模型；自动路由收到明确审核拒绝后才允许调用 Spicy。只有完整图片通过解码且供应商成本有效，才交给现有持久化/计费链路。透明背景沿用现有 GPT Image 2.5 路由。返回的是栅格图，不承担 run_code 的 editable 合同。Image API 没有开放本次可验证的 thinking 控制与像素流式输出。
 
 ## 实测结果
 
@@ -90,3 +90,20 @@ CLI 代码已更新，但没有发布新的 npm 版本。GUI 选择器负责选�
 
 ![桌面模型选择组件](../../output/playwright/nano-banana-21-selector-desktop.png)
 ![手机模型选择组件](../../output/playwright/nano-banana-21-selector-mobile.png)
+
+## 默认模型替换与 Tips 文案对比（2026-10-07）
+
+候选版本的普通图片自动路由与 Creative/Wild Tips 图片预览默认使用 2.1。Nano Banana 2 (`gemini`) 与 Lite (`gemini-lite`) 保留手动选择，Enhance/NSFW 的 Spicy 首选和透明图片的 Flare 合同保留。GUI 关闭自动选择后初始选中 2.1；Agent 与 MCP 余额预检按实际首选模型及可到达的审核兜底报价，交付前按供应商实际成本扣费。显式旧模型仍使用旧 Nano Banana 2，不被新自动路由覆盖。
+
+Tips 图片 10 组：Lite 成功 8/10，成功请求均值 14.3 秒；2.1 成功 10/10，均值 19.6 秒（慢约 37%）。均为完整图片返回耗时，不是首包时间；不能推导长期 P95。
+
+Tips 文案另做 12 组同图同提示词 A/B（每请求 2 条，覆盖 Creative/Wild、Enhance/Captions、四语言及去重）。使用实际 `streamTipsByCategory` 产品路径，明确 text-only，高/低思考沿用类别默认。总并发 4，每格只允许一个真实付费请求；缺 editPrompt 的补写请求被抑制。因此下表是首轮生成能力，不等于带补写的最终产品成功率。
+
+| 文案模型 | 首轮两条完整 Tips | 平均首轮完成时间 | 平均供应商费用 |
+| --- | --- | --- | --- |
+| 旧 Nano Banana 2 | 4/12 | 9.0 秒 | $0.00589 |
+| Nano Banana 2.1 | 8/12 | 24.1 秒 | $0.04550 |
+
+2.1 文案成本约 7.7 倍、耗时约 2.7 倍，仍有 4/12 组缺完整编辑指令；旧模型也有首轮缺字段问题。2.1 未达到直接替换文案主模型的速度/成本/合同稳定性标准，暂保留旧模型。可用 `TIPS_MODEL` 独立配置后续文案实验，图片模型不跟着变。
+
+脚本：`docs/spikes/nano-banana-21-tips-text-ab.cjs`；原始证据：`test-results/nano-banana-21-tips-text-ab-v1/{nb2,nb21,summary}.json`。实验已报告总费用 $0.6166225，没有付费补写。文案标签与英文 editPrompt 已检查；未作长期质量盲评或 Tips 文案驱动生成的端到端胜率结论。

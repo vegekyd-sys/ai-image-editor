@@ -220,6 +220,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.nanoBanana21.title': 'Nano Banana 2.1',
+  'changelog.nanoBanana21.item1': '普通图片与创意 Tips 图片默认使用 Nano Banana 2.1，支持多图参考及最高 4K 输出。',
+  'changelog.nanoBanana21.item2': '经典 Nano Banana 2 仍可手动选择；Tips 文案继续使用原模型。',
   'changelog.webSearch.title': '联网搜索与来源引用',
   'changelog.webSearch.item1': '使用支持联网搜索的 Agent 模型时，直接问最新资讯、产品资料或参考案例，Makaron 会按需搜索网页，为创作补充信息。',
   'changelog.webSearch.item2': '回答附有可点击的来源链接，方便核对原文；引用随对话保存，刷新或重新打开项目后仍可查看。',
@@ -608,10 +611,10 @@ const zh = {
   'model.tab.video': '视频',
   'model.tab.agent': 'Agent',
   'model.gemini.name': 'Nano Banana 2',
-  'model.gemini.desc': '快速通用，大多数编辑的默认选择。',
+  'model.gemini.desc': '经典 Nano Banana 2，可手动选择。',
   'model.geminiLite.name': 'Nano Banana 2 Lite',
   'model.gemini21.name': 'Nano Banana 2.1',
-  'model.gemini21.desc': '画质与文字更精准，支持多图融合和 4K 输出。',
+  'model.gemini21.desc': '默认图片模型，支持多图融合和 4K 输出。',
   'model.geminiLite.desc': '低成本路径，适合快速草稿。',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': '人脸保真最佳，可处理 NSFW 内容。',

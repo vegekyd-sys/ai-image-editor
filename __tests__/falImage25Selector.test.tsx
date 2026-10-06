@@ -27,3 +27,14 @@ describe('Image 2.5 model selector', () => {
     expect(onVideoModelChange).not.toHaveBeenCalled();
   });
 });
+
+
+it('chooses 2.1 when leaving auto and retains the classic Nano Banana 2 option', async () => {
+  const onModelChange=vi.fn();
+  render(<LocaleProvider><ModelSelector preferredModel="auto" onModelChange={onModelChange} /></LocaleProvider>);
+  fireEvent.click(screen.getByTestId('model-selector'));
+  fireEvent.click(await screen.findByTestId('model-auto-image'));
+  expect(onModelChange).toHaveBeenLastCalledWith('gemini-2.1');
+  fireEvent.click(await screen.findByText('Nano Banana 2'));
+  expect(onModelChange).toHaveBeenLastCalledWith('gemini');
+});

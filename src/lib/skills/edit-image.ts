@@ -1,4 +1,4 @@
-import { generateImage, SpicyImageRequestError } from '../model-router';
+import { generateImage, resolveModelChain, SpicyImageRequestError } from '../model-router';
 import type { ImageBackground, ModelId, TokenUsage } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
 import { ProviderImageInputError } from '../provider-image-preflight';
@@ -63,14 +63,15 @@ export async function editImage(
   }
 
   let result: string | null = null;
-  let usedModel: ModelId = 'gemini';
+  const primaryModel = resolveModelChain({ image: references ? undefined : ctx.currentImage, references, prompt: finalPrompt, model: requestedModel, category: skill, background, isNsfw })[0];
+  let usedModel: ModelId = primaryModel;
   let lastFailedModels: ModelId[] | undefined;
   let contentBlocked = false;
   let lastUsage: TokenUsage | undefined;
   let usedProvider: string | undefined;
   // A transparent request is a strict, paid provider call. Do not fan it out
   // or repeat it after failure; surface the capability error to the user.
-  const MAX_ATTEMPTS = isNsfw || skill === 'enhance' || background === 'transparent' || requestedModel === 'gemini-2.1' || requestedModel === 'wan2.7-image' || requestedModel === 'qwen-spicy' || isFalImage25(requestedModel) ? 1 : 2;
+  const MAX_ATTEMPTS = isNsfw || skill === 'enhance' || background === 'transparent' || primaryModel === 'gemini-2.1' || requestedModel === 'wan2.7-image' || requestedModel === 'qwen-spicy' || isFalImage25(requestedModel) ? 1 : 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let genResult;
@@ -93,7 +94,7 @@ export async function editImage(
       if (error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
         return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
       }
-      if (error instanceof SpicyImageRequestError || requestedModel === 'gemini-2.1' || requestedModel === 'wan2.7-image' || requestedModel === 'qwen-spicy' || isNsfw || skill === 'enhance' || isFalImage25(requestedModel)) {
+      if (error instanceof SpicyImageRequestError || primaryModel === 'gemini-2.1' || requestedModel === 'wan2.7-image' || requestedModel === 'qwen-spicy' || isNsfw || skill === 'enhance' || isFalImage25(requestedModel)) {
         // Return a durable tool result even for an unknown paid outcome. Never
         // echo arbitrary transport errors or invite automatic paid resubmission.
         return { success: false, message: 'Image generation did not complete. The provider outcome may be unknown. Do not retry automatically or silently switch models; explain the failure to the user. Do not bypass a failed required image edit by sending the unedited original into dependent video generation.' };

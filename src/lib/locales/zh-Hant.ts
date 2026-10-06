@@ -258,6 +258,9 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.nanoBanana21.title': 'Nano Banana 2.1',
+  'changelog.nanoBanana21.item1': '一般圖片與創意 Tips 圖片預設使用 Nano Banana 2.1，支援多圖參考及最高 4K 輸出。',
+  'changelog.nanoBanana21.item2': '經典 Nano Banana 2 仍可手動選擇；Tips 文案繼續使用原模型。',
   'changelog.webSearch.title': '連網搜尋與來源引用',
   'changelog.webSearch.item1': '使用支援連網搜尋的 Agent 模型時，直接詢問最新資訊、產品資料或參考案例，Makaron 會按需搜尋網頁，為創作補充資訊。',
   'changelog.webSearch.item2': '回答附有可點擊的來源連結，方便核對原文；引用隨對話儲存，重新整理或重新開啟專案後仍可查看。',
@@ -822,9 +825,9 @@ const zhHant = {
   'model.tab.image': '圖片',
   'model.tab.video': '影片',
   'model.tab.agent': 'Agent',
-  'model.gemini.desc': '快速且通用，是大多數編輯的預設選擇。',
+  'model.gemini.desc': '經典 Nano Banana 2，可手動選擇。',
   'model.gemini21.name': 'Nano Banana 2.1',
-  'model.gemini21.desc': '畫質與文字更精準，支援多圖融合和 4K 輸出。',
+  'model.gemini21.desc': '預設圖片模型，支援多圖融合和 4K 輸出。',
   'model.geminiLite.desc': '成本較低，適合快速草稿。',
   'model.qwen.desc': '人臉保真效果最佳，可處理 NSFW 內容。',
   'model.qwenSpicy.name': 'Qwen Spicy',

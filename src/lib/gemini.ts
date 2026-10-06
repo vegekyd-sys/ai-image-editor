@@ -10,6 +10,7 @@ import { getPromptLanguage, getTipsLanguageInstruction, normalizeLocale } from '
 import { DEFAULT_IMAGE_EDIT_SYSTEM_PROMPT, getChatSystemPrompt } from './chat-response-policy';
 import { getTipsPromptTemplate } from './tips-response-policy';
 import type { TokenUsage } from './models/types';
+import { nanoBanana21Backend, NANO_BANANA_21_MODEL } from './models/nano-banana-21';
 
 const LOG_FILE = '/tmp/tips-timing.log';
 function tlog(msg: string) {
@@ -38,14 +39,14 @@ function checkBlockReason(result: any, label: string): void {
 // Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
 export const PROVIDER = (process.env.AI_PROVIDER || 'openrouter') as 'google' | 'openrouter';
 
-// Image generation model — override with IMAGE_MODEL env var
-const MODEL = process.env.IMAGE_MODEL || 'gemini-3-pro-image-preview';
+// Classic Nano Banana 2 and Tips text; ordinary image routing defaults to 2.1 separately.
+const MODEL = process.env.IMAGE_MODEL || 'gemini-3.1-flash-image-preview';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = `google/${MODEL}`;
-const TIPS_OPENROUTER_MODEL = OPENROUTER_MODEL;
-// Tip text should stay on the primary creative model; only the image preview thumbnails use Lite by default.
-const TIPS_PREVIEW_IMAGE_MODEL = process.env.TIPS_PREVIEW_IMAGE_MODEL || 'google/gemini-3.1-flash-lite-image';
+const TIPS_OPENROUTER_MODEL = normalizeOpenRouterModel(process.env.TIPS_MODEL || OPENROUTER_MODEL);
+// Text and preview models have separate configuration, so either can be evaluated or rolled back.
+export const TIPS_PREVIEW_IMAGE_MODEL = normalizeOpenRouterModel(process.env.TIPS_PREVIEW_IMAGE_MODEL || NANO_BANANA_21_MODEL);
 
 // Tips text stays on Gemini via OpenRouter by default, with direct Google as fallback.
 type TipsProvider = 'openrouter' | 'google';
@@ -676,8 +677,11 @@ export async function generateTipsPreviewImageOpenRouter(
   imageBase64: string,
   editPrompt: string,
   aspectRatio?: string,
-): Promise<{ image: string | null; usage?: { inputTokens: number; outputTokens: number; modelId: string } }> {
+): Promise<{ image: string | null; usage?: TokenUsage }> {
   const modelId = normalizeOpenRouterModel(TIPS_PREVIEW_IMAGE_MODEL);
+  if (modelId === NANO_BANANA_21_MODEL) {
+    return nanoBanana21Backend.generate({ image: imageBase64, prompt: editPrompt, aspectRatio, imageResolution: '1K' });
+  }
   const thinkingEffort = (process.env.TIPS_PREVIEW_THINKING || 'low') as OpenRouterReasoningEffort;
   return generatePreviewImageOpenRouter(
     imageBase64,
@@ -990,6 +994,7 @@ export async function generateEditPromptForTip(
     body: JSON.stringify({
       model: TIPS_OPENROUTER_MODEL,
       stream: false,
+      modalities: ['text'],
       messages: [
         { role: 'system', content: systemPrompt },
         {
@@ -1215,6 +1220,7 @@ async function* streamTipsByCategoryOpenRouter(
     body: JSON.stringify({
       model: TIPS_OPENROUTER_MODEL,
       stream: true,
+      modalities: ['text'],
       reasoning,
       messages: [
         { role: 'system', content: `${languageInstruction}\n\n${systemPrompt}` },
