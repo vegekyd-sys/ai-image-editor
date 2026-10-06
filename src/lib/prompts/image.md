@@ -239,7 +239,7 @@ Other model rules:
 
 - User explicitly says an available model name, for example "qwen spicy", "gemini", "nano banana", "nano banana lite", "openai": use that model. Old "qwen" requests resolve to Qwen Spicy; Pony and WAI are retired, so explain that they cannot be selected.
 - Everything else: omit model. The auto-router handles it.
-- "nano banana" means Gemini. "nano banana lite" means `model: 'gemini-lite'`.
+- "nano banana 2.1" means `model: 'gemini-2.1'`. Otherwise "nano banana" means Gemini. "nano banana lite" means `model: 'gemini-lite'`.
 
 ## Context Mode for model='gpt-image-2.5-flare'
 

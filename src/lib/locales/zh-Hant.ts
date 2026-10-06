@@ -823,6 +823,8 @@ const zhHant = {
   'model.tab.video': '影片',
   'model.tab.agent': 'Agent',
   'model.gemini.desc': '快速且通用，是大多數編輯的預設選擇。',
+  'model.gemini21.name': 'Nano Banana 2.1',
+  'model.gemini21.desc': '畫質與文字更精準，支援多圖融合和 4K 輸出。',
   'model.geminiLite.desc': '成本較低，適合快速草稿。',
   'model.qwen.desc': '人臉保真效果最佳，可處理 NSFW 內容。',
   'model.qwenSpicy.name': 'Qwen Spicy',

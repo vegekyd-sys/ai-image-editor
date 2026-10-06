@@ -74,6 +74,14 @@ async function handleMcp(req: Request): Promise<Response> {
     // Pre-check: ensure user has enough credits
     onToolStart: auth.type === 'user' ? async (toolName, model, meta) => {
       if (!(await isBillingEnabled())) return { allowed: true };
+      if (toolName === 'makaron_edit_image' && model === 'gemini-2.1') {
+        const rate = await getTokenRate('google/gemini-nano-banana-2.1');
+        if (!rate || rate.model_id !== 'google/gemini-nano-banana-2.1' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Nano Banana 2.1 pricing is not configured.' };
+        const outputCost = meta?.imageResolution === '4K' ? 0.0756 : meta?.imageResolution === '2K' ? 0.0504 : 0.0336;
+        const credits = Math.ceil((outputCost + (meta?.imageInputCount ?? 0) * 1120 * 1.5 / 1_000_000) * rate.markup / 0.01);
+        const check = await requireCredits(auth.userId!, credits);
+        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
+      }
       if (toolName === 'makaron_edit_image' && isFalImage25(model)) {
         const rate = await getTokenRate(model);
         if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'GPT Image 2.5 pricing is not configured.' };
@@ -87,7 +95,7 @@ async function handleMcp(req: Request): Promise<Response> {
         const check = await requireCredits(auth.userId!, quote.credits);
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
-      if (toolName === 'makaron_edit_image' && model !== 'wan2.7-image' && !isFalImage25(model)
+      if (toolName === 'makaron_edit_image' && model !== 'wan2.7-image' && model !== 'gemini-2.1' && !isFalImage25(model)
         && meta?.imageInputCount !== undefined && meta.imageInputCount <= 3) {
         // Auto/Gemini requests may fall back to Spicy. Quote the most expensive
         // fixed-price provider they can reach before submitting either call.

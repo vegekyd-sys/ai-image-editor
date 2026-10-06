@@ -48,6 +48,7 @@ export async function getTokenRate(modelId: string): Promise<TokenRate | null> {
   // Exact match
   const exact = all.find(r => r.model_id === modelId)
   if (exact) return exact
+  if (modelId === 'google/gemini-nano-banana-2.1') return null
   // New image variants require their own active row, never the legacy Image 2 prefix.
   if (/^(?:openai\/)?gpt-image-2\.5(?:-|$)/.test(modelId)) return null
   // Strip inference profile prefix (e.g. "us.anthropic.xxx" or "global.anthropic.xxx" -> "anthropic.xxx") and retry

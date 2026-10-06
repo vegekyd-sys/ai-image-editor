@@ -1140,6 +1140,21 @@ try {
   }
 
   {
+    const out = path.join(tmpHome, 'nano21-result.jpg');
+    await expectSuccess(['edit', '--image-model', 'gemini-2.1', '--image-resolution', '4K', '--aspect', '4:1', '--out', out, 'A product banner.']);
+    const request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.model, 'gemini-2.1');
+    assert.equal(request.body.params.arguments.imageResolution, '4K');
+    assert.equal(request.body.params.arguments.aspectRatio, '4:1');
+    const before = requests.length;
+    const invalid = await expectFailure(['edit', '--image-model', 'gemini-2.1', '--image-resolution', '8K', 'A product.']);
+    assert.match(invalid.stderr, /Invalid --image-resolution/);
+    const wrongModel = await expectFailure(['edit', '--image-model', 'gemini-lite', '--image-resolution', '2K', 'A product.']);
+    assert.match(wrongModel.stderr, /requires --image-model gemini-2.1/);
+    assert.equal(requests.length, before);
+  }
+
+  {
     const out = path.join(tmpHome, 'wan-result.jpg');
     const result = await expectSuccess(['edit', '--image-model', 'wan2.7-image', '--aspect', '16:9', '--out', out, 'A red mug.']);
     assert.equal(result.stdout.trim(), out);

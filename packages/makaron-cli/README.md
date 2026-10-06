@@ -384,7 +384,7 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 npx makaron-cli edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Options: `--image`, `--image-model gemini|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output routes strictly to GPT Image 2.5 Flare and is returned only when the provider supplies real PNG/WebP alpha.
+Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output routes strictly to GPT Image 2.5 Flare and is returned only when the provider supplies real PNG/WebP alpha.
 
 `wan2.7-image` uses Alibaba international for fast, approximately 1K generation and editing (default 6 credits/image). Failed or timed-out Wan requests are not automatically retried or switched to another model. Face identity can change. Example: `makaron edit --image portrait.jpg --image-model wan2.7-image --aspect 16:9 --out stadium.jpg "Place this woman in a baseball stadium, preserving her face."`
 

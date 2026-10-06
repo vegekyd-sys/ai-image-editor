@@ -1388,13 +1388,14 @@ function createGenerateImageTool(
       inputSchema: z.object({
         editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for normal auto routing.'),
+        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite; Nano Banana 2.1 = gemini-2.1 (explicit requests, OpenRouter, up to 14 input images). Otherwise omit model for normal auto routing.'),
+        imageResolution: z.enum(['1K', '2K', '4K']).optional().describe('Nano Banana 2.1 output resolution; defaults to 1K. Use 2K/4K only when requested. Other image models do not support this parameter.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2.5 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, aspectRatio, background, media_index, reference_media_indices }) => {
+      execute: async ({ editPrompt, skill, model, aspectRatio, imageResolution, background, media_index, reference_media_indices }) => {
         // GPT-5.6 currently fills omitted optional numeric tool fields with 0.
         // Treat that provider sentinel exactly like omission so empty projects
         // can still use pure text-to-image. Positive indices remain validated.
@@ -1428,6 +1429,7 @@ function createGenerateImageTool(
         } catch (error) {
           return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: 'model_retired' };
         }
+        if (imageResolution && billingModel !== 'gemini-2.1') return { success: false, message: 'imageResolution requires Nano Banana 2.1.', error: 'unsupported_parameter' };
         const imageInputCount = (editTarget ? 1 : 0) + resolvedRefs.length;
         const spicyReachable = imageInputCount <= 3 && !(ctx.isNsfw && background === 'transparent')
           && resolveModelChain({
@@ -1441,12 +1443,18 @@ function createGenerateImageTool(
           }).includes('qwen-spicy');
         if (ctx.userId && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
           let requiredCredits = 0;
+          if (billingModel === 'gemini-2.1') {
+            const rate = await getTokenRate('google/gemini-nano-banana-2.1');
+            if (!rate || rate.model_id !== 'google/gemini-nano-banana-2.1' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Nano Banana 2.1 pricing is not configured.', error: 'pricing_unavailable' };
+            const outputCost = imageResolution === '4K' ? 0.0756 : imageResolution === '2K' ? 0.0504 : 0.0336;
+            requiredCredits = Math.ceil((outputCost + imageInputCount * 1120 * 1.5 / 1_000_000) * rate.markup / 0.01);
+          }
           if (isFalImage25(billingModel)) {
             const rate = await getTokenRate(billingModel);
             if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'GPT Image 2.5 pricing is not configured.', error: 'pricing_unavailable' };
             requiredCredits = 5;
           }
-          if (billingModel && !isFalImage25(billingModel)) {
+          if (billingModel && billingModel !== 'gemini-2.1' && !isFalImage25(billingModel)) {
             const toolName = resolveToolName('edit_image', billingModel, imageInputCount);
             const price = await getToolPrice(toolName);
             if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {
@@ -1467,7 +1475,7 @@ function createGenerateImageTool(
         }
         const imageStartedAt = Date.now();
         const skillResult = await editImage(
-          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, background, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           {
             currentImage: editTarget,
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,

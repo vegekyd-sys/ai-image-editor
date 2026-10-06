@@ -166,3 +166,27 @@ describe('App Agent Image 2.5 billing', () => {
     expect(deductCredits).not.toHaveBeenCalled();
   });
 });
+
+
+describe('Nano Banana 2.1 Agent execution and billing', () => {
+  it('rejects missing catalog pricing before generation', async () => {
+    const { tool, ctx, getTokenRate, editImage } = setup();
+    ctx.preferredModel = 'gemini-2.1';
+    getTokenRate.mockResolvedValue(null);
+    expect(await tool.execute({ editPrompt: 'Product' })).toMatchObject({ success: false, error: 'pricing_unavailable' });
+    expect(getTokenRate).toHaveBeenCalledWith('google/gemini-nano-banana-2.1');
+    expect(editImage).not.toHaveBeenCalled();
+  });
+  it('passes resolution and awaits actual supplier-cost accounting before publishing', async () => {
+    const { tool, ctx, getTokenRate, editImage, deductByTokens, deductCredits, requireCredits } = setup();
+    ctx.preferredModel = 'gemini-2.1';
+    getTokenRate.mockResolvedValue({ model_id: 'google/gemini-nano-banana-2.1', markup: 2, is_active: true });
+    editImage.mockResolvedValue({ success: true, image: 'data:image/png;base64,YQ==', usedModel: 'gemini-2.1', provider: 'openrouter', usage: { modelId: 'google/gemini-nano-banana-2.1', inputTokens: 100, outputTokens: 2520, providerCostUsd: 0.0768 } });
+    expect((await tool.execute({ editPrompt: 'Product', imageResolution: '4K' })).success).toBe(true);
+    expect(editImage.mock.calls[0][0]).toMatchObject({ preferredModel: 'gemini-2.1', imageResolution: '4K' });
+    expect(requireCredits).toHaveBeenCalledWith('test-user', 16);
+    expect(deductByTokens).toHaveBeenCalledWith('test-user', 'generate_image', 'google/gemini-nano-banana-2.1', 100, 2520, undefined, undefined, undefined, 0.0768);
+    expect(deductCredits).not.toHaveBeenCalled();
+    expect(ctx.generatedImages).toHaveLength(1);
+  });
+});

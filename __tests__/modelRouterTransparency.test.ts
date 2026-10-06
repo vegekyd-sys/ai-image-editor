@@ -80,3 +80,20 @@ describe('transparent image routing', () => {
     });
   });
 });
+
+
+describe('Nano Banana 2.1 strict routing', () => {
+  it('does not replace default or Lite routing', () => {
+    expect(resolveModelChain({ prompt: 'Scene', model: 'gemini-2.1' })).toEqual(['gemini-2.1']);
+    expect(resolveModelChain({ prompt: 'Scene' })).toEqual(['gemini', 'qwen-spicy']);
+    expect(resolveModelChain({ prompt: 'Scene', model: 'gemini-lite' })).toEqual(['gemini-lite', 'gemini', 'qwen-spicy']);
+  });
+  it('fails once on an uncertain paid outcome', async () => {
+    mockedGetBackend.mockReset();
+    const generate = vi.fn().mockRejectedValue(new Error('unknown paid outcome'));
+    mockedGetBackend.mockReturnValue({ id: 'gemini-2.1', canHandle: () => true, generate });
+    await expect(generateImage({ prompt: 'Scene', model: 'gemini-2.1' })).rejects.toThrow('unknown paid outcome');
+    expect(mockedGetBackend).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+});

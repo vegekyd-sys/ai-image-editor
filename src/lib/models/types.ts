@@ -1,5 +1,5 @@
 /** Models offered to new Agent and MCP requests. */
-export const IMAGE_MODEL_IDS = ['gemini', 'gemini-lite', 'qwen-spicy', 'openai', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'wan2.7-image'] as const;
+export const IMAGE_MODEL_IDS = ['gemini', 'gemini-2.1', 'gemini-lite', 'qwen-spicy', 'openai', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'wan2.7-image'] as const;
 /** Accept the old Qwen ID at API/tool boundaries; it is normalized before routing and billing. */
 export const IMAGE_MODEL_INPUT_IDS = [...IMAGE_MODEL_IDS, 'qwen'] as const;
 /** Keep old IDs at the input boundary so existing clients get a deliberate migration/error. */
@@ -13,6 +13,8 @@ export interface GenerateImageRequest {
   model?: ModelId;          // explicit model choice (agent tool param or UI selector)
   category?: string;        // tip category (for auto-routing)
   aspectRatio?: string;
+  /** Nano Banana 2.1 output resolution, default 1K. */
+  imageResolution?: '1K' | '2K' | '4K';
   /** Output background contract. Transparent output defaults to GPT Image 2.5 Flare. */
   background?: ImageBackground;
   thinkingEffort?: ReasoningEffort;

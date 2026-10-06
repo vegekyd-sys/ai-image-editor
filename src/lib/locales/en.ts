@@ -610,6 +610,8 @@ const en = {
   'model.gemini.name': 'Nano Banana 2',
   'model.gemini.desc': 'Fast and versatile. Default for most edits.',
   'model.geminiLite.name': 'Nano Banana 2 Lite',
+  'model.gemini21.name': 'Nano Banana 2.1',
+  'model.gemini21.desc': 'Improved visuals and text, with multi-image fusion and 4K output.',
   'model.geminiLite.desc': 'Lower-cost path for fast drafts.',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': 'Best face preservation. Handles NSFW content.',

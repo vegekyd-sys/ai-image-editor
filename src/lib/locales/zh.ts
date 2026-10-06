@@ -610,6 +610,8 @@ const zh = {
   'model.gemini.name': 'Nano Banana 2',
   'model.gemini.desc': '快速通用，大多数编辑的默认选择。',
   'model.geminiLite.name': 'Nano Banana 2 Lite',
+  'model.gemini21.name': 'Nano Banana 2.1',
+  'model.gemini21.desc': '画质与文字更精准，支持多图融合和 4K 输出。',
   'model.geminiLite.desc': '低成本路径，适合快速草稿。',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': '人脸保真最佳，可处理 NSFW 内容。',

@@ -32,6 +32,7 @@ export function resolveModelChain(req: GenerateImageRequest): ModelId[] {
   // Transparent output is a strict capability contract. Do not silently return
   // an opaque image from a fallback backend that cannot honor the request.
   if (req.background === 'transparent') return [model!];
+  if (model === 'gemini-2.1') return [model];
   if (isFalImage25(model)) return [model];
   // Explicit paid Wan calls never fan out to another model, even on timeout.
   if (req.model === 'wan2.7-image') return ['wan2.7-image'];
@@ -53,7 +54,7 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
 
   for (const modelId of chain) {
     const backend = getBackend(modelId);
-    if ((modelId === 'wan2.7-image' || (modelId === 'qwen-spicy' && chain[0] === modelId) || isFalImage25(modelId)) && !backend?.canHandle(req)) {
+    if ((modelId === 'gemini-2.1' || modelId === 'wan2.7-image' || (modelId === 'qwen-spicy' && chain[0] === modelId) || isFalImage25(modelId)) && !backend?.canHandle(req)) {
       throw new Error(`${modelId} is not configured. No fallback model was called.`);
     }
     if (!backend?.canHandle(req)) continue;
@@ -85,7 +86,7 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
           ? e
           : new SpicyImageRequestError(e instanceof Error ? e.message : 'Qwen Spicy request outcome unknown.');
       }
-      if (modelId === 'wan2.7-image' || isFalImage25(modelId)) throw e;
+      if (modelId === 'gemini-2.1' || modelId === 'wan2.7-image' || isFalImage25(modelId)) throw e;
       if (e instanceof ContentBlockedError) {
         console.warn(`[model-router] ${modelId} content blocked (NSFW), trying fallback...`);
         contentBlocked = true;

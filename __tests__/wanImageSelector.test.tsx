@@ -5,7 +5,7 @@ import { LocaleProvider } from '@/lib/i18n';
 import { IMAGE_MODEL_IDS } from '@/lib/models/types';
 import { getImageModels } from '@/lib/model-registry';
 
-describe('Wan model selector', () => {
+describe('Image model selector', () => {
   it('shares the canonical model id with the backend and tool schemas', () => {
     expect(IMAGE_MODEL_IDS).toContain('wan2.7-image');
     expect(getImageModels().filter(m => m.id === 'wan2.7-image')).toHaveLength(1);
@@ -20,4 +20,14 @@ describe('Wan model selector', () => {
     expect(onModelChange).toHaveBeenCalledWith('wan2.7-image');
     expect(onVideoModelChange).not.toHaveBeenCalled();
   });
+});
+
+
+it('lets users select Nano Banana 2.1 without changing the default', async () => {
+  const onModelChange = vi.fn();
+  render(<LocaleProvider><ModelSelector preferredModel="auto" onModelChange={onModelChange} /></LocaleProvider>);
+  expect(onModelChange).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByTestId('model-selector'));
+  fireEvent.click(await screen.findByText('Nano Banana 2.1'));
+  expect(onModelChange).toHaveBeenCalledWith('gemini-2.1');
 });

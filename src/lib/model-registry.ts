@@ -16,6 +16,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'gpt-image-2.5-flare', nameKey: 'model.image25Flare.name', descKey: 'model.image25Flare.desc', category: 'image' },
   { id: 'gpt-image-2.5-sunburst', nameKey: 'model.image25Sunburst.name', descKey: 'model.image25Sunburst.desc', category: 'image' },
   { id: 'wan2.7-image', nameKey: 'model.wan27Image.name', descKey: 'model.wan27Image.desc', category: 'image', speedLabel: '~10s' },
+  { id: 'gemini-2.1', nameKey: 'model.gemini21.name', descKey: 'model.gemini21.desc', category: 'image', speedLabel: '1K · 4K' },
   { id: 'gemini', nameKey: 'model.gemini.name', descKey: 'model.gemini.desc', category: 'image', speedLabel: '~15s' },
   { id: 'gemini-lite', nameKey: 'model.geminiLite.name', descKey: 'model.geminiLite.desc', category: 'image', speedLabel: 'Lite' },
   { id: 'qwen-spicy', nameKey: 'model.qwenSpicy.name', descKey: 'model.qwenSpicy.desc', category: 'image', speedLabel: '~15s' },
