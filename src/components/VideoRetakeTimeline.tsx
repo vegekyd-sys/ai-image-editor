@@ -42,11 +42,18 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
     if (cached.length === 8) return;
     let collecting = true;
     let stopSeek: (() => void) | undefined;
+    let loadTimeout: ReturnType<typeof setTimeout> | undefined;
     const sampler = document.createElement('video');
     sampler.crossOrigin = 'anonymous'; sampler.muted = true; sampler.playsInline = true; sampler.preload = 'auto';
     sampler.setAttribute('aria-hidden', 'true');
     sampler.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none';
     panel.current?.appendChild(sampler);
+    const releaseSampler = () => {
+      if (!collecting) return;
+      collecting = false; clearTimeout(loadTimeout); stopSeek?.();
+      sampler.onloadeddata = null; sampler.onerror = null; sampler.pause();
+      sampler.removeAttribute('src'); sampler.load(); sampler.remove();
+    };
     const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 90;
     const collect = async () => {
       const context = canvas.getContext('2d'); if (!context) return;
@@ -66,6 +73,7 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
           setFrameState({ key: thumbnailKey, images: [...images] });
         }
       }
+      if (collecting) releaseSampler();
     };
     let proxied = false;
     const load = (src: string) => {
@@ -73,15 +81,16 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
       sampler.src = src; sampler.load();
     };
     const fallback = () => {
-      if (!collecting || proxied) return;
+      if (!collecting) return;
+      if (proxied) { setRequestedKey(null); return; }
       // Canvas requires CORS even when native playback succeeds. Reuse the
       // existing range proxy only after direct loading/seeking fails.
       proxied = true; load(buildVideoProxyUrl(url));
     };
     sampler.onerror = fallback;
-    const loadTimeout = setTimeout(() => { if (sampler.readyState < 2) fallback(); }, 10000);
+    loadTimeout = setTimeout(() => { if (sampler.readyState < 2) fallback(); }, 10000);
     load(url);
-    return () => { collecting = false; clearTimeout(loadTimeout); stopSeek?.(); sampler.onloadeddata = null; sampler.onerror = null; sampler.pause(); sampler.removeAttribute('src'); sampler.load(); sampler.remove(); };
+    return releaseSampler;
     // Collapsing the selector keeps the same sampler alive until it finishes.
   }, [url, sourceOffset, length, thumbnailKey, requestedKey]);
   const commit = (next: VideoRetakeRange, seekAt = next.start) => {

@@ -33,12 +33,13 @@ describe('Retake playback timeline', () => {
     Object.defineProperty(sampler,'duration',{value:30,configurable:true});
     fireEvent.loadedData(sampler);
     for(let i=0;i<3;i++) await act(async()=>{fireEvent.seeked(sampler);});
-    const loads=vi.mocked(HTMLMediaElement.prototype.load).mock.calls.length;
     view.rerender(timeline(false));
     expect(view.container.querySelector('video')).toBe(sampler);
     for(let i=3;i<8;i++) await act(async()=>{fireEvent.seeked(sampler);});
     const sources=Array.from(view.container.querySelectorAll('img'),img=>img.src);
     expect(sources).toHaveLength(8);
+    expect(view.container.querySelector('video')).toBeNull();
+    const loads=vi.mocked(HTMLMediaElement.prototype.load).mock.calls.length;
     view.rerender(timeline(true));
     expect(HTMLMediaElement.prototype.load).toHaveBeenCalledTimes(loads);
     expect(Array.from(view.container.querySelectorAll('img'),img=>img.src)).toEqual(sources);
