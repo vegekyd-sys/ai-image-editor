@@ -8,9 +8,10 @@ describe('H3 Max reference adapter',()=>{
     expect(build({prompt:'<<<media_1>>> in a new room',images:[image],aspectRatio:'9:16'})).toMatchObject({prompt:'Image 1 in a new room', reference_image_urls:[image],aspect_ratio:'9:16',resolution:'768P'})
     expect(build({prompt:'<<<image_1>>>',images:[image]})).not.toHaveProperty('image_url')
   })
-  it('anchors Retake endpoints and disables rewriting only for anchored requests',()=>{
+  it('keeps Retake boundary references without switching to the unverified native endpoint constraints',()=>{
     const end='https://example.com/end.jpg'
-    expect(build({prompt:'Continue the jump',images:[image,end],boundaryFrames:{startUrl:image,endUrl:end}})).toMatchObject({image_url:image,end_image_url:end,prompt_expansion_mode:'disabled'})
+    expect(build({prompt:'Continue the jump',images:[image,end],boundaryFrames:{startUrl:image,endUrl:end}})).toMatchObject({reference_image_urls:[image,end],prompt_expansion_mode:'disabled'})
+    expect(build({prompt:'Continue the jump',images:[image,end],boundaryFrames:{startUrl:image,endUrl:end}})).not.toHaveProperty('image_url')
     expect(build({prompt:'New scene',images:[image]}).prompt_expansion_mode).toBe('balanced')
     expect(()=>build({prompt:'p',images:[image],boundaryFrames:{startUrl:image,endUrl:end}})).toThrow('validated image references')
   })
