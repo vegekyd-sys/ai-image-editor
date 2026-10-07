@@ -40,8 +40,17 @@ describe('Retake interval contract', () => {
     const plan = planRetake({start:10,end:23},30,'fal-h3-max');
     const prompt = retakePrompt('Use multiple camera angles',plan,true);
     expect(filterAndRemapImages(prompt,['start.jpg','end.jpg']).filteredImages).toEqual(['start.jpg','end.jpg']);
-    expect(prompt).toContain('Never restart an approach');
+    expect(prompt).toContain('never restart an earlier approach');
     expect(retakePrompt('Use multiple camera angles',planRetake({start:10,end:23},30,'seedance-2.5'))).not.toContain('BOUNDARY CONTINUITY');
+  });
+  it('maps original timestamps to the requested H3 output duration without locking intervening shots', () => {
+    const plan = planRetake({start:17.48,end:23},30.048,'fal-h3-max');
+    const prompt = retakePrompt('17.48-19s: low angle. CUT. 19-23s: overhead.',plan,true);
+    expect(prompt).toContain('NEW TAKE, 6.000 seconds');
+    expect(prompt).toContain('(original timestamp - 17.480) * 1.086957');
+    expect(prompt).toContain('output 0.000-6.000 seconds');
+    expect(prompt).toContain('they do not lock the camera composition');
+    expect(prompt).not.toContain('Preserve subject identity, motion, lighting and every detail');
   });
   it('extracts the first and last contextual frames from the original timebase', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'retake-boundaries-'));
