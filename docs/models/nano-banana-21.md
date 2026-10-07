@@ -7,7 +7,8 @@ Nano Banana 2.1 已在独立 worktree 接入 Makaron，优先使用 OpenRouter I
 ## 最终产品决定（2026-10-07）
 
 - CUI 聊天：Nano Banana 2.1 接替旧 Nano Banana 的普通图片默认位置；未指定模型以及只说「nano banana」都使用 2.1。明确选择「Nano Banana 2」仍使用经典模型。
-- Creative / Wild Tips 图片：使用 Nano Banana 2.1；保留既有透明背景、Enhance 与 NSFW 专用路由。
+- Creative / Wild / Captions Tips 图片：使用 Nano Banana 2.1；保留既有透明背景、Enhance 与 NSFW 专用路由。
+- CUI 的加文字、标题和排版请求：继续按现有规则引导到 Flare；与 Captions Tips 图片预览的默认模型分别处理。
 - Tips 文案：保持现有 Nano Banana 2 模型、提示词与推理档位，不切换到 Luna high、Luna low 或 2.1。文案与图片配置继续独立。
 
 此决定已由候选代码实现。最终复核在固定 runner 的应用代码提交 `d5418752` 上运行，7 个相关测试文件、58 项测试通过，覆盖 CUI/共享图片工具默认路由、经典模型可选、Tips 图片扣费与流式文案完整性。该应用提交此前已通过完整 release check。当前尚未合并主分支或发布生产；报告发布不代表 Makaron 应用上线。

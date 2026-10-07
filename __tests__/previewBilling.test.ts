@@ -83,15 +83,16 @@ describe('Tips preview billing', () => {
     expect(await response.json()).toMatchObject({ code: 'billing_reconciliation_required' })
   })
 
-  it('charges actual 2.1 cost before returning its image', async () => {
+  it.each(['creative', 'wild', 'captions'])('charges actual 2.1 cost before returning its %s image', async category => {
     mocks.generateLite.mockResolvedValue({
       image: 'lite-image',
       usage: { modelId: 'google/gemini-nano-banana-2.1', inputTokens: 10, outputTokens: 20, providerCostUsd: 0.04 },
     })
-    const response = await POST(request({ category: 'creative' }))
+    const response = await POST(request({ category }))
     expect(response.status).toBe(200)
     expect(mocks.requireCredits).toHaveBeenCalledOnce()
     expect(mocks.deductByTokens).toHaveBeenCalledOnce()
+    expect(mocks.deductByTokens).toHaveBeenCalledWith('user-1', 'preview', 'google/gemini-nano-banana-2.1', 10, 20, undefined, undefined, undefined, 0.04)
     expect(mocks.generateImage).not.toHaveBeenCalled()
   })
 

@@ -258,7 +258,7 @@ const ja = {
 
   // Changelog
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
-  'changelog.nanoBanana21.item1': '通常の画像とCreative / Wild Tips画像の標準をNano Banana 2.1に更新。背景の変更やクリエイティブな編集で、元の人物や構図をより保ちやすくなりました。',
+  'changelog.nanoBanana21.item1': '通常の画像とCreative / Wild / Captions Tips画像の標準をNano Banana 2.1に更新。背景の変更やクリエイティブな編集で、元の人物や構図をより保ちやすくなりました。',
   'changelog.nanoBanana21.item2': '写実的な細部、質感、光の表現と文字描画を改善。商品の背景変更、ポートレート編集、文字入りのクリエイティブ画像に適しています。',
   'changelog.nanoBanana21.item3': '編集元の画像を含め、最大14枚の入力画像に対応。チャットで2K / 4K出力や4:1、8:1などのパノラマ比率を指定できます。',
   'changelog.nanoBanana21.item4': '従来のNano Banana 2も手動で選択できます。Tipsの文章は従来のモデルを使用します。',

@@ -221,7 +221,7 @@ const en = {
 
   // Changelog
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
-  'changelog.nanoBanana21.item1': 'Ordinary images and Creative / Wild Tips images now default to Nano Banana 2.1, with better preservation of people and composition when changing scenes or making creative edits.',
+  'changelog.nanoBanana21.item1': 'Ordinary images and Creative / Wild / Captions Tips images now default to Nano Banana 2.1, with better preservation of people and composition when changing scenes or making creative edits.',
   'changelog.nanoBanana21.item2': 'Finer photorealistic detail, materials and lighting, plus clearer text rendering for product backgrounds, portrait edits and creative images with text.',
   'changelog.nanoBanana21.item3': 'Use up to 14 input images, including the image being edited. Ask in chat for 2K / 4K output or panoramic ratios such as 4:1 and 8:1.',
   'changelog.nanoBanana21.item4': 'Classic Nano Banana 2 remains available for manual selection. Tips text keeps its existing model.',

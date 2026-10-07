@@ -259,7 +259,7 @@ const zhHant = {
 
   // Changelog
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
-  'changelog.nanoBanana21.item1': '一般圖片與 Creative / Wild Tips 圖片預設升級為 Nano Banana 2.1，換場景和創意編輯時更擅長保留原圖人物與構圖。',
+  'changelog.nanoBanana21.item1': '一般圖片與 Creative / Wild / Captions Tips 圖片預設升級為 Nano Banana 2.1，換場景和創意編輯時更擅長保留原圖人物與構圖。',
   'changelog.nanoBanana21.item2': '更細膩的寫實細節、材質與光照，更清晰的文字呈現，適合商品換背景、人物修圖和帶文字的創意圖片。',
   'changelog.nanoBanana21.item3': '最多支援 14 張輸入圖片（含編輯底圖），可在對話中要求 2K / 4K 輸出，以及 4:1、8:1 等全景比例。',
   'changelog.nanoBanana21.item4': '經典 Nano Banana 2 仍可手動選擇；Tips 文案繼續使用原模型。',
