@@ -518,6 +518,7 @@ export async function* runMakaronAgent(
       'web_search',
       'generate_image',
       'generate_animation',
+      'retake_video',
       'upscale_video',
       'transcribe_audio',
       'rotate_camera',
@@ -988,7 +989,7 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: translate(responseLocale, 'agent.status.capturingFrame', hint) };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingImage') };
-        } else if (event.toolName === 'generate_animation') {
+        } else if (event.toolName === 'generate_animation' || event.toolName === 'retake_video') {
           yield { type: 'status', text: translate(responseLocale, 'status.submittingVideo') };
         } else if (event.toolName === 'upscale_video') {
           yield { type: 'status', text: translate(responseLocale, 'status.videoUpscaling') };

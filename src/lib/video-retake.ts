@@ -101,10 +101,15 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const now = new Date().toISOString()
     job = { id, user_id: input.userId, project_id: input.projectId ?? null, fingerprint, stage: 'preparing', source_url: input.videoUrl,
       instruction: input.script, model_id: model, resolution: input.videoResolution && input.videoResolution !== 'auto' ? input.videoResolution : model === 'fal-h3-max' ? '768p' : '720p',
-      plan, source_meta: { ...meta }, timings: {}, created_at: now, updated_at: now }
+      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount },
+      timings: {}, created_at: now, updated_at: now }
     const { error: insertError } = await admin.from(TABLE).insert(job)
     if (insertError) throw new Error('Could not create the Retake receipt. No provider submitted.')
-    await save(job, { source_url: await store(job, source, 'source') })
+    // Existing Makaron public objects already persist across provider polling.
+    const sourceUrl = new URL(input.videoUrl)
+    if (sourceUrl.origin !== new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).origin || !sourceUrl.pathname.startsWith('/storage/v1/object/public/images/')) {
+      await save(job, { source_url: await store(job, source, 'source') })
+    }
     const context = await extractRetakeContext(source, plan)
     const contextUrl = await store(job, context, 'context')
     await save(job, { context_url: contextUrl, stage: 'prepared', timings: { preparationMs: performance.now() - started } })
@@ -171,7 +176,7 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
       }
     }
     if (job.stage === 'saving_patch' && job.patch_url) {
-      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024)
+      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024, { falAsset: job.model_id !== 'seedance-2.5' })
       const permanentPatch = await store(job, bytes, 'patch')
       await save(job, { patch_url: permanentPatch, stage: 'assembling' }, token)
     }
