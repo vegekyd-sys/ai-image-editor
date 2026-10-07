@@ -23,6 +23,18 @@ function trackRect() {
   vi.spyOn(screen.getByTestId('video-retake-track'),'getBoundingClientRect').mockReturnValue({left:0,width:300} as DOMRect);
 }
 describe('Retake playback timeline', () => {
+  it('tracks playback independently of the selected interval and clamps to the video', () => {
+    const change=vi.fn();
+    const timeline=(time:number)=><LocaleProvider><VideoRetakeTimeline url="https://example.com/v.mp4" duration={30} range={{start:10,end:14}} currentTime={time} onSeek={vi.fn()} onChange={change} /></LocaleProvider>;
+    const {rerender}=render(timeline(7.5));
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('7.5');
+    expect(screen.getByTestId('video-retake-playhead').style.left).toBe('25%');
+    rerender(timeline(22.5));
+    expect(screen.getByTestId('video-retake-playhead').style.left).toBe('75%');
+    expect(values()).toEqual([10,14]); expect(change).not.toHaveBeenCalled();
+    rerender(timeline(40)); expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('30');
+    rerender(timeline(-1)); expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('0');
+  });
   it('moves the entire interval without resizing, clamps both video boundaries, and seeks the start', () => {
     const seek = vi.fn(); render(<RangeHarness seek={seek} />); trackRect();
     fireEvent.pointerDown(screen.getByRole('button',{name:/移动整个选区|Move the selected interval/}),{button:0,clientX:120,pointerId:1});
@@ -58,6 +70,8 @@ describe('Retake playback timeline', () => {
     render(<LocaleProvider><VideoResultCard animations={[anim]} selectedVideoId="v" onSelectVideo={vi.fn()} onCreateNew={vi.fn()} onAbandon={vi.fn()} onViewDetail={vi.fn()} onRetake={begin} onFrameEdit={frame} currentTime={3} currentDuration={12} /></LocaleProvider>);
     fireEvent.click(screen.getByTestId('video-frame-edit-pill').querySelector('button')!);
     expect(begin).toHaveBeenCalledWith(anim,3); expect(frame).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('video-retake-pill-edit'));
+    expect(begin).toHaveBeenCalledTimes(2); expect(begin).toHaveBeenLastCalledWith(anim,3);
     expect(screen.queryByTestId('video-retake-timeline')).toBeNull();
     expect(screen.getByTestId('video-frame-edit-pill')).toBeTruthy();
   });

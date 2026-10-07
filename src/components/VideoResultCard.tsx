@@ -271,7 +271,7 @@ export default function VideoResultCard({
               onClick={() => onRetake ? onRetake(frameEditAnim, clampTime(currentTime)) : onFrameEdit?.(frameEditAnim, clampTime(currentTime))}
               className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
               style={{
-                width: '100%',
+                width: onRetake ? cardWidth : '100%',
                 transition: 'filter 0.15s, transform 0.1s',
                 background: 'transparent',
                 border: 'none',
@@ -301,6 +301,19 @@ export default function VideoResultCard({
                 </div>
               </div>
             </button>
+            {onRetake && <button
+              data-testid="video-retake-pill-edit"
+              data-makaron-editor-tap-target="true"
+              aria-label={t('video.retakeEdit')}
+              aria-expanded={retakeActive}
+              onClick={() => onRetake(frameEditAnim, clampTime(currentTime))}
+              className="mkr-liquid-pill mkr-liquid-side-action flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110"
+              style={{ width: detailWidth, background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.30) 100%)', borderLeft: '1px solid rgba(217,70,239,0.42)', transition: 'transform 0.1s' }}>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fuchsia-200">
+                <path d="m16 3 5 5-12 12-6 1 1-6L16 3Z" /><path d="m14 5 5 5" />
+              </svg>
+              <span className={`font-semibold text-fuchsia-100/70 ${isDesktop ? 'text-[9px]' : 'text-[10px]'}`}>{t('video.retakeEdit')}</span>
+            </button>}
           </div>
         )}
       </PillCarousel>

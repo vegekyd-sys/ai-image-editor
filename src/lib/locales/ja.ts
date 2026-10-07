@@ -422,6 +422,7 @@ const ja = {
   'video.retakeContinue': '変更内容を入力',
   'video.retakeClose': '閉じる',
   'video.retakeEdit': '編集',
+  'video.retakePlayhead': '再生位置',
   'video.retakeSelectionHint': '両端で長さを調整、中央で区間を移動。最大15秒',
   'video.retakeDraftPrompt': (mediaIndex: number, start: string, end: string) => `@${mediaIndex} の ${start}～${end}秒を次の内容に変更：`,
   'video.frameCaptured': (time: string) => `${time}のフレームを切り出しました。確認して、変更内容を教えてください。`,

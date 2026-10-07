@@ -385,6 +385,7 @@ const en = {
   'video.retakeContinue': 'Describe the change',
   'video.retakeClose': 'Close',
   'video.retakeEdit': 'Edit',
+  'video.retakePlayhead': 'Playback position',
   'video.retakeSelectionHint': 'Drag the ends to resize, or the center to move. Up to 15 seconds',
   'video.retakeDraftPrompt': (mediaIndex: number, start: string, end: string) => `Replace ${start}–${end} seconds of @${mediaIndex} with: `,
   'video.frameCaptured': (time: string) => `I captured the frame at ${time}. Check it, then tell me what to change.`,

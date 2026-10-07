@@ -5,8 +5,8 @@ import { useLocale } from '@/lib/i18n';
 import { buildVideoProxyUrl } from '@/lib/video-playback-url';
 
 export interface VideoRetakeRange { start: number; end: number }
-export default function VideoRetakeTimeline({ url, duration, range, sourceOffset = 0, onSeek, onChange }: {
-  url: string; duration: number; range: VideoRetakeRange | null; sourceOffset?: number;
+export default function VideoRetakeTimeline({ url, duration, range, currentTime = 0, playing = false, sourceOffset = 0, onSeek, onChange }: {
+  url: string; duration: number; range: VideoRetakeRange | null; currentTime?: number; playing?: boolean; sourceOffset?: number;
   onSeek: (time: number) => void; onChange?: (range: VideoRetakeRange) => void;
 }) {
   const { t } = useLocale();
@@ -15,6 +15,8 @@ export default function VideoRetakeTimeline({ url, duration, range, sourceOffset
   if (range) lastRange.current = range;
   const { start, end } = range ?? lastRange.current;
   const active = Boolean(range);
+  const playheadTime = Math.max(0, Math.min(length, Number.isFinite(currentTime) ? currentTime : 0));
+  const playheadPercent = playheadTime / length * 100;
   const [frames, setFrames] = useState<string[]>([]);
   const track = useRef<HTMLDivElement>(null);
   const dragging = useRef<{ kind: 'start' | 'end' | 'move' | 'seek'; x: number; range: VideoRetakeRange } | null>(null);
@@ -133,6 +135,22 @@ export default function VideoRetakeTimeline({ url, duration, range, sourceOffset
         style={{ left: `${(side === 'start' ? start : end) / length * 100}%` }}>
         <span aria-hidden="true" className="flex h-full w-3 items-center justify-center rounded-[4px] bg-fuchsia-200 shadow-sm"><span className="h-4 w-px rounded bg-fuchsia-900/60" /></span>
       </button>)}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-md">
+        {Array.from({ length: 7 }, (_, i) => <div key={i} className="absolute bottom-0 flex flex-col items-center"
+          style={{ left: `${i / 6 * 100}%`, transform: i === 0 ? undefined : i === 6 ? 'translateX(-100%)' : 'translateX(-50%)' }}>
+          <span className="h-1 w-px bg-white/55" />
+          <span className="rounded-sm bg-black/55 px-0.5 text-[9px] leading-3 text-white/80 tabular-nums">{clock(length * i / 6)}</span>
+        </div>)}
+      </div>
+      <div data-testid="video-retake-playhead" role="progressbar" aria-label={t('video.retakePlayhead')}
+        aria-valuemin={0} aria-valuemax={length} aria-valuenow={Number(playheadTime.toFixed(2))} aria-valuetext={clock(playheadTime)}
+        className={`pointer-events-none absolute inset-y-0 z-30 w-0 ${playing ? 'transition-[left] duration-150 ease-linear motion-reduce:transition-none' : ''}`}
+        style={{ left: `${playheadPercent}%` }}>
+        <span className="absolute inset-y-0 -left-px w-0.5 bg-white shadow-[0_0_3px_rgba(0,0,0,0.9)]" />
+        <span className="absolute top-0 h-0 w-0 -translate-x-1/2 border-x-[4px] border-t-[5px] border-x-transparent border-t-white" />
+        <span className="absolute top-1.5 rounded bg-black/80 px-1 text-[9px] leading-3.5 text-white tabular-nums"
+          style={{ transform: playheadPercent < 10 ? 'translateX(3px)' : playheadPercent > 90 ? 'translateX(calc(-100% - 3px))' : 'translateX(-50%)' }}>{clock(playheadTime)}</span>
+      </div>
     </div>
   </div>;
 }
