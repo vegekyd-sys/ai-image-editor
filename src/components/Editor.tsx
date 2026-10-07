@@ -368,6 +368,8 @@ export default function Editor({
   const [videoGuiTime, setVideoGuiTime] = useState(0);
   const [videoGuiDuration, setVideoGuiDuration] = useState(0);
   const [videoFrameCaptureRequest, setVideoFrameCaptureRequest] = useState(0);
+  const [videoSeekRequest, setVideoSeekRequest] = useState<{ time: number; token: number }>();
+  useEffect(() => { setVideoSeekRequest(undefined); }, [selectedVideoId, currentIndex]);
   const [cuiDraftText, setCuiDraftText] = useState('');
   const [cuiDraftAttachments, setCuiDraftAttachments] = useState<ComposerDraftAttachment[]>([]);
   const pendingFrameEditRef = useRef<{ anim: ProjectAnimation; time: number; mediaIndex: number; prompt: string } | null>(null);
@@ -3165,14 +3167,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       .catch(e => console.warn('Artifact action failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
-  const handleVideoRetake = useCallback((anim: ProjectAnimation, start: number, end: number, model: string) => {
+  const handleVideoRetake = useCallback((anim: ProjectAnimation, start: number, end: number) => {
     if (gateInteraction() || !projectId || isAgentActive) return false;
     const snapIndex = snapshotsRef.current.findIndex(s => s.id === anim.id);
     if (snapIndex < 0) return false;
     const offset = snapshotsRef.current[snapIndex].videoMeta?.sourceRange?.start_sec ?? 0;
     pendingFrameEditRef.current = null;
     setCuiDraftAttachments([]);
-    setCuiDraftText(t('video.retakeDraftPrompt', snapIndex + 1, (start + offset).toFixed(2), (end + offset).toFixed(2), model));
+    setCuiDraftText(t('video.retakeDraftPrompt', snapIndex + 1, (start + offset).toFixed(2), (end + offset).toFixed(2)));
     setViewMode('cui');
     return true;
   }, [gateInteraction, projectId, isAgentActive, t]);
@@ -3823,6 +3825,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   if (duration && Number.isFinite(duration)) setVideoGuiDuration(duration);
                 }}
                 videoFrameCaptureRequest={videoFrameCaptureRequest}
+                videoSeekRequest={videoSeekRequest}
                 onVideoFrameCaptured={handleVideoFrameCaptured}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
@@ -4180,6 +4183,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     }}
                     onFrameEdit={handleVideoFrameEdit}
                     onRetake={handleVideoRetake}
+                    onSeek={time => setVideoSeekRequest(previous => ({ time, token: (previous?.token ?? 0) + 1 }))}
                     sourceOffset={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.start_sec : 0}
                     currentTime={videoGuiTime}
                     currentDuration={videoGuiDuration}

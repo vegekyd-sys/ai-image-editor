@@ -122,6 +122,7 @@ interface ImageCanvasProps {
   onVideoTimeUpdate?: (time: number, duration: number) => void;
   /** Incrementing token from parent to request a current-frame capture. */
   videoFrameCaptureRequest?: number;
+  videoSeekRequest?: { time: number; token: number };
   /** Called after the current video frame is captured from the playing element. */
   onVideoFrameCaptured?: (dataUrl: string, time: number, duration: number) => void;
 }
@@ -157,6 +158,7 @@ export default function ImageCanvas({
   onVideoPosterCapture,
   onVideoTimeUpdate,
   videoFrameCaptureRequest,
+  videoSeekRequest,
   onVideoFrameCaptured,
 }: ImageCanvasProps) {
   const { t } = useLocale();
@@ -777,6 +779,24 @@ export default function ImageCanvas({
     const boundedEnd = clipEnd === undefined ? sourceDuration : Math.min(sourceDuration, clipEnd);
     return Math.max(0, boundedEnd - clipStart);
   }, [clipEnd, clipStart]);
+
+  useEffect(() => {
+    if (!videoSeekRequest || !videoUrl) return;
+    const video = videoRef.current;
+    if (!video) return;
+    const seek = () => {
+      const duration = clipDurationFor(video.duration);
+      if (!Number.isFinite(duration) || duration <= 0) return;
+      const time = Math.max(0, Math.min(duration, videoSeekRequest.time));
+      video.pause();
+      video.currentTime = clipStart + time;
+      setVideoCurrentTime(time);
+      setShowControls(true);
+    };
+    if (video.readyState >= 1) seek();
+    else video.addEventListener('loadedmetadata', seek, { once: true });
+    return () => video.removeEventListener('loadedmetadata', seek);
+  }, [videoSeekRequest, videoUrl, clipStart, clipDurationFor]);
 
   const playVideoInRange = useCallback(() => {
     const video = videoRef.current;

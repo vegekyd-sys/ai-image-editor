@@ -33,7 +33,8 @@ interface VideoResultCardProps {
   onAbandon: (taskId: string) => void;
   onRetry?: (anim: ProjectAnimation) => void;
   onFrameEdit?: (anim: ProjectAnimation, time: number) => void;
-  onRetake?: (anim: ProjectAnimation, start: number, end: number, model: string) => boolean | void;
+  onRetake?: (anim: ProjectAnimation, start: number, end: number) => boolean | void;
+  onSeek?: (time: number) => void;
   onViewDetail: (anim: ProjectAnimation) => void;
   currentTime?: number;
   currentDuration?: number;
@@ -42,7 +43,7 @@ interface VideoResultCardProps {
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onRetake, onViewDetail, currentTime = 0, currentDuration = 0, sourceOffset = 0, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onRetake, onSeek, onViewDetail, currentTime = 0, currentDuration = 0, sourceOffset = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
   const [retakeId, setRetakeId] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function VideoResultCard({
   const detailWidth = isDesktop ? 40 : 44;
   const frameEditWidth = cardWidth + detailWidth;
   const frameEditAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
+  const retakeAnim = frameEditAnim && retakeId === frameEditAnim.id && onRetake ? frameEditAnim : null;
   const allSourceUploads = all.length > 0 && all.every(isSourceUpload);
 
   const selectedPillRef = useRef<HTMLDivElement>(null);
@@ -112,7 +114,13 @@ export default function VideoResultCard({
           to { transform: rotate(360deg); }
         }
       `}</style>
-      <PillCarousel toolbar={toolbar} isDesktop={isDesktop}>
+      <PillCarousel toolbar={retakeAnim ? <span className="text-[11px] text-white/35">{t('video.retakeSelectionHint')}</span> : toolbar} isDesktop={isDesktop}>
+        {retakeAnim ? <VideoRetakeTimeline
+          key={retakeAnim.id} url={retakeAnim.videoUrl!} duration={currentDuration || retakeAnim.duration || 0}
+          sourceOffset={sourceOffset} isDesktop={isDesktop} onSeek={onSeek}
+          time={clampTime(currentTime)} onClose={() => setRetakeId(null)}
+          onContinue={(start, end) => { if (onRetake?.(retakeAnim, start, end) !== false) setRetakeId(null); }}
+        /> : <>
         {all.map((anim, idx) => {
           const isSelected = anim.id === selectedVideoId;
           const isCompleted = anim.status === 'completed' && !!anim.videoUrl;
@@ -302,13 +310,8 @@ export default function VideoResultCard({
             </button>
           </div>
         )}
+        </>}
       </PillCarousel>
-      {frameEditAnim && retakeId === frameEditAnim.id && onRetake && <VideoRetakeTimeline
-        key={frameEditAnim.id} url={frameEditAnim.videoUrl!} duration={currentDuration || frameEditAnim.duration || 0}
-        sourceOffset={sourceOffset}
-        time={clampTime(currentTime)} onClose={() => setRetakeId(null)}
-        onContinue={(start, end, model) => { if (onRetake(frameEditAnim, start, end, model) !== false) setRetakeId(null); }}
-      />}
     </>
   );
 }
