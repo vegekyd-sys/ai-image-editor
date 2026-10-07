@@ -24,7 +24,7 @@ function trackRect() {
 }
 describe('Retake playback timeline', () => {
   it('finishes sampling while collapsed and reuses the same thumbnails across reopening and remounting', async () => {
-    vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:vi.fn()} as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockImplementation((()=>({drawImage:vi.fn()})) as unknown as typeof HTMLCanvasElement.prototype.getContext);
     let frame=0;
     const encode=vi.spyOn(HTMLCanvasElement.prototype,'toDataURL').mockImplementation(()=>`data:image/jpeg;base64,frame${frame++}`);
     const timeline=(active:boolean, offset=0)=><LocaleProvider><VideoRetakeTimeline url="https://example.com/cache-toggle.mp4" duration={30} sourceOffset={offset} range={active ? {start:10,end:14} : null} onSeek={vi.fn()} /></LocaleProvider>;
