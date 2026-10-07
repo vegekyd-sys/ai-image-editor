@@ -18,8 +18,7 @@ export default function VideoRetakeTimeline({ url, duration, time, sourceOffset 
   useEffect(() => {
     let active = true;
     const sampler = document.createElement('video');
-    sampler.crossOrigin = 'anonymous'; sampler.muted = true; sampler.preload = 'auto';
-    sampler.src = url;
+    sampler.crossOrigin = 'anonymous'; sampler.muted = true; sampler.playsInline = true; sampler.preload = 'auto';
     const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 90;
     const collect = async () => {
       const context = canvas.getContext('2d'); if (!context) return;
@@ -32,11 +31,13 @@ export default function VideoRetakeTimeline({ url, duration, time, sourceOffset 
         });
         if (!active) break;
         context.drawImage(sampler, 0, 0, 160, 90); images.push(canvas.toDataURL('image/jpeg', .65));
+        if (active) setFrames([...images]);
       }
       if (active) setFrames(images);
     };
-    sampler.onloadedmetadata = () => { collect().catch(() => {}); };
-    return () => { active = false; sampler.onloadedmetadata = null; sampler.pause(); sampler.removeAttribute('src'); sampler.load(); };
+    sampler.onloadeddata = () => { sampler.onloadeddata = null; collect().catch(() => {}); };
+    sampler.src = url; sampler.load();
+    return () => { active = false; sampler.onloadeddata = null; sampler.pause(); sampler.removeAttribute('src'); sampler.load(); };
   }, [url, sourceOffset, length]);
   const seek = (at: number) => { if (video.current) { video.current.pause(); video.current.currentTime = sourceOffset + at; } };
   const changeStart = (at: number) => {
