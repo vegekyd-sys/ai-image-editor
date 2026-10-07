@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocale } from '@/lib/i18n';
 import type { RetakeModel } from '@/lib/video-retake-contract';
+import { buildVideoProxyUrl } from '@/lib/video-playback-url';
 
 export default function VideoRetakeTimeline({ url, duration, time, sourceOffset = 0, onContinue, onClose }: {
   url: string; duration: number; time: number; sourceOffset?: number;
@@ -39,9 +40,21 @@ export default function VideoRetakeTimeline({ url, duration, time, sourceOffset 
       }
       if (active) setFrames(images);
     };
-    sampler.onloadeddata = () => { sampler.onloadeddata = null; collect().catch(() => {}); };
-    sampler.src = url; sampler.load();
-    return () => { active = false; sampler.onloadeddata = null; sampler.pause(); sampler.removeAttribute('src'); sampler.load(); sampler.remove(); };
+    let proxied = false;
+    const load = (src: string) => {
+      sampler.onloadeddata = () => { sampler.onloadeddata = null; collect().catch(fallback); };
+      sampler.src = src; sampler.load();
+    };
+    const fallback = () => {
+      if (!active || proxied) return;
+      // Canvas requires CORS even when native playback succeeds. Reuse the
+      // existing range proxy only after direct loading/seeking fails.
+      proxied = true; load(buildVideoProxyUrl(url));
+    };
+    sampler.onerror = fallback;
+    const loadTimeout = setTimeout(() => { if (sampler.readyState < 2) fallback(); }, 10000);
+    load(url);
+    return () => { active = false; clearTimeout(loadTimeout); sampler.onloadeddata = null; sampler.onerror = null; sampler.pause(); sampler.removeAttribute('src'); sampler.load(); sampler.remove(); };
   }, [url, sourceOffset, length]);
   const seek = (at: number) => { if (video.current) { video.current.pause(); video.current.currentTime = sourceOffset + at; } };
   const changeStart = (at: number) => {
