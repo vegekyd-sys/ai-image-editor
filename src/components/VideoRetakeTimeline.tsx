@@ -15,10 +15,14 @@ export default function VideoRetakeTimeline({ url, duration, time, sourceOffset 
   const [frames, setFrames] = useState<string[]>([]);
   const [model, setModel] = useState<RetakeModel>('seedance-2.5');
   const video = useRef<HTMLVideoElement>(null);
+  const panel = useRef<HTMLElement>(null);
   useEffect(() => {
     let active = true;
     const sampler = document.createElement('video');
     sampler.crossOrigin = 'anonymous'; sampler.muted = true; sampler.playsInline = true; sampler.preload = 'auto';
+    sampler.setAttribute('aria-hidden', 'true');
+    sampler.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none';
+    panel.current?.appendChild(sampler);
     const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 90;
     const collect = async () => {
       const context = canvas.getContext('2d'); if (!context) return;
@@ -37,7 +41,7 @@ export default function VideoRetakeTimeline({ url, duration, time, sourceOffset 
     };
     sampler.onloadeddata = () => { sampler.onloadeddata = null; collect().catch(() => {}); };
     sampler.src = url; sampler.load();
-    return () => { active = false; sampler.onloadeddata = null; sampler.pause(); sampler.removeAttribute('src'); sampler.load(); };
+    return () => { active = false; sampler.onloadeddata = null; sampler.pause(); sampler.removeAttribute('src'); sampler.load(); sampler.remove(); };
   }, [url, sourceOffset, length]);
   const seek = (at: number) => { if (video.current) { video.current.pause(); video.current.currentTime = sourceOffset + at; } };
   const changeStart = (at: number) => {
@@ -50,7 +54,7 @@ export default function VideoRetakeTimeline({ url, duration, time, sourceOffset 
     if (next - start > 15) setStart(next - 15);
     seek(next);
   };
-  return <section data-testid="video-retake-timeline" aria-label={t('video.retakeTitle')} className="mx-3 mb-3 rounded-2xl border border-fuchsia-300/20 bg-black/40 p-3 text-white">
+  return <section ref={panel} data-testid="video-retake-timeline" aria-label={t('video.retakeTitle')} className="mx-3 mb-3 rounded-2xl border border-fuchsia-300/20 bg-black/40 p-3 text-white">
     <div className="flex items-center justify-between gap-3">
       <strong className="text-sm">{t('video.retakeTitle')}</strong>
       <button type="button" onClick={onClose} className="px-2 py-1 text-sm text-white/70">{t('video.retakeClose')}</button>
