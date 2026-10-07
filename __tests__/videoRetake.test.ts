@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { planRetake, validateRetakeRange } from '@/lib/video-retake-contract';
+import { planRetake, validateRetakeRange, retakePrompt } from '@/lib/video-retake-contract';
 import { assembleRetake, extractRetakeContext, inspectRetakeSource } from '@/lib/video-retake-media';
 import { findFfmpeg } from '@/lib/ffmpeg-runtime';
 
@@ -20,6 +20,11 @@ describe('Retake interval contract', () => {
     }
     expect(() => planRetake({ start: 0, end: 2 }, 1, 'seedance-2.5')).toThrow();
     expect(() => planRetake({ start: 0, end: 2 }, 10, 'minimax-h3-max')).toThrow(/Turbo/);
+  });
+  it('allows explicitly requested camera cuts instead of overriding a multi-camera edit', () => {
+    const prompt = retakePrompt('Use multiple camera angles and cuts', planRetake({ start: 10, end: 23 }, 30, 'seedance-2.5'));
+    expect(prompt).toContain('Follow explicitly requested shot cuts');
+    expect(prompt).not.toContain('Do not add shots, cuts');
   });
   it('assembles only the selected frames and copies original audio', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'retake-test-'));

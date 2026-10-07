@@ -48,5 +48,5 @@ export function planRetake(range: RetakeRange, sourceDuration: number, model?: s
 
 export function retakePrompt(instruction: string, plan: RetakePlan): string {
   if (!instruction.trim()) throw new Error('Describe what to change in the selected interval.')
-  return `Edit the supplied source clip. Only change ${plan.patchOffset.toFixed(3)}-${(plan.end - plan.contextStart).toFixed(3)} seconds: ${instruction.trim()}\nPreserve subject identity, camera, framing, motion, lighting and every detail not requested. Keep the action timing and continuity with both ends of the source clip. Do not add shots, cuts, captions or a new ending.`
+  return `Edit the supplied source clip. Only change ${plan.patchOffset.toFixed(3)}-${(plan.end - plan.contextStart).toFixed(3)} seconds: ${instruction.trim()}\nPreserve subject identity, motion, lighting and every detail the instruction does not explicitly change. Preserve camera and framing unless the instruction requests new camera angles. Follow explicitly requested shot cuts within the selected interval; otherwise keep the original shot. Keep the action timing and continuity with both ends of the source clip. Do not add unrequested shots, captions or a new ending.`
 }
