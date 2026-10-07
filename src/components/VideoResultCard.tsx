@@ -263,7 +263,7 @@ export default function VideoResultCard({
             className="mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border border-white/10 transition-all animate-tip-in"
             style={{
               background: 'linear-gradient(145deg, rgba(217,70,239,0.075), rgba(12,12,16,0.42))',
-              width: frameEditWidth,
+              width: onRetake ? frameEditWidth + detailWidth : frameEditWidth,
             }}
           >
             <button
@@ -271,7 +271,7 @@ export default function VideoResultCard({
               onClick={() => onRetake ? onRetake(frameEditAnim, clampTime(currentTime)) : onFrameEdit?.(frameEditAnim, clampTime(currentTime))}
               className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
               style={{
-                width: onRetake ? cardWidth : '100%',
+                width: onRetake ? frameEditWidth : '100%',
                 transition: 'filter 0.15s, transform 0.1s',
                 background: 'transparent',
                 border: 'none',
