@@ -42,9 +42,10 @@ export function retakeVideoMeta(job: Job): VideoMeta {
 async function publish(job: Job) {
   if (!job.project_id) return
   const admin = getSupabaseAdmin()
-  const { data: existing, error: readError } = await admin.from('snapshots').select('id').eq('id', job.id).maybeSingle()
+  const { data: existing, error: readError } = await admin.from('snapshots').select('id,video_meta').eq('id', job.id).maybeSingle()
   if (readError) throw new Error('Cannot read Retake snapshot receipt.')
   if (existing) {
+    if (existing.video_meta?.status === 'abandoned') return
     const { error } = await admin.from('snapshots').update({ video_meta: retakeVideoMeta(job) }).eq('id', job.id).eq('project_id', job.project_id)
     if (error) throw new Error('Could not update Retake snapshot.')
   } else {
@@ -134,8 +135,11 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
         onBeforeProviderSubmit: beforeSubmit })
     }
     if (!result.success || !result.taskId) {
-      await save(job, { stage: result.submissionUncertain ? 'submission_uncertain' : 'failed', error: result.message })
-      return { ...result, taskId: result.submissionUncertain ? PREFIX + id : undefined }
+      // A preflight failure never posted. Once posted, an unclassified missing
+      // receipt must retain the reservation rather than encourage a paid retry.
+      const uncertain = posting && result.submissionUncertain !== false && !result.errorCode
+      await save(job, { stage: uncertain ? 'submission_uncertain' : 'failed', error: result.message })
+      return { ...result, submissionUncertain: uncertain, taskId: uncertain ? PREFIX + id : undefined }
     }
     await save(job, { provider_task_id: result.taskId, stage: 'generating', timings: { ...job.timings, submittedMs: performance.now() - started } })
     await publish(job)
