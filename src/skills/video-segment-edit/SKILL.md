@@ -24,7 +24,7 @@ original-audio preservation and full-video delivery. Do not screenshot-locate
 an already known interval, script a second clipping/assembly pipeline, or ask
 for a second merge confirmation. Use original-source seconds, including a
 bounded external clip's source offset. Respect the model explicitly selected
-by the user; supported models are Seedance 2.5, FAL H3 Max and LTX 2.3.
+by the user; supported models are Seedance 2.5 and FAL H3 Max.
 
 The screenshot localization workflow below remains useful when the interval is
 unknown, or when the user explicitly requests a legacy workflow comparison.
