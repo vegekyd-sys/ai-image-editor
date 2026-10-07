@@ -424,6 +424,7 @@ const zhHant = {
   'video.retakeClose': '收起',
   'video.retakeEdit': '編輯',
   'video.retakePlayhead': '播放位置',
+  'video.retakeStatusHint': '只改變所選片段的內容，其餘部分保持不變。',
   'video.retakeSelectionHint': '拖動兩端調整時長，拖動中間移動選區，最多15秒',
   'video.retakeDraftPrompt': (mediaIndex: number, start: string, end: string) => `把 @${mediaIndex} 的 ${start}–${end} 秒換成：`,
   'video.frameCaptured': (time: string) => `我擷取了 ${time} 這一幀。請先確認，再告訴我具體要如何修改。`,

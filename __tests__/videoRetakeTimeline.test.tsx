@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, render, screen, cleanup } from '@testing-library/react';
+import { act, fireEvent, render, screen, cleanup } from '@testing-library/react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import VideoResultCard from '@/components/VideoResultCard';
 import VideoRetakeTimeline from '@/components/VideoRetakeTimeline';
@@ -23,6 +23,34 @@ function trackRect() {
   vi.spyOn(screen.getByTestId('video-retake-track'),'getBoundingClientRect').mockReturnValue({left:0,width:300} as DOMRect);
 }
 describe('Retake playback timeline', () => {
+  it('finishes sampling while collapsed and reuses the same thumbnails across reopening and remounting', async () => {
+    vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:vi.fn()} as unknown as CanvasRenderingContext2D);
+    let frame=0;
+    const encode=vi.spyOn(HTMLCanvasElement.prototype,'toDataURL').mockImplementation(()=>`data:image/jpeg;base64,frame${frame++}`);
+    const timeline=(active:boolean, offset=0)=><LocaleProvider><VideoRetakeTimeline url="https://example.com/cache-toggle.mp4" duration={30} sourceOffset={offset} range={active ? {start:10,end:14} : null} onSeek={vi.fn()} /></LocaleProvider>;
+    const view=render(timeline(true));
+    const sampler=view.container.querySelector('video')!;
+    Object.defineProperty(sampler,'duration',{value:30,configurable:true});
+    fireEvent.loadedData(sampler);
+    for(let i=0;i<3;i++) await act(async()=>{fireEvent.seeked(sampler);});
+    const loads=vi.mocked(HTMLMediaElement.prototype.load).mock.calls.length;
+    view.rerender(timeline(false));
+    expect(view.container.querySelector('video')).toBe(sampler);
+    for(let i=3;i<8;i++) await act(async()=>{fireEvent.seeked(sampler);});
+    const sources=Array.from(view.container.querySelectorAll('img'),img=>img.src);
+    expect(sources).toHaveLength(8);
+    view.rerender(timeline(true));
+    expect(HTMLMediaElement.prototype.load).toHaveBeenCalledTimes(loads);
+    expect(Array.from(view.container.querySelectorAll('img'),img=>img.src)).toEqual(sources);
+    view.unmount();
+    const cached=render(timeline(true));
+    expect(cached.container.querySelector('video')).toBeNull();
+    expect(Array.from(cached.container.querySelectorAll('img'),img=>img.src)).toEqual(sources);
+    expect(encode).toHaveBeenCalledTimes(8);
+    cached.rerender(timeline(true,10));
+    expect(cached.container.querySelectorAll('img')).toHaveLength(0);
+    expect(cached.container.querySelector('video')).not.toBeNull();
+  });
   it('tracks playback independently of the selected interval and clamps to the video', () => {
     const change=vi.fn();
     const timeline=(time:number)=><LocaleProvider><VideoRetakeTimeline url="https://example.com/v.mp4" duration={30} range={{start:10,end:14}} currentTime={time} onSeek={vi.fn()} onChange={change} /></LocaleProvider>;
@@ -77,8 +105,9 @@ describe('Retake playback timeline', () => {
   });
   it('uses the Statusbar Edit action to navigate with the selection', () => {
     const open=vi.fn();
-    render(<LocaleProvider><AgentStatusBar statusText="" isActive={false} onOpenChat={open} chatActionLabel="Edit" selectionText="10–14s" /></LocaleProvider>);
+    render(<LocaleProvider><AgentStatusBar statusText="" isActive={false} onOpenChat={open} chatActionLabel="Edit" selectionHint="只改变选中片段的内容，其余部分保持不变。" selectionText="10–14s" /></LocaleProvider>);
     fireEvent.click(screen.getByRole('button',{name:'Edit'}));
     expect(open).toHaveBeenCalledTimes(1); expect(screen.getByText('10–14s')).toBeTruthy();
+    expect(screen.getByText('只改变选中片段的内容，其余部分保持不变。')).toBeTruthy();
   });
 });

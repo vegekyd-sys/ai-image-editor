@@ -269,6 +269,7 @@ export default function ImageCanvas({
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
+  const capturedVideoPosterUrlRef = useRef<string | null>(null);
   const lastCaptureRequestRef = useRef<number | undefined>(videoFrameCaptureRequest);
   const [frameCaptureFeedback, setFrameCaptureFeedback] = useState(false);
   const controlsHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -794,7 +795,7 @@ export default function ImageCanvas({
       if (!Number.isFinite(duration) || duration <= 0) return;
       const time = Math.max(0, Math.min(duration, videoSeekRequest.time));
       video.pause();
-      video.currentTime = clipStart + time;
+      if (Math.abs(video.currentTime - (clipStart + time)) > .01) video.currentTime = clipStart + time;
       setVideoCurrentTime(time);
       setShowControls(true);
     };
@@ -1396,14 +1397,16 @@ export default function ImageCanvas({
               onLoadedData={() => {
                 setVideoFrameLoadedUrl(videoUrl ?? null);
                 const v = videoRef.current;
-                if (onVideoPosterCapture && v && v.videoWidth) {
+                if (onVideoPosterCapture && v && v.videoWidth && capturedVideoPosterUrlRef.current !== videoUrl) {
                   // Capture the decoded first frame without seeking away and back.
                   try {
                     const canvas = document.createElement('canvas');
                     canvas.width = v.videoWidth;
                     canvas.height = v.videoHeight;
                     canvas.getContext('2d')!.drawImage(v, 0, 0);
-                    onVideoPosterCapture(canvas.toDataURL('image/jpeg', 0.75));
+                    const poster = canvas.toDataURL('image/jpeg', 0.75);
+                    capturedVideoPosterUrlRef.current = videoUrl ?? null;
+                    onVideoPosterCapture(poster);
                   } catch {}
                 }
               }}

@@ -4,6 +4,14 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } fr
 import { useLocale } from '@/lib/i18n';
 import { buildVideoProxyUrl } from '@/lib/video-playback-url';
 
+// Keep decoded thumbnails across GUI/CUI mounts without retaining video elements.
+const thumbnailCache = new Map<string, string[]>();
+function rememberThumbnails(key: string, images: string[]) {
+  thumbnailCache.delete(key);
+  thumbnailCache.set(key, images);
+  if (thumbnailCache.size > 12) thumbnailCache.delete(thumbnailCache.keys().next().value!);
+}
+
 export interface VideoRetakeRange { start: number; end: number }
 export default function VideoRetakeTimeline({ url, duration, range, currentTime = 0, playing = false, sourceOffset = 0, onSeek, onChange }: {
   url: string; duration: number; range: VideoRetakeRange | null; currentTime?: number; playing?: boolean; sourceOffset?: number;
@@ -17,13 +25,23 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
   const active = Boolean(range);
   const playheadTime = Math.max(0, Math.min(length, Number.isFinite(currentTime) ? currentTime : 0));
   const playheadPercent = playheadTime / length * 100;
-  const [frames, setFrames] = useState<string[]>([]);
+  const thumbnailKey = JSON.stringify([url, sourceOffset, length]);
+  const [requestedKey, setRequestedKey] = useState<string | null>(null);
+  const [frameState, setFrameState] = useState<{ key: string; images: string[] }>(() => ({ key: thumbnailKey, images: thumbnailCache.get(thumbnailKey) ?? [] }));
+  const frames = frameState.key === thumbnailKey ? frameState.images : thumbnailCache.get(thumbnailKey) ?? [];
   const track = useRef<HTMLDivElement>(null);
   const dragging = useRef<{ kind: 'start' | 'end' | 'move' | 'seek'; x: number; range: VideoRetakeRange } | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!active) return;
+    if (active) setRequestedKey(thumbnailKey);
+  }, [active, thumbnailKey]);
+  useEffect(() => {
+    if (requestedKey !== thumbnailKey) return;
+    const cached = thumbnailCache.get(thumbnailKey) ?? [];
+    setFrameState({ key: thumbnailKey, images: cached });
+    if (cached.length === 8) return;
     let collecting = true;
+    let stopSeek: (() => void) | undefined;
     const sampler = document.createElement('video');
     sampler.crossOrigin = 'anonymous'; sampler.muted = true; sampler.playsInline = true; sampler.preload = 'auto';
     sampler.setAttribute('aria-hidden', 'true');
@@ -32,18 +50,22 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
     const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 90;
     const collect = async () => {
       const context = canvas.getContext('2d'); if (!context) return;
-      const images: string[] = [];
-      for (let i = 0; i < 8 && collecting; i++) {
+      const images = [...(thumbnailCache.get(thumbnailKey) ?? [])];
+      for (let i = images.length; i < 8 && collecting; i++) {
         await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => { sampler.onseeked = null; reject(new Error('seek')); }, 15000);
-          sampler.onseeked = () => { clearTimeout(timer); resolve(); };
+          const finish = () => { clearTimeout(timer); sampler.onseeked = null; stopSeek = undefined; resolve(); };
+          const timer = setTimeout(() => { sampler.onseeked = null; stopSeek = undefined; reject(new Error('seek')); }, 15000);
+          stopSeek = finish;
+          sampler.onseeked = finish;
           sampler.currentTime = Math.min(sampler.duration - .05, sourceOffset + (i + .5) * length / 8);
         });
         if (!collecting) break;
         context.drawImage(sampler, 0, 0, 160, 90); images.push(canvas.toDataURL('image/jpeg', .65));
-        if (collecting) setFrames([...images]);
+        if (collecting) {
+          rememberThumbnails(thumbnailKey, [...images]);
+          setFrameState({ key: thumbnailKey, images: [...images] });
+        }
       }
-      if (collecting) setFrames(images);
     };
     let proxied = false;
     const load = (src: string) => {
@@ -59,8 +81,9 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
     sampler.onerror = fallback;
     const loadTimeout = setTimeout(() => { if (sampler.readyState < 2) fallback(); }, 10000);
     load(url);
-    return () => { collecting = false; clearTimeout(loadTimeout); sampler.onloadeddata = null; sampler.onerror = null; sampler.pause(); sampler.removeAttribute('src'); sampler.load(); sampler.remove(); };
-  }, [url, sourceOffset, length, active]);
+    return () => { collecting = false; clearTimeout(loadTimeout); stopSeek?.(); sampler.onloadeddata = null; sampler.onerror = null; sampler.pause(); sampler.removeAttribute('src'); sampler.load(); sampler.remove(); };
+    // Collapsing the selector keeps the same sampler alive until it finishes.
+  }, [url, sourceOffset, length, thumbnailKey, requestedKey]);
   const commit = (next: VideoRetakeRange, seekAt = next.start) => {
     onChange?.(next); onSeek(seekAt);
   };
