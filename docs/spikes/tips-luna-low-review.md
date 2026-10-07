@@ -43,3 +43,5 @@ Low 比 high 更值得作为 Tips 文案候选；先带上解析修复验证真�
 - 离线回放：`TIPS_AB_VARIANT=luna-low node --import tsx --require ./md-loader.cjs docs/spikes/tips-luna-replay.cjs`。
 - 报告打包：`python3 docs/spikes/build-tips-luna-low-report.py`。三方 20 组、60 张实际成品；high/线上原报告保留。
 - 本次没有应用代码变化；脚本语法检查、实际完整执行、指纹检查、十组离线回放和 160 条资产引用均通过。上一轮应用候选的 2063 测试、类型检查和生产构建结果仍适用，未重复跑无关检查。
+
+网站已实测：20 组默认未评分；Wild 10 组、叠加讨论桌筛选 2 组；原尺寸 low 图片放大宽度 1264；偏好导出为有效 JSON；桌面四列与 390px 手机单列均无横向溢出；已加载图片无失败。截图位于 `output/playwright/luna-low-*-case.png`，实验目录保留 `website-qa.json`。
