@@ -1,6 +1,6 @@
 # Nano Banana 2.1 接入与供应商对比
 
-Nano Banana 2.1 已在独立 worktree 接入 Makaron，优先使用 OpenRouter Image API。1K 商品图和 2K 编辑的真实费用明显低于 fal 公布的 $0.08 基础单价。候选版本的普通图片与 Tips 图片预览默认切为 2.1；保留经典 Nano Banana 2 手动选项，Tips 文案继续使用旧模型。生产应用尚未发布。
+Nano Banana 2.1 已在独立 worktree 接入 Makaron，优先使用 OpenRouter Image API。1K 商品图和 2K 编辑的真实费用明显低于 fal 公布的 $0.08 基础单价。生产版本的普通图片与 Creative / Wild / Captions Tips 图片预览默认使用 2.1；保留经典 Nano Banana 2 手动选项，Tips 文案继续使用旧模型。2026-10-07 已发布生产。
 
 核对日期为 2026 年 10 月 7 日（北京时间）。Google 模型卡记录发布日为 10 月 6 日。
 
@@ -11,7 +11,7 @@ Nano Banana 2.1 已在独立 worktree 接入 Makaron，优先使用 OpenRouter I
 - CUI 的加文字、标题和排版请求：继续按现有规则引导到 Flare；与 Captions Tips 图片预览的默认模型分别处理。
 - Tips 文案：保持现有 Nano Banana 2 模型、提示词与推理档位，不切换到 Luna high、Luna low 或 2.1。文案与图片配置继续独立。
 
-此决定已由候选代码实现。最终复核在固定 runner 的应用代码提交 `d5418752` 上运行，7 个相关测试文件、58 项测试通过，覆盖 CUI/共享图片工具默认路由、经典模型可选、Tips 图片扣费与流式文案完整性。该应用提交此前已通过完整 release check。当前尚未合并主分支或发布生产；报告发布不代表 Makaron 应用上线。
+此决定已由候选代码实现。最终复核在固定 runner 的应用代码提交 `d5418752` 上运行，7 个相关测试文件、58 项测试通过，覆盖 CUI/共享图片工具默认路由、经典模型可选、Tips 图片扣费与流式文案完整性。该应用提交此前已通过完整 release check。2026-10-07 已合入并推送 `dev`，应用提交 `3e825e24` 已发布生产；没有合并 `main`。
 
 ## 价格和供应商选择
 
@@ -80,7 +80,7 @@ CLI 代码已更新，但没有发布新的 npm 版本。GUI 选择器负责选�
 
 93 项相关测试通过，覆盖真实共享 Skill 与 MCP HTTP 路由、费用与来源归因、缺少定价或余额不足时不提交、失败不重试、图片完整解码、模型选择与旧模型路由回归。CLI smoke 覆盖新模型、4K/全景参数传输及错误分辨率的前置拒绝。TypeScript、修改文件的 ESLint、i18n 和 Agent startup 检查通过；ESLint 有一处既存未使用 locale 参数警告。
 
-生产构建通过，CRC32C 与 FFmpeg 打包检查通过。没有合并 dev/main，没有生产部署，也没有完整登录编辑器的保存/重开验收。
+生产构建通过，CRC32C 与 FFmpeg 打包检查通过。已合入并推送 dev，应用提交 `3e825e24` 已发布生产；没有合并 main，也没有完整登录编辑器的保存/重开验收。
 
 浏览器验证使用 Playwright（Browser plugin 不可用），桌面 1280 × 900，手机 390 × 844。本地临时 QA 页面挂载的是实际 ModelSelector；该临时页面已从最终源代码移除。
 
@@ -128,3 +128,14 @@ Preview：<https://ai-image-editor-8ugjmf4k3-vegekyd-sys-projects.vercel.app>。
 GUI 自动切换到 2.1、手动选旧 Nano Banana 2、Agent 自动 2K 预检、MCP 无 model 自动调用 2.1 并按实际费用扣费，均有回归测试。生产尚未合并或部署，没有把 Preview 成功当作生产编辑器上传、保存、重开的验收。
 
 私人 Sites 报告已更新：<https://makaron-nano-banana-21-report.tianyi595926.chatgpt.site>，附 20 组图片对比和 12 组 Tips 文案 A/B 数据。
+
+## 生产发布验收（2026-10-07）
+
+- 正式入口：https://www.makaron.app/projects；生产部署 `dpl_B6Q3mvNXHWVNmsM4XoET18tRmTif`，应用源码 `3e825e24532e35462eb68c693899d7f1248b722b`。
+- 按 canonical dev 的 `npm run release:prod` 发布：TypeScript、2065 项测试（1 项跳过）、CLI smoke、本地和云端构建通过；CRC32C 10 条和 FFmpeg 9 条 API trace 检查通过。Lint 无错误，7 个非阻塞警告。
+- 正式域名健康检查：12 healthy / 0 unhealthy。窄屏 390×844 实际打开新版 Changelog，四条特性与 Captions 默认说明完整，无横向溢出。
+- 真实 per-user MCP 调用省略 model、使用 captions，默认返回 `gemini-2.1`：1024×1024，约 18.4 秒，图片完整解码并查看。中文「向前一步」正确，保留瓶身与原标签。
+- 扣费回执与账本一致：单笔 8 Credits，48785 → 48777；账本 model 为 `google/gemini-nano-banana-2.1`、source 为 mcp。没有自动重试或重复扣费。
+- 生产 Tips 文案仍使用旧模型；CUI 加文字/排版继续引导到 Flare。真实调用验证的是共享图片链路，未把它当作完整手机上传、Tips、保存与重开验收。
+
+本地产物位于 `test-results/nano-banana-21-production/`。本次发布 Makaron Web 应用；没有另行发布 CLI npm 包或 iOS 二进制。
