@@ -125,8 +125,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       await save(job, { source_meta: { ...job.source_meta, boundaryFrames } })
     }
     await save(job, { context_url: contextUrl, stage: 'prepared', timings: { preparationMs: performance.now() - started } })
-    const prompt = retakePrompt(input.script, plan) + (boundaryFrames
-      ? '\nBOUNDARY CONTINUITY: <<<media_1>>> is the exact opening state; <<<media_2>>> is the exact ending state. Begin at the action already in progress in <<<media_1>>> and continue its momentum. Never restart an approach, establishing setup or action that already happened before this clip. Requested camera cuts may change viewpoint, but must advance the same action without replaying its beginning. Finish at <<<media_2>>>.' : '')
+    const prompt = retakePrompt(input.script, plan, Boolean(boundaryFrames))
     let result: CreateVideoResult
     const beforeSubmit = async (usage: Parameters<NonNullable<CreateVideoInput['onBeforeProviderSubmit']>>[0]) => {
       const reservation = await input.onBeforeProviderSubmit?.(usage)

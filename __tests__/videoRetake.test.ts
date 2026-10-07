@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { planRetake, validateRetakeRange, retakePrompt, resolveRetakeModel } from '@/lib/video-retake-contract';
 import { assembleRetake, extractRetakeContext, extractRetakeBoundaryFrames, inspectRetakeSource } from '@/lib/video-retake-media';
+import { filterAndRemapImages } from '@/lib/kling';
 import { findFfmpeg } from '@/lib/ffmpeg-runtime';
 
 describe('Retake interval contract', () => {
@@ -34,6 +35,13 @@ describe('Retake interval contract', () => {
     expect(prompt).toContain('Subtract 10.000 seconds');
     expect(prompt).toContain('Only change clip-local 0.000-13.000');
     expect(prompt).not.toContain('Do not add shots, cuts');
+  });
+  it('retains both native H3 boundary references through prompt selection', () => {
+    const plan = planRetake({start:10,end:23},30,'fal-h3-max');
+    const prompt = retakePrompt('Use multiple camera angles',plan,true);
+    expect(filterAndRemapImages(prompt,['start.jpg','end.jpg']).filteredImages).toEqual(['start.jpg','end.jpg']);
+    expect(prompt).toContain('Never restart an approach');
+    expect(retakePrompt('Use multiple camera angles',planRetake({start:10,end:23},30,'seedance-2.5'))).not.toContain('BOUNDARY CONTINUITY');
   });
   it('extracts the first and last contextual frames from the original timebase', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'retake-boundaries-'));
