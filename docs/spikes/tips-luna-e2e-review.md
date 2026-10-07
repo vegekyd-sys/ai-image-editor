@@ -43,3 +43,7 @@
 - 网站打包 `python3 docs/spikes/build-tips-luna-report.py`，复用既有 Sites，原报告保留，新页 `luna.html`。
 - 候选 `d5418752` 通过独立 runtime runner 的完整 `release:check --local`：TypeScript、2063 测试通过 + 1 跳过、CLI smoke、Webpack production build、CRC32C 10 条 / FFmpeg 9 条 runtime trace。
 - 网站检查单独验证响应式布局、筛选、图片放大、资源引用和本地偏好导出。模型默认接入与解析修复仍是候选，未合并或生产部署。
+
+私人报告已发布：[Luna 文案成品对比](https://makaron-nano-banana-21-report.tianyi595926.chatgpt.site/luna.html)。原 2.1 报告保留。Sites source `708f078138abeb5e4bb33f04d20cb4e7d9dc889f`，native deployment `appgdep_6ac5a1c2812081919b20c8eeecb22fc0` 返回 succeeded。
+
+网页已实测：20 组默认未评分；Wild 筛选 10 组，叠加图书馆筛选 2 组；原尺寸图片放大宽度 1200；偏好导出为有效 JSON；390px 手机单列、无横向溢出；120 条资产引用全部存在，已加载图片无失败。桌面/手机截图位于 `output/playwright/luna-*-case.png`，QA 明细位于实验产物目录。主分支原有修改未动，基线 Tips 源文件指纹在试验结束后仍一致。
