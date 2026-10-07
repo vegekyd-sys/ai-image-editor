@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import VideoRetakeTimeline, { type VideoRetakeRange } from './VideoRetakeTimeline';
 import type { PlayerRef } from '@remotion/player';
 import type { AnnotationEntry, DesignPayload, EditableField } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
@@ -122,6 +123,8 @@ interface ImageCanvasProps {
   onVideoTimeUpdate?: (time: number, duration: number) => void;
   /** Incrementing token from parent to request a current-frame capture. */
   videoFrameCaptureRequest?: number;
+  videoRetakeRange?: VideoRetakeRange | null;
+  onVideoRetakeChange?: (range: VideoRetakeRange) => void;
   videoSeekRequest?: { time: number; token: number };
   /** Called after the current video frame is captured from the playing element. */
   onVideoFrameCaptured?: (dataUrl: string, time: number, duration: number) => void;
@@ -159,6 +162,8 @@ export default function ImageCanvas({
   onVideoTimeUpdate,
   videoFrameCaptureRequest,
   videoSeekRequest,
+  videoRetakeRange = null,
+  onVideoRetakeChange,
   onVideoFrameCaptured,
 }: ImageCanvasProps) {
   const { t } = useLocale();
@@ -1510,7 +1515,7 @@ export default function ImageCanvas({
 
             {/* Play/pause button — bottom-left, hidden while seeking */}
             {!videoError && showControls && !hidePlaybackControls && !isSeeking && (
-              <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
+              <div className="absolute z-30 transition-[bottom] duration-[240ms] ease-out motion-reduce:transition-none" style={{ bottom: videoRetakeRange ? 62 : 8, left: 12 }}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1531,8 +1536,8 @@ export default function ImageCanvas({
             {/* Time badge — bottom-right (same as Remotion) */}
             {!videoError && (
               <div
-                className={`absolute z-20 pointer-events-none transition-opacity duration-300 ${showControls ? 'opacity-100' : 'opacity-0'}`}
-                style={{ bottom: 14, right: 10 }}
+                className={`absolute z-20 pointer-events-none transition-[opacity,bottom] duration-[240ms] ease-out motion-reduce:transition-none ${showControls ? 'opacity-100' : 'opacity-0'}`}
+                style={{ bottom: videoRetakeRange ? 68 : 14, right: 10 }}
               >
                 <span
                   className="mkr-liquid-media-badge tabular-nums rounded-full select-none"
@@ -1547,14 +1552,15 @@ export default function ImageCanvas({
             {!videoError && (
               <div
                 ref={seekBarRef}
-                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
-                style={{ height: 24, touchAction: 'none' }}
+                className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group transition-[height] duration-[240ms] ease-out motion-reduce:transition-none"
+                style={{ height: videoRetakeRange ? 48 : 24, touchAction: 'none' }}
                 onTouchStart={(e) => e.stopPropagation()}
                 onTouchMove={(e) => e.stopPropagation()}
                 onTouchEnd={(e) => e.stopPropagation()}
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (videoRetakeRange) return;
                   if (videoPlaying) videoRef.current?.pause();
                   seekDragging.current = true;
                   setIsSeeking(true);
@@ -1569,14 +1575,20 @@ export default function ImageCanvas({
                 onPointerUp={(e) => {
                   seekDragging.current = false;
                   setIsSeeking(false);
-                  (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                  if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div data-video-track className={`absolute bottom-0 left-0 right-0 transition-[height] duration-150 ${isSeeking ? 'h-[6px]' : 'h-[2px] group-hover:h-[6px]'}`}>
-                  <div className="absolute inset-0 bg-white/12" />
-                  <div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${videoBuffered * 100}%` }} />
-                  <div className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%` }} />
+                <div data-video-track className={`absolute bottom-0 left-0 right-0 transition-[height] duration-[240ms] ease-out motion-reduce:transition-none ${videoRetakeRange ? 'h-12' : isSeeking ? 'h-[6px]' : 'h-[2px] group-hover:h-[6px]'}`}>
+                  <VideoRetakeTimeline url={videoUrl} duration={videoDuration} range={videoRetakeRange} sourceOffset={clipStart}
+                    onChange={onVideoRetakeChange} onSeek={time => {
+                      const video = videoRef.current; if (!video) return;
+                      video.pause(); video.currentTime = clipStart + time; setVideoCurrentTime(time); resetControlsTimer();
+                      onVideoTimeUpdate?.(time, videoDuration);
+                    }} />
+                  <div className={`absolute inset-0 pointer-events-none bg-white/12 ${videoRetakeRange ? 'opacity-0' : ''}`} />
+                  <div className={`absolute inset-y-0 left-0 pointer-events-none bg-white/25 ${videoRetakeRange ? 'opacity-0' : ''}`} style={{ width: `${videoBuffered * 100}%` }} />
+                  <div className={`absolute inset-y-0 left-0 pointer-events-none bg-fuchsia-500/75 ${videoRetakeRange ? 'opacity-0' : ''}`} style={{ width: `${videoDuration ? (videoCurrentTime / videoDuration) * 100 : 0}%` }} />
                 </div>
               </div>
             )}
@@ -1748,7 +1760,7 @@ export default function ImageCanvas({
                 }}
                 onPointerUp={(e) => {
                   setIsSeeking(false);
-                  (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                  if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -1871,7 +1883,7 @@ export default function ImageCanvas({
 
       {/* Timeline indicators — bottom of canvas, hidden while seeking or in design editor mode */}
       {!selectedEditableId && !isSeeking && (timeline.length > 1 || onAnimate) && (
-        <div className={`absolute left-1/2 -translate-x-1/2 flex items-center justify-center z-10 ${isDesktop ? 'bottom-3' : 'bottom-3'}`}>
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center z-10 transition-[bottom] duration-[240ms] ease-out motion-reduce:transition-none" style={{ bottom: videoRetakeRange ? 62 : 12 }}>
           <div className={`mkr-liquid-timeline-rail flex items-center rounded-full ${isDesktop ? 'gap-1.5 px-3 py-1.5' : 'gap-[5px] px-[10px] py-[5px]'}`}>
             {timeline.map((entry, i) => {
               const isRef = referenceCount > 0 && i < referenceCount;

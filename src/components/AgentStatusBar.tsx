@@ -7,6 +7,8 @@ const PREVIEW_STATUS_PREFIXES = getTranslationVariants('status.generatingPreview
 
 interface AgentStatusBarProps {
   statusText: string;
+  chatActionLabel?: string;
+  selectionText?: string;
   isActive: boolean;
   onOpenChat: () => void;
   isViewingDraft?: boolean;
@@ -18,7 +20,7 @@ interface AgentStatusBarProps {
   onSeeNotification?: () => void;
 }
 
-export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat, notification, onSeeNotification }: AgentStatusBarProps) {
+export default function AgentStatusBar({ statusText, chatActionLabel, selectionText, isActive, onOpenChat, isViewingDraft, hideChat, notification, onSeeNotification }: AgentStatusBarProps) {
   const { t } = useLocale();
   // Determine dot color and breathe speed based on state
   const isGeneratingImages = PREVIEW_STATUS_PREFIXES.some((prefix) => statusText.startsWith(prefix));
@@ -44,9 +46,9 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
   }
 
   // Display text priority: notification > draft hint > normal status
-  const displayText = notification ? notification.text
+  const displayText = selectionText ?? (notification ? notification.text
     : isViewingDraft ? t('statusbar.likeEffect')
-    : statusText;
+    : statusText);
 
   return (
     <>
@@ -94,7 +96,7 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
           <button
             onClick={e => { e.stopPropagation(); onOpenChat(); }}
             className="mkr-liquid-pill px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
-            style={isViewingDraft && !notification ? {
+            style={chatActionLabel || (isViewingDraft && !notification) ? {
               background: 'linear-gradient(145deg, rgba(192,38,211,0.24), rgba(10,10,14,0.38))',
               color: '#e879f9',
               border: '0.5px solid rgba(232,121,249,0.32)',
@@ -104,7 +106,7 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
               border: '0.5px solid rgba(255,255,255,0.10)',
             }}
           >
-            Chat
+            {chatActionLabel ?? t('statusbar.chat')}
           </button>
         )}
 

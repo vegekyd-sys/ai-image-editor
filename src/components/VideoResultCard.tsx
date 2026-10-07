@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import { ProjectAnimation } from '@/types';
 import { useLocale } from '@/lib/i18n';
 import PillCarousel from '@/components/PillCarousel';
-import VideoRetakeTimeline from './VideoRetakeTimeline';
 import { getModelInfo } from '@/lib/model-registry';
 import type { TranslationKey } from '@/lib/locales/zh';
 
@@ -33,7 +32,8 @@ interface VideoResultCardProps {
   onAbandon: (taskId: string) => void;
   onRetry?: (anim: ProjectAnimation) => void;
   onFrameEdit?: (anim: ProjectAnimation, time: number) => void;
-  onRetake?: (anim: ProjectAnimation, start: number, end: number) => boolean | void;
+  onRetake?: (anim: ProjectAnimation, time: number) => void;
+  retakeActive?: boolean;
   onSeek?: (time: number) => void;
   onViewDetail: (anim: ProjectAnimation) => void;
   currentTime?: number;
@@ -43,10 +43,9 @@ interface VideoResultCardProps {
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onRetake, onSeek, onViewDetail, currentTime = 0, currentDuration = 0, sourceOffset = 0, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onRetake, retakeActive = false, onViewDetail, currentTime = 0, currentDuration = 0, sourceOffset = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
-  const [retakeId, setRetakeId] = useState<string | null>(null);
 
   function videoTitle(prompt: string, index: number): string {
     if (!prompt.trim()) return t('video.title', index + 1);
@@ -80,7 +79,6 @@ export default function VideoResultCard({
   const detailWidth = isDesktop ? 40 : 44;
   const frameEditWidth = cardWidth + detailWidth;
   const frameEditAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
-  const retakeAnim = frameEditAnim && retakeId === frameEditAnim.id && onRetake ? frameEditAnim : null;
   const allSourceUploads = all.length > 0 && all.every(isSourceUpload);
 
   const selectedPillRef = useRef<HTMLDivElement>(null);
@@ -114,13 +112,7 @@ export default function VideoResultCard({
           to { transform: rotate(360deg); }
         }
       `}</style>
-      <PillCarousel toolbar={retakeAnim ? <span className="text-[11px] text-white/35">{t('video.retakeSelectionHint')}</span> : toolbar} isDesktop={isDesktop}>
-        {retakeAnim ? <VideoRetakeTimeline
-          key={retakeAnim.id} url={retakeAnim.videoUrl!} duration={currentDuration || retakeAnim.duration || 0}
-          sourceOffset={sourceOffset} isDesktop={isDesktop} onSeek={onSeek}
-          time={clampTime(currentTime)} onClose={() => setRetakeId(null)}
-          onContinue={(start, end) => { if (onRetake?.(retakeAnim, start, end) !== false) setRetakeId(null); }}
-        /> : <>
+      <PillCarousel toolbar={retakeActive ? <span className="text-[11px] text-white/35">{t('video.retakeSelectionHint')}</span> : toolbar} isDesktop={isDesktop}>
         {all.map((anim, idx) => {
           const isSelected = anim.id === selectedVideoId;
           const isCompleted = anim.status === 'completed' && !!anim.videoUrl;
@@ -275,7 +267,8 @@ export default function VideoResultCard({
             }}
           >
             <button
-              onClick={() => onRetake ? setRetakeId(frameEditAnim.id) : onFrameEdit?.(frameEditAnim, clampTime(currentTime))}
+              aria-pressed={onRetake ? retakeActive : undefined}
+              onClick={() => onRetake ? onRetake(frameEditAnim, clampTime(currentTime)) : onFrameEdit?.(frameEditAnim, clampTime(currentTime))}
               className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
               style={{
                 width: '100%',
@@ -303,14 +296,13 @@ export default function VideoResultCard({
                     {t(onRetake ? 'video.retakeTitle' : 'video.frameEdit')}
                   </div>
                   <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
-                    {t('video.frameEditHint', formatTime(currentTime))}
+                    {retakeActive ? t('video.retakeClose') : t('video.frameEditHint', formatTime(currentTime))}
                   </div>
                 </div>
               </div>
             </button>
           </div>
         )}
-        </>}
       </PillCarousel>
     </>
   );

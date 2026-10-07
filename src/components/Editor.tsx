@@ -365,6 +365,8 @@ export default function Editor({
   const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
   const isAgentActiveRef = useRef(false);
+  const [videoRetakeSelection, setVideoRetakeSelection] = useState<{ anim: ProjectAnimation; start: number; end: number } | null>(null);
+  useEffect(() => { setVideoRetakeSelection(null); }, [viewIndex, viewMode, selectedVideoId]);
   const [videoGuiTime, setVideoGuiTime] = useState(0);
   const [videoGuiDuration, setVideoGuiDuration] = useState(0);
   const [videoFrameCaptureRequest, setVideoFrameCaptureRequest] = useState(0);
@@ -3826,6 +3828,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 }}
                 videoFrameCaptureRequest={videoFrameCaptureRequest}
                 videoSeekRequest={videoSeekRequest}
+                videoRetakeRange={videoRetakeSelection}
+                onVideoRetakeChange={range => setVideoRetakeSelection(previous => previous ? { ...previous, ...range } : null)}
                 onVideoFrameCaptured={handleVideoFrameCaptured}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
@@ -4097,9 +4101,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 <AgentStatusBar
                   statusText={agentStatus}
                   isActive={isAgentActive}
-                  onOpenChat={openCUI}
+                  onOpenChat={videoRetakeSelection ? () => handleVideoRetake(videoRetakeSelection.anim, videoRetakeSelection.start, videoRetakeSelection.end) : openCUI}
+                  chatActionLabel={videoRetakeSelection ? t('video.retakeEdit') : undefined}
+                  selectionText={videoRetakeSelection ? t('video.retakeRange', videoRetakeSelection.start.toFixed(1), videoRetakeSelection.end.toFixed(1), (videoRetakeSelection.end - videoRetakeSelection.start).toFixed(1)) : undefined}
                   isViewingDraft={isViewingDraft}
-                  hideChat={isDesktop}
+                  hideChat={isDesktop && !videoRetakeSelection}
                   snapshotCount={snapshots.length}
                   notification={creditExhausted ? { text: 'Credits exhausted · Top up' } : pendingNotification}
                   onSeeNotification={creditExhausted ? () => setCreditPopupOpen(true) : handleSeeNotification}
@@ -4182,7 +4188,15 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       });
                     }}
                     onFrameEdit={handleVideoFrameEdit}
-                    onRetake={handleVideoRetake}
+                    retakeActive={Boolean(videoRetakeSelection)}
+                    onRetake={(anim, time) => {
+                      if (videoRetakeSelection) { setVideoRetakeSelection(null); return; }
+                      const duration = videoGuiDuration || anim.duration || 0;
+                      if (!duration || gateInteraction() || isAgentActive) return;
+                      const start = Math.max(0, Math.min(time, duration - .1));
+                      setVideoRetakeSelection({ anim, start, end: Math.min(duration, start + 4) });
+                      setVideoSeekRequest(previous => ({ time: start, token: (previous?.token ?? 0) + 1 }));
+                    }}
                     onSeek={time => setVideoSeekRequest(previous => ({ time, token: (previous?.token ?? 0) + 1 }))}
                     sourceOffset={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.start_sec : 0}
                     currentTime={videoGuiTime}
