@@ -45,3 +45,5 @@ Low 比 high 更值得作为 Tips 文案候选；先带上解析修复验证真�
 - 本次没有应用代码变化；脚本语法检查、实际完整执行、指纹检查、十组离线回放和 160 条资产引用均通过。上一轮应用候选的 2063 测试、类型检查和生产构建结果仍适用，未重复跑无关检查。
 
 网站已实测：20 组默认未评分；Wild 10 组、叠加讨论桌筛选 2 组；原尺寸 low 图片放大宽度 1264；偏好导出为有效 JSON；桌面四列与 390px 手机单列均无横向溢出；已加载图片无失败。截图位于 `output/playwright/luna-low-*-case.png`，实验目录保留 `website-qa.json`。
+
+私人报告已发布：[Luna low 三方成品对比](https://makaron-nano-banana-21-report.tianyi595926.chatgpt.site/luna-low.html)。Sites source `11f7165c3cbb8a4d5e200924689e4a06233d48f3`，native deployment `appgdep_6ac5acdffd6081918d4525938d2afd9f` 返回 succeeded，所有旧报告保留。
