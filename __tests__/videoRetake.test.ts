@@ -24,6 +24,9 @@ describe('Retake interval contract', () => {
   it('allows explicitly requested camera cuts instead of overriding a multi-camera edit', () => {
     const prompt = retakePrompt('Use multiple camera angles and cuts', planRetake({ start: 10, end: 23 }, 30, 'seedance-2.5'));
     expect(prompt).toContain('Follow explicitly requested shot cuts');
+    expect(prompt).toContain('original source time 10.000-23.000');
+    expect(prompt).toContain('Subtract 10.000 seconds');
+    expect(prompt).toContain('Only change clip-local 0.000-13.000');
     expect(prompt).not.toContain('Do not add shots, cuts');
   });
   it('assembles only the selected frames and copies original audio', async () => {
