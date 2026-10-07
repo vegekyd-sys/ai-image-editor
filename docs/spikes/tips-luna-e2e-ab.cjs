@@ -8,8 +8,12 @@ const { AsyncLocalStorage } = require('node:async_hooks');
 const root = path.resolve(__dirname, '../..');
 const productionRoot = '/Users/tianyicai/ai-image-editor';
 const frozen = '/Users/tianyicai/ai-image-editor-tips-wan27-ab/test-results/v1/images';
-const out = path.join(root, 'test-results/tips-luna-e2e-v1');
-const models = { online: 'google/' + (process.env.IMAGE_MODEL || 'gemini-3.1-flash-image-preview'), luna: 'openai/gpt-6-luna' };
+// Set TIPS_AB_VARIANT=luna-low to add a matched low run without rerunning paid baselines.
+const variant = process.env.TIPS_AB_VARIANT || 'high-ab';
+if (!['high-ab', 'luna-low'].includes(variant)) throw Error('Unknown experiment variant');
+const out = path.join(root, 'test-results', variant === 'luna-low' ? 'tips-luna-low-v1' : 'tips-luna-e2e-v1');
+const models = variant === 'luna-low' ? { luna_low: 'openai/gpt-6-luna' }
+  : { online: 'google/' + (process.env.IMAGE_MODEL || 'gemini-3.1-flash-image-preview'), luna: 'openai/gpt-6-luna' };
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const json = (file, value) => fs.writeFile(file + '.next', JSON.stringify(value, null, 2)).then(() => fs.rename(file + '.next', file));
 const terminal = state => !['pending', 'submitted'].includes(state);
@@ -34,6 +38,7 @@ async function textWorker(author) {
     if (!String(url).endsWith('/chat/completions')) throw Error('Unexpected provider URL');
     if (row.requests.length >= 3) throw Error('Additional request beyond the existing two-tip repair limit suppressed');
     const body = JSON.parse(options.body); body.model = models[author];
+    if (author === 'luna_low' && body.stream) body.reasoning = { ...body.reasoning, effort: 'low' };
     const request = { phase: body.stream ? 'initial' : 'editPrompt-repair', model: body.model, stream: !!body.stream, reasoning: body.reasoning,
       promptHash: sha(JSON.stringify(body.messages.map(m => ({...m, content: Array.isArray(m.content) ? m.content.filter(c => c.type === 'text') : m.content})))),
       startedAt: new Date().toISOString(), state: 'submitted' };
@@ -90,8 +95,14 @@ async function main() {
     const productionPromptFiles = ['gemini.ts','prompts/creative.md','prompts/wild.md','tips-response-policy.ts'];
     const promptFiles = {};
     for (const f of productionPromptFiles) promptFiles[f] = sha(await fs.readFile(path.join(productionRoot, 'src/lib', f)));
+    if (variant === 'luna-low') {
+      const prior = JSON.parse(await fs.readFile(path.join(root, 'test-results/tips-luna-e2e-v1/protocol.json'), 'utf8'));
+      for (const f of productionPromptFiles) if (prior.promptFiles[f] !== promptFiles[f]) throw Error('Baseline source drift: ' + f);
+    }
     await json(path.join(out, 'protocol.json'), { createdAt: new Date().toISOString(), models, textProvider: 'OpenRouter both authors', source: 'current production Tips source and language rules', promptFiles,
-      count: 2, imageCount: 5, categories: ['creative','wild'], locale: 'zh', textConcurrency: 4, imageConcurrency: 4, reasoning: 'production category defaults, high for both Creative/Wild',
+      count: 2, imageCount: 5, categories: ['creative','wild'], locale: 'zh', textConcurrency: Object.keys(models).length * 2, imageConcurrency: 4,
+      reasoning: variant === 'luna-low' ? 'initial request low; existing repairs unchanged from prior high A/B' : 'production category defaults, high for both Creative/Wild',
+      parser: 'same legacy main parser as previous high A/B; candidate fix is assessed separately offline', variant,
       repairs: 'existing product editPrompt repair allowed, at most 2 per text request; charged and timed', crossProviderFallback: false, imageModel: 'google/gemini-nano-banana-2.1', resolution: '1K', paidImageRetry: false,
       resume: 'submitted unknown outcomes are never resubmitted automatically', comparison: 'tip ordinal pairs, not the same idea; author creativity is intentionally allowed to differ' });
     const catalog = await (await fetch('https://openrouter.ai/api/v1/models')).json();
@@ -105,7 +116,7 @@ async function main() {
   for (const author of Object.keys(models)) authors[author] = JSON.parse(await fs.readFile(path.join(out, author + '.json'), 'utf8'));
   const file = path.join(out, 'images.json'); let record;
   try { record = JSON.parse(await fs.readFile(file, 'utf8')); }
-  catch (e) { if (e.code !== 'ENOENT') throw e; record = { rows: [] }; for (let i = 0; i < 5; i++) for (const category of ['creative','wild']) for (let tipIndex = 0; tipIndex < 2; tipIndex++) for (const author of ['online','luna']) {
+  catch (e) { if (e.code !== 'ENOENT') throw e; record = { rows: [] }; for (let i = 0; i < 5; i++) for (const category of ['creative','wild']) for (let tipIndex = 0; tipIndex < 2; tipIndex++) for (const author of Object.keys(models)) {
     const text = authors[author].rows.find(r => r.imageIndex === i && r.category === category), tip = text.tips[tipIndex];
     record.rows.push({ id: `image-${i}-${category}-${tipIndex+1}-${author}`, imageIndex: i, category, tipIndex, author, tip, textReadyMs: tip?.readyMs,
       state: tip?.editPrompt ? 'pending' : 'missing-tip', textState: text.state });

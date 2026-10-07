@@ -3,7 +3,8 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
-const folder = path.join(root, 'test-results/tips-luna-e2e-v1');
+const variant = process.env.TIPS_AB_VARIANT || 'high-ab';
+const folder = path.join(root, 'test-results', variant === 'luna-low' ? 'tips-luna-low-v1' : 'tips-luna-e2e-v1');
 process.env.TIPS_PROVIDER = 'openrouter';
 process.env.OPENROUTER_API_KEY = 'offline-replay-only';
 delete process.env.GOOGLE_API_KEY;
@@ -20,7 +21,7 @@ global.fetch = async (_url, options) => {
 async function main() {
   const { streamTipsByCategory } = require('../../src/lib/gemini.ts');
   const results = { networkCalls: 0, chunking: 'synthetic 31-character SSE chunks; no latency inference', rows: [] };
-  for (const author of ['online', 'luna']) {
+  for (const author of variant === 'luna-low' ? ['luna_low'] : ['online', 'luna']) {
     const record = JSON.parse(await fs.readFile(path.join(folder, author + '.json'), 'utf8'));
     for (const row of record.rows) {
       current = row; calls = 0; const complete = new Map();
