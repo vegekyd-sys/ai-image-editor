@@ -3109,7 +3109,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
     if (!isHttpUrl(params.video_url)) {
       if (!params.project_id) { console.error('Local video upload requires --project <id>.'); process.exit(1); }
-      params.video_url = await uploadFileViaSignedUrl(baseUrl, headers, params.project_id, params.video_url, 'video/mp4');
+      const valid = validateVideoFileForAnalysis(params.video_url);
+      if (!valid.ok) { console.error(valid.error); process.exit(1); }
+      params.video_url = await uploadFileViaSignedUrl(baseUrl, headers, params.project_id, params.video_url, valid.mime);
       if (!params.video_url) process.exit(1);
     }
     const receipt = await callMcpTool(baseUrl, headers, 'makaron_retake_video', params);

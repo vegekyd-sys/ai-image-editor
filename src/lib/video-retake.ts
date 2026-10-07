@@ -176,7 +176,7 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
       }
     }
     if (job.stage === 'saving_patch' && job.patch_url) {
-      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024, { falAsset: job.model_id !== 'seedance-2.5' })
+      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024, { falAsset: job.model_id !== 'seedance-2.5', evolinkAsset: job.model_id === 'seedance-2.5' })
       const permanentPatch = await store(job, bytes, 'patch')
       await save(job, { patch_url: permanentPatch, stage: 'assembling' }, token)
     }

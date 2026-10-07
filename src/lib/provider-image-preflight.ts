@@ -18,7 +18,7 @@ export function isPublicImageAddress(address: string): boolean {
 }
 
 /** DNS is validated on the actual socket lookup, preventing DNS rebinding. No redirects or credentials. */
-export async function readProviderImage(source: string, limit: number, options?: { falAsset?: boolean }): Promise<Buffer> {
+export async function readProviderImage(source: string, limit: number, options?: { falAsset?: boolean; evolinkAsset?: boolean }): Promise<Buffer> {
   if (source.startsWith('data:')) {
     const match = /^data:image\/(?:jpeg|jpg|png|webp|bmp);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(source);
     if (!match || Buffer.byteLength(match[1], 'base64') > limit) throw new Error('Invalid image data');
@@ -29,7 +29,8 @@ export async function readProviderImage(source: string, limit: number, options?:
   // Our fixed CDN is also routed through fake-IP VPNs during local development.
   // It is server-owned, not a caller-selected hostname; TLS still verifies it.
   const managedStorageHost = host === 'cdn.makaron.app'
-    || (options?.falAsset === true && (host === 'fal.media' || host.endsWith('.fal.media')));
+    || (options?.falAsset === true && (host === 'fal.media' || host.endsWith('.fal.media')))
+    || (options?.evolinkAsset === true && host === 'files.evolink.ai');
   if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')
     || (isIP(host) && !isPublicImageAddress(host))) throw new Error('Not a public HTTPS image');
   return new Promise((resolve, reject) => {

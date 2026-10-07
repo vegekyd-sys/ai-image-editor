@@ -1,4 +1,5 @@
 import { isFalImage25 } from './models/types';
+import { createHash } from 'node:crypto';
 import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
 import { after } from 'next/server';
@@ -2200,12 +2201,15 @@ function createRetakeVideoTool(scope: AgentToolFactoryScope) {
       if (source.sourceRange && (start < source.sourceRange.start_sec || end > source.sourceRange.end_sec)) {
         return { success: false, message: 'Retake interval must be within the visible original-source range.' };
       }
+      const hash = ctx.execution ? createHash('sha256').update(JSON.stringify([ctx.execution.runId, ctx.execution.inputEpoch, media_index, start, end, prompt, model])).digest('hex') : undefined;
+      const stableId = hash ? `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}` : undefined;
       const result = await submitMcpVideo({ images: [], script: prompt, videoUrl: source.videoUrl,
-        retake: { start, end }, videoModel: model, projectId: ctx.projectId, billingRequestId: request_id,
+        retake: { start, end }, videoModel: model, projectId: ctx.projectId, billingRequestId: request_id ?? stableId,
       }, { userId: ctx.userId, apiKeyId: null, toolName: 'retake_video' });
-      if (result.success && result.taskId && result.snapshotId) {
-        const row = await ctx.supabase?.from('snapshots').select('video_meta').eq('id', result.snapshotId).maybeSingle();
-        if (row?.data?.video_meta) ctx.pendingVideoSnapshot = { snapshotId: result.snapshotId, taskId: result.taskId, videoMeta: row.data.video_meta };
+      const snapshotId = result.snapshotId ?? result.taskId?.replace(/^video-retake-/, '');
+      if (result.success && result.taskId && snapshotId) {
+        const row = await ctx.supabase?.from('snapshots').select('video_meta').eq('id', snapshotId).eq('project_id', ctx.projectId).maybeSingle();
+        if (row?.data?.video_meta) ctx.pendingVideoSnapshot = { snapshotId, taskId: result.taskId, videoMeta: row.data.video_meta };
       }
       return result;
     }),
