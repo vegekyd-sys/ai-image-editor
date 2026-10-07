@@ -3,7 +3,7 @@ name: video-segment-edit
 description: >
   Locate a user-provided screenshot/frame inside a video, regenerate only the
   nearby problem segment, and assemble it back into the original MP4.
-allowed-tools: analyze_video preview_frame run_code generate_animation write_file
+allowed-tools: retake_video analyze_video preview_frame run_code generate_animation write_file
 metadata:
   makaron:
     icon: "🎬"
@@ -14,6 +14,20 @@ metadata:
 ---
 
 # Video Segment Edit
+
+## Known time interval: Retake
+
+When the user has selected a start/end interval in the GUI or supplied numeric
+seconds with an edit instruction, call `retake_video` directly. It owns source
+validation, contextual clipping, model submission, exact interval replacement,
+original-audio preservation and full-video delivery. Do not screenshot-locate
+an already known interval, script a second clipping/assembly pipeline, or ask
+for a second merge confirmation. Use original-source seconds, including a
+bounded external clip's source offset. Respect the model explicitly selected
+by the user; supported models are Seedance 2.5, FAL H3 Max and LTX 2.3.
+
+The screenshot localization workflow below remains useful when the interval is
+unknown, or when the user explicitly requests a legacy workflow comparison.
 
 Use this workflow when the user wants to fix only a small part of an existing
 video, especially when they provide a screenshot/frame and say something like:

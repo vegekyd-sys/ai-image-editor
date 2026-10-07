@@ -16,7 +16,7 @@ describe('Retake entry', () => {
     fireEvent.change(ranges[0], { target: { value: '4.2' } });
     fireEvent.change(ranges[1], { target: { value: '6.4' } });
     fireEvent.click(screen.getByText(/填写修改要求|Describe the change/));
-    expect(retake).toHaveBeenCalledWith(anim, 4.2, 6.4);
+    expect(retake).toHaveBeenCalledWith(anim, 4.2, 6.4, 'seedance-2.5');
     expect(frame).not.toHaveBeenCalled();
   });
 });

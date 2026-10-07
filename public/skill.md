@@ -341,7 +341,12 @@ npx makaron-cli video create --script "make it warmer and cinematic" --video htt
 
 # 4. Check status
 npx makaron-cli video status <taskId>
+
+# Retake only a selected interval; publish the complete video to a project.
+npx makaron-cli video retake --video input.mp4 --start 2 --end 4 --prompt "Make the book red" --model seedance-2.5 --project <id> --wait --json
 ```
+
+`video retake` uses original-source seconds, accepts a 0.1–15s range in a source up to 120s, and automatically replaces only that range while preserving original audio and duration. Models: `seedance-2.5` (default), `fal-h3-max`, `ltx-2.3-retake`. Local files require `--project`. Keep the root taskId and request ID; resume polling or replay the same request ID instead of paying for another generation.
 
 `video create` returns a provider task id and does not create or update a Makaron project timeline. For project/timeline video editing, use:
 

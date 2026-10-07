@@ -3165,15 +3165,16 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       .catch(e => console.warn('Artifact action failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
-  const handleVideoRetake = useCallback((anim: ProjectAnimation, start: number, end: number) => {
-    if (gateInteraction() || !projectId || isAgentActive) return;
+  const handleVideoRetake = useCallback((anim: ProjectAnimation, start: number, end: number, model: string) => {
+    if (gateInteraction() || !projectId || isAgentActive) return false;
     const snapIndex = snapshotsRef.current.findIndex(s => s.id === anim.id);
-    if (snapIndex < 0) return;
+    if (snapIndex < 0) return false;
     const offset = snapshotsRef.current[snapIndex].videoMeta?.sourceRange?.start_sec ?? 0;
     pendingFrameEditRef.current = null;
     setCuiDraftAttachments([]);
-    setCuiDraftText(t('video.retakeDraftPrompt', snapIndex + 1, (start + offset).toFixed(2), (end + offset).toFixed(2)));
+    setCuiDraftText(t('video.retakeDraftPrompt', snapIndex + 1, (start + offset).toFixed(2), (end + offset).toFixed(2), model));
     setViewMode('cui');
+    return true;
   }, [gateInteraction, projectId, isAgentActive, t]);
 
   const handleVideoFrameEdit = useCallback((anim: ProjectAnimation, time: number) => {
@@ -4179,6 +4180,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     }}
                     onFrameEdit={handleVideoFrameEdit}
                     onRetake={handleVideoRetake}
+                    sourceOffset={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.start_sec : 0}
                     currentTime={videoGuiTime}
                     currentDuration={videoGuiDuration}
                     isDesktop={isDesktop}

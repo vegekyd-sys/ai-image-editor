@@ -33,15 +33,16 @@ interface VideoResultCardProps {
   onAbandon: (taskId: string) => void;
   onRetry?: (anim: ProjectAnimation) => void;
   onFrameEdit?: (anim: ProjectAnimation, time: number) => void;
-  onRetake?: (anim: ProjectAnimation, start: number, end: number) => void;
+  onRetake?: (anim: ProjectAnimation, start: number, end: number, model: string) => boolean | void;
   onViewDetail: (anim: ProjectAnimation) => void;
   currentTime?: number;
   currentDuration?: number;
+  sourceOffset?: number;
   isDesktop?: boolean;
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onRetake, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onRetake, onViewDetail, currentTime = 0, currentDuration = 0, sourceOffset = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
   const [retakeId, setRetakeId] = useState<string | null>(null);
@@ -304,8 +305,9 @@ export default function VideoResultCard({
       </PillCarousel>
       {frameEditAnim && retakeId === frameEditAnim.id && onRetake && <VideoRetakeTimeline
         key={frameEditAnim.id} url={frameEditAnim.videoUrl!} duration={currentDuration || frameEditAnim.duration || 0}
+        sourceOffset={sourceOffset}
         time={clampTime(currentTime)} onClose={() => setRetakeId(null)}
-        onContinue={(start, end) => { onRetake(frameEditAnim, start, end); setRetakeId(null); }}
+        onContinue={(start, end, model) => { if (onRetake(frameEditAnim, start, end, model) !== false) setRetakeId(null); }}
       />}
     </>
   );

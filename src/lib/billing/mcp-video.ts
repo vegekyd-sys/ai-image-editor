@@ -30,6 +30,10 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
       .select('fingerprint,task_id,status').eq('id', requestId).eq('user_id', owner.userId).maybeSingle()
     if (error) throw new Error('Cannot verify prior billing request. Retry with the same request ID.')
     if (previous) {
+      // Retake owns a canonical source/range/instruction receipt, shared by GUI
+      // Agent and CLI. Its owner and exact effective parameters are checked
+      // before returning an existing job; this path never reserves again.
+      if (input.retake) return createVideo({ ...input, userId: owner.userId });
       if (previous.fingerprint !== fingerprint) throw new Error('Billing request conflict: parameters changed.')
       return { success: Boolean(previous.task_id), taskId: previous.task_id ?? undefined,
         retryable: false,
