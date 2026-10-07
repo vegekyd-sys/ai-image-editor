@@ -3087,7 +3087,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (text) console.log(text);
 
   } else if (sub === 'retake') {
-    const params = { model: 'seedance-2.5' };
+    const params = { model: 'fal-h3-max' };
     let wait = false, json = false;
     for (let i = 2; i < args.length; i++) {
       const flag = args[i];

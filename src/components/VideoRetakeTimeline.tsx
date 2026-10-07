@@ -69,7 +69,7 @@ export default function VideoRetakeTimeline({ url, duration, time, sourceOffset 
   };
   const atPointer = (event: PointerEvent) => {
     const rect = track.current?.getBoundingClientRect();
-    return rect && rect.width ? Math.max(0, Math.min(length, (event.clientX - rect.left) / rect.width * length)) : start;
+    return rect && rect.width ? Math.max(0, Math.min(length, Math.round((event.clientX - rect.left) / rect.width * length * 10) / 10)) : start;
   };
   const pointerStart = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;

@@ -13,7 +13,7 @@ import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { submitMcpVideo } from './billing/mcp-video';
-import { RETAKE_MODELS } from './video-retake-contract';
+import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from './video-retake-contract';
 import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
 import {
@@ -2184,13 +2184,13 @@ function createGenerateAnimationTool(
 
 function createRetakeVideoTool(scope: AgentToolFactoryScope) {
   return tool({
-    description: 'Retake a known interval of a ready video. start/end are seconds in the original source timebase; replace only this interval and automatically deliver the complete video with original audio and duration. Use directly when the user supplies a numeric interval; do not relocate a screenshot, cut clips with run_code, or ask for a second merge confirmation. Interval 0.1–15s, source at most 120s. Choose Seedance 2.5 edit (default), fal H3 Max reference generation, or LTX native retake. Preserve the returned task/request receipt and poll it; never regenerate to retry delivery.',
+    description: 'Retake a known interval of a ready video. start/end are seconds in the original source timebase; replace only this interval and automatically deliver the complete video with original audio and duration. Use directly when the user supplies a numeric interval; do not relocate a screenshot, cut clips with run_code, or ask for a second merge confirmation. Interval 0.1–15s, source at most 120s. Default to FAL H3 Max reference generation for a new take. Choose seedance-2.5 for close preservation of source motion and small visual edits, or explicitly requested LTX native retake. Sources shorter than 2s require seedance-2.5 or ltx-2.3-retake. Preserve the returned task/request receipt and poll it; never regenerate to retry delivery.',
     inputSchema: z.object({
       media_index: z.number().int().positive(),
       start: z.number().nonnegative(),
       end: z.number().positive(),
       prompt: z.string().min(1),
-      model: z.enum(RETAKE_MODELS).default('seedance-2.5'),
+      model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
       request_id: z.string().uuid().optional(),
     }),
     execute: async ({ media_index, start, end, prompt, model, request_id }) => scope.serializeVideoSubmission(async () => {

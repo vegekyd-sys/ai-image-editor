@@ -4,11 +4,17 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { planRetake, validateRetakeRange, retakePrompt } from '@/lib/video-retake-contract';
+import { planRetake, validateRetakeRange, retakePrompt, resolveRetakeModel } from '@/lib/video-retake-contract';
 import { assembleRetake, extractRetakeContext, inspectRetakeSource } from '@/lib/video-retake-media';
 import { findFfmpeg } from '@/lib/ffmpeg-runtime';
 
 describe('Retake interval contract', () => {
+  it('uses H3 Max by default and keeps explicitly selected editing models', () => {
+    expect(resolveRetakeModel()).toBe('fal-h3-max');
+    expect(resolveRetakeModel('auto')).toBe('fal-h3-max');
+    expect(resolveRetakeModel('seedance-2.5')).toBe('seedance-2.5');
+    expect(resolveRetakeModel('ltx-2.3-retake')).toBe('ltx-2.3-retake');
+  });
   it('expands reference context without expanding the replacement interval', () => {
     const plan = planRetake({ start: 2, end: 3 }, 10, 'fal-h3-max');
     expect(plan).toMatchObject({ start: 2, end: 3, contextStart: 0, contextEnd: 5, patchOffset: 2, generationDuration: 5 });

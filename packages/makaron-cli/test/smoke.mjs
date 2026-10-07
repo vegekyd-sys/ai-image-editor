@@ -1180,6 +1180,8 @@ try {
     const request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
     assert.equal(request.body.params.name, 'makaron_retake_video');
     assert.deepEqual(request.body.params.arguments, { model: 'fal-h3-max', video_url: 'https://cdn.example/source.mp4', start: 2.5, end: 4.2, prompt: 'Make the umbrella red' });
+    await expectSuccess(['video', 'retake', '--video', 'https://cdn.example/source.mp4', '--start', '2.5', '--end', '4.2', '--prompt', 'Use multiple camera angles', '--json']);
+    assert.equal(requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params.arguments.model, 'fal-h3-max');
     const count = requests.length;
     await expectFailure(['video', 'retake', '--video', 'https://cdn.example/source.mp4', '--start', '2', '--end', '1', '--prompt', 'Change it']);
     assert.equal(requests.length, count);

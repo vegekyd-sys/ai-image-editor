@@ -10,7 +10,7 @@ import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
 import { getDefaultVideoModelId, resolveProductVideoModelId } from '../lib/video-model-capabilities';
 import { getVideoStatus } from '../lib/skills/get-video-status';
-import { RETAKE_MODELS } from '../lib/video-retake-contract';
+import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from '../lib/video-retake-contract';
 import { analyzeVideo } from '../lib/skills/analyze-video';
 import { createAudio } from '../lib/skills/create-audio';
 import { createMusic } from '../lib/skills/create-music';
@@ -286,7 +286,7 @@ Tips:
       start: z.number().nonnegative(),
       end: z.number().positive(),
       prompt: z.string().min(1),
-      model: z.enum(RETAKE_MODELS).default('seedance-2.5'),
+      model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
       project_id: z.string().uuid().optional(),
       request_id: z.string().uuid().optional(),
     },
