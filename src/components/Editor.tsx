@@ -369,7 +369,6 @@ export default function Editor({
   const [videoGuiDuration, setVideoGuiDuration] = useState(0);
   const [videoFrameCaptureRequest, setVideoFrameCaptureRequest] = useState(0);
   const [videoSeekRequest, setVideoSeekRequest] = useState<{ time: number; token: number }>();
-  useEffect(() => { setVideoSeekRequest(undefined); }, [selectedVideoId, currentIndex]);
   const [cuiDraftText, setCuiDraftText] = useState('');
   const [cuiDraftAttachments, setCuiDraftAttachments] = useState<ComposerDraftAttachment[]>([]);
   const pendingFrameEditRef = useRef<{ anim: ProjectAnimation; time: number; mediaIndex: number; prompt: string } | null>(null);
@@ -603,6 +602,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const videoTimelineIndex = !isV2 && hasAnyAnimation ? timeline.length - 1 : -1;
   const currentSnapIndex = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
   const currentSnap = snapshots[currentSnapIndex];
+  useEffect(() => { setVideoSeekRequest(undefined); }, [selectedVideoId, currentSnapIndex]);
   const isAtDraftSlot = isDraft && viewIndex === draftParentIndex! + 1;
 
   // ── Content type resolution via renderer registry ──
