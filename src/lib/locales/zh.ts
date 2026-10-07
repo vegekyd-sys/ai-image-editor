@@ -221,8 +221,10 @@ const zh = {
 
   // Changelog
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
-  'changelog.nanoBanana21.item1': '普通图片与创意 Tips 图片默认使用 Nano Banana 2.1，支持多图参考及最高 4K 输出。',
-  'changelog.nanoBanana21.item2': '经典 Nano Banana 2 仍可手动选择；Tips 文案继续使用原模型。',
+  'changelog.nanoBanana21.item1': '普通图片与 Creative / Wild Tips 图片默认升级为 Nano Banana 2.1，换场景和创意编辑时更擅长保留原图人物与构图。',
+  'changelog.nanoBanana21.item2': '更细腻的写实细节、材质与光照，更清晰的文字渲染，适合商品换背景、人物修图和带文字的创意图片。',
+  'changelog.nanoBanana21.item3': '最多支持 14 张输入图片（含编辑底图），可在对话中要求 2K / 4K 输出，以及 4:1、8:1 等全景比例。',
+  'changelog.nanoBanana21.item4': '经典 Nano Banana 2 仍可手动选择；Tips 文案继续使用原模型。',
   'changelog.webSearch.title': '联网搜索与来源引用',
   'changelog.webSearch.item1': '使用支持联网搜索的 Agent 模型时，直接问最新资讯、产品资料或参考案例，Makaron 会按需搜索网页，为创作补充信息。',
   'changelog.webSearch.item2': '回答附有可点击的来源链接，方便核对原文；引用随对话保存，刷新或重新打开项目后仍可查看。',

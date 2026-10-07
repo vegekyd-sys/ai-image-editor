@@ -975,7 +975,12 @@ const CHANGELOG: ChangelogEntry[] = [
 const LOCALIZED_CHANGELOG_KEYS = {
   nanoBanana21: {
     title: 'changelog.nanoBanana21.title',
-    items: ['changelog.nanoBanana21.item1', 'changelog.nanoBanana21.item2'],
+    items: [
+      'changelog.nanoBanana21.item1',
+      'changelog.nanoBanana21.item2',
+      'changelog.nanoBanana21.item3',
+      'changelog.nanoBanana21.item4',
+    ],
   },
   webSearch: {
     title: 'changelog.webSearch.title',

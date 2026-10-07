@@ -221,8 +221,10 @@ const en = {
 
   // Changelog
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
-  'changelog.nanoBanana21.item1': 'Ordinary images and creative Tips images now default to Nano Banana 2.1, with multiple references and output up to 4K.',
-  'changelog.nanoBanana21.item2': 'Classic Nano Banana 2 remains available for manual selection. Tips text keeps its existing model.',
+  'changelog.nanoBanana21.item1': 'Ordinary images and Creative / Wild Tips images now default to Nano Banana 2.1, with better preservation of people and composition when changing scenes or making creative edits.',
+  'changelog.nanoBanana21.item2': 'Finer photorealistic detail, materials and lighting, plus clearer text rendering for product backgrounds, portrait edits and creative images with text.',
+  'changelog.nanoBanana21.item3': 'Use up to 14 input images, including the image being edited. Ask in chat for 2K / 4K output or panoramic ratios such as 4:1 and 8:1.',
+  'changelog.nanoBanana21.item4': 'Classic Nano Banana 2 remains available for manual selection. Tips text keeps its existing model.',
   'changelog.webSearch.title': 'Web Search with Source Links',
   'changelog.webSearch.item1': 'With an Agent model that supports web search, ask about the latest news, product details, or reference examples. Makaron searches the web when needed to inform your creative work.',
   'changelog.webSearch.item2': 'Answers include clickable source links so you can check the original pages. Sources are saved with the conversation and remain available after refreshing or reopening the project.',
