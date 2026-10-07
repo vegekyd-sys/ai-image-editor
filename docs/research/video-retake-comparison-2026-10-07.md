@@ -88,3 +88,6 @@ makaron video retake --video ./source.mp4 --project PROJECT_ID \
 查看 `artifacts/video-retake/skateboard-matched/comparison.html` 可同步播放五条完整成片；`skateboard-five-way.mp4`为同一选区13秒同步对比。`new-jobs.json`、`new-billing.json`、`*-provider-status.json`、`seedance-provider.json`与两轮`old-*-run.json`保存时间、工具输入和账单证据。四条输出完整解码通过，压缩AAC哈希均与原片相同。主片的首尾未重新生成，选区外画面由源片重新编码，因此不是压缩视频字节相同。
 
 新版pill验收：移动视口实测拖动将0–4秒扩成8–23秒（最长15秒），再调到10–23秒；主视频暂停并定位至10秒。右侧按钮自然带入聊天草稿，不提交生成、不出现截图附件。桌面与移动视口还检查既有pill位置和8张缩略图，截图留在同一证据目录。代码仍在独立候选worktree，未合并或发布。
+
+
+最终候选验证：5组针对性测试15项通过，CLI smoke通过，`tsc --noEmit`、UI四语言检查与webpack生产构建通过；10条CRC32C、9条FFmpeg API打包trace通过。完成态Retake接入现有封面修复器，首次拼接复用已下载视频bytes抽封面，已有完成任务也可补封面；本次H3与LTX卡片已有真实poster。五路对比页浏览器实际播放时，五条视频均readyState=4，时间差小于0.02秒；拖到源18.5秒可同时看旧、新H3俯拍、Seedance保留原镜头与LTX角色变化。首版H3完整片及五路对比已保存至Downloads，未覆盖先前Seedance交付。
