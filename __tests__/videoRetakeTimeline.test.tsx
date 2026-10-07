@@ -75,6 +75,13 @@ describe('Retake playback timeline', () => {
     expect(values()).toEqual([0,4]);
     fireEvent.pointerUp(screen.getByTestId('video-retake-track'));
   });
+  it('seeks inside the selected interval on a tap, while small pointer jitter does not move the interval', () => {
+    const seek=vi.fn(); render(<RangeHarness seek={seek} />); trackRect();
+    fireEvent.pointerDown(screen.getByTestId('video-retake-selection'),{button:0,clientX:120,pointerId:1});
+    fireEvent.pointerMove(screen.getByTestId('video-retake-track'),{clientX:122,pointerId:1});
+    fireEvent.pointerUp(screen.getByTestId('video-retake-track'),{clientX:122,pointerId:1});
+    expect(seek).toHaveBeenLastCalledWith(12.2); expect(values()).toEqual([10,14]);
+  });
   it('resizes one ear while keeping the other fixed and enforces 0.1–15 seconds', () => {
     render(<RangeHarness />); trackRect();
     fireEvent.pointerDown(screen.getAllByRole('slider')[1],{button:0,clientX:140,pointerId:1});
@@ -106,9 +113,8 @@ describe('Retake playback timeline', () => {
   });
   it('uses the Statusbar Edit action to navigate with the selection', () => {
     const open=vi.fn();
-    render(<LocaleProvider><AgentStatusBar statusText="" isActive={false} onOpenChat={open} chatActionLabel="Edit" selectionHint="只改变选中片段的内容，其余部分保持不变。" selectionText="10–14s" /></LocaleProvider>);
+    render(<LocaleProvider><AgentStatusBar statusText="" isActive={false} onOpenChat={open} chatActionLabel="Edit" selectionText="重做 10–14 秒，其余保持不变" /></LocaleProvider>);
     fireEvent.click(screen.getByRole('button',{name:'Edit'}));
-    expect(open).toHaveBeenCalledTimes(1); expect(screen.getByText('10–14s')).toBeTruthy();
-    expect(screen.getByText('只改变选中片段的内容，其余部分保持不变。')).toBeTruthy();
+    expect(open).toHaveBeenCalledTimes(1); expect(screen.getByText('重做 10–14 秒，其余保持不变')).toBeTruthy();
   });
 });

@@ -30,7 +30,7 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
   const [frameState, setFrameState] = useState<{ key: string; images: string[] }>(() => ({ key: thumbnailKey, images: thumbnailCache.get(thumbnailKey) ?? [] }));
   const frames = frameState.key === thumbnailKey ? frameState.images : thumbnailCache.get(thumbnailKey) ?? [];
   const track = useRef<HTMLDivElement>(null);
-  const dragging = useRef<{ kind: 'start' | 'end' | 'move' | 'seek'; x: number; range: VideoRetakeRange } | null>(null);
+  const dragging = useRef<{ kind: 'start' | 'end' | 'move' | 'seek'; x: number; moved: boolean; range: VideoRetakeRange } | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (active) setRequestedKey(thumbnailKey);
@@ -116,7 +116,7 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
     const target = event.target as HTMLElement;
     const side = target.closest<HTMLElement>('[data-range-side]')?.dataset.rangeSide;
     const kind = side === 'start' || side === 'end' ? side : target.closest('[data-range-body]') ? 'move' : 'seek';
-    dragging.current = { kind, x: event.clientX, range: { start, end } };
+    dragging.current = { kind, x: event.clientX, moved: false, range: { start, end } };
     event.currentTarget.setPointerCapture(event.pointerId);
     if (kind === 'seek') onSeek(atPointer(event));
   };
@@ -139,11 +139,17 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
         const drag = dragging.current; if (!drag) return;
         event.preventDefault(); event.stopPropagation();
         if (drag.kind === 'move') {
+          if (Math.abs(event.clientX - drag.x) >= 4) drag.moved = true;
+          if (!drag.moved) return;
           const width = track.current?.getBoundingClientRect().width ?? 0;
           if (width) move(drag.range.start + Math.round((event.clientX - drag.x) / width * length * 10) / 10, drag.range);
         } else if (drag.kind === 'seek') onSeek(atPointer(event));
         else (drag.kind === 'start' ? changeStart : changeEnd)(atPointer(event));
-      }} onPointerUp={() => { dragging.current = null; }} onPointerCancel={() => { dragging.current = null; }}
+      }} onPointerUp={event => {
+        const drag = dragging.current;
+        dragging.current = null;
+        if (drag?.kind === 'move' && !drag.moved) onSeek(atPointer(event));
+      }} onPointerCancel={() => { dragging.current = null; }}
       onLostPointerCapture={() => { dragging.current = null; }} onClick={event => event.stopPropagation()}>
       <div className="absolute inset-0 flex overflow-hidden rounded-md bg-white/10" aria-hidden="true">
         {Array.from({ length: 8 }, (_, i) => frames[i]
@@ -171,16 +177,16 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
         {Array.from({ length: 7 }, (_, i) => <div key={i} className="absolute bottom-0 flex flex-col items-center"
           style={{ left: `${i / 6 * 100}%`, transform: i === 0 ? undefined : i === 6 ? 'translateX(-100%)' : 'translateX(-50%)' }}>
           <span className="h-1 w-px bg-white/55" />
-          <span className="rounded-sm bg-black/55 px-0.5 text-[9px] leading-3 text-white/80 tabular-nums">{clock(length * i / 6)}</span>
+          <span className="rounded-sm bg-black/65 px-0.5 text-[10px] leading-3 text-white/85 tabular-nums">{clock(length * i / 6).replace(/\.0$/, '')}</span>
         </div>)}
       </div>
       <div data-testid="video-retake-playhead" role="progressbar" aria-label={t('video.retakePlayhead')}
         aria-valuemin={0} aria-valuemax={length} aria-valuenow={Number(playheadTime.toFixed(2))} aria-valuetext={clock(playheadTime)}
-        className={`pointer-events-none absolute inset-y-0 z-30 w-0 ${playing ? 'transition-[left] duration-150 ease-linear motion-reduce:transition-none' : ''}`}
+        className={`pointer-events-none absolute inset-y-0 z-40 w-0 ${playing ? 'transition-[left] duration-150 ease-linear motion-reduce:transition-none' : ''}`}
         style={{ left: `${playheadPercent}%` }}>
-        <span className="absolute inset-y-0 -left-px w-0.5 bg-white shadow-[0_0_3px_rgba(0,0,0,0.9)]" />
-        <span className="absolute top-0 h-0 w-0 -translate-x-1/2 border-x-[4px] border-t-[5px] border-x-transparent border-t-white" />
-        <span className="absolute top-1.5 rounded bg-black/80 px-1 text-[9px] leading-3.5 text-white tabular-nums"
+        <span className="absolute inset-y-0 -left-px w-0.5 bg-white shadow-[0_0_4px_rgba(0,0,0,1)]" />
+        <span className="absolute top-0 h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[6px] border-x-transparent border-t-white" />
+        <span data-testid="video-retake-timestamp" className="absolute top-1.5 rounded-md border border-white/25 bg-black/90 px-1.5 text-[11px] font-medium leading-5 text-white shadow-md tabular-nums"
           style={{ transform: playheadPercent < 10 ? 'translateX(3px)' : playheadPercent > 90 ? 'translateX(calc(-100% - 3px))' : 'translateX(-50%)' }}>{clock(playheadTime)}</span>
       </div>
     </div>

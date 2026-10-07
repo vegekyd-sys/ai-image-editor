@@ -386,7 +386,7 @@ const zh = {
   'video.retakeClose': '收起',
   'video.retakeEdit': '编辑',
   'video.retakePlayhead': '播放位置',
-  'video.retakeStatusHint': '只改变选中片段的内容，其余部分保持不变。',
+  'video.retakeStatusHint': (start: string, end: string) => `重做 ${start}–${end} 秒，其余保持不变`,
   'video.retakeSelectionHint': '拖动两端调整时长，拖动中间移动选区，最多15秒',
   'video.retakeDraftPrompt': (mediaIndex: number, start: string, end: string) => `把 @${mediaIndex} 的 ${start}–${end} 秒换成：`,
   'video.frameCaptured': (time: string) => `我截到了 ${time} 这一帧。你可以确认一下，再告诉我具体怎么改。`,

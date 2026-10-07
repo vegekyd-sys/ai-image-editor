@@ -4103,8 +4103,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   isActive={isAgentActive}
                   onOpenChat={videoRetakeSelection ? () => handleVideoRetake(videoRetakeSelection.anim, videoRetakeSelection.start, videoRetakeSelection.end) : openCUI}
                   chatActionLabel={videoRetakeSelection ? t('video.retakeEdit') : undefined}
-                  selectionHint={videoRetakeSelection ? t('video.retakeStatusHint') : undefined}
-                  selectionText={videoRetakeSelection ? t('video.retakeRange', videoRetakeSelection.start.toFixed(1), videoRetakeSelection.end.toFixed(1), (videoRetakeSelection.end - videoRetakeSelection.start).toFixed(1)) : undefined}
+                  selectionText={videoRetakeSelection ? t('video.retakeStatusHint', String(Number(videoRetakeSelection.start.toFixed(1))), String(Number(videoRetakeSelection.end.toFixed(1)))) : undefined}
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop && !videoRetakeSelection}
                   snapshotCount={snapshots.length}

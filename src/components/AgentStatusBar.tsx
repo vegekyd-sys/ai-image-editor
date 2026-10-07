@@ -9,7 +9,6 @@ interface AgentStatusBarProps {
   statusText: string;
   chatActionLabel?: string;
   selectionText?: string;
-  selectionHint?: string;
   isActive: boolean;
   onOpenChat: () => void;
   isViewingDraft?: boolean;
@@ -21,7 +20,7 @@ interface AgentStatusBarProps {
   onSeeNotification?: () => void;
 }
 
-export default function AgentStatusBar({ statusText, chatActionLabel, selectionText, selectionHint, isActive, onOpenChat, isViewingDraft, hideChat, notification, onSeeNotification }: AgentStatusBarProps) {
+export default function AgentStatusBar({ statusText, chatActionLabel, selectionText, isActive, onOpenChat, isViewingDraft, hideChat, notification, onSeeNotification }: AgentStatusBarProps) {
   const { t } = useLocale();
   // Determine dot color and breathe speed based on state
   const isGeneratingImages = PREVIEW_STATUS_PREFIXES.some((prefix) => statusText.startsWith(prefix));
@@ -73,11 +72,8 @@ export default function AgentStatusBar({ statusText, chatActionLabel, selectionT
         />
 
         {/* Status / greeting text */}
-        <div className={`min-w-0 flex-1 text-[13px] ${notification ? 'text-white/80' : 'text-white/50'}`}>
-          {selectionHint ? <>
-            <div className="text-white/70 leading-snug">{selectionHint}</div>
-            <div className="mt-0.5 text-[11px] text-white/45 tabular-nums">{displayText}</div>
-          </> : <div className="truncate">{displayText}</div>}
+        <div className={`min-w-0 flex-1 truncate text-[13px] ${notification ? 'text-white/80' : 'text-white/50'}`}>
+          {displayText}
         </div>
 
         {/* "See" button — shown when there's a pending notification */}
