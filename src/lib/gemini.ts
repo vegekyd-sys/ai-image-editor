@@ -1329,7 +1329,10 @@ async function* sseToTextIterator(res: Response, label: string, usageOut?: Usage
 function extractJsonStringField(json: string, field: string): string | null {
   const regex = new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`);
   const match = json.match(regex);
-  return match ? match[1] : null;
+  if (!match) return null;
+  // Use the same decoded label for partial and complete objects. Otherwise an
+  // escaped quote becomes a second suggestion and triggers an unnecessary repair.
+  try { return JSON.parse(`"${match[1]}"`) as string; } catch { return null; }
 }
 
 // Try to build a partial Tip — category is injected since it comes after editPrompt in the JSON stream
@@ -1390,6 +1393,9 @@ async function* parseIncrementalTipsFromStream(
             const objStr = fullText.slice(start, j);
             try {
               const tip = JSON.parse(objStr) as Tip;
+              // Category is known from the request even when the model omits it.
+              // Preserve the complete editPrompt instead of repairing a partial.
+              if (!tip.category) tip.category = defaultCategory;
               if (tip.label && tip.editPrompt && tip.category) {
                 tlog(`[tips:${label}] complete tip "${tip.label}" at +${Date.now() - t0}ms`);
                 if (lastPartialLabel === tip.label) lastPartialLabel = null;
@@ -1436,6 +1442,7 @@ async function* parseIncrementalTipsFromStream(
     if (arrStart >= 0 && arrEnd > arrStart) {
       const arr = JSON.parse(cleaned.slice(arrStart, arrEnd + 1)) as Tip[];
       for (const tip of arr) {
+        if (!tip.category) tip.category = defaultCategory;
         if (tip.label && tip.category && !emittedLabels.has(tip.label)) {
           if (tip.editPrompt) {
             tlog(`[tips:${label}] fallback recovered tip "${tip.label}"`);
