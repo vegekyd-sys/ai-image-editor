@@ -8,6 +8,12 @@ describe('H3 Max reference adapter',()=>{
     expect(build({prompt:'<<<media_1>>> in a new room',images:[image],aspectRatio:'9:16'})).toMatchObject({prompt:'Image 1 in a new room', reference_image_urls:[image],aspect_ratio:'9:16',resolution:'768P'})
     expect(build({prompt:'<<<image_1>>>',images:[image]})).not.toHaveProperty('image_url')
   })
+  it('anchors Retake endpoints and disables rewriting only for anchored requests',()=>{
+    const end='https://example.com/end.jpg'
+    expect(build({prompt:'Continue the jump',images:[image,end],boundaryFrames:{startUrl:image,endUrl:end}})).toMatchObject({image_url:image,end_image_url:end,prompt_expansion_mode:'disabled'})
+    expect(build({prompt:'New scene',images:[image]}).prompt_expansion_mode).toBe('balanced')
+    expect(()=>build({prompt:'p',images:[image],boundaryFrames:{startUrl:image,endUrl:end}})).toThrow('validated image references')
+  })
   it('preserves each modality and index instead of flattening to a first frame',()=>{
     expect(build({prompt:'<<<media_2>>> meets <<<image_1>>>. Follow <<<video_1>>> and <<<audio_1>>>.',images:[image,image],videos:[{url:'v',durationSec:5}],audios:[{url:'https://example.com/a.wav',durationSec:3}]})).toMatchObject({prompt:'Image 2 meets Image 1. Follow Video 1 and Audio 1.',reference_video_urls:['v'],reference_audio_urls:['https://example.com/a.wav']})
   })

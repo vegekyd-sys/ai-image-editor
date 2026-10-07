@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { planRetake, validateRetakeRange, retakePrompt, resolveRetakeModel } from '@/lib/video-retake-contract';
-import { assembleRetake, extractRetakeContext, inspectRetakeSource } from '@/lib/video-retake-media';
+import { assembleRetake, extractRetakeContext, extractRetakeBoundaryFrames, inspectRetakeSource } from '@/lib/video-retake-media';
 import { findFfmpeg } from '@/lib/ffmpeg-runtime';
 
 describe('Retake interval contract', () => {
@@ -13,7 +13,7 @@ describe('Retake interval contract', () => {
     expect(resolveRetakeModel()).toBe('fal-h3-max');
     expect(resolveRetakeModel('auto')).toBe('fal-h3-max');
     expect(resolveRetakeModel('seedance-2.5')).toBe('seedance-2.5');
-    expect(resolveRetakeModel('ltx-2.3-retake')).toBe('ltx-2.3-retake');
+    expect(() => resolveRetakeModel('ltx-2.3-retake')).toThrow(/supports/);
   });
   it('expands reference context without expanding the replacement interval', () => {
     const plan = planRetake({ start: 2, end: 3 }, 10, 'fal-h3-max');
@@ -35,6 +35,20 @@ describe('Retake interval contract', () => {
     expect(prompt).toContain('Only change clip-local 0.000-13.000');
     expect(prompt).not.toContain('Do not add shots, cuts');
   });
+  it('extracts the first and last contextual frames from the original timebase', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'retake-boundaries-'));
+    const ffmpeg = await findFfmpeg();
+    try {
+      const src = join(dir, 'source.mp4');
+      execFileSync(ffmpeg, ['-v','error','-y','-f','lavfi','-i','color=red:s=320x240:r=24:d=3',
+        '-f','lavfi','-i','color=blue:s=320x240:r=24:d=3','-filter_complex','[0:v][1:v]concat=n=2:v=1:a=0[v]','-map','[v]','-c:v','libx264',src]);
+      const frames = await extractRetakeBoundaryFrames(readFileSync(src), planRetake({start:1,end:5},6,'fal-h3-max'),24);
+      const { default: sharp } = await import('sharp');
+      const color = async (buffer: Buffer) => [...(await sharp(buffer).resize(1,1).raw().toBuffer())];
+      expect((await color(frames.start))[0]).toBeGreaterThan(200);
+      expect((await color(frames.end))[2]).toBeGreaterThan(200);
+    } finally { rmSync(dir,{recursive:true,force:true}); }
+  },30_000);
   it('assembles only the selected frames and copies original audio', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'retake-test-'));
     const ffmpeg = await findFfmpeg();

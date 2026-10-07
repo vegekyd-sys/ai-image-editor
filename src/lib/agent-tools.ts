@@ -2184,7 +2184,7 @@ function createGenerateAnimationTool(
 
 function createRetakeVideoTool(scope: AgentToolFactoryScope) {
   return tool({
-    description: 'Retake a known interval of a ready video. start/end are seconds in the original source timebase; replace only this interval and automatically deliver the complete video with original audio and duration. Use directly when the user supplies a numeric interval; do not relocate a screenshot, cut clips with run_code, or ask for a second merge confirmation. Interval 0.1–15s, source at most 120s. Default to FAL H3 Max reference generation for a new take. Choose seedance-2.5 for close preservation of source motion and small visual edits, or explicitly requested LTX native retake. Sources shorter than 2s require seedance-2.5 or ltx-2.3-retake. Preserve the returned task/request receipt and poll it; never regenerate to retry delivery.',
+    description: 'Retake a known interval of a ready video. start/end are seconds in the original source timebase; replace only this interval and automatically deliver the complete video with original audio and duration. Use directly when the user supplies a numeric interval; do not relocate a screenshot, cut clips with run_code, or ask for a second merge confirmation. Interval 0.1–15s, source at most 120s. Default to FAL H3 Max reference generation for a new take. Choose seedance-2.5 for close preservation of source motion and small visual edits. Sources shorter than 2s require seedance-2.5. Preserve the returned task/request receipt and poll it; never regenerate to retry delivery.',
     inputSchema: z.object({
       media_index: z.number().int().positive(),
       start: z.number().nonnegative(),

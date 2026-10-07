@@ -4,8 +4,7 @@ import { readProviderImage } from './provider-image-preflight'
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from './skills/create-video'
 import { getVideoStatus, type GetVideoStatusResult } from './skills/get-video-status'
 import { planRetake, retakePrompt, resolveRetakeModel, validateRetakeRange, type RetakePlan } from './video-retake-contract'
-import { inspectRetakeSource, extractRetakeContext, assembleRetake } from './video-retake-media'
-import { submitLtxRetake, pollLtxRetake, LtxSubmissionError } from './fal-ltx-retake'
+import { inspectRetakeSource, extractRetakeContext, extractRetakeBoundaryFrames, assembleRetake } from './video-retake-media'
 import { VIDEO_PLACEHOLDER_IMAGE } from './editor/timeline-derivations'
 import type { VideoMeta } from '@/types'
 import { toPublicStorageUrl } from './supabase/storage'
@@ -25,9 +24,9 @@ async function save(job: Job, patch: Partial<Job>, lease?: string) {
   if (error || !data) throw new Error('Retake receipt could not be saved. Keep this task; do not resubmit.')
   Object.assign(job, patch)
 }
-async function store(job: Job, bytes: Buffer, suffix: string) {
-  const admin = getSupabaseAdmin(), path = `${job.user_id}/${job.project_id ?? 'video-tools'}/videos/retake-${job.id}-${suffix}.mp4`
-  const { error } = await admin.storage.from('images').upload(path, bytes, { contentType: 'video/mp4', upsert: true })
+async function store(job: Job, bytes: Buffer, suffix: string, image = false) {
+  const admin = getSupabaseAdmin(), path = `${job.user_id}/${job.project_id ?? 'video-tools'}/videos/retake-${job.id}-${suffix}.${image ? 'jpg' : 'mp4'}`
+  const { error } = await admin.storage.from('images').upload(path, bytes, { contentType: image ? 'image/jpeg' : 'video/mp4', upsert: true })
   if (error) throw new Error('Could not save Retake media. Delivery can be retried without regeneration.')
   return toPublicStorageUrl(admin.storage.from('images').getPublicUrl(path).data.publicUrl)
 }
@@ -118,8 +117,16 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     }
     const context = await extractRetakeContext(source, plan)
     const contextUrl = await store(job, context, 'context')
+    let boundaryFrames: { startUrl: string; endUrl: string } | undefined
+    if (model === 'fal-h3-max') {
+      const frames = await extractRetakeBoundaryFrames(source, plan, meta.fps!)
+      const [startUrl, endUrl] = await Promise.all([store(job, frames.start, 'start', true), store(job, frames.end, 'end', true)])
+      boundaryFrames = { startUrl, endUrl }
+      await save(job, { source_meta: { ...job.source_meta, boundaryFrames } })
+    }
     await save(job, { context_url: contextUrl, stage: 'prepared', timings: { preparationMs: performance.now() - started } })
-    const prompt = retakePrompt(input.script, plan)
+    const prompt = retakePrompt(input.script, plan) + (boundaryFrames
+      ? '\nBOUNDARY CONTINUITY: Image 1 is the exact opening state; Image 2 is the exact ending state. Begin at the action already in progress in Image 1 and continue its momentum. Never restart an approach, establishing setup or action that already happened before this clip. Requested camera cuts may change viewpoint, but must advance the same action without replaying its beginning. Finish at Image 2.' : '')
     let result: CreateVideoResult
     const beforeSubmit = async (usage: Parameters<NonNullable<CreateVideoInput['onBeforeProviderSubmit']>>[0]) => {
       const reservation = await input.onBeforeProviderSubmit?.(usage)
@@ -127,18 +134,13 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       posting = true
       return reservation
     }
-    if (model === 'ltx-2.3-retake') {
-      await beforeSubmit({ model, resolution: '720p', operation: 'edit', durationSec: plan.end - plan.start })
-      const requestId = await submitLtxRetake(contextUrl, input.script, plan.patchOffset, plan.end - plan.start)
-      result = { success: true, taskId: requestId, message: 'LTX Retake submitted.' }
-    } else {
-      result = await createVideo({ ...input, retake: undefined, videoUrl: contextUrl, videoUrls: undefined,
-        script: prompt, duration: model === 'seedance-2.5' ? -1 : plan.generationDuration,
-        referenceVideoDuration: plan.contextEnd - plan.contextStart, referenceVideoMetas: undefined,
-        videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
-        videoOperation: model === 'seedance-2.5' ? 'edit' : 'generate', videoReferType: 'feature',
-        onBeforeProviderSubmit: beforeSubmit })
-    }
+    result = await createVideo({ ...input, retake: undefined, videoUrl: contextUrl, videoUrls: undefined,
+      images: boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl] : [], h3RetakeBoundaryFrames: boundaryFrames,
+      script: prompt, duration: model === 'seedance-2.5' ? -1 : plan.generationDuration,
+      referenceVideoDuration: plan.contextEnd - plan.contextStart, referenceVideoMetas: undefined,
+      videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
+      videoOperation: model === 'seedance-2.5' ? 'edit' : 'generate', videoReferType: 'feature',
+      onBeforeProviderSubmit: beforeSubmit })
     if (!result.success || !result.taskId) {
       // A preflight failure never posted. Once posted, an unclassified missing
       // receipt must retain the reservation rather than encourage a paid retry.
@@ -152,7 +154,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       status: 'processing', sourceDuration: meta.duration!, retryable: false, message: `Retake submitted for ${plan.start}-${plan.end}s. Poll this task through generation and automatic full-video assembly. No merge confirmation is needed.` }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Retake failed.'
-    const uncertain = posting && !(error instanceof LtxSubmissionError && !error.uncertain)
+    const uncertain = posting
     if (job) {
       if (!job.provider_task_id) await save(job, { stage: uncertain ? 'submission_uncertain' : 'failed', error: message }).catch(() => {})
       return { success: !!job.provider_task_id || uncertain, taskId: job.provider_task_id || uncertain ? PREFIX + job.id : undefined,
@@ -178,8 +180,7 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
   let completedBuffer: Buffer | undefined
   try {
     if (job.stage === 'generating' && job.provider_task_id) {
-      const result = job.model_id === 'ltx-2.3-retake' ? await pollLtxRetake(job.provider_task_id)
-        : await getVideoStatus({ taskId: job.provider_task_id, userId })
+      const result = await getVideoStatus({ taskId: job.provider_task_id, userId })
       if (result.status === 'failed' && !('queryFailed' in result && result.queryFailed)) await save(job, { stage: 'failed', error: result.error ?? 'Retake generation failed.' }, token)
       else if (result.status === 'completed' && result.videoUrl) {
         await save(job, { stage: 'saving_patch', patch_url: result.videoUrl, timings: { ...job.timings, generationMs: Date.now() - Date.parse(job.created_at) - (job.timings.submittedMs ?? 0) } }, token)

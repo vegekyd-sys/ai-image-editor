@@ -37,6 +37,21 @@ export async function extractRetakeContext(source: Buffer, plan: RetakePlan): Pr
   })
 }
 
+/** Native H3 anchors use the exact reference-clip boundary states, not a new setup. */
+export async function extractRetakeBoundaryFrames(source: Buffer, plan: RetakePlan, fps: number): Promise<{ start: Buffer; end: Buffer }> {
+  if (!Number.isFinite(fps) || fps < 1) throw new Error('Boundary frames require a measured source frame rate.')
+  return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
+    const frames = await Promise.all([plan.contextStart, Math.max(plan.contextStart, plan.contextEnd - 1 / fps)].map(async (time, index) => {
+      const output = join(dir, `boundary-${index}.jpg`)
+      await exec(ffmpeg, ['-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-i', join(dir, 'source.mp4'),
+        '-ss', String(time), '-frames:v', '1', '-vf', "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
+        '-q:v', '3', output], { timeout: 120_000, maxBuffer: 1024 * 1024 })
+      return readFile(output)
+    }))
+    return { start: frames[0], end: frames[1] }
+  })
+}
+
 /** Replace only selected frames. The original complete audio bed is mapped once. */
 export async function assembleRetake(source: Buffer, patch: Buffer, plan: RetakePlan): Promise<{ bytes: Buffer; meta: VideoProbe }> {
   return withFiles({ 'source.mp4': source, 'patch.mp4': patch }, async (dir, ffmpeg) => {
@@ -46,14 +61,8 @@ export async function assembleRetake(source: Buffer, patch: Buffer, plan: Retake
     const totalFrames = Math.round(meta.duration * fps), replacementFrames = endFrame - startFrame
     if (replacementFrames <= 0) throw new Error('Retake interval is shorter than one source frame.')
     const contextLength = plan.contextEnd - plan.contextStart
-    // LTX may return the whole contextual clip or only the retaken interval.
-    const selectedOnly = plan.model === 'ltx-2.3-retake' && Math.abs(generated.duration - (plan.end - plan.start)) < 2 / fps
-      && Math.abs(contextLength - (plan.end - plan.start)) > 2 / fps
-    if (plan.model === 'ltx-2.3-retake' && !selectedOnly && Math.abs(generated.duration - contextLength) > .3) {
-      throw new Error('LTX returned an unexpected duration; retain this task for delivery reconciliation.')
-    }
-    const fittedDuration = selectedOnly ? plan.end - plan.start : contextLength
-    const offset = selectedOnly ? 0 : plan.patchOffset
+    const fittedDuration = contextLength
+    const offset = plan.patchOffset
     const scale = `scale=${meta.width}:${meta.height}:force_original_aspect_ratio=decrease,pad=${meta.width}:${meta.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`
     const graph = [
       `[1:v]setpts=${fittedDuration / generated.duration}*(PTS-STARTPTS),fps=${fps},${scale},trim=start=${offset},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${replacementFrames},setpts=PTS-STARTPTS[p]`,

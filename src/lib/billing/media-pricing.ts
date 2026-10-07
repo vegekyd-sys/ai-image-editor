@@ -123,7 +123,6 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
 }
 
 export function videoPriceId(input: Pick<VideoQuoteInput, 'model' | 'resolution' | 'operation'>): string {
-  if (input.model === 'ltx-2.3-retake') return 'video:ltx-2.3-retake:720p:edit'
   const route = resolveVideoGenerationRoute(input)
   return `video:${normalizeVideoModelId(input.model)}:${route.resolution}:${input.operation ?? 'generate'}`
 }

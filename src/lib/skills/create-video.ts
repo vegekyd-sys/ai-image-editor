@@ -7,6 +7,8 @@ const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
 export interface CreateVideoInput {
   /** Product Retake interval, in source-video seconds. */
   retake?: { start: number; end: number };
+  /** Internal only, generated from the authenticated Retake source. */
+  h3RetakeBoundaryFrames?: { startUrl: string; endUrl: string };
   script: string;
   images: string[];          // public URLs only (no base64)
   duration?: number;         // 3, 5, 7, 10, or 15 seconds. Omit for smart mode
@@ -639,6 +641,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         prompt: finalPrompt, images: filteredImages, videos: h3References.videos, audios: h3References.audios,
         duration: resolvedDuration ?? 5, aspectRatio: providerAspectRatio,
         resolution: route.resolution as '480p' | '768p' | '1080p', imagesVerified: true,
+        boundaryFrames: input.h3RetakeBoundaryFrames,
         onBeforeSubmit: billingUsage ? async () => { await input.onBeforeProviderSubmit!(billingUsage!); } : undefined,
       });
       return { success: true, taskId, videoModel: provider,
