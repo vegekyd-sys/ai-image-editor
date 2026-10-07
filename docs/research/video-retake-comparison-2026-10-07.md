@@ -91,3 +91,21 @@ makaron video retake --video ./source.mp4 --project PROJECT_ID \
 
 
 最终候选验证：5组针对性测试15项通过，CLI smoke通过，`tsc --noEmit`、UI四语言检查与webpack生产构建通过；10条CRC32C、9条FFmpeg API打包trace通过。完成态Retake接入现有封面修复器，首次拼接复用已下载视频bytes抽封面，已有完成任务也可补封面；本次H3与LTX卡片已有真实poster。五路对比页浏览器实际播放时，五条视频均readyState=4，时间差小于0.02秒；拖到源18.5秒可同时看旧、新H3俯拍、Seedance保留原镜头与LTX角色变化。首版H3完整片及五路对比已保存至Downloads，未覆盖先前Seedance交付。
+
+## 2026-10-08 验收修改
+
+用户明确淘汰 LTX：删除未上线的供应商适配器，GUI/Agent/MCP/CLI 不再接受该模型，CLI 和公开技能说明同步更新。共享数据库中唯一的 LTX 实验定价已置为 inactive；两条已完成历史任务及其成片保留，新迁移记录停用定价。
+
+H3 在完整视频 10–11 秒的动作重启来自原要求的“0–2 秒滑向斜坡”，而源片 10 秒已经起跳。修正后提取参考区间首尾状态图片，作为已验证和计价的 H3 图片参考，明确继续已有动作、切镜推进动作而非回放，并禁用提示词扩写。Seedance 路径未变化。首尾状态参考与修改开场要求共同改变，因此这一轮没有把提升归因到单一因素。
+
+原生 image_url/end_image_url 约束试验 `be7a437c-f56b-4bf2-96dd-399cda8f7233` 队列显示 COMPLETED，但结果是 HTTP 504、结构化 downstream_service_unavailable，未产生视频；产品 587 积分已退还。该试验不作为效果和耗时样本，也不保留原生首尾帧约束进入候选产品。轮询新增了只在已结束队列加结构化供应商推理失败时终止的处理，普通 5xx/网关错误仍保留原任务继续查询，不自动再生成。
+
+最终使用参考生成的任务 `73fe6efe-9a51-46a7-a7ad-90557bc752e7` 完成：587 积分，FAL inference 63.947 秒，Retake 任务总墙钟 147.081 秒（约 2分27秒，包含准备、供应商等待、下载与拼接）。失败试验的等待单独记录，不计入成功任务耗时；单次成功不证明稳定速度优势。新成片在 10–11 秒接着起跳，后续有轮子近景、侧拍、俯拍和跟拍切换，机器人身份保持。候选默认继续使用 H3，Seedance 2.5 保留。
+
+- [新版 H3 完整视频](https://cdn.makaron.app/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/d78fcc10-2909-4ce6-addf-a49059631a00/videos/retake-73fe6efe-9a51-46a7-a7ad-90557bc752e7-final.mp4)
+- 本机完整成片：`/Users/tianyicai/Downloads/eco-720p-multicam-retake-h3-fixed.mp4`，未覆盖旧 H3 与 Seedance 成片。
+- 验收 UI：`http://localhost:3039/projects/d78fcc10-2909-4ce6-addf-a49059631a00`；修正前后对比：`http://localhost:3041/h3-entry-comparison.html`。
+
+产物检查：1280×720，24fps，720帧，30.048秒，完整 FFmpeg 解码通过，原 AAC 音轨 SHA256 与源片一致。新任务已发布至项目 snapshots，带真实视频封面。浏览器四路视频 readyState=4，正常速度同步播放时相差小于0.04秒；10.5秒画面可见原片和新版 H3 都在空中，旧 H3 已重新滑行。GUI pill 拖动与键盘选出10–23秒后，主视频暂停在10秒；聊天自动填入“把 @1 的 10.00–23.00 秒换成：”，未发送新的聊天生成。
+
+验证：四组针对性测试43项通过，CLI smoke、TypeScript、四语言UI检查、公开技能生成检查通过；最终 webpack 生产构建通过，10条 CRC32C 与9条 FFmpeg API traces通过。本轮保留本地候选和验收服务器，未合并、未部署生产。
