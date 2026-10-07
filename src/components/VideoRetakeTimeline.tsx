@@ -25,7 +25,7 @@ export default function VideoRetakeTimeline({ url, duration, time, sourceOffset 
       const images: string[] = [];
       for (let i = 0; i < 8 && active; i++) {
         await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => { sampler.onseeked = null; reject(new Error('seek')); }, 5000);
+          const timer = setTimeout(() => { sampler.onseeked = null; reject(new Error('seek')); }, 15000);
           sampler.onseeked = () => { clearTimeout(timer); resolve(); };
           sampler.currentTime = Math.min(sampler.duration - .05, sourceOffset + (i + .5) * length / 8);
         });
@@ -77,7 +77,9 @@ export default function VideoRetakeTimeline({ url, duration, time, sourceOffset 
       onTimeUpdate={() => { if (video.current && video.current.currentTime >= sourceOffset + length) video.current.pause(); }}
       className="mt-2 max-h-36 w-full rounded-lg" />
     <div className="relative mt-3 flex h-12 overflow-hidden rounded-lg bg-white/10" aria-hidden="true">
-      {frames.map((frame, i) => <img key={i} src={frame} alt="" className="h-full min-w-0 flex-1 object-cover" />)}
+      {Array.from({ length: 8 }, (_, i) => frames[i]
+        ? <img key={i} src={frames[i]} alt="" className="h-full min-w-0 flex-1 object-cover" />
+        : <div key={i} className="h-full min-w-0 flex-1 bg-white/5" />)}
       <div className="pointer-events-none absolute inset-y-0 border-2 border-fuchsia-300 bg-fuchsia-400/25" style={{ left: `${start / length * 100}%`, width: `${(end - start) / length * 100}%` }} />
     </div>
     <div className="mt-2 grid grid-cols-2 gap-3">
