@@ -3165,6 +3165,17 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       .catch(e => console.warn('Artifact action failed:', e));
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
+  const handleVideoRetake = useCallback((anim: ProjectAnimation, start: number, end: number) => {
+    if (gateInteraction() || !projectId || isAgentActive) return;
+    const snapIndex = snapshotsRef.current.findIndex(s => s.id === anim.id);
+    if (snapIndex < 0) return;
+    const offset = snapshotsRef.current[snapIndex].videoMeta?.sourceRange?.start_sec ?? 0;
+    pendingFrameEditRef.current = null;
+    setCuiDraftAttachments([]);
+    setCuiDraftText(t('video.retakeDraftPrompt', snapIndex + 1, (start + offset).toFixed(2), (end + offset).toFixed(2)));
+    setViewMode('cui');
+  }, [gateInteraction, projectId, isAgentActive, t]);
+
   const handleVideoFrameEdit = useCallback((anim: ProjectAnimation, time: number) => {
     if (gateInteraction()) return;
     if (!projectId) { console.warn('video frame edit skipped: no projectId'); return; }
@@ -4167,6 +4178,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       });
                     }}
                     onFrameEdit={handleVideoFrameEdit}
+                    onRetake={handleVideoRetake}
                     currentTime={videoGuiTime}
                     currentDuration={videoGuiDuration}
                     isDesktop={isDesktop}

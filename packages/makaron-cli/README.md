@@ -417,6 +417,9 @@ npx makaron-cli video create --script "continue the camera move into the next be
 
 # 4. Check status
 npx makaron-cli video status <taskId>
+
+# Rebuild only 2–5 seconds and publish the complete video into the project.
+npx makaron-cli video retake --video input.mp4 --start 2 --end 5 --prompt "Make the umbrella red" --project <id> --model seedance-2.5 --wait --json
 ```
 
 For project/timeline video editing, use:

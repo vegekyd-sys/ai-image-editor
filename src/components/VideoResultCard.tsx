@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ProjectAnimation } from '@/types';
 import { useLocale } from '@/lib/i18n';
 import PillCarousel from '@/components/PillCarousel';
+import VideoRetakeTimeline from './VideoRetakeTimeline';
 import { getModelInfo } from '@/lib/model-registry';
 import type { TranslationKey } from '@/lib/locales/zh';
 
@@ -32,6 +33,7 @@ interface VideoResultCardProps {
   onAbandon: (taskId: string) => void;
   onRetry?: (anim: ProjectAnimation) => void;
   onFrameEdit?: (anim: ProjectAnimation, time: number) => void;
+  onRetake?: (anim: ProjectAnimation, start: number, end: number) => void;
   onViewDetail: (anim: ProjectAnimation) => void;
   currentTime?: number;
   currentDuration?: number;
@@ -39,9 +41,10 @@ interface VideoResultCardProps {
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onRetake, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
+  const [retakeId, setRetakeId] = useState<string | null>(null);
 
   function videoTitle(prompt: string, index: number): string {
     if (!prompt.trim()) return t('video.title', index + 1);
@@ -253,7 +256,7 @@ export default function VideoResultCard({
           </div>
         )}
 
-        {frameEditAnim && onFrameEdit && (
+        {frameEditAnim && (onFrameEdit || onRetake) && (
           <div
             data-testid="video-frame-edit-pill"
             className="mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border border-white/10 transition-all animate-tip-in"
@@ -263,7 +266,7 @@ export default function VideoResultCard({
             }}
           >
             <button
-              onClick={() => onFrameEdit(frameEditAnim, clampTime(currentTime))}
+              onClick={() => onRetake ? setRetakeId(frameEditAnim.id) : onFrameEdit?.(frameEditAnim, clampTime(currentTime))}
               className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
               style={{
                 width: '100%',
@@ -288,7 +291,7 @@ export default function VideoResultCard({
                 </div>
                 <div className={`min-w-0 flex-1 flex flex-col justify-center ${isDesktop ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
                   <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
-                    {t('video.frameEdit')}
+                    {t(onRetake ? 'video.retakeTitle' : 'video.frameEdit')}
                   </div>
                   <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
                     {t('video.frameEditHint', formatTime(currentTime))}
@@ -299,6 +302,11 @@ export default function VideoResultCard({
           </div>
         )}
       </PillCarousel>
+      {frameEditAnim && retakeId === frameEditAnim.id && onRetake && <VideoRetakeTimeline
+        key={frameEditAnim.id} url={frameEditAnim.videoUrl!} duration={currentDuration || frameEditAnim.duration || 0}
+        time={clampTime(currentTime)} onClose={() => setRetakeId(null)}
+        onContinue={(start, end) => { onRetake(frameEditAnim, start, end); setRetakeId(null); }}
+      />}
     </>
   );
 }

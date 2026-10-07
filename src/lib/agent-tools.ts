@@ -11,6 +11,8 @@ import { resolveModelChain } from './model-router';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
+import { submitMcpVideo } from './billing/mcp-video';
+import { RETAKE_MODELS } from './video-retake-contract';
 import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
 import {
@@ -2177,6 +2179,37 @@ function createGenerateAnimationTool(
         }
       }),
     });
+}
+
+function createRetakeVideoTool(scope: AgentToolFactoryScope) {
+  return tool({
+    description: 'Retake a known interval of a ready video. start/end are seconds in the original source timebase; replace only this interval and automatically deliver the complete video with original audio and duration. Use directly when the user supplies a numeric interval; do not relocate a screenshot, cut clips with run_code, or ask for a second merge confirmation. Interval 0.1–15s, source at most 120s. Choose Seedance 2.5 edit (default), fal H3 Max reference generation, or LTX native retake. Preserve the returned task/request receipt and poll it; never regenerate to retry delivery.',
+    inputSchema: z.object({
+      media_index: z.number().int().positive(),
+      start: z.number().nonnegative(),
+      end: z.number().positive(),
+      prompt: z.string().min(1),
+      model: z.enum(RETAKE_MODELS).default('seedance-2.5'),
+      request_id: z.string().uuid().optional(),
+    }),
+    execute: async ({ media_index, start, end, prompt, model, request_id }) => scope.serializeVideoSubmission(async () => {
+      const { ctx } = scope;
+      if (!ctx.userId || !ctx.projectId) return { success: false, message: 'Retake requires an authenticated project.' };
+      const source = await resolveVideoUrlForMediaIndex(ctx, media_index);
+      if (!source.videoUrl) return { success: false, message: source.error ?? 'Select a ready video.' };
+      if (source.sourceRange && (start < source.sourceRange.start_sec || end > source.sourceRange.end_sec)) {
+        return { success: false, message: 'Retake interval must be within the visible original-source range.' };
+      }
+      const result = await submitMcpVideo({ images: [], script: prompt, videoUrl: source.videoUrl,
+        retake: { start, end }, videoModel: model, projectId: ctx.projectId, billingRequestId: request_id,
+      }, { userId: ctx.userId, apiKeyId: null, toolName: 'retake_video' });
+      if (result.success && result.taskId && result.snapshotId) {
+        const row = await ctx.supabase?.from('snapshots').select('video_meta').eq('id', result.snapshotId).maybeSingle();
+        if (row?.data?.video_meta) ctx.pendingVideoSnapshot = { snapshotId: result.snapshotId, taskId: result.taskId, videoMeta: row.data.video_meta };
+      }
+      return result;
+    }),
+  });
 }
 
 function createUpscaleVideoTool(scope: AgentToolFactoryScope) {
@@ -5372,6 +5405,7 @@ const tools = preserveOptionalToolFields({
     generate_image: createGenerateImageTool(scope),
 
     generate_animation: createGenerateAnimationTool(scope),
+    retake_video: createRetakeVideoTool(scope),
 
     upscale_video: createUpscaleVideoTool(scope),
 

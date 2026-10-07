@@ -7,7 +7,7 @@ import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
 import { isBillingEnabled, recordSubscriptionUsage, requireCredits } from './credits'
 import { quoteVideo, type MediaQuote, type VideoQuoteInput } from './media-pricing'
 
-export interface McpVideoOwner { userId: string; apiKeyId: string; toolName: string }
+export interface McpVideoOwner { userId: string; apiKeyId: string | null; toolName: string }
 
 async function rpc(name: string, args: Record<string, unknown>) {
   const { data, error } = await getSupabaseAdmin().rpc(name, args)
@@ -64,7 +64,7 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
     reservedQuote = quote
   }
   const result = await createVideo({
-    ...input, userId: owner.userId, billingToolName: owner.toolName, billingSource: 'mcp',
+    ...input, billingRequestId: requestId, userId: owner.userId, billingToolName: owner.toolName, billingSource: 'mcp',
     onBeforeProviderSubmit: async resolved => {
       usage = resolved; if (!subscription) await reserve()
       return { reservedUpscaleCredits: reservedQuote?.upscaleCredits ?? 0 }
@@ -87,7 +87,7 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
       return { ...result, retryable: false, message: `${result.message}\nBilling reconciliation required. Request: ${requestId}. Do not resubmit this job.` }
     }
   } else if (result.success && result.provider === 'grok-subscription') {
-    await recordSubscriptionUsage(owner.userId, 'grok-subscription', owner.toolName, 'grok', { apiKeyId: owner.apiKeyId })
+    await recordSubscriptionUsage(owner.userId, 'grok-subscription', owner.toolName, 'grok', { apiKeyId: owner.apiKeyId ?? undefined })
   }
   if (reserved && result.submissionUncertain && !result.taskId) {
     return { ...result, retryable: false, errorCode: 'SUBMISSION_UNCERTAIN',

@@ -5,6 +5,8 @@ import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupported
 const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
 
 export interface CreateVideoInput {
+  /** Product Retake interval, in source-video seconds. */
+  retake?: { start: number; end: number };
   script: string;
   images: string[];          // public URLs only (no base64)
   duration?: number;         // 3, 5, 7, 10, or 15 seconds. Omit for smart mode
@@ -48,6 +50,8 @@ export interface CreateVideoInput {
 }
 
 export interface CreateVideoResult {
+  snapshotId?: string;
+  sourceDuration?: number;
   success: boolean;
   taskId?: string;
   videoModel?: string;
@@ -251,6 +255,7 @@ function prepareWan30References(options: {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
+  if (input.retake) return (await import('../video-retake')).createVideoRetake(input);
   const selected = normalizeVideoModelId(input.videoModel);
   if (selected === 'seedance-2.5-eco' || selected === 'bytedance-video-upscale') {
     const { createVideoPipeline } = await import('../video-upscale-pipeline');

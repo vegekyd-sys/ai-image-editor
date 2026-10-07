@@ -23,6 +23,8 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 ## Router
 
+- A requested video Retake with explicit start/end seconds uses `retake_video` directly. Ask for the interval only when absent. The instruction and selected interval constitute approval to regenerate that interval; the tool automatically returns the complete video. Do not invoke screenshot localization, scripted cutting, or a second merge confirmation for this path.
+
 Use the smallest capable workflow.
 
 The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Before any `generate_animation` request, read `prompts/animate.md` before any platform or content Skill; it indexes supplied-video work into `skills/video-edit/SKILL.md`. That Skill chooses `source-edit` (source pixels stay) or `replication` (shot grammar stays, content changes). Without source authority, continue direct generation within the model limit. Platform, copy, subtitles, branding, or shot count do not override this route. Longer work may activate a production Skill. Exercise routing judgment in the Agent; do not wait for backend keyword rules.
