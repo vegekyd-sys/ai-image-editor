@@ -39,10 +39,10 @@ export function retakeVideoMeta(job: Job): VideoMeta {
     retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url },
     width: Number(job.source_meta.width), height: Number(job.source_meta.height) }
 }
-async function publish(job: Job) {
+async function publish(job: Job, videoBuffer?: Buffer) {
   if (!job.project_id) return
   const admin = getSupabaseAdmin()
-  const { data: existing, error: readError } = await admin.from('snapshots').select('id,video_meta').eq('id', job.id).maybeSingle()
+  const { data: existing, error: readError } = await admin.from('snapshots').select('id,video_meta,image_url').eq('id', job.id).maybeSingle()
   if (readError) throw new Error('Cannot read Retake snapshot receipt.')
   if (existing) {
     if (existing.video_meta?.status === 'abandoned') return
@@ -54,6 +54,11 @@ async function publish(job: Job) {
     const { error } = await admin.from('snapshots').insert({ id: job.id, project_id: job.project_id, type: 'video',
       image_url: VIDEO_PLACEHOLDER_IMAGE, tips: [], message_id: '', sort_order: order ?? 0, video_meta: retakeVideoMeta(job) })
     if (error) throw new Error('Could not publish Retake snapshot.')
+  }
+  if (job.stage === 'completed' && job.output_url) {
+    const { ensureVideoPosterForSnapshot } = await import('./video-poster-repair')
+    await ensureVideoPosterForSnapshot({ admin, ownerUserId: job.user_id, projectId: job.project_id,
+      snapshotId: job.id, videoUrl: job.output_url, currentImageUrl: existing?.image_url, videoBuffer })
   }
 }
 function status(job: Job): GetVideoStatusResult {
@@ -170,6 +175,7 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
     .eq('id', id).eq('user_id', userId).eq('updated_at', job.updated_at).or(`lease_until.is.null,lease_until.lt.${now}`).select('id').maybeSingle()
   if (claimError) throw new Error('Could not claim Retake delivery.')
   if (!claimed) return status(job)
+  let completedBuffer: Buffer | undefined
   try {
     if (job.stage === 'generating' && job.provider_task_id) {
       const result = job.model_id === 'ltx-2.3-retake' ? await pollLtxRetake(job.provider_task_id)
@@ -188,10 +194,11 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
       const started = performance.now()
       const [source, patch] = await Promise.all([readProviderImage(job.source_url, 512 * 1024 * 1024), readProviderImage(job.patch_url, 512 * 1024 * 1024)])
       const final = await assembleRetake(source, patch, job.plan)
+      completedBuffer = final.bytes
       const outputUrl = await store(job, final.bytes, 'final')
       await save(job, { output_url: outputUrl, stage: 'completed', timings: { ...job.timings, assemblyMs: performance.now() - started, totalMs: Date.now() - Date.parse(job.created_at) } }, token)
     }
-    await publish(job)
+    await publish(job, completedBuffer)
     await settle(job)
     return status(job)
   } catch {
