@@ -37,7 +37,7 @@ export function retakeVideoMeta(job: Job): VideoMeta {
     duration: job.plan.sourceDuration, model: job.model_id, resolution: job.resolution as VideoMeta['resolution'], operation: 'edit',
     createdAt: job.created_at, error: job.error, pipelineStage: job.stage,
     retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url,
-      inputDuration: (job.source_meta.boundaryFrames as { middle?: unknown } | undefined)?.middle || job.source_meta.endFrameUrl ? 0
+      inputDuration: (job.source_meta.boundaryFrames as { middle?: unknown } | undefined)?.middle || (job.model_id === 'fal-h3-max' && (job.source_meta.endFrameUrl || job.source_meta.cameraChange)) ? 0
         : job.context_url ? job.plan.contextEnd - job.plan.contextStart : undefined, generationDuration: job.plan.generationDuration },
     width: Number(job.source_meta.width), height: Number(job.source_meta.height) }
 }
@@ -85,7 +85,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     if (!input.userId || !input.retake || !input.videoUrl) throw new Error('Retake requires an authenticated owner, source video and start/end seconds.')
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
-    if(input.retake.endFrame && (model!=='fal-h3-max' || input.videoResolution==='1080p' || !/^https?:\/\//.test(input.retake.endFrame.imageUrl))) throw new Error('An explicit end frame requires H3 native 480p/768p and a ready hosted image.')
+    if(input.retake.endFrame && (!/^https?:\/\//.test(input.retake.endFrame.imageUrl) || (model==='fal-h3-max' && input.videoResolution==='1080p'))) throw new Error('An explicit final image requires a ready hosted image; H3 uses native 480p/768p.')
     if (!input.script.trim()) throw new Error('Describe what to change in the selected interval.')
     const referenceImages = input.images.filter(Boolean)
     if (referenceImages.length > 6 || referenceImages.some(url => !/^https?:\/\//.test(url))) throw new Error('Retake supports up to six hosted image references.')
@@ -114,7 +114,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const now = new Date().toISOString()
     job = { id, user_id: input.userId, project_id: input.projectId ?? null, fingerprint, stage: 'preparing', source_url: input.videoUrl,
       instruction: input.script, model_id: model, resolution: input.videoResolution && input.videoResolution !== 'auto' ? input.videoResolution : model === 'fal-h3-max' ? '768p' : '720p',
-      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}),...(input.retake.endFrame ? {endFrameUrl:input.retake.endFrame.imageUrl} : {}) },
+      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}),...(input.retake.endFrame ? {endFrameUrl:input.retake.endFrame.imageUrl} : {}), ...(input.retake.cameraChange ? {cameraChange:true} : {}) },
       timings: {}, created_at: now, updated_at: now }
     const { error: insertError } = await admin.from(TABLE).insert(job)
     if (insertError) throw new Error('Could not create the Retake receipt. No provider submitted.')
@@ -139,7 +139,6 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     }
     await save(job, { context_url: contextUrl, stage: 'prepared', timings: { preparationMs: performance.now() - started } })
     const prompt = retakePrompt(input.script)
-    let result: CreateVideoResult
     const beforeSubmit = async (usage: Parameters<NonNullable<CreateVideoInput['onBeforeProviderSubmit']>>[0]) => {
       const reservation = await input.onBeforeProviderSubmit?.(usage)
       await save(job!, { stage: 'submitting' })
@@ -148,9 +147,9 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     }
     // Optional visual-state controls define the desired result alongside
     // source context; omit conflicting video references when those controls apply.
-    const useVideoReference = !boundaryFrames?.middle && !input.retake.endFrame
-    result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
-      images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages], h3RetakeBoundaryFrames: boundaryFrames,
+    const useVideoReference = model !== 'fal-h3-max' || (!boundaryFrames?.middle && !input.retake.endFrame && !input.retake.cameraChange)
+    const result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
+      images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages, ...(model !== 'fal-h3-max' && input.retake.endFrame ? [input.retake.endFrame.imageUrl] : [])], h3RetakeBoundaryFrames: boundaryFrames,
       script: prompt, duration: model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,
       referenceVideoDuration: useVideoReference ? plan.contextEnd - plan.contextStart : undefined, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
@@ -209,7 +208,8 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
     if (job.stage === 'assembling' && job.patch_url) {
       const started = performance.now()
       const [source, patch] = await Promise.all([readProviderImage(job.source_url, 512 * 1024 * 1024, {mediaType:'video'}), readProviderImage(job.patch_url, 512 * 1024 * 1024, {mediaType:'video'})])
-      const final = await assembleRetake(source, patch, job.plan)
+      const finalImage = job.source_meta.endFrameUrl ? await readProviderImage(String(job.source_meta.endFrameUrl), 20 * 1024 * 1024) : undefined
+      const final = await assembleRetake(source, patch, job.plan, finalImage)
       completedBuffer = final.bytes
       const outputUrl = await store(job, final.bytes, `final-${createHash('sha256').update(final.bytes).digest('hex').slice(0, 12)}`)
       await save(job, { output_url: outputUrl, stage: 'completed', timings: { ...job.timings, assemblyMs: performance.now() - started, totalMs: Date.now() - Date.parse(job.created_at) } }, token)

@@ -20,7 +20,7 @@ export function bindRetakeReferences(input: {
   }
   return input.prompt.replace(/<<<(?:media|image)_(\d+)>>>/gi, (_, raw: string) => {
     const index = Number(raw);
-    if(index===input.endIndex) return 'Image 2';
+    if(index===input.endIndex) return input.model === 'fal-h3-max' ? 'Image 2' : `<<<image_${input.referenceIndices.length + 1}>>>`;
     if (index === input.sourceIndex) return input.model === 'fal-h3-max'
       ? input.middleIndex || input.endIndex ? 'the inspected original scene' : 'Video 1' : '@video1';
     if (index === input.middleIndex) return 'Image 3';

@@ -125,12 +125,14 @@ export async function extractRetakeBoundaryFrames(source: Buffer, plan: RetakePl
 }
 
 /** Replace only selected frames. The original complete audio bed is mapped once. */
-export async function assembleRetake(source: Buffer, patch: Buffer, plan: RetakePlan): Promise<{ bytes: Buffer; meta: VideoProbe }> {
-  return withFiles({ 'source.mp4': source, 'patch.mp4': patch }, async (dir, ffmpeg) => {
+export async function assembleRetake(source: Buffer, patch: Buffer, plan: RetakePlan, finalImage?: Buffer): Promise<{ bytes: Buffer; meta: VideoProbe }> {
+  return withFiles({ 'source.mp4': source, 'patch.mp4': patch, ...(finalImage ? {'ending.png': finalImage} : {}) }, async (dir, ffmpeg) => {
     const [meta, generated] = await Promise.all([probeRetakeVideoFile(join(dir, 'source.mp4')), probeRetakeVideoFile(join(dir, 'patch.mp4'))])
     if (!meta.fps || !meta.width || !meta.height || !meta.duration || !generated.duration) throw new Error('Cannot measure Retake output.')
-    const fps = meta.fps, startFrame = Math.round(plan.start * fps), endFrame = Math.round(plan.end * fps)
-    const totalFrames = Math.round(meta.duration * fps), replacementFrames = endFrame - startFrame
+    if (finalImage && Math.abs(meta.duration - plan.end) > 1 / meta.fps + .001) throw new Error('An explicit final image cannot replace an internal join.')
+    const fps = meta.fps, totalFrames = Math.round(meta.duration * fps)
+    const startFrame = Math.round(plan.start * fps), endFrame = finalImage ? totalFrames : Math.round(plan.end * fps)
+    const replacementFrames = endFrame - startFrame
     if (replacementFrames <= 0) throw new Error('Retake interval is shorter than one source frame.')
     const contextLength = plan.contextEnd - plan.contextStart
     const fittedDuration = contextLength
@@ -147,14 +149,26 @@ export async function assembleRetake(source: Buffer, patch: Buffer, plan: Retake
     const graph = [
       plan.outputMode === 'selection' ? selectionPatch : `[1:v]setpts=${fittedDuration / generated.duration}*(PTS-STARTPTS),fps=${fps},${scale},trim=start=${offset},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${replacementFrames},setpts=PTS-STARTPTS[p]`,
     ]
+    // Exact user-supplied final images are assets, not text for a model to
+    // redraw. Settle gently onto the fitted original during the closing beat.
+    let patchLeg = '[p]'
+    if (finalImage) {
+      const tailFrames = Math.max(1, Math.min(Math.round(.75 * fps), Math.floor(replacementFrames / 3)))
+      const fadeFrames = Math.min(Math.round(.25 * fps), Math.floor(tailFrames / 2))
+      const fadeStart = (replacementFrames - tailFrames) / fps, holdStart = (replacementFrames - tailFrames + fadeFrames) / fps
+      const alpha = fadeFrames ? `min(1,max(0,(T-${fadeStart})/${holdStart-fadeStart}))` : `gte(T,${fadeStart})`
+      graph.push(`[2:v]fps=${fps},${scale},setpts=PTS-STARTPTS[e];[p][e]blend=all_expr='A*(1-(${alpha}))+B*(${alpha})':shortest=1[anchored]`)
+      patchLeg = '[anchored]'
+    }
     const legs: string[] = []
     if (startFrame > 0) { graph.push(`[0:v]fps=${fps},trim=end_frame=${startFrame},setpts=PTS-STARTPTS,setsar=1,format=yuv420p[b]`); legs.push('[b]') }
-    legs.push('[p]')
+    legs.push(patchLeg)
     if (endFrame < totalFrames) { graph.push(`[0:v]fps=${fps},trim=start_frame=${endFrame}:end_frame=${totalFrames},setpts=PTS-STARTPTS,setsar=1,format=yuv420p[a]`); legs.push('[a]') }
     graph.push(`${legs.join('')}concat=n=${legs.length}:v=1:a=0[v]`)
     const output = join(dir, 'final.mp4')
     await exec(ffmpeg, ['-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-i', join(dir, 'source.mp4'), '-protocol_whitelist', 'file,pipe', '-i', join(dir, 'patch.mp4'),
-      '-filter_complex', graph.join(';'), '-map', '[v]', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
+      ...(finalImage ? ['-loop','1','-framerate',String(fps),'-i',join(dir,'ending.png')] : []),
+      '-filter_complex_threads','1','-filter_complex', graph.join(';'), '-map', '[v]', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'veryfast', '-threads','2','-crf', '18',
       '-pix_fmt', 'yuv420p', '-r', String(fps), '-fps_mode', 'cfr', '-c:a', 'copy', '-t', String(meta.duration), '-movflags', '+faststart', output],
       { timeout: 180_000, maxBuffer: 1024 * 1024 })
     const finalMeta = await probeVideoFile(output)

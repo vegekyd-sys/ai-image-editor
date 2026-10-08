@@ -86,6 +86,28 @@ describe('Retake interval contract', () => {
       expect(pixel(72).every(v=>v<10)).toBe(true);
     } finally { rmSync(dir,{recursive:true,force:true}); }
   },30_000);
+  it.each(['fal-h3-max','seedance-2.5-eco'])('preserves a supplied final asset and source audio at EOF (%s)', async model => {
+    const dir = mkdtempSync(join(tmpdir(), 'retake-final-asset-'));
+    const ffmpeg = await findFfmpeg();
+    const run = (args: string[]) => execFileSync(ffmpeg, ['-v','error','-y',...args]);
+    try {
+      const src = join(dir,'source.mp4'), patch = join(dir,'patch.mp4'), final = join(dir,'final.mp4');
+      run(['-f','lavfi','-i','color=red:s=320x240:r=24:d=6','-f','lavfi','-i','sine=frequency=440:duration=6','-c:v','libx264','-c:a','aac','-shortest',src]);
+      run(['-f','lavfi','-i','color=blue:s=320x240:r=24:d=5','-c:v','libx264',patch]);
+      const {default:sharp} = await import('sharp');
+      const image = await sharp({create:{width:320,height:240,channels:3,background:'white'}}).png().toBuffer();
+      const result = await assembleRetake(readFileSync(src),readFileSync(patch),planRetake({start:3,end:6},6,model),image);
+      const {writeFileSync} = await import('node:fs'); writeFileSync(final,result.bytes);
+      const pixel = (time:number) => [...run(['-ss',String(time),'-i',final,'-frames:v','1','-vf','scale=1:1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'])];
+      expect(pixel(2)[0]).toBeGreaterThan(200);
+      expect(pixel(4)[2]).toBeGreaterThan(200);
+      expect(pixel(5.8).every(x=>x>245)).toBe(true);
+      expect(result.meta.duration).toBeCloseTo(6,1);
+      const audioHash = (f:string) => run(['-i',f,'-map','0:a','-c:a','copy','-f','hash','pipe:1']).toString();
+      expect(audioHash(final)).toBe(audioHash(src));
+      await expect(assembleRetake(readFileSync(src),readFileSync(patch),planRetake({start:2,end:4},6,model),image)).rejects.toThrow(/internal join/);
+    } finally {rmSync(dir,{recursive:true,force:true});}
+  },30_000);
   it('assembles only the selected frames and copies original audio', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'retake-test-'));
     const ffmpeg = await findFfmpeg();

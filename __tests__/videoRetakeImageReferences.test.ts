@@ -54,3 +54,24 @@ it('rejects replacing an internal join with a final image before submitting or c
   expect(stubs.provider).not.toHaveBeenCalled();
   expect(stubs.jobs).toHaveLength(0);
 });
+
+it('retains the source clip and binds the literal ending asset for Seedance Eco',async()=>{
+  const ending='https://image.example/final.png';
+  const result=await createVideoRetake({userId:'owner',projectId:'project',images:['https://image.example/content.jpg'],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:24.05,end:30.05,endFrame:{imageUrl:ending}},script:'Transition into <<<image_2>>>.',videoModel:'seedance-2.5-eco'});
+  expect(result.success).toBe(true);
+  const submitted=stubs.provider.mock.calls[0][0];
+  expect(submitted.videoUrl).toContain('-context.mp4');
+  expect(submitted.images).toEqual(['https://image.example/content.jpg',ending]);
+  expect(submitted.videoOperation).toBe('edit');
+  expect(retakeVideoMeta(stubs.jobs[0])).toMatchObject({retake:{inputDuration:6},sourceUrls:expect.arrayContaining([ending])});
+});
+
+it('lets H3 change camera coverage from inspected boundary states without replaying the source camera',async()=>{
+  const result=await createVideoRetake({userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:18,end:21,cameraChange:true},script:'Show the same advancing action from distinct new views.',videoModel:'fal-h3-max'});
+  expect(result.success).toBe(true);
+  const submitted=stubs.provider.mock.calls[0][0];
+  expect(submitted.videoUrl).toBeUndefined();
+  expect(submitted.images).toHaveLength(2);
+  expect(submitted.h3RetakeBoundaryFrames).toMatchObject({lockEndpoints:true});
+  expect(retakeVideoMeta(stubs.jobs[0])).toMatchObject({retake:{inputDuration:0}});
+});

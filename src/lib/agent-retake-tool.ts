@@ -31,12 +31,12 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       source_observation: z.string().optional().describe('Timestamped visible evidence: subject identity, original camera coverage, selected opening/middle/closing action states, travel direction/contact/occlusion, and uncertainty. Keep contextual boundary states separate. Do not substitute requested changes for observed facts.'),
       model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
       reference_media_indices: z.array(z.number().int().positive()).max(6).optional().describe('Timeline IMAGE references to incorporate into the edited scene, such as the supplied logo, product or ending card. Read their pixels first. Mention each as <<<media_N>>> in prompt. These are creative image references, not screenshot locators, source videos or camera middle keyframes.'),
-      end_frame_media_index: z.number().int().positive().optional().describe('H3: the ready IMAGE explicitly selected by the user as the final frame of the whole video. The selection must reach the video end. Pass that existing image directly, mention <<<media_N>>> in prompt, and transition into its actual composition. Do not generate a substitute image. A content reference to integrate inside a scene is reference_media_indices instead.'),
+      end_frame_media_index: z.number().int().positive().optional().describe('The ready IMAGE explicitly selected by the user as the final frame of the whole video. The selection must reach the video end. Pass that existing image directly, mention <<<media_N>>> in prompt, and transition into its actual composition. The provider makes the transition; delivery settles on the original image without regenerating its text/layout. Supported with H3 and Seedance. Do not generate a substitute image. A content reference to integrate inside a scene is reference_media_indices instead.'),
       middle_frame_media_index: z.number().int().positive().optional().describe('Optional H3 desired intermediate visual state, using a suitable ready image or a checked source-led generated image only when needed. Read its pixels and verify compatibility with this scene and action phase. This is native Image 3; using it is not mandatory for camera or content edits.'),
       middle_frame_time: z.number().positive().optional().describe('Output-local time for the optional H3 intermediate visual state, strictly between output endpoints. Match the chosen state to the scene, action and requested temporal development.'),
       request_id: z.string().uuid().optional(),
     }),
-    execute: async ({ media_index, start, end, prompt, shot_plan, model, request_id, inspection_id, source_observation, reference_media_indices = [], end_frame_media_index, middle_frame_media_index, middle_frame_time }) => serializeVideoSubmission(async () => {
+    execute: async ({ media_index, start, end, prompt, shot_plan, camera_change, model, request_id, inspection_id, source_observation, reference_media_indices = [], end_frame_media_index, middle_frame_media_index, middle_frame_time }) => serializeVideoSubmission(async () => {
       if (!ctx.userId || !ctx.projectId) return { success: false, message: 'Retake requires an authenticated project.' };
       const source = await resolveSource(ctx, media_index);
       if (!source.videoUrl) return { success: false, message: source.error ?? 'Select a ready video.' };
@@ -57,7 +57,6 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
         if (model !== 'fal-h3-max' || !imageUrl || !Number.isFinite(middle_frame_time) || middle_frame_time! <= 0 || Math.round(middle_frame_time!*24) >= clock.generationDuration*24-1) return {success:false,message:'Choose a ready H3 image keyframe and a time strictly inside its native output before video submission.'};
         middleFrame = {imageUrl,time:middle_frame_time!};
       }
-      if (end_frame_media_index && model !== 'fal-h3-max') return {success:false,message:'Explicit native end-frame control currently requires FAL H3 Max.'};
       const creativeIndices = reference_media_indices.filter(index=>index!==end_frame_media_index);
       const referenceImages: string[] = [];
       const imageRows = (reference_media_indices.length || end_frame_media_index) && ctx.supabase
@@ -81,7 +80,7 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       const hash = ctx.execution ? createHash('sha256').update(JSON.stringify([ctx.execution.runId, ctx.execution.inputEpoch, media_index, start, end, providerPrompt, model, middleFrame, ...(referenceImages.length ? [referenceImages] : []),...(endFrame ? [endFrame] : [])])).digest('hex') : undefined;
       const stableId = hash ? `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}` : undefined;
       const result = await submit({ images: referenceImages, script: providerPrompt, videoUrl: source.videoUrl,
-        retake: { start, end, ...(middleFrame ? {middleFrame} : {}),...(endFrame ? {endFrame} : {}) }, videoModel: model, projectId: ctx.projectId, billingRequestId: request_id ?? stableId,
+        retake: { start, end, ...(camera_change ? {cameraChange:true} : {}), ...(middleFrame ? {middleFrame} : {}),...(endFrame ? {endFrame} : {}) }, videoModel: model, projectId: ctx.projectId, billingRequestId: request_id ?? stableId,
       }, { userId: ctx.userId, apiKeyId: null, toolName: 'retake_video' });
       const snapshotId = result.snapshotId ?? result.taskId?.replace(/^video-retake-/, '');
       if (result.success && result.taskId && snapshotId) {
