@@ -1564,7 +1564,9 @@ function createGenerateImageTool(
         let retakePreviewAnalysis: string | undefined;
         if (retake_source && imageUrl) {
           const {readProviderImage} = await import('./provider-image-preflight');
-          const bytes = await readProviderImage(imageUrl,25*1024*1024);
+          const raw = await readProviderImage(imageUrl,25*1024*1024);
+          const {default:sharp} = await import('sharp');
+          const bytes = await sharp(raw).jpeg({quality:90}).toBuffer();
           if (runtime.spec.supportsImageInput) retakePreviewBase64 = bytes.toString('base64');
           else {
             const {analyzeImageContent} = await import('./gemini');
