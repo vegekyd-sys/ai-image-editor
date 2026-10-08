@@ -8,6 +8,7 @@ import { inspectRetakeSource, extractRetakeContext, extractRetakeBoundaryFrames,
 import { VIDEO_PLACEHOLDER_IMAGE } from './editor/timeline-derivations'
 import type { VideoMeta } from '@/types'
 import { toPublicStorageUrl } from './supabase/storage'
+import { materializeRetakeKeyframe } from './video-retake-keyframe'
 
 const TABLE = 'video_retake_jobs', PREFIX = 'video-retake-'
 type Job = {
@@ -102,7 +103,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const started = performance.now()
     const source = await readProviderImage(input.videoUrl, 512 * 1024 * 1024)
     const meta = await inspectRetakeSource(source)
-    const plan = planRetake(input.retake, meta.duration!, model)
+    const plan = planRetake({ start: input.retake.start, end: input.retake.end }, meta.duration!, model)
     if (Math.round(plan.end * meta.fps!) <= Math.round(plan.start * meta.fps!)) throw new Error('Retake interval must include at least one source frame.')
     const now = new Date().toISOString()
     job = { id, user_id: input.userId, project_id: input.projectId ?? null, fingerprint, stage: 'preparing', source_url: input.videoUrl,
@@ -122,7 +123,10 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     if (model === 'fal-h3-max') {
       const frames = await extractRetakeBoundaryFrames(source, plan, meta.fps!)
       const [startUrl, endUrl] = await Promise.all([store(job, frames.start, 'start', true), store(job, frames.end, 'end', true)])
-      boundaryFrames = { startUrl, endUrl, lockEndpoints: plan.outputMode === 'selection', middle:input.retake.middleFrame }
+      const middle = input.retake.middleFrame
+        ? { ...input.retake.middleFrame, imageUrl: await materializeRetakeKeyframe(input.retake.middleFrame.imageUrl, bytes => store(job!, bytes, 'middle', true)) }
+        : undefined
+      boundaryFrames = { startUrl, endUrl, lockEndpoints: plan.outputMode === 'selection', middle }
       await save(job, { source_meta: { ...job.source_meta, boundaryFrames } })
     }
     await save(job, { context_url: contextUrl, stage: 'prepared', timings: { preparationMs: performance.now() - started } })
