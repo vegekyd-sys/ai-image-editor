@@ -183,7 +183,7 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
           {loading ? <div className="flex min-h-52 items-center justify-center gap-2 text-sm text-white/60" role="status">
             <LoaderCircle size={18} className="animate-spin" aria-hidden="true" />{t('editor.savePreparing')}
           </div> : previewUrl && kind ? <>
-            <div className="mx-auto relative overflow-hidden bg-black" data-testid="save-media-preview"
+            <div className={`mx-auto relative overflow-hidden ${kind === 'image' && imageFormat === 'jpeg' ? 'bg-white' : 'bg-black'}`} data-testid="save-media-preview"
               style={{ width: `min(100%, ${42 * size.width / size.height}dvh)`, aspectRatio: `${size.width} / ${size.height}` }}>
               {kind === 'image' ? <img src={previewUrl} alt={t('editor.savePreview')}
                 className="block w-full h-full object-contain" onLoad={event => setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} />
