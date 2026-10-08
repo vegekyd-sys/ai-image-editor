@@ -54,6 +54,17 @@ export async function extractRetakeInspectionFrames(source: Buffer, plan: Retake
   })
 }
 
+/** A source-led still for the Agent's Retake camera/content keyframe edit. */
+export async function extractRetakeSourceFrame(source: Buffer, time: number): Promise<Buffer> {
+  return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
+    const output = join(dir, 'frame.jpg')
+    await exec(ffmpeg, ['-v','error','-y','-i',join(dir,'source.mp4'),'-ss',String(time),'-frames:v','1',
+      '-vf',"scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",'-q:v','3',output],
+      {timeout:120_000,maxBuffer:1024*1024})
+    return readFile(output)
+  })
+}
+
 /** New H3 outputs represent only the selection; legacy jobs retain context anchors. */
 export async function extractRetakeBoundaryFrames(source: Buffer, plan: RetakePlan, fps: number): Promise<{ start: Buffer; end: Buffer }> {
   if (!Number.isFinite(fps) || fps < 1) throw new Error('Boundary frames require a measured source frame rate.')

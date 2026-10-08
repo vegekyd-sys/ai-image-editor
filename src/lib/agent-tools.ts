@@ -15,7 +15,7 @@ import { createVideo } from './skills/create-video';
 import { submitMcpVideo } from './billing/mcp-video';
 import { createInspectedRetakeVideoTool } from './agent-retake-tool';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL, planRetake, validateRetakeRange } from './video-retake-contract';
-import { signRetakeInspection, retakeInspectionScope, retakeOutputTime } from './video-retake-inspection';
+import { signRetakeInspection, verifyRetakeInspection, retakeInspectionScope, retakeOutputTime } from './video-retake-inspection';
 import { RETAKE_SCENE_READING, RETAKE_PROMPT_WRITING, retakePromptPlanning } from './video-retake-prompt-planning';
 import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
@@ -1390,8 +1390,9 @@ function createGenerateImageTool(
   { ctx, runtime }: AgentToolFactoryScope,
 ) {
   return tool({
-      description: generateImageToolPrompt,
+      description: generateImageToolPrompt + '\nRetake camera/content keyframes: use retake_source after inspect_retake to edit an actual source frame, rather than a video poster or contact sheet. The returned image is a visual checkpoint for H3 middle-frame control. Read its actual pixels and verify the requested camera/content and action phase before passing its mediaIndex to retake_video.',
       inputSchema: z.object({
+        retake_source: z.object({media_index:z.number().int().positive(),start:z.number().nonnegative(),end:z.number().positive(),source_time:z.number().nonnegative(),inspection_id:z.string(),model:z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL)}).optional().describe('Generate a Retake keyframe from a real inspected video frame inside start/end, in original-source seconds. Use the exact inspect_retake receipt. Omit ordinary media_index/reference_media_indices; the actual video frame supplies identity, pose, environment and motion phase. Write editPrompt as the requested new view/content while retaining that phase.'),
         editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite; Nano Banana 2.1 = gemini-2.1 (ordinary image default, OpenRouter, up to 14 input images); classic Nano Banana 2 = gemini. Otherwise omit model for normal auto routing.'),
@@ -1401,7 +1402,7 @@ function createGenerateImageTool(
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, aspectRatio, imageResolution, background, media_index, reference_media_indices }) => {
+      execute: async ({ editPrompt, skill, model, aspectRatio, imageResolution, background, media_index, reference_media_indices, retake_source }) => {
         // GPT-5.6 currently fills omitted optional numeric tool fields with 0.
         // Treat that provider sentinel exactly like omission so empty projects
         // can still use pure text-to-image. Positive indices remain validated.
@@ -1417,8 +1418,19 @@ function createGenerateImageTool(
           editTarget = ctx.currentImage;
         }
 
+        if (retake_source) {
+          const r = retake_source;
+          if (!ctx.userId || !ctx.projectId || media_index || reference_media_indices?.length || r.source_time < r.start || r.source_time >= r.end) return {success:false,message:'Retake keyframe requires an inspected in-selection source frame and no competing image target.'};
+          const source = await resolveVideoUrlForMediaIndex(ctx,r.media_index);
+          if (!source.videoUrl || !verifyRetakeInspection(r.inspection_id,retakeInspectionScope(ctx,source.videoUrl,r.start,r.end,r.model),process.env.SUPABASE_SERVICE_ROLE_KEY || '')) return {success:false,message:'Re-inspect this exact source/range/model before generating a Retake keyframe. No image provider submitted.'};
+          const {readProviderImage} = await import('./provider-image-preflight');
+          const {extractRetakeSourceFrame} = await import('./video-retake-media');
+          const frame = await extractRetakeSourceFrame(await readProviderImage(source.videoUrl,512*1024*1024),r.source_time);
+          editTarget = `data:image/jpeg;base64,${frame.toString('base64')}`;
+        }
+
         // Resolve reference images: user-uploaded + snapshot indices
-        const resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
+        const resolvedRefs = !retake_source && ctx.referenceImages ? [...ctx.referenceImages] : [];
         console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_media_indices?.length) {
           for (const refIdx of reference_media_indices) {
@@ -1548,7 +1560,19 @@ function createGenerateImageTool(
           ? ` Resolved image URL: ${imageUrl}. Use this URL directly in Remotion composition props/code; do not use the <<<media_${mediaIndex}>>> marker inside composition code.`
           : '';
         const indexInfo = mediaIndex ? ` Now <<<media_${mediaIndex}>>>.${urlInfo}` : '';
+        let retakePreviewBase64: string | undefined;
+        let retakePreviewAnalysis: string | undefined;
+        if (retake_source && imageUrl) {
+          const {readProviderImage} = await import('./provider-image-preflight');
+          const bytes = await readProviderImage(imageUrl,25*1024*1024);
+          if (runtime.spec.supportsImageInput) retakePreviewBase64 = bytes.toString('base64');
+          else {
+            const {analyzeImageContent} = await import('./gemini');
+            retakePreviewAnalysis = await analyzeImageContent(`data:image/jpeg;base64,${bytes.toString('base64')}`,'Check this Retake keyframe against the requested camera/content and inspected action phase; report feet/board contact and wheel/ground separation without inventing motion.',ctx.userId);
+          }
+        }
         return {
+          retakePreviewBase64, retakePreviewAnalysis,
           success: skillResult.success as true,
           message: skillResult.message + indexInfo,
           ...(mediaIndex ? { mediaIndex } : {}),
@@ -1560,7 +1584,7 @@ function createGenerateImageTool(
       toModelOutput({ output }: { output: any }) {
         return {
           type: 'content' as const,
-          value: [{ type: 'text' as const, text: formatGeneratedImageForModel(output) }],
+          value: [...(output.retakePreviewBase64 ? [modelFileContent(output.retakePreviewBase64,'image/jpeg')] : []),{ type: 'text' as const, text: formatGeneratedImageForModel(output) + (output.retakePreviewAnalysis ? '\nRetake keyframe visual evidence: '+output.retakePreviewAnalysis : '') }],
         };
       },
     });

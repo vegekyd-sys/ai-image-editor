@@ -20,6 +20,14 @@ describe('H3 Max reference adapter',()=>{
     expect(build({prompt:'new interior angles, matching endpoints',images:[image,end],boundaryFrames:{startUrl:image,endUrl:end,lockEndpoints:true}}))
       .toMatchObject({image_url:image,end_image_url:end,reference_image_urls:[image,end],prompt_expansion_mode:'disabled'});
   });
+  it('uses a validated native middle keyframe and rejects unsupported resolution/timing',()=>{
+    const end='https://example.com/end.jpg',middle='https://example.com/airborne-close.jpg';
+    const input={prompt:'Image 3 is the new airborne close view',images:[image,end,middle],boundaryFrames:{startUrl:image,endUrl:end,lockEndpoints:true,middle:{imageUrl:middle,time:2.5}}};
+    expect(build(input)).toMatchObject({image_url:image,end_image_url:end,middle_image_url:middle,middle_frame_time:2.5,reference_image_urls:[image,end,middle]});
+    expect(()=>build({...input,resolution:'1080p'})).toThrow('middle frame');
+    expect(()=>build({...input,images:[image,end]})).toThrow('middle frame');
+    expect(()=>build({...input,boundaryFrames:{...input.boundaryFrames,middle:{imageUrl:middle,time:5}}})).toThrow('middle frame');
+  });
   it('preserves each modality and index instead of flattening to a first frame',()=>{
     expect(build({prompt:'<<<media_2>>> meets <<<image_1>>>. Follow <<<video_1>>> and <<<audio_1>>>.',images:[image,image],videos:[{url:'v',durationSec:5}],audios:[{url:'https://example.com/a.wav',durationSec:3}]})).toMatchObject({prompt:'Image 2 meets Image 1. Follow Video 1 and Audio 1.',reference_video_urls:['v'],reference_audio_urls:['https://example.com/a.wav']})
   })

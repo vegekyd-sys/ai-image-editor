@@ -19,7 +19,7 @@ export interface H3MaxReferenceInput {
   /** Internal only: createVideo already measured and validated the selected images. */
   imagesVerified?: boolean
   /** Retake only: boundary state references must be included in the measured image references. */
-  boundaryFrames?: { startUrl: string; endUrl: string; lockEndpoints?: boolean }
+  boundaryFrames?: { startUrl: string; endUrl: string; lockEndpoints?: boolean; middle?: {imageUrl:string;time:number} }
 }
 
 function validateClips(clips: Array<{ durationSec: number }>, kind: string): void {
@@ -52,6 +52,11 @@ export function buildH3MaxReferencePayload(input: H3MaxReferenceInput): Record<s
   if (input.boundaryFrames && (!images.includes(input.boundaryFrames.startUrl) || !images.includes(input.boundaryFrames.endUrl))) {
     throw new Error('H3 Retake boundary frames must be included in validated image references.')
   }
+  const middle = input.boundaryFrames?.middle
+  if (middle && (!input.boundaryFrames?.lockEndpoints || resolution === '1080p' || !images.includes(middle.imageUrl)
+    || !Number.isFinite(middle.time) || Math.round(middle.time*24) <= 0 || Math.round(middle.time*24) >= duration*24-1)) {
+    throw new Error('H3 middle frame requires validated imagery, native endpoint locks, 480p/768p and an interior output time.')
+  }
   const counts = { image: images.length, media: images.length, video: videos.length, audio: audios.length }
   const prompt = input.prompt.trim().replace(/<<<(image|media|video|audio)_(\d+)>>>/gi, (_, kind: string, raw: string) => {
     const type = kind.toLowerCase() as keyof typeof counts
@@ -66,6 +71,7 @@ export function buildH3MaxReferencePayload(input: H3MaxReferenceInput): Record<s
     reference_audio_urls: audios.map(clip => clip.url),
     enable_safety_checker: true, prompt_expansion_mode: input.boundaryFrames ? 'disabled' : 'balanced', sync_mode: false,
     ...(input.boundaryFrames?.lockEndpoints ? { image_url: input.boundaryFrames.startUrl, end_image_url: input.boundaryFrames.endUrl } : {}),
+    ...(middle ? {middle_image_url:middle.imageUrl,middle_frame_time:Math.round(middle.time*24)/24} : {}),
     ...(input.seed != null ? { seed: input.seed } : {}),
   }
 }

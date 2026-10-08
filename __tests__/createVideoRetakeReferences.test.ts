@@ -5,7 +5,7 @@ import * as referencePreflight from '@/lib/h3-reference-preflight'
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
-it.each([false, true])('keeps Retake boundary images and the exact final Agent prompt without marker-dependent filtering (native lock: %s)', async lockEndpoints => {
+it.each([false, true, 'middle'])('keeps Retake boundary images and the exact final Agent prompt without marker-dependent filtering (native lock: %s)', async lockEndpoints => {
   const images = ['https://example.com/start.jpg', 'https://example.com/end.jpg']
   const videoUrl = 'https://example.com/context.mp4'
   const prompt = '1–2s: wheel-level tracking. CUT. 2–4s: elevated view of the same landing.'
@@ -21,11 +21,12 @@ it.each([false, true])('keeps Retake boundary images and the exact final Agent p
   }))
   const result = await createVideo({ script: prompt, images, videoUrl, videoModel: 'fal-h3-max',
     videoResolution: '768p', aspectRatio: '16:9', duration: 5, referenceVideoDuration: 5,
-    h3RetakeBoundaryFrames: { startUrl: images[0], endUrl: images[1], lockEndpoints } })
+    h3RetakeBoundaryFrames: { startUrl: images[0], endUrl: images[1], lockEndpoints:!!lockEndpoints, ...(lockEndpoints === 'middle' ? {middle:{imageUrl:images[0],time:2.5}} : {}) } })
   expect(result.success).toBe(true)
   expect(preflight).toHaveBeenCalledWith(images, [videoUrl], [])
   expect(body).toMatchObject({ prompt, reference_image_urls: images,
     reference_video_urls: [videoUrl], prompt_expansion_mode: 'disabled' })
   if (lockEndpoints) expect(body).toMatchObject({image_url:images[0],end_image_url:images[1]})
   else expect(body).not.toHaveProperty('image_url')
+  if (lockEndpoints==='middle') expect(body).toMatchObject({middle_image_url:images[0],middle_frame_time:2.5})
 })

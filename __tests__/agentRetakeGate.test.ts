@@ -7,7 +7,7 @@ const submit = vi.hoisted(() => vi.fn(async () => ({ success: false, message: 't
 afterEach(() => { vi.unstubAllEnvs(); submit.mockClear() })
 
 const sourceUrl = 'https://example.com/original.mp4'
-const ctx = { userId: 'owner', projectId: 'project', snapshotImages: [sourceUrl], agentRunId: 'run' }
+const ctx = { userId: 'owner', projectId: 'project', snapshotImages: [sourceUrl,'https://example.com/air.jpg'], agentRunId: 'run' }
 const scope = { ctx, submit, resolveSource: async () => ({ videoUrl: sourceUrl }), serializeVideoSubmission: async (operation: () => Promise<unknown>) => operation() } as any
 const input = { media_index: 1, start: 18, end: 21, model: 'fal-h3-max', prompt: '1–2s: wheel close-up. CUT. 2–4s: overhead airborne motion.',
   shot_plan: [{ start: 1, end: 2, instruction: 'wheel close-up' }, { start: 2, end: 4, instruction: 'overhead airborne motion' }] }
@@ -30,10 +30,22 @@ describe('Agent Retake paid-submission gate', () => {
   })
   it('submits the inspected Agent prompt unchanged through the normal billing path', async () => {
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-server-secret')
-    await (createInspectedRetakeVideoTool(scope).execute as any)({ ...input, inspection_id: receipt(), source_observation: observation })
+    await (createInspectedRetakeVideoTool(scope).execute as any)({ ...input, inspection_id: receipt(), source_observation: observation, middle_frame_media_index:2,middle_frame_time:2.5 })
     expect(submit).toHaveBeenCalledTimes(1)
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ script: input.prompt, videoUrl: sourceUrl,
-      retake: { start: 18, end: 21 }, videoModel: 'fal-h3-max' }), expect.objectContaining({ toolName: 'retake_video' }))
+      retake: { start: 18, end: 21, middleFrame:{imageUrl:'https://example.com/air.jpg',time:2.5} }, videoModel: 'fal-h3-max' }), expect.objectContaining({ toolName: 'retake_video' }))
+  })
+  it('requires a visual keyframe for H3 camera changes before billing', async () => {
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret')
+    const result = await (createInspectedRetakeVideoTool(scope).execute as any)({...input,inspection_id:receipt(),source_observation:observation})
+    expect(result).toMatchObject({success:false,errorCode:'retake_keyframe_required'})
+    expect(submit).not.toHaveBeenCalled()
+  })
+  it.each([{middle_frame_media_index:99,middle_frame_time:2.5},{middle_frame_media_index:2,middle_frame_time:5},{middle_frame_media_index:2}])('rejects missing images and invalid middle times before billing %j',async middle=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret')
+    const result=await (createInspectedRetakeVideoTool(scope).execute as any)({...input,inspection_id:receipt(),source_observation:observation,...middle})
+    expect(result.success).toBe(false)
+    expect(submit).not.toHaveBeenCalled()
   })
   it.each([
     { shot_plan: [{ start: 0, end: 3, instruction: 'three new cameras' }] },

@@ -84,6 +84,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const model = resolveRetakeModel(input.videoModel)
     if (!input.script.trim()) throw new Error('Describe what to change in the selected interval.')
     if (input.images.some(Boolean) || input.videoUrls?.length || input.audioUrls?.length || input.motionControl) throw new Error('Retake accepts exactly one source video without extra media references.')
+    if (input.retake.middleFrame && (model !== 'fal-h3-max' || input.videoResolution === '1080p' || !Number.isFinite(input.retake.middleFrame.time) || input.retake.middleFrame.time <= 0 || input.retake.middleFrame.time >= Math.max(5,Math.ceil(input.retake.end-input.retake.start))-1/24)) throw new Error('Retake middle-frame control requires H3 native 480p/768p and a time strictly inside its output.');
     const admin = getSupabaseAdmin()
     if (input.projectId) {
       const { data, error } = await admin.from('projects').select('id').eq('id', input.projectId).eq('user_id', input.userId).maybeSingle()
@@ -117,11 +118,11 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     }
     const context = await extractRetakeContext(source, plan)
     const contextUrl = await store(job, context, 'context')
-    let boundaryFrames: { startUrl: string; endUrl: string; lockEndpoints?: boolean } | undefined
+    let boundaryFrames: { startUrl: string; endUrl: string; lockEndpoints?: boolean; middle?: {imageUrl:string;time:number} } | undefined
     if (model === 'fal-h3-max') {
       const frames = await extractRetakeBoundaryFrames(source, plan, meta.fps!)
       const [startUrl, endUrl] = await Promise.all([store(job, frames.start, 'start', true), store(job, frames.end, 'end', true)])
-      boundaryFrames = { startUrl, endUrl, lockEndpoints: plan.outputMode === 'selection' }
+      boundaryFrames = { startUrl, endUrl, lockEndpoints: plan.outputMode === 'selection', middle:input.retake.middleFrame }
       await save(job, { source_meta: { ...job.source_meta, boundaryFrames } })
     }
     await save(job, { context_url: contextUrl, stage: 'prepared', timings: { preparationMs: performance.now() - started } })
@@ -134,7 +135,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       return reservation
     }
     result = await createVideo({ ...input, retake: undefined, videoUrl: contextUrl, videoUrls: undefined,
-      images: boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl] : [], h3RetakeBoundaryFrames: boundaryFrames,
+      images: boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : [], h3RetakeBoundaryFrames: boundaryFrames,
       script: prompt, duration: model === 'seedance-2.5' ? -1 : plan.generationDuration,
       referenceVideoDuration: plan.contextEnd - plan.contextStart, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
