@@ -35,11 +35,11 @@ describe('Agent Retake paid-submission gate', () => {
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ script: input.prompt, videoUrl: sourceUrl,
       retake: { start: 18, end: 21, middleFrame:{imageUrl:'https://example.com/air.jpg',time:2.5} }, videoModel: 'fal-h3-max' }), expect.objectContaining({ toolName: 'retake_video' }))
   })
-  it('requires a visual keyframe for H3 camera changes before billing', async () => {
+  it('allows an inspected camera edit directly without requiring an additional image', async () => {
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret')
     const result = await (createInspectedRetakeVideoTool(scope).execute as any)({...input,inspection_id:receipt(),source_observation:observation})
-    expect(result).toMatchObject({success:false,errorCode:'retake_keyframe_required'})
-    expect(submit).not.toHaveBeenCalled()
+    expect(result).toMatchObject({message:'test submission recorded'})
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({script:input.prompt,retake:{start:18,end:21}}),expect.anything())
   })
   it('allows multiple fixed-camera content phases without generating a camera keyframe',async()=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');

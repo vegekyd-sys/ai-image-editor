@@ -146,8 +146,8 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       posting = true
       return reservation
     }
-    // A checked new camera frame plus native source endpoints defines this
-    // edit. Referencing the original moving camera can suppress its new view.
+    // Optional visual-state controls define the desired result alongside
+    // source context; omit conflicting video references when those controls apply.
     const useVideoReference = !boundaryFrames?.middle && !input.retake.endFrame
     result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
       images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages], h3RetakeBoundaryFrames: boundaryFrames,

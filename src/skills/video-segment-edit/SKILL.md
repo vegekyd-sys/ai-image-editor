@@ -32,10 +32,11 @@ bounded external clip's source offset. Respect the model explicitly selected
 by the user; supported models are FAL H3 Max, Seedance 2.5 Eco (preferred
 Seedance route), and native Seedance 2.5 when explicitly requested.
 
-For a scene/action description such as "机器人起跳那段", use analyze_video and
-preview_frame to locate the actual action, then inspect and edit its bounded
-interval. Ask only if multiple scenes match or the requested scope is unclear.
-For image + existing-video requests such as "把@1加到@2里去，可以是最后出logo的地方，衔接要自然好玩", locate and inspect the video ending and use local editing. Pass the supplied image in retake_video.reference_media_indices and mention <<<media_N>>> in the final prompt. A creative logo/image is not a screenshot locator. Distinguish a content reference from an explicitly chosen final frame: "结尾要是@1" / "用@1作为尾帧" means use that existing image directly as retake_video.end_frame_media_index (H3, range through source end), not generate a new image or keep the old ending. Multiple transition/reveal/hold phases at one camera are camera_change=false; only requested new angles/multi-camera coverage need camera_change=true and a source-led camera keyframe. Do not invent an editable timeline or substitute a Remotion pop-up card; composition is for explicit fixed overlay/layer/editability intent or exact deterministic text/layout requirements.
+For a scene/action description, use analyze_video and preview_frame to locate the actual moment, then inspect and edit its bounded interval. Ask only if multiple scenes match or the requested scope is unclear.
+
+Plan from the footage and the user's intent. Decide which content, action, framing or presentation must change, and what continuity to retain. A persistent change can use one continuous beat; additional temporal phases, shots or transitions must serve the desired result. There is no standard multi-camera sequence and no compulsory intermediate-image generation. Suitable supplied images take priority; an optional new keyframe is useful only when this particular edit needs a missing visual state. Camera changes can be attempted directly with an inspected, concrete prompt; choose an optional visual control when it would improve the result.
+
+Interpret image roles from the request. A content reference to integrate into the scene belongs in reference_media_indices. An explicitly chosen final frame of the whole video belongs in end_frame_media_index when supported, with a range extending to the source end; reuse that actual image instead of generating a substitute. A desired intermediate state may use an optional middle-frame control. Read supplied images and honor their roles; do not treat creative references as screenshots to locate. Distinguish content phases from camera changes when writing camera_change. Composition serves explicit fixed layers/editability or deterministic text/layout; do not invent an editable timeline for a generative scene edit.
 
 Never demand a GUI selection. Requests over 15s or sources over 120s need the
 appropriate whole-video/long-video workflow; never silently shorten them.
@@ -89,7 +90,7 @@ explain the skill mechanism to the user. If the screenshot is missing, say:
 
 Ordinary natural-language CLI requests need no skill flag or GUI interaction:
 
-`makaron chat --project <id> "把 @1 的 18–21 秒切成多机位，其余不变"`
+`makaron chat --project <id> "把 @1 的最后三秒改成夜景，其余不变"`
 
 Once located, use inspect_retake and retake_video. Poll the root task and deliver
 the complete result automatically, without a separate merge command.
