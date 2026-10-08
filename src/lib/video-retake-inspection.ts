@@ -12,23 +12,47 @@ export interface RetakeInspectionScope {
   model: string
 }
 
+export interface RetakeInspectionClock {
+  outputSelection: { start: number; end: number }
+  generationDuration: number
+}
+
 function fingerprint(scope: RetakeInspectionScope): string {
   return createHash('sha256').update(JSON.stringify(scope)).digest('hex')
 }
 
 /** A receipt survives durable continuation, but cannot be reused for another source,
  * selection, model, owner, run, or newer instruction. It contains no credentials. */
-export function signRetakeInspection(scope: RetakeInspectionScope, secret: string): string {
+export function signRetakeInspection(scope: RetakeInspectionScope, secret: string, clock?: RetakeInspectionClock): string {
   if (!secret) throw new Error('Retake inspection signing is unavailable.')
-  const value = `retake-v1.${fingerprint(scope)}`
+  const value = clock
+    ? `retake-v2.${fingerprint(scope)}.${Buffer.from(JSON.stringify(clock)).toString('base64url')}`
+    : `retake-v1.${fingerprint(scope)}`
   return `${value}.${createHmac('sha256', secret).update(value).digest('base64url')}`
 }
 
 export function verifyRetakeInspection(receipt: string | undefined, scope: RetakeInspectionScope, secret: string): boolean {
   if (!receipt || !secret) return false
+  if (receipt.startsWith('retake-v2.')) return !!readRetakeInspectionClock(receipt, scope, secret)
   const expected = Buffer.from(signRetakeInspection(scope, secret))
   const supplied = Buffer.from(receipt)
   return expected.length === supplied.length && timingSafeEqual(expected, supplied)
+}
+
+/** Verify the measured output clock before trusting any Agent-proposed shot times. */
+export function readRetakeInspectionClock(receipt: string | undefined, scope: RetakeInspectionScope, secret: string): RetakeInspectionClock | null {
+  if (!receipt || !secret) return null
+  const parts = receipt.split('.')
+  if (parts.length !== 4 || parts[0] !== 'retake-v2' || parts[1] !== fingerprint(scope)) return null
+  const expected = Buffer.from(createHmac('sha256', secret).update(parts.slice(0, 3).join('.')).digest('base64url'))
+  const supplied = Buffer.from(parts[3])
+  if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return null
+  try {
+    const clock = JSON.parse(Buffer.from(parts[2], 'base64url').toString()) as RetakeInspectionClock
+    const { start, end } = clock.outputSelection
+    if (![start, end, clock.generationDuration].every(Number.isFinite) || start < 0 || end <= start || end > clock.generationDuration) return null
+    return clock
+  } catch { return null }
 }
 
 /** Include the selected action and both surrounding reference boundary states. */

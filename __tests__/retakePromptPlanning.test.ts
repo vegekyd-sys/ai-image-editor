@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { planRetake } from '@/lib/video-retake-contract'
-import { retakePromptPlanning } from '@/lib/video-retake-prompt-planning'
+import { retakePromptPlanning, retakeShotPlanError } from '@/lib/video-retake-prompt-planning'
 
 describe('inspection-to-prompt timing budget', () => {
   it('makes the three-second example readable with three distinct shot slots', () => {
@@ -24,5 +24,9 @@ describe('inspection-to-prompt timing budget', () => {
         if (index) expect(slot.start).toBe(slots[index - 1].end)
       })
     }
+  })
+  it('allows persistent content edits and ordinary numbers that are not shot times', () => {
+    expect(retakeShotPlanError([{ start: 1, end: 4, instruction: 'add a small character beside the board throughout' }],
+      'Add one small character, 3D animation, a high three-quarter angle. From 1–4s keep it visible.', { start: 1, end: 4 })).toBeNull()
   })
 })

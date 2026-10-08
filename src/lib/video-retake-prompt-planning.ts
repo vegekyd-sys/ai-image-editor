@@ -13,6 +13,35 @@ For content changes, specify the new content's placement, scale, interaction and
 For H3, refer to Video 1 for identity/environment/action timing and Image 1 / Image 2 only for context boundary states. Boundary images are reference assets, not exact-frame camera locks. For Seedance, describe the requested edit to the supplied clip without inventing H3 image references.
 Before submitting, check that the change is visible, beats fit outputSelection, camera and preservation instructions do not conflict, and the closing action matches the evidence. Revise a vague or contradictory prompt before the one paid submission. Do not promise that a completed provider task proves the change succeeded.`
 
+export interface RetakeShotBeat { start: number; end: number; instruction: string }
+
+/** Reject an edit planned in selected-relative time before it can be charged. */
+export function retakeShotPlanError(shots: RetakeShotBeat[] | undefined, prompt: string, selection: { start: number; end: number }): string | null {
+  const epsilon = .01
+  if (!shots?.length || shots.length > 8) return 'Provide shot_plan with 1–8 output-time beats (one persistent beat for a simple content edit).'
+  let cursor = selection.start
+  for (const shot of shots) {
+    if (!Number.isFinite(shot.start) || !Number.isFinite(shot.end) || shot.end <= shot.start
+      || Math.abs(shot.start - cursor) > epsilon || shot.start < selection.start - epsilon || shot.end > selection.end + epsilon
+      || !shot.instruction?.trim()) return 'shot_plan must continuously cover outputSelection, with no gaps, overlaps or out-of-range beats.'
+    cursor = shot.end
+  }
+  if (Math.abs(cursor - selection.end) > epsilon) return 'shot_plan must end at outputSelection.end.'
+  // Only explicit second-based beats are interpreted. Camera dimensions,
+  // subjects and other numbers in ordinary prose are not timestamps.
+  const ranges = /\b(\d+(?:\.\d+)?)\s*s?\s*[–—-]\s*(\d+(?:\.\d+)?)\s*s(?:ec(?:onds)?)?\b/gi
+  for (const match of prompt.matchAll(ranges)) {
+    const start = Number(match[1]), end = Number(match[2])
+    if (start < selection.start - epsilon || end > selection.end + epsilon || end <= start) return 'Prompt shot times fall outside outputSelection. Do not reset the selected interval to zero.'
+  }
+  const points = /\b(?:at|before|after|output(?:-local)?)\s*(?:output\s*)?(\d+(?:\.\d+)?)\s*s(?:ec(?:onds)?)?\b/gi
+  for (const match of prompt.matchAll(points)) {
+    const time = Number(match[1])
+    if (time < selection.start - epsilon || time > selection.end + epsilon) return 'Prompt cut time falls outside outputSelection. Do not reset the selected interval to zero.'
+  }
+  return null
+}
+
 export function retakePromptPlanning(plan: RetakePlan) {
   const duration = plan.end - plan.start
   const shotCount = Math.min(5, Math.max(1, Math.floor(duration / .85)))
@@ -20,6 +49,7 @@ export function retakePromptPlanning(plan: RetakePlan) {
   return {
     selectedSourceSeconds: { start: plan.start, end: plan.end },
     outputSelection: { start: retakeOutputTime(plan, plan.start), end: retakeOutputTime(plan, plan.end) },
+    promptClock: `Output 0s corresponds to source ${plan.contextStart}s. The edit starts at output ${retakeOutputTime(plan, plan.start)}s and ends at output ${retakeOutputTime(plan, plan.end)}s. Do NOT reset this selection to zero. Copy these output times into shot_plan and the final prompt.`,
     multiCameraTimingBudget: {
       suggestedShots: shotCount,
       suggestedOutputSlots: Array.from({ length: shotCount }, (_, index) => ({

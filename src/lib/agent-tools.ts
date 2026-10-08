@@ -2225,7 +2225,9 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
         const workspacePath = `${ctx.projectId}/drafts/retake-inspection-${Date.now()}.jpg`;
         const write = await workspace.writeFile(workspacePath, sheet, ctx.supabase, ctx.userId, 'image/jpeg');
         const workspaceUrl = write.storageUrl ? toPublicStorageUrl(write.storageUrl) : '';
-        const inspection_id = signRetakeInspection(retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '');
+        const inspection_id = signRetakeInspection(retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '', {
+          outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) }, generationDuration: plan.generationDuration,
+        });
         return { success: true, inspection_id, plan, timestamps: sampled.timestamps,
           outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) },
           sourceToOutputScale: plan.generationDuration / (plan.contextEnd - plan.contextStart),

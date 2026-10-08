@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { signRetakeInspection, verifyRetakeInspection, retakeInspectionTimestamps, retakeOutputTime, type RetakeInspectionScope } from '@/lib/video-retake-inspection'
+import { signRetakeInspection, verifyRetakeInspection, readRetakeInspectionClock, retakeInspectionTimestamps, retakeOutputTime, type RetakeInspectionScope } from '@/lib/video-retake-inspection'
 import { planRetake } from '@/lib/video-retake-contract'
 
 const scope: RetakeInspectionScope = { userId: 'owner', projectId: 'project', runId: 'run', inputEpoch: 2,
@@ -27,6 +27,17 @@ describe('Retake inspection evidence', () => {
     expect(verifyRetakeInspection(receipt.slice(0, -1) + '!', scope, secret)).toBe(false)
     expect(verifyRetakeInspection(receipt, scope, '')).toBe(false)
     expect(() => signRetakeInspection(scope, '')).toThrow(/unavailable/)
+  })
+  it('authenticates the measured output clock and rejects a changed selection or clock', () => {
+    const clock = { outputSelection: { start: 1, end: 4 }, generationDuration: 5 }
+    const receipt = signRetakeInspection(scope, secret, clock)
+    expect(readRetakeInspectionClock(receipt, scope, secret)).toEqual(clock)
+    expect(verifyRetakeInspection(receipt, scope, secret)).toBe(true)
+    expect(readRetakeInspectionClock(receipt, { ...scope, start: 19 }, secret)).toBeNull()
+    const parts = receipt.split('.')
+    parts[2] = Buffer.from(JSON.stringify({ ...clock, outputSelection: { start: 0, end: 3 } })).toString('base64url')
+    expect(readRetakeInspectionClock(parts.join('.'), scope, secret)).toBeNull()
+    expect(readRetakeInspectionClock(signRetakeInspection(scope, secret), scope, secret)).toBeNull()
   })
   it('covers the selected action and contextual boundaries in original time', () => {
     const plan = planRetake({ start: 18, end: 21 }, 30.048, 'fal-h3-max')

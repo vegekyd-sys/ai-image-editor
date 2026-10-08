@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { tool } from 'ai';
 import { z } from 'zod';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from './video-retake-contract';
-import { retakeInspectionScope, verifyRetakeInspection } from './video-retake-inspection';
-import { RETAKE_PROMPT_WRITING } from './video-retake-prompt-planning';
+import { retakeInspectionScope, verifyRetakeInspection, readRetakeInspectionClock } from './video-retake-inspection';
+import { RETAKE_PROMPT_WRITING, retakeShotPlanError } from './video-retake-prompt-planning';
 import type { AgentContext } from './agent-tools';
 import type { submitMcpVideo } from './billing/mcp-video';
 import type { VideoSourceRange } from '@/types';
@@ -23,12 +23,14 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       start: z.number().nonnegative(),
       end: z.number().positive(),
       prompt: z.string().min(1).describe('Final expanded prompt: requested visible change first, explicit output-time action/shot beats next, essential identity constraints last. Avoid copying the source synopsis or conflicting camera locks.'),
+      shot_plan: z.array(z.object({ start: z.number().nonnegative(), end: z.number().positive(), instruction: z.string().min(1) })).min(1).max(8)
+        .describe('Output-local beats matching the final prompt, covering exactly outputSelection from inspect_retake. Do NOT reset its start to zero. Camera edits: one beat per distinct camera; content edits: one persistent beat is enough.'),
       inspection_id: z.string().optional().describe('Exact receipt returned by inspect_retake for this source, range and model. Required before any paid submission.'),
       source_observation: z.string().optional().describe('Timestamped visible evidence: subject identity, original camera coverage, selected opening/middle/closing action states, travel direction/contact/occlusion, and uncertainty. Keep contextual boundary states separate. Do not substitute requested changes for observed facts.'),
       model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
       request_id: z.string().uuid().optional(),
     }),
-    execute: async ({ media_index, start, end, prompt, model, request_id, inspection_id, source_observation }) => serializeVideoSubmission(async () => {
+    execute: async ({ media_index, start, end, prompt, shot_plan, model, request_id, inspection_id, source_observation }) => serializeVideoSubmission(async () => {
       if (!ctx.userId || !ctx.projectId) return { success: false, message: 'Retake requires an authenticated project.' };
       const source = await resolveSource(ctx, media_index);
       if (!source.videoUrl) return { success: false, message: source.error ?? 'Select a ready video.' };
@@ -38,6 +40,10 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       if (!verifyRetakeInspection(inspection_id, retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '') || !source_observation || source_observation.trim().length < 24) {
         return { success: false, errorCode: 'retake_inspection_required', message: 'No provider was submitted. Call inspect_retake for this exact media_index/start/end/model, read the actual frames, and provide its inspection_id plus a concrete source_observation before writing the final prompt.' };
       }
+      const clock = readRetakeInspectionClock(inspection_id, retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '')
+      if (!clock) return { success: false, errorCode: 'retake_inspection_required', message: 'No provider was submitted. Re-run inspect_retake to obtain the measured output clock before planning the edit.' }
+      const timingError = retakeShotPlanError(shot_plan, prompt, clock.outputSelection)
+      if (timingError) return { success: false, errorCode: 'retake_prompt_timing_invalid', message: `No provider was submitted. ${timingError} Required outputSelection: ${clock.outputSelection.start}–${clock.outputSelection.end}s. Correct shot_plan and prompt before submitting.` }
       const hash = ctx.execution ? createHash('sha256').update(JSON.stringify([ctx.execution.runId, ctx.execution.inputEpoch, media_index, start, end, prompt, model])).digest('hex') : undefined;
       const stableId = hash ? `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}` : undefined;
       const result = await submit({ images: [], script: prompt, videoUrl: source.videoUrl,
