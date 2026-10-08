@@ -10,7 +10,7 @@ const route = (req: Partial<GenerateImageRequest>) => resolveModelChain({ prompt
 
 describe('Image Model Capability acceptance matrix', () => {
   it('R21: covers every offered canonical model and generates its Agent contract', () => {
-    expect(listImageModelCapabilities().map(c => c.id).sort()).toEqual(IMAGE_MODEL_IDS.filter(id => id !== 'openai').sort());
+    expect(listImageModelCapabilities().map(c => c.id).sort()).toEqual(IMAGE_MODEL_IDS.slice().sort());
     expect(DEFAULT_IMAGE_MODEL).toBe('gpt-image-2.5-flare');
     const guide = formatImageCapabilitiesForAgent();
     for (const c of listImageModelCapabilities()) expect(guide).toContain(c.id);
@@ -36,7 +36,7 @@ describe('Image Model Capability acceptance matrix', () => {
     expect(plan.adjustments.join(' ')).toContain('2K');
     expect(() => validateImageModelRequest(plan.request, plan.model)).not.toThrow();
   });
-  it.each(IMAGE_MODEL_IDS)('R04/R05: explicit %s is retained or normalized', model => {
+  it.each([...IMAGE_MODEL_IDS, 'openai'] as const)('R04/R05: explicit %s is retained or normalized', model => {
     expect(route({ model })).toEqual([model === 'openai' ? 'gpt-image-2.5-flare' : model]);
   });
   it('R05: old Qwen normalizes; unknown and retired IDs use Flare-first Auto', () => {
