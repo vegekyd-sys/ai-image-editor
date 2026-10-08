@@ -2,17 +2,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
-const dir=path.join(process.cwd(),'test-results/image-capability-cli');
+const resolutionSuite=process.argv.includes('--resolution');
+const dir=path.join(process.cwd(),resolutionSuite?'test-results/image-resolution-cli':'test-results/image-capability-cli');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const rows=fs.readdirSync(dir).filter(f=>/^C\d+-receipt\.json$/.test(f)).sort().map(f=>JSON.parse(fs.readFileSync(path.join(dir,f))));
+const rows=fs.readdirSync(dir).filter(f=>(resolutionSuite?/^[DF]\d+-receipt\.json$/:/^C\d+-receipt\.json$/).test(f)).sort().map(f=>JSON.parse(fs.readFileSync(path.join(dir,f))));
 const negatives=fs.readdirSync(dir).filter(f=>/^N\d+-receipt\.json$/.test(f)).sort().map(f=>JSON.parse(fs.readFileSync(path.join(dir,f))));
 const visualFile=path.join(dir,'visual-review.json');const visual=fs.existsSync(visualFile)?JSON.parse(fs.readFileSync(visualFile)):{};
-const alphaIds=['C12','C13','C38','C41'];
+const alphaIds=resolutionSuite?['F05']:['C12','C13','C38','C41'];
+const sizes={D01:[2048,2048],D02:[4096,4096],F01:[2048,2048],F02:[3840,2160],F03:[2160,3840],F04:[2048,2048],F05:[2048,2048],F06:[4096,4096]};
 const aspect={C05:8,C06:1/8,C07:4,C08:1/4,C14:8,C29:3,C30:1/3,C31:8,C43:8,C46:6,C49:8};
 for(const r of rows){
   r.acceptanceIssues=[];
   r.coverageNotes=[];
   if(!r.technicalPass)r.acceptanceIssues.push('技术链路未通过');
+  if(resolutionSuite&&sizes[r.id]&&r.images.some(x=>x.width!==sizes[r.id][0]||x.height!==sizes[r.id][1]))r.acceptanceIssues.push('未达到原生分辨率画布');
+  if(resolutionSuite&&r.toolCalls.length!==1)r.acceptanceIssues.push('图片工具调用次数不是一次');
+  if(resolutionSuite&&r.toolCalls[0]?.input.imageResolution!==(r.id==='D02'||['F02','F03','F06'].includes(r.id)?'4K':'2K'))r.acceptanceIssues.push('请求分辨率未到达工具入口');
   if(alphaIds.includes(r.id)&&!r.images.some(x=>x.transparentPixels>0))r.acceptanceIssues.push('缺少真实透明像素');
   if(aspect[r.id]&&r.images.some(x=>Math.abs((x.width/x.height)/aspect[r.id]-1)>.06))r.acceptanceIssues.push('画布比例偏差超出供应商预设容差');
   if(r.id==='C09'&&r.images.some(x=>Math.max(x.width,x.height)<2000))r.acceptanceIssues.push('未达到2K');

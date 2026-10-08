@@ -2,6 +2,7 @@ import { validateImageModelRequest, getImageModelCapability } from '../image-mod
 import sharp from 'sharp';
 import type { GenerateImageRequest, ModelBackend } from './types';
 import { normalizeOpenAIImageOutput } from './openai-image-output';
+import { parseImageDataUrl } from './image-data-url';
 import { fitTransparentResultToAspectRatio, fitTransparentResultToSourceCanvas } from './transparent-source-canvas';
 
 import type { FalImage25Id } from './types';
@@ -54,7 +55,8 @@ export function buildFalImage25Request(req: GenerateImageRequest, model: FalImag
   const images = [...(req.image ? [{ url: req.image, role: 'Base image to edit' }] : []), ...(req.references ?? [])];
   if (!req.prompt.trim()) throw new FalImage25RequestError('GPT Image 2.5 requires a non-empty prompt.');
   for (const { url } of images) {
-    if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=\r\n]+$/.test(url)) continue;
+    const dataUrl = parseImageDataUrl(url);
+    if (dataUrl && ['image/png', 'image/jpeg', 'image/webp'].includes(dataUrl.mimeType)) continue;
     let parsed: URL;
     try { parsed = new URL(url); } catch { throw new FalImage25RequestError('Input images must be HTTPS URLs or PNG, JPEG or WebP data URLs.'); }
     if (parsed.protocol !== 'https:' || parsed.username || parsed.password) throw new FalImage25RequestError('Input images require HTTPS URLs without embedded credentials.');
@@ -144,6 +146,7 @@ export function createFalImage25Backend(model: FalImage25Id): ModelBackend {
         stage = 'decode';
         if (buffer.length > 50 * 1024 * 1024) throw new Error('Output exceeds image size limit.');
         await sharp(buffer, { failOn: 'error', limitInputPixels: 8294400 }).raw().toBuffer();
+        stage = 'output normalization';
         let image = await normalizeOpenAIImageOutput(`data:image/png;base64,${buffer.toString('base64')}`, req.background);
         if (!image) throw new Error('Output did not satisfy the transparent background request.');
         if (req.background === 'transparent') {
@@ -156,7 +159,7 @@ export function createFalImage25Backend(model: FalImage25Id): ModelBackend {
         // fal supplies cost, not token counts. Do not invent token telemetry.
         return { image, provider: 'fal', usage: { modelId: model, inputTokens: 0, outputTokens: 0, provider: 'fal', providerCostUsd: cost } };
       } catch (error) {
-        console.warn(`[${model}] stage=${stage} request=${requestId ?? 'unknown'} errorType=${error instanceof Error ? error.name : 'unknown'}`);
+        console.warn(`[${model}] stage=${stage} request=${requestId ?? 'unknown'} errorType=${error instanceof Error ? error.name : 'unknown'}${error instanceof RangeError && error.message === 'Maximum call stack size exceeded' ? ' errorCode=stack_overflow' : ''}`);
         const reason = error instanceof FalImage25RequestError ? error.message : `The request did not complete successfully during ${stage}.`;
         throw new FalImage25RequestError(`GPT Image 2.5: ${reason}${requestId ? ` Request: ${requestId}.` : ''} No automatic retry; inspect the provider request before resubmitting.`);
       }

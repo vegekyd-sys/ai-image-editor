@@ -23,6 +23,10 @@ const cases = [
  ['F04','RES','Sunburst 2K','gpt-image-2.5-sunburst','用GPT Image 2.5 Sunburst生成冰蓝茶壶商品照，model=gpt-image-2.5-sunburst、aspectRatio=1:1、imageResolution=2K。'],
  ['F05','RES','Flare 透明编辑 2K',flare,'上传茶壶图片去背景抠图，保留主体，输出2K真实透明PNG。传imageResolution=2K、background=transparent、aspectRatio=auto，分辨率优先，不要缩回源图尺寸。','source'],
  ['F06','RES','Auto 方形 4K',nb,'生成方形樱花树摄影，自动选择能完成原生4K方图的模型。请传aspectRatio=1:1、imageResolution=4K，不要先选择不支持的模型而后处理放大。'],
+ ['F07','RES','Flare 4K 竖图（大图修复后）',flare,'用GPT Image 2.5 Flare生成春日樱花树竖向摄影，model=gpt-image-2.5-flare、aspectRatio=9:16、imageResolution=4K。'],
+ ['F08','RES','Sunburst 2K（大图修复后）','gpt-image-2.5-sunburst','用GPT Image 2.5 Sunburst生成冰蓝茶壶商品照，model=gpt-image-2.5-sunburst、aspectRatio=1:1、imageResolution=2K。'],
+ ['F09','RES','Flare 透明编辑 2K（大图修复后）',flare,'上传茶壶图片去背景抠图，保留主体，输出2K真实透明PNG。传imageResolution=2K、background=transparent、aspectRatio=auto，分辨率优先，不要缩回源图尺寸。','source'],
+ ['F10','RES','Auto 方形 4K（大图修复后）',nb,'生成方形樱花树摄影，自动选择能完成原生4K方图的模型。请传aspectRatio=1:1、imageResolution=4K，不要先选择不支持的模型而后处理放大。'],
 ];
 const manifest = cases.map(([id,contract,label,model,prompt,images,projectFrom]) => ({id,contract,label,model,prompt,images,projectFrom}));
 fs.writeFileSync(path.join(dir,'manifest.json'),JSON.stringify({createdAt:new Date().toISOString(),route:'installed makaron chat -> candidate local Next -> real Agent -> real provider -> project persistence -> CLI responses and project media',cases:manifest},null,2));

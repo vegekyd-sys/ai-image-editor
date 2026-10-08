@@ -1,6 +1,7 @@
 import { validateImageModelRequest } from '../image-model-capabilities';
 import sharp from 'sharp';
 import type { GenerateImageRequest, ModelBackend } from './types';
+import { isImageBase64, parseImageDataUrl } from './image-data-url';
 
 export const NANO_BANANA_21_MODEL = 'google/gemini-nano-banana-2.1';
 
@@ -17,14 +18,15 @@ export function buildNanoBanana21Request(req: GenerateImageRequest) {
   const inputReferences = images.map(image => {
     let url = image.url;
     if (!url.startsWith('data:') && !url.startsWith('https://')) {
-      if (!/^[A-Za-z0-9+/=\r\n]+$/.test(url)) throw new NanoBanana21RequestError('Input images require HTTPS URLs or base64 image data.');
+      if (!isImageBase64(url)) throw new NanoBanana21RequestError('Input images require HTTPS URLs or base64 image data.');
       url = `data:image/jpeg;base64,${url}`;
     }
     if (url.startsWith('https://')) {
       const parsed = new URL(url);
       if (parsed.username || parsed.password) throw new NanoBanana21RequestError('Input image URLs must not contain credentials.');
-    } else if (!/^data:image\/(png|jpeg|webp|heic|heif);base64,[A-Za-z0-9+/=\r\n]+$/.test(url)) {
-      throw new NanoBanana21RequestError('Unsupported input image format.');
+    } else {
+      const parsed = parseImageDataUrl(url);
+      if (!parsed || !['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'].includes(parsed.mimeType)) throw new NanoBanana21RequestError('Unsupported input image format.');
     }
     return { type: 'image_url', image_url: { url } };
   });
@@ -85,7 +87,7 @@ export const nanoBanana21Backend: ModelBackend = {
       if (!Array.isArray(images) || images.length !== 1) throw new NanoBanana21RequestError('Nano Banana 2.1 returned no single completed image.');
       const mediaType = images[0]?.media_type;
       const base64 = images[0]?.b64_json;
-      if (typeof base64 !== 'string' || !/^[A-Za-z0-9+/=\r\n]+$/.test(base64) || !['image/png', 'image/jpeg', 'image/webp'].includes(mediaType)) throw new NanoBanana21RequestError('Nano Banana 2.1 returned an unsupported image payload.');
+      if (typeof base64 !== 'string' || !isImageBase64(base64) || !['image/png', 'image/jpeg', 'image/webp'].includes(mediaType)) throw new NanoBanana21RequestError('Nano Banana 2.1 returned an unsupported image payload.');
       const usage = data.usage;
       stage = 'supplier usage';
       if (!usage || !Number.isFinite(usage.cost) || usage.cost <= 0
@@ -110,7 +112,7 @@ export const nanoBanana21Backend: ModelBackend = {
       const code = error instanceof Error && 'cause' in error && error.cause && typeof error.cause === 'object' && 'code' in error.cause ? String(error.cause.code) : undefined;
       console.error('[gemini-2.1] failed', { stage, status, contentType, responseBytes, firstCodePoint,
         elapsedMs: Date.now() - started, requestId, resolution: body.resolution,
-        errorType: error instanceof Error ? error.name : 'unknown', code: code && /^[A-Z0-9_]+$/.test(code) ? code : undefined });
+        errorType: error instanceof Error ? error.name : 'unknown', code: error instanceof RangeError && error.message === 'Maximum call stack size exceeded' ? 'stack_overflow' : code && /^[A-Z0-9_]+$/.test(code) ? code : undefined });
       const reason = error instanceof NanoBanana21RequestError ? error.message : `Nano Banana 2.1 request did not complete during ${stage}; provider outcome may be unknown.`;
       throw new NanoBanana21RequestError(`${reason}${requestId ? ` Request: ${requestId}.` : ''} No automatic retry or model fallback.`, error instanceof NanoBanana21RequestError && error.contentBlocked);
     }

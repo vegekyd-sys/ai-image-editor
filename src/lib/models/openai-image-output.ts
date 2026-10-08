@@ -1,11 +1,6 @@
 import sharp from 'sharp';
 import type { ImageBackground } from './types';
-
-function parseImageDataUrl(dataUrl: string): { mimeType: string; buffer: Buffer } | null {
-  const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i);
-  if (!match) return null;
-  return { mimeType: match[1].toLowerCase(), buffer: Buffer.from(match[2], 'base64') };
-}
+import { parseImageDataUrl } from './image-data-url';
 
 /**
  * Preserve real alpha for explicit transparent-output requests. All other
@@ -15,8 +10,9 @@ export async function normalizeOpenAIImageOutput(
   dataUrl: string,
   background?: ImageBackground,
 ): Promise<string | null> {
-  const parsed = parseImageDataUrl(dataUrl);
-  if (!parsed) return null;
+  const data = parseImageDataUrl(dataUrl);
+  if (!data) return null;
+  const parsed = { mimeType: data.mimeType, buffer: Buffer.from(data.base64, 'base64') };
 
   if (background === 'transparent' || background === 'auto') {
     const metadata = await sharp(parsed.buffer, { failOn: 'error' }).metadata();
