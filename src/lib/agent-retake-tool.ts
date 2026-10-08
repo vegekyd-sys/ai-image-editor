@@ -74,7 +74,7 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       let providerPrompt: string;
       try {
         providerPrompt = bindRetakeReferences({prompt, model, sourceIndex:media_index,
-          referenceIndices:creativeIndices, middleIndex:middle_frame_media_index,endIndex:end_frame_media_index});
+          referenceIndices:creativeIndices, cameraChange:camera_change, middleIndex:middle_frame_media_index,endIndex:end_frame_media_index});
       } catch (error) { return {success:false,message:(error as Error).message}; }
       const endFrame = end_frame_media_index ? {imageUrl:ctx.snapshotImages[end_frame_media_index-1]} : undefined;
       const hash = ctx.execution ? createHash('sha256').update(JSON.stringify([ctx.execution.runId, ctx.execution.inputEpoch, media_index, start, end, providerPrompt, model, middleFrame, ...(referenceImages.length ? [referenceImages] : []),...(endFrame ? [endFrame] : [])])).digest('hex') : undefined;

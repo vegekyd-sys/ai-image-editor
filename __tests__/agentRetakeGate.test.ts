@@ -41,6 +41,11 @@ describe('Agent Retake paid-submission gate', () => {
     expect(result).toMatchObject({message:'test submission recorded'})
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({script:input.prompt,retake:{start:18,end:21,cameraChange:true}}),expect.anything())
   })
+  it('does not name an omitted source video when H3 changes camera coverage',async()=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,prompt:'Continue the advancing action in <<<media_1>>> from a new view.',inspection_id:receipt(),source_observation:observation});
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({script:'Continue the advancing action in the inspected original scene from a new view.'}),expect.anything());
+  });
   it('allows multiple fixed-camera content phases without generating a camera keyframe',async()=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
     await (createInspectedRetakeVideoTool(scope).execute as any)({...input,camera_change:false,

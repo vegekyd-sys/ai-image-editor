@@ -8,6 +8,7 @@ export function bindRetakeReferences(input: {
   referenceIndices: number[];
   middleIndex?: number;
   endIndex?: number;
+  cameraChange?: boolean;
 }): string {
   const indices = [...input.referenceIndices, ...(input.middleIndex ? [input.middleIndex] : []),...(input.endIndex ? [input.endIndex] : [])];
   if (new Set(indices).size !== indices.length || indices.includes(input.sourceIndex)) {
@@ -22,7 +23,7 @@ export function bindRetakeReferences(input: {
     const index = Number(raw);
     if(index===input.endIndex) return input.model === 'fal-h3-max' ? 'Image 2' : `<<<image_${input.referenceIndices.length + 1}>>>`;
     if (index === input.sourceIndex) return input.model === 'fal-h3-max'
-      ? input.middleIndex || input.endIndex ? 'the inspected original scene' : 'Video 1' : '@video1';
+      ? input.middleIndex || input.endIndex || input.cameraChange ? 'the inspected original scene' : 'Video 1' : '@video1';
     if (index === input.middleIndex) return 'Image 3';
     const position = input.referenceIndices.indexOf(index);
     if (position < 0) throw new Error(`Media @${index} has no supplied reference. Add its image index to reference_media_indices.`);
