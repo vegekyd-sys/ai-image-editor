@@ -822,6 +822,7 @@ const en = {
   'agent.status.choosingVoice': 'Choosing voice...',
   'agent.status.generatingVoiceover': 'Generating voiceover...',
   'agent.status.generatingAudio': 'Generating audio...',
+  'agent.status.understandingRetake': 'Understanding the selected segment…',
   'agent.status.capturingFrame': (hint: string) => `Capturing ${hint}...`,
   'agent.status.generatingImage': 'Generating image...',
   'agent.status.browsingWorkspace': 'Browsing workspace...',

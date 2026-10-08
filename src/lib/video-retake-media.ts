@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { findFfmpeg, probeVideoFile, type VideoProbe } from './ffmpeg-runtime'
 import type { RetakePlan } from './video-retake-contract'
+import { retakeInspectionTimestamps } from './video-retake-inspection'
 
 const exec = promisify(execFile)
 async function withFiles<T>(files: Record<string, Buffer>, run: (dir: string, ffmpeg: string) => Promise<T>): Promise<T> {
@@ -34,6 +35,22 @@ export async function extractRetakeContext(source: Buffer, plan: RetakePlan): Pr
       '-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-movflags', '+faststart', output],
       { timeout: 120_000, maxBuffer: 1024 * 1024 })
     return readFile(output)
+  })
+}
+
+/** Download once and extract the entire inspection sheet from one local source. */
+export async function extractRetakeInspectionFrames(source: Buffer, plan: RetakePlan, fps: number) {
+  const timestamps = retakeInspectionTimestamps(plan, fps)
+  return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
+    const frames = await Promise.all(timestamps.map(async (time, index) => {
+      const output = join(dir, `inspection-${index}.jpg`)
+      await exec(ffmpeg, ['-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-ss', String(time),
+        '-i', join(dir, 'source.mp4'), '-frames:v', '1', '-vf',
+        "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
+        '-q:v', '3', output], { timeout: 30_000, maxBuffer: 1024 * 1024 })
+      return readFile(output)
+    }))
+    return { timestamps, frames }
   })
 }
 

@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { planRetake, validateRetakeRange, retakePrompt, resolveRetakeModel } from '@/lib/video-retake-contract';
 import { assembleRetake, extractRetakeContext, extractRetakeBoundaryFrames, inspectRetakeSource } from '@/lib/video-retake-media';
-import { filterAndRemapImages } from '@/lib/kling';
 import { findFfmpeg } from '@/lib/ffmpeg-runtime';
 
 describe('Retake interval contract', () => {
@@ -28,29 +27,12 @@ describe('Retake interval contract', () => {
     expect(() => planRetake({ start: 0, end: 2 }, 1, 'seedance-2.5')).toThrow();
     expect(() => planRetake({ start: 0, end: 2 }, 10, 'minimax-h3-max')).toThrow(/Turbo/);
   });
-  it('allows explicitly requested camera cuts instead of overriding a multi-camera edit', () => {
-    const prompt = retakePrompt('Use multiple camera angles and cuts', planRetake({ start: 10, end: 23 }, 30, 'seedance-2.5'));
-    expect(prompt).toContain('Follow explicitly requested shot cuts');
-    expect(prompt).toContain('original source time 10.000-23.000');
-    expect(prompt).toContain('Subtract 10.000 seconds');
-    expect(prompt).toContain('Only change clip-local 0.000-13.000');
-    expect(prompt).not.toContain('Do not add shots, cuts');
-  });
-  it('retains both native H3 boundary references through prompt selection', () => {
-    const plan = planRetake({start:10,end:23},30,'fal-h3-max');
-    const prompt = retakePrompt('Use multiple camera angles',plan,true);
-    expect(filterAndRemapImages(prompt,['start.jpg','end.jpg']).filteredImages).toEqual(['start.jpg','end.jpg']);
-    expect(prompt).toContain('never restart an earlier approach');
-    expect(retakePrompt('Use multiple camera angles',planRetake({start:10,end:23},30,'seedance-2.5'))).not.toContain('BOUNDARY CONTINUITY');
-  });
-  it('maps original timestamps to the requested H3 output duration without locking intervening shots', () => {
-    const plan = planRetake({start:17.48,end:23},30.048,'fal-h3-max');
-    const prompt = retakePrompt('17.48-19s: low angle. CUT. 19-23s: overhead.',plan,true);
-    expect(prompt).toContain('NEW TAKE, 6.000 seconds');
-    expect(prompt).toContain('(original timestamp - 17.480) * 1.086957');
-    expect(prompt).toContain('output 0.000-6.000 seconds');
-    expect(prompt).toContain('they do not lock the camera composition');
-    expect(prompt).not.toContain('Preserve subject identity, motion, lighting and every detail');
+  it('passes the inspected Agent instruction unchanged without creative overrides', () => {
+    const instruction = '0–1s: continue the visible landing. CUT. 1–2s: wheel close-up. CUT. 2–3s: high angle.';
+    expect(retakePrompt(instruction)).toBe(instruction);
+    expect(retakePrompt(`  ${instruction}  `)).toBe(instruction);
+    expect(() => retakePrompt('  ')).toThrow(/Describe/);
+    expect(retakePrompt(instruction)).not.toContain('NEW TAKE');
   });
   it('extracts the first and last contextual frames from the original timebase', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'retake-boundaries-'));

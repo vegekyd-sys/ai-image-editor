@@ -982,6 +982,8 @@ export async function* runMakaronAgent(
               kind === 'voiceover' ? 'agent.status.generatingVoiceover' : 'agent.status.generatingAudio',
             ),
           };
+        } else if (event.toolName === 'inspect_retake') {
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.understandingRetake') };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number; frames?: number[]; timestamps?: number[] };
           const batch = input.frames?.length ? input.frames.join(', ') : input.timestamps?.length ? input.timestamps.map(value => `${value}s`).join(', ') : '';
@@ -1241,7 +1243,7 @@ export async function* runMakaronAgent(
         }
 
         // Emit preview_frame_captured so frontend shows the screenshot in CUI
-        if (toolName === 'preview_frame') {
+        if (toolName === 'preview_frame' || toolName === 'inspect_retake') {
 
           const toolOutput = (event as any).output as { workspaceUrl?: string } | undefined;
           const wsUrl = toolOutput?.workspaceUrl;

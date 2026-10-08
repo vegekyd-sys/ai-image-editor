@@ -125,7 +125,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       await save(job, { source_meta: { ...job.source_meta, boundaryFrames } })
     }
     await save(job, { context_url: contextUrl, stage: 'prepared', timings: { preparationMs: performance.now() - started } })
-    const prompt = retakePrompt(input.script, plan, Boolean(boundaryFrames))
+    const prompt = retakePrompt(input.script)
     let result: CreateVideoResult
     const beforeSubmit = async (usage: Parameters<NonNullable<CreateVideoInput['onBeforeProviderSubmit']>>[0]) => {
       const reservation = await input.onBeforeProviderSubmit?.(usage)

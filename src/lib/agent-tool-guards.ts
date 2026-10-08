@@ -20,6 +20,7 @@ export const DURABLE_INPUT_GUARDED_TOOLS = new Set([
   'write_code_file',
   'run_code',
   'preview_frame',
+  'inspect_retake',
   'delete_file',
   'execution_checkpoint',
 ]);

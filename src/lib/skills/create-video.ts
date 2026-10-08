@@ -385,6 +385,12 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     const initialFiltered = filterAndRemapImages(script, images, Math.max(7, capability.maxImageReferences ?? 7));
     let filteredImages = initialFiltered.filteredImages;
     let finalPrompt = initialFiltered.finalPrompt;
+    // Retake supplies measured boundary images as provider inputs, independently
+    // of whether the Agent chooses to mention their labels in its final prompt.
+    if (provider === 'fal-h3-max' && input.h3RetakeBoundaryFrames) {
+      filteredImages = images;
+      finalPrompt = script;
+    }
     if (provider === 'seedance-2.5') {
       const prepared = prepareSeedance25References({
         prompt: script,

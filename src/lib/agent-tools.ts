@@ -13,7 +13,9 @@ import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { submitMcpVideo } from './billing/mcp-video';
-import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from './video-retake-contract';
+import { createInspectedRetakeVideoTool } from './agent-retake-tool';
+import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL, planRetake, validateRetakeRange } from './video-retake-contract';
+import { signRetakeInspection, retakeInspectionScope, retakeOutputTime } from './video-retake-inspection';
 import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
 import {
@@ -2182,38 +2184,66 @@ function createGenerateAnimationTool(
     });
 }
 
-function createRetakeVideoTool(scope: AgentToolFactoryScope) {
+function createInspectRetakeTool({ ctx, durableVisionBridge }: AgentToolFactoryScope) {
   return tool({
-    description: 'Retake a known interval of a ready video. start/end are seconds in the original source timebase; replace only this interval and automatically deliver the complete video with original audio and duration. Use directly when the user supplies a numeric interval; do not relocate a screenshot, cut clips with run_code, or ask for a second merge confirmation. Interval 0.1–15s, source at most 120s. Default to FAL H3 Max reference generation for a new take. Choose seedance-2.5 for close preservation of source motion and small visual edits. For requested multi-camera coverage, write a concise shot list with explicit original-source timestamp ranges and CUT between distinct setups; make the beats fill the selection and keep the subject and progressing action consistent. Avoid vague lists of possible angles and preservation instructions that override the requested change. Sources shorter than 2s require seedance-2.5. Preserve the returned task/request receipt and poll it; never regenerate to retry delivery.',
+    description: 'Inspect the actual selected video interval BEFORE writing a Retake prompt. Downloads one source and extracts 4-6 labeled frames covering the action and surrounding boundary states. Returns pixels (or verified vision analysis), a signed inspection_id, and the exact source-to-output time mapping. Use the same media_index/start/end/model for retake_video. Read the images first, then describe the actual subjects, movement, camera coverage and boundary states in source_observation; write the final creative prompt in output seconds from the returned plan. That prompt is passed directly to the video model, without another creative wrapper. For H3, Video 1 is the reference clip; Image 1 and Image 2 are its context opening/ending frames. Do not confuse these provider references with timeline indices. If inspection fails, do not generate blindly.',
     inputSchema: z.object({
       media_index: z.number().int().positive(),
       start: z.number().nonnegative(),
       end: z.number().positive(),
-      prompt: z.string().min(1),
       model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
-      request_id: z.string().uuid().optional(),
     }),
-    execute: async ({ media_index, start, end, prompt, model, request_id }) => scope.serializeVideoSubmission(async () => {
-      const { ctx } = scope;
-      if (!ctx.userId || !ctx.projectId) return { success: false, message: 'Retake requires an authenticated project.' };
-      const source = await resolveVideoUrlForMediaIndex(ctx, media_index);
-      if (!source.videoUrl) return { success: false, message: source.error ?? 'Select a ready video.' };
-      if (source.sourceRange && (start < source.sourceRange.start_sec || end > source.sourceRange.end_sec)) {
-        return { success: false, message: 'Retake interval must be within the visible original-source range.' };
+    execute: async ({ media_index, start, end, model }) => {
+      if (!ctx.userId || !ctx.projectId) return { error: 'Retake inspection requires an authenticated project.' };
+      try {
+        validateRetakeRange({ start, end });
+        const source = await resolveVideoUrlForMediaIndex(ctx, media_index);
+        if (!source.videoUrl) return { error: source.error || 'Select a ready source video.' };
+        if (source.sourceRange && (start < source.sourceRange.start_sec || end > source.sourceRange.end_sec)) {
+          return { error: 'Inspect an interval within the visible original-source range.' };
+        }
+        const { readProviderImage } = await import('./provider-image-preflight');
+        const { inspectRetakeSource, extractRetakeInspectionFrames } = await import('./video-retake-media');
+        const { createContactSheet } = await import('./contact-sheet');
+        const bytes = await readProviderImage(source.videoUrl, 512 * 1024 * 1024);
+        const meta = await inspectRetakeSource(bytes);
+        const plan = planRetake({ start, end }, meta.duration!, model);
+        const sampled = await extractRetakeInspectionFrames(bytes, plan, meta.fps!);
+        const sheet = await createContactSheet(sampled.frames.map((image, index) => ({ image,
+          label: `#${index + 1} ${sampled.timestamps[index].toFixed(2)}s : ${retakeOutputTime(plan, sampled.timestamps[index]).toFixed(2)}s`,
+        })), meta.width!, meta.height!);
+        let analysis: string | undefined;
+        if (durableVisionBridge) {
+          const { analyzeImageContent } = await import('./gemini');
+          analysis = await analyzeImageContent(`data:image/jpeg;base64,${sheet.toString('base64')}`,
+            'Describe these timestamped actual video frames for a localized Retake. Identify subjects and distinctive appearance, environment, existing camera positions/cuts, progression of motion, and opening/ending action states. Separate visible evidence from uncertainty. Do not invent unseen action or write a replacement script yet.', ctx.userId);
+          if (!analysis?.trim()) return { error: 'Retake frame understanding failed. No video generation was submitted.' };
+        }
+        const workspacePath = `${ctx.projectId}/drafts/retake-inspection-${Date.now()}.jpg`;
+        const write = await workspace.writeFile(workspacePath, sheet, ctx.supabase, ctx.userId, 'image/jpeg');
+        const workspaceUrl = write.storageUrl ? toPublicStorageUrl(write.storageUrl) : '';
+        const inspection_id = signRetakeInspection(retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '');
+        return { success: true, inspection_id, plan, timestamps: sampled.timestamps,
+          outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) },
+          sourceToOutputScale: plan.generationDuration / (plan.contextEnd - plan.contextStart),
+          analysis, base64Data: sheet.toString('base64'), mimeType: 'image/jpeg', workspacePath, workspaceUrl };
+      } catch (error) {
+        return { error: `Retake inspection failed: ${error instanceof Error ? error.message : String(error)}. No video generation was submitted.` };
       }
-      const hash = ctx.execution ? createHash('sha256').update(JSON.stringify([ctx.execution.runId, ctx.execution.inputEpoch, media_index, start, end, prompt, model])).digest('hex') : undefined;
-      const stableId = hash ? `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}` : undefined;
-      const result = await submitMcpVideo({ images: [], script: prompt, videoUrl: source.videoUrl,
-        retake: { start, end }, videoModel: model, projectId: ctx.projectId, billingRequestId: request_id ?? stableId,
-      }, { userId: ctx.userId, apiKeyId: null, toolName: 'retake_video' });
-      const snapshotId = result.snapshotId ?? result.taskId?.replace(/^video-retake-/, '');
-      if (result.success && result.taskId && snapshotId) {
-        const row = await ctx.supabase?.from('snapshots').select('video_meta').eq('id', snapshotId).eq('project_id', ctx.projectId).maybeSingle();
-        if (row?.data?.video_meta) ctx.pendingVideoSnapshot = { snapshotId, taskId: result.taskId, videoMeta: row.data.video_meta };
-      }
-      return result;
-    }),
+    },
+    toModelOutput({ output }: { output: any }) {
+      if (output.error) return { type: 'text' as const, value: output.error };
+      const { base64Data, mimeType, ...receipt } = output;
+      return { type: 'content' as const, value: [
+        ...(!output.analysis ? [modelFileContent(base64Data, mimeType)] : []),
+        { type: 'text' as const, text: `Retake visual evidence and time mapping:\n${JSON.stringify(receipt)}\nUse these actual frames to write source_observation and the final prompt. All shot times in the prompt must be OUTPUT seconds; change only outputSelection and use the surrounding frames for a coherent handoff.` },
+      ] };
+    },
   });
+}
+
+function createRetakeVideoTool(scope: AgentToolFactoryScope) {
+  return createInspectedRetakeVideoTool({ ...scope, resolveSource: resolveVideoUrlForMediaIndex, submit: submitMcpVideo });
 }
 
 function createUpscaleVideoTool(scope: AgentToolFactoryScope) {
@@ -5409,6 +5439,7 @@ const tools = preserveOptionalToolFields({
     generate_image: createGenerateImageTool(scope),
 
     generate_animation: createGenerateAnimationTool(scope),
+    inspect_retake: createInspectRetakeTool(scope),
     retake_video: createRetakeVideoTool(scope),
 
     upscale_video: createUpscaleVideoTool(scope),

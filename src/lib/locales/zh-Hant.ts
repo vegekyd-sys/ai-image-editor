@@ -728,6 +728,7 @@ const zhHant = {
   'agent.status.choosingVoice': '正在選擇配音聲線...',
   'agent.status.generatingVoiceover': '正在產生配音...',
   'agent.status.generatingAudio': '正在產生音訊...',
+  'agent.status.understandingRetake': '正在理解選取片段…',
   'agent.status.capturingFrame': (hint: string) => `正在擷取 ${hint}...`,
   'agent.status.generatingImage': '正在產生圖片...',
   'agent.status.browsingWorkspace': '正在瀏覽工作區...',

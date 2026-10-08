@@ -822,6 +822,7 @@ const zh = {
   'agent.status.choosingVoice': '选择配音音色中...',
   'agent.status.generatingVoiceover': '生成配音中...',
   'agent.status.generatingAudio': '生成音频中...',
+  'agent.status.understandingRetake': '正在理解选中片段…',
   'agent.status.capturingFrame': (hint: string) => `截帧 ${hint}...`,
   'agent.status.generatingImage': '生成图片中...',
   'agent.status.browsingWorkspace': '浏览工作台...',

@@ -734,6 +734,7 @@ const ja = {
   'agent.status.choosingVoice': '音声を選択中...',
   'agent.status.generatingVoiceover': 'ナレーションを生成中...',
   'agent.status.generatingAudio': '音声を生成中...',
+  'agent.status.understandingRetake': '選択した区間を確認しています…',
   'agent.status.capturingFrame': (hint: string) => `${hint}をキャプチャ中...`,
   'agent.status.generatingImage': '画像を生成中...',
   'agent.status.browsingWorkspace': 'ワークスペースを確認中...',

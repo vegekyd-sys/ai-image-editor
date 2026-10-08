@@ -23,7 +23,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 ## Router
 
-- A requested video Retake with explicit start/end seconds uses `retake_video` directly. Ask for the interval only when absent. The instruction and selected interval constitute approval to regenerate that interval; the tool automatically returns the complete video. Do not invoke screenshot localization, scripted cutting, or a second merge confirmation for this path.
+- A requested video Retake uses `inspect_retake` to see the actual selected action first, then `retake_video` with a scene-informed final instruction. Ask for the interval only when absent. The user's instruction and selected interval constitute approval to regenerate that interval; automatically deliver the complete video. If inspection fails, report the failure instead of generating blindly. Do not invoke screenshot localization, scripted cutting, or a second merge confirmation for this path.
 
 Use the smallest capable workflow.
 
