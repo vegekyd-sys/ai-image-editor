@@ -71,29 +71,35 @@ export async function createContactSheet(
   frames: ContactSheetFrame[],
   sourceWidth: number,
   sourceHeight: number,
+  options: { columns?: number } = {},
 ): Promise<Buffer> {
   if (frames.length < 2) throw new Error('Contact sheet requires at least two frames');
+  if (options.columns != null && (!Number.isInteger(options.columns) || options.columns < 1)) {
+    throw new Error('Contact sheet columns must be a positive integer');
+  }
 
   const scale = Math.min(1, 480 / sourceWidth, 360 / sourceHeight);
   const tileWidth = Math.max(1, Math.round(sourceWidth * scale));
   const tileHeight = Math.max(1, Math.round(sourceHeight * scale));
   const labelHeight = 34;
-  const sheetWidth = tileWidth * frames.length;
-  const sheetHeight = tileHeight + labelHeight;
+  const columns = Math.min(options.columns ?? frames.length, frames.length);
+  const rowHeight = tileHeight + labelHeight;
+  const sheetWidth = tileWidth * columns;
+  const sheetHeight = rowHeight * Math.ceil(frames.length / columns);
 
   const tiles = await Promise.all(frames.map(async (frame, index) => ({
     input: await sharp(frame.image)
       .resize(tileWidth, tileHeight, { fit: 'cover' })
       .jpeg({ quality: 86 })
       .toBuffer(),
-    left: index * tileWidth,
-    top: 0,
+    left: (index % columns) * tileWidth,
+    top: Math.floor(index / columns) * rowHeight,
   })));
 
   const labels = frames.map((frame, index) => ({
     input: renderContactSheetLabelSvg(frame.label, tileWidth, labelHeight),
-    left: index * tileWidth,
-    top: tileHeight,
+    left: (index % columns) * tileWidth,
+    top: Math.floor(index / columns) * rowHeight + tileHeight,
   }));
 
   return sharp({

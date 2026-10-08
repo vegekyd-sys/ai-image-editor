@@ -30,7 +30,7 @@ describe('Retake inspection evidence', () => {
   })
   it('covers the selected action and contextual boundaries in original time', () => {
     const plan = planRetake({ start: 18, end: 21 }, 30.048, 'fal-h3-max')
-    expect(retakeInspectionTimestamps(plan, 24)).toEqual([17, 18, 19, 20, 20.958, 21.958])
+    expect(retakeInspectionTimestamps(plan, 24)).toEqual([17, 18, 18.6, 19.2, 19.8, 20.4, 20.958, 21.958])
     expect(retakeOutputTime(plan, 18)).toBe(1)
     expect(retakeOutputTime(plan, 21)).toBe(4)
     expect(retakeOutputTime(plan, 17)).toBe(0)

@@ -3,6 +3,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from './video-retake-contract';
 import { retakeInspectionScope, verifyRetakeInspection } from './video-retake-inspection';
+import { RETAKE_PROMPT_WRITING } from './video-retake-prompt-planning';
 import type { AgentContext } from './agent-tools';
 import type { submitMcpVideo } from './billing/mcp-video';
 import type { VideoSourceRange } from '@/types';
@@ -16,14 +17,14 @@ interface RetakeToolDependencies {
 
 export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, resolveSource, submit }: RetakeToolDependencies) {
   return tool({
-    description: 'Retake an INSPECTED interval of a ready video, automatically delivering the complete video with original audio/duration and footage outside the selection. Call inspect_retake for this exact source/selection/model first, view its frames, then supply its inspection_id plus a concrete source_observation. start/end use original-source seconds; prompt shot times use OUTPUT seconds from the inspection plan. The prompt is the complete final instruction passed directly to the provider without a creative wrapper. For requested multi-camera coverage, use what you actually saw to choose distinct camera setups and explicit CUT beats within outputSelection, advancing the same action. Keep observations separate from the requested changes. Do not copy the reference shot coverage when the user requests new angles. Default FAL H3 Max; Seedance 2.5 is available for close motion preservation/small edits. Interval 0.1–15s, source at most 120s; sources under 2s require Seedance. No screenshot relocation, run_code cutting, or second merge confirmation. Poll the returned task; never regenerate to retry delivery.',
+    description: 'Retake an INSPECTED interval of a ready video, automatically delivering the complete video with original audio/duration and footage outside the selection. Call inspect_retake for this exact source/selection/model first, view its frames, then supply its inspection_id plus a concrete source_observation. start/end use original-source seconds. The prompt is the complete final instruction passed directly to the provider without a creative wrapper. Default FAL H3 Max; Seedance 2.5 is available for close motion preservation/small edits. Interval 0.1–15s, source at most 120s; sources under 2s require Seedance. No screenshot relocation, run_code cutting, or second merge confirmation. Poll the returned task; never regenerate to retry delivery.\n' + RETAKE_PROMPT_WRITING,
     inputSchema: z.object({
       media_index: z.number().int().positive(),
       start: z.number().nonnegative(),
       end: z.number().positive(),
-      prompt: z.string().min(1),
+      prompt: z.string().min(1).describe('Final expanded prompt: requested visible change first, explicit output-time action/shot beats next, essential identity constraints last. Avoid copying the source synopsis or conflicting camera locks.'),
       inspection_id: z.string().optional().describe('Exact receipt returned by inspect_retake for this source, range and model. Required before any paid submission.'),
-      source_observation: z.string().optional().describe('Describe the actual inspected subjects, action progression, camera coverage and boundary states. Do not substitute the requested changes for observed facts.'),
+      source_observation: z.string().optional().describe('Timestamped visible evidence: subject identity, original camera coverage, selected opening/middle/closing action states, travel direction/contact/occlusion, and uncertainty. Keep contextual boundary states separate. Do not substitute requested changes for observed facts.'),
       model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
       request_id: z.string().uuid().optional(),
     }),

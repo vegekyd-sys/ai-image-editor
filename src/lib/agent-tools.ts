@@ -16,6 +16,7 @@ import { submitMcpVideo } from './billing/mcp-video';
 import { createInspectedRetakeVideoTool } from './agent-retake-tool';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL, planRetake, validateRetakeRange } from './video-retake-contract';
 import { signRetakeInspection, retakeInspectionScope, retakeOutputTime } from './video-retake-inspection';
+import { RETAKE_SCENE_READING, RETAKE_PROMPT_WRITING, retakePromptPlanning } from './video-retake-prompt-planning';
 import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
 import {
@@ -2186,7 +2187,7 @@ function createGenerateAnimationTool(
 
 function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
   return tool({
-    description: 'Inspect the actual selected video interval BEFORE writing a Retake prompt. Downloads one source and extracts 4-6 labeled frames covering the action and surrounding boundary states. Returns pixels (or verified vision analysis), a signed inspection_id, and the exact source-to-output time mapping. Use the same media_index/start/end/model for retake_video. Read the images first, then describe the actual subjects, movement, camera coverage and boundary states in source_observation; write the final creative prompt in output seconds from the returned plan. That prompt is passed directly to the video model, without another creative wrapper. For H3, Video 1 is the reference clip; Image 1 and Image 2 are its context opening/ending frames. Do not confuse these provider references with timeline indices. If inspection fails, do not generate blindly.',
+    description: 'Inspect the actual selected video interval BEFORE expanding a Retake prompt. Downloads one source and extracts up to 8 labeled frames: denser samples inside the selection plus contextual boundaries. Returns pixels (or verified vision analysis), a signed inspection_id, source/output mapping and a shot timing budget. Use the same media_index/start/end/model for retake_video. ' + RETAKE_SCENE_READING + '\nIf inspection fails, do not generate blindly.',
     inputSchema: z.object({
       media_index: z.number().int().positive(),
       start: z.number().nonnegative(),
@@ -2211,14 +2212,14 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
         const sampled = await extractRetakeInspectionFrames(bytes, plan, meta.fps!);
         const sheet = await createContactSheet(sampled.frames.map((image, index) => ({ image,
           label: `#${index + 1} ${sampled.timestamps[index].toFixed(2)}s : ${retakeOutputTime(plan, sampled.timestamps[index]).toFixed(2)}s`,
-        })), meta.width!, meta.height!);
+        })), meta.width!, meta.height!, { columns: 4 });
         let analysis: string | undefined;
         // A visual Agent reads the actual sheet itself. Only text-only models
         // need the separate analyzer; its failure must not permit blind editing.
         if (!runtime.spec.supportsImageInput) {
           const { analyzeImageContent } = await import('./gemini');
           analysis = await analyzeImageContent(`data:image/jpeg;base64,${sheet.toString('base64')}`,
-            'Describe these timestamped actual video frames for a localized Retake. Identify subjects and distinctive appearance, environment, existing camera positions/cuts, progression of motion, and opening/ending action states. Separate visible evidence from uncertainty. Do not invent unseen action or write a replacement script yet.', ctx.userId);
+            `${RETAKE_SCENE_READING}\nSelected source interval: ${start}–${end}s; context: ${plan.contextStart}–${plan.contextEnd}s.`, ctx.userId);
           if (!analysis?.trim()) return { error: 'Retake frame understanding failed. No video generation was submitted.' };
         }
         const workspacePath = `${ctx.projectId}/drafts/retake-inspection-${Date.now()}.jpg`;
@@ -2228,6 +2229,7 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
         return { success: true, inspection_id, plan, timestamps: sampled.timestamps,
           outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) },
           sourceToOutputScale: plan.generationDuration / (plan.contextEnd - plan.contextStart),
+          promptPlanning: retakePromptPlanning(plan),
           analysis, base64Data: sheet.toString('base64'), mimeType: 'image/jpeg', workspacePath, workspaceUrl };
       } catch (error) {
         return { error: `Retake inspection failed: ${error instanceof Error ? error.message : String(error)}. No video generation was submitted.` };
@@ -2238,7 +2240,7 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
       const { base64Data, mimeType, ...receipt } = output;
       return { type: 'content' as const, value: [
         ...(!output.analysis ? [modelFileContent(base64Data, mimeType)] : []),
-        { type: 'text' as const, text: `Retake visual evidence and time mapping:\n${JSON.stringify(receipt)}\nUse these actual frames to write source_observation and the final prompt. All shot times in the prompt must be OUTPUT seconds; change only outputSelection and use the surrounding frames for a coherent handoff.` },
+        { type: 'text' as const, text: `Retake visual evidence and time mapping:\n${JSON.stringify(receipt)}\n${RETAKE_SCENE_READING}\n${RETAKE_PROMPT_WRITING}` },
       ] };
     },
   });

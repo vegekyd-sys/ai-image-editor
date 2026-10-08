@@ -36,9 +36,12 @@ export function retakeInspectionTimestamps(plan: RetakePlan, fps: number): numbe
   if (!Number.isFinite(fps) || fps < 1) throw new Error('Retake inspection needs a measured frame rate.')
   const length = plan.end - plan.start
   const last = Math.max(plan.start, plan.end - 1 / fps)
+  const selectedSamples = Math.min(6, Math.max(2, Math.floor(length * fps)))
   return [...new Set([
-    plan.contextStart, plan.start, plan.start + length / 3,
-    plan.start + length * 2 / 3, last, Math.max(plan.contextStart, plan.contextEnd - 1 / fps),
+    plan.contextStart,
+    ...Array.from({ length: selectedSamples }, (_, index) => index === selectedSamples - 1
+      ? last : plan.start + length * index / (selectedSamples - 1)),
+    Math.max(plan.contextStart, plan.contextEnd - 1 / fps),
   ].map(value => Number(value.toFixed(3))))].sort((a, b) => a - b)
 }
 
@@ -50,4 +53,3 @@ export function retakeInspectionScope(ctx: { userId?: string; projectId: string;
   return { userId: ctx.userId!, projectId: ctx.projectId, runId: ctx.execution?.runId || ctx.agentRunId || 'interactive',
     inputEpoch: ctx.execution?.inputEpoch || 0, sourceUrl, start, end, model };
 }
-
