@@ -31,6 +31,7 @@ const IOS_CUI_PAN_COMMIT_PX = 86;
 const IOS_CUI_PAN_MIN_DX = 10;
 import { downloadAsset, getDownloadAssetPreview, prepareDownloadAsset, PreparedDownloadCache, trySavePaidDownload, type DownloadAssetParams } from '@/lib/editor/download';
 import { isWatermarkSaveFlowEnabled } from '@/lib/free-media-policy';
+import { trySaveSmallImage } from '@/lib/editor/image-save';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
@@ -3026,8 +3027,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   const handleDownload = useCallback(async () => {
     const generated = Boolean(currentSnap?.design || currentSnap?.messageId || isGeneratedVideoSnapshot(currentSnap) || draftParentIndexRef.current !== null);
     if (!isViewingVideo && !currentSnap?.design?.animation) {
-      setSaveNeedsWatermark(isWatermarkSaveFlowEnabled() && generated);
-      setSaveRequest(downloadParams());
+      const watermarkRequired = isWatermarkSaveFlowEnabled() && generated;
+      const params = downloadParams();
+      setSaveNeedsWatermark(watermarkRequired);
+      try {
+        if (!(await trySaveSmallImage(params, saveAssetCache.current!, watermarkRequired))) setSaveRequest(params);
+      } catch {
+        setAgentStatus(t('editor.saveFailed'));
+      }
       return;
     }
     if (isWatermarkSaveFlowEnabled() && generated) {

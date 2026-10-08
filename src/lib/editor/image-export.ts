@@ -3,6 +3,7 @@ import type { PreparedDownload } from './download';
 export type ImageSaveSize = 'original' | '2k' | 'share';
 export type ImageSaveFormat = 'original' | 'png' | 'jpeg';
 export interface ImageExportInfo { width: number; height: number; mimeType: string }
+export const IMAGE_SHARE_LONG_EDGE = 1280;
 
 async function decodeImage(blob: Blob): Promise<{ source: CanvasImageSource; width: number; height: number; close: () => void }> {
   if (typeof createImageBitmap === 'function') {
@@ -27,7 +28,7 @@ export async function inspectImageExport(blob: Blob): Promise<ImageExportInfo> {
 }
 
 export function imageExportDimensions(info: ImageExportInfo, size: ImageSaveSize): { width: number; height: number } {
-  const limit = size === '2k' ? 2048 : size === 'share' ? 1280 : Infinity;
+  const limit = size === '2k' ? 2048 : size === 'share' ? IMAGE_SHARE_LONG_EDGE : Infinity;
   const scale = Math.min(1, limit / Math.max(info.width, info.height));
   return { width: Math.max(1, Math.round(info.width * scale)), height: Math.max(1, Math.round(info.height * scale)) };
 }

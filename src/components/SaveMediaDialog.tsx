@@ -6,7 +6,7 @@ import { useLocale } from '@/lib/i18n';
 import { checkMediaDownload, savePreparedDownload, type DownloadAssetPreview, type PreparedDownload } from '@/lib/editor/download';
 import { preloadWatermarkVideo, watermarkDataUrl, watermarkGeometry, watermarkImage, watermarkVideo } from '@/lib/editor/web-watermark';
 import { isNativeVideoWatermarkAvailable, saveWatermarkedVideoToNativePhotoLibrary } from '@/lib/native-media';
-import { exportImageDownload, imageExportDimensions, inspectImageExport, type ImageExportInfo, type ImageSaveFormat, type ImageSaveSize } from '@/lib/editor/image-export';
+import { exportImageDownload, IMAGE_SHARE_LONG_EDGE, imageExportDimensions, inspectImageExport, type ImageExportInfo, type ImageSaveFormat, type ImageSaveSize } from '@/lib/editor/image-export';
 
 interface Props {
   prepare: () => Promise<PreparedDownload>;
@@ -216,7 +216,7 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
                   className="block h-11 w-full appearance-none rounded-lg border border-white/15 bg-[#242428] pl-2 pr-8 text-sm text-white">
                   <option value="original">{t('editor.saveOriginalSize')}{originalTier ? ` · ${originalTier}` : ''}</option>
                   {longEdge > 2048 && <option value="2k">{t('editor.save2kSize')}</option>}
-                  {longEdge > 1280 && <option value="share">{t('editor.saveShareSize')}</option>}
+                  {longEdge > IMAGE_SHARE_LONG_EDGE && <option value="share">{t('editor.saveShareSize')}</option>}
                 </select>
                 <ChevronDown size={15} aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-white/60" />
                 </span>
