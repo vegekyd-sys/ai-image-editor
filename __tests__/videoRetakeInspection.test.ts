@@ -1,7 +1,11 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
-import { signRetakeInspection, verifyRetakeInspection, readRetakeInspectionClock, retakeInspectionTimestamps, retakeOutputTime, type RetakeInspectionScope } from '@/lib/video-retake-inspection'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { signRetakeInspection, verifyRetakeInspection, readRetakeInspectionClock, resolveRetakeInspectionReceipt, retakeInspectionTimestamps, retakeOutputTime, type RetakeInspectionScope } from '@/lib/video-retake-inspection'
 import { planRetake } from '@/lib/video-retake-contract'
+
+const readProof = vi.hoisted(()=>vi.fn());
+vi.mock('@/lib/workspace',()=>({readFile:readProof}));
+beforeEach(()=>readProof.mockReset());
 
 const scope: RetakeInspectionScope = { userId: 'owner', projectId: 'project', runId: 'run', inputEpoch: 2,
   sourceUrl: 'https://example.com/original.mp4', start: 18, end: 21, model: 'fal-h3-max' }
@@ -39,6 +43,25 @@ describe('Retake inspection evidence', () => {
     expect(readRetakeInspectionClock(parts.join('.'), scope, secret)).toBeNull()
     expect(readRetakeInspectionClock(signRetakeInspection(scope, secret), scope, secret)).toBeNull()
   })
+  it('resolves a durable short ID while retaining all signed scope checks', async()=>{
+    const id='retake-evidence.11111111-2222-4333-a444-555555555555';
+    const receipt=signRetakeInspection(scope,secret,{outputSelection:{start:0,end:5},generationDuration:5});
+    const ctx={userId:'owner',projectId:'project',supabase:{}};
+    readProof.mockResolvedValue({content:JSON.stringify({receipt})});
+    const resolved=await resolveRetakeInspectionReceipt(id,ctx);
+    expect(readProof).toHaveBeenCalledWith('project/drafts/retake-inspection-11111111-2222-4333-a444-555555555555.json',ctx.supabase,'owner');
+    expect(verifyRetakeInspection(resolved,scope,secret)).toBe(true);
+    expect(verifyRetakeInspection(resolved,{...scope,runId:'other'},secret)).toBe(false);
+  });
+  it('rejects malformed, absent and damaged short-ID proofs without trusting the pointer', async()=>{
+    const ctx={userId:'owner',projectId:'project',supabase:{}};
+    expect(await resolveRetakeInspectionReceipt('retake-evidence.../other.json',ctx)).toBeUndefined();
+    expect(readProof).not.toHaveBeenCalled();
+    readProof.mockResolvedValue(null);
+    expect(await resolveRetakeInspectionReceipt('retake-evidence.11111111-2222-4333-a444-555555555555',ctx)).toBeUndefined();
+    readProof.mockResolvedValue({content:'not-json'});
+    expect(await resolveRetakeInspectionReceipt('retake-evidence.11111111-2222-4333-a444-555555555555',ctx)).toBeUndefined();
+  });
   it('covers the selected action and contextual boundaries in original time', () => {
     const plan = planRetake({ start: 18, end: 21 }, 30.048, 'fal-h3-max')
     expect(retakeInspectionTimestamps(plan, 24)).toEqual([17.958, 18, 18.6, 19.2, 19.8, 20.4, 20.958, 21])

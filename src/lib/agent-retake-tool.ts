@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { tool } from 'ai';
 import { z } from 'zod';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from './video-retake-contract';
-import { retakeInspectionScope, verifyRetakeInspection, readRetakeInspectionClock } from './video-retake-inspection';
+import { retakeInspectionScope, verifyRetakeInspection, resolveRetakeInspectionReceipt, readRetakeInspectionClock } from './video-retake-inspection';
 import { RETAKE_PROMPT_WRITING, retakeShotPlanError } from './video-retake-prompt-planning';
 import type { AgentContext } from './agent-tools';
 import type { submitMcpVideo } from './billing/mcp-video';
@@ -39,10 +39,11 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       if (source.sourceRange && (start < source.sourceRange.start_sec || end > source.sourceRange.end_sec)) {
         return { success: false, message: 'Retake interval must be within the visible original-source range.' };
       }
-      if (!verifyRetakeInspection(inspection_id, retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '') || !source_observation || source_observation.trim().length < 24) {
+      const receipt = await resolveRetakeInspectionReceipt(inspection_id,ctx);
+      if (!verifyRetakeInspection(receipt, retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '') || !source_observation || source_observation.trim().length < 24) {
         return { success: false, errorCode: 'retake_inspection_required', message: 'No provider was submitted. Call inspect_retake for this exact media_index/start/end/model, read the actual frames, and provide its inspection_id plus a concrete source_observation before writing the final prompt.' };
       }
-      const clock = readRetakeInspectionClock(inspection_id, retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '')
+      const clock = readRetakeInspectionClock(receipt, retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '')
       if (!clock) return { success: false, errorCode: 'retake_inspection_required', message: 'No provider was submitted. Re-run inspect_retake to obtain the measured output clock before planning the edit.' }
       const timingError = retakeShotPlanError(shot_plan, prompt, clock.outputSelection)
       if (timingError) return { success: false, errorCode: 'retake_prompt_timing_invalid', message: `No provider was submitted. ${timingError} Required outputSelection: ${clock.outputSelection.start}–${clock.outputSelection.end}s. Correct shot_plan and prompt before submitting.` }
