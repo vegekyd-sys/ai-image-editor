@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Download, LoaderCircle, Pause, Play, Sparkles, X } from 'lucide-react';
+import { ChevronDown, Download, LoaderCircle, Pause, Play, Sparkles, X } from 'lucide-react';
 import { useLocale } from '@/lib/i18n';
 import { checkMediaDownload, savePreparedDownload, type DownloadAssetPreview, type PreparedDownload } from '@/lib/editor/download';
 import { preloadWatermarkVideo, watermarkDataUrl, watermarkGeometry, watermarkImage, watermarkVideo } from '@/lib/editor/web-watermark';
@@ -211,20 +211,26 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
           {kind === 'image' && imageInfo && <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3" data-testid="image-save-options">
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs text-white/60">{t('editor.saveImageSize')}
+                <span className="relative mt-1.5 block">
                 <select value={imageSize} disabled={saving} data-testid="image-save-size" onChange={event => setImageSize(event.target.value as ImageSaveSize)}
-                  className="mt-1.5 block min-h-10 w-full rounded-lg border border-white/15 bg-[#242428] px-2 text-sm text-white">
+                  className="block h-11 w-full appearance-none rounded-lg border border-white/15 bg-[#242428] pl-2 pr-8 text-sm text-white">
                   <option value="original">{t('editor.saveOriginalSize')}{originalTier ? ` · ${originalTier}` : ''}</option>
                   {longEdge > 2048 && <option value="2k">{t('editor.save2kSize')}</option>}
                   {longEdge > 1280 && <option value="share">{t('editor.saveShareSize')}</option>}
                 </select>
+                <ChevronDown size={15} aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-white/60" />
+                </span>
               </label>
               <label className="text-xs text-white/60">{t('editor.saveImageFormat')}
+                <span className="relative mt-1.5 block">
                 <select value={imageFormat} disabled={saving} data-testid="image-save-format" onChange={event => setImageFormat(event.target.value as ImageSaveFormat)}
-                  className="mt-1.5 block min-h-10 w-full rounded-lg border border-white/15 bg-[#242428] px-2 text-sm text-white">
+                  className="block h-11 w-full appearance-none rounded-lg border border-white/15 bg-[#242428] pl-2 pr-8 text-sm text-white">
                   <option value="original">{t('editor.saveOriginalFormat')} · {nativeFormat}</option>
                   <option value="png">{t('editor.savePngFormat')}</option>
                   <option value="jpeg">{t('editor.saveJpgFormat')}</option>
                 </select>
+                <ChevronDown size={15} aria-hidden="true" className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-white/60" />
+                </span>
               </label>
             </div>
             <p className="mt-2 text-xs tabular-nums text-white/60" data-testid="image-save-dimensions">{selectedSize?.width} × {selectedSize?.height}</p>
