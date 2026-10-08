@@ -43,7 +43,7 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       if (source.sourceRange && (start < source.sourceRange.start_sec || end > source.sourceRange.end_sec)) {
         return { success: false, message: 'Retake interval must be within the visible original-source range.' };
       }
-      const receipt = await resolveRetakeInspectionReceipt(inspection_id,ctx);
+      const receipt = await resolveRetakeInspectionReceipt(inspection_id,ctx,retakeInspectionScope(ctx, source.videoUrl, start, end, model));
       if (!verifyRetakeInspection(receipt, retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '') || !source_observation || source_observation.trim().length < 24) {
         return { success: false, errorCode: 'retake_inspection_required', message: 'No provider was submitted. Call inspect_retake for this exact media_index/start/end/model, read the actual frames, and provide its inspection_id plus a concrete source_observation before writing the final prompt.' };
       }

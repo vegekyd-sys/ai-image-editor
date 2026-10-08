@@ -80,10 +80,20 @@ export function retakeInspectionScope(ctx: { userId?: string; projectId: string;
     inputEpoch: ctx.execution?.inputEpoch || 0, sourceUrl, start, end, model };
 }
 
-/** Keep long signed receipts server-side; models pass a familiar short UUID ID.
+export function retakeInspectionProofPath(scope: RetakeInspectionScope): string {
+  return `${scope.projectId}/drafts/retake-inspection-scope-${fingerprint(scope)}.json`
+}
+
+/** Keep long signed receipts server-side; models pass a stable scoped alias.
  * The stored receipt still verifies owner/project/run/epoch/source/range/model. */
-export async function resolveRetakeInspectionReceipt(id: string | undefined, ctx: {projectId:string;userId?:string;supabase?:any}): Promise<string | undefined> {
+export async function resolveRetakeInspectionReceipt(id: string | undefined, ctx: {projectId:string;userId?:string;supabase?:any}, scope?: RetakeInspectionScope): Promise<string | undefined> {
   if (!id?.startsWith('retake-evidence.')) return id
+  if (id === 'retake-evidence.current') {
+    if (!scope || !ctx.userId || scope.userId !== ctx.userId || scope.projectId !== ctx.projectId) return undefined
+    const {readFile} = await import('./workspace')
+    const result = await readFile(retakeInspectionProofPath(scope),ctx.supabase,ctx.userId)
+    try { return result ? JSON.parse(result.content).receipt : undefined } catch { return undefined }
+  }
   const key = id.slice('retake-evidence.'.length)
   if (!ctx.userId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(key)) return undefined
   const {readFile} = await import('./workspace')

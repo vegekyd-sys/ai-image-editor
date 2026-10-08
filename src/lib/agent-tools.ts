@@ -1,5 +1,4 @@
 import { isFalImage25 } from './models/types';
-import { createHash, randomUUID } from 'node:crypto';
 import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
 import { after } from 'next/server';
@@ -15,7 +14,7 @@ import { createVideo } from './skills/create-video';
 import { submitMcpVideo } from './billing/mcp-video';
 import { createInspectedRetakeVideoTool } from './agent-retake-tool';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL, planRetake, validateRetakeRange } from './video-retake-contract';
-import { signRetakeInspection, verifyRetakeInspection, resolveRetakeInspectionReceipt, retakeInspectionScope, retakeOutputTime } from './video-retake-inspection';
+import { signRetakeInspection, verifyRetakeInspection, resolveRetakeInspectionReceipt, retakeInspectionScope, retakeOutputTime, retakeInspectionProofPath } from './video-retake-inspection';
 import { RETAKE_SCENE_READING, RETAKE_PROMPT_WRITING, retakePromptPlanning } from './video-retake-prompt-planning';
 import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
@@ -1422,7 +1421,7 @@ function createGenerateImageTool(
           const r = retake_source;
           if (!ctx.userId || !ctx.projectId || media_index || reference_media_indices?.length || r.source_time < r.start || r.source_time >= r.end) return {success:false,message:'Retake keyframe requires an inspected in-selection source frame and no competing image target.'};
           const source = await resolveVideoUrlForMediaIndex(ctx,r.media_index);
-          if (!source.videoUrl || !verifyRetakeInspection(await resolveRetakeInspectionReceipt(r.inspection_id,ctx),retakeInspectionScope(ctx,source.videoUrl,r.start,r.end,r.model),process.env.SUPABASE_SERVICE_ROLE_KEY || '')) return {success:false,message:'Re-inspect this exact source/range/model before generating a Retake keyframe. No image provider submitted.'};
+          if (!source.videoUrl || !verifyRetakeInspection(await resolveRetakeInspectionReceipt(r.inspection_id,ctx,retakeInspectionScope(ctx,source.videoUrl,r.start,r.end,r.model)),retakeInspectionScope(ctx,source.videoUrl,r.start,r.end,r.model),process.env.SUPABASE_SERVICE_ROLE_KEY || '')) return {success:false,message:'Re-inspect this exact source/range/model before generating a Retake keyframe. No image provider submitted.'};
           const {readProviderImage} = await import('./provider-image-preflight');
           const {extractRetakeSourceFrame} = await import('./video-retake-media');
           const frame = await extractRetakeSourceFrame(await readProviderImage(source.videoUrl,512*1024*1024,{mediaType:'video'}),r.source_time);
@@ -2251,13 +2250,13 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
         const workspacePath = `${ctx.projectId}/drafts/retake-inspection-${Date.now()}.jpg`;
         const write = await workspace.writeFile(workspacePath, sheet, ctx.supabase, ctx.userId, 'image/jpeg');
         const workspaceUrl = write.storageUrl ? toPublicStorageUrl(write.storageUrl) : '';
-        const receipt = signRetakeInspection(retakeInspectionScope(ctx, source.videoUrl, start, end, model), process.env.SUPABASE_SERVICE_ROLE_KEY || '', {
+        const inspectionScope = retakeInspectionScope(ctx, source.videoUrl, start, end, model);
+        const receipt = signRetakeInspection(inspectionScope, process.env.SUPABASE_SERVICE_ROLE_KEY || '', {
           outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) }, generationDuration: plan.generationDuration,
         });
-        const key = randomUUID();
-        const proof = await workspace.writeFile(`${ctx.projectId}/drafts/retake-inspection-${key}.json`,JSON.stringify({receipt}),ctx.supabase,ctx.userId,'application/json');
+        const proof = await workspace.writeFile(retakeInspectionProofPath(inspectionScope),JSON.stringify({receipt}),ctx.supabase,ctx.userId,'application/json');
         if (!proof.success) return {error:'Could not persist the Retake inspection receipt. No provider submitted.'};
-        const inspection_id = `retake-evidence.${key}`;
+        const inspection_id = 'retake-evidence.current';
         return { success: true, inspection_id, plan, timestamps: sampled.timestamps,
           outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) },
           sourceToOutputScale: plan.generationDuration / (plan.outputMode === 'selection' ? end - start : plan.contextEnd - plan.contextStart),

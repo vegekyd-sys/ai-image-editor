@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { signRetakeInspection, verifyRetakeInspection, readRetakeInspectionClock, resolveRetakeInspectionReceipt, retakeInspectionTimestamps, retakeOutputTime, type RetakeInspectionScope } from '@/lib/video-retake-inspection'
+import { signRetakeInspection, verifyRetakeInspection, readRetakeInspectionClock, resolveRetakeInspectionReceipt, retakeInspectionProofPath, retakeInspectionTimestamps, retakeOutputTime, type RetakeInspectionScope } from '@/lib/video-retake-inspection'
 import { planRetake } from '@/lib/video-retake-contract'
 
 const readProof = vi.hoisted(()=>vi.fn());
@@ -61,6 +61,17 @@ describe('Retake inspection evidence', () => {
     expect(await resolveRetakeInspectionReceipt('retake-evidence.11111111-2222-4333-a444-555555555555',ctx)).toBeUndefined();
     readProof.mockResolvedValue({content:'not-json'});
     expect(await resolveRetakeInspectionReceipt('retake-evidence.11111111-2222-4333-a444-555555555555',ctx)).toBeUndefined();
+  });
+  it('resolves a stable alias only to the exact inspected scope, never another request',async()=>{
+    const receipt=signRetakeInspection(scope,secret,{outputSelection:{start:0,end:5},generationDuration:5});
+    const ctx={userId:'owner',projectId:'project',supabase:{}};
+    readProof.mockImplementation(async(path:string)=>path===retakeInspectionProofPath(scope)?{content:JSON.stringify({receipt})}:null);
+    expect(verifyRetakeInspection(await resolveRetakeInspectionReceipt('retake-evidence.current',ctx,scope),scope,secret)).toBe(true);
+    for(const change of [{userId:'other'},{projectId:'other'},{runId:'other'},{inputEpoch:3},{sourceUrl:'https://example.com/new.mp4'},{start:19},{end:22},{model:'seedance-2.5-eco'}]) {
+      expect(await resolveRetakeInspectionReceipt('retake-evidence.current',ctx,{...scope,...change})).toBeUndefined();
+    }
+    expect(await resolveRetakeInspectionReceipt('retake-evidence.current',ctx)).toBeUndefined();
+    expect(await resolveRetakeInspectionReceipt(undefined,ctx,scope)).toBeUndefined();
   });
   it('covers the selected action and contextual boundaries in original time', () => {
     const plan = planRetake({ start: 18, end: 21 }, 30.048, 'fal-h3-max')
