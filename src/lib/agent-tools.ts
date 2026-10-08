@@ -1425,7 +1425,7 @@ function createGenerateImageTool(
           if (!source.videoUrl || !verifyRetakeInspection(await resolveRetakeInspectionReceipt(r.inspection_id,ctx),retakeInspectionScope(ctx,source.videoUrl,r.start,r.end,r.model),process.env.SUPABASE_SERVICE_ROLE_KEY || '')) return {success:false,message:'Re-inspect this exact source/range/model before generating a Retake keyframe. No image provider submitted.'};
           const {readProviderImage} = await import('./provider-image-preflight');
           const {extractRetakeSourceFrame} = await import('./video-retake-media');
-          const frame = await extractRetakeSourceFrame(await readProviderImage(source.videoUrl,512*1024*1024),r.source_time);
+          const frame = await extractRetakeSourceFrame(await readProviderImage(source.videoUrl,512*1024*1024,{mediaType:'video'}),r.source_time);
           editTarget = `data:image/jpeg;base64,${frame.toString('base64')}`;
         }
 
@@ -2232,7 +2232,7 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
         const { readProviderImage } = await import('./provider-image-preflight');
         const { inspectRetakeSource, extractRetakeInspectionFrames } = await import('./video-retake-media');
         const { createContactSheet } = await import('./contact-sheet');
-        const bytes = await readProviderImage(source.videoUrl, 512 * 1024 * 1024);
+        const bytes = await readProviderImage(source.videoUrl, 512 * 1024 * 1024, {mediaType:'video'});
         const meta = await inspectRetakeSource(bytes);
         const plan = planRetake({ start, end }, meta.duration!, model);
         const sampled = await extractRetakeInspectionFrames(bytes, plan, meta.fps!);

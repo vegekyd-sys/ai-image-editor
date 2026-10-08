@@ -18,7 +18,7 @@ export function isPublicImageAddress(address: string): boolean {
 }
 
 /** DNS is validated on the actual socket lookup, preventing DNS rebinding. No redirects or credentials. */
-export async function readProviderImage(source: string, limit: number, options?: { falAsset?: boolean; evolinkAsset?: boolean }): Promise<Buffer> {
+export async function readProviderImage(source: string, limit: number, options?: { falAsset?: boolean; evolinkAsset?: boolean; mediaType?: 'video' }): Promise<Buffer> {
   if (source.startsWith('data:')) {
     const match = /^data:image\/(?:jpeg|jpg|png|webp|bmp);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(source);
     if (!match || Buffer.byteLength(match[1], 'base64') > limit) throw new Error('Invalid image data');
@@ -35,7 +35,7 @@ export async function readProviderImage(source: string, limit: number, options?:
     || (isIP(host) && !isPublicImageAddress(host))) throw new Error('Not a public HTTPS image');
   return new Promise((resolve, reject) => {
     const request = get(url, {
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(options?.mediaType === 'video' ? 120_000 : 15_000),
       lookup(hostname, options, callback) {
         lookup(hostname, { all: true }, (error, addresses) => {
           if (error) return callback(error, '', 4);

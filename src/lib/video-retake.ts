@@ -101,7 +101,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
         status: old.stage === 'completed' ? 'completed' : old.stage === 'failed' ? 'failed' : 'processing', videoUrl: old.output_url, retryable: false, message: status(old as Job).message }
     }
     const started = performance.now()
-    const source = await readProviderImage(input.videoUrl, 512 * 1024 * 1024)
+    const source = await readProviderImage(input.videoUrl, 512 * 1024 * 1024, {mediaType:'video'})
     const meta = await inspectRetakeSource(source)
     const plan = planRetake({ start: input.retake.start, end: input.retake.end }, meta.duration!, model)
     if (Math.round(plan.end * meta.fps!) <= Math.round(plan.start * meta.fps!)) throw new Error('Retake interval must include at least one source frame.')
@@ -194,13 +194,13 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
       }
     }
     if (job.stage === 'saving_patch' && job.patch_url) {
-      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024, { falAsset: job.model_id !== 'seedance-2.5', evolinkAsset: job.model_id === 'seedance-2.5' })
+      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', falAsset: job.model_id !== 'seedance-2.5', evolinkAsset: job.model_id === 'seedance-2.5' })
       const permanentPatch = await store(job, bytes, 'patch')
       await save(job, { patch_url: permanentPatch, stage: 'assembling' }, token)
     }
     if (job.stage === 'assembling' && job.patch_url) {
       const started = performance.now()
-      const [source, patch] = await Promise.all([readProviderImage(job.source_url, 512 * 1024 * 1024), readProviderImage(job.patch_url, 512 * 1024 * 1024)])
+      const [source, patch] = await Promise.all([readProviderImage(job.source_url, 512 * 1024 * 1024, {mediaType:'video'}), readProviderImage(job.patch_url, 512 * 1024 * 1024, {mediaType:'video'})])
       const final = await assembleRetake(source, patch, job.plan)
       completedBuffer = final.bytes
       const outputUrl = await store(job, final.bytes, `final-${createHash('sha256').update(final.bytes).digest('hex').slice(0, 12)}`)
