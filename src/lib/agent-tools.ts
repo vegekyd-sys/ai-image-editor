@@ -2238,6 +2238,16 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
         const sheet = await createContactSheet(sampled.frames.map((image, index) => ({ image,
           label: `#${index + 1} ${sampled.timestamps[index].toFixed(2)}s : ${sampled.timestamps[index] < start || sampled.timestamps[index] >= end ? 'JOIN CONTEXT' : retakeOutputTime(plan, sampled.timestamps[index]).toFixed(2) + 's'}`,
         })), meta.width!, meta.height!, { columns: 4 });
+        // Separate the edited action from adjacent shots: a context frame is
+        // evidence for the cut, never the selected closing pose.
+        const selectedIndices = sampled.timestamps.flatMap((time,index)=>time >= start && time < end ? [index] : []);
+        const contextIndices = sampled.timestamps.flatMap((time,index)=>time < start || time >= end ? [index] : []);
+        const visualEvidence = await Promise.all([
+          {role:'selection',indices:selectedIndices}, {role:'join_context',indices:contextIndices},
+        ].filter(group=>group.indices.length).map(async group=>({
+          role:group.role, timestamps:group.indices.map(index=>sampled.timestamps[index]),
+          base64Data:(group.indices.length === 1 ? sampled.frames[group.indices[0]] : await createContactSheet(group.indices.map(index=>({image:sampled.frames[index],label:`#${index + 1} ${sampled.timestamps[index].toFixed(2)}s : ${group.role==='join_context'?'JOIN CONTEXT':retakeOutputTime(plan,sampled.timestamps[index]).toFixed(2)+'s'}`})),meta.width!,meta.height!,{columns:group.role==='selection'?3:2})).toString('base64'),
+        })));
         let analysis: string | undefined;
         // A visual Agent reads the actual sheet itself. Only text-only models
         // need the separate analyzer; its failure must not permit blind editing.
@@ -2261,16 +2271,19 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
           outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) },
           sourceToOutputScale: plan.generationDuration / (plan.outputMode === 'selection' ? end - start : plan.contextEnd - plan.contextStart),
           promptPlanning: retakePromptPlanning(plan),
-          analysis, base64Data: sheet.toString('base64'), mimeType: 'image/jpeg', workspacePath, workspaceUrl };
+          analysis, visualEvidence, base64Data: sheet.toString('base64'), mimeType: 'image/jpeg', workspacePath, workspaceUrl };
       } catch (error) {
         return { error: `Retake inspection failed: ${error instanceof Error ? error.message : String(error)}. No video generation was submitted.` };
       }
     },
     toModelOutput({ output }: { output: any }) {
       if (output.error) return { type: 'text' as const, value: output.error };
-      const { base64Data, mimeType, ...receipt } = output;
+      const { base64Data, mimeType, visualEvidence, ...receipt } = output;
       return { type: 'content' as const, value: [
-        ...(!output.analysis ? [modelFileContent(base64Data, mimeType)] : []),
+        ...(!output.analysis ? visualEvidence?.length ? visualEvidence.flatMap((group:{role:string;timestamps:number[];base64Data:string})=>[
+          {type:'text' as const,text:`${group.role === 'selection' ? 'SELECTED ACTION ONLY' : 'ADJACENT JOIN CONTEXT ONLY — outside the replacement'}; SOURCE timestamps in image order: ${group.timestamps.join(', ')}s. Read every frame against its own label; do not attribute a neighboring shot to the selected endpoint.`},
+          modelFileContent(group.base64Data,mimeType),
+        ]) : [modelFileContent(base64Data, mimeType)] : []),
         { type: 'text' as const, text: `Retake visual evidence and time mapping:\n${JSON.stringify(receipt)}\n${RETAKE_SCENE_READING}\n${RETAKE_PROMPT_WRITING}` },
       ] };
     },

@@ -3,7 +3,7 @@ import { retakeOutputTime } from './video-retake-inspection'
 
 /** Guidance goes to the inspecting Agent, never appended to a provider prompt. */
 export const RETAKE_SCENE_READING = `Read the actual frames in timestamp order. Labels give SOURCE and OUTPUT seconds; JOIN CONTEXT is outside the replacement.
-Understand what is visible: subjects, environment, composition, motion, interactions, existing transitions, and the selected opening/closing states. Describe meaningful changes with supporting timestamps; summarize a static interval once instead of repeating identical frame descriptions. Track event order and physical relationships when relevant. Separate observed facts from uncertain or unseen details; never turn the requested change into a fact about the source.
+Understand what is visible: subjects, environment, composition, motion, interactions, existing transitions, and the selected opening/closing states. Associate each frame with its own label and evidence group. A new shot in ADJACENT JOIN CONTEXT is not the selected closing state, even if it occurs only one frame later. Describe meaningful changes with supporting timestamps; summarize a static interval once instead of repeating identical frame descriptions. Track event order and physical relationships when relevant. Separate observed facts from uncertain or unseen details; never turn the requested change into a fact about the source.
 Identify what the user wants changed and what must remain coherent. Read adjacent context to understand how this interval enters and exits the surrounding video. Only then plan the edit.`
 
 export const RETAKE_PROMPT_WRITING = `Write a scene-informed edit instruction after viewing the source and any supplied images.
