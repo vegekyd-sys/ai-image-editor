@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
+import { estimateFalImage25Credits } from '@/lib/models/fal-image25';
 import { IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, type ModelId } from '@/lib/models/types';
 import { formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration, resolveImageModelChain as resolveModelChain } from '@/lib/image-model-capabilities';
 import { normalizeGenerateImageMediaIndex } from '@/lib/generate-image-input';
@@ -27,7 +28,7 @@ function setup(provider = 'azure') {
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
   const ctx = { preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined, isNsfw: false };
   const context = vm.createContext({
-    tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, resolveModelChain, getTokenRate,
+    tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, resolveModelChain, getTokenRate, estimateFalImage25Credits,
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration,
     validateImageIndex: (images: string[], index: number) => images[index - 1] ? { idx: index - 1 } : { error: 'Invalid media index' }, getToolPrice, isBillingEnabled,
     resolveToolName,
@@ -192,13 +193,13 @@ describe('Nano Banana 2.1 Agent execution and billing', () => {
 });
 
 
-it('preflights the default Nano Banana 2.1 route and accepts its resolution', async () => {
+it('preflights native Flare 2K in Auto', async () => {
   const {tool,ctx,getTokenRate,requireCredits,editImage}=setup();
   ctx.preferredModel=undefined;
-  getTokenRate.mockResolvedValue({model_id:'google/gemini-nano-banana-2.1',markup:2,is_active:true});
+  getTokenRate.mockResolvedValue({model_id:'gpt-image-2.5-flare',markup:2,is_active:true});
   await tool.execute({editPrompt:'A forest scene',imageResolution:'2K'});
-  expect(getTokenRate).toHaveBeenCalledWith('google/gemini-nano-banana-2.1');
-  expect(requireCredits).toHaveBeenCalledWith('test-user',11);
+  expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+  expect(requireCredits).toHaveBeenCalledWith('test-user',20);
   expect(editImage).toHaveBeenCalledWith(expect.objectContaining({preferredModel:undefined,imageResolution:'2K'}),expect.anything());
 });
 

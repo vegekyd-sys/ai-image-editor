@@ -16,6 +16,8 @@ export interface ImageModelCapability {
   aspectRatio: ImageAspectRatioCapability;
   editAspectRatio?: ImageAspectRatioCapability;
   resolutions?: readonly string[];
+  /** Native 4K at this edge fits the provider pixel budget only at this ratio or wider. */
+  fourKSize?: { longSide: number; minLongToShortRatio: number };
   supportsTransparency: boolean;
   supportsNsfw: boolean;
   promptMode: 'context' | 'edit';
@@ -28,8 +30,9 @@ const PANORAMIC_RATIOS = [...STANDARD_RATIOS, '1:4', '4:1', '1:8', '8:1'] as con
 const FLARE: ImageModelCapability = {
   id: 'gpt-image-2.5-flare', label: 'GPT Image 2.5 Flare', autoPriority: 1,
   maxInputImages: 16, aspectRatio: { kind: 'range', min: 1 / 3, max: 3 },
+  resolutions: ['1K', '2K', '4K'], fourKSize: { longSide: 3840, minLongToShortRatio: 16 / 9 },
   supportsTransparency: true, supportsNsfw: false, promptMode: 'context', provider: 'fal',
-  notes: 'Primary image model, including product, text, layout, face restoration and director storyboards. Pass the original user brief with prior feedback verbatim. Low quality; no subscription substitution.',
+  notes: 'Primary image model, including product, text, layout, face restoration and director storyboards. Pass the original user brief with prior feedback verbatim. Native 2K up to 2048 long edge; 4K uses 3840 long edge, <=8294400 pixels, so requires 16:9 through 3:1 landscape or portrait. 4K without a ratio defaults to 16:9. Square 4K requires Nano Banana 2.1; transparent square 4K relaxes to 2K. Low quality; no subscription substitution.',
 };
 
 /** Current Makaron adapter contracts, not every capability advertised upstream. */
@@ -37,7 +40,7 @@ const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
   'gpt-image-2.5-flare': FLARE,
   'gpt-image-2.5-sunburst': {
     ...FLARE, id: 'gpt-image-2.5-sunburst', label: 'GPT Image 2.5 Sunburst', autoPriority: undefined,
-    notes: 'Explicit Sunburst only; pass the original user brief verbatim. Low quality; no subscription substitution.',
+    notes: FLARE.notes.replace('Primary image model,', 'Explicit Sunburst only,'),
   },
   'gemini-2.1': {
     id: 'gemini-2.1', label: 'Nano Banana 2.1', autoPriority: 2, maxInputImages: 14,
@@ -111,6 +114,11 @@ export function getImageRequestConflicts(req: GenerateImageRequest, capability: 
   if (req.isNsfw && !capability.supportsNsfw) conflicts.push('NSFW is not supported by this route');
   if (req.background === 'transparent' && !capability.supportsTransparency) conflicts.push('transparent output is not supported');
   if (req.imageResolution && !capability.resolutions?.includes(req.imageResolution)) conflicts.push(`imageResolution=${req.imageResolution}; supported: ${capability.resolutions?.join(', ') ?? 'no imageResolution parameter'}`);
+  if (req.imageResolution === '4K' && capability.fourKSize && req.aspectRatio && req.aspectRatio !== 'auto') {
+    const [w, h] = req.aspectRatio.split(':').map(Number);
+    const ratio = Math.max(w / h, h / w);
+    if (Number.isFinite(ratio) && ratio < capability.fourKSize.minLongToShortRatio) conflicts.push('imageResolution=4K exceeds the pixel budget at this ratio; use 2K or another model');
+  }
   if (req.aspectRatio && req.aspectRatio !== 'auto') {
     const match = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(req.aspectRatio);
     const ratio = match ? Number(match[1]) / Number(match[2]) : NaN;
@@ -156,9 +164,11 @@ export function prepareImageModelRequest(req: GenerateImageRequest, model: Activ
     request.aspectRatio = undefined;
     adjustments.push(`Requested ratio ${req.aspectRatio} was left to ${capability.label}'s available canvas.`);
   }
-  if (req.imageResolution && !capability.resolutions?.includes(req.imageResolution)) {
-    request.imageResolution = undefined;
-    adjustments.push(`Requested resolution ${req.imageResolution} was left to ${capability.label}'s native output.`);
+  if (getImageRequestConflicts(request, capability).some(reason => reason.startsWith('imageResolution='))) {
+    request.imageResolution = req.imageResolution === '4K' && capability.fourKSize ? '2K' : undefined;
+    adjustments.push(request.imageResolution === '2K'
+      ? `Used native 2K to retain the requested canvas and other image requirements within ${capability.label}'s pixel limit.`
+      : `Requested resolution ${req.imageResolution} was left to ${capability.label}'s native output.`);
   }
   if (req.background === 'transparent' && !capability.supportsTransparency) {
     request.background = 'opaque';
@@ -183,7 +193,7 @@ export function planImageGeneration(req: GenerateImageRequest): ImageGenerationP
     const loss = (originalCount - count) * 100
       + (req.aspectRatio && req.aspectRatio !== 'auto' && !plan.request.aspectRatio ? 10 : 0)
       + (req.background === 'transparent' && plan.request.background !== 'transparent' ? 5 : 0)
-      + (req.imageResolution && !plan.request.imageResolution ? 2 : 0);
+      + (req.imageResolution && plan.request.imageResolution !== req.imageResolution ? 2 : 0);
     return { plan, loss };
   }).sort((a, b) => a.loss - b.loss);
   const plan = plans[0].plan;

@@ -26,8 +26,15 @@ describe('Image Model Capability acceptance matrix', () => {
   it.each(['8:1', '1:8', '4:1', '1:4'])('R02: Auto %s uses 2.1 before submission', aspectRatio => {
     expect(route({ aspectRatio, image: 'base' })).toEqual(['gemini-2.1']);
   });
-  it.each(['1K', '2K', '4K'] as const)('R03: explicit %s resolution selects 2.1 in Auto', imageResolution => {
-    expect(route({ imageResolution })).toEqual(['gemini-2.1']);
+  it.each(['1K', '2K', '4K'] as const)('R03: explicit %s resolution retains Flare-first Auto', imageResolution => {
+    expect(route({ imageResolution })).toEqual(['gpt-image-2.5-flare']);
+  });
+  it('R03: square 4K uses Nano; transparent square retains alpha with explained 2K', () => {
+    expect(route({ imageResolution: '4K', aspectRatio: '1:1' })).toEqual(['gemini-2.1']);
+    const plan = planImageGeneration({ prompt: 'cutout', imageResolution: '4K', aspectRatio: '1:1', background: 'transparent' });
+    expect(plan).toMatchObject({ model: 'gpt-image-2.5-flare', request: { imageResolution: '2K', aspectRatio: '1:1', background: 'transparent' } });
+    expect(plan.adjustments.join(' ')).toContain('2K');
+    expect(() => validateImageModelRequest(plan.request, plan.model)).not.toThrow();
   });
   it.each(IMAGE_MODEL_IDS)('R04/R05: explicit %s is retained or normalized', model => {
     expect(route({ model })).toEqual([model === 'openai' ? 'gpt-image-2.5-flare' : model]);

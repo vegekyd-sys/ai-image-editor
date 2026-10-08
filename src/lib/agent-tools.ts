@@ -1,4 +1,5 @@
 import { isFalImage25 } from './models/types';
+import { estimateFalImage25Credits } from './models/fal-image25';
 import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
 import { after } from 'next/server';
@@ -1389,7 +1390,7 @@ function createGenerateImageTool(
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
         isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
-        imageResolution: z.string().optional().describe('Output resolution preference, normally 1K/2K/4K; Auto can use Nano Banana 2.1. Use larger tiers only when requested. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
+        imageResolution: z.string().optional().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.5 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Use larger tiers only when requested. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background preference. Set "transparent" for transparent/no background, background removal, 抠图/抠像/去背景 or reusable alpha assets. Also pass media_index for source-image cutout. Conflicts are resolved to deliver an image; see the capability table.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
@@ -1444,7 +1445,7 @@ function createGenerateImageTool(
           if (isFalImage25(billingModel)) {
             const rate = await getTokenRate(billingModel);
             if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'GPT Image 2.5 pricing is not configured.', error: 'pricing_unavailable' };
-            requiredCredits = 5;
+            requiredCredits = estimateFalImage25Credits(imagePlan.request.imageResolution);
           }
           if (billingModel && billingModel !== 'gemini-2.1' && !isFalImage25(billingModel)) {
             const toolName = resolveToolName('edit_image', billingModel, imageInputCount);

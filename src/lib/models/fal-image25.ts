@@ -28,13 +28,25 @@ export function checkFalImage25Response(response: Response, data?: { detail?: { 
 }
 
 
-export function image25Size(aspectRatio?: string): 'auto' | { width: number; height: number } {
-  if (!aspectRatio || aspectRatio === 'auto') return 'auto';
-  const match = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(aspectRatio);
+export function image25Size(aspectRatio?: string, resolution?: string): 'auto' | { width: number; height: number } {
+  if ((!aspectRatio || aspectRatio === 'auto') && !resolution) return 'auto';
+  const selectedRatio = !aspectRatio || aspectRatio === 'auto' ? (resolution === '4K' ? '16:9' : '1:1') : aspectRatio;
+  const match = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(selectedRatio);
   const ratio = match ? Number(match[1]) / Number(match[2]) : NaN;
   const contract = getImageModelCapability('gpt-image-2.5-flare').aspectRatio;
   if (!Number.isFinite(ratio) || contract.kind !== 'range' || ratio < contract.min || ratio > contract.max) throw new FalImage25RequestError('GPT Image 2.5 aspect ratio must be between 1:3 and 3:1.');
+  validateImageModelRequest({ prompt: 'size', aspectRatio, imageResolution: resolution }, 'gpt-image-2.5-flare');
+  if (resolution === '2K' || resolution === '4K') {
+    const longSide = resolution === '4K' ? getImageModelCapability('gpt-image-2.5-flare').fourKSize!.longSide : 2048;
+    return ratio >= 1 ? { width: longSide, height: Math.round(longSide / ratio / 16) * 16 }
+      : { width: Math.round(longSide * ratio / 16) * 16, height: longSide };
+  }
   return { width: Math.round(Math.sqrt(1048576 * ratio) / 16) * 16, height: Math.round(Math.sqrt(1048576 / ratio) / 16) * 16 };
+}
+
+/** Balance preflight estimate only; final debit always uses actual supplier cost. */
+export function estimateFalImage25Credits(resolution?: string): number {
+  return resolution === '4K' ? 40 : resolution === '2K' ? 20 : 5;
 }
 
 export function buildFalImage25Request(req: GenerateImageRequest, model: FalImage25Id) {
@@ -53,7 +65,7 @@ export function buildFalImage25Request(req: GenerateImageRequest, model: FalImag
     body: {
       prompt: images.length > 1 ? `${images.map((ref, i) => `Image ${i + 1}: ${ref.role}`).join('\n')}\n\n${req.prompt}` : req.prompt,
       ...(images.length ? { image_urls: images.map(ref => ref.url) } : {}),
-      image_size: image25Size(req.aspectRatio),
+      image_size: image25Size(req.aspectRatio, req.imageResolution),
       quality: 'low',
       background: req.background ?? 'auto',
       output_format: 'png',
@@ -138,7 +150,7 @@ export function createFalImage25Backend(model: FalImage25Id): ModelBackend {
           const source = req.image ?? req.references?.[0]?.url;
           stage = 'canvas';
           if (req.aspectRatio && req.aspectRatio !== 'auto') image = await fitTransparentResultToAspectRatio(image, req.aspectRatio);
-          else if (source) image = await fitTransparentResultToSourceCanvas(source, image);
+          else if (source && !req.imageResolution) image = await fitTransparentResultToSourceCanvas(source, image);
         }
         console.log(`[${model}] provider=fal request=${requestId} quality=low costUsd=${cost} totalMs=${Date.now() - started}`);
         // fal supplies cost, not token counts. Do not invent token telemetry.
