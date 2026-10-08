@@ -1,3 +1,4 @@
+import { formatImageCapabilitiesForAgent } from '@/lib/image-model-capabilities'
 import { describe, expect, it } from 'vitest'
 import { validateVideoScript } from '@/lib/video-harness'
 import { readAgentContractSource, readAgentAwareSource } from './helpers/agentRuntimeSource'
@@ -10,6 +11,7 @@ describe('agent media scenario matrix', () => {
   const image = read('src/lib/prompts/image.md')
   const cutout = read('src/lib/prompts/cutout.md')
   const generateImageTool = read('src/lib/prompts/generate_image_tool.md')
+  const imageCapabilities = formatImageCapabilitiesForAgent()
   const stickerMaker = read('src/skills/sticker-maker/SKILL.md')
   const animate = read('src/lib/prompts/animate.md')
   const audio = read('src/lib/prompts/audio.md')
@@ -81,7 +83,6 @@ describe('agent media scenario matrix', () => {
       "skill='creative'",
       "skill='wild'",
       "skill='captions'",
-      "`isNsfw: true`",
       "Image Model Capability",
       'Context Mode',
       'Keep every person',
@@ -100,7 +101,9 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain('media_index')
     expect(generateImageTool).toContain('reference_media_indices')
     expect(generateImageTool).toContain('`image_refs` is only for workspace asset provider URLs')
-    expect(generateImageTool).toContain("Context Mode for `model='gpt-image-2.5-flare'`")
+    expect(imageCapabilities).toContain('Context Mode (promptMode=context)')
+    expect(imageCapabilities).toContain('pass the user request verbatim')
+    expect(imageCapabilities).toContain('set isNsfw=true')
   })
 
   it('routes natural-language transparency and cutouts through the explicit tool contract', () => {
@@ -112,7 +115,7 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain('the requested layout wins')
     expect(image).toContain('Interpret the user\'s meaning, not a hard-coded keyword list')
     expect(image).toContain('This is an image-to-image cutout/edit')
-    expect(image).toContain('deliver a useful image by retaining the ratio or transparency')
+    expect(imageCapabilities).toContain('Prefer retaining reference content, then requested ratio, transparency and resolution')
     expect(image).toContain('Never claim an opaque image or synthetic checkerboard has real alpha')
     expect(image).toContain("read_file('prompts/cutout.md')")
     expect(generateImageTool).toContain('read `prompts/cutout.md` once')
@@ -331,7 +334,7 @@ describe('agent media scenario matrix', () => {
     expect(agent).toContain('layout/mockup image generation')
     expect(agent).toContain('generic layout/mockup/image tasks')
     expect(read('src/lib/image-model-capabilities.ts')).toContain('product, text, layout, face restoration and director storyboards')
-    expect(generateImageTool).toContain('multi-turn layout/mockup image tasks')
+    expect(imageCapabilities).toContain('multi-turn layout/mockup image tasks')
     expect(image).toContain('images, videos, Remotion compositions, and node media work')
     expect(coding).toContain('generic layout/mockup/image tasks')
     expect(agent).not.toContain('design/layout generation')
