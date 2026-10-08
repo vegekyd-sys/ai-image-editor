@@ -67,3 +67,9 @@ Image Model Capability 同时拥有模型事实、默认优先级、别名、参
 本地验收数据在 `test-results/image-model-capabilities/agent-decisions.json`、`supplier-receipt.json`、`panorama.png`（忽略文件，不提交媒体）。第一次输出已完整解码，但验收脚本用精确比例阈值误判，未保存图片；修正脚本为先保存再校验供应商原生尺寸后，完成上述视觉验收。另一次使用本地保存的生产 env 副本返回 HTTP 403，未换供应商或重试该请求；最后使用已有本地有效配置完成生成。这不证明当前线上配置或线上端到端可用。
 
 剩余生产验收：合并与发布后，真实项目 chat → run → 图片保存/重新打开、Credits 归因、NSFW 跨轮状态。当前工作没有修改该项目或生产数据。
+
+### 最终本地检查
+
+实现提交 `1a1e64c7` 在独立 runtime runner 执行 `release:check --local`，退出 0：TypeScript 通过，326 个 test file 通过、1 个跳过；2146 项 test 通过、1 项跳过；CLI smoke 通过；Next.js webpack production build 和 postbuild 的服务端运行时打包检查通过。`check:i18n-ui` 与 `check:agent-startup` 通过，改动文件 ESLint 0 error（`agent-tools.ts` 既有未使用 locale warning）。构建只有既有 `libheif-js` 动态 require 警告。
+
+22 个 case 的自动回归按上表覆盖；真实调用只覆盖表述过的三种主模型路由和一份安全全景媒体，不声称覆盖所有真实内容或线上端到端场景。全量检查日志保存于本地 `/tmp/image-capability-release-check.log`；默认 dirty runner 与主 checkout 既有修改均未被覆盖。
