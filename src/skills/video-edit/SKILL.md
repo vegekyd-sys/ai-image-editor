@@ -58,8 +58,10 @@ generation in `prompts/animate.md`.
    the user to choose an "edit mode" and do not set
    `video_operation: "edit"`. Extension remains a distinct operation.
 5. Before paid work, state provider, current capability, billable duration/cost,
-   and retry ceiling. Show the final script and respect the normal confirmation
-   gate unless the request explicitly authorizes submission.
+   and retry ceiling. A clear existing-video edit instruction authorizes that
+   scoped edit without a GUI selection; ask only for genuinely missing source
+   or scope, or when the user requested review first. New video generation
+   retains its script confirmation gate.
 6. Verify the real output, not task completion: decode, streams, duration,
    changed content, preserved layers, identity, continuity, structure, and audio
    sync. Retry only against one or two measured failures.

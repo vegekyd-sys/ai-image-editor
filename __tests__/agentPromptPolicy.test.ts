@@ -213,11 +213,12 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain('implicit-skill-routing')
   })
 
-  it('requires script confirmation before video provider submission unless direct-submit is explicit', () => {
+  it('retains new-video script review while existing-video edits need no GUI selection', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('video rendering has a script review gate unless the user explicitly asks to submit/render without confirmation')
+    expect(agent).toContain('New video generation retains its script review gate')
+    expect(agent).toContain('without a GUI selection requirement')
     expect(agent).toContain('Only call `generate_animation` after the user confirms')
     expect(agent).toContain('Direct-submit exception')
     expect(agent).toContain('直接提交渲染')
