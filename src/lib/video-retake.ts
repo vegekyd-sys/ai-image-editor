@@ -138,10 +138,13 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       posting = true
       return reservation
     }
-    result = await createVideo({ ...input, retake: undefined, videoUrl: contextUrl, videoUrls: undefined,
+    // A checked new camera frame plus native source endpoints defines this
+    // edit. Referencing the original moving camera can suppress its new view.
+    const useVideoReference = !boundaryFrames?.middle
+    result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
       images: boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : [], h3RetakeBoundaryFrames: boundaryFrames,
       script: prompt, duration: model === 'seedance-2.5' ? -1 : plan.generationDuration,
-      referenceVideoDuration: plan.contextEnd - plan.contextStart, referenceVideoMetas: undefined,
+      referenceVideoDuration: useVideoReference ? plan.contextEnd - plan.contextStart : undefined, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
       videoOperation: model === 'seedance-2.5' ? 'edit' : 'generate', videoReferType: 'feature',
       onBeforeProviderSubmit: beforeSubmit })
@@ -200,7 +203,7 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
       const [source, patch] = await Promise.all([readProviderImage(job.source_url, 512 * 1024 * 1024), readProviderImage(job.patch_url, 512 * 1024 * 1024)])
       const final = await assembleRetake(source, patch, job.plan)
       completedBuffer = final.bytes
-      const outputUrl = await store(job, final.bytes, 'final')
+      const outputUrl = await store(job, final.bytes, `final-${createHash('sha256').update(final.bytes).digest('hex').slice(0, 12)}`)
       await save(job, { output_url: outputUrl, stage: 'completed', timings: { ...job.timings, assemblyMs: performance.now() - started, totalMs: Date.now() - Date.parse(job.created_at) } }, token)
     }
     await publish(job, completedBuffer)
