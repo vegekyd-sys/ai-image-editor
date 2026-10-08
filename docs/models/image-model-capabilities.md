@@ -21,6 +21,16 @@
 
 实现使用同一 `planImageGeneration()` 产生实际模型、有效请求和调整说明。Router 提交有效请求；App/MCP 预检使用计划中的实际参考数量与分辨率；Skill 返回成功和调整说明。Spicy wrapper 对直接调用也放宽不支持的输出参数。GUI/Tips preview 的透明与 NSFW 路径同样使用计划，删除原 NSFW+透明硬阻断。
 
+### 用户修订的最终验收
+
+最终实现提交 `bb0c94e1`：未知/退役模型字符串和不支持的分辨率偏好（含 8K）可经过 Agent/MCP/CLI 入口，到达同一生成计划。回归检查实际供应商收到的是有效参数，并按放宽后的模型、输入数量及分辨率档位预检和结算。超额参考输入优先选择能保留更多内容的模型；必要截断会保留底图并在成功消息说明。
+
+独立 runtime runner 的 `release:check --local` 退出 0：326 个 test file、2151 项 test 通过，1 个 test 跳过；TypeScript、CLI smoke、production build、postbuild 打包检查通过。i18n 和 Agent startup 检查通过；ESLint 0 error，保留既有未使用 locale warning。最终检查日志 `/tmp/image-delivery-release-final.log`。
+
+最终 schema 下再次运行真实 `gpt-6-luna` 路由验收，五种输入各调用一次图片验收桩：普通图 → Flare；原始 8:1 → Nano Banana 2.1；NSFW 标记 → Spicy；透明 8:1 → Nano Banana 2.1；NSFW + 8:1/4K/透明 → Spicy。均通过。这些是主模型工具决策测试，没有再次提交图片供应商；上一版已保存的原生超宽茶壶图片仍作为供应商输出证据。成人语义被 Azure 拦截的边界和剩余生产验收仍适用。
+
+本次修订未合并、未部署、未修改原用户项目。临时 runtime runner 已清理；默认 runner 和主 checkout 既有改动保留。
+
 以下为初版历史记录；取舍政策以本节用户修订为准。
 
 ## 初版目标合同（已由上文修订）
