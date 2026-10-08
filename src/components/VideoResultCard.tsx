@@ -260,12 +260,13 @@ export default function VideoResultCard({
         {frameEditAnim && (onFrameEdit || onRetake) && (
           <div
             data-testid="video-frame-edit-pill"
-            className="mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border border-white/10 transition-all animate-tip-in"
+            data-active={retakeActive}
+            className={`mkr-liquid-pill mkr-liquid-pill-strong mkr-retake-pill flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border transition-all animate-tip-in ${retakeActive ? 'mkr-liquid-pill-selected border-fuchsia-500 ring-1 ring-fuchsia-500/50' : 'border-white/10'}`}
             style={{
-              background: 'linear-gradient(145deg, rgba(217,70,239,0.075), rgba(12,12,16,0.42))',
-              width: onRetake ? frameEditWidth + thumbSize : frameEditWidth,
-              borderColor: retakeActive ? 'rgb(217,70,239)' : undefined,
-              boxShadow: retakeActive ? '0 0 0 1px rgba(217,70,239,0.5)' : undefined,
+              background: retakeActive
+                ? 'linear-gradient(145deg, rgba(217,70,239,0.14), rgba(12,12,16,0.46))'
+                : 'linear-gradient(145deg, rgba(255,255,255,0.045), rgba(12,12,16,0.42))',
+              width: onRetake ? undefined : frameEditWidth,
             }}
           >
             <button
@@ -273,7 +274,7 @@ export default function VideoResultCard({
               onClick={() => onRetake ? onRetake(frameEditAnim, clampTime(currentTime)) : onFrameEdit?.(frameEditAnim, clampTime(currentTime))}
               className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
               style={{
-                width: onRetake ? frameEditWidth : '100%',
+                width: onRetake ? cardWidth : '100%',
                 transition: 'filter 0.15s, transform 0.1s',
                 background: 'transparent',
                 border: 'none',
@@ -293,7 +294,7 @@ export default function VideoResultCard({
                     <circle cx="12" cy="13" r="3.5" />
                   </svg>
                 </div>
-                <div className={`min-w-0 flex-1 flex flex-col justify-center ${isDesktop ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
+                <div className={`min-w-0 flex-1 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
                   <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
                     {t(onRetake ? 'video.retakeTitle' : 'video.frameEdit')}
                   </div>
@@ -309,13 +310,17 @@ export default function VideoResultCard({
               aria-label={t('video.retakeEdit')}
               aria-expanded={retakeActive}
               onClick={() => onRetake(frameEditAnim, clampTime(currentTime))}
-              className="mkr-liquid-pill mkr-liquid-side-action relative group flex flex-col items-center justify-center gap-1.5 rounded-r-2xl overflow-hidden cursor-pointer active:scale-95"
-              style={{ width: thumbSize, background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.32) 100%)', borderLeft: '1px solid rgba(217,70,239,0.42)', transition: 'transform 0.1s' }}>
-              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200" style={{background:'linear-gradient(135deg, rgba(217,70,239,0.12), rgba(192,38,211,0.22))'}} />
-              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-fuchsia-300 relative z-10">
+              className={`mkr-liquid-pill mkr-retake-side-action ${retakeActive ? 'mkr-liquid-side-action' : ''} flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110`}
+              style={{
+                width: detailWidth,
+                background: retakeActive ? 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.30) 100%)' : 'rgba(255,255,255,0.035)',
+                borderLeft: retakeActive ? '1px solid rgba(217,70,239,0.42)' : '1px solid rgba(255,255,255,0.10)',
+                transition: 'background 180ms ease, border-color 180ms ease, color 180ms ease, transform 100ms ease',
+              }}>
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={retakeActive ? 'text-fuchsia-200/80' : 'text-white/45'}>
                 <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" />
               </svg>
-              <span className="text-fuchsia-200 text-[10px] font-semibold tracking-wide leading-tight text-center relative z-10 whitespace-nowrap">{t('video.retakeEdit')}</span>
+              <span className={`font-medium ${isDesktop ? 'text-[9px]' : 'text-[10px]'} ${retakeActive ? 'text-fuchsia-100/70' : 'text-white/45'}`}>{t('video.retakeEdit')}</span>
             </button>}
           </div>
         )}
