@@ -2184,7 +2184,7 @@ function createGenerateAnimationTool(
     });
 }
 
-function createInspectRetakeTool({ ctx, durableVisionBridge }: AgentToolFactoryScope) {
+function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
   return tool({
     description: 'Inspect the actual selected video interval BEFORE writing a Retake prompt. Downloads one source and extracts 4-6 labeled frames covering the action and surrounding boundary states. Returns pixels (or verified vision analysis), a signed inspection_id, and the exact source-to-output time mapping. Use the same media_index/start/end/model for retake_video. Read the images first, then describe the actual subjects, movement, camera coverage and boundary states in source_observation; write the final creative prompt in output seconds from the returned plan. That prompt is passed directly to the video model, without another creative wrapper. For H3, Video 1 is the reference clip; Image 1 and Image 2 are its context opening/ending frames. Do not confuse these provider references with timeline indices. If inspection fails, do not generate blindly.',
     inputSchema: z.object({
@@ -2213,7 +2213,9 @@ function createInspectRetakeTool({ ctx, durableVisionBridge }: AgentToolFactoryS
           label: `#${index + 1} ${sampled.timestamps[index].toFixed(2)}s : ${retakeOutputTime(plan, sampled.timestamps[index]).toFixed(2)}s`,
         })), meta.width!, meta.height!);
         let analysis: string | undefined;
-        if (durableVisionBridge) {
+        // A visual Agent reads the actual sheet itself. Only text-only models
+        // need the separate analyzer; its failure must not permit blind editing.
+        if (!runtime.spec.supportsImageInput) {
           const { analyzeImageContent } = await import('./gemini');
           analysis = await analyzeImageContent(`data:image/jpeg;base64,${sheet.toString('base64')}`,
             'Describe these timestamped actual video frames for a localized Retake. Identify subjects and distinctive appearance, environment, existing camera positions/cuts, progression of motion, and opening/ending action states. Separate visible evidence from uncertainty. Do not invent unseen action or write a replacement script yet.', ctx.userId);
