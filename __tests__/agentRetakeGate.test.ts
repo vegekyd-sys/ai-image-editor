@@ -9,7 +9,7 @@ afterEach(() => { vi.unstubAllEnvs(); submit.mockClear() })
 const sourceUrl = 'https://example.com/original.mp4'
 const ctx = { userId: 'owner', projectId: 'project', snapshotImages: [sourceUrl,'https://example.com/air.jpg'], agentRunId: 'run' }
 const scope = { ctx, submit, resolveSource: async () => ({ videoUrl: sourceUrl }), serializeVideoSubmission: async (operation: () => Promise<unknown>) => operation() } as any
-const input = { media_index: 1, start: 18, end: 21, model: 'fal-h3-max', prompt: '1–2s: wheel close-up. CUT. 2–4s: overhead airborne motion.',
+const input = { camera_change:true, media_index: 1, start: 18, end: 21, model: 'fal-h3-max', prompt: '1–2s: wheel close-up. CUT. 2–4s: overhead airborne motion.',
   shot_plan: [{ start: 1, end: 2, instruction: 'wheel close-up' }, { start: 2, end: 4, instruction: 'overhead airborne motion' }] }
 const observation = 'A white box-headed robot is already airborne above an orange skateboard in the purple-lit skatepark.'
 const receipt = () => signRetakeInspection({ userId: 'owner', projectId: 'project', runId: 'run', inputEpoch: 0,
@@ -40,6 +40,23 @@ describe('Agent Retake paid-submission gate', () => {
     const result = await (createInspectedRetakeVideoTool(scope).execute as any)({...input,inspection_id:receipt(),source_observation:observation})
     expect(result).toMatchObject({success:false,errorCode:'retake_keyframe_required'})
     expect(submit).not.toHaveBeenCalled()
+  })
+  it('allows multiple fixed-camera content phases without generating a camera keyframe',async()=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,camera_change:false,
+      prompt:'Reveal the homepage with a fixed camera, then hold it.',
+      shot_plan:[{start:1,end:2,instruction:'transition'},{start:2,end:3,instruction:'homepage reveal'},{start:3,end:4,instruction:'hold homepage'}],
+      inspection_id:receipt(),source_observation:observation});
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({retake:{start:18,end:21}}),expect.anything());
+  })
+  it('binds the existing user-selected final image directly as Image 2 without a middle frame or duplicate reference',async()=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,camera_change:false,
+      prompt:'Finish on <<<media_2>>> after transitioning from <<<media_1>>>.',
+      inspection_id:receipt(),source_observation:observation,end_frame_media_index:2,reference_media_indices:[2]});
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({images:[],script:'Finish on Image 2 after transitioning from the inspected original scene.',
+      retake:{start:18,end:21,endFrame:{imageUrl:'https://example.com/air.jpg'}}}),expect.anything());
   })
   it('binds the selected timeline keyframe to provider-local Image 3 without changing creative text', async () => {
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret')
@@ -73,7 +90,7 @@ describe('Agent Retake paid-submission gate', () => {
 it.each(['fal-h3-max','seedance-2.5','seedance-2.5-eco'])('passes creative image references separately from the source video for %s', async model => {
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
   const signed = signRetakeInspection({userId:'owner',projectId:'project',runId:'run',inputEpoch:0,sourceUrl,start:18,end:21,model},'test-server-secret',{outputSelection:{start:1,end:4},generationDuration:5});
-  await (createInspectedRetakeVideoTool(scope).execute as any)({...input,model,
+  await (createInspectedRetakeVideoTool(scope).execute as any)({...input,model,camera_change:false,
     prompt:'Use <<<media_2>>> as the brand image within <<<media_1>>>.',
     shot_plan:[{start:1,end:4,instruction:'Integrate the brand image into the ending'}],
     inspection_id:signed,source_observation:observation,reference_media_indices:[2]});
@@ -82,7 +99,7 @@ it.each(['fal-h3-max','seedance-2.5','seedance-2.5-eco'])('passes creative image
 });
 it('rejects a named image without a supplied reference before billing',async()=>{
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
-  const result=await (createInspectedRetakeVideoTool(scope).execute as any)({...input,prompt:'Use <<<media_2>>> as the brand image.',shot_plan:[{start:1,end:4,instruction:'Integrate logo'}],inspection_id:receipt(),source_observation:observation});
+  const result=await (createInspectedRetakeVideoTool(scope).execute as any)({...input,camera_change:false,prompt:'Use <<<media_2>>> as the brand image.',shot_plan:[{start:1,end:4,instruction:'Integrate logo'}],inspection_id:receipt(),source_observation:observation});
   expect(result.success).toBe(false);
   expect(submit).not.toHaveBeenCalled();
 });

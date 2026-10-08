@@ -33,11 +33,11 @@ async function store(job: Job, bytes: Buffer, suffix: string, image = false) {
 }
 export function retakeVideoMeta(job: Job): VideoMeta {
   return { taskId: PREFIX + job.id, videoUrl: job.output_url ?? null, prompt: job.instruction,
-    sourceSnapshotIds: [], sourceUrls: [job.source_url, ...((job.source_meta.referenceImages as string[] | undefined) ?? [])], status: job.stage === 'completed' ? 'completed' : job.stage === 'failed' ? 'failed' : 'processing',
+    sourceSnapshotIds: [], sourceUrls: [job.source_url, ...((job.source_meta.referenceImages as string[] | undefined) ?? []),...(job.source_meta.endFrameUrl ? [String(job.source_meta.endFrameUrl)] : [])], status: job.stage === 'completed' ? 'completed' : job.stage === 'failed' ? 'failed' : 'processing',
     duration: job.plan.sourceDuration, model: job.model_id, resolution: job.resolution as VideoMeta['resolution'], operation: 'edit',
     createdAt: job.created_at, error: job.error, pipelineStage: job.stage,
     retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url,
-      inputDuration: (job.source_meta.boundaryFrames as { middle?: unknown } | undefined)?.middle ? 0
+      inputDuration: (job.source_meta.boundaryFrames as { middle?: unknown } | undefined)?.middle || job.source_meta.endFrameUrl ? 0
         : job.context_url ? job.plan.contextEnd - job.plan.contextStart : undefined, generationDuration: job.plan.generationDuration },
     width: Number(job.source_meta.width), height: Number(job.source_meta.height) }
 }
@@ -85,6 +85,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     if (!input.userId || !input.retake || !input.videoUrl) throw new Error('Retake requires an authenticated owner, source video and start/end seconds.')
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
+    if(input.retake.endFrame && (model!=='fal-h3-max' || input.videoResolution==='1080p' || !/^https?:\/\//.test(input.retake.endFrame.imageUrl))) throw new Error('An explicit end frame requires H3 native 480p/768p and a ready hosted image.')
     if (!input.script.trim()) throw new Error('Describe what to change in the selected interval.')
     const referenceImages = input.images.filter(Boolean)
     if (referenceImages.length > 6 || referenceImages.some(url => !/^https?:\/\//.test(url))) throw new Error('Retake supports up to six hosted image references.')
@@ -107,12 +108,13 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const started = performance.now()
     const source = await readProviderImage(input.videoUrl, 512 * 1024 * 1024, {mediaType:'video'})
     const meta = await inspectRetakeSource(source)
+    if(input.retake.endFrame && Math.abs(meta.duration!-input.retake.end)>1/meta.fps!+.001) throw new Error('An explicit final image requires selecting through the end of the source video; internal joins retain their original endpoint.')
     const plan = planRetake({ start: input.retake.start, end: input.retake.end }, meta.duration!, model)
     if (Math.round(plan.end * meta.fps!) <= Math.round(plan.start * meta.fps!)) throw new Error('Retake interval must include at least one source frame.')
     const now = new Date().toISOString()
     job = { id, user_id: input.userId, project_id: input.projectId ?? null, fingerprint, stage: 'preparing', source_url: input.videoUrl,
       instruction: input.script, model_id: model, resolution: input.videoResolution && input.videoResolution !== 'auto' ? input.videoResolution : model === 'fal-h3-max' ? '768p' : '720p',
-      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}) },
+      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}),...(input.retake.endFrame ? {endFrameUrl:input.retake.endFrame.imageUrl} : {}) },
       timings: {}, created_at: now, updated_at: now }
     const { error: insertError } = await admin.from(TABLE).insert(job)
     if (insertError) throw new Error('Could not create the Retake receipt. No provider submitted.')
@@ -126,7 +128,9 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     let boundaryFrames: { startUrl: string; endUrl: string; lockEndpoints?: boolean; middle?: {imageUrl:string;time:number} } | undefined
     if (model === 'fal-h3-max') {
       const frames = await extractRetakeBoundaryFrames(source, plan, meta.fps!)
-      const [startUrl, endUrl] = await Promise.all([store(job, frames.start, 'start', true), store(job, frames.end, 'end', true)])
+      const [startUrl, endUrl] = await Promise.all([store(job, frames.start, 'start', true), input.retake.endFrame
+        ? materializeRetakeKeyframe(input.retake.endFrame.imageUrl, bytes=>store(job!,bytes,'end',true))
+        : store(job, frames.end, 'end', true)])
       const middle = input.retake.middleFrame
         ? { ...input.retake.middleFrame, imageUrl: await materializeRetakeKeyframe(input.retake.middleFrame.imageUrl, bytes => store(job!, bytes, 'middle', true)) }
         : undefined
@@ -144,7 +148,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     }
     // A checked new camera frame plus native source endpoints defines this
     // edit. Referencing the original moving camera can suppress its new view.
-    const useVideoReference = !boundaryFrames?.middle
+    const useVideoReference = !boundaryFrames?.middle && !input.retake.endFrame
     result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
       images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages], h3RetakeBoundaryFrames: boundaryFrames,
       script: prompt, duration: model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,

@@ -35,3 +35,22 @@ it('does not reuse a paid receipt with a different image reference',async()=>{
   expect(second.message).toMatch(/conflict/);
   expect(stubs.provider).toHaveBeenCalledTimes(1);
 });
+it('uses the exact supplied ending image as the native endpoint and omits conflicting source-video references',async()=>{
+  const ending='https://image.example/homepage.jpg';
+  const result=await createVideoRetake({userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:24.05,end:30.05,endFrame:{imageUrl:ending}},script:'Transition to Image 2 and hold it.',videoModel:'fal-h3-max'});
+  expect(result.success).toBe(true);
+  const submitted=stubs.provider.mock.calls[0][0];
+  expect(submitted.h3RetakeBoundaryFrames).toMatchObject({endUrl:ending,lockEndpoints:true});
+  expect(submitted.images).toHaveLength(2);
+  expect(submitted.images[1]).toBe(ending);
+  expect(submitted.videoUrl).toBeUndefined();
+  expect(submitted.h3RetakeBoundaryFrames.middle).toBeUndefined();
+  expect(retakeVideoMeta(stubs.jobs[0])).toMatchObject({sourceUrls:expect.arrayContaining([ending]),retake:{inputDuration:0}});
+});
+it('rejects replacing an internal join with a final image before submitting or creating a job',async()=>{
+  const result=await createVideoRetake({userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:18,end:21,endFrame:{imageUrl:'https://image.example/homepage.jpg'}},script:'Finish on Image 2.',videoModel:'fal-h3-max'});
+  expect(result.success).toBe(false);
+  expect(result.message).toMatch(/end of the source video/);
+  expect(stubs.provider).not.toHaveBeenCalled();
+  expect(stubs.jobs).toHaveLength(0);
+});
