@@ -263,7 +263,9 @@ export default function VideoResultCard({
             className="mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border border-white/10 transition-all animate-tip-in"
             style={{
               background: 'linear-gradient(145deg, rgba(217,70,239,0.075), rgba(12,12,16,0.42))',
-              width: onRetake ? frameEditWidth + detailWidth : frameEditWidth,
+              width: onRetake ? frameEditWidth + thumbSize : frameEditWidth,
+              borderColor: retakeActive ? 'rgb(217,70,239)' : undefined,
+              boxShadow: retakeActive ? '0 0 0 1px rgba(217,70,239,0.5)' : undefined,
             }}
           >
             <button
@@ -307,12 +309,13 @@ export default function VideoResultCard({
               aria-label={t('video.retakeEdit')}
               aria-expanded={retakeActive}
               onClick={() => onRetake(frameEditAnim, clampTime(currentTime))}
-              className="mkr-liquid-pill mkr-liquid-side-action flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110"
-              style={{ width: detailWidth, background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.30) 100%)', borderLeft: '1px solid rgba(217,70,239,0.42)', transition: 'transform 0.1s' }}>
-              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-fuchsia-200">
-                <path d="m16 3 5 5-12 12-6 1 1-6L16 3Z" /><path d="m14 5 5 5" />
+              className="mkr-liquid-pill mkr-liquid-side-action relative group flex flex-col items-center justify-center gap-1.5 rounded-r-2xl overflow-hidden cursor-pointer active:scale-95"
+              style={{ width: thumbSize, background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.32) 100%)', borderLeft: '1px solid rgba(217,70,239,0.42)', transition: 'transform 0.1s' }}>
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200" style={{background:'linear-gradient(135deg, rgba(217,70,239,0.12), rgba(192,38,211,0.22))'}} />
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-fuchsia-300 relative z-10">
+                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" />
               </svg>
-              <span className={`font-semibold text-fuchsia-100/70 ${isDesktop ? 'text-[9px]' : 'text-[10px]'}`}>{t('video.retakeEdit')}</span>
+              <span className="text-fuchsia-200 text-[10px] font-semibold tracking-wide leading-tight text-center relative z-10 whitespace-nowrap">{t('video.retakeEdit')}</span>
             </button>}
           </div>
         )}

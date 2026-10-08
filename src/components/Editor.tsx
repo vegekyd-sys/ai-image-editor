@@ -366,7 +366,11 @@ export default function Editor({
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
   const isAgentActiveRef = useRef(false);
   const [videoRetakeSelection, setVideoRetakeSelection] = useState<{ anim: ProjectAnimation; start: number; end: number } | null>(null);
-  useEffect(() => { setVideoRetakeSelection(null); }, [viewIndex, viewMode, selectedVideoId]);
+  useEffect(() => {
+    setVideoRetakeSelection(null);
+    setVideoGuiTime(0);
+    setVideoGuiDuration(0);
+  }, [viewIndex, selectedVideoId]);
   const [videoGuiTime, setVideoGuiTime] = useState(0);
   const [videoGuiDuration, setVideoGuiDuration] = useState(0);
   const [videoFrameCaptureRequest, setVideoFrameCaptureRequest] = useState(0);
@@ -3170,16 +3174,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [projectId, isAgentActive, addMessage, handleAgentRequest]);
 
   const handleVideoRetake = useCallback((anim: ProjectAnimation, start: number, end: number) => {
-    if (gateInteraction() || !projectId || isAgentActive) return false;
     const snapIndex = snapshotsRef.current.findIndex(s => s.id === anim.id);
     if (snapIndex < 0) return false;
-    const offset = snapshotsRef.current[snapIndex].videoMeta?.sourceRange?.start_sec ?? 0;
     pendingFrameEditRef.current = null;
     setCuiDraftAttachments([]);
-    setCuiDraftText(t('video.retakeDraftPrompt', snapIndex + 1, (start + offset).toFixed(2), (end + offset).toFixed(2)));
+    setVideoRetakeSelection({ anim, start, end });
     setViewMode('cui');
     return true;
-  }, [gateInteraction, projectId, isAgentActive, t]);
+  }, []);
 
   const handleVideoFrameEdit = useCallback((anim: ProjectAnimation, time: number) => {
     if (gateInteraction()) return;
@@ -3555,6 +3557,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   // ── Shared props for AgentChatView — single source of truth ──
   // Both desktop panel and mobile overlay use these. Add new props HERE
   // to avoid desktop/mobile divergence bugs (e.g. missing onMusicSelect).
+  const retakeSnapshotIndex = videoRetakeSelection ? snapshots.findIndex(s => s.id === videoRetakeSelection.anim.id) : -1;
+  const retakeSourceOffset = snapshots[retakeSnapshotIndex]?.videoMeta?.sourceRange?.start_sec ?? 0;
   const cuiSharedProps = {
     messages,
     messagesLoading: messages.length === 0 && !isAgentActive && (initialSnapshots?.length ?? 0) > 0,
@@ -3607,6 +3611,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     onMusicSelect: handleMusicSelect,
     onArtifactAction: handleArtifactAction,
     draftText: cuiDraftText,
+    retakeContext: videoRetakeSelection && retakeSnapshotIndex >= 0 ? {
+      mediaIndex: retakeSnapshotIndex + 1,
+      start: videoRetakeSelection.start + retakeSourceOffset,
+      end: videoRetakeSelection.end + retakeSourceOffset,
+    } : undefined,
+    onClearRetake: () => setVideoRetakeSelection(null),
     draftAttachments: cuiDraftAttachments.length > 0 ? cuiDraftAttachments : undefined,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling' || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing'),
     skills: availableSkills,
@@ -3829,6 +3839,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 videoFrameCaptureRequest={videoFrameCaptureRequest}
                 videoSeekRequest={videoSeekRequest}
                 videoRetakeRange={videoRetakeSelection}
+                videoDurationHint={(isViewingVideoV2 ? currentSnap?.videoMeta?.duration : currentVideo?.duration) ?? undefined}
                 onVideoRetakeChange={range => setVideoRetakeSelection(previous => previous ? { ...previous, ...range } : null)}
                 onVideoFrameCaptured={handleVideoFrameCaptured}
                 pullDownActive={pullProgress !== null}
@@ -4105,7 +4116,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   chatActionLabel={videoRetakeSelection ? t('video.retakeEdit') : undefined}
                   selectionText={videoRetakeSelection ? t('video.retakeStatusHint', String(Number(videoRetakeSelection.start.toFixed(1))), String(Number(videoRetakeSelection.end.toFixed(1)))) : undefined}
                   isViewingDraft={isViewingDraft}
-                  hideChat={isDesktop && !videoRetakeSelection}
+                  hideChat={isDesktop}
                   snapshotCount={snapshots.length}
                   notification={creditExhausted ? { text: 'Credits exhausted · Top up' } : pendingNotification}
                   onSeeNotification={creditExhausted ? () => setCreditPopupOpen(true) : handleSeeNotification}
@@ -4191,8 +4202,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     retakeActive={Boolean(videoRetakeSelection)}
                     onRetake={(anim, time) => {
                       if (videoRetakeSelection) { setVideoRetakeSelection(null); return; }
-                      const duration = videoGuiDuration || anim.duration || 0;
-                      if (!duration || gateInteraction() || isAgentActive) return;
+                      const sourceRange = snapshotsRef.current.find(s => s.id === anim.id)?.videoMeta?.sourceRange;
+                      const duration = videoGuiDuration || (sourceRange ? sourceRange.end_sec - sourceRange.start_sec : anim.duration) || 0;
+                      if (!Number.isFinite(duration) || duration < .1) return;
                       const start = Math.max(0, Math.min(time, duration - .1));
                       setVideoRetakeSelection({ anim, start, end: Math.min(duration, start + 4) });
                       setVideoSeekRequest(previous => ({ time: start, token: (previous?.token ?? 0) + 1 }));

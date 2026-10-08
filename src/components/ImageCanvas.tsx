@@ -124,6 +124,7 @@ interface ImageCanvasProps {
   /** Incrementing token from parent to request a current-frame capture. */
   videoFrameCaptureRequest?: number;
   videoRetakeRange?: VideoRetakeRange | null;
+  videoDurationHint?: number;
   onVideoRetakeChange?: (range: VideoRetakeRange) => void;
   videoSeekRequest?: { time: number; token: number };
   /** Called after the current video frame is captured from the playing element. */
@@ -163,6 +164,7 @@ export default function ImageCanvas({
   videoFrameCaptureRequest,
   videoSeekRequest,
   videoRetakeRange = null,
+  videoDurationHint,
   onVideoRetakeChange,
   onVideoFrameCaptured,
 }: ImageCanvasProps) {
@@ -1583,7 +1585,7 @@ export default function ImageCanvas({
                 onClick={(e) => e.stopPropagation()}
               >
                 <div data-video-track className={`absolute bottom-0 left-0 right-0 transition-[height] duration-[240ms] ease-out motion-reduce:transition-none ${videoRetakeRange ? 'h-12' : isSeeking ? 'h-[6px]' : 'h-[2px] group-hover:h-[6px]'}`}>
-                  <VideoRetakeTimeline url={videoUrl} duration={videoDuration} range={videoRetakeRange} currentTime={videoCurrentTime} playing={videoPlaying} sourceOffset={clipStart}
+                  <VideoRetakeTimeline url={videoUrl} duration={videoDuration || (clipEnd !== undefined ? clipEnd - clipStart : videoDurationHint) || 0} range={videoRetakeRange} currentTime={videoCurrentTime} playing={videoPlaying} sourceOffset={clipStart}
                     onChange={onVideoRetakeChange} onSeek={time => {
                       const video = videoRef.current; if (!video) return;
                       video.pause(); video.currentTime = clipStart + time; setVideoCurrentTime(time); resetControlsTimer();
