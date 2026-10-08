@@ -19,9 +19,7 @@ add staging or QA requirements, but must not replace or weaken this contract.
 - No source image: omit `media_index` and set `background: "transparent"` for
   transparent text-to-image.
 - Never use prompt wording, white, checkerboard, or chroma as a substitute for
-  the `background` field. Follow the generated Image Model Capability table
-  for conflicts; describe any adjusted output truthfully and never label an
-  opaque image as a transparent cutout.
+  the `background` field. Never fall back to an opaque provider.
 - Do not append the ordinary "preserve exact composition / scene layout" line.
   A cutout intentionally removes that scene.
 

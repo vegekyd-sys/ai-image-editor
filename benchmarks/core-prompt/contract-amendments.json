@@ -26,7 +26,7 @@
   },
   "src/lib/prompts/cutout.md": {
     "baselineSha256": "e1ffb7d39f0cad95e702d7a3971c9fdd97e4bc4f9720c7b31c7ee5ca98d6d202",
-    "sha256": "97557925ca48aeecdc7a1b821efdef1c1b960ae2f62fde78416910d3f8c74852",
-    "reason": "2026-10-08 user-authorized second cleanup: model priority, legacy IDs, NSFW and output-conflict policy have one owner in generated Image Model Capability. Context-mode summary is generated beside the tool; detailed original-brief examples, face/reference/edit preservation and cutout fidelity/content rules remain unchanged. Preserve real-alpha honesty while using shared conflict planning. Regression: agentMediaScenarioMatrix.test.ts, imageModelCapabilities.test.ts, editImageReferences.test.ts, falImage25.test.ts; before/after provider payload parity and CLI Chat image QA."
+    "sha256": "b9d61c73ed05e94e4c2d6833cc9077fdbaa70b25a157df08d6fde34b0099204a",
+    "reason": "User approved replacing Image 2 defaults with FAL GPT Image 2.5 Flare on 2026-09-10. Preserve context-mode briefs and transparent fidelity rules; migrate model names, proactive product/design routing and remove stale fixed latency promises. Regression: agentPromptPolicy.test.ts, agentMediaScenarioMatrix.test.ts, modelRouterTransparency.test.ts; 13 real scenario outputs reviewed."
   }
 }
