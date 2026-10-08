@@ -6,13 +6,13 @@ import * as referencePreflight from '@/lib/h3-reference-preflight'
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals() })
 
 it.each([false, true, 'middle'])('keeps Retake boundary images and the exact final Agent prompt without marker-dependent filtering (native lock: %s)', async lockEndpoints => {
-  const images = ['https://example.com/start.jpg', 'https://example.com/end.jpg']
+  const images = ['https://example.com/start.jpg', 'https://example.com/end.jpg', 'https://example.com/brand.jpg']
   const videoUrl = 'https://example.com/context.mp4'
-  const prompt = '1–2s: wheel-level tracking. CUT. 2–4s: elevated view of the same landing.'
+  const prompt = '1–2s: wheel-level tracking. CUT. 2–4s: elevated view of the same landing. Integrate Image 3 as the supplied brand image.'
   vi.stubEnv('FAL_KEY', 'test-key')
   const preflight = vi.spyOn(referencePreflight, 'prepareH3ReferenceMedia').mockResolvedValue({
     videos: [{ url: videoUrl, durationSec: 5 }], audios: [],
-    referenceImagePixels: 1280 * 720 * 2, referenceVideoDurationSec: 5, referenceAudioDurationSec: 0,
+    referenceImagePixels: 1280 * 720 * images.length, referenceVideoDurationSec: 5, referenceAudioDurationSec: 0,
   })
   let body: any
   vi.stubGlobal('fetch', vi.fn(async (_url: unknown, init?: RequestInit) => {

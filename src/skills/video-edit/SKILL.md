@@ -49,6 +49,8 @@ generation in `prompts/animate.md`.
 2. Inspect only to the required depth. A clear source edit does not need
    `analyze_video`; replication must understand the complete clip and lock
    uncertain boundaries before paid generation.
+For a bounded change integrating a supplied image/logo into an existing scene or ending, use skills/video-segment-edit/SKILL.md and pass reference_media_indices. Natural/playful integration does not imply a Remotion overlay or editable timeline; explicit fixed layers and exact deterministic text/layout remain composition tasks.
+
 3. Choose the smallest capable path: deterministic FFmpeg, editable Remotion,
    reference-to-video synthesis, or a hybrid. Models decide semantic intent and
    visual labels; deterministic tools own measurements, timecodes, assembly,

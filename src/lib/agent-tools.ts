@@ -3645,7 +3645,7 @@ Returns the rendered image so you can see it with your vision.`,
             return undefined;
           }
         };
-        let design = (ctx as any).__lastDesignPayload;
+        let design = !design_path && media_index !== undefined ? undefined : (ctx as any).__lastDesignPayload;
         let rawVideo: { url: string; duration?: number; fps?: number; sourceRange?: VideoSourceRange } | null = null;
         if (design_path) {
           try {
@@ -3671,7 +3671,7 @@ Returns the rendered image so you can see it with your vision.`,
               .eq('project_id', ctx.projectId)
               .order('sort_order', { ascending: true });
             const snap = snaps?.[v.idx] as { type?: string; image_url?: string; design_path?: string; video_meta?: Record<string, unknown> } | undefined;
-            if (snap?.design_path) {
+            if (snap?.design_path && snap.type !== 'video') {
               const storagePath = `${ctx.userId}/workspace/${snap.design_path}`;
               const { data: urlData } = ctx.supabase.storage.from('images').getPublicUrl(storagePath);
               if (urlData?.publicUrl) {

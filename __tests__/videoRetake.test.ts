@@ -1,11 +1,12 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { planRetake, validateRetakeRange, retakePrompt, resolveRetakeModel } from '@/lib/video-retake-contract';
 import { assembleRetake, extractRetakeContext, extractRetakeBoundaryFrames, extractRetakeInspectionFrames, inspectRetakeSource } from '@/lib/video-retake-media';
+import * as ffmpegRuntime from '@/lib/ffmpeg-runtime';
 import { findFfmpeg } from '@/lib/ffmpeg-runtime';
 
 describe('Retake interval contract', () => {
@@ -48,12 +49,15 @@ describe('Retake interval contract', () => {
       const color = async (buffer: Buffer) => [...(await sharp(buffer).resize(1,1).raw().toBuffer())];
       expect((await color(frames.start))[2]).toBeGreaterThan(200);
       expect((await color(frames.end))[2]).toBeGreaterThan(200);
+      const probe = vi.spyOn(ffmpegRuntime, 'probeVideoFile').mockResolvedValue({duration:6.2,width:320,height:240,fps:24,audioCodec:'aac'});
+      try {
       const inspection = await extractRetakeInspectionFrames(readFileSync(src), planRetake({start:3.2,end:6.2},6.2,'fal-h3-max'),24);
       expect(inspection.timestamps.at(-1)).toBeLessThan(6);
       const tailBoundary = await extractRetakeBoundaryFrames(readFileSync(src), planRetake({start:3.2,end:6.2},6.2,'fal-h3-max'),24);
       expect((await color(tailBoundary.end))[2]).toBeGreaterThan(200);
       expect(inspection.frames.length).toBeGreaterThan(2);
       expect((await color(inspection.frames.at(-1)!))[2]).toBeGreaterThan(200);
+      } finally { probe.mockRestore(); }
     } finally { rmSync(dir,{recursive:true,force:true}); }
   },30_000);
   it('retains generated first/last frames when fitting a short selection', async () => {

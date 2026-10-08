@@ -69,3 +69,20 @@ describe('Agent Retake paid-submission gate', () => {
     expect(submit).not.toHaveBeenCalled()
   })
 })
+
+it.each(['fal-h3-max','seedance-2.5','seedance-2.5-eco'])('passes creative image references separately from the source video for %s', async model => {
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+  const signed = signRetakeInspection({userId:'owner',projectId:'project',runId:'run',inputEpoch:0,sourceUrl,start:18,end:21,model},'test-server-secret',{outputSelection:{start:1,end:4},generationDuration:5});
+  await (createInspectedRetakeVideoTool(scope).execute as any)({...input,model,
+    prompt:'Use <<<media_2>>> as the brand image within <<<media_1>>>.',
+    shot_plan:[{start:1,end:4,instruction:'Integrate the brand image into the ending'}],
+    inspection_id:signed,source_observation:observation,reference_media_indices:[2]});
+  expect(submit).toHaveBeenCalledWith(expect.objectContaining({images:['https://example.com/air.jpg'],videoUrl:sourceUrl,
+    script:model==='fal-h3-max' ? 'Use Image 3 as the brand image within Video 1.' : 'Use <<<image_1>>> as the brand image within @video1.'}),expect.anything());
+});
+it('rejects a named image without a supplied reference before billing',async()=>{
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+  const result=await (createInspectedRetakeVideoTool(scope).execute as any)({...input,prompt:'Use <<<media_2>>> as the brand image.',shot_plan:[{start:1,end:4,instruction:'Integrate logo'}],inspection_id:receipt(),source_observation:observation});
+  expect(result.success).toBe(false);
+  expect(submit).not.toHaveBeenCalled();
+});

@@ -33,7 +33,7 @@ async function store(job: Job, bytes: Buffer, suffix: string, image = false) {
 }
 export function retakeVideoMeta(job: Job): VideoMeta {
   return { taskId: PREFIX + job.id, videoUrl: job.output_url ?? null, prompt: job.instruction,
-    sourceSnapshotIds: [], sourceUrls: [job.source_url], status: job.stage === 'completed' ? 'completed' : job.stage === 'failed' ? 'failed' : 'processing',
+    sourceSnapshotIds: [], sourceUrls: [job.source_url, ...((job.source_meta.referenceImages as string[] | undefined) ?? [])], status: job.stage === 'completed' ? 'completed' : job.stage === 'failed' ? 'failed' : 'processing',
     duration: job.plan.sourceDuration, model: job.model_id, resolution: job.resolution as VideoMeta['resolution'], operation: 'edit',
     createdAt: job.created_at, error: job.error, pipelineStage: job.stage,
     retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url,
@@ -86,7 +86,9 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
     if (!input.script.trim()) throw new Error('Describe what to change in the selected interval.')
-    if (input.images.some(Boolean) || input.videoUrls?.length || input.audioUrls?.length || input.motionControl) throw new Error('Retake accepts exactly one source video without extra media references.')
+    const referenceImages = input.images.filter(Boolean)
+    if (referenceImages.length > 6 || referenceImages.some(url => !/^https?:\/\//.test(url))) throw new Error('Retake supports up to six hosted image references.')
+    if (input.videoUrls?.length || input.audioUrls?.length || input.motionControl) throw new Error('Retake accepts one source video and image references; extra videos/audio/motion control require another workflow.')
     if (input.retake.middleFrame && (model !== 'fal-h3-max' || input.videoResolution === '1080p' || !Number.isFinite(input.retake.middleFrame.time) || input.retake.middleFrame.time <= 0 || input.retake.middleFrame.time >= Math.max(5,Math.ceil(input.retake.end-input.retake.start))-1/24)) throw new Error('Retake middle-frame control requires H3 native 480p/768p and a time strictly inside its output.');
     const admin = getSupabaseAdmin()
     if (input.projectId) {
@@ -94,7 +96,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       if (error || !data) throw new Error('Retake project is unavailable or not owned by this user.')
     }
     const id = input.billingRequestId ?? randomUUID()
-    const fingerprint = createHash('sha256').update(JSON.stringify([input.videoUrl, input.retake, input.script, model, input.videoResolution, input.projectId])).digest('hex')
+    const fingerprint = createHash('sha256').update(JSON.stringify([input.videoUrl, input.retake, input.script, model, input.videoResolution, input.projectId, ...(referenceImages.length ? [referenceImages] : [])])).digest('hex')
     const { data: old, error: oldError } = await admin.from(TABLE).select('*').eq('id', id).eq('user_id', input.userId).maybeSingle()
     if (oldError) throw new Error('Retake task storage is not configured. No provider submitted.')
     if (old) {
@@ -110,7 +112,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const now = new Date().toISOString()
     job = { id, user_id: input.userId, project_id: input.projectId ?? null, fingerprint, stage: 'preparing', source_url: input.videoUrl,
       instruction: input.script, model_id: model, resolution: input.videoResolution && input.videoResolution !== 'auto' ? input.videoResolution : model === 'fal-h3-max' ? '768p' : '720p',
-      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount },
+      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}) },
       timings: {}, created_at: now, updated_at: now }
     const { error: insertError } = await admin.from(TABLE).insert(job)
     if (insertError) throw new Error('Could not create the Retake receipt. No provider submitted.')
@@ -144,7 +146,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     // edit. Referencing the original moving camera can suppress its new view.
     const useVideoReference = !boundaryFrames?.middle
     result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
-      images: boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : [], h3RetakeBoundaryFrames: boundaryFrames,
+      images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages], h3RetakeBoundaryFrames: boundaryFrames,
       script: prompt, duration: model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,
       referenceVideoDuration: useVideoReference ? plan.contextEnd - plan.contextStart : undefined, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],

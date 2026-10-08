@@ -10,7 +10,9 @@ For local generative content changes, resolve a 0.1–15s interval from explicit
 
 For screenshot/frame-based local video repair with an unknown moment, read `skills/video-segment-edit/SKILL.md`, locate the screenshot with `analyze_video({ mode: "locate_frame" })`, then follow the same inspection and automatic interval replacement path. An image supplied as a creative reference is not a screenshot to locate.
 
-For precise cuts, deletion, reordering, speed, crop or transcoding, use the existing composition timeline or FFmpeg. For text/overlays use editable composition; for sound/lip-sync use the appropriate audio tool; for longer full-source restyling/replication read `prompts/animate.md` and `skills/video-edit/SKILL.md`. These are also natural-language flows.
+Image + existing video: integrating a supplied image/logo into a source scene or ending with natural/playful continuity defaults to inspect_retake → retake_video with reference_media_indices. Do not infer Remotion/editability or a fixed overlay solely from "add image", "logo" or "ending"; use composition for explicit fixed layers or exact deterministic text/layout.
+
+For precise cuts, deletion, reordering, speed, crop or transcoding, use the existing composition timeline or FFmpeg. For subtitles or explicitly requested fixed overlays/editable layers use editable composition; for sound/lip-sync use the appropriate audio tool; for longer full-source restyling/replication read `prompts/animate.md` and `skills/video-edit/SKILL.md`. These are also natural-language flows.
 
 For async intermediate videos outside local editing, include `completion_actions` for appropriate next steps. Local editing already owns full-video assembly and must not offer a redundant merge action.
 

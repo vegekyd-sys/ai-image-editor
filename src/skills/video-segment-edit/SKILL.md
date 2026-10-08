@@ -35,6 +35,8 @@ Seedance route), and native Seedance 2.5 when explicitly requested.
 For a scene/action description such as "机器人起跳那段", use analyze_video and
 preview_frame to locate the actual action, then inspect and edit its bounded
 interval. Ask only if multiple scenes match or the requested scope is unclear.
+For image + existing-video requests such as "把@1加到@2里去，可以是最后出logo的地方，衔接要自然好玩", locate and inspect the video ending and use local editing. Pass the supplied image in retake_video.reference_media_indices and mention <<<media_N>>> in the final prompt. A creative logo/image is not a screenshot locator. Do not invent an editable timeline or substitute a Remotion pop-up card; composition is for explicit fixed overlay/layer/editability intent or exact deterministic text/layout requirements.
+
 Never demand a GUI selection. Requests over 15s or sources over 120s need the
 appropriate whole-video/long-video workflow; never silently shorten them.
 
