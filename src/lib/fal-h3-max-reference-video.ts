@@ -19,7 +19,7 @@ export interface H3MaxReferenceInput {
   /** Internal only: createVideo already measured and validated the selected images. */
   imagesVerified?: boolean
   /** Retake only: boundary state references must be included in the measured image references. */
-  boundaryFrames?: { startUrl: string; endUrl: string }
+  boundaryFrames?: { startUrl: string; endUrl: string; lockEndpoints?: boolean }
 }
 
 function validateClips(clips: Array<{ durationSec: number }>, kind: string): void {
@@ -65,6 +65,7 @@ export function buildH3MaxReferencePayload(input: H3MaxReferenceInput): Record<s
     reference_image_urls: images, reference_video_urls: videos.map(clip => clip.url),
     reference_audio_urls: audios.map(clip => clip.url),
     enable_safety_checker: true, prompt_expansion_mode: input.boundaryFrames ? 'disabled' : 'balanced', sync_mode: false,
+    ...(input.boundaryFrames?.lockEndpoints ? { image_url: input.boundaryFrames.startUrl, end_image_url: input.boundaryFrames.endUrl } : {}),
     ...(input.seed != null ? { seed: input.seed } : {}),
   }
 }

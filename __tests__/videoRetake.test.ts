@@ -17,7 +17,7 @@ describe('Retake interval contract', () => {
   });
   it('expands reference context without expanding the replacement interval', () => {
     const plan = planRetake({ start: 2, end: 3 }, 10, 'fal-h3-max');
-    expect(plan).toMatchObject({ start: 2, end: 3, contextStart: 0, contextEnd: 5, patchOffset: 2, generationDuration: 5 });
+    expect(plan).toMatchObject({ start: 2, end: 3, contextStart: 0, contextEnd: 5, patchOffset: 0, generationDuration: 5, outputMode: 'selection' });
     expect(planRetake({ start: 9, end: 10 }, 10, 'seedance-2.5').contextStart).toBe(6);
   });
   it('rejects invalid and unsupported requests before paid submission', () => {
@@ -34,18 +34,36 @@ describe('Retake interval contract', () => {
     expect(() => retakePrompt('  ')).toThrow(/Describe/);
     expect(retakePrompt(instruction)).not.toContain('NEW TAKE');
   });
-  it('extracts the first and last contextual frames from the original timebase', async () => {
+  it('extracts the first and last selected frames from the original timebase', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'retake-boundaries-'));
     const ffmpeg = await findFfmpeg();
     try {
       const src = join(dir, 'source.mp4');
-      execFileSync(ffmpeg, ['-v','error','-y','-f','lavfi','-i','color=red:s=320x240:r=24:d=3',
-        '-f','lavfi','-i','color=blue:s=320x240:r=24:d=3','-filter_complex','[0:v][1:v]concat=n=2:v=1:a=0[v]','-map','[v]','-c:v','libx264',src]);
-      const frames = await extractRetakeBoundaryFrames(readFileSync(src), planRetake({start:1,end:5},6,'fal-h3-max'),24);
+      execFileSync(ffmpeg, ['-v','error','-y','-f','lavfi','-i','color=red:s=320x240:r=24:d=2',
+        '-f','lavfi','-i','color=blue:s=320x240:r=24:d=4','-filter_complex','[0:v][1:v]concat=n=2:v=1:a=0[v]','-map','[v]','-c:v','libx264',src]);
+      const frames = await extractRetakeBoundaryFrames(readFileSync(src), planRetake({start:2,end:3},6,'fal-h3-max'),24);
       const { default: sharp } = await import('sharp');
       const color = async (buffer: Buffer) => [...(await sharp(buffer).resize(1,1).raw().toBuffer())];
-      expect((await color(frames.start))[0]).toBeGreaterThan(200);
+      expect((await color(frames.start))[2]).toBeGreaterThan(200);
       expect((await color(frames.end))[2]).toBeGreaterThan(200);
+    } finally { rmSync(dir,{recursive:true,force:true}); }
+  },30_000);
+  it('retains generated first/last frames when fitting a short selection', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'retake-endpoints-'));
+    const ffmpeg = await findFfmpeg();
+    const run = (args: string[]) => execFileSync(ffmpeg, ['-v', 'error', '-y', ...args]);
+    try {
+      const src = join(dir, 'source.mp4'), patch = join(dir, 'patch.mp4'), final = join(dir, 'final.mp4');
+      run(['-f','lavfi','-i','color=black:s=320x240:r=24:d=6','-c:v','libx264',src]);
+      run(['-f','lavfi','-i','color=red:s=320x240:r=24:d=0.041667','-f','lavfi','-i','color=green:s=320x240:r=24:d=5',
+        '-f','lavfi','-i','color=blue:s=320x240:r=24:d=0.041667','-filter_complex','[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]','-map','[v]','-c:v','libx264',patch]);
+      const { writeFileSync } = await import('node:fs');
+      const result = await assembleRetake(readFileSync(src),readFileSync(patch),planRetake({start:2,end:3},6));
+      writeFileSync(final,result.bytes);
+      const pixel = (frame: number) => [...run(['-i',final,'-vf',`select=eq(n\\,${frame}),scale=1:1`,'-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'])];
+      expect(pixel(48)[0]).toBeGreaterThan(200);
+      expect(pixel(71)[2]).toBeGreaterThan(200);
+      expect(pixel(72).every(v=>v<10)).toBe(true);
     } finally { rmSync(dir,{recursive:true,force:true}); }
   },30_000);
   it('assembles only the selected frames and copies original audio', async () => {

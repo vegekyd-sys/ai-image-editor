@@ -6,9 +6,9 @@ import { retakePromptPlanning, retakeShotPlanError } from '@/lib/video-retake-pr
 describe('inspection-to-prompt timing budget', () => {
   it('makes the three-second example readable with three distinct shot slots', () => {
     const budget = retakePromptPlanning(planRetake({ start: 18, end: 21 }, 30.048, 'fal-h3-max'))
-    expect(budget.outputSelection).toEqual({ start: 1, end: 4 })
+    expect(budget.outputSelection).toEqual({ start: 0, end: 5 })
     expect(budget.multiCameraTimingBudget.suggestedOutputSlots).toEqual([
-      { start: 1, end: 2 }, { start: 2, end: 3 }, { start: 3, end: 4 },
+      { start: 0, end: 1.667 }, { start: 1.667, end: 3.333 }, { start: 3.333, end: 5 },
     ])
   })
   it.each(['fal-h3-max', 'seedance-2.5'])('budgets only the selected output, with no gaps or out-of-range cuts (%s)', model => {

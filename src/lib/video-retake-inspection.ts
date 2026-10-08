@@ -62,15 +62,17 @@ export function retakeInspectionTimestamps(plan: RetakePlan, fps: number): numbe
   const last = Math.max(plan.start, plan.end - 1 / fps)
   const selectedSamples = Math.min(6, Math.max(2, Math.floor(length * fps)))
   return [...new Set([
-    plan.contextStart,
+    Math.max(0, plan.start - 1 / fps),
     ...Array.from({ length: selectedSamples }, (_, index) => index === selectedSamples - 1
       ? last : plan.start + length * index / (selectedSamples - 1)),
-    Math.max(plan.contextStart, plan.contextEnd - 1 / fps),
+    Math.min(plan.sourceDuration - 1 / fps, plan.end),
   ].map(value => Number(value.toFixed(3))))].sort((a, b) => a - b)
 }
 
 export function retakeOutputTime(plan: RetakePlan, sourceTime: number): number {
-  return (sourceTime - plan.contextStart) * plan.generationDuration / (plan.contextEnd - plan.contextStart)
+  const start = plan.outputMode === 'selection' ? plan.start : plan.contextStart
+  const end = plan.outputMode === 'selection' ? plan.end : plan.contextEnd
+  return (sourceTime - start) * plan.generationDuration / (end - start)
 }
 
 export function retakeInspectionScope(ctx: { userId?: string; projectId: string; execution?: { runId: string; inputEpoch: number }; agentRunId?: string }, sourceUrl: string, start: number, end: number, model: string): RetakeInspectionScope {

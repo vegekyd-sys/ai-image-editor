@@ -41,10 +41,10 @@ describe('Retake inspection evidence', () => {
   })
   it('covers the selected action and contextual boundaries in original time', () => {
     const plan = planRetake({ start: 18, end: 21 }, 30.048, 'fal-h3-max')
-    expect(retakeInspectionTimestamps(plan, 24)).toEqual([17, 18, 18.6, 19.2, 19.8, 20.4, 20.958, 21.958])
-    expect(retakeOutputTime(plan, 18)).toBe(1)
-    expect(retakeOutputTime(plan, 21)).toBe(4)
-    expect(retakeOutputTime(plan, 17)).toBe(0)
+    expect(retakeInspectionTimestamps(plan, 24)).toEqual([17.958, 18, 18.6, 19.2, 19.8, 20.4, 20.958, 21])
+    expect(retakeOutputTime(plan, 18)).toBe(0)
+    expect(retakeOutputTime(plan, 21)).toBe(5)
+    expect(retakeOutputTime({ ...plan, outputMode: undefined, patchOffset: 1 }, 17)).toBe(0)
   })
   it('handles minimum selections and scaled output without seeking past video end', () => {
     const plan = planRetake({ start: 9.9, end: 10 }, 10, 'fal-h3-max')

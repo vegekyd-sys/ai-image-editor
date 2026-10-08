@@ -2211,7 +2211,7 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
         const plan = planRetake({ start, end }, meta.duration!, model);
         const sampled = await extractRetakeInspectionFrames(bytes, plan, meta.fps!);
         const sheet = await createContactSheet(sampled.frames.map((image, index) => ({ image,
-          label: `#${index + 1} ${sampled.timestamps[index].toFixed(2)}s : ${retakeOutputTime(plan, sampled.timestamps[index]).toFixed(2)}s`,
+          label: `#${index + 1} ${sampled.timestamps[index].toFixed(2)}s : ${sampled.timestamps[index] < start || sampled.timestamps[index] >= end ? 'JOIN CONTEXT' : retakeOutputTime(plan, sampled.timestamps[index]).toFixed(2) + 's'}`,
         })), meta.width!, meta.height!, { columns: 4 });
         let analysis: string | undefined;
         // A visual Agent reads the actual sheet itself. Only text-only models
@@ -2230,7 +2230,7 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
         });
         return { success: true, inspection_id, plan, timestamps: sampled.timestamps,
           outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) },
-          sourceToOutputScale: plan.generationDuration / (plan.contextEnd - plan.contextStart),
+          sourceToOutputScale: plan.generationDuration / (plan.outputMode === 'selection' ? end - start : plan.contextEnd - plan.contextStart),
           promptPlanning: retakePromptPlanning(plan),
           analysis, base64Data: sheet.toString('base64'), mimeType: 'image/jpeg', workspacePath, workspaceUrl };
       } catch (error) {

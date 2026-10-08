@@ -8,13 +8,18 @@ describe('H3 Max reference adapter',()=>{
     expect(build({prompt:'<<<media_1>>> in a new room',images:[image],aspectRatio:'9:16'})).toMatchObject({prompt:'Image 1 in a new room', reference_image_urls:[image],aspect_ratio:'9:16',resolution:'768P'})
     expect(build({prompt:'<<<image_1>>>',images:[image]})).not.toHaveProperty('image_url')
   })
-  it('keeps Retake boundary references without switching to the unverified native endpoint constraints',()=>{
+  it('keeps Retake boundary references for legacy jobs without native endpoint constraints',()=>{
     const end='https://example.com/end.jpg'
     expect(build({prompt:'Continue the jump',images:[image,end],boundaryFrames:{startUrl:image,endUrl:end}})).toMatchObject({reference_image_urls:[image,end],prompt_expansion_mode:'disabled'})
     expect(build({prompt:'Continue the jump',images:[image,end],boundaryFrames:{startUrl:image,endUrl:end}})).not.toHaveProperty('image_url')
     expect(build({prompt:'New scene',images:[image]}).prompt_expansion_mode).toBe('balanced')
     expect(()=>build({prompt:'p',images:[image],boundaryFrames:{startUrl:image,endUrl:end}})).toThrow('validated image references')
   })
+  it('locks native endpoints only for selected-output Retake jobs',()=>{
+    const end='https://example.com/end.jpg';
+    expect(build({prompt:'new interior angles, matching endpoints',images:[image,end],boundaryFrames:{startUrl:image,endUrl:end,lockEndpoints:true}}))
+      .toMatchObject({image_url:image,end_image_url:end,reference_image_urls:[image,end],prompt_expansion_mode:'disabled'});
+  });
   it('preserves each modality and index instead of flattening to a first frame',()=>{
     expect(build({prompt:'<<<media_2>>> meets <<<image_1>>>. Follow <<<video_1>>> and <<<audio_1>>>.',images:[image,image],videos:[{url:'v',durationSec:5}],audios:[{url:'https://example.com/a.wav',durationSec:3}]})).toMatchObject({prompt:'Image 2 meets Image 1. Follow Video 1 and Audio 1.',reference_video_urls:['v'],reference_audio_urls:['https://example.com/a.wav']})
   })

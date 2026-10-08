@@ -117,11 +117,11 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     }
     const context = await extractRetakeContext(source, plan)
     const contextUrl = await store(job, context, 'context')
-    let boundaryFrames: { startUrl: string; endUrl: string } | undefined
+    let boundaryFrames: { startUrl: string; endUrl: string; lockEndpoints?: boolean } | undefined
     if (model === 'fal-h3-max') {
       const frames = await extractRetakeBoundaryFrames(source, plan, meta.fps!)
       const [startUrl, endUrl] = await Promise.all([store(job, frames.start, 'start', true), store(job, frames.end, 'end', true)])
-      boundaryFrames = { startUrl, endUrl }
+      boundaryFrames = { startUrl, endUrl, lockEndpoints: plan.outputMode === 'selection' }
       await save(job, { source_meta: { ...job.source_meta, boundaryFrames } })
     }
     await save(job, { context_url: contextUrl, stage: 'prepared', timings: { preparationMs: performance.now() - started } })

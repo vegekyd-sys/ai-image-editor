@@ -54,11 +54,13 @@ export async function extractRetakeInspectionFrames(source: Buffer, plan: Retake
   })
 }
 
-/** Native H3 anchors use the exact reference-clip boundary states, not a new setup. */
+/** New H3 outputs represent only the selection; legacy jobs retain context anchors. */
 export async function extractRetakeBoundaryFrames(source: Buffer, plan: RetakePlan, fps: number): Promise<{ start: Buffer; end: Buffer }> {
   if (!Number.isFinite(fps) || fps < 1) throw new Error('Boundary frames require a measured source frame rate.')
   return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
-    const frames = await Promise.all([plan.contextStart, Math.max(plan.contextStart, plan.contextEnd - 1 / fps)].map(async (time, index) => {
+    const start = plan.outputMode === 'selection' ? Math.round(plan.start * fps) / fps : plan.contextStart
+    const end = plan.outputMode === 'selection' ? (Math.round(plan.end * fps) - 1) / fps : plan.contextEnd - 1 / fps
+    const frames = await Promise.all([start, Math.max(start, end)].map(async (time, index) => {
       const output = join(dir, `boundary-${index}.jpg`)
       await exec(ffmpeg, ['-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-i', join(dir, 'source.mp4'),
         '-ss', String(time), '-frames:v', '1', '-vf', "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
@@ -81,8 +83,16 @@ export async function assembleRetake(source: Buffer, patch: Buffer, plan: Retake
     const fittedDuration = contextLength
     const offset = plan.patchOffset
     const scale = `scale=${meta.width}:${meta.height}:force_original_aspect_ratio=decrease,pad=${meta.width}:${meta.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`
+    // Selection output: fit the entire generated action, retaining its actual
+    // first/last frames even when provider audio outlasts the video track.
+    const generatedFrames = generated.frameCount || Math.round(generated.duration * (generated.fps || fps))
+    const selectionPatch = replacementFrames === 1
+      ? `[1:v]${scale},trim=end_frame=1,setpts=PTS-STARTPTS[p]`
+      : replacementFrames === 2
+      ? `[1:v]${scale},split=2[pf][pl];[pf]trim=end_frame=1,setpts=PTS-STARTPTS[pfirst];[pl]trim=start_frame=${generatedFrames - 1},trim=end_frame=1,setpts=PTS-STARTPTS[plast];[pfirst][plast]concat=n=2:v=1:a=0,setpts=N/(${fps}*TB)[p]`
+      : `[1:v]${scale},split=3[pf][pm][pl];[pf]trim=end_frame=1,setpts=PTS-STARTPTS[pfirst];[pm]setpts=${(replacementFrames - 1) / fps / Math.max(1, generatedFrames - 1)}*N/TB,fps=${fps},trim=start_frame=1:end_frame=${replacementFrames - 1},setpts=PTS-STARTPTS[pmid];[pl]trim=start_frame=${generatedFrames - 1},trim=end_frame=1,setpts=PTS-STARTPTS[plast];[pfirst][pmid][plast]concat=n=3:v=1:a=0,setpts=N/(${fps}*TB)[p]`
     const graph = [
-      `[1:v]setpts=${fittedDuration / generated.duration}*(PTS-STARTPTS),fps=${fps},${scale},trim=start=${offset},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${replacementFrames},setpts=PTS-STARTPTS[p]`,
+      plan.outputMode === 'selection' ? selectionPatch : `[1:v]setpts=${fittedDuration / generated.duration}*(PTS-STARTPTS),fps=${fps},${scale},trim=start=${offset},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${replacementFrames},setpts=PTS-STARTPTS[p]`,
     ]
     const legs: string[] = []
     if (startFrame > 0) { graph.push(`[0:v]fps=${fps},trim=end_frame=${startFrame},setpts=PTS-STARTPTS,setsar=1,format=yuv420p[b]`); legs.push('[b]') }

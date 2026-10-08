@@ -11,6 +11,8 @@ export interface RetakePlan extends RetakeRange {
   patchOffset: number
   generationDuration: number
   model: RetakeModel
+  /** Absent on persisted legacy jobs: their patch represents the full context. */
+  outputMode?: 'selection'
 }
 
 export function resolveRetakeModel(model?: string | null): RetakeModel {
@@ -43,8 +45,9 @@ export function planRetake(range: RetakeRange, sourceDuration: number, model?: s
   const contextStart = Math.max(0, Math.min(range.start - (contextLength - length) / 2, sourceDuration - contextLength))
   const contextEnd = Math.min(sourceDuration, contextStart + contextLength)
   return { ...range, sourceDuration, model: selectedModel, contextStart, contextEnd,
-    patchOffset: range.start - contextStart,
-    generationDuration: selectedModel === 'fal-h3-max' ? Math.min(15, Math.max(5, Math.ceil(contextLength))) : contextLength }
+    patchOffset: selectedModel === 'fal-h3-max' ? 0 : range.start - contextStart,
+    ...(selectedModel === 'fal-h3-max' ? { outputMode: 'selection' as const } : {}),
+    generationDuration: selectedModel === 'fal-h3-max' ? Math.min(15, Math.max(5, Math.ceil(length))) : contextLength }
 }
 
 /** The Agent writes the final instruction after inspection, in output seconds.
