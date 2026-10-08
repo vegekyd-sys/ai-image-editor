@@ -152,7 +152,7 @@
   },
   {
     "name": "video-segment-edit",
-    "description": "Locate a user-provided screenshot/frame inside a video, regenerate only the"
+    "description": "Edit a video interval from natural-language times or a verified scene/frame;"
   },
   {
     "name": "video-translate",
