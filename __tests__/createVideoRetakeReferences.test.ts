@@ -30,3 +30,18 @@ it.each([false, true, 'middle'])('keeps Retake boundary images and the exact fin
   else expect(body).not.toHaveProperty('image_url')
   if (lockEndpoints==='middle') expect(body).toMatchObject({middle_image_url:images[0],middle_frame_time:2.5})
 })
+
+it('sends an existing final image directly as the native H3 ending without a generated middle image or original video',async()=>{
+  const images=['https://example.com/source-first.jpg','https://example.com/user-homepage.jpg'];
+  vi.stubEnv('FAL_KEY','test-key');
+  vi.spyOn(referencePreflight,'prepareH3ReferenceMedia').mockResolvedValue({videos:[],audios:[],referenceImagePixels:1280*720*2,referenceVideoDurationSec:0,referenceAudioDurationSec:0});
+  let body:any;
+  vi.stubGlobal('fetch',vi.fn(async(_url:unknown,init?:RequestInit)=>{
+    body=JSON.parse(String(init?.body));return new Response(JSON.stringify({request_id:'existing-final-image-test'}),{status:200});
+  }));
+  const result=await createVideo({script:'Transition from Image 1 to Image 2 and hold Image 2 through the final frame.',images,videoModel:'fal-h3-max',videoResolution:'768p',aspectRatio:'16:9',duration:5,
+    h3RetakeBoundaryFrames:{startUrl:images[0],endUrl:images[1],lockEndpoints:true}});
+  expect(result.success).toBe(true);
+  expect(body).toMatchObject({image_url:images[0],end_image_url:images[1],reference_image_urls:images,reference_video_urls:[],prompt_expansion_mode:'disabled'});
+  expect(body).not.toHaveProperty('middle_image_url');
+});
