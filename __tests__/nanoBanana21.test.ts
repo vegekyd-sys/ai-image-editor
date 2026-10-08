@@ -20,7 +20,7 @@ describe('Nano Banana 2.1 OpenRouter contract', () => {
     vi.stubEnv('OPENROUTER_API_KEY', 'test');
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     await expect(nanoBanana21Backend.generate({ image: 'base', references: Array.from({ length: 14 }, () => ({ url: 'ref', role: 'reference' })), prompt: 'Combine' })).rejects.toThrow('at most 14');
-    await expect(nanoBanana21Backend.generate({ prompt: 'Scene', aspectRatio: '7:3' })).rejects.toThrow('aspect ratio');
+    await expect(nanoBanana21Backend.generate({ prompt: 'Scene', aspectRatio: '7:3' })).rejects.toThrow('aspectRatio=7:3');
     expect(fetch).not.toHaveBeenCalled();
   });
 

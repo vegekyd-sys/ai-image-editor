@@ -1,3 +1,4 @@
+import { getImageModelCapability } from './image-model-capabilities';
 import type { TranslationKey } from '@/lib/locales';
 
 export type ModelCategory = 'image' | 'video' | 'agent';
@@ -46,7 +47,8 @@ export const MODEL_REGISTRY: ModelInfo[] = [
 ];
 
 export function getImageModels(): ModelInfo[] {
-  return MODEL_REGISTRY.filter(m => m.category === 'image');
+  return MODEL_REGISTRY.filter(m => m.category === 'image').sort((a, b) =>
+    (getImageModelCapability(a.id).autoPriority ?? 100) - (getImageModelCapability(b.id).autoPriority ?? 100));
 }
 
 export function getVideoModels(): ModelInfo[] {

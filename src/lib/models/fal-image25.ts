@@ -1,3 +1,4 @@
+import { validateImageModelRequest, getImageModelCapability } from '../image-model-capabilities';
 import sharp from 'sharp';
 import type { GenerateImageRequest, ModelBackend } from './types';
 import { normalizeOpenAIImageOutput } from './openai-image-output';
@@ -31,13 +32,14 @@ export function image25Size(aspectRatio?: string): 'auto' | { width: number; hei
   if (!aspectRatio || aspectRatio === 'auto') return 'auto';
   const match = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(aspectRatio);
   const ratio = match ? Number(match[1]) / Number(match[2]) : NaN;
-  if (!Number.isFinite(ratio) || ratio < 1 / 3 || ratio > 3) throw new FalImage25RequestError('GPT Image 2.5 aspect ratio must be between 1:3 and 3:1.');
+  const contract = getImageModelCapability('gpt-image-2.5-flare').aspectRatio;
+  if (!Number.isFinite(ratio) || contract.kind !== 'range' || ratio < contract.min || ratio > contract.max) throw new FalImage25RequestError('GPT Image 2.5 aspect ratio must be between 1:3 and 3:1.');
   return { width: Math.round(Math.sqrt(1048576 * ratio) / 16) * 16, height: Math.round(Math.sqrt(1048576 / ratio) / 16) * 16 };
 }
 
 export function buildFalImage25Request(req: GenerateImageRequest, model: FalImage25Id) {
+  validateImageModelRequest(req, model);
   const images = [...(req.image ? [{ url: req.image, role: 'Base image to edit' }] : []), ...(req.references ?? [])];
-  if (images.length > 16) throw new FalImage25RequestError('GPT Image 2.5 supports at most 16 input images, including the base image.');
   if (!req.prompt.trim()) throw new FalImage25RequestError('GPT Image 2.5 requires a non-empty prompt.');
   for (const { url } of images) {
     if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=\r\n]+$/.test(url)) continue;

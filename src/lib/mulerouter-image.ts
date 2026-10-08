@@ -6,6 +6,8 @@
  * https://www.mulerouter.ai/docs/api-reference/endpoint/carrothub/z-image-spicy/generation
  */
 
+import { getImageModelCapability, validateImageModelRequest } from './image-model-capabilities'
+
 const BASE_URL = 'https://api.mulerouter.ai'
 const QWEN_EDIT_PATH = '/vendors/carrothub/v1/qwen-image-edit-spicy/generation'
 const Z_IMAGE_PATH = '/vendors/carrothub/v1/z-image-spicy/generation'
@@ -191,13 +193,14 @@ async function runTask(path: string, payload: Record<string, unknown>): Promise<
 }
 
 function dimensionsForAspectRatio(aspectRatio?: string): { width: number; height: number } {
+  validateImageModelRequest({ prompt: 'size', aspectRatio }, 'qwen-spicy')
   const match = aspectRatio?.match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/)
   if (!match) return { width: 1024, height: 1024 }
   const ratio = Number(match[1]) / Number(match[2])
   if (!Number.isFinite(ratio) || ratio <= 0) return { width: 1024, height: 1024 }
 
-  const longSide = 1536
-  const shortSide = Math.max(256, Math.round(longSide / Math.max(ratio, 1 / ratio)))
+  const { longSide, minShortSide } = getImageModelCapability('qwen-spicy').textToImageSize!
+  const shortSide = Math.max(minShortSide, Math.round(longSide / Math.max(ratio, 1 / ratio)))
   return ratio >= 1
     ? { width: longSide, height: shortSide }
     : { width: shortSide, height: longSide }
@@ -216,11 +219,11 @@ export function muleRouterQwenInputs(input: { image?: string; references?: { url
 
 export function supportsMuleRouterQwenRequest(input: { image?: string; references?: { url: string }[] }): boolean {
   const images = muleRouterQwenInputs(input)
-  return images.length <= 3
+  return images.length <= getImageModelCapability('qwen-spicy').maxInputImages!
 }
 
 export async function generateWithMuleRouterQwenEdit(images: string[], prompt: string): Promise<string> {
-  if (images.length < 1 || images.length > 3) {
+  if (images.length < 1 || images.length > getImageModelCapability('qwen-spicy').maxInputImages!) {
     throw new Error('Qwen Image Edit Spicy requires 1-3 input images')
   }
   return runTask(QWEN_EDIT_PATH, {

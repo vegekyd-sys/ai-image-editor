@@ -1155,6 +1155,17 @@ try {
   }
 
   {
+    await expectSuccess(['edit', '--image-resolution', '2K', '--aspect', '8:1', 'A panoramic banner.']);
+    let request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.model, undefined);
+    assert.equal(request.body.params.arguments.imageResolution, '2K');
+    assert.equal(request.body.params.arguments.aspectRatio, '8:1');
+    await expectSuccess(['edit', '--nsfw', 'Sensitive artwork.']);
+    request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.isNsfw, true);
+  }
+
+  {
     const out = path.join(tmpHome, 'wan-result.jpg');
     const result = await expectSuccess(['edit', '--image-model', 'wan2.7-image', '--aspect', '16:9', '--out', out, 'A red mug.']);
     assert.equal(result.stdout.trim(), out);

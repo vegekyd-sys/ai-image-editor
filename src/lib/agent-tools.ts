@@ -42,6 +42,7 @@ import {
 } from './narration-cues';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
+import { formatImageCapabilitiesForAgent, ImageCapabilityError } from './image-model-capabilities';
 import { normalizeGenerateImageMediaIndex } from './generate-image-input';
 import type { DesignPayload, VideoMeta, VideoModel, VideoSourceRange } from '@/types';
 import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
@@ -250,7 +251,7 @@ export interface AgentContext {
   explicitMediaIndices: number[];
   /** 0-based index of the snapshot the user is currently viewing */
   currentSnapshotIndex: number;
-  /** NSFW flag — set when Gemini refuses content. All subsequent calls skip Gemini. */
+  /** NSFW flag — assessed by the main Agent before image submission and retained during the session. */
   isNsfw?: boolean;
   /** Timeline version: 1 = legacy (project_animations), 2 = video-in-timeline (snapshots) */
   timelineVersion?: number;
@@ -344,7 +345,7 @@ export type AgentStreamEvent =
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'capture_frame'; frame: number; uploadPath: string; captureId: string }  // request frontend to capture a frame via renderStillOnWeb
   | { type: 'preview_frame_captured'; workspaceUrl: string }  // emitted after preview_frame completes — CUI shows inline
-  | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
+  | { type: 'nsfw_detected' }  // main Agent assessment persists in the client session
   | { type: 'reasoning_start' }           // new thinking round started
   | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
@@ -1384,18 +1385,20 @@ function createGenerateImageTool(
   { ctx, runtime }: AgentToolFactoryScope,
 ) {
   return tool({
-      description: generateImageToolPrompt,
+      description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}`,
       inputSchema: z.object({
         editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite; Nano Banana 2.1 = gemini-2.1 (ordinary image default, OpenRouter, up to 14 input images); classic Nano Banana 2 = gemini. Otherwise omit model for normal auto routing.'),
+        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Explicit user/active Skill image model choice. Otherwise omit for capability-aware Auto; see the generated Image Model Capability table.'),
+        isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
         imageResolution: z.enum(['1K', '2K', '4K']).optional().describe('Nano Banana 2.1 output resolution; defaults to 1K. Use 2K/4K only when requested. Other image models do not support this parameter.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2.5 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, aspectRatio, imageResolution, background, media_index, reference_media_indices }) => {
+      execute: async ({ editPrompt, skill, model, isNsfw, aspectRatio, imageResolution, background, media_index, reference_media_indices }) => {
+        if (isNsfw) ctx.isNsfw = true;
         // GPT-5.6 currently fills omitted optional numeric tool fields with 0.
         // Treat that provider sentinel exactly like omission so empty projects
         // can still use pure text-to-image. Positive indices remain validated.
@@ -1424,18 +1427,14 @@ function createGenerateImageTool(
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         let billingModel: ModelId | undefined;
-        let modelChain: ModelId[];
         try {
-          modelChain = resolveModelChain({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, background, isNsfw: ctx.isNsfw });
+          const modelChain = resolveModelChain({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, aspectRatio, imageResolution, background, isNsfw: ctx.isNsfw });
           billingModel = modelChain[0];
         } catch (error) {
-          return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: 'model_retired' };
+          return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: error instanceof ImageCapabilityError ? error.code : 'model_retired', ...(error instanceof ImageCapabilityError ? { conflicts: error.conflicts, compatibleModels: error.compatibleModels } : {}) };
         }
-        if (imageResolution && billingModel !== 'gemini-2.1') return { success: false, message: 'imageResolution requires Nano Banana 2.1.', error: 'unsupported_parameter' };
         const imageInputCount = (editTarget ? 1 : 0) + resolvedRefs.length;
-        const spicyReachable = imageInputCount <= 3 && !(ctx.isNsfw && background === 'transparent')
-          && modelChain.includes('qwen-spicy');
-        if (ctx.userId && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
+        if (ctx.userId && await isBillingEnabled()) {
           let requiredCredits = 0;
           if (billingModel === 'gemini-2.1') {
             const rate = await getTokenRate('google/gemini-nano-banana-2.1');
@@ -1455,12 +1454,6 @@ function createGenerateImageTool(
               return { success: false, message: `Tool pricing is not configured: ${toolName}`, error: 'pricing_unavailable' };
             }
             if (price && !price.isFree) requiredCredits = Math.max(requiredCredits, price.credits);
-          }
-          if (spicyReachable) {
-            const spicyToolName = resolveToolName('edit_image', 'qwen-spicy', imageInputCount);
-            const spicyPrice = await getToolPrice(spicyToolName);
-            if (!spicyPrice) return { success: false, message: `Tool pricing is not configured: ${spicyToolName}`, error: 'pricing_unavailable' };
-            if (!spicyPrice.isFree) requiredCredits = Math.max(requiredCredits, spicyPrice.credits);
           }
           // For token-priced, non-Spicy auto routes this remains an estimate;
           // the final debit still uses actual provider usage before publishing.
@@ -1524,7 +1517,7 @@ function createGenerateImageTool(
             : 'edit_image';
           await deductCredits(ctx.userId ?? '', null, billingTool, skillResult.usedModel, Date.now() - imageStartedAt);
         }
-        // NSFW detection: flag session so all subsequent calls skip Gemini
+        // Preserve compatibility with older tool results that reported a content block.
         if (skillResult.contentBlocked) ctx.isNsfw = true;
         if (skillResult.image) {
           ctx.currentImage = skillResult.image;

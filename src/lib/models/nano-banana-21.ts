@@ -1,22 +1,19 @@
+import { validateImageModelRequest } from '../image-model-capabilities';
 import sharp from 'sharp';
 import type { GenerateImageRequest, ModelBackend } from './types';
 
 export const NANO_BANANA_21_MODEL = 'google/gemini-nano-banana-2.1';
-const RATIOS = ['auto', '1:1', '3:2', '2:3', '3:4', '1:4', '4:1', '4:3', '4:5', '5:4', '1:8', '8:1', '9:16', '16:9', '21:9'];
 
 export class NanoBanana21RequestError extends Error {
   constructor(message: string, public readonly contentBlocked = false) { super(message); }
 }
 
 export function buildNanoBanana21Request(req: GenerateImageRequest) {
+  validateImageModelRequest(req, 'gemini-2.1');
   const images = [...(req.image ? [{ url: req.image, role: 'Base image to edit' }] : []), ...(req.references ?? [])];
   if (!req.prompt.trim()) throw new NanoBanana21RequestError('Nano Banana 2.1 requires a non-empty prompt.');
-  if (images.length > 14) throw new NanoBanana21RequestError('Nano Banana 2.1 supports at most 14 input images, including the base.');
   const aspectRatio = req.aspectRatio ?? 'auto';
-  if (!RATIOS.includes(aspectRatio)) throw new NanoBanana21RequestError('Unsupported Nano Banana 2.1 aspect ratio.');
   const resolution = req.imageResolution ?? '1K';
-  if (!['1K', '2K', '4K'].includes(resolution)) throw new NanoBanana21RequestError('Nano Banana 2.1 requires 1K, 2K or 4K resolution.');
-  if (req.background === 'transparent') throw new NanoBanana21RequestError('Nano Banana 2.1 does not guarantee transparent output.');
   const inputReferences = images.map(image => {
     let url = image.url;
     if (!url.startsWith('data:') && !url.startsWith('https://')) {

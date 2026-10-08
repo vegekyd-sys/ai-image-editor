@@ -35,22 +35,15 @@ describe('transparent image routing', () => {
       generate,
     });
 
-    const result = await generateImage({
-      image: 'https://example.com/source.jpg',
-      prompt: 'Cut out the subject.',
-      model: 'gemini',
-      background: 'transparent',
-    });
+    await expect(generateImage({
+      image: 'https://example.com/source.jpg', prompt: 'Cut out the subject.',
+      model: 'gemini', background: 'transparent',
+    })).rejects.toThrow('No automatic retry'.toLowerCase());
 
     expect(mockedGetBackend).toHaveBeenCalledTimes(1);
     expect(mockedGetBackend).toHaveBeenCalledWith('gpt-image-2.5-flare');
     expect(generate).toHaveBeenCalledTimes(1);
-    expect(result).toMatchObject({
-      image: null,
-      model: 'gpt-image-2.5-flare',
-      fallbackUsed: false,
-      failedModels: ['gpt-image-2.5-flare'],
-    });
+
   });
 
   it('migrates legacy Image 2 calls to paid fal even with subscription context', async () => {
@@ -84,10 +77,10 @@ describe('transparent image routing', () => {
 
 
 describe('Nano Banana 2.1 strict routing', () => {
-  it('defaults to 2.1 while preserving explicit classic and Lite routing', () => {
+  it('defaults to Flare while preserving explicit classic and Lite routing', () => {
     expect(resolveModelChain({ prompt: 'Scene', model: 'gemini-2.1' })).toEqual(['gemini-2.1']);
-    expect(resolveModelChain({ prompt: 'Scene' })).toEqual(['gemini-2.1', 'qwen-spicy']);
-    expect(resolveModelChain({ prompt: 'Scene', model: 'gemini-lite' })).toEqual(['gemini-lite', 'gemini', 'qwen-spicy']);
+    expect(resolveModelChain({ prompt: 'Scene' })).toEqual(['gpt-image-2.5-flare']);
+    expect(resolveModelChain({ prompt: 'Scene', model: 'gemini-lite' })).toEqual(['gemini-lite']);
   });
   it('fails once on an uncertain paid outcome', async () => {
     mockedGetBackend.mockReset();
@@ -102,10 +95,10 @@ describe('Nano Banana 2.1 strict routing', () => {
 
 describe('ordinary image defaults and paid fallback boundaries', () => {
   it('retains classic selection and special provider routes', () => {
-    expect(resolveModelChain({ prompt: 'Scene', model: 'gemini' })).toEqual(['gemini', 'qwen-spicy']);
-    expect(resolveModelChain({ prompt: 'Scene', image: 'photo', category: 'enhance' })).toEqual(['qwen-spicy', 'gemini-2.1']);
+    expect(resolveModelChain({ prompt: 'Scene', model: 'gemini' })).toEqual(['gemini']);
+    expect(resolveModelChain({ prompt: 'Scene', image: 'photo', category: 'enhance' })).toEqual(['gpt-image-2.5-flare']);
     expect(resolveModelChain({ prompt: 'Scene', isNsfw: true })).toEqual(['qwen-spicy']);
-    expect(resolveModelChain({ prompt: 'Scene', references: Array.from({length: 4}, () => ({url:'photo',role:'reference'})) })).toEqual(['gemini-2.1']);
+    expect(resolveModelChain({ prompt: 'Scene', references: Array.from({length: 4}, () => ({url:'photo',role:'reference'})) })).toEqual(['gpt-image-2.5-flare']);
   });
   it.each([new Error('timeout'), new NanoBanana21RequestError('unknown'), null])('never switches auto models after an unknown outcome', async error => {
     mockedGetBackend.mockReset();
@@ -115,15 +108,12 @@ describe('ordinary image defaults and paid fallback boundaries', () => {
     expect(mockedGetBackend).toHaveBeenCalledTimes(1);
     expect(generate).toHaveBeenCalledTimes(1);
   });
-  it('uses Spicy only after a definite moderation rejection in auto mode', async () => {
+  it('surfaces a definite 2.1 moderation rejection without an automatic model switch', async () => {
     mockedGetBackend.mockReset();
     const nano = vi.fn().mockRejectedValue(new NanoBanana21RequestError('blocked', true));
-    const spicy = vi.fn().mockResolvedValue({image:'spicy-image'});
-    mockedGetBackend.mockImplementation(id => ({id,canHandle:()=>true,generate:id==='gemini-2.1'?nano:spicy}));
-    await expect(generateImage({prompt:'Scene'})).resolves.toMatchObject({image:'spicy-image',model:'qwen-spicy',fallbackUsed:true,contentBlocked:true});
+    mockedGetBackend.mockReturnValue({id:'gemini-2.1',canHandle:()=>true,generate:nano});
+    await expect(generateImage({prompt:'Scene',aspectRatio:'8:1'})).rejects.toThrow('blocked');
+    expect(mockedGetBackend).toHaveBeenCalledExactlyOnceWith('gemini-2.1');
     expect(nano).toHaveBeenCalledTimes(1);
-    expect(spicy).toHaveBeenCalledTimes(1);
-    await expect(generateImage({prompt:'Scene',model:'gemini-2.1'})).rejects.toThrow('blocked');
-    expect(spicy).toHaveBeenCalledTimes(1);
   });
 });

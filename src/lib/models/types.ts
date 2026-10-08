@@ -5,7 +5,7 @@ export const IMAGE_MODEL_INPUT_IDS = [...IMAGE_MODEL_IDS, 'qwen'] as const;
 /** Keep old IDs at the input boundary so existing clients get a deliberate migration/error. */
 export type ModelId = typeof IMAGE_MODEL_IDS[number] | 'qwen' | 'pony' | 'wai';
 /** Default for ordinary photo edits and image generation; legacy gemini remains selectable. */
-export const DEFAULT_IMAGE_MODEL: ModelId = 'gemini-2.1';
+export { DEFAULT_IMAGE_MODEL, resolveImageModel } from '../image-model-capabilities';
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type ImageBackground = 'auto' | 'opaque' | 'transparent';
 
@@ -61,12 +61,4 @@ export const FAL_IMAGE25_IDS = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst']
 export type FalImage25Id = typeof FAL_IMAGE25_IDS[number];
 export function isFalImage25(model?: string | null): model is FalImage25Id {
   return FAL_IMAGE25_IDS.some(id => id === model);
-}
-
-export function resolveImageModel(model?: ModelId, background?: ImageBackground): ModelId | undefined {
-  // Persisted selections and older clients used "openai" for Image 2.
-  // Migrate those requests before pricing and provider selection.
-  if (model === 'pony' || model === 'wai') throw new Error(`${model} has been retired. Choose an available image model explicitly.`);
-  const activeModel = model === 'qwen' ? 'qwen-spicy' : model === 'openai' ? 'gpt-image-2.5-flare' : model;
-  return background === 'transparent' && !isFalImage25(activeModel) ? 'gpt-image-2.5-flare' : activeModel;
 }

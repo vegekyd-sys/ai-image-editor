@@ -839,7 +839,7 @@ const ja = {
   'model.gemini.desc': '従来のNano Banana 2。手動で選択できます。',
   'model.geminiLite.name': 'Nano Banana 2 Lite',
   'model.gemini21.name': 'Nano Banana 2.1',
-  'model.gemini21.desc': '標準画像モデル。複数画像の融合と4K出力に対応。',
+  'model.gemini21.desc': '超ワイド画像、複数画像の融合、4K出力に対応。',
   'model.geminiLite.desc': '高速な下書きに適した低コストモデルです。',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': '顔の再現性に優れ、NSFWコンテンツにも対応します。',

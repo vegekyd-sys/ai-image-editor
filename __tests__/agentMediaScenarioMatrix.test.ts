@@ -81,8 +81,8 @@ describe('agent media scenario matrix', () => {
       "skill='creative'",
       "skill='wild'",
       "skill='captions'",
-      "model: 'qwen-spicy'",
-      "model: 'gpt-image-2.5-flare'",
+      "`isNsfw: true`",
+      "Image Model Capability",
       'Context Mode',
       'Keep every person',
       'Do NOT add any text, watermarks, or borders',
@@ -329,7 +329,7 @@ describe('agent media scenario matrix', () => {
   it('keeps generic image/layout routing away from Remotion design terminology', () => {
     expect(agent).toContain('layout/mockup image generation')
     expect(agent).toContain('generic layout/mockup/image tasks')
-    expect(generateImageTool).toContain('layout/mockup images')
+    expect(read('src/lib/image-model-capabilities.ts')).toContain('product, text, layout, face restoration and director storyboards')
     expect(generateImageTool).toContain('multi-turn layout/mockup image tasks')
     expect(image).toContain('images, videos, Remotion compositions, and node media work')
     expect(coding).toContain('generic layout/mockup/image tasks')

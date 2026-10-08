@@ -616,7 +616,7 @@ const en = {
   'model.gemini.desc': 'Classic Nano Banana 2, available for manual selection.',
   'model.geminiLite.name': 'Nano Banana 2 Lite',
   'model.gemini21.name': 'Nano Banana 2.1',
-  'model.gemini21.desc': 'Default image model, with multi-image fusion and 4K output.',
+  'model.gemini21.desc': 'Panoramic images, multi-image fusion and 4K output.',
   'model.geminiLite.desc': 'Lower-cost path for fast drafts.',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': 'Best face preservation. Handles NSFW content.',

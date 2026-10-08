@@ -16,13 +16,13 @@
   },
   "src/lib/prompts/image.md": {
     "baselineSha256": "fc3ff3be94e2ce9d6921b2982a138b9a5503e1ac052426b9ceb6d5f4d0e32715",
-    "sha256": "5ca975a481ad6b2d3e6b16ccb5845ac962524100da5ff0b96813497b0307e3ef",
-    "reason": "Retire Vast image models in the candidate: route NSFW to Qwen Spicy, map legacy Qwen to Spicy, and remove Pony/WAI selection. Preserve the prior Flare context-mode and transparency rules. Regression: vastRetirementRouting.test.ts and agentMediaScenarioMatrix.test.ts. User-selected Nano Banana 2.1 ordinary image default; preserve explicit classic Nano Banana 2."
+    "sha256": "7bc5b4d1af252f727d1dd289133d1ff58a4cce671f8bd4af1e3c502a62bb4514",
+    "reason": "Retire Vast image models in the candidate: route NSFW to Qwen Spicy, map legacy Qwen to Spicy, and remove Pony/WAI selection. Preserve the prior Flare context-mode and transparency rules. Regression: vastRetirementRouting.test.ts and agentMediaScenarioMatrix.test.ts. User-selected Nano Banana 2.1 ordinary image default; preserve explicit classic Nano Banana 2. 2026-10-08: user-authorized Image Model Capability consolidation removes duplicated model priorities/provider limits, moves NSFW assessment to the main Agent, and preserves requested canvas constraints; all remaining creative/edit/reference guidance is retained."
   },
   "src/lib/prompts/generate_image_tool.md": {
     "baselineSha256": "d0dad379bc778a008f0adeaa580868085bb0cbd2483c459ed891003c12c3a3e7",
-    "sha256": "491ae80b137b4bc0c4d1dc5d0c3d42074d67010fc5814d55a395b8e4ba2417d7",
-    "reason": "Retire Vast image models in the candidate and route NSFW to Qwen Spicy. Preserve the prior Flare and transparent-output contracts. Regression: vastRetirementRouting.test.ts and agentMediaScenarioMatrix.test.ts. User-selected Nano Banana 2.1 ordinary default, classic Nano Banana 2 opt-in; shorten to fit the existing 2500-character budget."
+    "sha256": "e1996b411a78b44688d6f2b6880cdedb2fc0438ee003f2c88fccc42af55f8c03",
+    "reason": "Retire Vast image models in the candidate and route NSFW to Qwen Spicy. Preserve the prior Flare and transparent-output contracts. Regression: vastRetirementRouting.test.ts and agentMediaScenarioMatrix.test.ts. User-selected Nano Banana 2.1 ordinary default, classic Nano Banana 2 opt-in; shorten to fit the existing 2500-character budget. 2026-10-08: user-authorized capability-table generation replaces duplicated selection facts and enables main-Agent NSFW classification; creative prompt shape and alpha/media-index contracts remain."
   },
   "src/lib/prompts/cutout.md": {
     "baselineSha256": "e1ffb7d39f0cad95e702d7a3971c9fdd97e4bc4f9720c7b31c7ee5ca98d6d202",

@@ -27,7 +27,7 @@ Image Model Capability 同时拥有模型事实、默认优先级、别名、参
 | R13 | 明确模型与硬要求冲突 | 不提交，返回模型/冲突字段/满足全部条件的可选模型 |
 | R14 | UI 手选覆盖 Agent 参数；无手选 Auto；Agent 自己识别 NSFW | 统一 preflight 和实际调用；NSFW 标志保持会话生效 |
 | R15 | Agent 省略 media_index、0 sentinel、底图 + 时间线/上传/workspace 引用 | 原有输入语义保留；累计数量一致 |
-| R16 | MCP / CLI：省略模型、显式模型、比例/分辨率/NSFW 参数 | 与共享 Skill 同路由；stdio 路径先读成本图像再计输入 |
+| R16 | MCP / CLI：省略模型、显式模型、比例/分辨率/NSFW 参数 | 与共享 Skill 同路由；stdio 本地文件按实际输入个数校验 |
 | R17 | Credits 缺少价格、余额不足、路由从 Flare 换成 2.1 | 按实际首选模型预检；校验失败不扣费、不提交 |
 | R18 | 成功：实际模型、provider、成本、source/run 归因 | 一次供应商调用和一次结算；保持现有持久化链路 |
 | R19 | provider 超时、异常、空输出、内容审核拒绝 | 无自动跨模型重试；不把单个模型拒绝归纳为整个生成器限制 |
@@ -42,3 +42,28 @@ Image Model Capability 同时拥有模型事实、默认优先级、别名、参
 3. 本地真实主 Agent 选择与供应商输出：用原 8:1 请求验证自然语言选择，并完整解码/查看媒体。与自动测试、生产发布分开报告。
 
 非目标：数据库迁移、改价格、改视频、改 iOS 二进制、自动重做用户现有项目。发布仍按已有 release 流程处理。
+
+## 候选实现与验收对应
+
+能力来源为 `src/lib/image-model-capabilities.ts`。App Agent、MCP 和 provider builder 共用校验；Agent/MCP 的模型说明自动生成。`model-router.ts` 仅执行已选供应商，排名不作为付费失败的重试链。浏览器沿用 `nsfw_detected` 事件，把主 Agent 的判断保持到后续对话。
+
+| Case | 自动测试证据 |
+| --- | --- |
+| R01–R13 | `imageModelCapabilities.test.ts` 表驱动矩阵；`nanoBanana21.test.ts`、`falImage25.test.ts`、`wanImage.test.ts`、`mulerouterQwenSpicy.test.ts` 的 provider 合同 |
+| R14–R15 | `wanImageAgentBilling.test.ts` 实际工具工厂：UI 优先级、NSFW 会话标记、0 sentinel、底图/参考图累计；已有 Agent 输入/媒体矩阵回归 |
+| R16 | `imageCapabilityMcp.test.ts` 实际 MCP HTTP → Skill → mock provider；CLI smoke 的 Auto 8:1/2K 和 `--nsfw` 参数传递；`agentDiscovery.test.ts` 的公开 Skill 一致性 |
+| R17–R18 | 上述 Agent/MCP 集成，加 `spicyMcpBilling.test.ts`、`wanImageMcpBilling.test.ts`：价格缺失、余额不足、最终供应商成本、结算失败、一次提交/结算 |
+| R19 | 路由与 MCP 集成的超时、审核拒绝、空结果、无配置；不跨模型重试，不结算失败结果 |
+| R20 | 能力矩阵及已有 Tips category / streaming / route 回归；Tips 文案和显式预览不受普通 Auto 排名覆盖 |
+| R21 | 能力矩阵、`agentPromptPolicy.test.ts`、冻结 prompt 合同与 discovery 同步测试 |
+| R22 | 全量 Vitest、CLI smoke、TypeScript、构建、i18n 和 Agent startup；最终结果完成后记录 |
+
+### 真实调用（本地，2026-10-08）
+
+`scripts/image-model-capability-acceptance.ts` 使用真实 `gpt-6-luna` 主模型和当前工具 schema，图片 execute 被替换为不提交供应商的验收桩。普通商品图选 Flare、原项目 8:1 横幅请求选 Nano Banana 2.1、NSFW 标记搭配中性纹理内容选 Spicy，三个选择通过。成人内衣测试提示词被 Azure policy 拦截；因此本次验证不代表主模型可以处理所有成人内容。参考 V 仅以 Media Index 描述进入路由测试，没有执行原项目角色保真验收。
+
+实际 OpenRouter 8:1 文生图使用安全的冰蓝茶壶横幅，完整解码、保存并查看了图片：2928×352；茶壶位于左侧，右侧浅色渐变留白，无可见文字或水印。供应商成本 $0.036195。此尺寸匹配 [Nano Banana 2.1 供应商原生尺寸表](https://runware.ai/docs/models/google-nano-banana-2-1/guides/prompting)，不等于数学上精确的 8:1。能力说明明确该边界；没有自动裁剪或拉伸输出。
+
+本地验收数据在 `test-results/image-model-capabilities/agent-decisions.json`、`supplier-receipt.json`、`panorama.png`（忽略文件，不提交媒体）。第一次输出已完整解码，但验收脚本用精确比例阈值误判，未保存图片；修正脚本为先保存再校验供应商原生尺寸后，完成上述视觉验收。另一次使用本地保存的生产 env 副本返回 HTTP 403，未换供应商或重试该请求；最后使用已有本地有效配置完成生成。这不证明当前线上配置或线上端到端可用。
+
+剩余生产验收：合并与发布后，真实项目 chat → run → 图片保存/重新打开、Credits 归因、NSFW 跨轮状态。当前工作没有修改该项目或生产数据。

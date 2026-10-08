@@ -18,7 +18,7 @@ function tlog(msg: string) {
   fs.appendFileSync(LOG_FILE, line);
 }
 
-/** Thrown when Gemini blocks content via promptFeedback.blockReason. Do NOT retry — fallback to Qwen. */
+/** Thrown when Gemini blocks content via promptFeedback.blockReason. Do not retry automatically. */
 export class ContentBlockedError extends Error {
   constructor(public blockReason: string) {
     super(`Content blocked by Gemini: ${blockReason}`);
@@ -39,7 +39,7 @@ function checkBlockReason(result: any, label: string): void {
 // Switch provider: 'google' = direct Google API, 'openrouter' = OpenRouter proxy
 export const PROVIDER = (process.env.AI_PROVIDER || 'openrouter') as 'google' | 'openrouter';
 
-// Classic Nano Banana 2 and Tips text; ordinary image routing defaults to 2.1 separately.
+// Classic Nano Banana 2 and Tips text; ordinary image routing is owned by Image Model Capability.
 const MODEL = process.env.IMAGE_MODEL || 'gemini-3.1-flash-image-preview';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';

@@ -161,7 +161,7 @@ describe('MuleRouter Qwen Image Edit Spicy integration', () => {
     }
 
     expect(qwenSpicyBackend.canHandle(request)).toBe(false)
-    await expect(qwenSpicyBackend.generate(request)).resolves.toEqual({ image: null })
+    await expect(qwenSpicyBackend.generate(request)).rejects.toThrow('at most 3')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

@@ -362,7 +362,7 @@ export default function Editor({
   const pendingAnalysisRef = useRef<{ id: string; image: string }[]>([]);
   const lastEditPromptRef = useRef<string | null>(null); // captures editPrompt from generate_image tool calls
   const lastEditInputImagesRef = useRef<string[] | null>(null); // captures input images from generate_image tool calls
-  const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
+  const isNsfwRef = useRef(false); // Main Agent NSFW assessment, retained for subsequent turns
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
   const isAgentActiveRef = useRef(false);
   const [videoGuiTime, setVideoGuiTime] = useState(0);
