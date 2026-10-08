@@ -16,6 +16,11 @@ const receipt = () => signRetakeInspection({ userId: 'owner', projectId: 'projec
   sourceUrl, start: 18, end: 21, model: 'fal-h3-max' }, 'test-server-secret', { outputSelection: { start: 1, end: 4 }, generationDuration: 5 })
 
 describe('Agent Retake paid-submission gate', () => {
+  it('carries scene continuity through inspection, source-marker binding and normal submission',async()=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,camera_change:false,boundary_mode:'scene',prompt:'Replace <<<media_1>>> with a sustained tighter shot.',inspection_id:receipt(),source_observation:observation});
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({script:'Replace the inspected original scene with a sustained tighter shot.',retake:{start:18,end:21,boundaryMode:'scene'}}),expect.anything());
+  });
   it('does not reserve or submit without actual inspection evidence', async () => {
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-server-secret')
     const result = await (createInspectedRetakeVideoTool(scope).execute as any)({ ...input, source_observation: observation })

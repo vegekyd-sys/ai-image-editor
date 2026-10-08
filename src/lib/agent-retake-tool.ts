@@ -27,6 +27,7 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       shot_plan: z.array(z.object({ start: z.number().nonnegative(), end: z.number().positive(), instruction: z.string().min(1) })).min(1).max(8)
         .describe('Output-local beats matching the final prompt, covering exactly outputSelection from inspect_retake. Do NOT reset its start to zero. Choose beats from the requested temporal development; one continuous beat is enough for a persistent change. Beat count does not imply camera count.'),
       camera_change: z.boolean().default(false).describe('Declare whether the scene-informed plan changes camera coverage. Temporal content phases alone are false. This flag does not require generating an image.'),
+      boundary_mode: z.enum(['exact','scene']).default('exact').describe('H3 boundary policy. exact locks the original selected first/last compositions for compatible content or motion edits. scene treats those images only as identity/environment references, allowing a replacement shot with different framing, viewpoint, action or staging; join through coherent shot cuts, not a forced return to the old shot. Choose scene when exact original poses/framing would contradict the requested result. Seedance retains its cropped-video edit route. Native middle/final-image controls require exact.'),
       inspection_id: z.string().optional().describe('Exact receipt returned by inspect_retake for this source, range and model. Required before any paid submission.'),
       source_observation: z.string().optional().describe('Timestamped visible evidence: subject identity, original camera coverage, selected opening/middle/closing action states, travel direction/contact/occlusion, and uncertainty. Keep contextual boundary states separate. Do not substitute requested changes for observed facts.'),
       model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
@@ -36,7 +37,7 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       middle_frame_time: z.number().positive().optional().describe('Output-local time for the optional H3 intermediate visual state, strictly between output endpoints. Match the chosen state to the scene, action and requested temporal development.'),
       request_id: z.string().uuid().optional(),
     }),
-    execute: async ({ media_index, start, end, prompt, shot_plan, camera_change, model, request_id, inspection_id, source_observation, reference_media_indices = [], end_frame_media_index, middle_frame_media_index, middle_frame_time }) => serializeVideoSubmission(async () => {
+    execute: async ({ media_index, start, end, prompt, shot_plan, camera_change, boundary_mode, model, request_id, inspection_id, source_observation, reference_media_indices = [], end_frame_media_index, middle_frame_media_index, middle_frame_time }) => serializeVideoSubmission(async () => {
       if (!ctx.userId || !ctx.projectId) return { success: false, message: 'Retake requires an authenticated project.' };
       const source = await resolveSource(ctx, media_index);
       if (!source.videoUrl) return { success: false, message: source.error ?? 'Select a ready video.' };
@@ -52,6 +53,7 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       const timingError = retakeShotPlanError(shot_plan, prompt, clock.outputSelection)
       if (timingError) return { success: false, errorCode: 'retake_prompt_timing_invalid', message: `No provider was submitted. ${timingError} Required outputSelection: ${clock.outputSelection.start}–${clock.outputSelection.end}s. Correct shot_plan and prompt before submitting.` }
       let middleFrame: {imageUrl:string;time:number} | undefined;
+      if (boundary_mode === 'scene' && (middle_frame_media_index || end_frame_media_index)) return {success:false,message:'Scene continuity does not lock frames. Choose exact for native middle/final-image controls, or pass suitable images as creative references.'};
       if (middle_frame_media_index || middle_frame_time != null) {
         const imageUrl = ctx.snapshotImages[middle_frame_media_index! - 1];
         if (model !== 'fal-h3-max' || !imageUrl || !Number.isFinite(middle_frame_time) || middle_frame_time! <= 0 || Math.round(middle_frame_time!*24) >= clock.generationDuration*24-1) return {success:false,message:'Choose a ready H3 image keyframe and a time strictly inside its native output before video submission.'};
@@ -74,13 +76,13 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       let providerPrompt: string;
       try {
         providerPrompt = bindRetakeReferences({prompt, model, sourceIndex:media_index,
-          referenceIndices:creativeIndices, cameraChange:camera_change, middleIndex:middle_frame_media_index,endIndex:end_frame_media_index});
+          referenceIndices:creativeIndices, cameraChange:camera_change, boundaryMode:boundary_mode, middleIndex:middle_frame_media_index,endIndex:end_frame_media_index});
       } catch (error) { return {success:false,message:(error as Error).message}; }
       const endFrame = end_frame_media_index ? {imageUrl:ctx.snapshotImages[end_frame_media_index-1]} : undefined;
-      const hash = ctx.execution ? createHash('sha256').update(JSON.stringify([ctx.execution.runId, ctx.execution.inputEpoch, media_index, start, end, providerPrompt, model, middleFrame, ...(referenceImages.length ? [referenceImages] : []),...(endFrame ? [endFrame] : [])])).digest('hex') : undefined;
+      const hash = ctx.execution ? createHash('sha256').update(JSON.stringify([ctx.execution.runId, ctx.execution.inputEpoch, media_index, start, end, providerPrompt, model, camera_change, boundary_mode ?? 'exact', middleFrame, ...(referenceImages.length ? [referenceImages] : []),...(endFrame ? [endFrame] : [])])).digest('hex') : undefined;
       const stableId = hash ? `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}` : undefined;
       const result = await submit({ images: referenceImages, script: providerPrompt, videoUrl: source.videoUrl,
-        retake: { start, end, ...(camera_change ? {cameraChange:true} : {}), ...(middleFrame ? {middleFrame} : {}),...(endFrame ? {endFrame} : {}) }, videoModel: model, projectId: ctx.projectId, billingRequestId: request_id ?? stableId,
+        retake: { start, end, ...(camera_change ? {cameraChange:true} : {}), ...(boundary_mode === 'scene' ? {boundaryMode:'scene' as const} : {}), ...(middleFrame ? {middleFrame} : {}),...(endFrame ? {endFrame} : {}) }, videoModel: model, projectId: ctx.projectId, billingRequestId: request_id ?? stableId,
       }, { userId: ctx.userId, apiKeyId: null, toolName: 'retake_video' });
       const snapshotId = result.snapshotId ?? result.taskId?.replace(/^video-retake-/, '');
       if (result.success && result.taskId && snapshotId) {

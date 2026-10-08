@@ -37,7 +37,7 @@ export function retakeVideoMeta(job: Job): VideoMeta {
     duration: job.plan.sourceDuration, model: job.model_id, resolution: job.resolution as VideoMeta['resolution'], operation: 'edit',
     createdAt: job.created_at, error: job.error, pipelineStage: job.stage,
     retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url,
-      inputDuration: (job.source_meta.boundaryFrames as { middle?: unknown } | undefined)?.middle || (job.model_id === 'fal-h3-max' && (job.source_meta.endFrameUrl || job.source_meta.cameraChange)) ? 0
+      inputDuration: (job.source_meta.boundaryFrames as { middle?: unknown } | undefined)?.middle || (job.model_id === 'fal-h3-max' && (job.source_meta.endFrameUrl || job.source_meta.cameraChange || job.source_meta.boundaryMode === 'scene')) ? 0
         : job.context_url ? job.plan.contextEnd - job.plan.contextStart : undefined, generationDuration: job.plan.generationDuration },
     width: Number(job.source_meta.width), height: Number(job.source_meta.height) }
 }
@@ -85,6 +85,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     if (!input.userId || !input.retake || !input.videoUrl) throw new Error('Retake requires an authenticated owner, source video and start/end seconds.')
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
+    if (input.retake.boundaryMode === 'scene' && (input.retake.middleFrame || input.retake.endFrame)) throw new Error('Scene continuity uses source images as references, not native frame locks. Use exact boundaries for a native middle control or an explicit final image.')
     if(input.retake.endFrame && (!/^https?:\/\//.test(input.retake.endFrame.imageUrl) || (model==='fal-h3-max' && input.videoResolution==='1080p'))) throw new Error('An explicit final image requires a ready hosted image; H3 uses native 480p/768p.')
     if (!input.script.trim()) throw new Error('Describe what to change in the selected interval.')
     const referenceImages = input.images.filter(Boolean)
@@ -114,7 +115,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const now = new Date().toISOString()
     job = { id, user_id: input.userId, project_id: input.projectId ?? null, fingerprint, stage: 'preparing', source_url: input.videoUrl,
       instruction: input.script, model_id: model, resolution: input.videoResolution && input.videoResolution !== 'auto' ? input.videoResolution : model === 'fal-h3-max' ? '768p' : '720p',
-      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}),...(input.retake.endFrame ? {endFrameUrl:input.retake.endFrame.imageUrl} : {}), ...(input.retake.cameraChange ? {cameraChange:true} : {}) },
+      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}),...(input.retake.endFrame ? {endFrameUrl:input.retake.endFrame.imageUrl} : {}), ...(input.retake.cameraChange ? {cameraChange:true} : {}), ...(input.retake.boundaryMode ? {boundaryMode:input.retake.boundaryMode} : {}) },
       timings: {}, created_at: now, updated_at: now }
     const { error: insertError } = await admin.from(TABLE).insert(job)
     if (insertError) throw new Error('Could not create the Retake receipt. No provider submitted.')
@@ -134,7 +135,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       const middle = input.retake.middleFrame
         ? { ...input.retake.middleFrame, imageUrl: await materializeRetakeKeyframe(input.retake.middleFrame.imageUrl, bytes => store(job!, bytes, 'middle', true)) }
         : undefined
-      boundaryFrames = { startUrl, endUrl, lockEndpoints: plan.outputMode === 'selection', middle }
+      boundaryFrames = { startUrl, endUrl, lockEndpoints: plan.outputMode === 'selection' && input.retake.boundaryMode !== 'scene', middle }
       await save(job, { source_meta: { ...job.source_meta, boundaryFrames } })
     }
     await save(job, { context_url: contextUrl, stage: 'prepared', timings: { preparationMs: performance.now() - started } })
@@ -147,7 +148,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     }
     // Optional visual-state controls define the desired result alongside
     // source context; omit conflicting video references when those controls apply.
-    const useVideoReference = model !== 'fal-h3-max' || (!boundaryFrames?.middle && !input.retake.endFrame && !input.retake.cameraChange)
+    const useVideoReference = model !== 'fal-h3-max' || (!boundaryFrames?.middle && !input.retake.endFrame && !input.retake.cameraChange && input.retake.boundaryMode !== 'scene')
     const result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
       images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages, ...(model !== 'fal-h3-max' && input.retake.endFrame ? [input.retake.endFrame.imageUrl] : [])], h3RetakeBoundaryFrames: boundaryFrames,
       script: prompt, duration: model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,

@@ -75,3 +75,22 @@ it('lets H3 change camera coverage from inspected boundary states without replay
   expect(submitted.h3RetakeBoundaryFrames).toMatchObject({lockEndpoints:true});
   expect(retakeVideoMeta(stubs.jobs[0])).toMatchObject({retake:{inputDuration:0}});
 });
+
+it('uses scene references without mandatory original endpoint compositions for a replacement shot',async()=>{
+  const result=await createVideoRetake({userId:'owner',projectId:'project',images:['https://image.example/character.jpg'],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:3,end:6,boundaryMode:'scene'},script:'Keep a hand close-up throughout; Image 1 and Image 2 only identify the source character.',videoModel:'fal-h3-max'});
+  expect(result.success).toBe(true);
+  const submitted=stubs.provider.mock.calls[0][0];
+  expect(submitted.h3RetakeBoundaryFrames).toMatchObject({lockEndpoints:false});
+  expect(submitted.images).toHaveLength(3);
+  expect(submitted.videoUrl).toBeUndefined();
+  expect(submitted.duration).toBe(5);
+  expect(stubs.jobs[0].plan).toMatchObject({start:3,end:6,outputMode:'selection',patchOffset:0});
+  expect(retakeVideoMeta(stubs.jobs[0])).toMatchObject({retake:{inputDuration:0}});
+});
+
+it.each([{middleFrame:{imageUrl:'https://image.example/middle.jpg',time:2}},{endFrame:{imageUrl:'https://image.example/end.jpg'}}])('rejects incompatible native locks before a replacement-shot charge: %j',async controls=>{
+  const result=await createVideoRetake({userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:27.05,end:30.05,boundaryMode:'scene',...controls},script:'Replace this shot.',videoModel:'fal-h3-max'});
+  expect(result.success).toBe(false);
+  expect(stubs.provider).not.toHaveBeenCalled();
+  expect(stubs.jobs).toHaveLength(0);
+});
