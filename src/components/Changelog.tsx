@@ -976,7 +976,7 @@ const CHANGELOG: ChangelogEntry[] = [
 const LOCALIZED_CHANGELOG_KEYS = {
   imageCapabilities: {
     title: 'changelog.imageCapabilities.title',
-    items: ['changelog.imageCapabilities.item1', 'changelog.imageCapabilities.item2', 'changelog.imageCapabilities.item3', 'changelog.imageCapabilities.item4', 'changelog.imageCapabilities.item5'],
+    items: ['changelog.imageCapabilities.item1', 'changelog.imageCapabilities.item2', 'changelog.imageCapabilities.item3'],
   },
   nanoBanana21: {
     title: 'changelog.nanoBanana21.title',

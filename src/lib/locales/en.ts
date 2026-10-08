@@ -220,12 +220,10 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
-  'changelog.imageCapabilities.title': "Panoramic Images, Native Resolution, Easier Saving",
-  'changelog.imageCapabilities.item1': "Chat image generation chooses a model that fits your aspect ratio, transparency and resolution, including 8:1 and 1:8 panoramas. When requirements conflict, it aims to preserve the main request and still deliver an image.",
-  'changelog.imageCapabilities.item2': "Ask in chat for native 2K / 4K. GPT Image 2.5 supports 4K landscape ratios from 16:9 to 3:1 and their portrait equivalents, with a 3840px long edge. Square 4K uses Nano Banana 2.1 at 4096 × 4096.",
-  'changelog.imageCapabilities.item3': "The web uses lightweight previews and loads the original for saving. Larger images offer original size, 2K or a smaller sharing copy, plus PNG / JPG formats. Small images are never enlarged and labelled 4K.",
-  'changelog.imageCapabilities.item4': "Ordinary images (up to about 2 megapixels, including 1K panoramas) save directly when you click Save. Only larger originals open the save options. PNG preserves transparency; JPG turns transparent areas white.",
-  'changelog.imageCapabilities.item5': "The CLI continues to return original images. Transparent square 4K requests preserve transparency at 2K.",
+  'changelog.imageCapabilities.title': "Panoramic & High-Resolution Images",
+  'changelog.imageCapabilities.item1': "Generate 8:1 panoramas and native 2K / 4K images.",
+  'changelog.imageCapabilities.item2': "Save ordinary images in one click. Choose a size and PNG / JPG for high-resolution images.",
+  'changelog.imageCapabilities.item3': "Lighter web previews; the CLI still returns original images.",
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
   'changelog.nanoBanana21.item1': 'Ordinary images and Creative / Wild / Captions Tips images now default to Nano Banana 2.1, with better preservation of people and composition when changing scenes or making creative edits.',
   'changelog.nanoBanana21.item2': 'Finer photorealistic detail, materials and lighting, plus clearer text rendering for product backgrounds, portrait edits and creative images with text.',
