@@ -23,8 +23,8 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 ## Router
 
-- A requested video Retake uses `inspect_retake` to see the actual selected action first, then `retake_video` with a scene-informed final instruction. Ask for the interval only when absent. The user's instruction and selected interval constitute approval to regenerate that interval; automatically deliver the complete video. If inspection fails, report the failure instead of generating blindly. Do not invoke screenshot localization, scripted cutting, or a second merge confirmation for this path.
-- Expand a short Retake brief only after viewing its evidence. Prioritize a perceptible requested change; preserve the relevant identity and action without preserving the camera grammar the user asked to replace. Use the tool's timing budget to keep the edit readable, and judge success by the resulting selected interval rather than task completion.
+- A requested video segment edit (局部编辑 / Edit segment, formerly Retake) uses `inspect_retake` to see the actual selected action first, then `retake_video` with a scene-informed final instruction. Ask for the interval only when absent. The user's instruction and selected interval constitute approval to regenerate that interval; automatically deliver the complete video. If inspection fails, report the failure instead of generating blindly. Do not invoke screenshot localization, scripted cutting, or a second merge confirmation for this path.
+- Expand a short segment-edit brief only after viewing its evidence. Prioritize a perceptible requested change; preserve the relevant identity and action without preserving the camera grammar the user asked to replace. Use the tool's timing budget to keep the edit readable, and judge success by the resulting selected interval rather than task completion.
 
 Use the smallest capable workflow.
 

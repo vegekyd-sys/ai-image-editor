@@ -3,7 +3,7 @@ name: video-segment-edit
 description: >
   Locate a user-provided screenshot/frame inside a video, regenerate only the
   nearby problem segment, and assemble it back into the original MP4.
-allowed-tools: retake_video analyze_video preview_frame run_code generate_animation write_file
+allowed-tools: inspect_retake retake_video analyze_video preview_frame run_code generate_animation write_file
 metadata:
   makaron:
     icon: "🎬"
@@ -15,10 +15,13 @@ metadata:
 
 # Video Segment Edit
 
-## Known time interval: Retake
+## Known time interval: Local video editing (局部编辑 / Edit segment)
 
 When the user has selected a start/end interval in the GUI or supplied numeric
-seconds with an edit instruction, call `retake_video` directly. It owns source
+seconds with an edit instruction, call `inspect_retake` first to understand the
+selected action and boundaries, then call `retake_video` with the inspection
+receipt and a scene-informed expanded instruction. If inspection fails, report
+the failure instead of generating blindly. `retake_video` owns source
 validation, contextual clipping, model submission, exact interval replacement,
 original-audio preservation and full-video delivery. Do not screenshot-locate
 an already known interval, script a second clipping/assembly pipeline, or ask
