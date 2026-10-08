@@ -8,6 +8,8 @@ import { planRetake, validateRetakeRange, retakePrompt, resolveRetakeModel } fro
 import { assembleRetake, extractRetakeContext, extractRetakeBoundaryFrames, extractRetakeInspectionFrames, inspectRetakeSource } from '@/lib/video-retake-media';
 import * as ffmpegRuntime from '@/lib/ffmpeg-runtime';
 import { findFfmpeg } from '@/lib/ffmpeg-runtime';
+import { createRequire } from 'node:module';
+import { extractVideoFrame } from '@/lib/video-frame';
 
 describe('Retake interval contract', () => {
   it('uses H3 Max by default and keeps explicitly selected editing models', () => {
@@ -50,14 +52,20 @@ describe('Retake interval contract', () => {
       expect((await color(frames.start))[2]).toBeGreaterThan(200);
       expect((await color(frames.end))[2]).toBeGreaterThan(200);
       const probe = vi.spyOn(ffmpegRuntime, 'probeVideoFile').mockResolvedValue({duration:6.2,width:320,height:240,fps:24,audioCodec:'aac'});
+      const bundledFfmpeg = createRequire(import.meta.url)('ffmpeg-static') as string;
+      const binary = vi.spyOn(ffmpegRuntime,'findFfmpeg').mockResolvedValue(bundledFfmpeg);
       try {
+      expect(await inspectRetakeSource(readFileSync(src))).toMatchObject({frameCount:144});
       const inspection = await extractRetakeInspectionFrames(readFileSync(src), planRetake({start:3.2,end:6.2},6.2,'fal-h3-max'),24);
       expect(inspection.timestamps.at(-1)).toBeLessThan(6);
       const tailBoundary = await extractRetakeBoundaryFrames(readFileSync(src), planRetake({start:3.2,end:6.2},6.2,'fal-h3-max'),24);
       expect((await color(tailBoundary.end))[2]).toBeGreaterThan(200);
       expect(inspection.frames.length).toBeGreaterThan(2);
       expect((await color(inspection.frames.at(-1)!))[2]).toBeGreaterThan(200);
-      } finally { probe.mockRestore(); }
+      const fetchMock = vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(readFileSync(src)));
+      try { expect((await color(await extractVideoFrame('https://example.com/source.mp4',{timestamp:6.2})))[2]).toBeGreaterThan(200); }
+      finally { fetchMock.mockRestore(); }
+      } finally { probe.mockRestore(); binary.mockRestore(); }
     } finally { rmSync(dir,{recursive:true,force:true}); }
   },30_000);
   it('retains generated first/last frames when fitting a short selection', async () => {

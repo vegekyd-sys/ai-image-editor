@@ -22,9 +22,11 @@ async function probeRetakeVideoFile(file: string): Promise<VideoProbe> {
     // FFmpeg is bundled in serverless; FFprobe may be absent. Count video
     // packets without decoding so audio padding cannot invent video frames.
     const {stdout} = await exec(await findFfmpeg(),['-v','error','-protocol_whitelist','file,pipe','-i',file,
-      '-map','0:v:0','-c:v','copy','-an','-progress','pipe:1','-nostats','-f','null','-'],
-      {timeout:120_000,maxBuffer:1024*1024})
-    const count = Array.from(stdout.matchAll(/^frame=(\d+)/gm),match=>Number(match[1])).at(-1)
+      '-map','0:v:0','-c:v','copy','-an','-f','framehash','-hash','md5','-'],
+      {timeout:120_000,maxBuffer:16*1024*1024})
+    // Stream-copy progress counters vary across bundled FFmpeg versions.
+    // Framehash emits one record per video packet, including in serverless.
+    const count = stdout.split(/\r?\n/).filter(line=>/^\s*0\s*,/.test(line)).length
     if (!count) throw new Error('Cannot count the actual source video frames.')
     meta.frameCount = count
   }
@@ -66,9 +68,9 @@ async function lastSourceFrameTime(file: string, fps: number): Promise<number> {
 
 const stillFilter = "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuvj420p"
 
-async function extractSourceStill(dir: string, ffmpeg: string, time: number, output: string, duration: number) {
+async function extractSourceStill(dir: string, ffmpeg: string, time: number, output: string, duration: number, quality = 3) {
   await exec(ffmpeg, ['-v','error','-y','-protocol_whitelist','file,pipe','-ss',String(time),
-    '-i',join(dir,'source.mp4'),'-frames:v','1','-vf',stillFilter,'-q:v','3','-threads','1',output],
+    '-i',join(dir,'source.mp4'),'-frames:v','1','-vf',stillFilter,'-q:v',String(quality),'-threads','1',output],
     {timeout:120_000,maxBuffer:1024*1024})
   try { return {image:await readFile(output),time} } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || time < duration - 2) throw error
@@ -77,7 +79,7 @@ async function extractSourceStill(dir: string, ffmpeg: string, time: number, out
   // audio padding. Decode only the tail and keep its last actual video frame.
   const {stderr} = await exec(ffmpeg,['-v','info','-y','-protocol_whitelist','file,pipe','-sseof','-2','-copyts',
     '-i',join(dir,'source.mp4'),'-map','0:v:0','-an','-vf',stillFilter+',showinfo',
-    '-fps_mode','passthrough','-q:v','3','-threads','1','-f','image2','-update','1',output],
+    '-fps_mode','passthrough','-q:v',String(quality),'-threads','1','-f','image2','-update','1',output],
     {timeout:120_000,maxBuffer:2*1024*1024})
   const samples = Array.from(stderr.matchAll(/pts_time:([\d.-]+)/g),match=>Number(match[1]))
   const actualTime = samples.at(-1)
@@ -99,13 +101,13 @@ export async function extractRetakeInspectionFrames(source: Buffer, plan: Retake
 }
 
 /** A source-led still for the Agent's Retake camera/content keyframe edit. */
-export async function extractRetakeSourceFrame(source: Buffer, time: number): Promise<Buffer> {
+export async function extractRetakeSourceFrame(source: Buffer, time: number, quality = 3): Promise<Buffer> {
   return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
     const output = join(dir, 'frame.jpg')
     const meta = await probeRetakeVideoFile(join(dir, 'source.mp4'))
     const last = await lastSourceFrameTime(join(dir, 'source.mp4'), meta.fps || 30)
     const sampleTime = Math.min(time, last)
-    return (await extractSourceStill(dir,ffmpeg,sampleTime,output,meta.duration!)).image
+    return (await extractSourceStill(dir,ffmpeg,sampleTime,output,meta.duration!,quality)).image
   })
 }
 
