@@ -53,6 +53,16 @@ describe('SaveMediaDialog choices and checkout return', () => {
     expect(screen.getByTestId('image-save-dimensions').textContent).toBe('1024 × 768');
   });
 
+  it('still saves original bytes when the browser cannot inspect the original image', async () => {
+    mocks.inspect.mockRejectedValue(new Error('Unsupported browser image decoder'));
+    render(<SaveMediaDialog {...props} watermarkRequired={false} />);
+    await waitFor(() => expect(screen.getByTestId('save-clean').hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByTestId('save-clean'));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ blob: original, filename: 'work.png' })));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(mocks.export).not.toHaveBeenCalled();
+  });
+
   it('makes Save the primary choice and downloads the marked image without opening checkout', async () => {
     render(<SaveMediaDialog {...props} />);
     await waitFor(() => expect(screen.getByTestId('save-free').hasAttribute('disabled')).toBe(false));

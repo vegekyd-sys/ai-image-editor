@@ -60,7 +60,7 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
       setAsset(next);
       if (next.kind === 'image') void inspectImageExport(next.blob).then(info => {
         if (!cancelled) setImageInfo(info);
-      }).catch(() => {if (!cancelled) setError(t('editor.savePrepareFailed'));});
+      }).catch(() => { /* Keep original-file saving available if this browser cannot decode it. */ });
       if (!preview?.source) {url = URL.createObjectURL(next.blob);setPreviewUrl(url);}
       if (next.kind === 'video' && knownAccess === false && !isNativeVideoWatermarkAvailable()) preloadWatermarkVideo();
     }).catch(() => {if (!cancelled) setError(t('editor.savePrepareFailed'));});
@@ -241,7 +241,7 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
           </div>}
         </div>
         <div className="px-5 pt-3 pb-5">
-          <button type="button" disabled={loading || saving || !accessReady || (!asset && !preview) || (kind === 'image' && !imageInfo)} onClick={() => void save()}
+          <button type="button" disabled={loading || saving || !accessReady || (!asset && !preview)} onClick={() => void save()}
             data-testid={paid ? 'save-clean' : 'save-free'} className="mkr-liquid-pill flex min-h-12 w-full items-center justify-center gap-2 rounded-full border border-fuchsia-400/25 bg-fuchsia-500/20 px-5 text-sm font-medium text-white transition hover:bg-fuchsia-500/30 disabled:opacity-40">
             {saving ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : <Download size={17} aria-hidden="true" />}
             {saving ? t('editor.saveProcessing', Math.round(progress * 100)) : t('project.save')}
