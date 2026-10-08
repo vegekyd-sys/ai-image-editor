@@ -54,9 +54,14 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
         if (model !== 'fal-h3-max' || !imageUrl || !Number.isFinite(middle_frame_time) || middle_frame_time! <= 0 || Math.round(middle_frame_time!*24) >= clock.generationDuration*24-1) return {success:false,message:'Choose a ready H3 image keyframe and a time strictly inside its native output before video submission.'};
         middleFrame = {imageUrl,time:middle_frame_time!};
       }
-      const hash = ctx.execution ? createHash('sha256').update(JSON.stringify([ctx.execution.runId, ctx.execution.inputEpoch, media_index, start, end, prompt, model, middleFrame])).digest('hex') : undefined;
+      // Timeline indices differ from provider-local reference indices. Resolve
+      // only the selected keyframe marker; the Agent's creative text stays intact.
+      const providerPrompt = middleFrame
+        ? prompt.replace(new RegExp(`<<<media_${middle_frame_media_index}>>>`, 'gi'), 'Image 3')
+        : prompt;
+      const hash = ctx.execution ? createHash('sha256').update(JSON.stringify([ctx.execution.runId, ctx.execution.inputEpoch, media_index, start, end, providerPrompt, model, middleFrame])).digest('hex') : undefined;
       const stableId = hash ? `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}` : undefined;
-      const result = await submit({ images: [], script: prompt, videoUrl: source.videoUrl,
+      const result = await submit({ images: [], script: providerPrompt, videoUrl: source.videoUrl,
         retake: { start, end, ...(middleFrame ? {middleFrame} : {}) }, videoModel: model, projectId: ctx.projectId, billingRequestId: request_id ?? stableId,
       }, { userId: ctx.userId, apiKeyId: null, toolName: 'retake_video' });
       const snapshotId = result.snapshotId ?? result.taskId?.replace(/^video-retake-/, '');

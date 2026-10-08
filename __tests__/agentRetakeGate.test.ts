@@ -41,6 +41,13 @@ describe('Agent Retake paid-submission gate', () => {
     expect(result).toMatchObject({success:false,errorCode:'retake_keyframe_required'})
     expect(submit).not.toHaveBeenCalled()
   })
+  it('binds the selected timeline keyframe to provider-local Image 3 without changing creative text', async () => {
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret')
+    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,
+      prompt: input.prompt+' Match <<<media_2>>> at the new camera beat.',
+      inspection_id:receipt(),source_observation:observation,middle_frame_media_index:2,middle_frame_time:2.5})
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({script:input.prompt+' Match Image 3 at the new camera beat.'}),expect.anything())
+  })
   it.each([{middle_frame_media_index:99,middle_frame_time:2.5},{middle_frame_media_index:2,middle_frame_time:5},{middle_frame_media_index:2}])('rejects missing images and invalid middle times before billing %j',async middle=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret')
     const result=await (createInspectedRetakeVideoTool(scope).execute as any)({...input,inspection_id:receipt(),source_observation:observation,...middle})
