@@ -224,7 +224,7 @@ const zh = {
   'changelog.imageCapabilities.item1': "对话生图会根据比例、透明背景和分辨率选择合适模型，支持 8:1、1:8 等全景构图；遇到不兼容的组合时，尽量保留主要要求并完成出图。",
   'changelog.imageCapabilities.item2': "可在对话中要求原生 2K / 4K。GPT Image 2.5 的 4K 支持 16:9 至 3:1 横图及对应竖图，长边 3840px；方形 4K 使用 Nano Banana 2.1 输出 4096 × 4096。",
   'changelog.imageCapabilities.item3': "网页浏览使用轻量预览，保存时读取原图。大图可选择原图、2K 或轻量分享版，并另存为 PNG / JPG；不会把小图放大后标成 4K。",
-  'changelog.imageCapabilities.item4': "长边不超过 1280px 的小图点击 Save 即直接保存，省去中间选择页面；PNG 保留透明背景，JPG 的透明区域会变成白色。",
+  'changelog.imageCapabilities.item4': "普通图片（约 200 万像素以内，含 1K 全景图）点击 Save 即直接保存；更大的原图才显示保存选择页面；PNG 保留透明背景，JPG 的透明区域会变成白色。",
   'changelog.imageCapabilities.item5': "CLI 继续返回原图。要求透明方形 4K 时，优先保留透明背景并提供 2K 图片。",
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
   'changelog.nanoBanana21.item1': '普通图片与 Creative / Wild / Captions Tips 图片默认升级为 Nano Banana 2.1，换场景和创意编辑时更擅长保留原图人物与构图。',

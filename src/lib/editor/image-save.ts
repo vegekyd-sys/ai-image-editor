@@ -1,8 +1,12 @@
 import { checkMediaDownload, prepareDownloadAsset, savePreparedDownload, type DownloadAssetParams, type PreparedDownloadCache } from './download';
-import { exportImageDownload, IMAGE_SHARE_LONG_EDGE, inspectImageExport, type ImageExportInfo } from './image-export';
+import { exportImageDownload, inspectImageExport, type ImageExportInfo } from './image-export';
 import { watermarkImage } from './web-watermark';
 
-/** Small originals have no smaller size to choose. Save them without another screen. */
+// Use pixel count, independently of the sharing export's long edge. A 1K panorama
+// can be 2928 × 352 and should save as directly as a 1024 × 1024 image.
+const DIRECT_SAVE_MAX_PIXELS = 2048 * 1024;
+
+/** Ordinary images save directly; larger originals offer size and format choices. */
 export async function trySaveSmallImage(params: DownloadAssetParams, cache: PreparedDownloadCache, watermarkRequired: boolean): Promise<boolean> {
   params.setIsSaving(true);
   try {
@@ -11,7 +15,7 @@ export async function trySaveSmallImage(params: DownloadAssetParams, cache: Prep
     let info: ImageExportInfo | null = null;
     try { info = await inspectImageExport(original.blob); }
     catch { /* An unavailable decoder must not prevent saving the original file. */ }
-    if (info && Math.max(info.width, info.height) > IMAGE_SHARE_LONG_EDGE) return false;
+    if (info && info.width * info.height > DIRECT_SAVE_MAX_PIXELS) return false;
 
     let selected = original;
     if (watermarkRequired && !(await checkMediaDownload())) {

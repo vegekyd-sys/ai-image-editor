@@ -261,7 +261,7 @@ const ja = {
   'changelog.imageCapabilities.item1': "チャットでの画像生成では、縦横比・透明背景・解像度に合うモデルを選び、8:1や1:8のパノラマ構図にも対応。条件が両立しない場合は、主な希望をできるだけ保ちながら画像を作成します。",
   'changelog.imageCapabilities.item2': "チャットでネイティブ2K / 4Kを指定できます。GPT Image 2.5の4Kは16:9〜3:1の横長画像と対応する縦長画像に対応し、長辺は3840px。正方形4KはNano Banana 2.1で4096 × 4096を生成します。",
   'changelog.imageCapabilities.item3': "ウェブでは軽量プレビューを表示し、保存時に元画像を読み込みます。大きい画像は元サイズ・2K・軽量共有版を選び、PNG / JPGで保存可能。小さい画像を拡大して4Kと表示することはありません。",
-  'changelog.imageCapabilities.item4': "長辺1280px以下の画像はSaveを押すと直接保存でき、選択画面を省略します。PNGは透明背景を保持し、JPGでは透明部分が白になります。",
+  'changelog.imageCapabilities.item4': "通常の画像（約200万画素以下、1Kパノラマを含む）はSaveを押すと直接保存されます。より大きな元画像のみ保存の選択画面を表示します。PNGは透明背景を保持し、JPGでは透明部分が白になります。",
   'changelog.imageCapabilities.item5': "CLIは引き続き元画像を返します。透明背景の正方形4Kを指定した場合は、透明背景を優先して2K画像を提供します。",
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
   'changelog.nanoBanana21.item1': '通常の画像とCreative / Wild / Captions Tips画像の標準をNano Banana 2.1に更新。背景の変更やクリエイティブな編集で、元の人物や構図をより保ちやすくなりました。',

@@ -3,7 +3,7 @@ import { trySaveSmallImage } from '@/lib/editor/image-save';
 import type { DownloadAssetParams, PreparedDownloadCache } from '@/lib/editor/download';
 const mocks = vi.hoisted(() => ({ prepare: vi.fn(), save: vi.fn(), access: vi.fn(), inspect: vi.fn(), watermark: vi.fn(), export: vi.fn() }));
 vi.mock('@/lib/editor/download', () => ({ prepareDownloadAsset: mocks.prepare, savePreparedDownload: mocks.save, checkMediaDownload: mocks.access }));
-vi.mock('@/lib/editor/image-export', () => ({ IMAGE_SHARE_LONG_EDGE: 1280, inspectImageExport: mocks.inspect, exportImageDownload: mocks.export }));
+vi.mock('@/lib/editor/image-export', () => ({ inspectImageExport: mocks.inspect, exportImageDownload: mocks.export }));
 vi.mock('@/lib/editor/web-watermark', () => ({ watermarkImage: mocks.watermark }));
 const original = { blob: new Blob(['original'], { type: 'image/png' }), filename: 'image.png', kind: 'image' };
 const marked = new Blob(['marked'], { type: 'image/png' });
@@ -17,7 +17,7 @@ beforeEach(() => {
   mocks.export.mockImplementation(async asset => asset);
 });
 describe('GUI image save entry', () => {
-  it.each([[1024, 768], [1280, 720], [720, 1280]])('saves small %sx%s originals directly without entitlement calls', async (width, height) => {
+  it.each([[1024, 768], [1280, 720], [720, 1280], [1024, 1024], [1536, 1024], [1024, 1536], [2928, 352], [352, 2928], [1920, 1080], [2048, 1024], [1024, 2048]])('saves ordinary %sx%s originals directly without entitlement calls', async (width, height) => {
     mocks.inspect.mockResolvedValue({ width, height, mimeType: 'image/png' });
     const request = params();
     expect(await trySaveSmallImage(request, cache, false)).toBe(true);
@@ -25,7 +25,7 @@ describe('GUI image save entry', () => {
     expect(mocks.access).not.toHaveBeenCalled();expect(mocks.watermark).not.toHaveBeenCalled();
     expect(request.showSaveToast).toHaveBeenCalledOnce();expect(request.setIsSaving).toHaveBeenLastCalledWith(false);
   });
-  it.each([[1281, 720], [720, 1281], [2048, 2048], [4096, 4096]])('opens size choices for large %sx%s without saving yet', async (width, height) => {
+  it.each([[2049, 1024], [1024, 2049], [2048, 1152], [2048, 2048], [4096, 4096], [1856, 2304], [3712, 4608], [5856, 704], [704, 5856]])('opens size choices for large %sx%s without saving yet', async (width, height) => {
     mocks.inspect.mockResolvedValue({ width, height, mimeType: 'image/png' });
     const request = params();
     expect(await trySaveSmallImage(request, cache, true)).toBe(false);
