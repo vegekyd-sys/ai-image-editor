@@ -8,7 +8,7 @@ Separate (1) observed facts, (2) the requested visual change, and (3) the identi
 
 export const RETAKE_PROMPT_WRITING = `Expand the user's brief into a concise, concrete final generation prompt AFTER viewing the evidence.
 Lead with the requested visible change; then give the output-time beats, then only the essential identity/action constraints. Keep the long source observation in source_observation, not in the generation prompt. Use output-local seconds only; do not put the source video's absolute timestamps in the provider prompt.
-For a camera-change request, explicitly authorize NEW shot coverage: the reference supplies subject identity, environment and action phase, not its camera framing or continuous shot. Describe camera position/view direction AND shot size for each setup, with an explicit HARD CUT and time at each transition. A zoom, crop, pan or small camera drift within the original shot does not fulfill multi-camera editing. Choose a few substantially distinct views with enough screen time to read them; the suggested slots are a timing budget, not a forced template. Keep the same action progressing across cuts. Do not restart takeoff or invent a landing unless observed or requested. A brief bridge to surrounding footage must not lock the interior camera.
+For a camera-change request, explicitly authorize NEW shot coverage: the reference supplies subject identity, environment and action phase, not its camera framing or continuous shot. Describe camera position/view direction AND shot size for each setup, with an explicit HARD CUT and time at each transition. A zoom, crop, pan or small camera drift within the original shot does not fulfill multi-camera editing. Choose a few substantially distinct views with enough screen time to read them; the suggested slots are a timing budget, not a forced template. Keep the same action progressing across cuts. Do not restart takeoff or invent a landing unless observed or requested. Match the boundary action/pose, not necessarily the original camera: the last NEW setup can hand off directly. Do not squeeze in an additional return-to-source shot beyond the timing budget.
 For content changes, specify the new content's placement, scale, interaction and persistence across the selected interval; keep the source camera unless the user requests a camera change. Never add cuts to a simple object/outfit/color edit.
 For H3, refer to Video 1 for identity/environment/action timing and Image 1 / Image 2 only for context boundary states. Boundary images are reference assets, not exact-frame camera locks. For Seedance, describe the requested edit to the supplied clip without inventing H3 image references.
 Before submitting, check that the change is visible, beats fit outputSelection, camera and preservation instructions do not conflict, and the closing action matches the evidence. Revise a vague or contradictory prompt before the one paid submission. Do not promise that a completed provider task proves the change succeeded.`
@@ -29,12 +29,12 @@ export function retakeShotPlanError(shots: RetakeShotBeat[] | undefined, prompt:
   if (Math.abs(cursor - selection.end) > epsilon) return 'shot_plan must end at outputSelection.end.'
   // Only explicit second-based beats are interpreted. Camera dimensions,
   // subjects and other numbers in ordinary prose are not timestamps.
-  const ranges = /\b(\d+(?:\.\d+)?)\s*s?\s*[–—-]\s*(\d+(?:\.\d+)?)\s*s(?:ec(?:onds)?)?\b/gi
+  const ranges = /\b(\d+(?:\.\d+)?)\s*(?:s|秒)?\s*[–—-]\s*(\d+(?:\.\d+)?)\s*(?:s(?:ec(?:onds)?)?\b|秒)/gi
   for (const match of prompt.matchAll(ranges)) {
     const start = Number(match[1]), end = Number(match[2])
     if (start < selection.start - epsilon || end > selection.end + epsilon || end <= start) return 'Prompt shot times fall outside outputSelection. Do not reset the selected interval to zero.'
   }
-  const points = /\b(?:at|before|after|output(?:-local)?)\s*(?:output\s*)?(\d+(?:\.\d+)?)\s*s(?:ec(?:onds)?)?\b/gi
+  const points = /(?:\b(?:at|before|after|output(?:-local)?)\s*(?:output\s*)?|(?:输出|輸出|出力)\s*|(?:在|於|于|第)\s*(?:输出|輸出|出力)?\s*)(\d+(?:\.\d+)?)\s*(?:s(?:ec(?:onds)?)?\b|秒)/gi
   for (const match of prompt.matchAll(points)) {
     const time = Number(match[1])
     if (time < selection.start - epsilon || time > selection.end + epsilon) return 'Prompt cut time falls outside outputSelection. Do not reset the selected interval to zero.'

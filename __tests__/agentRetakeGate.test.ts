@@ -39,6 +39,8 @@ describe('Agent Retake paid-submission gate', () => {
     { shot_plan: [{ start: 0, end: 3, instruction: 'three new cameras' }] },
     { prompt: 'Output-local 0.0–1.0s: close-up. At 1.0s, HARD CUT to medium shot.' },
     { prompt: '1–2s: close-up. At 0.5s, HARD CUT to medium shot.' },
+    { prompt: '输出0–1秒：轮子近景；输出1秒处硬切到侧拍。' },
+    { prompt: '输出1–2秒：轮子近景；在0.5秒处硬切到侧拍。' },
     { shot_plan: [{ start: 1, end: 2, instruction: 'close-up' }, { start: 3, end: 4, instruction: 'overhead' }] },
     { shot_plan: undefined },
   ])('rejects malformed shot clocks before billing/provider submission %j', async change => {

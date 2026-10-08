@@ -29,4 +29,8 @@ describe('inspection-to-prompt timing budget', () => {
     expect(retakeShotPlanError([{ start: 1, end: 4, instruction: 'add a small character beside the board throughout' }],
       'Add one small character, 3D animation, a high three-quarter angle. From 1–4s keep it visible.', { start: 1, end: 4 })).toBeNull()
   })
+  it('accepts valid Chinese output-time beats', () => {
+    const slots = [{ start: 1, end: 2, instruction: '近景' }, { start: 2, end: 4, instruction: '俯拍' }]
+    expect(retakeShotPlanError(slots, '输出1–2秒：近景；输出2秒处硬切，输出2–4秒：俯拍。', { start: 1, end: 4 })).toBeNull()
+  })
 })
