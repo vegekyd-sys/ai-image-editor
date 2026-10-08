@@ -1,6 +1,6 @@
 import { normalizeVideoModelId } from './video-model-capabilities'
 
-export const RETAKE_MODELS = ['seedance-2.5', 'fal-h3-max'] as const
+export const RETAKE_MODELS = ['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max'] as const
 export type RetakeModel = typeof RETAKE_MODELS[number]
 export const DEFAULT_RETAKE_MODEL: RetakeModel = 'fal-h3-max'
 export interface RetakeRange { start: number; end: number }
@@ -18,7 +18,7 @@ export interface RetakePlan extends RetakeRange {
 export function resolveRetakeModel(model?: string | null): RetakeModel {
   const id = model && model !== 'auto' ? normalizeVideoModelId(model) : DEFAULT_RETAKE_MODEL
   if (!RETAKE_MODELS.includes(id as RetakeModel)) {
-    throw new Error('Retake supports Seedance 2.5 and FAL H3 Max. H3 Turbo does not accept source video. Choose a supported model explicitly.')
+    throw new Error('Retake supports Seedance 2.5 Eco, Seedance 2.5 and FAL H3 Max. H3 Turbo does not accept source video. Choose a supported model explicitly.')
   }
   return id as RetakeModel
 }

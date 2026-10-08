@@ -4088,6 +4088,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       imageUrl: currentSnap.imageUrl,
                       status: currentSnap.videoMeta.status,
                       duration: currentSnap.videoMeta.duration,
+                      retake: currentSnap.videoMeta.retake,
                       createdAt: currentSnap.videoMeta.createdAt || new Date().toISOString(),
                       videoModel: currentSnap.videoMeta.model,
                       videoResolution: currentSnap.videoMeta.resolution,

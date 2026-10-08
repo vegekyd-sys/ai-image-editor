@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { planRetake, validateRetakeRange, retakePrompt, resolveRetakeModel } from '@/lib/video-retake-contract';
-import { assembleRetake, extractRetakeContext, extractRetakeBoundaryFrames, inspectRetakeSource } from '@/lib/video-retake-media';
+import { assembleRetake, extractRetakeContext, extractRetakeBoundaryFrames, extractRetakeInspectionFrames, inspectRetakeSource } from '@/lib/video-retake-media';
 import { findFfmpeg } from '@/lib/ffmpeg-runtime';
 
 describe('Retake interval contract', () => {
@@ -13,6 +13,8 @@ describe('Retake interval contract', () => {
     expect(resolveRetakeModel()).toBe('fal-h3-max');
     expect(resolveRetakeModel('auto')).toBe('fal-h3-max');
     expect(resolveRetakeModel('seedance-2.5')).toBe('seedance-2.5');
+    expect(resolveRetakeModel('seedance-2.5-eco')).toBe('seedance-2.5-eco');
+    expect(planRetake({start:12.3,end:26},30.14,'seedance-2.5-eco')).toMatchObject({contextStart:12.3,contextEnd:26,generationDuration:13.7});
     expect(() => resolveRetakeModel('ltx-2.3-retake')).toThrow(/supports/);
   });
   it('expands reference context without expanding the replacement interval', () => {
@@ -46,6 +48,9 @@ describe('Retake interval contract', () => {
       const color = async (buffer: Buffer) => [...(await sharp(buffer).resize(1,1).raw().toBuffer())];
       expect((await color(frames.start))[2]).toBeGreaterThan(200);
       expect((await color(frames.end))[2]).toBeGreaterThan(200);
+      const inspection = await extractRetakeInspectionFrames(readFileSync(src), planRetake({start:3,end:6},6,'fal-h3-max'),24);
+      expect(inspection.frames.length).toBeGreaterThan(2);
+      expect((await color(inspection.frames.at(-1)!))[2]).toBeGreaterThan(200);
     } finally { rmSync(dir,{recursive:true,force:true}); }
   },30_000);
   it('retains generated first/last frames when fitting a short selection', async () => {

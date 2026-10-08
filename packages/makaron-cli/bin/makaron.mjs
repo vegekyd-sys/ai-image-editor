@@ -2231,7 +2231,7 @@ Not sure which built-in skill to use? Start with:
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
     else if (subtopic === 'create') printVideoCreateHelp();
-    else if (subtopic === 'retake') console.log('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5|fal-h3-max] [--project <id>] [--wait] [--json] [--request-id <uuid>]');
+    else if (subtopic === 'retake') console.log('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max] [--project <id>] [--wait] [--json] [--request-id <uuid>]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else printVideoHelp();
   } else if (topic === 'music') {
@@ -3100,11 +3100,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if ((flag === '--model' || flag === '--video-model') && args[i + 1]) params.model = args[++i];
       else if (flag === '--project' && args[i + 1]) params.project_id = args[++i];
       else if (flag === '--request-id' && args[i + 1]) params.request_id = args[++i];
-      else { console.error('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5|fal-h3-max] [--project <id>] [--wait] [--json] [--request-id <uuid>]'); process.exit(1); }
+      else { console.error('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max] [--project <id>] [--wait] [--json] [--request-id <uuid>]'); process.exit(1); }
     }
     if (!params.video_url || !params.prompt || !Number.isFinite(params.start) || !Number.isFinite(params.end)
       || params.start < 0 || params.end - params.start < .1 || params.end - params.start > 15
-      || !['seedance-2.5', 'fal-h3-max'].includes(params.model)) {
+      || !['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max'].includes(params.model)) {
       console.error('Retake needs one video, a prompt, a valid 0.1–15 second interval, and a supported model.'); process.exit(1);
     }
     if (!isHttpUrl(params.video_url)) {

@@ -46,8 +46,8 @@ export async function extractRetakeInspectionFrames(source: Buffer, plan: Retake
       const output = join(dir, `inspection-${index}.jpg`)
       await exec(ffmpeg, ['-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-ss', String(time),
         '-i', join(dir, 'source.mp4'), '-frames:v', '1', '-vf',
-        "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
-        '-q:v', '3', output], { timeout: 30_000, maxBuffer: 1024 * 1024 })
+        "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuvj420p",
+        '-q:v', '3', '-threads', '1', output], { timeout: 30_000, maxBuffer: 1024 * 1024 })
       return readFile(output)
     }))
     return { timestamps, frames }
@@ -59,7 +59,7 @@ export async function extractRetakeSourceFrame(source: Buffer, time: number): Pr
   return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
     const output = join(dir, 'frame.jpg')
     await exec(ffmpeg, ['-v','error','-y','-i',join(dir,'source.mp4'),'-ss',String(time),'-frames:v','1',
-      '-vf',"scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",'-q:v','3',output],
+      '-vf',"scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuvj420p",'-q:v','3','-threads','1',output],
       {timeout:120_000,maxBuffer:1024*1024})
     return readFile(output)
   })
@@ -74,8 +74,8 @@ export async function extractRetakeBoundaryFrames(source: Buffer, plan: RetakePl
     const frames = await Promise.all([start, Math.max(start, end)].map(async (time, index) => {
       const output = join(dir, `boundary-${index}.jpg`)
       await exec(ffmpeg, ['-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-i', join(dir, 'source.mp4'),
-        '-ss', String(time), '-frames:v', '1', '-vf', "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
-        '-q:v', '3', output], { timeout: 120_000, maxBuffer: 1024 * 1024 })
+        '-ss', String(time), '-frames:v', '1', '-vf', "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuvj420p",
+        '-q:v', '3', '-threads', '1', output], { timeout: 120_000, maxBuffer: 1024 * 1024 })
       return readFile(output)
     }))
     return { start: frames[0], end: frames[1] }

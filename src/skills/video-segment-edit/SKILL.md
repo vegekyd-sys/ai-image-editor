@@ -29,7 +29,8 @@ original-audio preservation and full-video delivery. Do not screenshot-locate
 an already known interval, script a second clipping/assembly pipeline, or ask
 for a second merge confirmation. Use original-source seconds, including a
 bounded external clip's source offset. Respect the model explicitly selected
-by the user; supported models are Seedance 2.5 and FAL H3 Max.
+by the user; supported models are FAL H3 Max, Seedance 2.5 Eco (preferred
+Seedance route), and native Seedance 2.5 when explicitly requested.
 
 For a scene/action description such as "机器人起跳那段", use analyze_video and
 preview_frame to locate the actual action, then inspect and edit its bounded

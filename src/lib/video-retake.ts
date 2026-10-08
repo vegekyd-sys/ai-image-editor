@@ -36,7 +36,9 @@ export function retakeVideoMeta(job: Job): VideoMeta {
     sourceSnapshotIds: [], sourceUrls: [job.source_url], status: job.stage === 'completed' ? 'completed' : job.stage === 'failed' ? 'failed' : 'processing',
     duration: job.plan.sourceDuration, model: job.model_id, resolution: job.resolution as VideoMeta['resolution'], operation: 'edit',
     createdAt: job.created_at, error: job.error, pipelineStage: job.stage,
-    retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url },
+    retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url,
+      inputDuration: (job.source_meta.boundaryFrames as { middle?: unknown } | undefined)?.middle ? 0
+        : job.context_url ? job.plan.contextEnd - job.plan.contextStart : undefined, generationDuration: job.plan.generationDuration },
     width: Number(job.source_meta.width), height: Number(job.source_meta.height) }
 }
 async function publish(job: Job, videoBuffer?: Buffer) {
@@ -143,10 +145,10 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const useVideoReference = !boundaryFrames?.middle
     result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
       images: boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : [], h3RetakeBoundaryFrames: boundaryFrames,
-      script: prompt, duration: model === 'seedance-2.5' ? -1 : plan.generationDuration,
+      script: prompt, duration: model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,
       referenceVideoDuration: useVideoReference ? plan.contextEnd - plan.contextStart : undefined, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
-      videoOperation: model === 'seedance-2.5' ? 'edit' : 'generate', videoReferType: 'feature',
+      videoOperation: model.startsWith('seedance-2.5') ? 'edit' : 'generate', videoReferType: 'feature',
       onBeforeProviderSubmit: beforeSubmit })
     if (!result.success || !result.taskId) {
       // A preflight failure never posted. Once posted, an unclassified missing
@@ -194,7 +196,7 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
       }
     }
     if (job.stage === 'saving_patch' && job.patch_url) {
-      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', falAsset: job.model_id !== 'seedance-2.5', evolinkAsset: job.model_id === 'seedance-2.5' })
+      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', falAsset: !job.model_id.startsWith('seedance-2.5'), evolinkAsset: job.model_id.startsWith('seedance-2.5') })
       const permanentPatch = await store(job, bytes, 'patch')
       await save(job, { patch_url: permanentPatch, stage: 'assembling' }, token)
     }
