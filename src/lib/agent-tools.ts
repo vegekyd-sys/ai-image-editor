@@ -1380,7 +1380,7 @@ interface AgentToolFactoryScope {
 }
 
 function createGenerateImageTool(
-  { ctx, runtime }: AgentToolFactoryScope,
+  { ctx }: AgentToolFactoryScope,
 ) {
   return tool({
       description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}`,
@@ -1465,32 +1465,10 @@ function createGenerateImageTool(
           {
             currentImage: editTarget,
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
-            codexSubscription: runtime.spec.provider === 'codex-subscription' && ctx.userId
-              ? {
-                  userId: ctx.userId,
-                  projectId: ctx.projectId,
-                  agentModelId: runtime.spec.providerModelId,
-                }
-              : undefined,
           },
         );
         // Bill for image generation (separate from Agent LLM tokens)
-        if (skillResult.usage && skillResult.provider === 'codex-subscription' && ctx.userId) {
-          try {
-            await recordSubscriptionUsage(
-              ctx.userId,
-              'codex-subscription',
-              'generate_image',
-              skillResult.usage.modelId,
-              {
-                inputTokens: skillResult.usage.inputTokens,
-                outputTokens: skillResult.usage.outputTokens,
-              },
-            );
-          } catch (error) {
-            console.error('[billing] generate_image subscription usage logging error:', error);
-          }
-        } else if (skillResult.usage && skillResult.provider !== 'codex-subscription') {
+        if (skillResult.usage) {
           const { deductByTokens } = await import('./billing/credits');
           await deductByTokens(
               ctx.userId ?? '',
@@ -1504,8 +1482,7 @@ function createGenerateImageTool(
               skillResult.usage!.providerCostUsd,
           );
         } else if (
-          skillResult.provider !== 'codex-subscription'
-          && skillResult.success
+          skillResult.success
           && skillResult.image
           && skillResult.usedModel
           && skillResult.usedModel !== 'gemini'

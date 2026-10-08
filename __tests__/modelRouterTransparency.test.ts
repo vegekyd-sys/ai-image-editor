@@ -65,7 +65,6 @@ describe('transparent image routing', () => {
     await expect(generateImage({
       prompt: 'A product poster.',
       model: 'openai',
-      codexSubscription: { userId: 'allowed-user', projectId: 'project-1' },
     })).resolves.toMatchObject({
       image: 'data:image/png;base64,cG5n',
       model: 'gpt-image-2.5-flare',

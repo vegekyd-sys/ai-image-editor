@@ -52,7 +52,7 @@ describe('fal Image 2.5 paid request contract', () => {
       .mockResolvedValueOnce(Response.json({ images: [{ url: 'https://v3.fal.media/output.png' }] }, { headers: { 'x-fal-billable-units': '0.0062' } }))
       .mockResolvedValueOnce(new Response(new Uint8Array(png)));
     vi.stubGlobal('fetch', fetcher);
-    const result = await createFalImage25Backend(model).generate({ prompt: 'Sticker', background: 'transparent', codexSubscription: { userId: 'owner', projectId: 'project' } });
+    const result = await createFalImage25Backend(model).generate({ prompt: 'Sticker', background: 'transparent' });
     expect(result.image).toMatch(/^data:image\/png;base64,/);
     expect(result).toMatchObject({ provider: 'fal', usage: { modelId: model, providerCostUsd: 0.0062, inputTokens: 0, outputTokens: 0 } });
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);

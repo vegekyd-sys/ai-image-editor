@@ -1,6 +1,6 @@
 # Image Creation and Editing
 
-Use the Image Model Capability table supplied with `generate_image` for current model selection and limits.
+Use the generated Image Model Capability table supplied with `generate_image` for model choice, limits, NSFW assessment, legacy IDs and conflicting output preferences.
 
 Use this file when the user asks for image editing, text-to-image generation, posters, marketing graphics, e-commerce pages, infographics, captions, photo enhancement, creative photo edits, wild transformations, reference-image composition, or any `generate_image` task that needs more than a single obvious instruction.
 
@@ -31,7 +31,7 @@ Before the first transparent generation or extraction in a conversation, call `r
 - Existing source image: pass that image's `media_index`. This is an image-to-image cutout/edit. In `editPrompt`, tell GPT Image 2.5 to remove the background to transparent alpha while preserving the complete intended subject, identity, shape, fine edges, holes, and interior details. Do not redesign the subject unless requested.
 - No source image: omit `media_index` entirely. This is transparent text-to-image. Describe only the wanted subject and composition; do not invent a colored, white, checkerboard, studio, or scenic background.
 - Ambiguous cleanup such as removing one background object does not automatically mean alpha. Use transparent output only when the intended deliverable has no background or is a cutout/overlay asset.
-- Transparent model selection follows the Image Model Capability table. When output preferences conflict, deliver a useful image by retaining the ratio or transparency; explain the actual adjustment. Never claim an opaque image or synthetic checkerboard has real alpha.
+- Never claim an opaque image or synthetic checkerboard has real alpha.
 - The canonical fidelity wording, keep/remove selection rules, content-specific details, and delivery line live in `prompts/cutout.md`. Do not improvise a weaker generic prompt.
 
 Omit `background` for normal images.
@@ -129,7 +129,7 @@ Routing table:
 - "疯狂 / 脑洞 / 夸张 / wild / 变形" means `skill='wild'`.
 - "加文字 / 加字幕 / 加文案 / caption / 标题 / 加个说明" means `skill='captions'`.
 
-Before using a built-in skill for the first time, call `read_file('prompts/{skill}.md')` to load the rules. Skip if already in your tool-result history. Then write `editPrompt` following those rules. The template is not auto-injected into your reasoning; you must internalize it into `editPrompt`. When calling `generate_image`, pass `skill='{skill}'` so the model router picks the best backend for that skill.
+Before using a built-in skill for the first time, call `read_file('prompts/{skill}.md')` to load the rules. Skip if already in your tool-result history. Then write `editPrompt` following those rules. The template is not auto-injected into your reasoning; you must internalize it into `editPrompt`. When calling `generate_image`, pass `skill='{skill}'` to retain the editing intent. Model choice follows the Image Model Capability table.
 
 TipsBar reference: when `[当前TipsBar中的编辑建议]` has a tip matching the user's intent, you may use that tip's `editPrompt` as inspiration for your own prompt. Do not mention tips to the user. Just generate directly.
 
@@ -198,14 +198,6 @@ Omit this line if the user explicitly requested text or captions.
 - Example: `list_files('skills/my-skill/assets/')` gives asset entries. Pass their provider URLs to `image_refs`.
 - `image_refs` works for text-to-image too. No `media_index` is needed. Just pass references and a prompt.
 - `image_refs` are not remembered between tool calls. If you need the same references again, pass them again.
-
-## Model Selection
-
-Use the generated Image Model Capability table in `generate_image` as the source of truth for model characteristics, priority and parameter limits. Omit `model` for Auto; set it for an explicit user/active Skill preference. Prefer retaining references and output preferences, but let the shared generation plan relax conflicts so the user gets an image. Unknown IDs use Auto with Flare first.
-
-The main Agent assesses NSFW from the user request and supplied media before generation. Set `isNsfw: true` for NSFW requests (nudity, sexual content, gore or explicit edits), or when the existing context is NSFW. Do not probe another image provider first. A provider may still reject a request; report failure without automatic model switching or retry.
-
-Do not report output-capability conflicts as generation failures. Transparent 8:1 normally keeps 8:1 with opaque Nano Banana 2.1 output; it can preserve transparency instead when that serves the other requirements better. For NSFW generation and editing, always use Spicy regardless of unsupported size/resolution/alpha requirements. Explain the actual output briefly.
 
 ## Context Mode for model='gpt-image-2.5-flare'
 

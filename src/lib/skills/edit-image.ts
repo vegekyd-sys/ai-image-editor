@@ -14,11 +14,9 @@ export interface EditImageInput {
   imageResolution?: string;
   /** Explicit output background. Transparent requests default to Flare and preserve selected Sunburst. */
   background?: ImageBackground;
-  /** @deprecated Use workspace service instead. Kept for backward compat. */
-  skillPrompts?: Record<string, string>;
-  /** User's preferred model override — bypasses default routing */
+  /** Explicit model preference, normalized and planned against capabilities. */
   preferredModel?: string;
-  /** NSFW flag — skip Gemini entirely */
+  /** Main Agent assessment routes directly to Spicy. */
   isNsfw?: boolean;
 }
 
@@ -58,7 +56,7 @@ export async function editImage(
     image: references ? undefined : ctx.currentImage,
     references, prompt: finalPrompt, model: requestedModel, category: skill,
     aspectRatio, imageResolution, background, isNsfw,
-    thinkingEffort: 'minimal' as const, codexSubscription: ctx.codexSubscription,
+    thinkingEffort: 'minimal' as const,
   };
   try {
     // Validate before a supplier call; the same resolver is used by billing preflight.
@@ -69,7 +67,6 @@ export async function editImage(
     let message = 'Image generated successfully.';
     const adjustments = [...new Set([...plan.adjustments, ...(result.adjustments ?? [])])];
     if (adjustments.length) message += ` ${adjustments.join(' ')}`;
-    if (result.provider === 'codex-subscription') message += ' Provider: Codex subscription.';
     return { success: true, message, image: result.image, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage };
   } catch (error) {
     if (error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {

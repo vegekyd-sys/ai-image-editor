@@ -84,23 +84,11 @@ describe('editImage reference contract', () => {
     }));
   });
 
-  it('normalizes legacy Image 2 while retaining caller context', async () => {
-    await editImage(
-      { editPrompt: 'Create a polished poster.', preferredModel: 'openai' },
-      {
-        codexSubscription: {
-          userId: 'allowed-user',
-          projectId: 'project-1',
-        },
-      },
-    );
-
+  it('normalizes legacy Image 2 and preserves the original user prompt', async () => {
+    const prompt = '给这个键盘设计一个高级的信息丰富的电商详情页';
+    await editImage({ editPrompt: prompt, preferredModel: 'openai' }, {});
     expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'gpt-image-2.5-flare',
-      codexSubscription: {
-        userId: 'allowed-user',
-        projectId: 'project-1',
-      },
+      model: 'gpt-image-2.5-flare', prompt,
     }));
   });
 

@@ -1,6 +1,6 @@
 Edit or generate an image.
 
-Model selection and limits are supplied by the generated Image Model Capability table below. Omit model for Auto. Aim to deliver an image: conflicting output preferences are relaxed before submission, and unknown IDs use Flare-first Auto.
+Model choice, NSFW routing and conflicting output preferences follow the generated Image Model Capability table below.
 
 Call `read_file('prompts/image.md')` for complex edits, references, restoration, or layout work.
 
@@ -22,7 +22,3 @@ Edit Mode prompt shape for ordinary in-place edits:
 4. End line: "Do NOT add any text, watermarks, or borders." Omit this if the user explicitly requested text or captions.
 
 For cutout, read `prompts/cutout.md` once; do not append ordinary composition/scene-layout preservation.
-
-Context Mode for `model='gpt-image-2.5-flare'`: pass the user's request verbatim as `editPrompt`; do not rewrite, translate, expand, or invent layout/color details. Include prior feedback for multi-turn layout/mockup image tasks.
-
-Assess NSFW from the request and supplied media before submission; set `isNsfw: true`. Existing NSFW context stays active. Report provider rejection without automatic retry or model switching.
