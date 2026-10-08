@@ -16,6 +16,13 @@ Before the one paid submission, check that the requested change will be percepti
 
 export interface RetakeShotBeat { start: number; end: number; instruction: string }
 
+/** A source/join timestamp describes inspected footage, not output timing. */
+function sourceClockReference(prompt: string, index: number): boolean {
+  const clause = prompt.slice(Math.max(0,index-100),index).split(/[;\n.!?]/).at(-1) || ''
+  return /\b(?:source|original|adjacent|untouched)\b|原片|源片|原视频|原視頻/i.test(clause)
+    && !/\boutput\b|输出|輸出|出力/i.test(clause)
+}
+
 /** Reject an edit planned in selected-relative time before it can be charged. */
 export function retakeShotPlanError(shots: RetakeShotBeat[] | undefined, prompt: string, selection: { start: number; end: number }): string | null {
   const epsilon = .01
@@ -32,11 +39,13 @@ export function retakeShotPlanError(shots: RetakeShotBeat[] | undefined, prompt:
   // subjects and other numbers in ordinary prose are not timestamps.
   const ranges = /\b(\d+(?:\.\d+)?)\s*(?:s|秒)?\s*[–—-]\s*(\d+(?:\.\d+)?)\s*(?:s(?:ec(?:onds)?)?\b|秒)/gi
   for (const match of prompt.matchAll(ranges)) {
+    if (sourceClockReference(prompt,match.index!+match[0].search(/\d/))) continue
     const start = Number(match[1]), end = Number(match[2])
     if (start < selection.start - epsilon || end > selection.end + epsilon || end <= start) return 'Prompt shot times fall outside outputSelection. Do not reset the selected interval to zero.'
   }
   const points = /(?:\b(?:at|before|after|output(?:-local)?)\s*(?:output\s*)?|(?:输出|輸出|出力)\s*|(?:在|於|于|第)\s*(?:输出|輸出|出力)?\s*)(\d+(?:\.\d+)?)\s*(?:s(?:ec(?:onds)?)?\b|秒)/gi
   for (const match of prompt.matchAll(points)) {
+    if (sourceClockReference(prompt,match.index!+match[0].search(/\d/))) continue
     const time = Number(match[1])
     if (time < selection.start - epsilon || time > selection.end + epsilon) return 'Prompt cut time falls outside outputSelection. Do not reset the selected interval to zero.'
   }

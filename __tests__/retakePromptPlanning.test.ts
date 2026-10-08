@@ -4,6 +4,14 @@ import { planRetake } from '@/lib/video-retake-contract'
 import { retakePromptPlanning, retakeShotPlanError } from '@/lib/video-retake-prompt-planning'
 
 describe('scene-neutral inspection timing', () => {
+  it('distinguishes inspected source joins from output beats before billing',()=>{
+    const beats=[{start:0,end:5,instruction:'A new medium shot throughout'}];
+    expect(retakeShotPlanError(beats,'Keep medium framing; cut naturally to the following source shot at 6.0s.',{start:0,end:5})).toBeNull();
+    expect(retakeShotPlanError(beats,"Match the adjacent source's side-profile shot at 6 seconds.",{start:0,end:5})).toBeNull();
+    expect(retakeShotPlanError(beats,'Source 3–6s is an overhead shot. Output 0–5s is a medium shot.',{start:0,end:5})).toBeNull();
+    expect(retakeShotPlanError(beats,'After viewing the original, cut at output 6s.',{start:0,end:5})).not.toBeNull();
+    expect(retakeShotPlanError(beats,'At 6s change to a new view.',{start:0,end:5})).not.toBeNull();
+  });
   it.each(['fal-h3-max', 'seedance-2.5'])('provides a measured clock without prescribing an edit structure (%s)', model => {
     for (const range of [{ start: 0, end: .1 }, { start: 17.48, end: 23 }, { start: 0, end: 15 }, { start: 29, end: 30.048 }]) {
       const plan = planRetake(range, 30.048, model)
