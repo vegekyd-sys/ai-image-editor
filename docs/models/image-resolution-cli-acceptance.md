@@ -41,6 +41,6 @@ GPT Image 2.5 的 4K 指 3840 长边、最多 8,294,400 像素，不能生成 40
 
 共 12 个独立项目/请求（包含修复前 4 个失败记录），Makaron 共扣 88 credits，最终 8 个出图请求 84 credits，失败请求各仅扣 Agent 1 credit。fal 三个失败请求已产生供应商图片与成本，OpenRouter 失败请求的供应商成本未确认，不能把 Makaron 没扣图片 credits 当作供应商没有费用。没有自动重发失败的付费 POST。
 
-脚本：`scripts/image-resolution-cli-acceptance.mjs`；报告：`test-results/image-resolution-cli/report.html`，所有 receipt、图片、修复前失败及供应商原始图保留于同目录。报告生成用 `node scripts/image-capability-cli-report.mjs --resolution`。本地自动化 2159 测试通过，1 跳过；原 50-case 的参考取舍与其他视觉偏差仍未重新完成验收。
+脚本：`scripts/image-resolution-cli-acceptance.mjs`；报告：`test-results/image-resolution-cli/report.html`，所有 receipt、图片、修复前失败及供应商原始图保留于同目录。报告生成用 `node scripts/image-capability-cli-report.mjs --resolution`。独立 runner 的 `release:check --local` 退出 0：TypeScript、2159 自动化测试（1 跳过）、CLI smoke、生产 webpack 构建和 server runtime packaging 通过。原 50-case 的参考取舍与其他视觉偏差仍未重新完成验收。
 
 状态：候选工作树已修正，未合并、未上线；分辨率专项通过不替代完整上线验收。
