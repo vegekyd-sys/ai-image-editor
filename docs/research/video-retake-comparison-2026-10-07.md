@@ -164,3 +164,21 @@ Agent 写最终 prompt，后端原样传递，只保留区间裁切、时间坐�
 同步对比页：`http://localhost:3041/understand-first/comparison.html`，包含原片/前后成片、实际检查图、原始 Agent 指令、耗时和扣费。证据保存在 ignored `artifacts/video-retake/skateboard-matched/understand-first/`。新版 Preview：`https://ai-image-editor-9wqoajam4-vegekyd-sys-projects.vercel.app/projects/d78fcc10-2909-4ce6-addf-a49059631a00`，代码为 `9a322791`；首次点击 Retake 可展开选区，项目中的实际检查图帧与 @12 成片均已显示。仍未合并或部署生产。
 
 验证：7组针对性测试52项通过，含实际 Agent 检查门禁、跨区间拒绝、最终 FAL payload 不改 prompt、图片参考不丢失、计费和 FFmpeg 拼接；TypeScript、Agent startup、四语言 UI、video reference workflow 检查通过。Vercel Turbopack 构建成功，10条 CRC32C 与9条 FFmpeg API traces通过。浏览器三路视频 readyState=4，可定位18秒并同步播放，采样时间差小于0.001秒。
+
+## 2026-10-08：加强理解与 Agent 扩写
+
+继续保持 Agent 编写最终 prompt、后台直接传递。检查改为选区内最多六帧加两端上下文，共最多八帧；Retake 联系表单独使用四列两行布局，普通联系表仍保持原布局。Agent 被要求区分观察事实、所需变化和必要保留项，记录开头/中段/结尾的动作阶段、接触、遮挡与不确定性，不得从用户要求臆造落地。最终指令先写可见变化，再写明确硬切机位，最后写必要身份约束；简单物体/服装/颜色编辑不强加切镜头。参考视频提供身份、环境和动作，不锁住用户要改变的构图。
+
+检查返回按实际选区时长计算的镜头时间预算，3秒默认三个可读机位，长选区最多建议五个。机位写相机位置/方向和景别，边界接续优先匹配动作，不强制额外插回原机位。预算是供 Agent 创作使用的指引，不在后端自动生成或覆盖创意正文。
+
+唯一新增付费复测仍用 @1 原片、18–21秒、同一句“切多镜头”、H3 Max。Agent run `33a1c49e-361a-4233-b45f-6c1849cec3ba`；任务 `2627f185-fb96-4af8-a806-d1d632479917`（@13），220积分，FAL inference 9.826秒。Agent 此次明确观察到腾空与 Spark 遮挡，并说明无法确认落地。成片出现明显近侧拍及高位俯拍，较 @11/@12 的原镜头覆盖有可见变化；但原片腾空阶段变为部分地面滑行，轮子特写未清楚落实，因此仅镜头变化有进展，动作保持不通过，不标记完整成功。
+
+复测同时发现 Agent 把输出选区误归零为0–3秒，实际应为1–4秒。随后将检查返回的实测输出时钟签入回执，并在 `retake_video` 中要求结构化 `shot_plan`：连续覆盖实际 outputSelection，缺失、漏段、重叠、越界或 prompt 中明确写错输出秒数，在任何扣费/供应商提交前退回 Agent。检查兼容英文秒数及中日文“秒”；后端只校验，仍不改写最终 prompt。
+
+补完时间检查后做一次不生成视频的实际 Agent 验证，run `cd094308-7fcf-4107-be6b-982441316526`。它读取真实画面并写出1–2、2–3、3–4秒的正确镜头计划，最终 prompt 通过实际校验函数；Agent积分为0，没有再次提交付费生成。因此 @13 成片属于扩写加强版 `f3c9cee8`，不宣称它是后补时间检查版本的新成片，也不声称已证明动作问题修好。
+
+完整成片30.048秒、1280×720、24fps、721帧，完整解码通过；AAC压缩音轨哈希与原片相同。本次用户消息至成片399.774秒（6分40秒），包含本地 Agent 等待及供应商已完成后的轮询延迟；任务总墙钟290.676秒，不能把生成阶段观测243.538秒当成真实模型推理或稳定性能。后续直接查询同一任务完成了交付，没有创建第二条视频任务。
+
+四路同步对比：`http://localhost:3041/expanded-brief/comparison.html`，保留原片、两版旧结果和本次成片，附实际画面观察、生成指令及最终只读校验后的扩写样例。证据在 ignored `artifacts/video-retake/skateboard-matched/expanded-brief/`。最新版代码 `3f98ec18`，Preview：`https://ai-image-editor-72izdjqj8-vegekyd-sys-projects.vercel.app/projects/d78fcc10-2909-4ce6-addf-a49059631a00`，3039本地服务也已更新；未合并或部署生产。
+
+验证：9组针对性测试69项通过，覆盖八帧网格完整像素、镜头时间映射、签名时钟防篡改、错时间计划在计费前拒绝、原样供应商 prompt 和计费/拼接路径；TypeScript及相关检查通过。最终 Vercel 构建成功，10条CRC32C与9条FFmpeg API traces通过。浏览器四路视频 readyState=4，同步采样差小于0.001秒，并能全部定位19.2秒对照新增俯拍。
