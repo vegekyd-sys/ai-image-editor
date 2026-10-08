@@ -42,13 +42,16 @@ describe('Retake interval contract', () => {
     try {
       const src = join(dir, 'source.mp4');
       execFileSync(ffmpeg, ['-v','error','-y','-f','lavfi','-i','color=red:s=320x240:r=24:d=2',
-        '-f','lavfi','-i','color=blue:s=320x240:r=24:d=4','-filter_complex','[0:v][1:v]concat=n=2:v=1:a=0[v]','-map','[v]','-c:v','libx264',src]);
+        '-f','lavfi','-i','color=blue:s=320x240:r=24:d=4','-f','lavfi','-i','sine=frequency=440:duration=6.2','-filter_complex','[0:v][1:v]concat=n=2:v=1:a=0[v]','-map','[v]','-map','2:a','-c:a','aac','-c:v','libx264',src]);
       const frames = await extractRetakeBoundaryFrames(readFileSync(src), planRetake({start:2,end:3},6,'fal-h3-max'),24);
       const { default: sharp } = await import('sharp');
       const color = async (buffer: Buffer) => [...(await sharp(buffer).resize(1,1).raw().toBuffer())];
       expect((await color(frames.start))[2]).toBeGreaterThan(200);
       expect((await color(frames.end))[2]).toBeGreaterThan(200);
-      const inspection = await extractRetakeInspectionFrames(readFileSync(src), planRetake({start:3,end:6},6,'fal-h3-max'),24);
+      const inspection = await extractRetakeInspectionFrames(readFileSync(src), planRetake({start:3.2,end:6.2},6.2,'fal-h3-max'),24);
+      expect(inspection.timestamps.at(-1)).toBeLessThan(6);
+      const tailBoundary = await extractRetakeBoundaryFrames(readFileSync(src), planRetake({start:3.2,end:6.2},6.2,'fal-h3-max'),24);
+      expect((await color(tailBoundary.end))[2]).toBeGreaterThan(200);
       expect(inspection.frames.length).toBeGreaterThan(2);
       expect((await color(inspection.frames.at(-1)!))[2]).toBeGreaterThan(200);
     } finally { rmSync(dir,{recursive:true,force:true}); }

@@ -38,10 +38,22 @@ export async function extractRetakeContext(source: Buffer, plan: RetakePlan): Pr
   })
 }
 
+/** The container can outlast its video track because of audio padding. */
+async function lastSourceFrameTime(file: string, fps: number): Promise<number> {
+  const meta = await probeVideoFile(file, true)
+  const video = (meta.streams as Array<{ codec_type?: string; duration?: string }> | undefined)?.find(stream => stream.codec_type === 'video')
+  const videoDuration = Number(video?.duration)
+  const duration = videoDuration > 0 ? videoDuration : meta.frameCount ? meta.frameCount / fps : meta.duration
+  if (!duration) throw new Error('Cannot measure the last video frame.')
+  // Round down so a millisecond timestamp never seeks past the final frame.
+  return Math.max(0, Math.floor((duration - 1 / fps) * 1000) / 1000)
+}
+
 /** Download once and extract the entire inspection sheet from one local source. */
 export async function extractRetakeInspectionFrames(source: Buffer, plan: RetakePlan, fps: number) {
-  const timestamps = retakeInspectionTimestamps(plan, fps)
   return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
+    const last = await lastSourceFrameTime(join(dir, 'source.mp4'), fps)
+    const timestamps = [...new Set(retakeInspectionTimestamps(plan, fps).map(time => Math.min(time, last)))]
     const frames = await Promise.all(timestamps.map(async (time, index) => {
       const output = join(dir, `inspection-${index}.jpg`)
       await exec(ffmpeg, ['-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-ss', String(time),
@@ -58,7 +70,10 @@ export async function extractRetakeInspectionFrames(source: Buffer, plan: Retake
 export async function extractRetakeSourceFrame(source: Buffer, time: number): Promise<Buffer> {
   return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
     const output = join(dir, 'frame.jpg')
-    await exec(ffmpeg, ['-v','error','-y','-i',join(dir,'source.mp4'),'-ss',String(time),'-frames:v','1',
+    const meta = await probeVideoFile(join(dir, 'source.mp4'), true)
+    const last = await lastSourceFrameTime(join(dir, 'source.mp4'), meta.fps || 30)
+    const sampleTime = Math.min(time, last)
+    await exec(ffmpeg, ['-v','error','-y','-i',join(dir,'source.mp4'),'-ss',String(sampleTime),'-frames:v','1',
       '-vf',"scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuvj420p",'-q:v','3','-threads','1',output],
       {timeout:120_000,maxBuffer:1024*1024})
     return readFile(output)
@@ -71,7 +86,8 @@ export async function extractRetakeBoundaryFrames(source: Buffer, plan: RetakePl
   return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
     const start = plan.outputMode === 'selection' ? Math.round(plan.start * fps) / fps : plan.contextStart
     const end = plan.outputMode === 'selection' ? (Math.round(plan.end * fps) - 1) / fps : plan.contextEnd - 1 / fps
-    const frames = await Promise.all([start, Math.max(start, end)].map(async (time, index) => {
+    const last = await lastSourceFrameTime(join(dir, 'source.mp4'), fps)
+    const frames = await Promise.all([Math.min(start, last), Math.min(Math.max(start, end), last)].map(async (time, index) => {
       const output = join(dir, `boundary-${index}.jpg`)
       await exec(ffmpeg, ['-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-i', join(dir, 'source.mp4'),
         '-ss', String(time), '-frames:v', '1', '-vf', "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuvj420p",
