@@ -140,3 +140,27 @@ Statusbar 在选区模式显示“只改变选中片段的内容，其余部分�
 同一原片/区间进行一次修正版H3试验 `c881193b-0ac8-4840-85f2-195a549353ff`：252积分，总墙钟111.702秒（供应商生成等待70.158秒，拼接12.692秒）。最终成片30.048秒、1280×720、24fps，完整decode通过，原音轨hash一致。19.3秒能看到新增轮子特写，20.3–21.3秒能看到新增俯拍；浏览器三路视频readyState=4，能同步播放至23.5秒。没有严格实现五镜头表，部分地面/空中动作切换仍不够连续，不标记为动作连续性全通过，也不由这一次样本推断通用模型能力。
 
 对比页：`http://localhost:3041/latest-request-comparison.html`；原始 @9 保留。诊断与修正版图帧、job及receipt位于 ignored `artifacts/video-retake/skateboard-matched/latest-user-*`。此次属于本地候选，未合并或部署生产。相关18项测试、TypeScript、Agent startup检查及webpack build/CRC32C/FFmpeg trace通过。
+
+## 2026-10-08：先理解画面，移除后端创意包装
+
+根据用户的新决定，撤销上节候选方案的固定创意 wrapper。Agent 的 Retake 路径先调用 `inspect_retake`，读取选区与两端上下文的实际画面，再结合用户修改要求写最终 prompt。原生视觉 Agent 直接读取六格联系表；文本 Agent 使用视觉分析桥，读取失败则不提交视频生成。`retake_video` 验证检查回执绑定当前用户、项目、run、输入 epoch、源视频、选区与模型，并要求画面观察。旧回执或缺少检查不能进入计费和供应商提交。
+
+Agent 写最终 prompt，后端原样传递，只保留区间裁切、时间坐标、参考材料和拼回完整视频的技术合同。H3 Retake 绕过普通视频生成的默认参考句，保留实测首尾图片并关闭供应商 prompt 扩写。CLI 显式 `video retake --prompt` 仍接收调用者编写的最终指令；在 `makaron chat` 中由 Agent 先检查画面。
+
+实际比较使用同一原片 @1、同一句“把 @1 的 18.00–21.00 秒换成：切多镜头。”、同一 H3 Max 和 Agent 模型。旧流程成功任务 `f5662ddd-2695-41ce-a82e-be8517abfd22`（@11），新流程成功任务 `d5dc435b-1d9b-46e6-a0e1-76b37518fd30`（@12）。新流程检查原片 17、18、19、20、20.958、21.958 秒的真实图帧，观察机器人腾空和 Spark 前景后，编写输出局部 1–4 秒的四机位硬切指令。
+
+| 本次单样本 | 修改前 | 先理解再生成 |
+| --- | ---: | ---: |
+| 用户消息到完整成片 | 101.689 秒 | 119.561 秒 |
+| 画面检查 | 未强制前置检查 | 10.16 秒 |
+| FAL inference 回执 | 9.876 秒 | 9.811 秒 |
+| 实际扣费 | 220 积分 | 220 积分 |
+| 多机位切换效果 | 未通过 | 未通过 |
+
+两版生成片段都主要沿用原片连续镜头，仅动作节奏和细节变化，没有清楚落实指定新机位。两条 FAL 返回视频与保存的 provider patch SHA256 完全一致，不能归因于下载取错结果，也不能将“已检查画面”或供应商完成包装为效果通过。本次机制改动已走通，但这一样本没有证明 H3 编辑效果提升。未追加付费生成来挑选成功样本。
+
+两次先前只读检查失败分别来自视觉桥地区限制及本地动态 worker 旧缓存，均在生成前终止，不扣视频积分；不混入成功样本耗时。修复为原生视觉直读后，仅重启本任务 3039 服务，没有中断运行中的视频任务。两版最终成片均为 30.048 秒、1280×720、24fps、721帧，完整解码通过，原 AAC 压缩音轨哈希一致。
+
+同步对比页：`http://localhost:3041/understand-first/comparison.html`，包含原片/前后成片、实际检查图、原始 Agent 指令、耗时和扣费。证据保存在 ignored `artifacts/video-retake/skateboard-matched/understand-first/`。新版 Preview：`https://ai-image-editor-9wqoajam4-vegekyd-sys-projects.vercel.app/projects/d78fcc10-2909-4ce6-addf-a49059631a00`，代码为 `9a322791`；首次点击 Retake 可展开选区，项目中的实际检查图帧与 @12 成片均已显示。仍未合并或部署生产。
+
+验证：7组针对性测试52项通过，含实际 Agent 检查门禁、跨区间拒绝、最终 FAL payload 不改 prompt、图片参考不丢失、计费和 FFmpeg 拼接；TypeScript、Agent startup、四语言 UI、video reference workflow 检查通过。Vercel Turbopack 构建成功，10条 CRC32C 与9条 FFmpeg API traces通过。浏览器三路视频 readyState=4，可定位18秒并同步播放，采样时间差小于0.001秒。
