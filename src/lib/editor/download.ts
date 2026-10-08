@@ -3,6 +3,7 @@ import type { LocaleContextValue } from '@/lib/i18n';
 import { isNativePhotoLibrarySaveAvailable, saveBlobToNativePhotoLibrary, saveUrlToNativePhotoLibrary } from '@/lib/native-media';
 import { snapFromTimeline } from './timeline-utils';
 import { resolveNativeVideoPlaybackUrl } from '@/lib/video-playback-url';
+import { getOptimizedUrl } from '@/lib/supabase/storage';
 
 export async function checkMediaDownload(): Promise<boolean> {
   const response = await fetch('/api/media/unlock', { cache: 'no-store' });
@@ -82,7 +83,7 @@ export function getDownloadAssetPreview(params: DownloadAssetParams): DownloadAs
   }
   if (snap?.design) return undefined;
   const source = snap?.imageUrl || params.timeline[params.viewIndex];
-  return source ? { source, kind: 'image' } : undefined;
+  return source ? { source: getOptimizedUrl(source), kind: 'image' } : undefined;
 }
 
 export function prepareDownloadAsset(params: DownloadAssetParams, cache?: PreparedDownloadCache): Promise<PreparedDownload> {

@@ -6,6 +6,7 @@ import { useLocale } from '@/lib/i18n';
 import { checkMediaDownload, savePreparedDownload, type DownloadAssetPreview, type PreparedDownload } from '@/lib/editor/download';
 import { preloadWatermarkVideo, watermarkDataUrl, watermarkGeometry, watermarkImage, watermarkVideo } from '@/lib/editor/web-watermark';
 import { isNativeVideoWatermarkAvailable, saveWatermarkedVideoToNativePhotoLibrary } from '@/lib/native-media';
+import { exportImageDownload, imageExportDimensions, inspectImageExport, type ImageExportInfo, type ImageSaveFormat, type ImageSaveSize } from '@/lib/editor/image-export';
 
 interface Props {
   prepare: () => Promise<PreparedDownload>;
@@ -15,9 +16,10 @@ interface Props {
   onSaved: () => void;
   suspended: boolean;
   returningFromCheckout?: boolean;
+  watermarkRequired?: boolean;
 }
 
-export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, onSaved, suspended, returningFromCheckout = false }: Props) {
+export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, onSaved, suspended, returningFromCheckout = false, watermarkRequired = true }: Props) {
   const { t } = useLocale();
   const [asset, setAsset] = useState<PreparedDownload | null>(null);
   const [previewUrl, setPreviewUrl] = useState(preview?.source || '');
@@ -29,6 +31,9 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState(0);
   const [size, setSize] = useState({ width: preview?.width || 1, height: preview?.height || 1 });
+  const [imageInfo, setImageInfo] = useState<ImageExportInfo | null>(null);
+  const [imageSize, setImageSize] = useState<ImageSaveSize>('original');
+  const [imageFormat, setImageFormat] = useState<ImageSaveFormat>('original');
   const [markUrl] = useState(() => watermarkDataUrl());
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(0);
@@ -46,28 +51,32 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
     let url = '';
     let knownAccess: boolean | undefined;
     let preparedKind = preview?.kind;
-    setError('');setAsset(null);setAccessReady(false);setPreviewUrl(preview?.source || '');
+    setError('');setAsset(null);setImageInfo(null);setImageSize('original');setImageFormat('original');setAccessReady(false);setPreviewUrl(preview?.source || '');
     const pending = prepare();
     preparedAsset.current = pending;
     pending.then(next => {
       if (cancelled) return;
       preparedKind = next.kind;
       setAsset(next);
+      if (next.kind === 'image') void inspectImageExport(next.blob).then(info => {
+        if (!cancelled) setImageInfo(info);
+      }).catch(() => {if (!cancelled) setError(t('editor.savePrepareFailed'));});
       if (!preview?.source) {url = URL.createObjectURL(next.blob);setPreviewUrl(url);}
       if (next.kind === 'video' && knownAccess === false && !isNativeVideoWatermarkAvailable()) preloadWatermarkVideo();
     }).catch(() => {if (!cancelled) setError(t('editor.savePrepareFailed'));});
-    checkMediaDownload().then(access => {
+    (watermarkRequired ? checkMediaDownload() : Promise.resolve(true)).then(access => {
       if (cancelled) return;
       knownAccess = access;
       if (!access && preparedKind === 'video' && !isNativeVideoWatermarkAvailable()) preloadWatermarkVideo();
       setPaid(access);setAccessReady(true);
-      setMarkVisible(!access || returningFromCheckout);
+      setMarkVisible(watermarkRequired && (!access || returningFromCheckout));
     }).catch(() => {if (!cancelled) setError(t('editor.savePrepareFailed'));});
     return () => {cancelled = true;if (url) URL.revokeObjectURL(url);exportController.current?.abort();};
-  }, [prepare, preview, attempt, t, returningFromCheckout]);
+  }, [prepare, preview, attempt, t, returningFromCheckout, watermarkRequired]);
 
   // Refresh entitlement when the existing checkout closes or the browser returns from Stripe.
   useEffect(() => {
+    if (!watermarkRequired) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {
@@ -86,7 +95,7 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
     wasSuspended.current = suspended;
     if (!suspended) window.addEventListener('focus', refresh);
     return () => {cancelled = true;clearTimeout(timer);window.removeEventListener('focus', refresh);};
-  }, [suspended, asset, returningFromCheckout]);
+  }, [suspended, asset, returningFromCheckout, watermarkRequired]);
 
   useEffect(() => {
     if (!paid || loading || suspended) return;
@@ -101,7 +110,7 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
       if (event.key !== 'Tab') return;
-      const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)');
+      const controls = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled)');
       if (!controls?.length) return;
       const first = controls[0], last = controls[controls.length - 1];
       if (event.shiftKey && document.activeElement === first) {event.preventDefault();last.focus();}
@@ -121,7 +130,7 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
     try {
       const ready = asset || await preparedAsset.current;
       controller.signal.throwIfAborted();
-      if (paid) {
+      if (paid && watermarkRequired) {
         phase = 'access';
         if (!(await checkMediaDownload())) {setPaid(false);setMarkVisible(true);throw new Error('Access changed');}
       }
@@ -134,8 +143,12 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
           : await watermarkVideo(ready.blob, setProgress, controller.signal);
         controller.signal.throwIfAborted();
         phase = 'save';
-        await savePreparedDownload({ ...ready, blob, filename: !paid && ready.kind === 'image'
-          ? ready.filename.replace(/\.[^.]+$/, '.png') : ready.filename });
+        const prepared = { ...ready, blob, filename: !paid && ready.kind === 'image'
+          ? ready.filename.replace(/\.[^.]+$/, '.png') : ready.filename };
+        const selected = ready.kind === 'image' && imageInfo
+          ? await exportImageDownload(prepared, imageInfo, imageSize, imageFormat) : prepared;
+        controller.signal.throwIfAborted();
+        await savePreparedDownload(selected);
       }
       controller.signal.throwIfAborted();
       onSaved();onClose();
@@ -150,6 +163,10 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
 
   if (suspended) return null;
   const geometry = watermarkGeometry(size.width, size.height);
+  const longEdge = imageInfo ? Math.max(imageInfo.width, imageInfo.height) : 0;
+  const originalTier = longEdge >= 3840 && longEdge <= 4096 ? '4K' : longEdge >= 2000 && longEdge <= 2048 ? '2K' : '';
+  const selectedSize = imageInfo ? imageExportDimensions(imageInfo, imageSize) : null;
+  const nativeFormat = imageInfo?.mimeType === 'image/png' ? 'PNG' : imageInfo?.mimeType === 'image/webp' ? 'WebP' : 'JPG';
   const formatTime = (value: number) => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
   return (
     <div className="fixed inset-0 z-[290] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm" onClick={onClose}>
@@ -173,9 +190,9 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
                 : <video ref={videoRef} src={previewUrl} playsInline preload="auto" className="block w-full h-full"
                   onLoadedMetadata={event => {const v = event.currentTarget;setSize({width:v.videoWidth,height:v.videoHeight});setDuration(v.duration);}}
                   onTimeUpdate={event => setTime(event.currentTarget.currentTime)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />}
-              <img src={markUrl} alt="" aria-hidden="true" data-testid="save-watermark" data-visible={markVisible}
+              {watermarkRequired && <img src={markUrl} alt="" aria-hidden="true" data-testid="save-watermark" data-visible={markVisible}
                 className="absolute pointer-events-none transition-[opacity,filter,transform] duration-700 ease-out motion-reduce:transition-none"
-                style={{opacity:markVisible ? 1 : 0,filter:markVisible ? 'blur(0)' : 'blur(3px)',transform:markVisible ? 'scale(1)' : 'scale(1.04)',width:`${geometry.width / size.width * 100}%`,height:`${geometry.height / size.height * 100}%`,left:`${geometry.left / size.width * 100}%`,top:`${geometry.top / size.height * 100}%`}} />
+                style={{opacity:markVisible ? 1 : 0,filter:markVisible ? 'blur(0)' : 'blur(3px)',transform:markVisible ? 'scale(1)' : 'scale(1.04)',width:`${geometry.width / size.width * 100}%`,height:`${geometry.height / size.height * 100}%`,left:`${geometry.left / size.width * 100}%`,top:`${geometry.top / size.height * 100}%`}} />}
             </div>
             {kind === 'video' && <div className="flex items-center gap-3 pt-2 text-white/60">
               <button type="button" aria-label={t(playing ? 'editor.pausePreview' : 'editor.playPreview')}
@@ -188,15 +205,37 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
               <span className="shrink-0 text-xs tabular-nums">{formatTime(time)} / {formatTime(duration)}</span>
             </div>}
             <p className="pt-3 pb-1 text-center text-xs text-white/50" style={{ visibility: accessReady ? 'visible' : 'hidden' }}>
-              {t(paid ? 'editor.saveCleanCaption' : 'editor.saveWatermarkedCaption')}
+              {t(!watermarkRequired ? 'editor.saveImageCaption' : paid ? 'editor.saveCleanCaption' : 'editor.saveWatermarkedCaption')}
             </p>
           </> : null}
+          {kind === 'image' && imageInfo && <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3" data-testid="image-save-options">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs text-white/60">{t('editor.saveImageSize')}
+                <select value={imageSize} disabled={saving} data-testid="image-save-size" onChange={event => setImageSize(event.target.value as ImageSaveSize)}
+                  className="mt-1.5 block min-h-10 w-full rounded-lg border border-white/15 bg-[#242428] px-2 text-sm text-white">
+                  <option value="original">{t('editor.saveOriginalSize')}{originalTier ? ` · ${originalTier}` : ''}</option>
+                  {longEdge > 2048 && <option value="2k">{t('editor.save2kSize')}</option>}
+                  {longEdge > 1280 && <option value="share">{t('editor.saveShareSize')}</option>}
+                </select>
+              </label>
+              <label className="text-xs text-white/60">{t('editor.saveImageFormat')}
+                <select value={imageFormat} disabled={saving} data-testid="image-save-format" onChange={event => setImageFormat(event.target.value as ImageSaveFormat)}
+                  className="mt-1.5 block min-h-10 w-full rounded-lg border border-white/15 bg-[#242428] px-2 text-sm text-white">
+                  <option value="original">{t('editor.saveOriginalFormat')} · {nativeFormat}</option>
+                  <option value="png">{t('editor.savePngFormat')}</option>
+                  <option value="jpeg">{t('editor.saveJpgFormat')}</option>
+                </select>
+              </label>
+            </div>
+            <p className="mt-2 text-xs tabular-nums text-white/60" data-testid="image-save-dimensions">{selectedSize?.width} × {selectedSize?.height}</p>
+            {imageFormat === 'jpeg' && <p className="mt-1 text-xs text-white/50">{t('editor.saveJpgTransparency')}</p>}
+          </div>}
           {error && <div className="py-3 text-sm text-red-300" role="alert">{error}
-            {(!asset || !accessReady) && <button type="button" className="ml-2 underline" onClick={() => setAttempt(value => value + 1)}>{t('misc.retry')}</button>}
+            {(!asset || !accessReady || (kind === 'image' && !imageInfo)) && <button type="button" className="ml-2 underline" onClick={() => setAttempt(value => value + 1)}>{t('misc.retry')}</button>}
           </div>}
         </div>
         <div className="px-5 pt-3 pb-5">
-          <button type="button" disabled={loading || saving || !accessReady || (!asset && !preview)} onClick={() => void save()}
+          <button type="button" disabled={loading || saving || !accessReady || (!asset && !preview) || (kind === 'image' && !imageInfo)} onClick={() => void save()}
             data-testid={paid ? 'save-clean' : 'save-free'} className="mkr-liquid-pill flex min-h-12 w-full items-center justify-center gap-2 rounded-full border border-fuchsia-400/25 bg-fuchsia-500/20 px-5 text-sm font-medium text-white transition hover:bg-fuchsia-500/30 disabled:opacity-40">
             {saving ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : <Download size={17} aria-hidden="true" />}
             {saving ? t('editor.saveProcessing', Math.round(progress * 100)) : t('project.save')}
