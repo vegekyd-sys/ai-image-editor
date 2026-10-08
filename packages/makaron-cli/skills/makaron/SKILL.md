@@ -346,6 +346,15 @@ npx makaron-cli video status <taskId>
 npx makaron-cli video retake --video input.mp4 --start 2 --end 4 --prompt "Make the book red" --model seedance-2.5 --project <id> --wait --json
 ```
 
+Video segment editing also works directly from natural-language chat, without a GUI selection:
+
+```bash
+npx makaron-cli chat --project <id> "把 @1 的 18–21 秒切成多机位，其余不变"
+npx makaron-cli chat --project <id> "把 @1 的最后三秒改成夜景"
+```
+
+Chat resolves the source/range, inspects the footage, expands the edit instruction, and delivers the complete video. It asks only when the source or scope remains ambiguous. Precise cuts, subtitles, dubbing and extension also start from chat. Local editing accepts a 0.1–15s range in a source up to 120s; longer scopes use the appropriate whole-video workflow rather than silently shortening the request.
+
 `video retake` uses original-source seconds, accepts a 0.1–15s range in a source up to 120s, and automatically replaces only that range while preserving original audio and duration. Models: `fal-h3-max` (default), `seedance-2.5`. For sources shorter than 2 seconds, explicitly use Seedance. Local files require `--project`. Keep the root taskId and request ID; resume polling or replay the same request ID instead of paying for another generation.
 
 `video create` returns a provider task id and does not create or update a Makaron project timeline. For project/timeline video editing, use:

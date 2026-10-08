@@ -1,8 +1,8 @@
 ---
 name: video-segment-edit
 description: >
-  Locate a user-provided screenshot/frame inside a video, regenerate only the
-  nearby problem segment, and assemble it back into the original MP4.
+  Edit a video interval from natural-language times or a verified scene/frame;
+  understand the footage, regenerate that range and deliver the complete video.
 allowed-tools: inspect_retake retake_video analyze_video preview_frame run_code generate_animation write_file
 metadata:
   makaron:
@@ -17,8 +17,10 @@ metadata:
 
 ## Known time interval: Local video editing (局部编辑 / Edit segment)
 
-When the user has selected a start/end interval in the GUI or supplied numeric
-seconds with an edit instruction, call `inspect_retake` first to understand the
+GUI selection is optional. Resolve explicit seconds/timecodes, "first/last N
+seconds", or "first half" from the visible source duration; convert clip-relative
+times to original-source seconds using the source offset. Briefly state the
+resolved interval. When an interval is known from chat, CLI or the GUI, call `inspect_retake` first to understand the
 selected action and boundaries, then call `retake_video` with the inspection
 receipt and a scene-informed expanded instruction. If inspection fails, report
 the failure instead of generating blindly. `retake_video` owns source
@@ -29,8 +31,13 @@ for a second merge confirmation. Use original-source seconds, including a
 bounded external clip's source offset. Respect the model explicitly selected
 by the user; supported models are Seedance 2.5 and FAL H3 Max.
 
-The screenshot localization workflow below remains useful when the interval is
-unknown, or when the user explicitly requests a legacy workflow comparison.
+For a scene/action description such as "机器人起跳那段", use analyze_video and
+preview_frame to locate the actual action, then inspect and edit its bounded
+interval. Ask only if multiple scenes match or the requested scope is unclear.
+Never demand a GUI selection. Requests over 15s or sources over 120s need the
+appropriate whole-video/long-video workflow; never silently shorten them.
+
+The screenshot localization workflow below is for an unknown frame location.
 
 Use this workflow when the user wants to fix only a small part of an existing
 video, especially when they provide a screenshot/frame and say something like:
@@ -77,9 +84,12 @@ Treat `--skill video-segment-edit` as equivalent to the CUI skill picker. Do not
 explain the skill mechanism to the user. If the screenshot is missing, say:
 "把那一帧截图作为 --image 传进来，或者告诉我具体秒数。"
 
-When a generated patch clip finishes, rely on `completion_actions` so the CLI can
-print the exact next `makaron chat --project ...` command. Keep that action
-human-readable and include the original media marker plus numeric replace window.
+Ordinary natural-language CLI requests need no skill flag or GUI interaction:
+
+`makaron chat --project <id> "把 @1 的 18–21 秒切成多机位，其余不变"`
+
+Once located, use inspect_retake and retake_video. Poll the root task and deliver
+the complete result automatically, without a separate merge command.
 
 ## Step 1 - Resolve the Frame Anchor
 
@@ -165,138 +175,30 @@ Then compare the screenshot with the best candidates visually, or call
 Do not spend many turns on perfect matching. If two candidates are plausible,
 ask the user which one is the frame they meant.
 
-## Step 4 - Build the Edit Window
+## Step 4 - Resolve the Interval and Edit
 
-Start from the verified timestamp: the `analyze_video` timestamp, unless the
-local visual cross-check overrode it.
+Use the verified action/window, staying inside the visible source range and the
+same scene when possible. Choose the smallest range that contains the requested
+change (0.1–15 seconds); a timestamp-only repair defaults to a short window around
+that moment, not everything after it. The product interval does not need to match
+a provider's generation minimum: the tool owns contextual padding and trimming.
 
-Default window:
+State the resolved source range briefly. Call inspect_retake for that exact
+source/range/model, view its frames and boundary states, then expand the requested
+change and call retake_video with the returned receipt and output-local timing.
+If inspection fails, report it; do not generate blindly. Respect a request for
+inspection/planning only and do not submit a paid generation in that case.
 
-- SeeDance/default: at least 4 seconds, centered on the timestamp when possible
-- Kling: at least 5 seconds, centered on the timestamp when possible
-- clamp to the source video boundaries
+The user's clear edit instruction authorizes this operation. Do not require GUI
+selection, extract before/segment/after files, call generate_animation for a
+separate patch, or ask for a second merge confirmation. retake_video owns context,
+replacement, original audio, and full-video delivery. Poll the returned root task;
+a delivery retry must not create another provider generation.
 
-If the returned `window` is usable and agrees with the verified timestamp, treat
-it as the visual evidence window, then expand it to the selected model minimum
-before generation. If the local visual cross-check overrode the timestamp, ignore
-the old `analyze_video.window` and center the window on the verified timestamp.
-Keep it small after that; for local repair, 4-5 seconds is usually enough.
+## Completion
 
-If the screenshot is near a hard scene cut, keep the window inside that scene.
-Use `preview_frame` at the middle of the proposed window to verify it contains
-the problem.
-
-## Step 5 - Extract the Segment
-
-Use `run_code({ runtime: "node", media_refs: [media_index] })` to cut:
-
-- `before.mp4`: source from 0 to window start
-- `segment.mp4`: source from window start to window end
-- `after.mp4`: source from window end to source end
-
-The `segment.mp4` is the reference clip sent to video generation.
-
-For model preparation chunks, keep them in workspace; do not publish them to the
-timeline yet.
-
-## Step 6 - Regenerate the Segment
-
-Call `generate_animation` on the segment clip only.
-
-Use the `segment.mp4` workspace output as the single video reference:
-
-- For `generate_animation`, use the provider URL returned next to the
-  `segment.mp4` workspace path as `video_ref_url`; this URL is only for the
-  external video model, not for FFmpeg or workspace reuse. Use
-  `video_ref_type: "feature"`.
-- The script should say "参考刚裁出的 segment.mp4 这一段..." in normal language.
-- Do not reference the original full video, `before.mp4`, or `after.mp4` in
-  `generate_animation`.
-- Do not write `<<<media_N>>>` as if it were the segment unless you first
-  published that exact segment to the timeline and verified its new Media Index.
-- If the project already contains the original video as `<<<media_N>>>`, do not
-  include that marker in the generation script for the patch. It will route the
-  full video into the model again.
-- Add `completion_actions` to the `generate_animation` call so the finished
-  patch clip shows a clear next step in CUI/CLI. The default action should tell
-  the agent to merge the generated patch back into the source video at the edit
-  window, preserving original audio and publishing the full MP4.
-- The action prompt must include the exact replace start, replace end, and
-  replacement duration. If the generated patch is longer than the window, trim it
-  to the replacement duration before concatenating. Never append the full patch
-  clip after `before.mp4`; the final duration should match the original video.
-- Prefer source media markers and workspace paths over raw URLs in the action prompt. Say
-  `原视频 <<<media_N>>>`, `replaceStart`, `replaceEnd`, and
-  `replacementDuration`. Do not say only "`before.mp4` URL is ..."; that makes
-  the next agent rediscover the source and often causes retries.
-
-Example action:
-
-`completion_actions: [{ label: "拼回完整视频", description: "替换 7.5-12.5 秒，输出仍是原视频时长", prompt: "把刚生成的新片段作为 patch，拼回原视频 <<<media_2>>> 的 7.5-12.5 秒。replaceStart=7.5，replaceEnd=12.5，replacementDuration=5.0。先把 patch 精确裁/对齐到 5.0 秒，再用 FFmpeg 替换原视频这一段；保留原视频音频和前后内容，最终 MP4 总时长必须等于原视频时长，不要把 patch 直接追加到 before.mp4 后面。", policy: "confirm" }]`
-
-Script style:
-
-- Keep it short and concrete.
-- Reference the segment video.
-- Say exactly what to fix.
-- Preserve camera, framing, character identity, motion, lighting, and continuity.
-- Do not describe a new scene unless the user asked for a new scene.
-
-If the user clearly said to proceed, you may direct-submit. Otherwise show the
-short segment script and wait for confirmation, following the normal video
-rendering gate.
-
-If `generate_animation` says multiple reference videos would be submitted, stop
-and rewrite the call so that only the segment clip is passed.
-
-## Step 7 - Assemble Back Into the Full Video
-
-When the patch clip finishes, use one `run_code({ runtime: "node" })` call with
-`media_refs` for the original source video and the generated patch video.
-
-Preferred assembly graph:
-
-- cut original `0 -> replaceStart`,
-- trim/fit patch to `replacementDuration`,
-- cut original `replaceEnd -> sourceEnd`,
-- concatenate `before + fittedPatch + after`,
-- preserve the original audio bed unless the user asked for new audio.
-
-Do not rely on `before.mp4` / `after.mp4` filenames from an earlier turn unless
-they are exact workspace outputs returned in the current tool history. The stable
-handoff is original media index + patch media index + numeric replace window.
-
-Do not directly stream-copy concatenate provider output. First normalize every
-video leg to the original video's width, height, fps, SAR, and pixel format. A
-provider patch may come back at a nearby but different size such as 864x496.
-
-Audio rule:
-
-- If the user did not ask for new audio, keep the original segment audio under
-  the generated patch video.
-- If the patch has no audio, do not leave the final MP4 with a broken or missing
-  audio section; use the original `segment.mp4` audio for that window.
-
-Export H.264/AAC/yuv420p with `-movflags +faststart`.
-
-Publish only the final full MP4 to the timeline:
-
-`write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: 1 })`
-
-Do not call both `write_file({ fromLastRunCode: true })` and
-`write_file({ fromWorkspaceOutputs: true })` for the same final MP4. Pick one
-publish path, preferably `fromWorkspaceOutputs` for FFmpeg outputs, so the same
-video is not added twice.
-
-Do not publish intermediate chunks unless the user asks.
-
-## Completion Checklist
-
-Before saying it is done:
-
-- You have a located timestamp or the user confirmed the frame.
-- You verified the edit window contains the problematic frame.
-- You regenerated only the small segment.
-- You assembled a full replacement MP4.
-- You published the final full video snapshot to the timeline.
-- You briefly say what seconds were replaced, e.g. "我替换了 5.8-8.7 秒这一段。"
+Confirm the delivered complete video is playable and the requested change is
+visible in the replaced interval, with coherent opening/ending action. Report the
+actual replaced seconds and any failure honestly. Provider completion alone is
+not successful editing. Precise cuts, subtitles, audio replacement and extension
+use their dedicated tools, also from natural-language instructions.

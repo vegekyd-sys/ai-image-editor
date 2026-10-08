@@ -102,10 +102,10 @@ describe('Retake playback timeline', () => {
   });
   it('opens selection on the existing timeline while keeping the Retake pill in place', () => {
     const anim = {id:'v',projectId:'p',taskId:'',videoUrl:'https://example.com/v.mp4',prompt:'',snapshotUrls:[],status:'completed',duration:12,createdAt:new Date().toISOString()} as ProjectAnimation;
-    const begin=vi.fn(), frame=vi.fn();
-    render(<LocaleProvider><VideoResultCard animations={[anim]} selectedVideoId="v" onSelectVideo={vi.fn()} onCreateNew={vi.fn()} onAbandon={vi.fn()} onViewDetail={vi.fn()} onRetake={begin} onFrameEdit={frame} currentTime={3} currentDuration={12} /></LocaleProvider>);
+    const begin=vi.fn();
+    render(<LocaleProvider><VideoResultCard animations={[anim]} selectedVideoId="v" onSelectVideo={vi.fn()} onCreateNew={vi.fn()} onAbandon={vi.fn()} onViewDetail={vi.fn()} onRetake={begin} currentTime={3} currentDuration={12} /></LocaleProvider>);
     fireEvent.click(screen.getByTestId('video-frame-edit-pill').querySelector('button')!);
-    expect(begin).toHaveBeenCalledWith(anim,3); expect(frame).not.toHaveBeenCalled();
+    expect(begin).toHaveBeenCalledWith(anim,3);
     fireEvent.click(screen.getByTestId('video-retake-pill-edit'));
     expect(begin).toHaveBeenCalledTimes(2); expect(begin).toHaveBeenLastCalledWith(anim,3);
     expect(screen.queryByTestId('video-retake-timeline')).toBeNull();

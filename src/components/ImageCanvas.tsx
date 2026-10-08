@@ -122,13 +122,11 @@ interface ImageCanvasProps {
   /** Called as the current video playback position changes. */
   onVideoTimeUpdate?: (time: number, duration: number) => void;
   /** Incrementing token from parent to request a current-frame capture. */
-  videoFrameCaptureRequest?: number;
   videoRetakeRange?: VideoRetakeRange | null;
   videoDurationHint?: number;
   onVideoRetakeChange?: (range: VideoRetakeRange) => void;
   videoSeekRequest?: { time: number; token: number };
   /** Called after the current video frame is captured from the playing element. */
-  onVideoFrameCaptured?: (dataUrl: string, time: number, duration: number) => void;
 }
 
 export default function ImageCanvas({
@@ -161,12 +159,10 @@ export default function ImageCanvas({
   videoTimelineIndices,
   onVideoPosterCapture,
   onVideoTimeUpdate,
-  videoFrameCaptureRequest,
   videoSeekRequest,
   videoRetakeRange = null,
   videoDurationHint,
   onVideoRetakeChange,
-  onVideoFrameCaptured,
 }: ImageCanvasProps) {
   const { t } = useLocale();
   const videoRenderTimeHint = isRemotionExportTaskId(videoTaskId)
@@ -272,8 +268,6 @@ export default function ImageCanvas({
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
   const capturedVideoPosterUrlRef = useRef<string | null>(null);
-  const lastCaptureRequestRef = useRef<number | undefined>(videoFrameCaptureRequest);
-  const [frameCaptureFeedback, setFrameCaptureFeedback] = useState(false);
   const controlsHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const seekBarRef = useRef<HTMLDivElement>(null);
   const seekDragging = useRef(false);
@@ -332,53 +326,6 @@ export default function ImageCanvas({
     ro.observe(container);
     return () => ro.disconnect();
   }, [updateImageRect]);
-
-  useEffect(() => {
-    if (videoFrameCaptureRequest === undefined) return;
-    if (lastCaptureRequestRef.current === undefined) {
-      lastCaptureRequestRef.current = videoFrameCaptureRequest;
-      return;
-    }
-    if (lastCaptureRequestRef.current === videoFrameCaptureRequest) return;
-    lastCaptureRequestRef.current = videoFrameCaptureRequest;
-    setFrameCaptureFeedback(true);
-
-    const video = videoRef.current;
-    if (!video) {
-      window.setTimeout(() => setFrameCaptureFeedback(false), 760);
-      return;
-    }
-    try {
-      video.pause();
-      const canvas = document.createElement('canvas');
-      const videoWidth = video.videoWidth || naturalDims.w || 1280;
-      const videoHeight = video.videoHeight || naturalDims.h || 720;
-      canvas.width = videoWidth;
-      canvas.height = videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        window.setTimeout(() => setFrameCaptureFeedback(false), 760);
-        return;
-      }
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-      const sourceStart = Number.isFinite(videoClipStart) ? Math.max(0, videoClipStart || 0) : 0;
-      const sourceEnd = Number.isFinite(videoClipEnd) && (videoClipEnd || 0) > sourceStart
-        ? Number(videoClipEnd)
-        : undefined;
-      const capturedTime = Math.max(0, video.currentTime - sourceStart);
-      const sourceDuration = Number.isFinite(video.duration) ? video.duration : sourceStart + videoDuration;
-      const capturedDuration = Math.max(0, Math.min(sourceDuration, sourceEnd ?? sourceDuration) - sourceStart);
-      setFrameCaptureFeedback(true);
-      window.setTimeout(() => {
-        setFrameCaptureFeedback(false);
-        onVideoFrameCaptured?.(dataUrl, capturedTime, capturedDuration);
-      }, 760);
-    } catch (e) {
-      console.warn('[ImageCanvas] current video frame capture failed:', e);
-      setFrameCaptureFeedback(false);
-    }
-  }, [videoFrameCaptureRequest, onVideoFrameCaptured, videoDuration, videoClipStart, videoClipEnd, naturalDims.w, naturalDims.h]);
 
   const SWIPE_THRESHOLD = 40;
 
@@ -1460,61 +1407,6 @@ export default function ImageCanvas({
                 <div className="bg-black/60 backdrop-blur-sm rounded-2xl px-6 py-4 text-center">
                   <p className="text-white/80 text-sm">{t('canvas.videoExpired')}</p>
                 </div>
-              </div>
-            )}
-
-            {frameCaptureFeedback && (
-              <div
-                data-testid="video-frame-capture-feedback"
-                data-capture-state="captured"
-                className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center"
-                style={{
-                  animation: 'frameCaptureOverlay 760ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
-                  background: 'rgba(0,0,0,0.16)',
-                  backdropFilter: 'saturate(1.06) brightness(1.04)',
-                }}
-              >
-                <div
-                  className="rounded-[20px]"
-                  style={{
-                    position: 'absolute',
-                    inset: 20,
-                    border: '1px solid rgba(255,255,255,0.62)',
-                    boxShadow: 'inset 0 0 0 1px rgba(217,70,239,0.18), 0 0 36px rgba(217,70,239,0.28)',
-                    animation: 'frameCaptureReticle 760ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
-                  }}
-                />
-                <div
-                  className="rounded-full px-3.5 py-1.5 text-[13px] font-semibold text-white"
-                  style={{
-                    background: 'rgba(10,10,10,0.68)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    boxShadow: '0 8px 28px rgba(0,0,0,0.24)',
-                    backdropFilter: 'blur(12px)',
-                    animation: 'frameCaptureBadge 760ms cubic-bezier(0.2, 0.8, 0.2, 1) both',
-                  }}
-                >
-                  {t('video.frameCapturedShort')}
-                </div>
-                <style>{`
-                  @keyframes frameCaptureOverlay {
-                    0% { opacity: 0; transform: scale(1.006); }
-                    18% { opacity: 1; transform: scale(1); }
-                    72% { opacity: 1; transform: scale(1); }
-                    100% { opacity: 0; transform: scale(0.996); }
-                  }
-                  @keyframes frameCaptureReticle {
-                    0% { opacity: 0; transform: scale(1.045); }
-                    22% { opacity: 1; transform: scale(1); }
-                    100% { opacity: 0; transform: scale(0.985); }
-                  }
-                  @keyframes frameCaptureBadge {
-                    0% { opacity: 0; transform: translateY(8px) scale(0.96); }
-                    22% { opacity: 1; transform: translateY(0) scale(1); }
-                    68% { opacity: 1; transform: translateY(0) scale(1); }
-                    100% { opacity: 0; transform: translateY(-4px) scale(0.98); }
-                  }
-                `}</style>
               </div>
             )}
 

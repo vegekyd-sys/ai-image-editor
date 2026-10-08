@@ -11,7 +11,7 @@ import ImageCanvas from '@/components/ImageCanvas';
 import { getEditorCanvasKey } from '@/lib/editor/canvas-key';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
-import AgentChatView, { type ComposerDraftAttachment, type PreferredModel } from '@/components/AgentChatView';
+import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import CreditPopup from '@/components/CreditPopup';
 import ShareButton from '@/components/ShareButton';
@@ -75,12 +75,6 @@ function isPreviewGenerationStatus(status: string): boolean {
   return PREVIEW_STATUS_PREFIXES.some((prefix) => status.startsWith(prefix));
 }
 
-
-function formatFrameEditTime(seconds: number) {
-  if (!seconds || !isFinite(seconds)) return '0:00';
-  const mins = Math.floor(seconds / 60);
-  return `${mins}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
-}
 
 interface EditorProps {
   projectId?: string;
@@ -373,11 +367,7 @@ export default function Editor({
   }, [viewIndex, selectedVideoId]);
   const [videoGuiTime, setVideoGuiTime] = useState(0);
   const [videoGuiDuration, setVideoGuiDuration] = useState(0);
-  const [videoFrameCaptureRequest, setVideoFrameCaptureRequest] = useState(0);
   const [videoSeekRequest, setVideoSeekRequest] = useState<{ time: number; token: number }>();
-  const [cuiDraftText, setCuiDraftText] = useState('');
-  const [cuiDraftAttachments, setCuiDraftAttachments] = useState<ComposerDraftAttachment[]>([]);
-  const pendingFrameEditRef = useRef<{ anim: ProjectAnimation; time: number; mediaIndex: number; prompt: string } | null>(null);
 
   // Sync state when initialSnapshots/Messages props change (Supabase fetch or cache)
   useEffect(() => {
@@ -1864,8 +1854,6 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // CUI send: if annotations exist, merge them; otherwise normal chat
   const handleCuiSend = async (text: string, imgs?: string[], videos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => {
     if (gateInteraction()) return;
-    setCuiDraftText('');
-    setCuiDraftAttachments([]);
     if (annotationMode && annotationEntries.length > 0) {
       await sendWithAnnotations(text);
       return;
@@ -3176,41 +3164,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   const handleVideoRetake = useCallback((anim: ProjectAnimation, start: number, end: number) => {
     const snapIndex = snapshotsRef.current.findIndex(s => s.id === anim.id);
     if (snapIndex < 0) return false;
-    pendingFrameEditRef.current = null;
-    setCuiDraftAttachments([]);
     setVideoRetakeSelection({ anim, start, end });
     setViewMode('cui');
     return true;
   }, []);
-
-  const handleVideoFrameEdit = useCallback((anim: ProjectAnimation, time: number) => {
-    if (gateInteraction()) return;
-    if (!projectId) { console.warn('video frame edit skipped: no projectId'); return; }
-    if (isAgentActive) { console.warn('video frame edit skipped: agent busy'); return; }
-
-    const duration = videoGuiDuration || anim.duration || 0;
-    const safeTime = Math.max(0, Math.min(Number.isFinite(duration) && duration > 0 ? duration : time, Number.isFinite(time) ? time : 0));
-    const snapIndex = snapshotsRef.current.findIndex(s => s.id === anim.id);
-    const mediaIndex = snapIndex >= 0 ? snapIndex + 1 : Math.max(1, viewIndexRef.current + 1);
-    const timeLabel = formatFrameEditTime(safeTime);
-    const prompt = t('video.frameEditDraftPrompt', mediaIndex, timeLabel);
-
-    pendingFrameEditRef.current = { anim, time: safeTime, mediaIndex, prompt };
-    setVideoFrameCaptureRequest(v => v + 1);
-  }, [gateInteraction, projectId, isAgentActive, videoGuiDuration, t]);
-
-  const handleVideoFrameCaptured = useCallback((dataUrl: string, time: number) => {
-    const pending = pendingFrameEditRef.current;
-    if (!pending || !projectId) return;
-    pendingFrameEditRef.current = null;
-
-    const timeLabel = formatFrameEditTime(time);
-    const attachmentId = `frame-edit-${pending.anim.id}-${Math.round(time * 1000)}-${Date.now()}`;
-    setCuiDraftText('');
-    setCuiDraftAttachments([{ id: attachmentId, type: 'image', data: dataUrl, thumbnail: dataUrl }]);
-    requestAnimationFrame(() => setCuiDraftText(pending.prompt || t('video.frameEditDraftPrompt', pending.mediaIndex, timeLabel)));
-    setViewMode('cui');
-  }, [projectId, t]);
 
   const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
     if (!posterDataUrl) return;
@@ -3610,14 +3567,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     onDesignPoster: handleDesignPoster,
     onMusicSelect: handleMusicSelect,
     onArtifactAction: handleArtifactAction,
-    draftText: cuiDraftText,
     retakeContext: videoRetakeSelection && retakeSnapshotIndex >= 0 ? {
       mediaIndex: retakeSnapshotIndex + 1,
       start: videoRetakeSelection.start + retakeSourceOffset,
       end: videoRetakeSelection.end + retakeSourceOffset,
     } : undefined,
     onClearRetake: () => setVideoRetakeSelection(null),
-    draftAttachments: cuiDraftAttachments.length > 0 ? cuiDraftAttachments : undefined,
     hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling' || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing'),
     skills: availableSkills,
     selectedSkill,
@@ -3836,12 +3791,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   setVideoGuiTime(time);
                   if (duration && Number.isFinite(duration)) setVideoGuiDuration(duration);
                 }}
-                videoFrameCaptureRequest={videoFrameCaptureRequest}
                 videoSeekRequest={videoSeekRequest}
                 videoRetakeRange={videoRetakeSelection}
                 videoDurationHint={(isViewingVideoV2 ? currentSnap?.videoMeta?.duration : currentVideo?.duration) ?? undefined}
                 onVideoRetakeChange={range => setVideoRetakeSelection(previous => previous ? { ...previous, ...range } : null)}
-                onVideoFrameCaptured={handleVideoFrameCaptured}
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
@@ -4198,7 +4151,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         videoResolution: anim.videoResolution || 'auto',
                       });
                     }}
-                    onFrameEdit={handleVideoFrameEdit}
                     retakeActive={Boolean(videoRetakeSelection)}
                     onRetake={(anim, time) => {
                       if (videoRetakeSelection) { setVideoRetakeSelection(null); return; }

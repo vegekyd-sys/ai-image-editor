@@ -372,8 +372,7 @@ const en = {
   'video.detail': 'Detail',
   'video.count': (n: number) => `${n} video${n !== 1 ? 's' : ''}`,
   'video.sourceCount': (n: number) => `${n} source${n !== 1 ? 's' : ''}`,
-  'video.frameEdit': 'Edit video here',
-  'video.frameEditHint': (time: string) => `Current ${time}`,
+  'video.retakeCurrent': (time: string) => `Current ${time}`,
   'statusbar.chat': 'Chat',
   'video.retakeMove': 'Move the selected interval',
   'video.retakeModel': 'Model',
@@ -392,9 +391,6 @@ const en = {
   'video.retakeChatPlaceholder': 'Describe the changes to this segment…',
   'video.retakeClearSelection': 'Clear segment selection',
   'video.retakeDraftPrompt': (mediaIndex: number, start: string, end: string) => `Replace ${start}–${end} seconds of @${mediaIndex} with: `,
-  'video.frameCaptured': (time: string) => `I captured the frame at ${time}. Check it, then tell me what to change.`,
-  'video.frameCapturedShort': 'Frame saved',
-  'video.frameEditDraftPrompt': (mediaIndex: number, time: string) => `@${mediaIndex} ${time} edit this video starting from this frame, `,
 
   // Animate sheet
   'animate.title': 'Generate video',

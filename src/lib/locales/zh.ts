@@ -372,8 +372,7 @@ const zh = {
   'video.detail': '详情',
   'video.count': (n: number) => `视频 · ${n} 个`,
   'video.sourceCount': (n: number) => `素材 · ${n} 个`,
-  'video.frameEdit': '从这帧改视频',
-  'video.frameEditHint': (time: string) => `当前 ${time}`,
+  'video.retakeCurrent': (time: string) => `当前 ${time}`,
   'statusbar.chat': '聊天',
   'video.retakeMove': '移动整个选区',
   'video.retakeModel': '模型',
@@ -392,9 +391,6 @@ const zh = {
   'video.retakeChatPlaceholder': '描述这一段要怎么改…',
   'video.retakeClearSelection': '取消片段选择',
   'video.retakeDraftPrompt': (mediaIndex: number, start: string, end: string) => `把 @${mediaIndex} 的 ${start}–${end} 秒换成：`,
-  'video.frameCaptured': (time: string) => `我截到了 ${time} 这一帧。你可以确认一下，再告诉我具体怎么改。`,
-  'video.frameCapturedShort': '已截取当前帧',
-  'video.frameEditDraftPrompt': (mediaIndex: number, time: string) => `@${mediaIndex} ${time} 从这一帧开始修改这个视频，`,
 
   // Animate sheet
   'animate.title': '生成视频',

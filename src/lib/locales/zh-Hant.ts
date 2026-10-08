@@ -410,8 +410,7 @@ const zhHant = {
   'video.detail': '詳細資料',
   'video.count': (n: number) => `影片 · ${n} 個`,
   'video.sourceCount': (n: number) => `素材 · ${n} 個`,
-  'video.frameEdit': '從這一幀編輯影片',
-  'video.frameEditHint': (time: string) => `目前 ${time}`,
+  'video.retakeCurrent': (time: string) => `目前 ${time}`,
   'statusbar.chat': '聊天',
   'video.retakeMove': '移動整個選區',
   'video.retakeModel': '模型',
@@ -430,9 +429,6 @@ const zhHant = {
   'video.retakeChatPlaceholder': '描述這一段要怎麼改…',
   'video.retakeClearSelection': '取消片段選擇',
   'video.retakeDraftPrompt': (mediaIndex: number, start: string, end: string) => `把 @${mediaIndex} 的 ${start}–${end} 秒換成：`,
-  'video.frameCaptured': (time: string) => `我擷取了 ${time} 這一幀。請先確認，再告訴我具體要如何修改。`,
-  'video.frameCapturedShort': '已擷取目前影格',
-  'video.frameEditDraftPrompt': (mediaIndex: number, time: string) => `@${mediaIndex} ${time} 從這一幀開始修改這段影片，`,
 
   // Animate sheet
   'animate.title': '產生影片',

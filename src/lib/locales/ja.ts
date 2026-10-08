@@ -409,8 +409,7 @@ const ja = {
   'video.detail': '詳細',
   'video.count': (n: number) => `動画・${n}件`,
   'video.sourceCount': (n: number) => `素材・${n}件`,
-  'video.frameEdit': 'このフレームから編集',
-  'video.frameEditHint': (time: string) => `現在 ${time}`,
+  'video.retakeCurrent': (time: string) => `現在 ${time}`,
   'statusbar.chat': 'チャット',
   'video.retakeMove': '選択区間全体を移動',
   'video.retakeModel': 'モデル',
@@ -429,9 +428,6 @@ const ja = {
   'video.retakeChatPlaceholder': 'この区間をどう変更しますか…',
   'video.retakeClearSelection': '区間の選択を解除',
   'video.retakeDraftPrompt': (mediaIndex: number, start: string, end: string) => `@${mediaIndex} の ${start}～${end}秒を次の内容に変更：`,
-  'video.frameCaptured': (time: string) => `${time}のフレームを切り出しました。確認して、変更内容を教えてください。`,
-  'video.frameCapturedShort': 'フレームを保存しました',
-  'video.frameEditDraftPrompt': (mediaIndex: number, time: string) => `@${mediaIndex} ${time} このフレームから動画を編集して、`,
 
   // Animate sheet
   'animate.title': '動画を生成',

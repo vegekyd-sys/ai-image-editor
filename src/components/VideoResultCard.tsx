@@ -31,7 +31,6 @@ interface VideoResultCardProps {
   onCreateNew: () => void;
   onAbandon: (taskId: string) => void;
   onRetry?: (anim: ProjectAnimation) => void;
-  onFrameEdit?: (anim: ProjectAnimation, time: number) => void;
   onRetake?: (anim: ProjectAnimation, time: number) => void;
   retakeActive?: boolean;
   onSeek?: (time: number) => void;
@@ -43,7 +42,7 @@ interface VideoResultCardProps {
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onRetake, retakeActive = false, onViewDetail, currentTime = 0, currentDuration = 0, sourceOffset = 0, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onAbandon, onRetake, retakeActive = false, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
 
@@ -77,8 +76,7 @@ export default function VideoResultCard({
   const thumbSize = isDesktop ? 64 : 72;
   const cardWidth = isDesktop ? 176 : 200;
   const detailWidth = isDesktop ? 40 : 44;
-  const frameEditWidth = cardWidth + detailWidth;
-  const frameEditAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
+  const retakeAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
   const allSourceUploads = all.length > 0 && all.every(isSourceUpload);
 
   const selectedPillRef = useRef<HTMLDivElement>(null);
@@ -257,7 +255,7 @@ export default function VideoResultCard({
           </div>
         )}
 
-        {frameEditAnim && (onFrameEdit || onRetake) && (
+        {retakeAnim && onRetake && (
           <div
             data-testid="video-frame-edit-pill"
             data-active={retakeActive}
@@ -266,15 +264,14 @@ export default function VideoResultCard({
               background: retakeActive
                 ? 'linear-gradient(145deg, rgba(217,70,239,0.14), rgba(12,12,16,0.46))'
                 : 'linear-gradient(145deg, rgba(255,255,255,0.045), rgba(12,12,16,0.42))',
-              width: onRetake ? undefined : frameEditWidth,
             }}
           >
             <button
-              aria-pressed={onRetake ? retakeActive : undefined}
-              onClick={() => onRetake ? onRetake(frameEditAnim, clampTime(currentTime)) : onFrameEdit?.(frameEditAnim, clampTime(currentTime))}
+              aria-pressed={retakeActive}
+              onClick={() => onRetake(retakeAnim, clampTime(currentTime))}
               className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
               style={{
-                width: onRetake ? cardWidth : '100%',
+                width: cardWidth,
                 transition: 'filter 0.15s, transform 0.1s',
                 background: 'transparent',
                 border: 'none',
@@ -296,20 +293,20 @@ export default function VideoResultCard({
                 </div>
                 <div className={`min-w-0 flex-1 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
                   <div className={`text-white font-semibold leading-tight tracking-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
-                    {t(onRetake ? 'video.retakeTitle' : 'video.frameEdit')}
+                    {t('video.retakeTitle')}
                   </div>
                   <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
-                    {retakeActive ? t('video.retakeClose') : t('video.frameEditHint', formatTime(currentTime))}
+                    {retakeActive ? t('video.retakeClose') : t('video.retakeCurrent', formatTime(currentTime))}
                   </div>
                 </div>
               </div>
             </button>
-            {onRetake && <button
+            <button
               data-testid="video-retake-pill-edit"
               data-makaron-editor-tap-target="true"
               aria-label={t('video.retakeEdit')}
               aria-expanded={retakeActive}
-              onClick={() => onRetake(frameEditAnim, clampTime(currentTime))}
+              onClick={() => onRetake(retakeAnim, clampTime(currentTime))}
               className={`mkr-liquid-pill mkr-retake-side-action ${retakeActive ? 'mkr-liquid-side-action' : ''} flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110`}
               style={{
                 width: detailWidth,
@@ -321,7 +318,7 @@ export default function VideoResultCard({
                 <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" />
               </svg>
               <span className={`font-medium ${isDesktop ? 'text-[9px]' : 'text-[10px]'} ${retakeActive ? 'text-fuchsia-100/70' : 'text-white/45'}`}>{t('video.retakeEdit')}</span>
-            </button>}
+            </button>
           </div>
         )}
       </PillCarousel>
