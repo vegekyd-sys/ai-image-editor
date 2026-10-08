@@ -1440,7 +1440,7 @@ function createGenerateImageTool(
         }
 
         // Priority: UI selector > agent tool param > auto-route
-        const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
+        const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model || (retake_source ? 'gemini-2.1' : undefined)) as ModelId | undefined;
         let billingModel: ModelId | undefined;
         let modelChain: ModelId[];
         try {
