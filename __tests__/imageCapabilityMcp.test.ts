@@ -55,6 +55,8 @@ describe('R16–R19: MCP HTTP → shared image Skill → selected provider → b
     [{ aspectRatio: '8:1' }, 'gemini-2.1', 7],
     [{ imageResolution: '4K' }, 'gemini-2.1', 16],
     [{ model: 'gpt-image-2.5-flare', isNsfw: true }, 'qwen-spicy', 3],
+    [{ model: 'unknown-model' }, 'gpt-image-2.5-flare', 5],
+    [{ background: 'transparent', aspectRatio: '8:1' }, 'gemini-2.1', 7],
   ] as const)('keeps preflight and actual execution aligned for %j', async (args, model, quote) => {
     const { response, payload } = await callImage(args);
     expect(payload.result.isError).not.toBe(true);
@@ -70,14 +72,15 @@ describe('R16–R19: MCP HTTP → shared image Skill → selected provider → b
   it.each([
     { model: 'gpt-image-2.5-flare', aspectRatio: '8:1' },
     { isNsfw: true, image: 'data:image/png;base64,YQ==', aspectRatio: '1:1' },
-  ])('rejects incompatible %j before quoting or submitting', async args => {
+  ])('relaxes incompatible %j before quoting and submitting', async args => {
     const { payload } = await callImage(args);
-    expect(payload.result.isError).toBe(true);
-    expect(payload.result.content[0].text).toContain('No generation was submitted');
-    expect(state.requireCredits).not.toHaveBeenCalled();
-    expect(state.backend).not.toHaveBeenCalled();
-    expect(state.tokenDebit).not.toHaveBeenCalled();
-    expect(state.debit).not.toHaveBeenCalled();
+    expect(payload.result.isError).not.toBe(true);
+    expect(state.requireCredits).toHaveBeenCalledTimes(1);
+    expect(state.backend).toHaveBeenCalledTimes(1);
+    const expected = args.isNsfw ? 'qwen-spicy' : 'gemini-2.1';
+    expect(state.backend).toHaveBeenCalledWith(expected);
+    if (args.isNsfw) expect(state.generate.mock.calls[0][0].aspectRatio).toBeUndefined();
+    expect(state.tokenDebit.mock.calls.length + state.debit.mock.calls.length).toBe(1);
   });
 
   it('does not submit or settle when preflight reports insufficient balance', async () => {

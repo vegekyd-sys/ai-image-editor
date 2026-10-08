@@ -76,9 +76,9 @@ export const DEFAULT_IMAGE_MODEL: ActiveImageModelId = 'gpt-image-2.5-flare';
 
 export function normalizeImageModelId(model?: string | null): ActiveImageModelId | undefined {
   if (!model || model === 'auto') return undefined;
-  if (model === 'pony' || model === 'wai') throw new Error(`${model} has been retired. Choose an available image model explicitly.`);
+  if (model === 'pony' || model === 'wai') return undefined;
   const id = model === 'openai' ? 'gpt-image-2.5-flare' : model === 'qwen' ? 'qwen-spicy' : model;
-  if (!Object.hasOwn(IMAGE_CAPABILITIES, id)) throw new Error(`Unknown image model: ${id}.`);
+  if (!Object.hasOwn(IMAGE_CAPABILITIES, id)) return undefined;
   return id as ActiveImageModelId;
 }
 
@@ -92,7 +92,7 @@ export function listImageModelCapabilities(): ImageModelCapability[] {
 }
 
 /** Preserve the existing transparent-output override, including selected Sunburst. */
-export function resolveImageModel(model?: ModelId, background?: ImageBackground): ActiveImageModelId | undefined {
+export function resolveImageModel(model?: string, background?: ImageBackground): ActiveImageModelId | undefined {
   const id = normalizeImageModelId(model);
   return background === 'transparent' && (!id || !getImageModelCapability(id).supportsTransparency)
     ? DEFAULT_IMAGE_MODEL : id;
@@ -136,30 +136,73 @@ export function validateImageModelRequest(req: GenerateImageRequest, model: stri
     .filter(c => !getImageRequestConflicts(req, c).length).map(c => c.id));
 }
 
-export function resolveImageModelChain(req: GenerateImageRequest): ActiveImageModelId[] {
-  if (req.isNsfw) {
-    validateImageModelRequest(req, 'qwen-spicy');
-    return ['qwen-spicy'];
+export interface ImageGenerationPlan {
+  model: ActiveImageModelId;
+  request: GenerateImageRequest;
+  adjustments: string[];
+}
+
+/** Project a request onto a provider's real contract before any paid submission. */
+export function prepareImageModelRequest(req: GenerateImageRequest, model: ActiveImageModelId): ImageGenerationPlan {
+  const capability = getImageModelCapability(model);
+  const request = { ...req, model };
+  const adjustments: string[] = [];
+  const referenceLimit = Math.max(0, (capability.maxInputImages ?? Infinity) - (req.image ? 1 : 0));
+  if (req.references && req.references.length > referenceLimit) {
+    request.references = req.references.slice(0, referenceLimit);
+    adjustments.push(`Used the first ${capability.maxInputImages} input images supported by ${capability.label}, keeping the base image.`);
   }
+  if (getImageRequestConflicts(request, capability).some(reason => reason.startsWith('aspectRatio='))) {
+    request.aspectRatio = undefined;
+    adjustments.push(`Requested ratio ${req.aspectRatio} was left to ${capability.label}'s available canvas.`);
+  }
+  if (req.imageResolution && !capability.resolutions?.includes(req.imageResolution)) {
+    request.imageResolution = undefined;
+    adjustments.push(`Requested resolution ${req.imageResolution} was left to ${capability.label}'s native output.`);
+  }
+  if (req.background === 'transparent' && !capability.supportsTransparency) {
+    request.background = 'opaque';
+    adjustments.push('Generated an opaque image to preserve the other requested content and canvas.');
+  }
+  return { model, request, adjustments };
+}
+
+/** Prefer delivering an image. Capabilities guide tradeoffs instead of blocking users. */
+export function planImageGeneration(req: GenerateImageRequest): ImageGenerationPlan {
+  const normalized = normalizeImageModelId(req.model);
   const explicit = resolveImageModel(req.model, req.background);
-  if (explicit) {
-    validateImageModelRequest(req, explicit);
-    return [explicit];
-  }
-  const candidates = listImageModelCapabilities().filter(c => c.autoPriority !== undefined)
-    .sort((a, b) => a.autoPriority! - b.autoPriority!);
-  const selected = candidates.find(c => !getImageRequestConflicts(req, c).length);
-  if (selected) return [selected.id];
-  throw new ImageCapabilityError(undefined, candidates.flatMap(c => getImageRequestConflicts(req, c).map(reason => `${c.label}: ${reason}`)), []);
+  const ranked = listImageModelCapabilities().filter(c => c.autoPriority !== undefined)
+    .sort((a, b) => a.autoPriority! - b.autoPriority!).map(c => c.id);
+  const candidates = req.isNsfw || normalized === 'qwen-spicy' ? ['qwen-spicy' as const]
+    : [...new Set([...(explicit ? [explicit] : []), ...ranked])];
+  const originalCount = (req.image ? 1 : 0) + (req.references?.length ?? 0);
+  const plans = candidates.map(model => {
+    const plan = prepareImageModelRequest(req, model);
+    const count = (plan.request.image ? 1 : 0) + (plan.request.references?.length ?? 0);
+    // Content references first, then canvas, transparency, resolution; stable ties preserve preference/rank.
+    const loss = (originalCount - count) * 100
+      + (req.aspectRatio && req.aspectRatio !== 'auto' && !plan.request.aspectRatio ? 10 : 0)
+      + (req.background === 'transparent' && plan.request.background !== 'transparent' ? 5 : 0)
+      + (req.imageResolution && !plan.request.imageResolution ? 2 : 0);
+    return { plan, loss };
+  }).sort((a, b) => a.loss - b.loss);
+  const plan = plans[0].plan;
+  if (req.model && req.model !== 'auto' && !normalized) plan.adjustments.unshift(`Unrecognized or retired image model ${req.model}; used capability-aware Auto.`);
+  else if (normalized && normalized !== plan.model) plan.adjustments.unshift(`Used ${getImageModelCapability(plan.model).label} to meet more of the requested image requirements.`);
+  return plan;
+}
+
+export function resolveImageModelChain(req: GenerateImageRequest): ActiveImageModelId[] {
+  return [planImageGeneration(req).model];
 }
 
 export function formatImageCapabilitiesForAgent(): string {
   return [
     'Image Model Capability (current Makaron routes):',
-    `Auto priority: ${listImageModelCapabilities().filter(c => c.autoPriority !== undefined).sort((a, b) => a.autoPriority! - b.autoPriority!).map(c => c.id).join(' > ')}. Hard requirements filter models before ranking.`,
+    `Auto priority: ${listImageModelCapabilities().filter(c => c.autoPriority !== undefined).sort((a, b) => a.autoPriority! - b.autoPriority!).map(c => c.id).join(' > ')}. Prefer compatible models, then relax conflicting output preferences to deliver an image.`,
     'Omit model for Auto. Set model only for a user/active Skill explicit choice. Assess NSFW from the user request and supplied media; set isNsfw=true before generation, never probe another provider first. Existing NSFW context stays active.',
-    'Legacy openai means Flare; qwen means Spicy; unversioned nano banana means gemini-2.1. Explicit Nano Banana 2 means gemini; Lite means gemini-lite. Pony/WAI are retired.',
-    'Transparent output uses Flare or explicitly selected Sunburst. Preserve the requested ratio and references. A conflict concerns the selected model, not every generator. No automatic retry or model switch after a failed/unknown paid submission.',
+    'Legacy openai means Flare; qwen means Spicy; unversioned nano banana means gemini-2.1. Explicit Nano Banana 2 means gemini; Lite means gemini-lite. Unknown/retired IDs use Auto, Flare first.',
+    'Aim to deliver an image instead of reporting capability errors. Prefer retaining reference content, then requested ratio, transparency and resolution. Transparent 8:1 normally uses Nano Banana 2.1 opaque output; another conflict may preserve transparency instead. NSFW always uses Spicy for generation/editing: ignore unsupported size, resolution or alpha requirements. If inputs exceed every suitable model limit, keep the base and first supported references. Explain actual adjustments briefly without calling them a generation failure. No automatic retry or model switch after a failed/unknown paid submission.',
     ...listImageModelCapabilities().map(c => `- ${c.id} (${c.label}): ratio=${ratioDescription(c.aspectRatio)}${c.editAspectRatio ? `; editing ratio=${ratioDescription(c.editAspectRatio)}` : ''}; ${c.maxInputImages === undefined ? 'legacy input limit remains provider-owned' : `max ${c.maxInputImages} total input images`}; ${c.resolutions ? `imageResolution=${c.resolutions.join('/')}` : 'no imageResolution parameter'}; transparent=${c.supportsTransparency}; NSFW=${c.supportsNsfw}. ${c.notes}`),
   ].join('\n');
 }

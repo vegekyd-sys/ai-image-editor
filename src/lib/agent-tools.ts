@@ -6,8 +6,6 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ImageBackground, ModelId } from './models/types';
-import { IMAGE_MODEL_IDS } from './models/types';
-import { resolveModelChain } from './model-router';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
@@ -42,7 +40,7 @@ import {
 } from './narration-cues';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
-import { formatImageCapabilitiesForAgent, ImageCapabilityError } from './image-model-capabilities';
+import { formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration, type ImageGenerationPlan } from './image-model-capabilities';
 import { normalizeGenerateImageMediaIndex } from './generate-image-input';
 import type { DesignPayload, VideoMeta, VideoModel, VideoSourceRange } from '@/types';
 import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
@@ -1389,11 +1387,11 @@ function createGenerateImageTool(
       inputSchema: z.object({
         editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Explicit user/active Skill image model choice. Otherwise omit for capability-aware Auto; see the generated Image Model Capability table.'),
+        model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
         isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
-        imageResolution: z.enum(['1K', '2K', '4K']).optional().describe('Nano Banana 2.1 output resolution; defaults to 1K. Use 2K/4K only when requested. Other image models do not support this parameter.'),
+        imageResolution: z.enum(['1K', '2K', '4K']).optional().describe('Output resolution preference; Auto can use Nano Banana 2.1. Use 2K/4K only when requested. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
-        background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2.5 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
+        background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background preference. Set "transparent" for transparent/no background, background removal, 抠图/抠像/去背景 or reusable alpha assets. Also pass media_index for source-image cutout. Conflicts are resolved to deliver an image; see the capability table.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
@@ -1427,19 +1425,20 @@ function createGenerateImageTool(
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         let billingModel: ModelId | undefined;
+        let imagePlan: ImageGenerationPlan;
         try {
-          const modelChain = resolveModelChain({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, aspectRatio, imageResolution, background, isNsfw: ctx.isNsfw });
-          billingModel = modelChain[0];
+          imagePlan = planImageGeneration({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, aspectRatio, imageResolution, background, isNsfw: ctx.isNsfw });
+          billingModel = imagePlan.model;
         } catch (error) {
           return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: error instanceof ImageCapabilityError ? error.code : 'model_retired', ...(error instanceof ImageCapabilityError ? { conflicts: error.conflicts, compatibleModels: error.compatibleModels } : {}) };
         }
-        const imageInputCount = (editTarget ? 1 : 0) + resolvedRefs.length;
+        const imageInputCount = (imagePlan.request.image ? 1 : 0) + (imagePlan.request.references?.length ?? 0);
         if (ctx.userId && await isBillingEnabled()) {
           let requiredCredits = 0;
           if (billingModel === 'gemini-2.1') {
             const rate = await getTokenRate('google/gemini-nano-banana-2.1');
             if (!rate || rate.model_id !== 'google/gemini-nano-banana-2.1' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Nano Banana 2.1 pricing is not configured.', error: 'pricing_unavailable' };
-            const outputCost = imageResolution === '4K' ? 0.0756 : imageResolution === '2K' ? 0.0504 : 0.0336;
+            const outputCost = imagePlan.request.imageResolution === '4K' ? 0.0756 : imagePlan.request.imageResolution === '2K' ? 0.0504 : 0.0336;
             requiredCredits = Math.ceil((outputCost + imageInputCount * 1120 * 1.5 / 1_000_000) * rate.markup / 0.01);
           }
           if (isFalImage25(billingModel)) {
@@ -1523,7 +1522,7 @@ function createGenerateImageTool(
           ctx.currentImage = skillResult.image;
           ctx.snapshotImages.push(skillResult.image);
           ctx.generatedImages.push(skillResult.image);
-          ctx.lastImageBackground = background;
+          ctx.lastImageBackground = imagePlan.request.background;
           if (skillResult.usedModel) ctx.lastUsedModel = skillResult.usedModel;
           // Refresh URLs from DB — DualWriter uploads to Storage in parallel,
           // so base64 entries get replaced with http URLs for downstream tools

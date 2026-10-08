@@ -12,7 +12,7 @@ export type ImageBackground = 'auto' | 'opaque' | 'transparent';
 export interface GenerateImageRequest {
   image?: string;           // input image (URL/base64). Missing = text-to-image
   prompt: string;           // English editPrompt
-  model?: ModelId;          // explicit model choice (agent tool param or UI selector)
+  model?: string;          // explicit model preference; unknown IDs use Auto
   category?: string;        // tip category (for auto-routing)
   aspectRatio?: string;
   /** Nano Banana 2.1 output resolution, default 1K. */
@@ -45,6 +45,7 @@ export interface GenerateImageResult {
   image: string | null;
   model: ModelId;           // model that actually produced the image
   fallbackUsed: boolean;
+  adjustments?: string[];  // capability preferences relaxed before submission
   failedModels?: ModelId[]; // models that were tried and returned null/error
   contentBlocked?: boolean; // Gemini refused content (NSFW) — caller should set isNsfw flag
   usage?: TokenUsage;       // token usage for billing (available for Gemini/OpenRouter)

@@ -19,13 +19,17 @@
 
 取舍默认顺序：先保留参考内容，再保留可用比例、透明、分辨率；同等满足程度下保留显式模型偏好，再按 Flare → Nano Banana 2.1 → Spicy 排序。NSFW 的 Spicy 选择优先于这些取舍。
 
-## 目标合同
+实现使用同一 `planImageGeneration()` 产生实际模型、有效请求和调整说明。Router 提交有效请求；App/MCP 预检使用计划中的实际参考数量与分辨率；Skill 返回成功和调整说明。Spicy wrapper 对直接调用也放宽不支持的输出参数。GUI/Tips preview 的透明与 NSFW 路径同样使用计划，删除原 NSFW+透明硬阻断。
+
+以下为初版历史记录；取舍政策以本节用户修订为准。
+
+## 初版目标合同（已由上文修订）
 
 Image Model Capability 同时拥有模型事实、默认优先级、别名、参数校验和 Agent 能力说明。Model Router 保留供应商执行职责，不再另写选模型规则。Prompt 保留创作方法和用户意图，不再维护模型排名或数字限制。
 
 自动选择先满足硬性要求，顺序为 GPT Image 2.5 Flare → Nano Banana 2.1 → Qwen Spicy。Sunburst、经典 Nano Banana 2、Lite、Wan 为显式选择。NSFW 由主 Agent 判断并通过参数传递，直接选 Spicy；不使用关键词正则猜测 NSFW。付费提交失败不因排名自动换模型或重发。Tips 文案与已有显式图片预览配置独立保留。
 
-## 改动前确定的 case
+## 初版改动前确定的 case（保留对照）
 
 | ID | 场景 | 预期 |
 | --- | --- | --- |
@@ -60,7 +64,7 @@ Image Model Capability 同时拥有模型事实、默认优先级、别名、参
 
 非目标：数据库迁移、改价格、改视频、改 iOS 二进制、自动重做用户现有项目。发布仍按已有 release 流程处理。
 
-## 候选实现与验收对应
+## 初版候选实现与验收对应
 
 能力来源为 `src/lib/image-model-capabilities.ts`。App Agent、MCP 和 provider builder 共用校验；Agent/MCP 的模型说明自动生成。`model-router.ts` 仅执行已选供应商，排名不作为付费失败的重试链。浏览器沿用 `nsfw_detected` 事件，把主 Agent 的判断保持到后续对话。
 
@@ -85,7 +89,7 @@ Image Model Capability 同时拥有模型事实、默认优先级、别名、参
 
 剩余生产验收：合并与发布后，真实项目 chat → run → 图片保存/重新打开、Credits 归因、NSFW 跨轮状态。当前工作没有修改该项目或生产数据。
 
-### 最终本地检查
+### 初版最终本地检查
 
 实现提交 `1a1e64c7` 在独立 runtime runner 执行 `release:check --local`，退出 0：TypeScript 通过，326 个 test file 通过、1 个跳过；2146 项 test 通过、1 项跳过；CLI smoke 通过；Next.js webpack production build 和 postbuild 的服务端运行时打包检查通过。`check:i18n-ui` 与 `check:agent-startup` 通过，改动文件 ESLint 0 error（`agent-tools.ts` 既有未使用 locale warning）。构建只有既有 `libheif-js` 动态 require 警告。
 

@@ -1149,9 +1149,9 @@ try {
     const before = requests.length;
     const invalid = await expectFailure(['edit', '--image-model', 'gemini-2.1', '--image-resolution', '8K', 'A product.']);
     assert.match(invalid.stderr, /Invalid --image-resolution/);
-    const wrongModel = await expectFailure(['edit', '--image-model', 'gemini-lite', '--image-resolution', '2K', 'A product.']);
-    assert.match(wrongModel.stderr, /requires --image-model gemini-2.1/);
     assert.equal(requests.length, before);
+    await expectSuccess(['edit', '--image-model', 'gemini-lite', '--image-resolution', '2K', 'A product.']);
+    assert.equal(requests.length, before + 1);
   }
 
   {
@@ -1163,6 +1163,10 @@ try {
     await expectSuccess(['edit', '--nsfw', 'Sensitive artwork.']);
     request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
     assert.equal(request.body.params.arguments.isNsfw, true);
+    await expectSuccess(['edit', '--image-model', 'future-image-id', '--background', 'transparent', '--aspect', '8:1', 'A banner.']);
+    request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.model, 'future-image-id');
+    assert.equal(request.body.params.arguments.background, 'transparent');
   }
 
   {

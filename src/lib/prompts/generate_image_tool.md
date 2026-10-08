@@ -1,6 +1,6 @@
 Edit or generate an image.
 
-Model selection and limits are supplied by the generated Image Model Capability table below. Omit model for automatic selection; preserve hard requirements.
+Model selection and limits are supplied by the generated Image Model Capability table below. Omit model for Auto. Aim to deliver an image: conflicting output preferences are relaxed before submission, and unknown IDs use Flare-first Auto.
 
 Call `read_file('prompts/image.md')` for complex edits, references, restoration, or layout work.
 

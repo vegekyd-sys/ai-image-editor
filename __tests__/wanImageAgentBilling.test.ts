@@ -5,7 +5,7 @@ import ts from 'typescript';
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
 import { IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, type ModelId } from '@/lib/models/types';
-import { formatImageCapabilitiesForAgent, ImageCapabilityError, resolveImageModelChain as resolveModelChain } from '@/lib/image-model-capabilities';
+import { formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration, resolveImageModelChain as resolveModelChain } from '@/lib/image-model-capabilities';
 import { normalizeGenerateImageMediaIndex } from '@/lib/generate-image-input';
 import { resolveToolName } from '@/lib/billing/pricing';
 
@@ -28,7 +28,7 @@ function setup(provider = 'azure') {
   const ctx = { preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined, isNsfw: false };
   const context = vm.createContext({
     tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, resolveModelChain, getTokenRate,
-    generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError,
+    generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration,
     validateImageIndex: (images: string[], index: number) => images[index - 1] ? { idx: index - 1 } : { error: 'Invalid media index' }, getToolPrice, isBillingEnabled,
     resolveToolName,
     editImage, requireCredits, deductCredits, refreshSnapshotUrls: vi.fn(), console,
@@ -233,15 +233,16 @@ describe('Image capability Agent integration cases', () => {
     await tool.execute({ editPrompt: 'Add lighting.', isNsfw: false });
     expect(editImage.mock.calls[1][0]).toMatchObject({ isNsfw: true });
   });
-  it('R13/R14/R17: locked Flare incompatible with 8:1 returns structured alternatives without billing', async () => {
+  it('R13/R14/R17: incompatible Flare preference quotes Nano and continues generation', async () => {
     const { tool, ctx, editImage, getTokenRate, requireCredits, deductCredits } = setup();
     ctx.preferredModel = 'gpt-image-2.5-flare';
+    getTokenRate.mockResolvedValue({ model_id: 'google/gemini-nano-banana-2.1', markup: 2 });
     const result = await tool.execute({ editPrompt: 'Banner.', model: 'gemini-2.1', aspectRatio: '8:1', imageResolution: '4K' });
-    expect(result).toMatchObject({ success: false, error: 'unsupported_image_capability', compatibleModels: ['gemini-2.1'] });
-    expect(editImage).not.toHaveBeenCalled();
-    expect(getTokenRate).not.toHaveBeenCalled();
-    expect(requireCredits).not.toHaveBeenCalled();
-    expect(deductCredits).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    expect(editImage).toHaveBeenCalledTimes(1);
+    expect(getTokenRate).toHaveBeenCalledWith('google/gemini-nano-banana-2.1');
+    expect(requireCredits).toHaveBeenCalledWith('test-user', 16);
+    expect(deductCredits).toHaveBeenCalledTimes(1);
   });
   it('R15: media index zero remains text-to-image, uploaded and timeline references are counted', async () => {
     const { tool, ctx, editImage, getTokenRate } = setup();
@@ -253,8 +254,8 @@ describe('Image capability Agent integration cases', () => {
     ctx.referenceImages = Array.from({ length: 13 }, () => 'uploaded-reference');
     getTokenRate.mockClear();
     const result = await tool.execute({ editPrompt: 'Combine.', media_index: 1, reference_media_indices: [2] });
-    expect(result).toMatchObject({ success: false, error: 'unsupported_image_capability' });
-    expect(getTokenRate).not.toHaveBeenCalled();
-    expect(editImage).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(true);
+    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    expect(editImage).toHaveBeenCalledTimes(2);
   });
 });

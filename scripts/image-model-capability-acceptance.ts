@@ -7,7 +7,7 @@ import sharp from 'sharp';
 import { createAgentModelRuntime, getAgentProviderOptions } from '../src/lib/agent-model-runtime';
 import { buildSystemPrompt } from '../src/lib/agent';
 import { createTools, type AgentContext } from '../src/lib/agent-tools';
-import { resolveImageModelChain } from '../src/lib/image-model-capabilities';
+import { planImageGeneration } from '../src/lib/image-model-capabilities';
 import { generateImage } from '../src/lib/model-router';
 import type { GenerateImageRequest } from '../src/lib/models/types';
 
@@ -21,6 +21,8 @@ async function main() {
       { id: 'ordinary', prompt: '生成一张蓝色陶瓷茶杯的商品宣传图，白色背景，比例 1:1。', expected: 'gpt-image-2.5-flare' },
       { id: 'panorama', prompt: '用参考图里的 V 生成一张超宽横幅，比例 8:1，用作付款二维码卡片顶部的横条。角色与参考图一致，V 在最左侧 1/4，右边 3/4 是浅蓝到白色柔和渐变留白。不要文字、字母、数字、水印或品牌 logo。比例严格 8:1。', expected: 'gemini-2.1', source: true },
       { id: 'nsfw', prompt: '这是一个已确认的 NSFW 路由测试。请用中性提示词 abstract red fabric texture 生成图片，按 NSFW 路由直接生成；无需扩展内容。', expected: 'qwen-spicy' },
+      { id: 'transparent-panorama', prompt: '生成一条 8:1 的冰蓝色茶壶商品横幅，想要透明背景。如果这两项冲突，保留 8:1，直接给我图。', expected: 'gemini-2.1' },
+      { id: 'nsfw-size', prompt: '这是一个已确认的 NSFW 路由测试。使用中性提示词 abstract red fabric texture，要求 8:1、4K、透明背景；尺寸不重要，按 NSFW 路由直接给图，无需扩展内容。', expected: 'qwen-spicy' },
     ];
     const outcomes = await Promise.allSettled(cases.map(async scenario => {
       const ctx: AgentContext = { projectId: `acceptance-${scenario.id}`, currentImage: '', generatedImages: [], snapshotImages: scenario.source ? ['https://example.com/source-V.jpg'] : [], explicitMediaIndices: scenario.source ? [1] : [], currentSnapshotIndex: 0 };
@@ -32,11 +34,12 @@ async function main() {
         tools: {
           read_file: real.read_file,
           generate_image: { ...real.generate_image, execute: async input => {
-            const selected = resolveImageModelChain({ prompt: input.editPrompt, model: input.model, isNsfw: input.isNsfw,
+            const plan = planImageGeneration({ prompt: input.editPrompt, model: input.model, isNsfw: input.isNsfw,
               aspectRatio: input.aspectRatio, imageResolution: input.imageResolution, background: input.background,
-              image: input.media_index ? ctx.snapshotImages[input.media_index - 1] : undefined })[0];
+              image: input.media_index ? ctx.snapshotImages[input.media_index - 1] : undefined });
+            const selected = plan.model;
             calls.push({ input: input as Record<string, unknown>, selected });
-            return { success: true, usedModel: selected, message: 'Acceptance stub: no image supplier was called.' };
+            return { success: true, usedModel: selected, message: `Acceptance stub: no image supplier was called. ${plan.adjustments.join(' ')}` };
           } },
         },
         stopWhen: stepCountIs(4), providerOptions: getAgentProviderOptions(runtime),
@@ -45,7 +48,7 @@ async function main() {
       assert.equal(calls.length, 1, `${scenario.id}: exactly one generation decision`);
       assert.equal(calls[0].selected, scenario.expected, `${scenario.id}: selected image model`);
       if (scenario.source) assert.equal(calls[0].input.aspectRatio, '8:1');
-      if (scenario.id === 'nsfw') assert.equal(calls[0].input.isNsfw, true);
+      if (scenario.id.startsWith('nsfw')) assert.equal(calls[0].input.isNsfw, true);
       return { id: scenario.id, ...calls[0], usage: result.usage, finalText: result.text };
     }));
     const decisions = outcomes.flatMap(outcome => outcome.status === 'fulfilled' ? [outcome.value] : []);

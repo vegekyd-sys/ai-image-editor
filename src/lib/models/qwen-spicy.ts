@@ -1,4 +1,4 @@
-import { validateImageModelRequest } from '../image-model-capabilities'
+import { prepareImageModelRequest } from '../image-model-capabilities'
 /**
  * Qwen Image Edit Spicy — MuleRouter image backend replacing the Vast Qwen route.
  */
@@ -15,11 +15,11 @@ export const qwenSpicyBackend: ModelBackend = {
   id: 'qwen-spicy',
 
   canHandle(req: GenerateImageRequest): boolean {
-    return isMuleRouterImageAvailable() && supportsMuleRouterQwenRequest(req)
+    return isMuleRouterImageAvailable() && supportsMuleRouterQwenRequest(prepareImageModelRequest(req, 'qwen-spicy').request)
   },
 
   async generate(req: GenerateImageRequest): Promise<{ image: string | null; provider?: string }> {
-    validateImageModelRequest(req, 'qwen-spicy')
+    req = prepareImageModelRequest(req, 'qwen-spicy').request
     if (!this.canHandle(req)) return { image: null }
     const images = muleRouterQwenInputs(req)
     return {

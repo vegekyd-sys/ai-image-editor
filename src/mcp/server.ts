@@ -1,11 +1,9 @@
-import { formatImageCapabilitiesForAgent, getImageModelCapability } from '../lib/image-model-capabilities';
-import { resolveModelChain } from '../lib/model-router';
+import { formatImageCapabilitiesForAgent, getImageModelCapability, planImageGeneration } from '../lib/image-model-capabilities';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { editImage } from '../lib/skills/edit-image';
-import { IMAGE_MODEL_INPUT_IDS } from '../lib/models/types';
 import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
@@ -121,25 +119,25 @@ Generation timing varies; report actual completion. No automatic retry or model 
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback. For ordinary edits, use specific English editing instructions'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
-      model: z.enum(IMAGE_MODEL_INPUT_IDS).nullish().describe('Explicit image model choice; otherwise omit for capability-aware Auto. See the generated Image Model Capability table.'),
+      model: z.string().nullish().describe('Explicit image model preference; otherwise omit for Auto. Unknown IDs use Auto, Flare first. See the generated Image Model Capability table.'),
       isNsfw: z.boolean().nullish().describe('Caller/Agent-assessed NSFW input; routes directly to Qwen Spicy.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5 supports up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
-      imageResolution: z.enum(['1K', '2K', '4K']).nullish().describe('Nano Banana 2.1 output resolution (default 1K). Supported with automatic routing or model gemini-2.1.'),
+      imageResolution: z.enum(['1K', '2K', '4K']).nullish().describe('Output resolution preference; Auto can use Nano Banana 2.1. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
-      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2.5 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
+      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background preference. Set transparent for cutout/alpha assets. Conflicts are resolved to deliver an image; see the capability table.'),
     },
     async (params) => {
       try {
-        const chain = resolveModelChain({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined, aspectRatio: params.aspectRatio ?? undefined, imageResolution: params.imageResolution ?? undefined, isNsfw: params.isNsfw ?? undefined });
-        const imageInputCount = (params.image ? 1 : 0) + (params.referenceImages?.length ?? 0);
+        const plan = planImageGeneration({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined, aspectRatio: params.aspectRatio ?? undefined, imageResolution: params.imageResolution ?? undefined, isNsfw: params.isNsfw ?? undefined });
+        const imageInputCount = (plan.request.image ? 1 : 0) + (plan.request.references?.length ?? 0);
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', chain[0], { imageInputCount, imageResolution: params.imageResolution ?? undefined });
+          const check = await options.onToolStart('makaron_edit_image', plan.model, { imageInputCount, imageResolution: plan.request.imageResolution });
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
         const image = params.image ? resolveImage(params.image) : undefined;
-        const wrappedPrompt = getImageModelCapability(chain[0]).promptMode === 'context' ? params.editPrompt : `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;
+        const wrappedPrompt = getImageModelCapability(plan.model).promptMode === 'context' ? params.editPrompt : `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;
 
         const ctx = {
           currentImage: image,

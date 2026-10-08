@@ -56,6 +56,7 @@ describe('Tips preview billing', () => {
   it.each([
     { category: 'enhance' },
     { isNsfw: true },
+    { isNsfw: true, background: 'transparent', aspectRatio: '8:1' },
   ])('quotes Spicy and bypasses Lite for $category', async fields => {
     const response = await POST(request(fields))
     expect(response.status).toBe(200)
@@ -64,6 +65,18 @@ describe('Tips preview billing', () => {
     expect(mocks.requireCredits).toHaveBeenCalledWith('user-1', 8)
     expect(mocks.generateLite).not.toHaveBeenCalled()
     expect(mocks.deductCredits).toHaveBeenCalledWith('user-1', null, 'edit_image_qwen-spicy')
+    if (fields.isNsfw) expect(mocks.generateImage).toHaveBeenCalledWith(expect.objectContaining({ model: 'qwen-spicy', aspectRatio: undefined }))
+  })
+
+  it('quotes and delivers Nano for transparent 8:1, keeping the ratio instead of failing', async () => {
+    mocks.generateImage.mockResolvedValue({ image: 'panorama-image', model: 'gemini-2.1', usage: { modelId: 'google/gemini-nano-banana-2.1', inputTokens: 10, outputTokens: 20, providerCostUsd: 0.04 } })
+    const response = await POST(request({ background: 'transparent', aspectRatio: '8:1' }))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ image: 'panorama-image', background: 'opaque', adjustments: expect.arrayContaining([expect.stringContaining('opaque')]) })
+    expect(mocks.generateImage).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ model: 'gemini-2.1', aspectRatio: '8:1', background: 'opaque' }))
+    expect(mocks.generateLite).not.toHaveBeenCalled()
+    expect(mocks.getTokenRate).toHaveBeenCalledWith('google/gemini-nano-banana-2.1')
+    expect(mocks.deductByTokens).toHaveBeenCalledTimes(1)
   })
 
   it('checks the Spicy price again before a definite 2.1 rejection can fall back to it', async () => {

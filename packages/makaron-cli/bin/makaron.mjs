@@ -3051,7 +3051,6 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else if (args[i] === '--out' && args[i + 1]) outputPath = args[++i];
     else promptParts.push(args[i]);
   }
-  if (editArgs.imageResolution && editArgs.model && editArgs.model !== 'gemini-2.1') { console.error('--image-resolution requires --image-model gemini-2.1.'); process.exit(1); }
   editArgs.editPrompt = promptParts.join(' ');
   if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');

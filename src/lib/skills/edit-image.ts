@@ -1,12 +1,11 @@
-import { generateImage, resolveModelChain } from '../model-router';
-import type { ImageBackground, ModelId } from '../models/types';
+import { generateImage } from '../model-router';
+import type { ImageBackground } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
 import { ProviderImageInputError } from '../provider-image-preflight';
-import { isFalImage25 } from '../models/types';
 import { FalImage25RequestError } from '../models/fal-image25';
 import { NanoBanana21RequestError } from '../models/nano-banana-21';
 import { WanImageRequestError } from '../models/wan-image';
-import { ImageCapabilityError } from '../image-model-capabilities';
+import { ImageCapabilityError, planImageGeneration } from '../image-model-capabilities';
 
 export interface EditImageInput {
   editPrompt: string;
@@ -18,7 +17,7 @@ export interface EditImageInput {
   /** @deprecated Use workspace service instead. Kept for backward compat. */
   skillPrompts?: Record<string, string>;
   /** User's preferred model override — bypasses default routing */
-  preferredModel?: ModelId;
+  preferredModel?: string;
   /** NSFW flag — skip Gemini entirely */
   isNsfw?: boolean;
 }
@@ -63,14 +62,13 @@ export async function editImage(
   };
   try {
     // Validate before a supplier call; the same resolver is used by billing preflight.
-    const model = resolveModelChain(request)[0];
-    const result = await generateImage({ ...request, model });
+    const plan = planImageGeneration(request);
+    const result = await generateImage(plan.request);
     if (!result.image) return { success: false, message: 'Image generation returned no image. Do not retry automatically.' };
     console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s model=${result.model} provider=${result.provider ?? 'default'}`);
     let message = 'Image generated successfully.';
-    if (background === 'transparent' && preferredModel && preferredModel !== 'openai' && !isFalImage25(preferredModel)) {
-      message += ' Transparent output required GPT Image 2.5.';
-    }
+    const adjustments = [...new Set([...plan.adjustments, ...(result.adjustments ?? [])])];
+    if (adjustments.length) message += ` ${adjustments.join(' ')}`;
     if (result.provider === 'codex-subscription') message += ' Provider: Codex subscription.';
     return { success: true, message, image: result.image, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage };
   } catch (error) {

@@ -31,7 +31,7 @@ Before the first transparent generation or extraction in a conversation, call `r
 - Existing source image: pass that image's `media_index`. This is an image-to-image cutout/edit. In `editPrompt`, tell GPT Image 2.5 to remove the background to transparent alpha while preserving the complete intended subject, identity, shape, fine edges, holes, and interior details. Do not redesign the subject unless requested.
 - No source image: omit `media_index` entirely. This is transparent text-to-image. Describe only the wanted subject and composition; do not invent a colored, white, checkerboard, studio, or scenic background.
 - Ambiguous cleanup such as removing one background object does not automatically mean alpha. Use transparent output only when the intended deliverable has no background or is a cutout/overlay asset.
-- Transparent model selection follows the Image Model Capability table. Never fall back to an opaque image, synthetic checkerboard, chroma-key background, or a different image model. If the provider cannot return real alpha, report failure.
+- Transparent model selection follows the Image Model Capability table. When output preferences conflict, deliver a useful image by retaining the ratio or transparency; explain the actual adjustment. Never claim an opaque image or synthetic checkerboard has real alpha.
 - The canonical fidelity wording, keep/remove selection rules, content-specific details, and delivery line live in `prompts/cutout.md`. Do not improvise a weaker generic prompt.
 
 Omit `background` for normal images.
@@ -201,11 +201,11 @@ Omit this line if the user explicitly requested text or captions.
 
 ## Model Selection
 
-Use the generated Image Model Capability table in `generate_image` as the source of truth for model characteristics, priority and parameter limits. Omit `model` for Auto; set it for an explicit user/active Skill choice. Preserve the requested ratio, resolution and all reference images.
+Use the generated Image Model Capability table in `generate_image` as the source of truth for model characteristics, priority and parameter limits. Omit `model` for Auto; set it for an explicit user/active Skill preference. Prefer retaining references and output preferences, but let the shared generation plan relax conflicts so the user gets an image. Unknown IDs use Auto with Flare first.
 
 The main Agent assesses NSFW from the user request and supplied media before generation. Set `isNsfw: true` for NSFW requests (nudity, sexual content, gore or explicit edits), or when the existing context is NSFW. Do not probe another image provider first. A provider may still reject a request; report failure without automatic model switching or retry.
 
-Capability errors identify the selected model and compatible alternatives. Do not call a restriction on one model a limit of the whole generator, and do not reduce an explicit 8:1 request to 3:1.
+Do not report output-capability conflicts as generation failures. Transparent 8:1 normally keeps 8:1 with opaque Nano Banana 2.1 output; it can preserve transparency instead when that serves the other requirements better. For NSFW generation and editing, always use Spicy regardless of unsupported size/resolution/alpha requirements. Explain the actual output briefly.
 
 ## Context Mode for model='gpt-image-2.5-flare'
 

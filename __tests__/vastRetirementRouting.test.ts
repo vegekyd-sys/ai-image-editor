@@ -19,15 +19,15 @@ describe('Vast retirement image routing', () => {
     expect(IMAGE_MODEL_INPUT_IDS).not.toContain('wai');
     expect(resolveImageModel('qwen')).toBe('qwen-spicy');
     expect(resolveModelChain({ prompt: 'Edit', model: 'qwen' })).toEqual(['qwen-spicy']);
-    expect(() => resolveModelChain({ prompt: 'Anime', model: 'pony' })).toThrow('retired');
-    expect(() => resolveModelChain({ prompt: 'Anime', model: 'wai' })).toThrow('retired');
+    expect(resolveModelChain({ prompt: 'Anime', model: 'pony' })).toEqual(['gpt-image-2.5-flare']);
+    expect(resolveModelChain({ prompt: 'Anime', model: 'wai' })).toEqual(['gpt-image-2.5-flare']);
   });
 
   it('routes NSFW exclusively to Spicy, including explicit legacy/Fal/Gemini selections', () => {
     for (const model of ['qwen', 'pony', 'wai', 'gemini', 'gpt-image-2.5-flare'] as const) {
       expect(resolveModelChain({ prompt: 'Sensitive edit', model, isNsfw: true })).toEqual(['qwen-spicy']);
     }
-    expect(() => resolveModelChain({ prompt: 'Cutout', isNsfw: true, background: 'transparent' })).toThrow('not supported');
+    expect(resolveModelChain({ prompt: 'Cutout', isNsfw: true, background: 'transparent' })).toEqual(['qwen-spicy']);
   });
 
   it('never repeats a paid NSFW submission after a null result or unknown outcome', async () => {
