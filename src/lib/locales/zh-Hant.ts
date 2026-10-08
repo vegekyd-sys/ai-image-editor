@@ -258,6 +258,12 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.imageCapabilities.title': "全景、高解析度圖片與更順手的儲存",
+  'changelog.imageCapabilities.item1': "對話生圖會依比例、透明背景和解析度選擇合適模型，支援 8:1、1:8 等全景構圖；遇到不相容的組合時，盡量保留主要要求並完成出圖。",
+  'changelog.imageCapabilities.item2': "可在對話中要求原生 2K / 4K。GPT Image 2.5 的 4K 支援 16:9 至 3:1 橫圖及對應直圖，長邊 3840px；方形 4K 使用 Nano Banana 2.1 輸出 4096 × 4096。",
+  'changelog.imageCapabilities.item3': "網頁瀏覽使用輕量預覽，儲存時讀取原圖。大圖可選擇原圖、2K 或輕量分享版，並另存為 PNG / JPG；不會將小圖放大後標成 4K。",
+  'changelog.imageCapabilities.item4': "長邊不超過 1280px 的小圖點擊 Save 即直接儲存，省去中間選擇頁面；PNG 保留透明背景，JPG 的透明區域會變成白色。",
+  'changelog.imageCapabilities.item5': "CLI 繼續回傳原圖。要求透明方形 4K 時，優先保留透明背景並提供 2K 圖片。",
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
   'changelog.nanoBanana21.item1': '一般圖片與 Creative / Wild / Captions Tips 圖片預設升級為 Nano Banana 2.1，換場景和創意編輯時更擅長保留原圖人物與構圖。',
   'changelog.nanoBanana21.item2': '更細膩的寫實細節、材質與光照，更清晰的文字呈現，適合商品換背景、人物修圖和帶文字的創意圖片。',
