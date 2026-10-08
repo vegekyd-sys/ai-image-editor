@@ -11,7 +11,7 @@ export interface EditImageInput {
   editPrompt: string;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   aspectRatio?: string;
-  imageResolution?: '1K' | '2K' | '4K';
+  imageResolution?: string;
   /** Explicit output background. Transparent requests default to Flare and preserve selected Sunburst. */
   background?: ImageBackground;
   /** @deprecated Use workspace service instead. Kept for backward compat. */

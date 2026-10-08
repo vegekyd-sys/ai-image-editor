@@ -57,6 +57,8 @@ describe('R16–R19: MCP HTTP → shared image Skill → selected provider → b
     [{ model: 'gpt-image-2.5-flare', isNsfw: true }, 'qwen-spicy', 3],
     [{ model: 'unknown-model' }, 'gpt-image-2.5-flare', 5],
     [{ background: 'transparent', aspectRatio: '8:1' }, 'gemini-2.1', 7],
+    [{ isNsfw: true, aspectRatio: '8:1', imageResolution: '8K', background: 'transparent' }, 'qwen-spicy', 3],
+    [{ imageResolution: '8K' }, 'gpt-image-2.5-flare', 5],
   ] as const)('keeps preflight and actual execution aligned for %j', async (args, model, quote) => {
     const { response, payload } = await callImage(args);
     expect(payload.result.isError).not.toBe(true);

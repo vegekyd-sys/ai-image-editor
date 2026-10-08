@@ -15,7 +15,7 @@ export interface ImageModelCapability {
   textToImageSize?: { longSide: number; minShortSide: number };
   aspectRatio: ImageAspectRatioCapability;
   editAspectRatio?: ImageAspectRatioCapability;
-  resolutions?: readonly ('1K' | '2K' | '4K')[];
+  resolutions?: readonly string[];
   supportsTransparency: boolean;
   supportsNsfw: boolean;
   promptMode: 'context' | 'edit';

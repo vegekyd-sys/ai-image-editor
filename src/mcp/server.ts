@@ -95,7 +95,7 @@ export interface McpServerOptions {
     },
   ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
-  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: '1K' | '2K' | '4K' }) => Promise<{ allowed: boolean; message?: string }>;
+  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: string }) => Promise<{ allowed: boolean; message?: string }>;
   /** Called only before a Grok personal-plan request safely falls back to the paid API. */
   onBeforeGrokApiFallback?: (toolName: string, model?: string) => Promise<void>;
 }
@@ -122,7 +122,7 @@ Generation timing varies; report actual completion. No automatic retry or model 
       model: z.string().nullish().describe('Explicit image model preference; otherwise omit for Auto. Unknown IDs use Auto, Flare first. See the generated Image Model Capability table.'),
       isNsfw: z.boolean().nullish().describe('Caller/Agent-assessed NSFW input; routes directly to Qwen Spicy.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5 supports up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
-      imageResolution: z.enum(['1K', '2K', '4K']).nullish().describe('Output resolution preference; Auto can use Nano Banana 2.1. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
+      imageResolution: z.string().nullish().describe('Output resolution preference, normally 1K/2K/4K; Auto can use Nano Banana 2.1. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background preference. Set transparent for cutout/alpha assets. Conflicts are resolved to deliver an image; see the capability table.'),
     },

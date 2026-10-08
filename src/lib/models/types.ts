@@ -16,7 +16,7 @@ export interface GenerateImageRequest {
   category?: string;        // tip category (for auto-routing)
   aspectRatio?: string;
   /** Nano Banana 2.1 output resolution, default 1K. */
-  imageResolution?: '1K' | '2K' | '4K';
+  imageResolution?: string;
   /** Output background contract. Transparent output defaults to GPT Image 2.5 Flare. */
   background?: ImageBackground;
   thinkingEffort?: ReasoningEffort;

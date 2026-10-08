@@ -3035,7 +3035,6 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
     else if (args[i] === '--image-resolution' && args[i + 1]) {
       const resolution = args[++i];
-      if (!['1K', '2K', '4K'].includes(resolution)) { console.error('Invalid --image-resolution. Use 1K, 2K, or 4K.'); process.exit(1); }
       editArgs.imageResolution = resolution;
     }
     else if (args[i] === '--aspect' && args[i + 1]) editArgs.aspectRatio = args[++i];

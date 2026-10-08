@@ -1147,11 +1147,9 @@ try {
     assert.equal(request.body.params.arguments.imageResolution, '4K');
     assert.equal(request.body.params.arguments.aspectRatio, '4:1');
     const before = requests.length;
-    const invalid = await expectFailure(['edit', '--image-model', 'gemini-2.1', '--image-resolution', '8K', 'A product.']);
-    assert.match(invalid.stderr, /Invalid --image-resolution/);
-    assert.equal(requests.length, before);
+    await expectSuccess(['edit', '--image-model', 'gemini-2.1', '--image-resolution', '8K', 'A product.']);
     await expectSuccess(['edit', '--image-model', 'gemini-lite', '--image-resolution', '2K', 'A product.']);
-    assert.equal(requests.length, before + 1);
+    assert.equal(requests.length, before + 2);
   }
 
   {
