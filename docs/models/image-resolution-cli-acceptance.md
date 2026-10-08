@@ -20,4 +20,27 @@ GPT Image 2.5 的 4K 指 3840 长边、最多 8,294,400 像素，不能生成 40
 
 来源：[fal 适配合同](https://fal.ai/models/openai/gpt-image-2.5/flare/text-to-image/api)、[OpenAI 原生尺寸](https://developers.openai.com/api/docs/guides/image-prompting)、[OpenRouter 图片 resolution 参数](https://openrouter.ai/docs/api/api-reference/images/generate-an-image)。
 
-状态：专项验收进行中，未合并、未上线。实际结果在补测后更新。
+## 实测结果
+
+分辨率专项 8 个最终场景均通过安装的 Makaron CLI Chat 实际出图、完整解码、持久化与 CLI 重新读取；原生尺寸 8/8 通过，视觉完整验收 7/8。透明编辑 2K 保留真实 alpha 与源茶壶，主体外轮廓仍有浅色半透明光晕，质量待改善。
+
+| 最终 case | 实际模型 | 保存后尺寸 | 结果 |
+| --- | --- | --- | --- |
+| D01 | Nano Banana 2.1 | 2048×2048 | 通过 |
+| D02 | Nano Banana 2.1 | 4096×4096 | 通过 |
+| F01 | Flare（Auto） | 2048×2048 | 通过 |
+| F02 | Flare | 3840×2160 | 通过 |
+| F07，替代失败 F03 | Flare | 2160×3840 | 通过 |
+| F08，替代失败 F04 | Sunburst | 2048×2048 | 通过 |
+| F09，替代失败 F05 | Flare 编辑 | 2048×2048，真实 alpha | 分辨率通过，边缘光晕警告 |
+| F10，替代失败 F06 | Nano Banana 2.1（Agent依据能力表自动选择） | 4096×4096 | 通过 |
+
+初始 F03/F04/F05 已在 fal 生成成功，本地运行时 decode/normalization 报 RangeError；读取同一已接受请求的原始供应商图片，Sharp 全解码通过，尺寸与成本也有效。F06 在 OpenRouter HTTP 200、17,533,457 字节 JSON 返回后，图片 payload 校验报 RangeError。避开整张大图的带量词正则，改为限长 header 解析和无量词非法字符检查；随后 F07–F10 的独立真实 CLI Chat 请求全部交付。独立 Node 对旧 fal 素材的归一化也能通过，故不能把这个问题描述为图片损坏或供应商不支持；运行时解析/校验是本轮复现的故障环节。原 C09/C10 没有阶段日志，不能逐次认定其旧失败根因相同。
+
+补齐 Flare/Sunburst imageResolution 与原生 image_size，兼容画布保留 Flare-first；方形 4K 转 Nano，透明方形 4K 放宽至 2K 并说明。明确要求高分辨率的透明编辑不缩回源图尺寸。供应商最终计费仍取实际成本，保持既有余额预检政策，没有按分辨率硬编码新图价。
+
+共 12 个独立项目/请求（包含修复前 4 个失败记录），Makaron 共扣 88 credits，最终 8 个出图请求 84 credits，失败请求各仅扣 Agent 1 credit。fal 三个失败请求已产生供应商图片与成本，OpenRouter 失败请求的供应商成本未确认，不能把 Makaron 没扣图片 credits 当作供应商没有费用。没有自动重发失败的付费 POST。
+
+脚本：`scripts/image-resolution-cli-acceptance.mjs`；报告：`test-results/image-resolution-cli/report.html`，所有 receipt、图片、修复前失败及供应商原始图保留于同目录。报告生成用 `node scripts/image-capability-cli-report.mjs --resolution`。本地自动化 2159 测试通过，1 跳过；原 50-case 的参考取舍与其他视觉偏差仍未重新完成验收。
+
+状态：候选工作树已修正，未合并、未上线；分辨率专项通过不替代完整上线验收。

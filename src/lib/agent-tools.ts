@@ -1,5 +1,4 @@
 import { isFalImage25 } from './models/types';
-import { estimateFalImage25Credits } from './models/fal-image25';
 import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
 import { after } from 'next/server';
@@ -1445,7 +1444,7 @@ function createGenerateImageTool(
           if (isFalImage25(billingModel)) {
             const rate = await getTokenRate(billingModel);
             if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'GPT Image 2.5 pricing is not configured.', error: 'pricing_unavailable' };
-            requiredCredits = estimateFalImage25Credits(imagePlan.request.imageResolution);
+            requiredCredits = 5;
           }
           if (billingModel && billingModel !== 'gemini-2.1' && !isFalImage25(billingModel)) {
             const toolName = resolveToolName('edit_image', billingModel, imageInputCount);

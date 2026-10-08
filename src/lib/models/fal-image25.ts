@@ -45,11 +45,6 @@ export function image25Size(aspectRatio?: string, resolution?: string): 'auto' |
   return { width: Math.round(Math.sqrt(1048576 * ratio) / 16) * 16, height: Math.round(Math.sqrt(1048576 / ratio) / 16) * 16 };
 }
 
-/** Balance preflight estimate only; final debit always uses actual supplier cost. */
-export function estimateFalImage25Credits(resolution?: string): number {
-  return resolution === '4K' ? 40 : resolution === '2K' ? 20 : 5;
-}
-
 export function buildFalImage25Request(req: GenerateImageRequest, model: FalImage25Id) {
   validateImageModelRequest(req, model);
   const images = [...(req.image ? [{ url: req.image, role: 'Base image to edit' }] : []), ...(req.references ?? [])];

@@ -53,9 +53,9 @@ describe('R16–R19: MCP HTTP → shared image Skill → selected provider → b
   it.each([
     [{}, 'gpt-image-2.5-flare', 5],
     [{ aspectRatio: '8:1' }, 'gemini-2.1', 7],
-    [{ imageResolution: '4K' }, 'gpt-image-2.5-flare', 40],
+    [{ imageResolution: '4K' }, 'gpt-image-2.5-flare', 5],
     [{ imageResolution: '4K', aspectRatio: '1:1' }, 'gemini-2.1', 16],
-    [{ imageResolution: '4K', aspectRatio: '1:1', background: 'transparent' }, 'gpt-image-2.5-flare', 20],
+    [{ imageResolution: '4K', aspectRatio: '1:1', background: 'transparent' }, 'gpt-image-2.5-flare', 5],
     [{ model: 'gpt-image-2.5-flare', isNsfw: true }, 'qwen-spicy', 3],
     [{ model: 'unknown-model' }, 'gpt-image-2.5-flare', 5],
     [{ background: 'transparent', aspectRatio: '8:1' }, 'gemini-2.1', 7],

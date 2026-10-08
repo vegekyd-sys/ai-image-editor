@@ -2,7 +2,7 @@
 
 2026-10-08：先列验收 case，再实现、逐项回归。此文档记录候选合同，不代表已发布。
 
-最新真实验收见 [CLI Chat 实图验收](image-capability-cli-acceptance.md)：50 个正向 case 全部走安装的 Makaron CLI Chat，47 个真实供应商图片保存/再读取通过，44 个同时通过视觉验收；另有5个CLI Chat故障注入 case通过。2K、4K和15输入参考取舍仍未交付，3项内容质量有偏差。以下早期路由桩结果不替代最新实图结果；当前不具备“全部通过”的上线结论。
+原 50-case 真实验收见 [CLI Chat 实图验收](image-capability-cli-acceptance.md)：47 个真实供应商图片保存/再读取通过，44 个同时通过视觉验收；另有5个CLI Chat故障注入 case通过。后续 [2K/4K 专项修正与实图验收](image-resolution-cli-acceptance.md) 已补齐 GPT 原生分辨率与大图处理，8 个最终场景尺寸和技术链路通过，7 个视觉完整通过，透明 2K 仍有边缘光晕。原 50-case 的 15 输入取舍及其他内容偏差没有重新完成验收。以下早期 R03“2K/4K 只走 Nano”是历史结果，现行规则是兼容画布时 Flare-first，方形 4K 走 Nano；不具备完整上线通过结论。
 
 ## 用户修订：优先出图（先列 case，后改代码）
 
