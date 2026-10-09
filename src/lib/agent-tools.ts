@@ -1533,13 +1533,17 @@ function createGenerateImageTool(
         // Preserve compatibility with older tool results that reported a content block.
         if (skillResult.contentBlocked) ctx.isNsfw = true;
         const batchImages = skillResult.images ?? (skillResult.image ? [skillResult.image] : []);
+        const imageGeneration: import('@/types').PhotoMetadata['imageGeneration'] = {
+          id: skillResult.taskId || crypto.randomUUID(),
+          prompt: mjGeneration?.prompt || editPrompt,
+          model: skillResult.usedModel || billingModel,
+          inputImages: [editTarget, ...resolvedRefs].filter((url): url is string => Boolean(url?.startsWith('http'))),
+        };
         const mediaIndices: number[] = [];
         for (const image of batchImages) {
           ctx.snapshotImages.push(image);
-          if (mjGeneration) {
-            ctx.generatedImageMetadata ??= new Map();
-            ctx.generatedImageMetadata.set(ctx.generatedImages.length, { midjourneyGeneration: mjGeneration });
-          }
+          ctx.generatedImageMetadata ??= new Map();
+          ctx.generatedImageMetadata.set(ctx.generatedImages.length, { imageGeneration, ...(mjGeneration ? { midjourneyGeneration: mjGeneration } : {}) });
           ctx.generatedImages.push(image);
           mediaIndices.push(ctx.snapshotImages.length);
         }

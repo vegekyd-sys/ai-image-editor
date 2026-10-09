@@ -9,6 +9,7 @@ import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { groupWebSearchSourcesByMessage } from '@/lib/web-citations'
 import { createPersistedEditableDesign } from '@/lib/editor/editable-persistence'
 import { cacheProjectData, getCachedProjectData } from '@/lib/imageCache'
+import { restoreImageGenerationHistory } from '@/lib/editor/image-generation-history'
 
 interface LoadedProject {
   ownerId: string | null
@@ -57,9 +58,9 @@ export function useProject(projectId: string, userId: string) {
         .maybeSingle(),
       supabase
         .from('agent_events')
-        .select('type, data, created_at')
+        .select('type, data, created_at, seq, run_id')
         .eq('project_id', projectId)
-        .in('type', ['preview_frame_captured', 'source'])
+        .in('type', ['preview_frame_captured', 'source', 'tool_call', 'image'])
         .order('created_at', { ascending: true }),
       supabase
         .from('project_music')
@@ -109,7 +110,7 @@ export function useProject(projectId: string, userId: string) {
       ])
     }
 
-    const snapshots: Snapshot[] = dbSnapshots.map((s) => {
+    const snapshots: Snapshot[] = restoreImageGenerationHistory(dbSnapshots.map((s) => {
       const imageUrl = s.image_url || (s.type === 'video' ? VIDEO_PLACEHOLDER_IMAGE : '')
       return {
         id: s.id,
@@ -127,7 +128,7 @@ export function useProject(projectId: string, userId: string) {
         ...(s.video_meta ? { videoMeta: s.video_meta as VideoMeta } : {}),
         ...(s.metadata ? { metadata: s.metadata } : {}),
       }
-    })
+    }), agentMediaEvents)
 
     // Publish posters and history first; persisted compositions hydrate independently.
     // Public viewers must read the owner workspace, never their own workspace.

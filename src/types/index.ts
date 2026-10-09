@@ -85,6 +85,14 @@ export interface PhotoMetadata {
   hasAlpha?: boolean;
   transparentRatio?: number;
   generationBackground?: 'auto' | 'opaque' | 'transparent';
+  /** Per-generation prompt shared only by images from the same request. */
+  imageGeneration?: {
+    id: string;
+    prompt: string;
+    model: string;
+    inputImages?: string[];
+    promptKind?: 'submitted' | 'brief';
+  };
   /** Exact submitted MJ payload, persisted with every candidate for prompt transparency. */
   midjourneyGeneration?: {
     prompt: string;

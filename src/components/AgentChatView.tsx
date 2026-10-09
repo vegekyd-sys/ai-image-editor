@@ -20,7 +20,9 @@ import { removeAllInlineVideoUrls, removeInlineMediaNavigationMarkers, removeRen
 import type { ArtifactCompletionAction as CompletionAction } from '@/types';
 import { buildStudioRunStagePlacements, StudioRunProgress, StudioRunStageCard, useStudioRun } from '@/components/StudioRunDock';
 import { resolveOpenAIWebCitations } from '@/lib/web-citations';
-import { resolveImagePromptCard } from '@/lib/editor/image-prompt-card';
+import { resolveImagePromptCard, getGeneratedImageCards, isImageGalleryEnabled } from '@/lib/editor/image-prompt-card';
+import ImagePromptCard from '@/components/ImagePromptCard';
+import GeneratedImageGallery from '@/components/GeneratedImageGallery';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
 const videoArCache = new Map<string, string>();
@@ -84,74 +86,7 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
   );
 }
 
-/** Collapsible card showing a submitted prompt, or a labeled legacy MJ brief. */
-function EditPromptCard({ prompt, inputImages, editModel, isBrief }: { prompt: string; inputImages?: string[]; editModel?: string; isBrief?: boolean }) {
-  const { t } = useLocale();
-  const [open, setOpen] = useState(false);
-  const inputImageLabels = [t('chat.currentImage'), t('chat.referenceImage')];
-  const modelLabels: Record<string, string> = { 'mj-v8.2': 'Midjourney V8.2', gemini: 'nano banana 2', 'gemini-2.1': 'nano banana 2.1', 'gemini-lite': 'nano banana 2 lite', 'qwen-spicy': 'qwen spicy', openai: 'OpenAI Image 2', 'gpt-image-2.5-flare': 'GPT Image 2.5 Flare', 'gpt-image-2.5-sunburst': 'GPT Image 2.5 Sunburst', 'wan2.7-image': 'Wan 2.7 Image' };
-  const modelLabel = modelLabels[editModel || ''] || editModel || 'model';
-  return (
-    <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', maxWidth: 308 }}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left active:opacity-70 transition-opacity"
-      >
-        {/* Reference image thumbnail in collapsed header */}
-        {!open && inputImages?.[0] && inputImages[0].length > 10 && (
 
-          <img
-            src={inputImages[0]}
-            alt=""
-            className="w-7 h-7 rounded-md object-cover flex-shrink-0"
-            style={{ border: '1px solid rgba(255,255,255,0.1)' }}
-          />
-        )}
-        <span className="text-[11px] font-medium flex-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          {isBrief ? t('chat.midjourneyBrief') : t('chat.promptCard').replace(/nano banana 2|qwen edit|OpenAI Image 2/gi, modelLabel)}
-        </span>
-        <span className="text-[11px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? t('chat.collapse') : t('chat.expand')}</span>
-      </button>
-      {open && (
-        <div className="px-3 pb-3 flex flex-col gap-2.5">
-          {inputImages && inputImages.filter(img => img && img.length > 10).length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                {t('chat.inputImages')}{inputImages.length > 1 ? `（${inputImages.length}）` : ''}
-              </span>
-              <div className="flex gap-2 flex-wrap">
-                {inputImages.filter(img => img && img.length > 10).map((img, i) => (
-                  <div key={i} className="flex flex-col gap-1">
-                    { }
-                    <img
-                      src={img}
-                      alt={`Input ${i + 1} to Gemini`}
-                      className="rounded-lg object-cover"
-                      style={{
-                        width: inputImages.length > 1 ? 100 : 'auto',
-                        height: inputImages.length > 1 ? 100 : 140,
-                        maxHeight: 140,
-                        border: '1px solid rgba(255,255,255,0.08)',
-                      }}
-                    />
-                    {inputImages.length > 1 && (
-                      <span className="text-[9px] text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                        {inputImageLabels[i] ?? `${t('chat.imageLabel')} ${i + 1}`}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <p className="text-[11px] leading-relaxed whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.55)', fontFamily: 'monospace' }}>
-            {prompt}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function CompletionActionCard({ actions, disabled, onAction }: {
   actions: CompletionAction[];
@@ -712,6 +647,10 @@ export default function AgentChatView({
   readOnly,
 }: AgentChatViewProps) {
   const { t } = useLocale();
+  const [imageGalleryEnabled, setImageGalleryEnabled] = useState(isImageGalleryEnabled(process.env.NODE_ENV === 'development', process.env.NEXT_PUBLIC_IMAGE_GALLERY_EXPERIMENT === '1'));
+  useEffect(() => {
+    setImageGalleryEnabled(isImageGalleryEnabled(process.env.NODE_ENV === 'development', process.env.NEXT_PUBLIC_IMAGE_GALLERY_EXPERIMENT === '1', new URLSearchParams(window.location.search).get('imageGallery')));
+  }, []);
 
   // Find 1-based snapshot index by messageId (for @N badge on inline images)
   const getSnapshotIndex = useCallback((messageId: string): number | null => {
@@ -1559,38 +1498,19 @@ export default function AgentChatView({
 
                     {/* Inline image — shared for generate_image and design poster */}
                     {msg.image && (() => {
-                      const candidates = snapshots.map((snapshot, index) => ({ snapshot, index }))
-                        .filter(({ snapshot }) => snapshot.messageId === msg.id && !snapshot.design && !snapshot.videoMeta);
-                      if (candidates.length > 1) return (
-                        <div className="mt-3" data-testid="generated-image-candidates">
-                          <p className="text-sm text-white/60 mb-2">{t('image.candidates')} · {candidates.length}</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            {candidates.map(({ snapshot, index }, candidate) => {
-                              const source = snapshot.imageUrl || snapshot.image;
-                              return (
-                                <button key={snapshot.id} aria-label={`${t('image.candidate')} ${candidate + 1}`}
-                                  aria-pressed={currentSnapshotIndex === index + 1}
-                                  className="relative overflow-hidden rounded-xl border border-white/10 active:opacity-75"
-                                  onClick={event => onImageTap(msg.id, event.currentTarget.getBoundingClientRect(), source, snapshot.id)}>
-                                  <img src={source.startsWith('http') ? getThumbnailUrl(source, isPanel ? 340 : 512, 75, 2000, 'contain') : source}
-                                    alt={`${t('image.candidate')} ${candidate + 1}`} className="w-full h-auto" />
-                                  <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-xs text-white">@{index + 1}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <p className="text-xs text-white/40 mt-2">{t('image.chooseCandidate')}</p>
-                        </div>
-                      );
-                      const snapIdx = getSnapshotIndex(msg.id);
+                      const cards = getGeneratedImageCards(msg, snapshots);
+                      if (imageGalleryEnabled && cards.length) return <GeneratedImageGallery cards={cards} currentSnapshotIndex={currentSnapshotIndex} isPanel={isPanel}
+                        onSelect={(snapshot, rect) => onImageTap(msg.id, rect, snapshot.imageUrl || snapshot.image, snapshot.id)} />;
+                      const classicImage = cards.at(-1)?.snapshot.imageUrl || cards.at(-1)?.snapshot.image || msg.image;
+                      const snapIdx = cards.length ? cards[cards.length - 1].index + 1 : getSnapshotIndex(msg.id);
                       return (
                         <button
-                          onClick={(e) => handleGeneratedImageClick(msg.id, e)}
+                          onClick={(e) => cards.length ? onImageTap(msg.id, e.currentTarget.getBoundingClientRect(), classicImage, cards[cards.length - 1].snapshot.id) : handleGeneratedImageClick(msg.id, e)}
                           className="block w-full mt-3 active:opacity-75 transition-opacity relative"
                         >
                           { }
                           <img
-                            src={msg.image.startsWith('http') ? getThumbnailUrl(msg.image, isPanel ? 680 : 1024, 75, 2000, 'contain') : msg.image}
+                            src={classicImage.startsWith('http') ? getThumbnailUrl(classicImage, isPanel ? 680 : 1024, 75, 2000, 'contain') : classicImage}
                             alt="Generated"
                             className="rounded-2xl"
                             style={{ border: '1px solid rgba(255,255,255,0.08)', maxWidth: 308 }}
@@ -1630,8 +1550,9 @@ export default function AgentChatView({
 
                     {/* editPrompt card — collapsible */}
                     {(() => {
+                      if (imageGalleryEnabled && msg.image && getGeneratedImageCards(msg, snapshots).length) return null;
                       const card = resolveImagePromptCard(msg, snapshots);
-                      return card && <EditPromptCard prompt={card.prompt} inputImages={msg.editInputImages} editModel={card.model} isBrief={card.isBrief} />;
+                      return card && <ImagePromptCard prompt={card.prompt} inputImages={card.inputImages} editModel={card.model} isBrief={card.isBrief} />;
                     })()}
 
                     {/* Inline music — format: "music:INDEX|TITLE|DURATION|TAGS|playUrl|finalUrl" */}
