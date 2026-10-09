@@ -11,6 +11,18 @@ const scope: RetakeInspectionScope = { userId: 'owner', projectId: 'project', ru
   sourceUrl: 'https://example.com/original.mp4', start: 18, end: 21, model: 'fal-h3-max' }
 const secret = 'test-server-secret'
 
+describe('targeted samples for brief events', () => {
+  it('adds close source samples without dropping either join or selected endpoints', () => {
+    const plan = planRetake({start:5,end:10},15,'fal-h3-max');
+    const defaults=retakeInspectionTimestamps(plan,24);
+    const samples=retakeInspectionTimestamps(plan,24,[7.12,7.24,7.36,7.48,7.24]);
+    expect(defaults.every(time=>samples.includes(time))).toBe(true);
+    expect(samples.filter(time=>time>=7.12&&time<=7.48)).toEqual([7.12,7.24,7.36,7.48]);
+    for(const time of [4.9,10,NaN,Infinity]) expect(()=>retakeInspectionTimestamps(plan,24,[time])).toThrow(/inside/);
+    expect(()=>retakeInspectionTimestamps(plan,24,Array(9).fill(7))).toThrow(/eight/);
+  });
+});
+
 describe('Retake inspection evidence', () => {
   it('accepts the exact inspected selection across durable attempts', () => {
     const receipt = signRetakeInspection(scope, secret)

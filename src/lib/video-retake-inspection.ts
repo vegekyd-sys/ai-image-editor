@@ -56,12 +56,14 @@ export function readRetakeInspectionClock(receipt: string | undefined, scope: Re
 }
 
 /** Include the selected action and both surrounding reference boundary states. */
-export function retakeInspectionTimestamps(plan: RetakePlan, fps: number): number[] {
+export function retakeInspectionTimestamps(plan: RetakePlan, fps: number, extraTimes: number[] = []): number[] {
   if (!Number.isFinite(fps) || fps < 1) throw new Error('Retake inspection needs a measured frame rate.')
+  if (extraTimes.length > 8 || extraTimes.some(time=>!Number.isFinite(time) || time < plan.start || time >= plan.end)) throw new Error('Extra samples must be up to eight source times inside the selected interval.');
   const length = plan.end - plan.start
   const last = Math.max(plan.start, plan.end - 1 / fps)
   const selectedSamples = Math.min(6, Math.max(2, Math.floor(length * fps)))
   return [...new Set([
+    ...extraTimes,
     Math.max(0, plan.start - 1 / fps),
     ...Array.from({ length: selectedSamples }, (_, index) => index === selectedSamples - 1
       ? last : plan.start + length * index / (selectedSamples - 1)),

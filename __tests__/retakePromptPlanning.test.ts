@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { planRetake } from '@/lib/video-retake-contract'
+import { bindRetakeReferences } from '@/lib/video-retake-references'
 import { retakePromptPlanning, retakeShotPlanError } from '@/lib/video-retake-prompt-planning'
 
 describe('scene-neutral inspection timing', () => {
@@ -33,3 +34,9 @@ describe('scene-neutral inspection timing', () => {
     expect(retakeShotPlanError(slots, '输出1–2秒：近景；输出2秒处硬切，输出2–4秒：俯拍。', { start: 1, end: 4 })).toBeNull()
   })
 })
+
+it('binds the cropped source motion beside a content control, not beside a changed camera',()=>{
+  const input={prompt:'Continue <<<media_1>>> while showing <<<media_3>>> at the middle.',model:'fal-h3-max' as const,sourceIndex:1,referenceIndices:[],middleIndex:3};
+  expect(bindRetakeReferences(input)).toBe('Continue Video 1 while showing Image 3 at the middle.');
+  expect(bindRetakeReferences({...input,cameraChange:true})).toContain('inspected original scene');
+});

@@ -90,10 +90,10 @@ async function extractSourceStill(dir: string, ffmpeg: string, time: number, out
 }
 
 /** Download once and extract the entire inspection sheet from one local source. */
-export async function extractRetakeInspectionFrames(source: Buffer, plan: RetakePlan, fps: number) {
+export async function extractRetakeInspectionFrames(source: Buffer, plan: RetakePlan, fps: number, extraTimes: number[] = []) {
   return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
     const last = await lastSourceFrameTime(join(dir, 'source.mp4'), fps)
-    const timestamps = [...new Set(retakeInspectionTimestamps(plan, fps).map(time => Math.min(time, last)))]
+    const timestamps = [...new Set(retakeInspectionTimestamps(plan, fps, extraTimes).map(time => Math.min(time, last)))]
     const sampled = await Promise.all(timestamps.map((time,index) =>
       extractSourceStill(dir,ffmpeg,time,join(dir,`inspection-${index}.jpg`),plan.sourceDuration)))
     return {timestamps:sampled.map(frame=>frame.time),frames:sampled.map(frame=>frame.image)}

@@ -28,7 +28,7 @@ export function bindRetakeReferences(input: {
     if (index === input.correctedEndIndex) return 'Image 2';
     if(index===input.endIndex) return input.model === 'fal-h3-max' ? 'Image 2' : `<<<image_${input.referenceIndices.length + 1}>>>`;
     if (index === input.sourceIndex) return input.model === 'fal-h3-max'
-      ? input.correctedStartIndex || input.middleIndex || input.endIndex || input.cameraChange || input.boundaryMode === 'scene' ? 'the inspected original scene' : 'Video 1' : '@video1';
+      ? input.correctedStartIndex || input.endIndex || input.cameraChange || input.boundaryMode === 'scene' ? 'the inspected original scene' : 'Video 1' : '@video1';
     if (index === input.middleIndex) return 'Image 3';
     const position = input.referenceIndices.indexOf(index);
     if (position < 0) throw new Error(`Media @${index} has no supplied reference. Add its image index to reference_media_indices.`);

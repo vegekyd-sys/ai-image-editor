@@ -38,7 +38,7 @@ export function retakeVideoMeta(job: Job): VideoMeta {
     duration: job.plan.sourceDuration, model: job.model_id, resolution: job.resolution as VideoMeta['resolution'], operation: 'edit',
     createdAt: job.created_at, error: job.error, pipelineStage: job.stage,
     retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url,
-      inputDuration: (job.source_meta.boundaryFrames as { middle?: unknown } | undefined)?.middle || (job.model_id === 'fal-h3-max' && (job.source_meta.correctedBoundaries || job.source_meta.endFrameUrl || job.source_meta.cameraChange || job.source_meta.boundaryMode === 'scene')) ? 0
+      inputDuration: (job.model_id === 'fal-h3-max' && (job.source_meta.correctedBoundaries || job.source_meta.endFrameUrl || job.source_meta.cameraChange || job.source_meta.boundaryMode === 'scene')) ? 0
         : job.context_url ? job.plan.contextEnd - job.plan.contextStart : undefined, generationDuration: job.plan.generationDuration },
     width: Number(job.source_meta.width), height: Number(job.source_meta.height) }
 }
@@ -159,9 +159,10 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       posting = true
       return reservation
     }
-    // Optional visual-state controls define the desired result alongside
-    // source context; omit conflicting video references when those controls apply.
-    const useVideoReference = model !== 'fal-h3-max' || (!corrected && !boundaryFrames?.middle && !input.retake.endFrame && !input.retake.cameraChange && input.retake.boundaryMode !== 'scene')
+    // A content checkpoint supplements the source motion; it does not replace
+    // its choreography. Omit Video 1 only when the requested camera/scene or
+    // corrected boundary attributes would conflict with that reference.
+    const useVideoReference = model !== 'fal-h3-max' || (!corrected && !input.retake.endFrame && !input.retake.cameraChange && input.retake.boundaryMode !== 'scene')
     const result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
       images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages, ...(model !== 'fal-h3-max' && input.retake.endFrame ? [input.retake.endFrame.imageUrl] : [])], h3RetakeBoundaryFrames: boundaryFrames,
       script: prompt, duration: model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,

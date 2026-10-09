@@ -124,3 +124,14 @@ it.each([{middleFrame:{imageUrl:'https://image.example/middle.jpg',time:2}},{end
   expect(stubs.provider).not.toHaveBeenCalled();
   expect(stubs.jobs).toHaveLength(0);
 });
+
+it.each([false,true])('keeps source motion for a content checkpoint but omits a competing camera reference (camera change: %s)',async cameraChange=>{
+  const middle='https://image.example/content-state.jpg';
+  const result=await createVideoRetake({userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:5,end:10,editMode:'modify',cameraChange,middleFrame:{imageUrl:middle,time:2}},script:'Apply the requested change at Image 3 while continuing the action.',videoModel:'fal-h3-max'});
+  expect(result.success).toBe(true);
+  const input=stubs.provider.mock.calls[0][0];
+  expect(input.h3RetakeBoundaryFrames).toMatchObject({lockEndpoints:true,middle:{imageUrl:middle,time:2}});
+  if(cameraChange) expect(input.videoUrl).toBeUndefined();
+  else expect(input.videoUrl).toContain('-context.mp4');
+  expect(retakeVideoMeta(stubs.jobs[0]).retake!.inputDuration).toBe(cameraChange?0:5);
+});
