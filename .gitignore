@@ -54,6 +54,7 @@ next-env.d.ts
 # test images and results
 /testcase/
 /test-results/
+/.midjourney-lab/
 *.jpg
 *.jpeg
 *.png

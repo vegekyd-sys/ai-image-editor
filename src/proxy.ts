@@ -2,8 +2,12 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { matchSupportedLocale } from '@/lib/locales'
 import { appendAuthReturnParam, normalizeAuthReturnPath } from '@/lib/auth-return'
+import { isLocalMidjourneyRequest } from '@/lib/midjourney-local-access'
 
 export async function proxy(request: NextRequest) {
+  if ((request.nextUrl.pathname === '/midjourney' || request.nextUrl.pathname === '/api/local-midjourney') && isLocalMidjourneyRequest(request)) {
+    return NextResponse.next()
+  }
   const requestedLocale = matchSupportedLocale(request.nextUrl.searchParams.get('locale'))
   const requestedReturnPath = normalizeAuthReturnPath(request.nextUrl.searchParams.get('next'))
   if (requestedLocale) request.cookies.set('locale', requestedLocale)
