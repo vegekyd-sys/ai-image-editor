@@ -81,7 +81,7 @@ export async function createVideoPipeline(input: CreateVideoInput): Promise<Crea
           if (billing) await save(job, { reserved_upscale_credits: billing.reservedUpscaleCredits })
         } : undefined })
       if (!result.success || !result.taskId) {
-        await save(job, { stage: result.submissionUncertain ? 'submission_uncertain' : 'failed' })
+        await save(job, { stage: result.submissionUncertain ? 'submission_uncertain' : 'failed', error: result.message })
         if (!result.submissionUncertain) return result
       } else {
         console.info('[video-pipeline] generation receipt', { id: job.id, taskId: result.taskId })

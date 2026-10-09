@@ -30,6 +30,16 @@ export interface EvolinkTaskResult {
   error?: string
 }
 
+/** An explicit rejected POST has no paid receipt to reconcile. Transport/5xx
+ * failures remain ambiguous and must never authorize an automatic repost. */
+export class EvolinkSubmissionError extends Error {
+  readonly code = 'evolink_submission_rejected'
+  constructor(readonly statusCode: number) {
+    super(`Evolink rejected video submission (HTTP ${statusCode}); no provider task was accepted.`)
+    this.name = 'EvolinkSubmissionError'
+  }
+}
+
 export class EvolinkInputError extends Error {
   readonly code: string
   readonly retryable = false
@@ -122,6 +132,9 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
   })
 
   if (!response.ok) {
+    if ([400, 401, 403, 404, 413, 415, 422, 429].includes(response.status)) {
+      throw new EvolinkSubmissionError(response.status)
+    }
     const errorText = await response.text()
     console.error(`[evolink] ${response.status}: ${errorText.slice(0, 300)}`)
     throw new Error(`Evolink API error ${response.status}: ${errorText}`)

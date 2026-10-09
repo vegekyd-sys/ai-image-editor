@@ -791,7 +791,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (e instanceof ProviderImageInputError) {
       return { success: false, message: e.message, retryable: false, repairable: true, terminal: false, errorCode: e.code, submissionUncertain: false };
     }
-    const { EvolinkInputError } = await import('../evolink');
+    const { EvolinkInputError, EvolinkSubmissionError } = await import('../evolink');
+    if (e instanceof EvolinkSubmissionError) return { success: false, message: e.message, retryable: false, repairable: true, errorCode: e.code, submissionUncertain: false };
     if (e instanceof EvolinkInputError) {
       console.warn('[create_video input rejected]', e.message);
       return {

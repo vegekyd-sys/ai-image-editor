@@ -54,6 +54,13 @@ beforeEach(() => {
   mocks.upload.mockResolvedValue({ error: null }); mocks.refund.mockResolvedValue({ error: null })
 })
 describe('recoverable Eco and independent enhancement', () => {
+  it('reports a confirmed generation rejection instead of leaving a rendering root', async () => {
+    mocks.create.mockResolvedValueOnce({ success: false, submissionUncertain: false, message: 'Provider rejected submission (HTTP 400).' })
+    const result = await createVideoPipeline({ script: 'Replace the character', images: [], userId: owner, videoModel: 'seedance-2.5-eco', duration: -1 })
+    expect(result).toMatchObject({ success: false, submissionUncertain: false })
+    expect(mocks.job).toMatchObject({ stage: 'failed', error: 'Provider rejected submission (HTTP 400).' })
+    expect(mocks.submit).not.toHaveBeenCalled()
+  })
   it.each([undefined, 'auto'] as const)('generates 480p then bills and submits 1080p delivery when resolution is %s', async videoResolution => {
     const reserve = vi.fn().mockResolvedValue({ reservedUpscaleCredits: 15 })
     mocks.create.mockImplementationOnce(async input => {
