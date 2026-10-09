@@ -2,12 +2,24 @@ import { partitionCompositionMediaRefs } from '@/lib/agent-media-index';
 import { describe, expect, it } from 'vitest';
 import {
   findSnapshotMediaIndex,
+  initializeAgentSnapshotUrls,
   pinAgentMediaUrl,
   rebuildAgentSnapshotUrls,
   snapshotUrlForAgent,
 } from '@/lib/agent-media-index';
 
 describe('Agent Media Index synchronization', () => {
+  it('keeps blank composition slots before a materialized video across turns', () => {
+    const urls = ['photo.jpg', '', 'final.mp4'];
+    const initialized = initializeAgentSnapshotUrls(urls, 'final.mp4');
+    expect(initialized).toEqual(urls);
+    expect(initialized[3 - 1]).toBe('final.mp4');
+    initialized.push('next.mp4');
+    expect(urls).toHaveLength(3);
+    expect(initializeAgentSnapshotUrls([], 'current.jpg')).toEqual([]);
+    expect(initializeAgentSnapshotUrls(undefined, '')).toEqual([]);
+    expect(initializeAgentSnapshotUrls(undefined, 'current.jpg')).toEqual(['current.jpg']);
+  });
   const rows = [
     { id: 'image-1', image_url: 'https://cdn.example.com/image-1.jpg', type: null },
     {

@@ -1,4 +1,5 @@
 import { streamText } from 'ai';
+import { initializeAgentSnapshotUrls } from './agent-media-index';
 import type { ModelMessage } from 'ai';
 import type { ModelId } from './models/types';
 import agentPrompt from './prompts/agent.md';
@@ -300,7 +301,7 @@ export async function* runMakaronAgent(
     videoAuto: options?.videoAuto,
     audioAttachments: options?.audioAttachments,
     preferredModel: options?.preferredModel,
-    snapshotImages: (options?.snapshotImages ?? [currentImage]).filter(img => img.length > 0),
+    snapshotImages: initializeAgentSnapshotUrls(options?.snapshotImages, currentImage),
     explicitMediaIndices: options?.explicitMediaIndices ?? [],
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
