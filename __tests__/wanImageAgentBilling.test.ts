@@ -259,3 +259,31 @@ describe('Image capability Agent integration cases', () => {
     expect(editImage).toHaveBeenCalledTimes(2);
   });
 });
+
+
+describe('Midjourney Agent batch billing and timeline', () => {
+  it('publishes all four candidates after one awaited batch-cost debit', async () => {
+    const { tool, ctx, editImage, getTokenRate, deductByTokens, deductCredits, requireCredits } = setup();
+    ctx.preferredModel = 'mj-v8.2';
+    getTokenRate.mockResolvedValue({ model_id: 'mj-v8.2', markup: 2, is_active: true });
+    const images = ['a', 'b', 'c', 'd'].map(value => `data:image/png;base64,${value}`);
+    editImage.mockResolvedValue({ success: true, image: images[0], images, taskId: 'mj-accepted', usedModel: 'mj-v8.2', provider: 'evolink',
+      usage: { modelId: 'mj-v8.2', inputTokens: 100, outputTokens: 60, providerCostUsd: .0801 } });
+    const result = await tool.execute({ editPrompt: '秋天的一只咖啡杯' });
+    expect(requireCredits).toHaveBeenCalledWith('test-user', 18);
+    expect(deductByTokens).toHaveBeenCalledTimes(1);
+    expect(deductCredits).not.toHaveBeenCalled();
+    expect(ctx.generatedImages).toEqual(images);
+    expect(ctx.snapshotImages).toEqual(images);
+    expect(result).toMatchObject({ mediaIndices: [1, 2, 3, 4], candidateCount: 4, taskId: 'mj-accepted' });
+  });
+  it('blocks the paid request when MJ pricing is missing or the source requires editing', async () => {
+    const { tool, ctx, editImage, getTokenRate } = setup();
+    ctx.preferredModel = 'mj-v8.2';
+    getTokenRate.mockResolvedValue(null);
+    expect(await tool.execute({ editPrompt: 'a cup' })).toMatchObject({ success: false, error: 'pricing_unavailable' });
+    ctx.snapshotImages = ['https://example.com/photo.png'];
+    expect(await tool.execute({ editPrompt: 'remove background', media_index: 1 })).toMatchObject({ success: false });
+    expect(editImage).not.toHaveBeenCalled();
+  });
+});

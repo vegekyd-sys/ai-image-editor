@@ -105,3 +105,14 @@ describe('R16–R19: MCP HTTP → shared image Skill → selected provider → b
     expect(state.debit).not.toHaveBeenCalled();
   });
 });
+
+it('MCP preserves all MJ candidates and charges the batch once', async () => {
+  const images = ['YQ==', 'Yg==', 'Yw==', 'ZA=='].map(data => `data:image/png;base64,${data}`);
+  state.generate.mockResolvedValue({ image: images[0], images, taskId: 'mj-accepted', provider: 'evolink', usage: { modelId: 'mj-v8.2', inputTokens: 10, outputTokens: 12, providerCostUsd: .0801 } });
+  const { payload } = await callImage({ model: 'mj-v8.2' });
+  expect(payload.result.isError).not.toBe(true);
+  expect(payload.result.content.filter((item: any) => item.type === 'image')).toHaveLength(4);
+  expect(state.requireCredits).toHaveBeenCalledWith('test-user', 18);
+  expect(state.tokenDebit).toHaveBeenCalledTimes(1);
+  expect(state.debit).not.toHaveBeenCalled();
+});
