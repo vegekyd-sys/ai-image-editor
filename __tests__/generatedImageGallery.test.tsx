@@ -26,7 +26,7 @@ describe('model-independent generated image gallery', () => {
     const view = render(<GeneratedImageGallery cards={cards} currentSnapshotIndex={3} onSelect={onSelect} />);
     expect(screen.getAllByRole('img')).toHaveLength(3);
     const second = view.container.querySelector('[data-snapshot-id="second"]')! as HTMLElement;
-    fireEvent.click(within(second).getByRole('button', { name: /^Prompt/ }));
+    fireEvent.click(within(second).getByRole('button', { name: /发给 GPT/ }));
     expect(within(second).getByText('second prompt')).toBeTruthy();
     expect(screen.queryByText('first prompt')).toBeNull();
     const imageButton = within(second).getByRole('button', { name: '生成图片 2' });
