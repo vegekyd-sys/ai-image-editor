@@ -1497,11 +1497,11 @@ export default function AgentChatView({
                     )}
 
                     {/* Inline image — shared for generate_image and design poster */}
-                    {msg.image && (() => {
+                    {(msg.image || (imageGalleryEnabled && getGeneratedImageCards(msg, snapshots).length > 0)) && (() => {
                       const cards = getGeneratedImageCards(msg, snapshots);
                       if (imageGalleryEnabled && cards.length) return <GeneratedImageGallery cards={cards} currentSnapshotIndex={currentSnapshotIndex} isPanel={isPanel}
                         onSelect={(snapshot, rect) => onImageTap(msg.id, rect, snapshot.imageUrl || snapshot.image, snapshot.id)} />;
-                      const classicImage = cards.at(-1)?.snapshot.imageUrl || cards.at(-1)?.snapshot.image || msg.image;
+                      const classicImage = cards.at(-1)?.snapshot.imageUrl || cards.at(-1)?.snapshot.image || msg.image || '';
                       const snapIdx = cards.length ? cards[cards.length - 1].index + 1 : getSnapshotIndex(msg.id);
                       return (
                         <button
@@ -1550,7 +1550,7 @@ export default function AgentChatView({
 
                     {/* editPrompt card — collapsible */}
                     {(() => {
-                      if (imageGalleryEnabled && msg.image && getGeneratedImageCards(msg, snapshots).length) return null;
+                      if (imageGalleryEnabled && getGeneratedImageCards(msg, snapshots).length) return null;
                       const card = resolveImagePromptCard(msg, snapshots);
                       return card && <ImagePromptCard prompt={card.prompt} inputImages={card.inputImages} editModel={card.model} isBrief={card.isBrief} />;
                     })()}
