@@ -15,6 +15,13 @@ metadata:
 
 # Video Segment Edit
 
+## Scope
+
+This supplements full-source video editing. Use it only for a requested bounded
+range/scene. Whole-video character replacement or a persistent global change
+stays on video-edit, even for a short source or a single changed attribute.
+Explicit new source/scope overrides prior GUI or chat ranges and actions.
+
 ## Known time interval: Local video editing (局部编辑 / Edit segment)
 
 GUI selection is optional. Resolve explicit seconds/timecodes, "first/last N
@@ -25,7 +32,7 @@ selected action and boundaries, then call `retake_video` with the inspection
 receipt and a scene-informed expanded instruction. If inspection fails, report
 the failure instead of generating blindly. `retake_video` owns source
 validation, contextual clipping, model submission, exact interval replacement,
-original-audio preservation and full-video delivery. Do not screenshot-locate
+selected audio policy and full-video delivery. Do not screenshot-locate
 an already known interval, script a second clipping/assembly pipeline, or ask
 for a second merge confirmation. Use original-source seconds, including a
 bounded external clip's source offset. Respect the model explicitly selected
@@ -41,9 +48,14 @@ retained original narration. Adjacent speech belongs to surrounding footage,
 and untimed text is not a precise cue. Do not transcribe the same source again.
 No recognized speech does not imply silence; ASR does not measure music beats,
 effects or lip synchronization. If unavailable speech is essential to the edit,
-resolve that evidence before submitting rather than inventing timing. This
-workflow preserves original audio; explain any conflict between a requested
-visual change and retained dialogue instead of claiming the dialogue changed.
+resolve that evidence before submitting rather than inventing timing. Choose audio_mode independently of modify/replace: original for visual-only
+edits (preserve the complete original soundtrack), generated when the request
+changes speech, music or effects (use new clip audio only inside the selection).
+Write new dialogue and sound explicitly, complete within outputSelection.
+Generated audio follows its video timing; do not promise source speech is kept
+inside that selection. Outside audio remains source audio. Verify delivered
+ASR and speaking lips when requested; missing generated audio is a failure,
+not permission to silently use original sound.
 
 Choose `edit_mode` from intent. `modify` changes the inside of the existing sequence while preserving the original first/last composition and action states, including multi-angle edits and layers. `replace` discards the selected shot/scene; original endpoints need not match. Camera changes alone do not imply replacement. Do not supply the legacy boundary_mode override. On model-only comparison follow-ups, reuse the last explicitly edited original source, interval and demand, rather than editing the generated output or GUI's current selection.
 
@@ -209,7 +221,7 @@ inspection/planning only and do not submit a paid generation in that case.
 The user's clear edit instruction authorizes this operation. Do not require GUI
 selection, extract before/segment/after files, call generate_animation for a
 separate patch, or ask for a second merge confirmation. retake_video owns context,
-replacement, original audio, and full-video delivery. Poll the returned root task;
+replacement, the chosen audio policy, and full-video delivery. Poll the returned root task;
 a delivery retry must not create another provider generation.
 
 ## Completion
@@ -218,5 +230,5 @@ Confirm the delivered complete video is playable and the requested change is
 visible in the replaced interval, with coherent opening/ending action and visual
 meaning/timing consistent with retained narration where relevant. Report the
 actual replaced seconds and any failure honestly. Provider completion alone is
-not successful editing. Precise cuts, subtitles, audio replacement and extension
+not successful editing. Precise cuts, subtitles, standalone audio work and extension
 use their dedicated tools, also from natural-language instructions.

@@ -124,7 +124,18 @@ export async function extractRetakeBoundaryFrames(source: Buffer, plan: RetakePl
   })
 }
 
-/** Replace only selected frames. The original complete audio bed is mapped once. */
+/** A completed provider result cannot acquire missing audio by polling again. */
+export class RetakeDeliveryError extends Error {}
+
+function tempoFilters(factor: number): string {
+  const stages: number[] = []
+  while (factor > 2) { stages.push(2); factor /= 2 }
+  while (factor < .5) { stages.push(.5); factor /= .5 }
+  stages.push(factor)
+  return stages.map(value => `atempo=${value}`).join(',')
+}
+
+/** Replace selected frames and, only when requested, their synchronized audio. */
 export async function assembleRetake(source: Buffer, patch: Buffer, plan: RetakePlan, finalImage?: Buffer): Promise<{ bytes: Buffer; meta: VideoProbe }> {
   return withFiles({ 'source.mp4': source, 'patch.mp4': patch, ...(finalImage ? {'ending.png': finalImage} : {}) }, async (dir, ffmpeg) => {
     const [meta, generated] = await Promise.all([probeRetakeVideoFile(join(dir, 'source.mp4')), probeRetakeVideoFile(join(dir, 'patch.mp4'))])
@@ -134,6 +145,8 @@ export async function assembleRetake(source: Buffer, patch: Buffer, plan: Retake
     const startFrame = Math.round(plan.start * fps), endFrame = finalImage ? totalFrames : Math.round(plan.end * fps)
     const replacementFrames = endFrame - startFrame
     if (replacementFrames <= 0) throw new Error('Retake interval is shorter than one source frame.')
+    const useGeneratedAudio = plan.audioMode === 'generated'
+    if (useGeneratedAudio && !generated.audioCodec) throw new RetakeDeliveryError('The generated clip has no audio track. New-audio delivery cannot silently substitute the original soundtrack. Keep the provider result for inspection.')
     const contextLength = plan.contextEnd - plan.contextStart
     const offset = plan.patchOffset
     const scale = `scale=${meta.width}:${meta.height}:force_original_aspect_ratio=decrease,pad=${meta.width}:${meta.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`
@@ -168,16 +181,38 @@ export async function assembleRetake(source: Buffer, patch: Buffer, plan: Retake
     if (endFrame < totalFrames) { graph.push(`[0:v]fps=${fps},trim=start_frame=${endFrame}:end_frame=${totalFrames},setpts=PTS-STARTPTS,setsar=1,format=yuv420p[a]`); legs.push('[a]') }
     // Give the frame-fitted patch and untouched source legs one CFR clock.
     graph.push(`${legs.join('')}concat=n=${legs.length}:v=1:a=0,setpts=N/(${fps}*TB)[v]`)
+    if (useGeneratedAudio) {
+      // Use the same first-to-last-frame clock as fitPatch. Changing video
+      // speed without changing audio speed would separate dialogue and lips.
+      const fitFrames = plan.outputMode === 'selection' ? replacementFrames : contextFrames
+      const generatedFps = generated.fps || fps
+      const tempo = (Math.max(1, generatedFrames - 1) / generatedFps) / (Math.max(1, fitFrames - 1) / fps)
+      const patchStart = plan.outputMode === 'selection' ? 0 : offsetFrames / fps
+      const length = replacementFrames / fps
+      const fade = Math.min(.01, length / 4)
+      graph.push(`[1:a]aresample=48000,aformat=channel_layouts=stereo,atrim=duration=${generatedFrames / generatedFps},asetpts=PTS-STARTPTS,${tempoFilters(tempo)},apad,atrim=start=${patchStart}:end=${patchStart + length},asetpts=PTS-STARTPTS,afade=t=in:d=${fade},afade=t=out:st=${length-fade}:d=${fade}[pa]`)
+      const audioLegs: string[] = []
+      const sourceAudio = (start: number, end: number, label: string) => {
+        graph.push(meta.audioCodec
+          ? `[0:a]aresample=48000:async=1:first_pts=0,aformat=channel_layouts=stereo,apad,atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS[${label}]`
+          : `anullsrc=r=48000:cl=stereo,atrim=duration=${end-start},asetpts=PTS-STARTPTS[${label}]`)
+        audioLegs.push(`[${label}]`)
+      }
+      if (startFrame > 0) sourceAudio(0, startFrame / fps, 'ba')
+      audioLegs.push('[pa]')
+      if (endFrame < totalFrames) sourceAudio(endFrame / fps, totalFrames / fps, 'aa')
+      graph.push(`${audioLegs.join('')}concat=n=${audioLegs.length}:v=0:a=1[a]`)
+    }
     const output = join(dir, 'final.mp4')
     await exec(ffmpeg, ['-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-i', join(dir, 'source.mp4'), '-protocol_whitelist', 'file,pipe', '-i', join(dir, 'patch.mp4'),
       ...(finalImage ? ['-loop','1','-framerate',String(fps),'-i',join(dir,'ending.png')] : []),
-      '-filter_complex_threads','1','-filter_complex', graph.join(';'), '-map', '[v]', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'veryfast', '-threads','2','-crf', '18',
-      '-pix_fmt', 'yuv420p', '-r', String(fps), '-fps_mode', 'cfr', '-c:a', 'copy', '-t', String(meta.duration), '-movflags', '+faststart', output],
+      '-filter_complex_threads','1','-filter_complex', graph.join(';'), '-map', '[v]', '-map', useGeneratedAudio ? '[a]' : '0:a:0?', '-c:v', 'libx264', '-preset', 'veryfast', '-threads','2','-crf', '18',
+      '-pix_fmt', 'yuv420p', '-r', String(fps), '-fps_mode', 'cfr', '-c:a', useGeneratedAudio ? 'aac' : 'copy', ...(useGeneratedAudio ? ['-b:a','192k'] : []), '-t', String(meta.duration), '-movflags', '+faststart', output],
       { timeout: 180_000, maxBuffer: 1024 * 1024 })
     const finalMeta = await probeVideoFile(output)
     if (!finalMeta.duration || Math.abs(finalMeta.duration - meta.duration) > Math.max(.1, 2 / fps)
-      || finalMeta.width !== meta.width || finalMeta.height !== meta.height || (meta.audioCodec && !finalMeta.audioCodec)) {
-      throw new Error('Retake delivery failed duration, dimensions or original-audio verification.')
+      || finalMeta.width !== meta.width || finalMeta.height !== meta.height || ((meta.audioCodec || useGeneratedAudio) && !finalMeta.audioCodec)) {
+      throw new Error('Retake delivery failed duration, dimensions or audio verification.')
     }
     return { bytes: await readFile(output), meta: finalMeta }
   })

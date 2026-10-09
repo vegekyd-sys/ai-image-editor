@@ -196,7 +196,7 @@ export interface VideoSourceRange {
 }
 
 export interface VideoMeta {
-  retake?: { start: number; end: number; sourceUrl: string; inputDuration?: number; generationDuration?: number };
+  retake?: { start: number; end: number; sourceUrl: string; audioMode?: 'original' | 'generated'; inputDuration?: number; generationDuration?: number };
   /** Explicit provenance for source uploads vs agent/provider outputs. */
   origin?: 'source-upload' | 'external-range' | 'generated';
   taskId: string | null;

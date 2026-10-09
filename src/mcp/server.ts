@@ -272,14 +272,15 @@ Tips:
       end: z.number().positive(),
       prompt: z.string().min(1),
       model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
+      audio_mode: z.enum(['original','generated']).default('original').describe('original keeps the complete source soundtrack; generated replaces only selected sound with synchronized generated audio.'),
       project_id: z.string().uuid().optional(),
       request_id: z.string().uuid().optional(),
     },
-    async ({ video_url, start, end, prompt, model, project_id, request_id }) => {
+    async ({ video_url, start, end, prompt, model, audio_mode, project_id, request_id }) => {
       try {
         if (!options?.userId || !options.submitVideo) throw new Error('Retake requires authenticated hosted video submission.');
         const result = await options.submitVideo({ images: [], script: prompt, videoUrl: video_url,
-          retake: { start, end }, videoModel: model, projectId: project_id, billingRequestId: request_id,
+          retake: { start, end, ...(audio_mode === 'generated' ? {audioMode:audio_mode} : {}) }, videoModel: model, projectId: project_id, billingRequestId: request_id,
         }, 'makaron_retake_video');
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], isError: !result.success };
       } catch (e) {

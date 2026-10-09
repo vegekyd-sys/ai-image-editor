@@ -4,7 +4,7 @@ import { readProviderImage } from './provider-image-preflight'
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from './skills/create-video'
 import { getVideoStatus, type GetVideoStatusResult } from './skills/get-video-status'
 import { planRetake, retakePrompt, resolveRetakeModel, validateRetakeRange, type RetakePlan } from './video-retake-contract'
-import { inspectRetakeSource, extractRetakeContext, extractRetakeBoundaryFrames, assembleRetake } from './video-retake-media'
+import { inspectRetakeSource, extractRetakeContext, extractRetakeBoundaryFrames, assembleRetake, RetakeDeliveryError } from './video-retake-media'
 import { VIDEO_PLACEHOLDER_IMAGE } from './editor/timeline-derivations'
 import type { VideoMeta } from '@/types'
 import { toPublicStorageUrl } from './supabase/storage'
@@ -37,7 +37,7 @@ export function retakeVideoMeta(job: Job): VideoMeta {
     sourceSnapshotIds: [], sourceUrls: [job.source_url, ...((job.source_meta.referenceImages as string[] | undefined) ?? []),...(job.source_meta.endFrameUrl ? [String(job.source_meta.endFrameUrl)] : []),...(job.source_meta.correctedBoundaries ? Object.values(job.source_meta.correctedBoundaries as {startUrl:string;endUrl:string}) : [])], status: job.stage === 'completed' ? 'completed' : job.stage === 'failed' ? 'failed' : 'processing',
     duration: job.plan.sourceDuration, model: job.model_id, resolution: job.resolution as VideoMeta['resolution'], operation: 'edit',
     createdAt: job.created_at, error: job.error, pipelineStage: job.stage,
-    retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url,
+    retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url, audioMode: job.plan.audioMode ?? 'original',
       inputDuration: (job.model_id === 'fal-h3-max' && (job.source_meta.correctedBoundaries || job.source_meta.endFrameUrl || job.source_meta.cameraChange || job.source_meta.boundaryMode === 'scene')) ? 0
         : job.context_url ? job.plan.contextEnd - job.plan.contextStart : undefined, generationDuration: job.plan.generationDuration },
     width: Number(job.source_meta.width), height: Number(job.source_meta.height) }
@@ -67,7 +67,7 @@ async function publish(job: Job, videoBuffer?: Buffer) {
 function status(job: Job): GetVideoStatusResult {
   return { success: job.stage !== 'failed', status: job.stage === 'completed' ? 'completed' : job.stage === 'failed' ? 'failed' : 'processing',
     videoUrl: job.output_url, stage: job.stage, error: job.error,
-    message: job.stage === 'completed' ? `Retake completed: replaced ${job.plan.start}-${job.plan.end}s; original audio and total duration preserved.`
+    message: job.stage === 'completed' ? `Retake completed: replaced ${job.plan.start}-${job.plan.end}s; ${job.plan.audioMode === 'generated' ? 'generated audio in selection, original audio outside' : 'original audio preserved'}; total duration preserved.`
       : job.stage === 'failed' ? job.error ?? 'Retake failed.'
       : job.stage === 'submission_uncertain' || job.stage === 'submitting' ? 'Retake submission receipt needs reconciliation. Do not submit another generation.'
       : job.stage === 'assembling' ? 'Putting the new interval back into the original video.' : 'Retaking the selected interval.' }
@@ -90,6 +90,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       if (input.retake.boundaryMode && input.retake.boundaryMode !== boundaryMode) throw new Error('Edit mode conflicts with endpoint policy.')
       input.retake = {...input.retake,boundaryMode}
     }
+    if (input.retake.audioMode && !['original','generated'].includes(input.retake.audioMode)) throw new Error('Choose original or generated audio for local editing.')
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
     const corrected = input.retake.correctedBoundaries
@@ -123,7 +124,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     // Video 1. Do not let the provider's no-video default turn portrait into landscape.
     const aspectRatio = resolveClosestSupportedAspectRatio(model, meta.width, meta.height)
     if(input.retake.endFrame && Math.abs(meta.duration!-input.retake.end)>1/meta.fps!+.001) throw new Error('An explicit final image requires selecting through the end of the source video; internal joins retain their original endpoint.')
-    const plan = planRetake({ start: input.retake.start, end: input.retake.end }, meta.duration!, model)
+    const plan: RetakePlan = {...planRetake({ start: input.retake.start, end: input.retake.end }, meta.duration!, model), ...(input.retake.audioMode ? {audioMode: input.retake.audioMode} : {})}
     if (Math.round(plan.end * meta.fps!) <= Math.round(plan.start * meta.fps!)) throw new Error('Retake interval must include at least one source frame.')
     const now = new Date().toISOString()
     job = { id, user_id: input.userId, project_id: input.projectId ?? null, fingerprint, stage: 'preparing', source_url: input.videoUrl,
@@ -166,7 +167,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
       images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages, ...(model !== 'fal-h3-max' && input.retake.endFrame ? [input.retake.endFrame.imageUrl] : [])], h3RetakeBoundaryFrames: boundaryFrames,
       script: prompt, duration: model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,
-      aspectRatio,
+      aspectRatio, ...(plan.audioMode === 'generated' ? {generateAudio:true, keepOriginalSound:false} : {}),
       referenceVideoDuration: useVideoReference ? plan.contextEnd - plan.contextStart : undefined, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
       videoOperation: model.startsWith('seedance-2.5') ? 'edit' : 'generate', videoReferType: 'feature',
@@ -233,7 +234,13 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
     await publish(job, completedBuffer)
     await settle(job)
     return status(job)
-  } catch {
+  } catch (error) {
+    if (error instanceof RetakeDeliveryError) {
+      await save(job, {stage:'failed', error:error.message}, token)
+      await publish(job)
+      await settle(job)
+      return status(job)
+    }
     // A read/storage/assembly error is recoverable and never creates another paid task.
     return { ...status(job), queryFailed: true, message: 'Retake delivery is pending. Poll this same task; do not regenerate.' }
   } finally {

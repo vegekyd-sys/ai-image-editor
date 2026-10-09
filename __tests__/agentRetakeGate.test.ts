@@ -16,6 +16,11 @@ const receipt = () => signRetakeInspection({ userId: 'owner', projectId: 'projec
   sourceUrl, start: 18, end: 21, model: 'fal-h3-max' }, 'test-server-secret', { outputSelection: { start: 1, end: 4 }, generationDuration: 5 })
 
 describe('Agent Retake paid-submission gate', () => {
+  it('selects new audio without changing the visual endpoint intent',async()=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,edit_mode:'modify',audio_mode:'generated',inspection_id:receipt(),source_observation:observation});
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({retake:{start:18,end:21,audioMode:'generated',editMode:'modify',cameraChange:true}}),expect.anything());
+  });
   it('binds inspected corrected boundary images without relaxing modify endpoint intent',async()=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
     const refs={...scope,ctx:{...ctx,snapshotImages:[sourceUrl,'https://example.com/open.jpg','https://example.com/close.jpg']}};

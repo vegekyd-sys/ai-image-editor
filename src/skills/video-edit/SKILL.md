@@ -21,6 +21,20 @@ metadata:
 
 # Video Edit
 
+## Scope before execution
+
+Whole-video character/object/outfit/background replacement, persistent removal,
+and restyling remain full-source video edits. "Only change the character"
+restricts what changes, not the time range. Pass the complete source plus the
+supplied replacement image to generate_animation through the source-edit
+protocol, preserving all unnamed attributes. Do not find character appearance
+windows and force retake_video, inherit old ranges/actions, or generate endpoint
+images merely because the conversation previously used local editing. Existing
+images are references, not mandatory new image-generation requests. When a new
+request explicitly changes the source or scope, replace the prior edit plan.
+Provider duration limits select a capable model or the long-video workflow;
+15 seconds is the local selection limit, not the whole-product editing limit.
+
 ## Bounded visual edits
 
 For an explicit interval or a resolved scene inside an existing video, use
@@ -29,8 +43,8 @@ then retake_video to modify or replace the interval and deliver the full video.
 This includes adding/changing objects, visual demonstrations of layers, camera
 coverage and whole-shot/background replacement. A known interval needs no
 preliminary analyze_video call, scripted trimming or second assembly pipeline.
-These visual edits use that route's models, endpoint intent and original-audio
-preservation, rather than the generation/replication instructions below.
+These visual edits use that route's models, endpoint intent and selected audio
+policy, rather than the generation/replication instructions below.
 Depicting layers in a video does not request an actual editable composition.
 Dedicated precise cutting, subtitles, dubbing and explicit editable projects
 continue through their own capabilities.

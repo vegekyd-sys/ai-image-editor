@@ -64,7 +64,7 @@ export function retakeAudioEvidence(result: TranscriptResult, plan: RetakePlan) 
       untimedSpeech: untimed.length ? untimed : [transcript.text],
       warning: 'Some speech has no measured timing and cannot be attributed to this selection or used for precise synchronization.',
     } : {}),
-    timingContract: 'sourceStart/sourceEnd are original-source seconds. outputStart/outputEnd are measured provider-output seconds, mapped for visual retiming; they are NOT regenerated dialogue timing. Original full audio is retained. Whole-sentence text may cross the selection; use measured selected words for local timing. Adjacent speech is outside the replacement. ASR is speech evidence, not sound-effect, music-beat or lip-sync verification.',
+    timingContract: 'sourceStart/sourceEnd are original-source seconds. outputStart/outputEnd are measured provider-output seconds, mapped for visual retiming; they are NOT regenerated dialogue timing. Source speech is evidence. audio_mode=original retains the full source audio; generated replaces selected audio and must be checked against its new dialogue, not these source speech times. Whole-sentence text may cross the selection; use measured selected words for local timing. Adjacent speech is outside the replacement. ASR is speech evidence, not sound-effect, music-beat or lip-sync verification.',
   }
 }
 
