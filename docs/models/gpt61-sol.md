@@ -22,4 +22,14 @@ migration. [Official model](https://developers.openai.com/api/docs/models/gpt-6.
 
 Release evidence and the identical 60-second explainer comparison are saved under
 `/Users/tianyicai/.codex/visualizations/2026/10/09/01a12079-4757-7be3-9012-adc65b795958/`.
-Production and npm acceptance are recorded after the release gates finish.
+Production deployed `ab979f44` on 2026-10-10 (Asia/Shanghai); the subsequent
+price-only correction `e41d5b21` is applied to the shared billing table. Both
+production selector routes are visible. Real Azure CLI requests completed,
+including a billing-formula check, and the upgraded relay passed the image,
+function-call, and streaming probe. All 12 release health checks passed.
+
+NPM `makaron-cli@0.16.2` is published. A fresh registry installation matched the
+published tarball SHA-1 and the source CLI, README, bundled Skill, and plugin
+metadata. The release passed TypeScript, production builds, CLI smoke, discovery
+checks, and 2,335 tests (one skipped). Evidence is in `gpt61-release/` beneath
+the directory above; `explainer/` records the separate creative comparison.
