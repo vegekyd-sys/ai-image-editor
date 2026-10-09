@@ -1994,7 +1994,7 @@ Recent model choices:
                   5/10/15s; native 768p default or 480p; no video/audio/multi-image references.
   wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
   wan-3.0         Wan standard tier with the same public duration/resolution range.
-  seedance-2.5    4-30s; 480p/720p; generate/edit/extend and multimodal refs.
+  seedance-2.5    Defaults to Eco; 4-30s; 1080p default, 720p/2k/4k; multimodal refs.
   seedance-2.5-eco  480p generation → ByteDance Fast; 1080p default, 2k/4k.
   minimax-h3      4-15s; 768p default or 2k; image/video/audio feature refs.
   grok            T2V/reference generation plus typed edit/extend.

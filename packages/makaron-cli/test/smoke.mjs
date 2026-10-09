@@ -1182,6 +1182,14 @@ try {
   }
 
   {
+    // Unaccepted Retake must stay outside the release's command and help surface.
+    const before = requests.length;
+    const result = await expectSuccess(['video', 'retake', '--video', 'https://cdn.example/source.mp4', '--start', '2', '--end', '3', '--prompt', 'Change it']);
+    assert.doesNotMatch(result.stdout, /retake/i);
+    assert.equal(requests.length, before);
+  }
+
+  {
     const result = await expectSuccess(['video', 'create', '--script', 'A neon one-person studio wakes at dawn', '--duration', '5', '--video-model', 'seedance-fast']);
     assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
     assert.match(result.stderr, /💳 {2}4 credits used · balance 300/);
