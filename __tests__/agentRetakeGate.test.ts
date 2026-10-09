@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createInspectedRetakeVideoTool } from '@/lib/agent-retake-tool'
 import { signRetakeInspection } from '@/lib/video-retake-inspection'
 
-const submit = vi.hoisted(() => vi.fn(async () => ({ success: false, message: 'test submission recorded' })))
+const submit = vi.hoisted(() => vi.fn(async (_input?: unknown, _context?: unknown) => ({ success: false, message: 'test submission recorded' })))
 afterEach(() => { vi.unstubAllEnvs(); submit.mockClear() })
 
 const sourceUrl = 'https://example.com/original.mp4'
@@ -16,6 +16,22 @@ const receipt = () => signRetakeInspection({ userId: 'owner', projectId: 'projec
   sourceUrl, start: 18, end: 21, model: 'fal-h3-max' }, 'test-server-secret', { outputSelection: { start: 1, end: 4 }, generationDuration: 5 })
 
 describe('Agent Retake paid-submission gate', () => {
+  it.each(['creative','middle','ending'])('resolves a persisted same-turn %s image despite a stale data URL',async role=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    const query:any={select:()=>query,eq:()=>query,order:async()=>({data:[{type:'video',video_meta:{}},{type:null,image_url:'https://example.com/ready.jpg'}]})};
+    const freshScope={...scope,ctx:{...ctx,snapshotImages:[sourceUrl,'data:image/png;base64,AAAA'],supabase:{from:()=>query}}};
+    const refs=role==='creative' ? {reference_media_indices:[2]} : role==='middle' ? {middle_frame_media_index:2,middle_frame_time:2.5} : {end_frame_media_index:2};
+    await (createInspectedRetakeVideoTool(freshScope).execute as any)({...input,prompt:input.prompt+' Use <<<media_2>>> as the checked visual state.',inspection_id:receipt(),source_observation:observation,...refs});
+    expect(submit).toHaveBeenCalledTimes(1);
+    const call:any=submit.mock.calls[0][0];
+    expect(role==='creative' ? call.images[0] : role==='middle' ? call.retake.middleFrame.imageUrl : call.retake.endFrame.imageUrl).toBe('https://example.com/ready.jpg');
+  });
+  it('rejects a video poster as a native middle image before submission',async()=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    const query:any={select:()=>query,eq:()=>query,order:async()=>({data:[{type:'video'},{type:'video',image_url:'https://example.com/poster.jpg'}]})};
+    const result=await (createInspectedRetakeVideoTool({...scope,ctx:{...ctx,supabase:{from:()=>query}}}).execute as any)({...input,inspection_id:receipt(),source_observation:observation,middle_frame_media_index:2,middle_frame_time:2.5});
+    expect(result.success).toBe(false);expect(submit).not.toHaveBeenCalled();
+  });
   it('preserves endpoints for a modification even with camera changes',async()=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
     await (createInspectedRetakeVideoTool(scope).execute as any)({...input,edit_mode:'modify',inspection_id:receipt(),source_observation:observation});

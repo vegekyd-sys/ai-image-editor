@@ -55,23 +55,31 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       if (!clock) return { success: false, errorCode: 'retake_inspection_required', message: 'No provider was submitted. Re-run inspect_retake to obtain the measured output clock before planning the edit.' }
       const timingError = retakeShotPlanError(shot_plan, prompt, clock.outputSelection)
       if (timingError) return { success: false, errorCode: 'retake_prompt_timing_invalid', message: `No provider was submitted. ${timingError} Required outputSelection: ${clock.outputSelection.start}–${clock.outputSelection.end}s. Correct shot_plan and prompt before submitting.` }
+      // DualWriter can finish persisting an image after the generation tool
+      // refreshed its in-memory index. Resolve the owned timeline row again
+      // here instead of rejecting a stale same-turn data URL as a video.
+      const imageRows = (reference_media_indices.length || end_frame_media_index || middle_frame_media_index) && ctx.supabase
+        ? await ctx.supabase.from('snapshots').select('type,video_meta,image_url').eq('project_id',ctx.projectId).order('sort_order')
+        : undefined;
+      if (imageRows?.error) return {success:false,message:'Cannot verify the selected image references.'};
+      const imageUrlFor = (index: number) => {
+        const row = imageRows?.data?.[index - 1];
+        if (index === media_index || row?.type === 'video' || row?.video_meta) return undefined;
+        return typeof row?.image_url === 'string' && row.image_url.startsWith('http')
+          ? row.image_url : ctx.snapshotImages[index - 1];
+      };
       let middleFrame: {imageUrl:string;time:number} | undefined;
       if (boundary_mode === 'scene' && (middle_frame_media_index || end_frame_media_index)) return {success:false,message:'Scene continuity does not lock frames. Choose exact for native middle/final-image controls, or pass suitable images as creative references.'};
       if (middle_frame_media_index || middle_frame_time != null) {
-        const imageUrl = ctx.snapshotImages[middle_frame_media_index! - 1];
+        const imageUrl = imageUrlFor(middle_frame_media_index!);
         if (model !== 'fal-h3-max' || !imageUrl || !Number.isFinite(middle_frame_time) || middle_frame_time! <= 0 || Math.round(middle_frame_time!*24) >= clock.generationDuration*24-1) return {success:false,message:'Choose a ready H3 image keyframe and a time strictly inside its native output before video submission.'};
         middleFrame = {imageUrl,time:middle_frame_time!};
       }
       const creativeIndices = reference_media_indices.filter(index=>index!==end_frame_media_index);
       const referenceImages: string[] = [];
-      const imageRows = (reference_media_indices.length || end_frame_media_index) && ctx.supabase
-        ? await ctx.supabase.from('snapshots').select('type,video_meta').eq('project_id',ctx.projectId).order('sort_order')
-        : undefined;
-      if (imageRows?.error) return {success:false,message:'Cannot verify the selected image references.'};
       for (const index of [...creativeIndices,...(end_frame_media_index ? [end_frame_media_index] : [])]) {
-        const imageUrl = ctx.snapshotImages[index - 1];
-        const row = imageRows?.data?.[index - 1];
-        if (!imageUrl?.startsWith('http') || index === media_index || row?.type === 'video' || row?.video_meta) {
+        const imageUrl = imageUrlFor(index);
+        if (!imageUrl?.startsWith('http')) {
           return {success:false,message:`Reference @${index} must be a ready image, not a video or video poster.`};
         }
         if (index!==end_frame_media_index) referenceImages.push(imageUrl);
@@ -81,7 +89,7 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
         providerPrompt = bindRetakeReferences({prompt, model, sourceIndex:media_index,
           referenceIndices:creativeIndices, cameraChange:camera_change, boundaryMode:boundary_mode, middleIndex:middle_frame_media_index,endIndex:end_frame_media_index});
       } catch (error) { return {success:false,message:(error as Error).message}; }
-      const endFrame = end_frame_media_index ? {imageUrl:ctx.snapshotImages[end_frame_media_index-1]} : undefined;
+      const endFrame = end_frame_media_index ? {imageUrl:imageUrlFor(end_frame_media_index)!} : undefined;
       const hash = ctx.execution ? createHash('sha256').update(JSON.stringify([ctx.execution.runId, ctx.execution.inputEpoch, media_index, start, end, providerPrompt, model, camera_change, boundary_mode ?? 'exact', edit_mode, middleFrame, ...(referenceImages.length ? [referenceImages] : []),...(endFrame ? [endFrame] : [])])).digest('hex') : undefined;
       const stableId = hash ? `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}` : undefined;
       const result = await submit({ images: referenceImages, script: providerPrompt, videoUrl: source.videoUrl,
