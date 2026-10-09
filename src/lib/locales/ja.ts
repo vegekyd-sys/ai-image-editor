@@ -3,6 +3,8 @@ import type { TranslationDictionary } from './index';
 const ja = {
   "mjLab.back": "Makaron に戻る",
   "mjLab.eyebrow": "ローカル試用 · Midjourney V8.2",
+  "model.midjourney.name": "Midjourney V8.2",
+  "model.midjourney.desc": "クリエイティブな画像とスタイル探索。標準は4候補。精密な画像編集には非対応。",
   "mjLab.title": "言葉から、ビジュアルの方向を探す。",
   "mjLab.subtitle": "自然な言葉でイメージを伝えてください。Makaron が Midjourney Prompt に整理し、候補画像を生成します。",
   "mjLab.brief": "何を作りたいですか？",

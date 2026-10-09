@@ -5,10 +5,13 @@ import { ProviderImageInputError } from '../provider-image-preflight';
 import { FalImage25RequestError } from '../models/fal-image25';
 import { NanoBanana21RequestError } from '../models/nano-banana-21';
 import { WanImageRequestError } from '../models/wan-image';
+import { MidjourneyRequestError, type MidjourneyRequest, type MidjourneyTask } from '../midjourney';
 import { ImageCapabilityError, planImageGeneration } from '../image-model-capabilities';
 
 export interface EditImageInput {
   editPrompt: string;
+  midjourney?: Omit<MidjourneyRequest, 'prompt' | 'aspectRatio' | 'imageUrls'>;
+  onMidjourneyReceipt?: (task: MidjourneyTask) => Promise<void>;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   aspectRatio?: string;
   imageResolution?: string;
@@ -56,6 +59,7 @@ export async function editImage(
     image: references ? undefined : ctx.currentImage,
     references, prompt: finalPrompt, model: requestedModel, category: skill,
     aspectRatio, imageResolution, background, isNsfw,
+    midjourney: input.midjourney, onMidjourneyReceipt: input.onMidjourneyReceipt,
     thinkingEffort: 'minimal' as const,
   };
   try {
@@ -64,11 +68,12 @@ export async function editImage(
     const result = await generateImage(plan.request);
     if (!result.image) return { success: false, message: 'Image generation returned no image. Do not retry automatically.' };
     console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s model=${result.model} provider=${result.provider ?? 'default'}`);
-    let message = 'Image generated successfully.';
+    let message = result.images?.length ? `${result.images.length} candidate images generated successfully; keep all candidates in the timeline. Task: ${result.taskId}.` : 'Image generated successfully.';
     const adjustments = [...new Set([...plan.adjustments, ...(result.adjustments ?? [])])];
     if (adjustments.length) message += ` ${adjustments.join(' ')}`;
-    return { success: true, message, image: result.image, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage };
+    return { success: true, message, image: result.image, images: result.images, taskId: result.taskId, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage };
   } catch (error) {
+    if (error instanceof MidjourneyRequestError) return { success: false, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
     if (error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
       return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
     }

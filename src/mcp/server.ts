@@ -95,7 +95,7 @@ export interface McpServerOptions {
     },
   ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
-  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: string }) => Promise<{ allowed: boolean; message?: string }>;
+  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: string; midjourneyQuality?: string }) => Promise<{ allowed: boolean; message?: string }>;
   /** Called only before a Grok personal-plan request safely falls back to the paid API. */
   onBeforeGrokApiFallback?: (toolName: string, model?: string) => Promise<void>;
 }
@@ -123,21 +123,27 @@ Generation timing varies; report actual completion. No automatic retry or model 
       isNsfw: z.boolean().nullish().describe('Caller/Agent-assessed NSFW input; routes directly to Qwen Spicy.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5 supports up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
       imageResolution: z.string().nullish().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.5 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
+      midjourney: z.object({
+        speed: z.enum(['fast', 'draft']).optional(), quality: z.enum(['standard', 'hd']).optional(),
+        styleReferences: z.array(z.string()).max(20).optional(), styleWeight: z.number().int().min(0).max(1000).optional(),
+        stylize: z.number().int().min(0).max(1000).optional(), chaos: z.number().int().min(0).max(100).optional(),
+        seed: z.number().int().min(0).max(4294967295).optional(), raw: z.boolean().optional(),
+      }).nullish().describe('Only for explicit mj-v8.2. Fast 4 / Draft 24 / HD 4 candidates. Style references require public HTTPS URLs. HD regenerates, not lossless upscaling. The natural-language brief is converted automatically.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background preference. Set transparent for cutout/alpha assets. Conflicts are resolved to deliver an image; see the capability table.'),
     },
     async (params) => {
       try {
-        const plan = planImageGeneration({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined, aspectRatio: params.aspectRatio ?? undefined, imageResolution: params.imageResolution ?? undefined, isNsfw: params.isNsfw ?? undefined });
+        const plan = planImageGeneration({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined, aspectRatio: params.aspectRatio ?? undefined, imageResolution: params.imageResolution ?? undefined, isNsfw: params.isNsfw ?? undefined, midjourney: params.midjourney ?? undefined });
         const imageInputCount = (plan.request.image ? 1 : 0) + (plan.request.references?.length ?? 0);
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', plan.model, { imageInputCount, imageResolution: plan.request.imageResolution });
+          const check = await options.onToolStart('makaron_edit_image', plan.model, { imageInputCount, imageResolution: plan.request.imageResolution, midjourneyQuality: params.midjourney?.quality });
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
         const image = params.image ? resolveImage(params.image) : undefined;
-        const wrappedPrompt = getImageModelCapability(plan.model).promptMode === 'context' ? params.editPrompt : `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;
+        const wrappedPrompt = getImageModelCapability(plan.model).promptMode !== 'edit' ? params.editPrompt : `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;
 
         const ctx = {
           currentImage: image,
@@ -147,6 +153,7 @@ Generation timing varies; report actual completion. No automatic retry or model 
         const result = await editImage(
           {
             editPrompt: wrappedPrompt,
+            midjourney: params.midjourney ?? undefined,
             skill: params.skill ?? undefined,
             preferredModel: params.model ?? undefined,
             isNsfw: params.isNsfw ?? undefined,
@@ -165,7 +172,11 @@ Generation timing varies; report actual completion. No automatic retry or model 
         const msg = result.usedModel
           ? `${result.message} (model: ${result.usedModel})`
           : result.message;
-        return formatResult(result.image, msg, 'edit');
+        const images = result.images ?? [result.image];
+        if (images.length === 1) return formatResult(result.image, msg, 'edit');
+        // Preserve every candidate; one onToolComplete call bills the whole batch once.
+        return { content: images.flatMap((image, index) => formatResult(image, `${msg} Candidate ${index + 1}/${images.length}.`, `edit-${index + 1}`).content) };
+
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP edit_image error]', msg);

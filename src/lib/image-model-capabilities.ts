@@ -20,7 +20,7 @@ export interface ImageModelCapability {
   fourKSize?: { longSide: number; minLongToShortRatio: number };
   supportsTransparency: boolean;
   supportsNsfw: boolean;
-  promptMode: 'context' | 'edit';
+  promptMode: 'context' | 'edit' | 'scene';
   provider: string;
   notes: string;
 }
@@ -67,6 +67,12 @@ const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
     supportsTransparency: false, supportsNsfw: false, promptMode: 'edit', provider: 'openrouter',
     notes: 'Explicit fast draft model only; no imageResolution control in Makaron.',
   },
+  'mj-v8.2': {
+    id: 'mj-v8.2', label: 'Midjourney V8.2', maxInputImages: 20,
+    aspectRatio: { kind: 'range', min: 1 / 14, max: 14 }, resolutions: ['1K', '2K'],
+    supportsTransparency: false, supportsNsfw: false, promptMode: 'scene', provider: 'evolink',
+    notes: 'Explicit creative generation only. Fast returns 4 candidates; Draft returns 24 small drafts; HD returns 4 regenerated candidates, not lossless upscaling. 2K means native HD, approximate size, ratio <=4:1/1:4. Pass the original natural-language brief; the adapter prepares the concise scene prompt. Omit media_index: no precise source edit, alpha cutout, strict identity or Edit Model. Generic references are image prompts (loose inspiration); use midjourney style references for appearance. Do not switch to MJ for required edits. No automatic fallback or paid resubmission.',
+  },
   'wan2.7-image': {
     id: 'wan2.7-image', label: 'Wan 2.7 Image', maxInputImages: 9,
     aspectRatio: { kind: 'range', min: 1 / 8, max: 8 },
@@ -110,6 +116,13 @@ function ratioDescription(ratio: ImageAspectRatioCapability): string {
 export function getImageRequestConflicts(req: GenerateImageRequest, capability: ImageModelCapability): string[] {
   const conflicts: string[] = [];
   const count = (req.image ? 1 : 0) + (req.references?.length ?? 0);
+  if (capability.id === 'mj-v8.2') {
+    if (req.image) conflicts.push('precise source-image editing is not supported; omit the source only for a new generation');
+    if ((req.midjourney?.quality === 'hd' || req.imageResolution === '2K') && req.aspectRatio && req.aspectRatio !== 'auto') {
+      const [w, h] = req.aspectRatio.split(':').map(Number);
+      if (w / h > 4 || w / h < 1 / 4) conflicts.push('HD requires ratio between 1:4 and 4:1');
+    }
+  }
   if (capability.maxInputImages !== undefined && count > capability.maxInputImages) conflicts.push(`inputImages=${count}; supports at most ${capability.maxInputImages} input images including the base`);
   if (req.isNsfw && !capability.supportsNsfw) conflicts.push('NSFW is not supported by this route');
   if (req.background === 'transparent' && !capability.supportsTransparency) conflicts.push('transparent output is not supported');
@@ -180,6 +193,11 @@ export function prepareImageModelRequest(req: GenerateImageRequest, model: Activ
 /** Prefer delivering an image. Capabilities guide tradeoffs instead of blocking users. */
 export function planImageGeneration(req: GenerateImageRequest): ImageGenerationPlan {
   const normalized = normalizeImageModelId(req.model);
+  // Explicit batch generation has a different editing contract. Never silently reroute it.
+  if (normalized === 'mj-v8.2') {
+    validateImageModelRequest(req, normalized);
+    return { model: normalized, request: { ...req, model: normalized }, adjustments: [] };
+  }
   const explicit = resolveImageModel(req.model, req.background);
   const ranked = listImageModelCapabilities().filter(c => c.autoPriority !== undefined)
     .sort((a, b) => a.autoPriority! - b.autoPriority!).map(c => c.id);

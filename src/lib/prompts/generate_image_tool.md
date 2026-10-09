@@ -22,3 +22,5 @@ Edit Mode prompt shape for ordinary in-place edits:
 4. End line: "Do NOT add any text, watermarks, or borders." Omit this if the user explicitly requested text or captions.
 
 For cutout, read `prompts/cutout.md` once; do not append ordinary composition/scene-layout preservation.
+
+Midjourney (`mj-v8.2`) is for NEW creative scenes, not precise source editing. Pass the user's original natural-language brief: the adapter prepares a concise scene prompt. Omit `media_index`. Fast returns all 4 candidates; `midjourney.speed=draft` returns all 24 small drafts; `midjourney.quality=hd` regenerates 4 HD candidates and may change composition. For a new scene guided by an existing look, pass `style_reference_media_indices`; this transfers palette/material/light, not identity. Keep all returned candidates available, let the user choose, then use an edit-capable model for exact refinement or typography. Do not re-submit a failed/unknown paid task.

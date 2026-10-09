@@ -1,6 +1,8 @@
 const en = {
   "mjLab.back": "Back to Makaron",
   "mjLab.eyebrow": "Local trial · Midjourney V8.2",
+  "model.midjourney.name": "Midjourney V8.2",
+  "model.midjourney.desc": "Creative scenes and style exploration. Four candidates by default; no precise image editing.",
   "mjLab.title": "Turn an idea into a visual direction.",
   "mjLab.subtitle": "Describe the image naturally. Makaron prepares a Midjourney prompt and generates candidates to choose from.",
   "mjLab.brief": "What would you like to create?",

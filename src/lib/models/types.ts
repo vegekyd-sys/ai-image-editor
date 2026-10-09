@@ -1,5 +1,5 @@
 /** Models offered to new Agent and MCP requests. */
-export const IMAGE_MODEL_IDS = ['gemini', 'gemini-2.1', 'gemini-lite', 'qwen-spicy', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'wan2.7-image'] as const;
+export const IMAGE_MODEL_IDS = ['gemini', 'gemini-2.1', 'gemini-lite', 'qwen-spicy', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'wan2.7-image', 'mj-v8.2'] as const;
 /** Accept the old Qwen ID at API/tool boundaries; it is normalized before routing and billing. */
 export const IMAGE_MODEL_INPUT_IDS = [...IMAGE_MODEL_IDS, 'openai', 'qwen'] as const;
 /** Keep old IDs at the input boundary so existing clients get a capability-aware migration. */
@@ -21,6 +21,9 @@ export interface GenerateImageRequest {
   background?: ImageBackground;
   thinkingEffort?: ReasoningEffort;
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)
+  midjourney?: Omit<import('../midjourney').MidjourneyRequest, 'prompt' | 'aspectRatio' | 'imageUrls'>;
+  /** Persist accepted MJ receipt before polling; server-side only. */
+  onMidjourneyReceipt?: (task: import('../midjourney').MidjourneyTask) => Promise<void>;
   isNsfw?: boolean;         // project-level NSFW flag — skip Gemini entirely when true
 
 }
@@ -37,6 +40,8 @@ export interface TokenUsage {
 
 export interface GenerateImageResult {
   image: string | null;
+  images?: string[];          // complete batch, includes image at index 0
+  taskId?: string;
   model: ModelId;           // model that actually produced the image
   fallbackUsed: boolean;
   adjustments?: string[];  // capability preferences relaxed before submission
@@ -48,7 +53,7 @@ export interface GenerateImageResult {
 export interface ModelBackend {
   id: ModelId;
   canHandle(req: GenerateImageRequest): boolean;
-  generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage; provider?: string }>;
+  generate(req: GenerateImageRequest): Promise<{ image: string | null; images?: string[]; taskId?: string; usage?: TokenUsage; provider?: string }>;
 }
 
 export const FAL_IMAGE25_IDS = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] as const;

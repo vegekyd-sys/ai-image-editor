@@ -6,6 +6,8 @@ const zhHant = {
   ...zh,
   "mjLab.back": "返回 Makaron",
   "mjLab.eyebrow": "本機試用 · Midjourney V8.2",
+  "model.midjourney.name": "Midjourney V8.2",
+  "model.midjourney.desc": "創意畫面與風格探索，預設四張候選；不用於精確修圖。",
   "mjLab.title": "說出想法，探索視覺方向。",
   "mjLab.subtitle": "用自然語言描述想要的畫面。Makaron 會整理成 Midjourney Prompt，生成候選圖供你挑選。",
   "mjLab.brief": "你想創作什麼？",

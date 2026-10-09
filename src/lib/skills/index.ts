@@ -9,6 +9,8 @@ export interface SkillContext {
 export interface SkillResult {
   success: boolean;
   message: string;
+  images?: string[];
+  taskId?: string;
   image?: string;              // base64 result image (data URL)
   usedModel?: ModelId;         // which model generated the image
   contentBlocked?: boolean;    // Gemini refused content (NSFW) — caller should set isNsfw flag

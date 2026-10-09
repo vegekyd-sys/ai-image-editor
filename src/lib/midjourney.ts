@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
-/** Experimental EvoLink V8.2 batch adapter. Submission and recovery are separate.
+/** EvoLink V8.2 batch adapter. Submission and recovery are separate.
  * Provider contract: https://evolink.ai/api-reference/mj-v8.2/mj-v8.2-API-Reference.md
- * Do not register as a synchronous single-image backend: one request buys a batch.
+ * One request buys a batch. The shared backend preserves and publishes every candidate.
  */
 export const MIDJOURNEY_MODEL = 'mj-v8.2' as const;
 export interface MidjourneyRequest {

@@ -1392,10 +1392,20 @@ function createGenerateImageTool(
         imageResolution: z.string().optional().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.5 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Use larger tiers only when requested. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background preference. Set "transparent" for transparent/no background, background removal, 抠图/抠像/去背景 or reusable alpha assets. Also pass media_index for source-image cutout. Conflicts are resolved to deliver an image; see the capability table.'),
+        midjourney: z.object({
+          speed: z.enum(['fast', 'draft']).optional(),
+          quality: z.enum(['standard', 'hd']).optional(),
+          stylize: z.number().int().min(0).max(1000).optional(),
+          chaos: z.number().int().min(0).max(100).optional(),
+          seed: z.number().int().min(0).max(4294967295).optional(),
+          raw: z.boolean().optional(),
+          styleWeight: z.number().int().min(0).max(1000).optional(),
+        }).optional().describe('Only for explicit mj-v8.2: defaults Fast 4 candidates; Draft 24 small drafts; HD 4 regenerated candidates (not upscaling). Draft+HD is invalid. Use only when requested. No source-image edits.'),
+        style_reference_media_indices: z.array(z.number().int().positive()).max(20).optional().describe('Only for mj-v8.2: timeline images whose appearance (palette, material, lighting) should guide a NEW scene. Not identity or exact layout. Omit media_index and do not add style references to reference_media_indices.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, isNsfw, aspectRatio, imageResolution, background, media_index, reference_media_indices }) => {
+      execute: async ({ editPrompt, skill, model, isNsfw, aspectRatio, imageResolution, background, midjourney, style_reference_media_indices, media_index, reference_media_indices }) => {
         if (isNsfw) ctx.isNsfw = true;
         // GPT-5.6 currently fills omitted optional numeric tool fields with 0.
         // Treat that provider sentinel exactly like omission so empty projects
@@ -1424,10 +1434,18 @@ function createGenerateImageTool(
 
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
+        const styleReferences: string[] = [];
+        for (const index of style_reference_media_indices ?? []) {
+          const v = validateImageIndex(ctx.snapshotImages, index);
+          if (v.error) return { success: false, message: v.error };
+          styleReferences.push(ctx.snapshotImages[v.idx]);
+        }
+        if ((midjourney || styleReferences.length) && resolvedModel !== 'mj-v8.2') return { success: false, message: 'Midjourney parameters require model mj-v8.2. No generation submitted.' };
+        const mjOptions = midjourney || styleReferences.length ? { ...midjourney, ...(styleReferences.length ? { styleReferences } : {}) } : undefined;
         let billingModel: ModelId | undefined;
         let imagePlan: ImageGenerationPlan;
         try {
-          imagePlan = planImageGeneration({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, aspectRatio, imageResolution, background, isNsfw: ctx.isNsfw });
+          imagePlan = planImageGeneration({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, aspectRatio, imageResolution, background, midjourney: mjOptions, isNsfw: ctx.isNsfw });
           billingModel = imagePlan.model;
         } catch (error) {
           return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: error instanceof ImageCapabilityError ? error.code : 'model_retired', ...(error instanceof ImageCapabilityError ? { conflicts: error.conflicts, compatibleModels: error.compatibleModels } : {}) };
@@ -1435,6 +1453,12 @@ function createGenerateImageTool(
         const imageInputCount = (imagePlan.request.image ? 1 : 0) + (imagePlan.request.references?.length ?? 0);
         if (ctx.userId && await isBillingEnabled()) {
           let requiredCredits = 0;
+          if (billingModel === 'mj-v8.2') {
+            const rate = await getTokenRate('mj-v8.2');
+            if (!rate || rate.model_id !== 'mj-v8.2' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Midjourney pricing is not configured.', error: 'pricing_unavailable' };
+            // Full batch once, plus a small prompt-preparation estimate. Final bill uses exact cost.
+            requiredCredits = Math.ceil(((mjOptions?.quality === 'hd' || imageResolution === '2K' ? 0.12 : 0.08) + 0.01) * rate.markup / 0.01);
+          }
           if (billingModel === 'gemini-2.1') {
             const rate = await getTokenRate('google/gemini-nano-banana-2.1');
             if (!rate || rate.model_id !== 'google/gemini-nano-banana-2.1' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Nano Banana 2.1 pricing is not configured.', error: 'pricing_unavailable' };
@@ -1446,7 +1470,7 @@ function createGenerateImageTool(
             if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'GPT Image 2.5 pricing is not configured.', error: 'pricing_unavailable' };
             requiredCredits = 5;
           }
-          if (billingModel && billingModel !== 'gemini-2.1' && !isFalImage25(billingModel)) {
+          if (billingModel && billingModel !== 'gemini-2.1' && billingModel !== 'mj-v8.2' && !isFalImage25(billingModel)) {
             const toolName = resolveToolName('edit_image', billingModel, imageInputCount);
             const price = await getToolPrice(toolName);
             if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {
@@ -1459,9 +1483,17 @@ function createGenerateImageTool(
           const check = await requireCredits(ctx.userId, requiredCredits || 5);
           if (!check.ok) return { success: false, message: `Insufficient credits. Need ${requiredCredits || 5}, have ${check.balance}.`, error: 'insufficient_credits' };
         }
+        let receiptPath: string | undefined;
+        const onMidjourneyReceipt = billingModel === 'mj-v8.2' && ctx.supabase && ctx.userId
+          ? async (task: import('./midjourney').MidjourneyTask) => {
+              const { writeFile } = await import('./workspace');
+              receiptPath = `${ctx.projectId}/midjourney/${task.taskId}.json`;
+              const saved = await writeFile(receiptPath, JSON.stringify({ model: task.model, taskId: task.taskId, status: task.status, brief: editPrompt, createdAt: new Date().toISOString() }), ctx.supabase, ctx.userId!, 'application/json');
+              if (!saved.success) throw new Error('Receipt persistence failed');
+            } : undefined;
         const imageStartedAt = Date.now();
         const skillResult = await editImage(
-          { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { editPrompt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           {
             currentImage: editTarget,
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
@@ -1495,17 +1527,20 @@ function createGenerateImageTool(
         }
         // Preserve compatibility with older tool results that reported a content block.
         if (skillResult.contentBlocked) ctx.isNsfw = true;
-        if (skillResult.image) {
-          ctx.currentImage = skillResult.image;
-          ctx.snapshotImages.push(skillResult.image);
-          ctx.generatedImages.push(skillResult.image);
+        const batchImages = skillResult.images ?? (skillResult.image ? [skillResult.image] : []);
+        const mediaIndices: number[] = [];
+        for (const image of batchImages) {
+          ctx.snapshotImages.push(image);
+          ctx.generatedImages.push(image);
+          mediaIndices.push(ctx.snapshotImages.length);
+        }
+        if (batchImages.length) {
+          ctx.currentImage = batchImages[0];
           ctx.lastImageBackground = imagePlan.request.background;
           if (skillResult.usedModel) ctx.lastUsedModel = skillResult.usedModel;
-          // Refresh URLs from DB — DualWriter uploads to Storage in parallel,
-          // so base64 entries get replaced with http URLs for downstream tools
           await refreshSnapshotUrls(ctx);
         }
-        const mediaIndex = skillResult.image ? ctx.snapshotImages.length : undefined;
+        const mediaIndex = mediaIndices[0];
         const imageUrl = mediaIndex ? ctx.snapshotImages[mediaIndex - 1] : undefined;
         const urlInfo = imageUrl?.startsWith('http')
           ? ` Resolved image URL: ${imageUrl}. Use this URL directly in Remotion composition props/code; do not use the <<<media_${mediaIndex}>>> marker inside composition code.`
@@ -1513,7 +1548,9 @@ function createGenerateImageTool(
         const indexInfo = mediaIndex ? ` Now <<<media_${mediaIndex}>>>.${urlInfo}` : '';
         return {
           success: skillResult.success as true,
-          message: skillResult.message + indexInfo,
+          message: skillResult.message + indexInfo + (mediaIndices.length > 1 ? ` Candidates: ${mediaIndices.map(i => `<<<media_${i}>>>`).join(', ')}. User can choose any candidate for further editing with an edit-capable model.` : '') + (receiptPath ? ` Provider receipt saved at ${receiptPath}.` : ''),
+          ...(mediaIndices.length > 1 ? { mediaIndices, candidateCount: mediaIndices.length } : {}),
+          ...(skillResult.taskId ? { taskId: skillResult.taskId } : {}),
           ...(mediaIndex ? { mediaIndex } : {}),
           ...(imageUrl?.startsWith('http') ? { imageUrl } : {}),
           provider: skillResult.provider,

@@ -74,6 +74,13 @@ async function handleMcp(req: Request): Promise<Response> {
     // Pre-check: ensure user has enough credits
     onToolStart: auth.type === 'user' ? async (toolName, model, meta) => {
       if (!(await isBillingEnabled())) return { allowed: true };
+      if (toolName === 'makaron_edit_image' && model === 'mj-v8.2') {
+        const rate = await getTokenRate('mj-v8.2');
+        if (!rate || rate.model_id !== 'mj-v8.2' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Midjourney pricing is not configured.' };
+        const cost = (meta?.midjourneyQuality === 'hd' || meta?.imageResolution === '2K' ? 0.12 : 0.08) + 0.01;
+        const check = await requireCredits(auth.userId!, Math.ceil(cost * rate.markup / 0.01));
+        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
+      }
       if (toolName === 'makaron_edit_image' && model === 'gemini-2.1') {
         const rate = await getTokenRate('google/gemini-nano-banana-2.1');
         if (!rate || rate.model_id !== 'google/gemini-nano-banana-2.1' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Nano Banana 2.1 pricing is not configured.' };

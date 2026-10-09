@@ -24,15 +24,20 @@ export function validateMidjourneyPrompt(value: unknown): MidjourneyRequest {
   return result;
 }
 
-export async function prepareMidjourneyPrompt(brief: string, hasStyleReference = false): Promise<MidjourneyRequest> {
+export async function prepareMidjourneyPromptWithUsage(brief: string, hasStyleReference = false) {
   if (!brief.trim() || brief.length > 4000) throw new Error('invalid_brief');
-  const [{ generateText }, { createAgentModelRuntime }] = await Promise.all([import('ai'), import('./agent-model-runtime')]);
-  const runtime = createAgentModelRuntime('gpt-6-luna', 'midjourney-local-lab', 'openrouter');
+  const [{ generateText }, { createAgentModelRuntime, sumOpenRouterProviderCost }] = await Promise.all([import('ai'), import('./agent-model-runtime')]);
+  const runtime = createAgentModelRuntime('gpt-6-luna', 'midjourney-prompt', 'openrouter');
   const result = await generateText({
     model: runtime.model, system: MIDJOURNEY_PROMPT_SYSTEM,
     prompt: JSON.stringify({ brief, hasStyleReference }),
     maxOutputTokens: 1600, maxRetries: 0, abortSignal: AbortSignal.timeout(60_000),
   });
   const text = result.text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  return validateMidjourneyPrompt(JSON.parse(text));
+  const cost = sumOpenRouterProviderCost(runtime, [{ providerMetadata: result.providerMetadata as Record<string, unknown> }]);
+  return { request: validateMidjourneyPrompt(JSON.parse(text)), cost, usage: result.usage };
+}
+
+export async function prepareMidjourneyPrompt(brief: string, hasStyleReference = false): Promise<MidjourneyRequest> {
+  return (await prepareMidjourneyPromptWithUsage(brief, hasStyleReference)).request;
 }
