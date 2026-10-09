@@ -114,4 +114,6 @@ Web/Agent 普通四图与 sref 已真实调用；MCP 批次响应与计费通过
 
 最终本地验证：2229 项测试通过、1 项既有跳过；TypeScript、四语 UI 检查和 core prompt 合同通过。1280×900 桌面与 390×844 窄屏均可显示候选组，无水平溢出；最终重新打开期间无页面或 console error。手机浏览器点击候选能选中正确编号。正常画布 Save 下载为 1456×816 PNG，完整解码通过。
 
-本地运行：专用 runner `/Users/tianyicai/ai-image-editor-midjourney-runner`，服务 `http://127.0.0.1:3041/projects`。3039 的 Retake 服务保持运行。测试账号、测试项目与新增 `mj-v8.2` 价格行位于共享数据库；没有修改用户已有项目、其他模型价格或共享 Preview 配置。
+本地运行：专用 runner `/Users/tianyicai/ai-image-editor-midjourney-runner`，服务 `http://127.0.0.1:3041/projects`。3039 的 Retake 服务保持运行。测试账号、测试项目与新增 `mj-v8.2` 价格行位于共享数据库；没有修改其他模型价格或共享 Preview 配置。
+
+后续用户反馈回归：修复空时间线加载时透明度结果为 null 的画布崩溃，补充空画布→首图解码→空画布测试。MJ 自然语言转换按主体优先组织场景，把人物主导、大胆构图等要求落实为近景裁切、镜头角度和背景层次。使用相同火星城市中文需求在隔离验收账号重跑，完成一笔 Fast Standard 任务，四张 1024×1024 图片均有清晰近景人物和退后的城市背景；这是一次具体构图改进的实测，不能推广为质量排名。实际提交的英文 Prompt 与参数随每张候选的 metadata 保存，聊天卡片在重新打开后也显示该内容；旧 MJ 中文卡片只标为转换前需求。为反馈项目既有的四张 MJ 候选，从其已保存供应商收据补入实际提交 Prompt，未改变图片或计费。另修复项目缓存恢复时漏合并 photo metadata 的问题。相关 319 项回归测试、TypeScript、四语 UI、core prompt 与 Agent startup 检查通过；仍为本地候选版本。
