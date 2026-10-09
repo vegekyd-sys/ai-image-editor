@@ -35,12 +35,17 @@ describe('agent media scenario matrix', () => {
   const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
   it('keeps the core agent prompt as a lightweight router', () => {
-    expect(readAgentAwareSource(root, 'src/lib/prompts/agent.md').length).toBeLessThan(7_500)
+    // Local editing adds explicit inspected source/range, ASR and edit-intent rules.
+    const core = readAgentAwareSource(root, 'src/lib/prompts/agent.md')
+    const localEditPolicy = core.split('## Router\n\n')[1].split('Use the smallest capable workflow.')[0]
+    expect(localEditPolicy.length).toBeLessThan(6_000)
+    expect(core.replace(localEditPolicy, '').length).toBeLessThan(8_000)
+    expect(core.length).toBeLessThan(14_000)
     expect(agent).toContain("read_file('prompts/image.md')")
     expect(agent).toContain("read_file('prompts/animate.md')")
     expect(agent).toContain('`skills/video-ffmpeg-lab/SKILL.md`')
     expect(agent).toContain('Default tool: `generate_image`')
-    expect(agent).toContain('Default tool: `generate_animation`')
+    expect(agent).toContain('New video generation uses `generate_animation`')
     expect(agent).toContain('Substantial scripts: `write_code_file` -> `run_code(code_path)`')
     expect(agent).toContain('Substantial code uses `write_code_file` -> `run_code(code_path)`')
     expect(agent).toContain('transcript requests or speech-dependent edits')

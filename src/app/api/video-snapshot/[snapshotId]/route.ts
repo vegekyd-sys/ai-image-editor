@@ -249,7 +249,12 @@ export async function GET(
     let result: { taskId: string; status: string; videoUrl?: string; error?: string } & Partial<import('@/lib/skills/get-video-status').GetVideoStatusResult>
     const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
 
-    if (videoMeta.taskId.startsWith('video-pipeline-')) {
+    if (videoMeta.taskId.startsWith('video-retake-')) {
+      const { advanceVideoRetake } = await import('@/lib/video-retake')
+      result = { taskId: videoMeta.taskId, ...await advanceVideoRetake(videoMeta.taskId, ownerUserId) }
+      if (result.status === 'completed' && result.videoUrl) repairVideoPosterAfterResponse({ admin, ownerUserId, projectId: snap.project_id, snapshotId, videoUrl: result.videoUrl, currentImageUrl: snap.image_url })
+      return NextResponse.json({ ...result, snapshotId, imageUrl: snap.image_url || undefined })
+    } else if (videoMeta.taskId.startsWith('video-pipeline-')) {
       const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline')
       result = { taskId: videoMeta.taskId, ...await advanceVideoPipeline(videoMeta.taskId, ownerUserId) }
     } else if (isMuleRouter) {

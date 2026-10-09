@@ -114,12 +114,12 @@ function parseDuration(value?: string): number | null {
   return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)
 }
 
-async function probeVideoFileWithFfmpeg(filePath: string): Promise<VideoProbe> {
+async function probeVideoFileWithFfmpeg(filePath: string, localOnly = false): Promise<VideoProbe> {
   const ffmpegPath = await findFfmpeg()
   try {
     // Header inspection intentionally exits without an output. Decoding the
     // whole video was both expensive and discarded metadata on success.
-    await execFileAsync(ffmpegPath, ['-hide_banner', '-i', filePath], {
+    await execFileAsync(ffmpegPath, ['-hide_banner', ...(localOnly ? ['-protocol_whitelist', 'file,pipe'] : []), '-i', filePath], {
       timeout: 30_000,
       maxBuffer: 10 * 1024 * 1024,
     })
@@ -144,12 +144,13 @@ async function probeVideoFileWithFfmpeg(filePath: string): Promise<VideoProbe> {
   return { duration: null }
 }
 
-export async function probeVideoFile(filePath: string): Promise<VideoProbe> {
+export async function probeVideoFile(filePath: string, localOnly = false): Promise<VideoProbe> {
   const ffprobePath = await findFfprobe().catch(() => null)
-  if (!ffprobePath) return probeVideoFileWithFfmpeg(filePath)
+  if (!ffprobePath) return probeVideoFileWithFfmpeg(filePath, localOnly)
 
   const { stdout } = await execFileAsync(ffprobePath, [
     '-v', 'error',
+    ...(localOnly ? ['-protocol_whitelist', 'file,pipe'] : []),
     '-print_format', 'json',
     '-show_format',
     '-show_streams',

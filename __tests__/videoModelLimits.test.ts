@@ -3,6 +3,11 @@ import { createVideo, prepareSeedance20References } from '@/lib/skills/create-vi
 import { DEFAULT_VIDEO_REPLICATION_MODEL_ID, DEFAULT_VIDEO_REPLICATION_RESOLUTION, estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, resolveProductVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
+  it.each(['seedance-2.5', 'seedance-2.5-eco'])('rejects fractional output seconds for %s while retaining source-duration mode', model => {
+    expect(validateVideoModelRequest({ model, outputDuration: 15.1, operation: 'generate' })).toContain('integer')
+    expect(validateVideoModelRequest({ model, outputDuration: -1, operation: 'generate' })).toBeNull()
+    expect(validateVideoModelRequest({ model, outputDuration: 16, operation: 'generate' })).toBeNull()
+  })
   it('maps mixed timeline image/video indices to Seedance 2.0 provider markers', () => {
     const prepared = prepareSeedance20References({
       prompt: 'Use <<<media_4>>> for motion, replace actors with <<<media_5>>> and <<<media_6>>>, background <<<media_7>>>.',

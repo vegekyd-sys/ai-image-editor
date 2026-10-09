@@ -30,6 +30,13 @@ const LABEL_GLYPHS: Record<string, readonly string[]> = {
   f: ['00110', '01001', '01000', '11100', '01000', '01000', '01000'],
   m: ['00000', '11010', '10101', '10101', '10101', '10101', '10101'],
   r: ['00000', '10110', '11001', '10000', '10000', '10000', '10000'],
+  c: ['00000', '01110', '10001', '10000', '10000', '10001', '01110'],
+  i: ['00100', '00000', '01100', '00100', '00100', '00100', '01110'],
+  j: ['00010', '00000', '00110', '00010', '00010', '10010', '01100'],
+  n: ['00000', '11110', '10001', '10001', '10001', '10001', '10001'],
+  o: ['00000', '01110', '10001', '10001', '10001', '10001', '01110'],
+  t: ['00100', '00100', '11111', '00100', '00100', '00101', '00010'],
+  x: ['00000', '10001', '01010', '00100', '01010', '10001', '00000'],
   s: ['00000', '01111', '10000', '01110', '00001', '10001', '01110'],
 };
 
@@ -71,29 +78,35 @@ export async function createContactSheet(
   frames: ContactSheetFrame[],
   sourceWidth: number,
   sourceHeight: number,
+  options: { columns?: number } = {},
 ): Promise<Buffer> {
   if (frames.length < 2) throw new Error('Contact sheet requires at least two frames');
+  if (options.columns != null && (!Number.isInteger(options.columns) || options.columns < 1)) {
+    throw new Error('Contact sheet columns must be a positive integer');
+  }
 
   const scale = Math.min(1, 480 / sourceWidth, 360 / sourceHeight);
   const tileWidth = Math.max(1, Math.round(sourceWidth * scale));
   const tileHeight = Math.max(1, Math.round(sourceHeight * scale));
   const labelHeight = 34;
-  const sheetWidth = tileWidth * frames.length;
-  const sheetHeight = tileHeight + labelHeight;
+  const columns = Math.min(options.columns ?? frames.length, frames.length);
+  const rowHeight = tileHeight + labelHeight;
+  const sheetWidth = tileWidth * columns;
+  const sheetHeight = rowHeight * Math.ceil(frames.length / columns);
 
   const tiles = await Promise.all(frames.map(async (frame, index) => ({
     input: await sharp(frame.image)
       .resize(tileWidth, tileHeight, { fit: 'cover' })
       .jpeg({ quality: 86 })
       .toBuffer(),
-    left: index * tileWidth,
-    top: 0,
+    left: (index % columns) * tileWidth,
+    top: Math.floor(index / columns) * rowHeight,
   })));
 
   const labels = frames.map((frame, index) => ({
     input: renderContactSheetLabelSvg(frame.label, tileWidth, labelHeight),
-    left: index * tileWidth,
-    top: tileHeight,
+    left: (index % columns) * tileWidth,
+    top: Math.floor(index / columns) * rowHeight + tileHeight,
   }));
 
   return sharp({

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
 import { IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, type ModelId } from '@/lib/models/types';
 import { formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration, resolveImageModelChain as resolveModelChain } from '@/lib/image-model-capabilities';
+import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from '@/lib/video-retake-contract';
 import { normalizeGenerateImageMediaIndex } from '@/lib/generate-image-input';
 import { resolveToolName } from '@/lib/billing/pricing';
 
@@ -27,7 +28,7 @@ function setup(provider = 'azure') {
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
   const ctx = { preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined, isNsfw: false };
   const context = vm.createContext({
-    tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, resolveModelChain, getTokenRate,
+    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, resolveModelChain, getTokenRate,
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration,
     validateImageIndex: (images: string[], index: number) => images[index - 1] ? { idx: index - 1 } : { error: 'Invalid media index' }, getToolPrice, isBillingEnabled,
     resolveToolName,

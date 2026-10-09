@@ -1,5 +1,5 @@
 /** FAL H3 Max reference and native text generation adapter.
- * Contract checked 2026-09-08: https://fal.ai/models/minimax/h3-max/reference-to-video/api
+ * Contract checked 2026-10-08: https://fal.ai/models/minimax/h3-max/reference-to-video/api
  */
 import { validateProviderImages } from './provider-image-preflight'
 
@@ -18,6 +18,8 @@ export interface H3MaxReferenceInput {
   onBeforeSubmit?: () => Promise<void>
   /** Internal only: createVideo already measured and validated the selected images. */
   imagesVerified?: boolean
+  /** Retake only: boundary state references must be included in the measured image references. */
+  boundaryFrames?: { startUrl: string; endUrl: string; lockEndpoints?: boolean; middle?: {imageUrl:string;time:number} }
 }
 
 function validateClips(clips: Array<{ durationSec: number }>, kind: string): void {
@@ -47,6 +49,14 @@ export function buildH3MaxReferencePayload(input: H3MaxReferenceInput): Record<s
   if (!['480p', '768p', '1080p'].includes(resolution)) throw new Error('H3 Max reference resolution must be 480p, 768p, or 1080p.')
   const aspectRatio = !input.aspectRatio || input.aspectRatio === 'auto' ? 'adaptive' : input.aspectRatio
   if (!['adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'].includes(aspectRatio)) throw new Error('Unsupported H3 Max reference aspect ratio.')
+  if (input.boundaryFrames && (!images.includes(input.boundaryFrames.startUrl) || !images.includes(input.boundaryFrames.endUrl))) {
+    throw new Error('H3 Retake boundary frames must be included in validated image references.')
+  }
+  const middle = input.boundaryFrames?.middle
+  if (middle && (!input.boundaryFrames?.lockEndpoints || resolution === '1080p' || !images.includes(middle.imageUrl)
+    || !Number.isFinite(middle.time) || Math.round(middle.time*24) <= 0 || Math.round(middle.time*24) >= duration*24-1)) {
+    throw new Error('H3 middle frame requires validated imagery, native endpoint locks, 480p/768p and an interior output time.')
+  }
   const counts = { image: images.length, media: images.length, video: videos.length, audio: audios.length }
   const prompt = input.prompt.trim().replace(/<<<(image|media|video|audio)_(\d+)>>>/gi, (_, kind: string, raw: string) => {
     const type = kind.toLowerCase() as keyof typeof counts
@@ -59,7 +69,9 @@ export function buildH3MaxReferencePayload(input: H3MaxReferenceInput): Record<s
     prompt, duration, resolution: resolution.toUpperCase(), aspect_ratio: aspectRatio,
     reference_image_urls: images, reference_video_urls: videos.map(clip => clip.url),
     reference_audio_urls: audios.map(clip => clip.url),
-    enable_safety_checker: true, prompt_expansion_mode: 'balanced', sync_mode: false,
+    enable_safety_checker: true, prompt_expansion_mode: input.boundaryFrames ? 'disabled' : 'balanced', sync_mode: false,
+    ...(input.boundaryFrames?.lockEndpoints ? { image_url: input.boundaryFrames.startUrl, end_image_url: input.boundaryFrames.endUrl } : {}),
+    ...(middle ? {middle_image_url:middle.imageUrl,middle_frame_time:Math.round(middle.time*24)/24} : {}),
     ...(input.seed != null ? { seed: input.seed } : {}),
   }
 }

@@ -735,7 +735,7 @@ export async function buildPromptContext(
     : '';
 
   const frameAnchoredVideoEditContext = isFrameAnchoredVideoEdit
-    ? `[Frame-anchored video edit]\nThe user attached a screenshot/frame and referenced a video moment in the text. Treat the attached image as the visual anchor for local video repair: read skills/video-segment-edit/SKILL.md, locate the moment with analyze_video({ mode: "locate_frame" }) using the screenshot + referenced video, and do not call generate_animation until the user explicitly confirms generation.\n\n`
+    ? `[Video image reference]\nThe attached image may be a creative reference or a screenshot locator; determine its role from the request. Follow skills/video-edit/SKILL.md for scope routing.\n\n`
     : '';
 
   const videoUploadContext = uploadedVideoCount && !options.turnMediaCount

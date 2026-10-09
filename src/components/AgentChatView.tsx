@@ -655,6 +655,8 @@ interface AgentChatViewProps {
   skills?: SkillItem[];
   selectedSkill?: string | null;
   draftText?: string;
+  retakeContext?: { mediaIndex: number; start: number; end: number };
+  onClearRetake?: () => void;
   draftAttachments?: ComposerDraftAttachment[];
   onSkillChange?: (skill: string | null) => void;
   onDeleteSkill?: (name: string) => void;
@@ -702,6 +704,8 @@ export default function AgentChatView({
   skills,
   selectedSkill,
   draftText,
+  retakeContext,
+  onClearRetake,
   draftAttachments,
   onSkillChange,
   onDeleteSkill,
@@ -1117,18 +1121,24 @@ export default function AgentChatView({
     const hasProcessing = attachments.some(a => a.status === 'processing');
     if (!hasContent || isAgentActive || hasProcessing) return;
 
-    const finalText = selectedSkill && text ? `[Active skill: ${selectedSkill}]\n${text}` : text;
+    const retakeText = retakeContext && text
+      ? `${t('video.retakeDraftPrompt', retakeContext.mediaIndex, retakeContext.start.toFixed(2), retakeContext.end.toFixed(2))} ${text}`
+      : text;
+    const finalText = selectedSkill && retakeText ? `[Active skill: ${selectedSkill}]\n${retakeText}` : retakeText;
     const imageData = attachments.filter(a => a.type === 'image' && a.data).map(a => a.data!);
     const videoData = attachments.filter(a => a.type === 'video' && a.data).map(a => ({
       url: a.data!, duration: a.duration || 0, width: a.width || 1080, height: a.height || 1920, poster: a.thumbnail,
     }));
 
     onSendMessage(finalText, imageData.length > 0 ? imageData : undefined, videoData.length > 0 ? videoData : undefined);
+    // The submitted text already carries the source/range; clear the draft
+    // selection in both chat and GUI so it cannot leak into the next message.
+    if (retakeContext) onClearRetake?.();
     userScrolledUp.current = false;
     setInput('');
     setAttachments([]);
     if (selectedSkill) onSkillChange?.(null);
-  }, [input, attachments, isAgentActive, onSendMessage, selectedSkill, onSkillChange]);
+  }, [input, attachments, isAgentActive, onSendMessage, selectedSkill, onSkillChange, retakeContext, onClearRetake, t]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();
@@ -1778,6 +1788,14 @@ export default function AgentChatView({
             WebkitBackdropFilter: 'blur(20px) saturate(1.35)',
           }}
         >
+          {retakeContext && <div data-testid="chat-retake-context" className="flex items-center gap-2 px-3 pt-2.5">
+            <span className="min-w-0 truncate rounded-full border border-fuchsia-300/20 bg-fuchsia-300/[0.08] px-2.5 py-1 text-[11px] font-medium text-fuchsia-200/85">
+              {t('video.retakeChatContext', retakeContext.mediaIndex, retakeContext.start.toFixed(2), retakeContext.end.toFixed(2))}
+            </span>
+            {onClearRetake && <button type="button" onClick={onClearRetake} aria-label={t('video.retakeClearSelection')} className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/5 hover:text-white/70">
+              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M6 18 18 6" /></svg>
+            </button>}
+          </div>}
           {/* Row 1: Textarea */}
           <textarea
             ref={inputRef}
@@ -1805,7 +1823,7 @@ export default function AgentChatView({
                 handleSubmit();
               }
             }}
-            placeholder={t('chat.placeholder')}
+            placeholder={t(retakeContext ? 'video.retakeChatPlaceholder' : 'chat.placeholder')}
             className={`w-full bg-transparent outline-none border-none leading-relaxed disabled:opacity-40 resize-none overflow-y-auto block ${isPanel ? 'text-[17px]' : 'text-[21px]'}`}
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem', padding: isPanel ? '10px 14px 4px' : '12px 16px 6px' }}
           />

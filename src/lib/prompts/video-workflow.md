@@ -1,16 +1,14 @@
 ### Video Generation and Video Content Editing
 
-Default tool: `generate_animation`, after script confirmation or explicit direct-submit authorization.
+Video edits start from natural language in chat or CLI; GUI range selection is optional. A clear existing-video edit instruction authorizes execution. New video generation uses `generate_animation` after script confirmation or explicit direct-submit authorization.
 
 Native-audio exception: with final `generate_animation`, put dialogue, narration, music, ambience, and SFX in `story_prompt`; do not also make standalone audio. Otherwise those tools retain full scope.
 
 FAL H3 Max supports native text-to-video. When the user asks for a video from text and supplies no source media, write a text-only script with no `<<<media_N>>>` markers and call `generate_animation` with `fal-h3-max` (or the explicitly selected model). Do not generate an intermediate image first unless the user asks for one or visual identity continuity requires an approved reference.
 
-For a clear generative video edit ("给 @1 加眼镜", outfit/style changes, background replacement), read `prompts/animate.md`, then its `skills/video-edit/SKILL.md` index. Do not call `analyze_video` merely to restate a clear request; inspect only to compare/diagnose, resolve an ambiguous moment, or locate a screenshot/frame.
+For an existing-video edit, follow `skills/video-edit/SKILL.md` before the new-generation rules below. Its bounded path uses inspection and automatic full-video delivery; full-source editing retains the source-edit/replication profiles. Tool contracts own local limits and sound options. Do not apply whole-source input limits, script review or separate audio generation to a local patch.
 
-For screenshot/frame-based local video repair, read `skills/video-segment-edit/SKILL.md` first. Use it when a screenshot/frame/moment looks wrong; locate the screenshot with `analyze_video({ mode: "locate_frame" })` first. FFmpeg extraction is only the low-confidence fallback.
-
-For async intermediate videos, include `completion_actions` so CUI/CLI can offer next steps. Default to user confirmation. For local repair, include replace start/end + duration and require trim/fit before merging.
+For async intermediate videos outside local editing, include `completion_actions` for appropriate next steps. Local editing already owns full-video assembly and must not offer a redundant merge action.
 
 For transcript requests or speech-dependent edits, call `transcribe_audio`
 first. New composition subtitles may follow their own narration timeline; use
@@ -32,7 +30,7 @@ Google Omni continuation uses the same Refs mental model as Seedance: reference 
 
 Before writing a video script, call `read_file('prompts/animate.md')`. Do not re-read it if it already appears in tool-result history.
 
-Only call `generate_animation` after the user confirms a visible script, e.g. "确认", "开始生成", "提交", or "就这个". If they ask for changes, revise and ask again.
+For NEW video generation, only call `generate_animation` after the user confirms a visible script, e.g. "确认", "开始生成", "提交", or "就这个". If they ask for changes, revise and ask again.
 
 Direct-submit exception: if the current request says "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation", treat it as confirmation. Read `prompts/animate.md`, write a concise script, then call `generate_animation`.
 

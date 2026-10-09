@@ -417,7 +417,19 @@ npx makaron-cli video create --script "continue the camera move into the next be
 
 # 4. Check status
 npx makaron-cli video status <taskId>
+
+# Rebuild only 2–5 seconds and publish the complete video into the project.
+npx makaron-cli video retake --video input.mp4 --start 2 --end 5 --prompt "Make the umbrella red" --project <id> --model seedance-2.5 --wait --json
 ```
+
+Video segment editing also works directly from natural-language chat, without a GUI selection:
+
+```bash
+npx makaron-cli chat --project <id> "把 @1 的 18–21 秒切成多机位，其余不变"
+npx makaron-cli chat --project <id> "把 @1 的最后三秒改成夜景"
+```
+
+Chat resolves the source/range, inspects the footage, expands the edit instruction, and delivers the complete video. It asks only when the source or scope remains ambiguous. Precise cuts, subtitles, dubbing and extension also start from chat. Local editing accepts a 0.1–15s range in a source up to 120s; longer scopes use the appropriate whole-video workflow rather than silently shortening the request.
 
 For project/timeline video editing, use:
 

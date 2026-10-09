@@ -103,6 +103,27 @@ describe('video-edit Skill replication profile', () => {
     )
   })
 
+  it('retires the old segment workflow without losing historical launches or unknown-frame location', async () => {
+    clearSkillCache()
+    clearWorkspaceCache()
+    const retired = loadBuiltInSkills().get('video-segment-edit')!
+    expect(retired.makaron).toMatchObject({ userSelectable: false, manifestVisible: false, canonicalSkill: 'video-edit' })
+    expect(await getSkillManifest()).not.toContain('**video-segment-edit**')
+    const legacy = readBuiltInFile('skills/video-segment-edit/SKILL.md')?.content
+    expect(legacy).toContain('skills/video-edit/SKILL.md')
+    expect(legacy).not.toContain('locate_frame')
+    const skill = read('src/skills/video-edit/SKILL.md')
+    expect(skill).toContain('For a known range, go straight to inspection')
+    expect(skill).toContain('ORIGINAL source')
+    expect(readBuiltInFile('skills/video-edit/references/frame-location.md')?.content).toContain('verification.verdict')
+    for (const entry of ['src/lib/prompts/agent.md', 'src/lib/prompts/video-workflow.md', 'src/lib/agent-context.ts', 'src/skills/multi-angle-video/SKILL.md']) {
+      expect(read(entry)).not.toContain('skills/video-segment-edit/SKILL.md')
+    }
+    const inspectResult = read('src/lib/agent-tools.ts').split('Retake visual evidence and time mapping:')[1]?.split('function createRetakeVideoTool')[0]
+    expect(inspectResult).not.toContain('${RETAKE_PROMPT_WRITING}')
+    expect(inspectResult).not.toContain('${RETAKE_SCENE_READING}')
+  })
+
   it('extracts a provisional Blueprint that matches the committed P0 schema skeleton', async () => {
     const work = mkdtempSync(join(tmpdir(), 'makaron-video-replication-test-'))
     const output = join(work, 'shot-blueprint.json')

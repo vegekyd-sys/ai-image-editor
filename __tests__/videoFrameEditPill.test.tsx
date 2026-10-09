@@ -4,8 +4,8 @@ import VideoResultCard from '@/components/VideoResultCard';
 import type { ProjectAnimation } from '@/types';
 import { LocaleProvider } from '@/lib/i18n';
 
-describe('VideoResultCard frame edit pill', () => {
-  it('shows a one-click frame edit action for the selected completed video', () => {
+describe('VideoResultCard local edit pill', () => {
+  it('shows a optional one-click local edit action for the selected completed video', () => {
     const anim: ProjectAnimation = {
       id: 'video-1',
       projectId: 'project-1',
@@ -19,7 +19,7 @@ describe('VideoResultCard frame edit pill', () => {
       createdAt: new Date().toISOString(),
       videoModel: 'seedance-2-fast' as ProjectAnimation['videoModel'],
     };
-    const onFrameEdit = vi.fn();
+    const onRetake = vi.fn();
 
     render(
       <LocaleProvider>
@@ -30,7 +30,7 @@ describe('VideoResultCard frame edit pill', () => {
           onCreateNew={vi.fn()}
           onAbandon={vi.fn()}
           onViewDetail={vi.fn()}
-          onFrameEdit={onFrameEdit}
+          onRetake={onRetake}
           currentTime={8.7}
           currentDuration={15}
         />
@@ -39,7 +39,7 @@ describe('VideoResultCard frame edit pill', () => {
 
     fireEvent.click(screen.getByTestId('video-frame-edit-pill').querySelector('button')!);
 
-    expect(screen.getByText(/从这帧改视频|Edit video here/)).toBeTruthy();
-    expect(onFrameEdit).toHaveBeenCalledWith(anim, 8.7);
+    expect(screen.getByText(/局部编辑|Edit segment/)).toBeTruthy();
+    expect(onRetake).toHaveBeenCalledWith(anim, 8.7);
   });
 });

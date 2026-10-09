@@ -11,8 +11,8 @@
   },
   "src/lib/prompts/animate.md": {
     "baselineSha256": "694bb707e878fdaa1487109fc5c8e059d1cd28b59f7a8109011485d0a4ecf67c",
-    "sha256": "62cfa093d17c7f4e590b13f1dfb93e60b25aca52193297473d0fdc54cc52c790",
-    "reason": "Preserve H3 Max resolution support and explicit user/app selection; an active Skill may own its workflow-specific default (Multi-Angle uses Wan 3.0 Prime 720p). General H3 Max defaults remain unchanged. Regression: agentMediaScenarioMatrix.test.ts."
+    "sha256": "cb112fd9c8f70022b99a53c3072eb4886931ea1ba52637efa9d5281bb440651b",
+    "reason": "Preserve H3 Max resolution support and explicit user/app selection; an active Skill may own its workflow-specific default (Multi-Angle uses Wan 3.0 Prime 720p). General H3 Max defaults remain unchanged. Regression: agentMediaScenarioMatrix.test.ts. Existing-video edit requests now authorize source inspection and local generation without a redundant script gate; new video generation still uses visible script approval. Regressions: agentRetakeGate.test.ts, agentPromptPolicy.test.ts, corePromptLayers.test.ts."
   },
   "src/lib/prompts/image.md": {
     "baselineSha256": "fc3ff3be94e2ce9d6921b2982a138b9a5503e1ac052426b9ceb6d5f4d0e32715",
