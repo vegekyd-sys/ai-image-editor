@@ -37,17 +37,49 @@ Provider duration limits select a capable model or the long-video workflow;
 
 ## Bounded visual edits
 
-For an explicit interval or a resolved scene inside an existing video, use
-`skills/video-segment-edit/SKILL.md`: inspect_retake (frames plus automatic ASR),
-then retake_video to modify or replace the interval and deliver the full video.
-This includes adding/changing objects, visual demonstrations of layers, camera
-coverage and whole-shot/background replacement. A known interval needs no
-preliminary analyze_video call, scripted trimming or second assembly pipeline.
-These visual edits use that route's models, endpoint intent and selected audio
-policy, rather than the generation/replication instructions below.
-Depicting layers in a video does not request an actual editable composition.
-Dedicated precise cutting, subtitles, dubbing and explicit editable projects
-continue through their own capabilities.
+This is an addition to full-source editing, not a replacement for it. For a
+requested interval/scene, follow the steps here and stop before the full-source
+profiles below. The tool descriptions own model limits, parameters, frame/audio
+interpretation and prompt-writing guidance; do not load multi-angle or generation
+guides for a bounded edit, even when its brief asks for multiple views.
+
+1. Resolve the requested range from explicit seconds/timecodes, first/last N
+   seconds, source duration or a verified scene/action. Convert clip-relative
+   time to original-source seconds using its source offset. GUI selection is
+   optional. For a known range, go straight to inspection; do not analyze the
+   whole video or locate a screenshot first. For an unknown scene, use
+   `analyze_video` / `preview_frame` to locate it. Only an unknown screenshot
+   location uses `skills/video-edit/references/frame-location.md`.
+2. State the source range briefly. Choose the requested model, otherwise H3 Max;
+   Seedance family requests default to Eco unless native/standard is explicit.
+   Call `inspect_retake` for that exact source/range/model. Read its actual frame
+   evidence and ASR together; do not retranscribe it. If visual inspection fails,
+   report it instead of generating blindly. If essential speech evidence is
+   unavailable, resolve it before submission.
+3. From the user's actual demand, independently choose `edit_mode` and
+   `audio_mode` using the tool contracts. Expand the demand using the observed
+   footage and measured output clock. Pass supplied images in their intended
+   roles; no compulsory image generation or standard camera sequence.
+4. Call `retake_video` with the inspection receipt and final instruction. It owns
+   contextual clipping, generation, selected audio handling and full-video
+   assembly. Do not script another pipeline or ask for a second merge approval.
+   Poll its root task; delivery retries must not create another paid generation.
+5. Verify the delivered selection: requested change, correct modification or
+   replacement policy, outer footage, joins and requested sound. Provider
+   completion alone is not acceptance. Report actual seconds and limitations.
+
+A model-only comparison reuses the last explicitly edited ORIGINAL source,
+range and demand, then reinspects that source for the new model. Do not use the
+failed/generated result or current GUI selection as a new base unless the user
+explicitly asks to revise that result. For an authorized correction, inspect the
+failed selection to identify the defect, then revise from the original source.
+Never weaken modification continuity just to make a failed edit look different.
+
+If the range or source exceeds tool capabilities, use a capable full-source or
+long-video workflow without silently shrinking the request. Precise cuts,
+subtitles, working editable layers, standalone audio and continuation retain
+their own tools. Visual demonstrations of layers and natural image/logo
+integration within a scene remain local visual edits.
 
 Use one Skill for any request in which a supplied video controls the result.
 "Edit" is a user intent, not a requirement to expose a provider's typed edit
@@ -77,7 +109,6 @@ generation in `prompts/animate.md`.
 2. Inspect only to the required depth. A clear source edit does not need
    `analyze_video`; replication must understand the complete clip and lock
    uncertain boundaries before paid generation.
-For a bounded change integrating a supplied image/logo into an existing scene or ending, use skills/video-segment-edit/SKILL.md and pass reference_media_indices. Natural/playful integration does not imply a Remotion overlay or editable timeline; explicit fixed layers and exact deterministic text/layout remain composition tasks.
 
 3. Choose the smallest capable path: deterministic FFmpeg, editable Remotion,
    reference-to-video synthesis, or a hybrid. Models decide semantic intent and

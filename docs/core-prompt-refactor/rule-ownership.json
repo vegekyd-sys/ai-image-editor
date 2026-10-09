@@ -112,13 +112,13 @@
     {
       "id": "core-22",
       "text": "For a clear generative video edit (\"给 @1 加眼镜\", outfit/style changes, background replacement), read `prompts/animate.md`, then its `skills/video-edit/SKILL.md` index. Do not call `analyze_video` merely to restate a clear request; inspect only to compare/diagnose, resolve an ambiguous moment, or locate a screenshot/frame.",
-      "amendment": "Bounded editing supplements full-source editing and selects original/generated interval audio.",
+      "amendment": "Retire screenshot-segment workflow; video-edit owns all existing-video scope/workflow routing, while local tool descriptions own inspection and submission contracts.",
       "owner": "video"
     },
     {
       "id": "core-23",
       "text": "For screenshot/frame-based local video repair, read `skills/video-segment-edit/SKILL.md` first. Use it when a screenshot/frame/moment looks wrong; locate the screenshot with `analyze_video({ mode: \"locate_frame\" })` first. FFmpeg extraction is only the low-confidence fallback.",
-      "amendment": "Preserve screenshot localization for unknown moments; use inspected automatic assembly afterward.",
+      "amendment": "Retire screenshot-segment workflow; video-edit owns all existing-video scope/workflow routing, while local tool descriptions own inspection and submission contracts.",
       "owner": "video"
     },
     {

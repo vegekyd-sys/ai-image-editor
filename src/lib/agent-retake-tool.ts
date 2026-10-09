@@ -23,9 +23,9 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       media_index: z.number().int().positive(),
       start: z.number().nonnegative(),
       end: z.number().positive(),
-      prompt: z.string().min(1).describe('Final expanded prompt: requested visible change first, explicit output-time action/shot beats next, essential identity constraints last. Avoid copying the source synopsis or conflicting camera locks.'),
+      prompt: z.string().min(1).describe('Final provider instruction: requested change, measured output-time beats and essential preservation constraints. Numeric edit times use ONLY outputSelection from inspection; the original selection is already in start/end and source facts belong in source_observation. Avoid copying the source synopsis or conflicting camera locks.'),
       shot_plan: z.array(z.object({ start: z.number().nonnegative(), end: z.number().positive(), instruction: z.string().min(1) })).min(1).max(8)
-        .describe('Output-local beats matching the final prompt, covering exactly outputSelection from inspect_retake. Do NOT reset its start to zero. Choose beats from the requested temporal development; one continuous beat is enough for a persistent change. Beat count does not imply camera count.'),
+        .describe('Output-local beats matching the final prompt, covering exactly outputSelection from inspect_retake. Do NOT reset its start to zero. Choose beats from the requested temporal development; one continuous beat is enough for a persistent change. Beat count does not imply camera count. The provider receives prompt, not this array: copy every phase start–end and action into prompt when there is more than one phase.'),
       camera_change: z.boolean().default(false).describe('Declare whether the scene-informed plan changes camera coverage. Temporal content phases alone are false. This flag does not require generating an image.'),
       audio_mode: z.enum(['original','generated']).default('original').describe('Independent of edit_mode. original copies the complete original soundtrack (default for visual-only requests). generated uses the generated clip audio ONLY within the selection, timed with its video, retaining source audio outside. Choose generated when the user requests new/changed dialogue, narration, music or sound; write that sound explicitly in the final prompt. Fit speech inside outputSelection, and verify the delivered speech/lip-sync rather than promising preservation of the old selected audio. Never route a whole-video edit here merely because it changes one subject.'),
       edit_mode: z.enum(['modify','replace']).describe('Choose from USER INTENT, independently of camera_change. modify edits inside the existing sequence (including multi-angle coverage, layers or added content) and retains original first/last compositions for continuity. replace discards the selected shot and creates a new shot: original first/last compositions need not match. Camera changes alone do not mean replacement. Seedance keeps its source-video edit route but must follow the same intent in the prompt.'),
@@ -44,7 +44,13 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
       if (!ctx.userId || !ctx.projectId) return { success: false, message: 'Retake requires an authenticated project.' };
       const boundary_mode = edit_mode ? edit_mode === 'modify' ? 'exact' : 'scene' : legacy_boundary_mode ?? 'exact';
       if (edit_mode && legacy_boundary_mode && legacy_boundary_mode !== boundary_mode) return {success:false,errorCode:'retake_edit_mode_conflict',message:'No provider submitted. Choose edit_mode from user intent; omit boundary_mode. modify preserves endpoints, replace does not lock original endpoints.'};
-      if (corrected_boundary_media_indices && (model !== 'fal-h3-max' || edit_mode !== 'modify' || end_frame_media_index)) return {success:false,message:'Corrected boundary images are H3 modify controls, not replacement shots or a competing final asset.'};
+      const unsupportedControls = (fields: string[], reason: string) => ({
+        success: false, errorCode: 'retake_controls_unsupported',
+        message: `No provider was submitted. ${reason} Omit the incompatible native fields; suitable checked images may be creative references. Preserve the requested model and edit_mode when repairing parameters. Do not change modify to replace to bypass this validation. A justified model change requires fresh inspection.`,
+        repair: { model, edit_mode, omit: fields },
+      });
+      if (corrected_boundary_media_indices && (model !== 'fal-h3-max' || edit_mode !== 'modify' || end_frame_media_index)) return unsupportedControls(['corrected_boundary_media_indices'], 'Corrected boundary images are H3 modify controls, not replacement shots or a competing final asset.');
+      if (model !== 'fal-h3-max' && (middle_frame_media_index || middle_frame_time != null)) return unsupportedControls(['middle_frame_media_index','middle_frame_time'], 'This model uses source-video editing and creative references, not native intermediate image controls.');
       const source = await resolveSource(ctx, media_index);
       if (!source.videoUrl) return { success: false, message: source.error ?? 'Select a ready video.' };
       if (source.sourceRange && (start < source.sourceRange.start_sec || end > source.sourceRange.end_sec)) {
@@ -78,7 +84,7 @@ export function createInspectedRetakeVideoTool({ ctx, serializeVideoSubmission, 
         correctedBoundaries={startUrl,endUrl};
       }
       let middleFrame: {imageUrl:string;time:number} | undefined;
-      if (boundary_mode === 'scene' && (middle_frame_media_index || end_frame_media_index)) return {success:false,message:'Scene continuity does not lock frames. Choose exact for native middle/final-image controls, or pass suitable images as creative references.'};
+      if (boundary_mode === 'scene' && (middle_frame_media_index || end_frame_media_index)) return unsupportedControls(['middle_frame_media_index','middle_frame_time','end_frame_media_index'], 'Replacement does not lock native middle/final frames.');
       if (middle_frame_media_index || middle_frame_time != null) {
         const imageUrl = imageUrlFor(middle_frame_media_index!);
         if (model !== 'fal-h3-max' || !imageUrl || !Number.isFinite(middle_frame_time) || middle_frame_time! <= 0 || Math.round(middle_frame_time!*24) >= clock.generationDuration*24-1) return {success:false,message:'Choose a ready H3 image keyframe and a time strictly inside its native output before video submission.'};

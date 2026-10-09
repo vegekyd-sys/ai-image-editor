@@ -24,13 +24,21 @@ describe('Agent Retake paid-submission gate', () => {
   it('binds inspected corrected boundary images without relaxing modify endpoint intent',async()=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
     const refs={...scope,ctx:{...ctx,snapshotImages:[sourceUrl,'https://example.com/open.jpg','https://example.com/close.jpg']}};
-    await (createInspectedRetakeVideoTool(refs).execute as any)({...input,edit_mode:'modify',camera_change:false,prompt:'Retain <<<media_1>>> action with corrected opening <<<media_2>>> and closing <<<media_3>>>.',inspection_id:receipt(),source_observation:observation,corrected_boundary_media_indices:{start:2,end:3}});
+    await (createInspectedRetakeVideoTool(refs).execute as any)({...input,edit_mode:'modify',camera_change:false,prompt:'Retain <<<media_1>>> action with corrected opening <<<media_2>>> and closing <<<media_3>>>.',shot_plan:[{start:1,end:4,instruction:'Retain action with corrected endpoints'}],inspection_id:receipt(),source_observation:observation,corrected_boundary_media_indices:{start:2,end:3}});
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({script:'Retain the inspected original scene action with corrected opening Image 1 and closing Image 2.',images:[],retake:{start:18,end:21,editMode:'modify',correctedBoundaries:{startUrl:'https://example.com/open.jpg',endUrl:'https://example.com/close.jpg'}}}),expect.anything());
   });
   it.each([{edit_mode:'replace'},{model:'seedance-2.5-eco'},{end_frame_media_index:2}])('rejects incompatible corrected boundary controls before submission %j',async change=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
     const result=await (createInspectedRetakeVideoTool(scope).execute as any)({...input,edit_mode:'modify',inspection_id:receipt(),source_observation:observation,corrected_boundary_media_indices:{start:2,end:3},...change});
     expect(result.success).toBe(false);expect(submit).not.toHaveBeenCalled();
+  });
+  it.each(['seedance-2.5-eco','seedance-2.5'])('repairs unsupported native controls without discarding modification intent for %s',async model=>{
+    const execute=createInspectedRetakeVideoTool(scope).execute as any;
+    for(const controls of [{corrected_boundary_media_indices:{start:2,end:3}},{middle_frame_media_index:2,middle_frame_time:2.5}]) {
+      const result=await execute({...input,model,edit_mode:'modify',...controls});
+      expect(result).toMatchObject({success:false,errorCode:'retake_controls_unsupported',repair:{model,edit_mode:'modify',omit:Object.keys(controls)}});
+      expect(submit).not.toHaveBeenCalled();
+    }
   });
   it.each(['creative','middle','ending'])('resolves a persisted same-turn %s image despite a stale data URL',async role=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
@@ -66,7 +74,7 @@ describe('Agent Retake paid-submission gate', () => {
   });
   it('carries scene continuity through inspection, source-marker binding and normal submission',async()=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
-    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,camera_change:false,boundary_mode:'scene',prompt:'Replace <<<media_1>>> with a sustained tighter shot.',inspection_id:receipt(),source_observation:observation});
+    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,camera_change:false,boundary_mode:'scene',prompt:'Replace <<<media_1>>> with a sustained tighter shot.',shot_plan:[{start:1,end:4,instruction:'Sustained tighter shot'}],inspection_id:receipt(),source_observation:observation});
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({script:'Replace the inspected original scene with a sustained tighter shot.',retake:{start:18,end:21,boundaryMode:'scene'}}),expect.anything());
   });
   it('does not reserve or submit without actual inspection evidence', async () => {
@@ -96,13 +104,13 @@ describe('Agent Retake paid-submission gate', () => {
   })
   it('does not name an omitted source video when H3 changes camera coverage',async()=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
-    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,prompt:'Continue the advancing action in <<<media_1>>> from a new view.',inspection_id:receipt(),source_observation:observation});
+    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,prompt:'Continue the advancing action in <<<media_1>>> from a new view.',shot_plan:[{start:1,end:4,instruction:'Continue action from a new view'}],inspection_id:receipt(),source_observation:observation});
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({script:'Continue the advancing action in the inspected original scene from a new view.'}),expect.anything());
   });
   it('allows multiple fixed-camera content phases without generating a camera keyframe',async()=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
     await (createInspectedRetakeVideoTool(scope).execute as any)({...input,camera_change:false,
-      prompt:'Reveal the homepage with a fixed camera, then hold it.',
+      prompt:'1–2s: transition with a fixed camera. 2–3s: reveal the homepage. 3–4s: hold it.',
       shot_plan:[{start:1,end:2,instruction:'transition'},{start:2,end:3,instruction:'homepage reveal'},{start:3,end:4,instruction:'hold homepage'}],
       inspection_id:receipt(),source_observation:observation});
     expect(submit).toHaveBeenCalledTimes(1);
@@ -112,6 +120,7 @@ describe('Agent Retake paid-submission gate', () => {
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
     await (createInspectedRetakeVideoTool(scope).execute as any)({...input,camera_change:false,
       prompt:'Finish on <<<media_2>>> after transitioning from <<<media_1>>>.',
+      shot_plan:[{start:1,end:4,instruction:'Transition into the supplied final image'}],
       inspection_id:receipt(),source_observation:observation,end_frame_media_index:2,reference_media_indices:[2]});
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({images:[],script:'Finish on Image 2 after transitioning from the inspected original scene.',
       retake:{start:18,end:21,endFrame:{imageUrl:'https://example.com/air.jpg'}}}),expect.anything());
@@ -130,6 +139,7 @@ describe('Agent Retake paid-submission gate', () => {
     expect(submit).not.toHaveBeenCalled()
   })
   it.each([
+    { prompt: 'Turn, then speak. Output 1–4s.' },
     { shot_plan: [{ start: 0, end: 3, instruction: 'three new cameras' }] },
     { prompt: 'Output-local 0.0–1.0s: close-up. At 1.0s, HARD CUT to medium shot.' },
     { prompt: '1–2s: close-up. At 0.5s, HARD CUT to medium shot.' },

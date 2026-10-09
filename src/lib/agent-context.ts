@@ -735,7 +735,7 @@ export async function buildPromptContext(
     : '';
 
   const frameAnchoredVideoEditContext = isFrameAnchoredVideoEdit
-    ? `[Frame-anchored video edit]\nThe user attached an image and referenced a video time. Determine its role first: a character/content/style reference is not a screenshot locator, and a whole-video change stays on video-edit. Only when it anchors a bounded video repair: read skills/video-segment-edit/SKILL.md, If the image is a screenshot anchor and the moment is unknown, locate it with analyze_video({ mode: "locate_frame" }); if the user already supplied a clear interval, use it directly. A creative/style reference is not a screenshot to locate. Once the range is resolved, use inspect_retake followed by retake_video for local content editing; the user's edit instruction is authorization, without a GUI selection or a second merge confirmation.\n\n`
+    ? `[Video image reference]\nThe attached image may be a creative reference or a screenshot locator; determine its role from the request. Follow skills/video-edit/SKILL.md for scope routing.\n\n`
     : '';
 
   const videoUploadContext = uploadedVideoCount && !options.turnMediaCount

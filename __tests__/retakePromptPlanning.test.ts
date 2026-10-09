@@ -5,6 +5,13 @@ import { bindRetakeReferences } from '@/lib/video-retake-references'
 import { retakePromptPlanning, retakeShotPlanError } from '@/lib/video-retake-prompt-planning'
 
 describe('scene-neutral inspection timing', () => {
+  it('does not let a timed plan disappear from the actual provider instruction',()=>{
+    const beats=[{start:.2,end:1.2,instruction:'Turn toward camera'},{start:1.2,end:4,instruction:'Speak after turning'}];
+    const selection={start:.2,end:4};
+    expect(retakeShotPlanError(beats,'Turn toward camera, then speak. Output .2–4 seconds.',selection)).toContain('provider receives prompt');
+    expect(retakeShotPlanError(beats,'Output 0.2–1.2 seconds: turn toward camera. Output 1.2–4 seconds: speak after turning.',selection)).toBeNull();
+    expect(retakeShotPlanError(beats,'Source 0.2–1.2 seconds: profile. Output 1.2–4 seconds: speak.',selection)).toContain('provider receives prompt');
+  });
   it('distinguishes inspected source joins from output beats before billing',()=>{
     const beats=[{start:0,end:5,instruction:'A new medium shot throughout'}];
     expect(retakeShotPlanError(beats,'Keep medium framing; cut naturally to the following source shot at 6.0s.',{start:0,end:5})).toBeNull();

@@ -152,7 +152,7 @@ describe('agent prompt policy guards', () => {
     const home = read('src/app/home/page.tsx')
     const executionRunner = read('src/lib/agent-execution-runner.ts')
 
-    expect(agent).toContain('Only call `generate_animation` after the user confirms a visible script')
+    expect(agent).toContain('For NEW video generation, only call `generate_animation` after the user confirms a visible script')
     expect(animate).toContain('in an ordinary CUI/editor request, write the complete visible script and wait for confirmation')
     expect(animate).toContain('the system prompt explicitly supplies a `Trusted Skill template launch`')
     expect(agentTs).toContain('trusted Skill template launch exception')
@@ -219,7 +219,7 @@ describe('agent prompt policy guards', () => {
 
     expect(agent).toContain('New video generation retains its script review gate')
     expect(agent).toContain('without a GUI selection requirement')
-    expect(agent).toContain('Only call `generate_animation` after the user confirms')
+    expect(agent).toContain('For NEW video generation, only call `generate_animation` after the user confirms')
     expect(agent).toContain('Direct-submit exception')
     expect(agent).toContain('直接提交渲染')
     expect(agent).toContain('不要问我确认')

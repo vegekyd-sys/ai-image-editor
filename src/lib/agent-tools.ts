@@ -13,7 +13,7 @@ import { submitMcpVideo } from './billing/mcp-video';
 import { createInspectedRetakeVideoTool } from './agent-retake-tool';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL, planRetake, validateRetakeRange } from './video-retake-contract';
 import { signRetakeInspection, verifyRetakeInspection, resolveRetakeInspectionReceipt, retakeInspectionScope, retakeOutputTime, retakeInspectionProofPath } from './video-retake-inspection';
-import { RETAKE_SCENE_READING, RETAKE_PROMPT_WRITING, retakePromptPlanning } from './video-retake-prompt-planning';
+import { RETAKE_SCENE_READING, retakePromptPlanning } from './video-retake-prompt-planning';
 import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
 import {
@@ -2271,7 +2271,7 @@ function createInspectRetakeTool(scope: AgentToolFactoryScope) {
           {type:'text' as const,text:`${group.role === 'selection' ? 'SELECTED ACTION ONLY' : 'ADJACENT JOIN CONTEXT ONLY — outside the replacement'}; SOURCE timestamps in image order: ${group.timestamps.join(', ')}s. Read every frame against its own label; do not attribute a neighboring shot to the selected endpoint.`},
           modelFileContent(group.base64Data,mimeType),
         ]) : [modelFileContent(base64Data, mimeType)] : []),
-        { type: 'text' as const, text: `Retake visual evidence and time mapping:\n${JSON.stringify(receipt)}\n${RETAKE_SCENE_READING}\n${RETAKE_PROMPT_WRITING}` },
+        { type: 'text' as const, text: `Retake visual evidence and time mapping:\n${JSON.stringify(receipt)}` },
       ] };
     },
   });
