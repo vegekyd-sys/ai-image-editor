@@ -1568,7 +1568,7 @@ export default function AgentChatView({
                               const source = snapshot.imageUrl || snapshot.image;
                               return (
                                 <button key={snapshot.id} aria-label={`${t('image.candidate')} ${candidate + 1}`}
-                                  aria-pressed={currentSnapshotIndex === index}
+                                  aria-pressed={currentSnapshotIndex === index + 1}
                                   className="relative overflow-hidden rounded-xl border border-white/10 active:opacity-75"
                                   onClick={event => onImageTap(msg.id, event.currentTarget.getBoundingClientRect(), source, snapshot.id)}>
                                   <img src={source.startsWith('http') ? getThumbnailUrl(source, isPanel ? 340 : 512, 75, 2000, 'contain') : source}
