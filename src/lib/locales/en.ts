@@ -1,6 +1,9 @@
 const en = {
   "mjLab.back": "Back to Makaron",
   "mjLab.eyebrow": "Local trial · Midjourney V8.2",
+  "image.candidates": "Candidate images",
+  "image.candidate": "Candidate",
+  "image.chooseCandidate": "Choose an image to view, save or edit on the canvas.",
   "model.midjourney.name": "Midjourney V8.2",
   "model.midjourney.desc": "Creative scenes and style exploration. Four candidates by default; no precise image editing.",
   "mjLab.title": "Turn an idea into a visual direction.",

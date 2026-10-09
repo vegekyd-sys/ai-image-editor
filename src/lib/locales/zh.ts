@@ -1,6 +1,9 @@
 const zh = {
   "mjLab.back": "返回 Makaron",
   "mjLab.eyebrow": "本地试用 · Midjourney V8.2",
+  "image.candidates": "候选图",
+  "image.candidate": "候选图",
+  "image.chooseCandidate": "选择一张，在画布中查看、保存或继续编辑。",
   "model.midjourney.name": "Midjourney V8.2",
   "model.midjourney.desc": "创意画面与风格探索，默认四张候选；不用于精确修图。",
   "mjLab.title": "说出想法，探索视觉方向。",

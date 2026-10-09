@@ -1385,7 +1385,7 @@ function createGenerateImageTool(
   return tool({
       description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}`,
       inputSchema: z.object({
-        editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
+        editPrompt: z.string().describe('For mj-v8.2, pass the original natural-language user brief verbatim; its adapter handles MJ scene conversion, so do not append source-preservation instructions. For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
         isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),

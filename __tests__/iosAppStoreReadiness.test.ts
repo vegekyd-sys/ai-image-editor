@@ -479,7 +479,15 @@ describe('iOS App Store readiness guardrails', () => {
       'src/app/home/[skillId]/page.tsx',
     ]);
 
-    expect([...shellCovered, ...handledByComposition, ...redirectsOnly].sort()).toEqual([...pages].sort());
+    // Internal MJ lab is explicitly dev-only; normal users use the covered editor.
+    const developmentOnly = new Set(['src/app/midjourney/page.tsx']);
+    for (const file of developmentOnly) {
+      const source = fs.readFileSync(path.join(root, file), 'utf8');
+      expect(source).toContain("process.env.NODE_ENV !== 'development'");
+      expect(source).toContain("process.env.MIDJOURNEY_LOCAL_LAB !== '1'");
+      expect(source).toContain('notFound()');
+    }
+    expect([...shellCovered, ...handledByComposition, ...redirectsOnly, ...developmentOnly].sort()).toEqual([...pages].sort());
 
     for (const file of shellCovered) {
       const source = fs.readFileSync(path.join(root, file), 'utf8');

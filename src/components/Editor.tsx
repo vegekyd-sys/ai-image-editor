@@ -3081,8 +3081,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [projectId, snapshots, saveRequest, returningToSave, downloadParams]);
 
   // CUI: tap inline image → find snapshot → switch to GUI at that index
-  const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string) => {
-    const snapIdx = snapshots.findIndex(s => s.messageId === messageId);
+  const handleImageTap = useCallback((messageId: string, imgRect?: DOMRect, imgSrc?: string, snapshotId?: string) => {
+    const snapIdx = snapshots.findIndex(s => snapshotId ? s.id === snapshotId : s.messageId === messageId);
     if (snapIdx < 0) return;
     const snap = snapshots[snapIdx];
     const src = imgSrc || snap?.image || snap?.imageUrl || '';

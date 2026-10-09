@@ -615,7 +615,7 @@ interface AgentChatViewProps {
   onAbort?: () => void;
   onBack: () => void;
   onPipTap: (rect: DOMRect) => void;
-  onImageTap: (messageId: string, rect?: DOMRect, imgSrc?: string) => void;
+  onImageTap: (messageId: string, rect?: DOMRect, imgSrc?: string, snapshotId?: string) => void;
   focusOnOpen?: boolean;
   hidePip?: boolean;
   onInputBarHeight?: (h: number) => void;
@@ -1558,6 +1558,29 @@ export default function AgentChatView({
 
                     {/* Inline image — shared for generate_image and design poster */}
                     {msg.image && (() => {
+                      const candidates = snapshots.map((snapshot, index) => ({ snapshot, index }))
+                        .filter(({ snapshot }) => snapshot.messageId === msg.id && !snapshot.design && !snapshot.videoMeta);
+                      if (candidates.length > 1) return (
+                        <div className="mt-3" data-testid="generated-image-candidates">
+                          <p className="text-sm text-white/60 mb-2">{t('image.candidates')} · {candidates.length}</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            {candidates.map(({ snapshot, index }, candidate) => {
+                              const source = snapshot.imageUrl || snapshot.image;
+                              return (
+                                <button key={snapshot.id} aria-label={`${t('image.candidate')} ${candidate + 1}`}
+                                  aria-pressed={currentSnapshotIndex === index}
+                                  className="relative overflow-hidden rounded-xl border border-white/10 active:opacity-75"
+                                  onClick={event => onImageTap(msg.id, event.currentTarget.getBoundingClientRect(), source, snapshot.id)}>
+                                  <img src={source.startsWith('http') ? getThumbnailUrl(source, isPanel ? 340 : 512, 75, 2000, 'contain') : source}
+                                    alt={`${t('image.candidate')} ${candidate + 1}`} className="w-full h-auto" />
+                                  <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-xs text-white">@{index + 1}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <p className="text-xs text-white/40 mt-2">{t('image.chooseCandidate')}</p>
+                        </div>
+                      );
                       const snapIdx = getSnapshotIndex(msg.id);
                       return (
                         <button

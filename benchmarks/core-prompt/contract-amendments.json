@@ -21,8 +21,8 @@
   },
   "src/lib/prompts/generate_image_tool.md": {
     "baselineSha256": "d0dad379bc778a008f0adeaa580868085bb0cbd2483c459ed891003c12c3a3e7",
-    "sha256": "ecf7577299e139a40f598099633dd5800073f4115a3c3c01a6b9125cc82031cf",
-    "reason": "2026-10-08 user-authorized second cleanup: model priority, legacy IDs, NSFW and output-conflict policy have one owner in generated Image Model Capability. Context-mode summary is generated beside the tool; detailed original-brief examples, face/reference/edit preservation and cutout fidelity/content rules remain unchanged. Preserve real-alpha honesty while using shared conflict planning. Regression: agentMediaScenarioMatrix.test.ts, imageModelCapabilities.test.ts, editImageReferences.test.ts, falImage25.test.ts; before/after provider payload parity and CLI Chat image QA."
+    "sha256": "945fb1adfd58dc05c32c205dd3115c081438cdda02fa054250abbdaa3adb0e12",
+    "reason": "2026-10-08 user-authorized second cleanup: model priority, legacy IDs, NSFW and output-conflict policy have one owner in generated Image Model Capability. Context-mode summary is generated beside the tool; detailed original-brief examples, face/reference/edit preservation and cutout fidelity/content rules remain unchanged. Preserve real-alpha honesty while using shared conflict planning. Regression: agentMediaScenarioMatrix.test.ts, imageModelCapabilities.test.ts, editImageReferences.test.ts, falImage25.test.ts; before/after provider payload parity and CLI Chat image QA. 2026-10-09 user-authorized Midjourney integration: add new-scene batch/tool parameter contract; retain all existing edit and alpha rules. Regression: midjourneyIntegration.test.ts, wanImageAgentBilling.test.ts, imageCapabilityMcp.test.ts."
   },
   "src/lib/prompts/cutout.md": {
     "baselineSha256": "e1ffb7d39f0cad95e702d7a3971c9fdd97e4bc4f9720c7b31c7ee5ca98d6d202",
