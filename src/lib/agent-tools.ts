@@ -1385,7 +1385,7 @@ interface AgentToolFactoryScope {
 }
 
 function createGenerateImageTool(
-  { ctx }: AgentToolFactoryScope,
+  { ctx, runtime }: AgentToolFactoryScope,
 ) {
   return tool({
       description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}` + '\nRetake camera/content keyframes: use retake_source after inspect_retake to edit an actual source frame, rather than a video poster or contact sheet. The returned image is a visual checkpoint for H3 middle-frame control or an explicitly requested boundary-attribute correction. For a boundary correction use the corresponding inspected selected opening/closing source time; retain that exact composition and action phase except the requested correction. Read its actual pixels and verify the requested camera/content and action phase before passing its mediaIndex to retake_video.',
