@@ -3,7 +3,11 @@ export function isLocalMidjourneyRequest(request: Request): boolean {
   if (process.env.NODE_ENV !== 'development' || process.env.MIDJOURNEY_LOCAL_LAB !== '1') return false;
   const url = new URL(request.url);
   if (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return false;
+  // Next dev normalizes request.url to its bind hostname; the browser uses Host.
+  const host = request.headers.get('host') ?? url.host;
+  const external = new URL(`${url.protocol}//${host}`);
+  if (!['localhost', '127.0.0.1', '[::1]'].includes(external.hostname) || external.port !== url.port) return false;
   const origin = request.headers.get('origin');
-  if (origin && origin !== url.origin) return false;
+  if (origin && origin !== external.origin) return false;
   return !['cross-site', 'same-site'].includes(request.headers.get('sec-fetch-site') ?? '');
 }
