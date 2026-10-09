@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
-import { VERSION as REMOTION_VERSION } from 'remotion'
+import { VERSION as REMOTION_VERSION } from 'remotion/version'
 import type { DesignPayload, VideoMeta } from '@/types'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { toPublicStorageUrl } from '@/lib/supabase/storage'

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { VERSION as REMOTION_VERSION } from 'remotion'
+import { VERSION as REMOTION_VERSION } from 'remotion/version'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'

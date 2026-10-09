@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { VERSION as REMOTION_VERSION } from 'remotion'
+import { VERSION as REMOTION_VERSION } from 'remotion/version'
 
 import { config as loadEnv } from 'dotenv'
 

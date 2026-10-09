@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { VERSION as REMOTION_VERSION } from 'remotion';
+import { VERSION as REMOTION_VERSION } from 'remotion/version';
 import { REMOTION_EDITABLE_RUNTIME_VERSION } from '@/lib/editor/editable-react-runtime';
 import {
   assertRemotionRuntimeMarker,
