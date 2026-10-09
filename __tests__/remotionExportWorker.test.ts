@@ -147,6 +147,7 @@ describe('Remotion export worker contract', () => {
       runtimeVersion: 'remotion-font-runtime-r10-google-fonts-on-demand',
       fontCatalogVersion: 'makaron-fonts-r2-symbol-fallback',
       editableRuntimeVersion: 'remotion-editable-runtime-r4-caption-style-preserving',
+      remotionVersion: '4.0.527',
     })
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION')
     expect(read('src/remotion/DynamicDesign.tsx')).toContain('makaron-remotion-font-timing')

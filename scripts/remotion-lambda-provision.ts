@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { VERSION as REMOTION_VERSION } from 'remotion'
 
 import { config as loadEnv } from 'dotenv'
 
@@ -45,7 +46,19 @@ async function main(): Promise<void> {
     onProgress: (message) => console.log(message),
   })
 
-  const { deploySite } = await import('@remotion/lambda')
+  const { deploySite, deployFunction } = await import('@remotion/lambda')
+  // A renderer upgrade needs both a matching site and Lambda binary. Provision
+  // the versioned function only when requested; this does not change app envs.
+  const deployedFunction = process.argv.includes('--with-function')
+    ? await deployFunction({
+        region: region as Parameters<typeof deployFunction>[0]['region'],
+        memorySizeInMb: Number(readArg('--memory-mb') || 10240),
+        diskSizeInMb: Number(readArg('--disk-mb') || 5120),
+        timeoutInSeconds: Number(readArg('--timeout-seconds') || 900),
+        createCloudWatchLogGroup: true,
+        cloudWatchLogRetentionPeriodInDays: 14,
+      })
+    : null
   const result = await deploySite({
     region: region as Parameters<typeof deploySite>[0]['region'],
     bucketName,
@@ -73,6 +86,11 @@ async function main(): Promise<void> {
     serveUrl: result.serveUrl,
     bucketName,
     region,
+    remotionVersion: REMOTION_VERSION,
+    ...(deployedFunction ? {
+      functionName: deployedFunction.functionName,
+      functionAlreadyExisted: deployedFunction.alreadyExisted,
+    } : {}),
     fontManifestUrl: fontCatalog.manifestUrl,
     fontCatalog: {
       assetCount: fontCatalog.assetCount,

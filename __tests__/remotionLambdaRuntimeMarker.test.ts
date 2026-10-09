@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { VERSION as REMOTION_VERSION } from 'remotion';
 import { REMOTION_EDITABLE_RUNTIME_VERSION } from '@/lib/editor/editable-react-runtime';
 import {
   assertRemotionRuntimeMarker,
@@ -19,6 +20,7 @@ describe('Remotion Lambda runtime marker', () => {
       runtimeVersion: REMOTION_FONT_RUNTIME_VERSION,
       fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION,
       editableRuntimeVersion: REMOTION_EDITABLE_RUNTIME_VERSION,
+      remotionVersion: REMOTION_VERSION,
     });
     expect(() => assertRemotionRuntimeMarker(marker, serveUrl)).not.toThrow();
   });
@@ -36,6 +38,19 @@ describe('Remotion Lambda runtime marker', () => {
       fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION,
       editableRuntimeVersion: 'remotion-editable-runtime-stale',
     }, serveUrl)).toThrow(REMOTION_EDITABLE_RUNTIME_VERSION);
+  });
+
+  it('rejects a site built before the Lambda rasterization fix', () => {
+    expect(() => assertRemotionRuntimeMarker({
+      ...marker,
+      remotionVersion: '4.0.448',
+    }, serveUrl)).toThrow(`Remotion ${REMOTION_VERSION}`);
+  });
+
+  it('rejects a site whose renderer version is unknown', () => {
+    const { remotionVersion: _version, ...legacyMarker } = marker;
+    expect(() => assertRemotionRuntimeMarker(legacyMarker, serveUrl))
+      .toThrow(`Remotion ${REMOTION_VERSION}`);
   });
 });
 

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
+import { VERSION as REMOTION_VERSION } from 'remotion'
 import type { DesignPayload, VideoMeta } from '@/types'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { toPublicStorageUrl } from '@/lib/supabase/storage'
@@ -269,6 +270,7 @@ function fingerprintDesign(
     : null
   const payload = {
     renderer: 'remotion-export-v6-font-runtime-pinned',
+    remotionVersion: REMOTION_VERSION,
     fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION,
     fontRuntimeVersion: REMOTION_FONT_RUNTIME_VERSION,
     editableRuntimeVersion: REMOTION_EDITABLE_RUNTIME_VERSION,

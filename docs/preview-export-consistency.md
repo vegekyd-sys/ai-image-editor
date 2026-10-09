@@ -50,7 +50,7 @@ style: {
 
 ### 2. @remotion/web-renderer patch
 
-原版 web-renderer 的 canvas drawing 只读 `style.transform`/`style.scale`/`style.rotate`，**漏了 `style.translate`**。我们通过 `patches/@remotion+web-renderer+4.0.446.patch` 补上了 translate 支持。
+原版 web-renderer 的 canvas drawing 只读 `style.transform`/`style.scale`/`style.rotate`，**漏了 `style.translate`**。我们通过 `patches/@remotion+web-renderer+4.0.527.patch` 补上了 translate 支持，包括新版的 transform style cache 与 reset/restore 路径。
 
 **升级 @remotion/web-renderer 时必须：**
 1. 检查新版是否已支持 `style.translate`
@@ -102,5 +102,15 @@ style: {
 | `src/lib/evalRemotionJSX.ts` | Proxy 注入 translate/scale + HOC wrapper |
 | `src/components/DesignOverlay.tsx` | 预览时 applyStoredOffsets + 交互（drag/scale/pinch）|
 | `src/components/RemotionRenderer.tsx` | captureDesignPoster / exportDesignVideo 调用 |
-| `patches/@remotion+web-renderer+4.0.446.patch` | web-renderer translate 支持 |
+| `patches/@remotion+web-renderer+4.0.527.patch` | web-renderer translate 支持 |
 | `src/app/moveable-test/page.tsx` | 验证 demo |
+
+## Lambda 横向重影回归
+
+项目 `6eb73527-e997-4622-8bbf-df3df5479a16` 的 @15 在 19 秒 Preview 正常，但 @16/@17 MP4 的首页、标题、输入框按横向条带重复。旧 Lambda 的单帧 PNG 也能复现；同一源码与已部署 site 在本机 renderer 正常，排除了 MP4 编码与源码版本漂移。
+
+上游 [Remotion #11428](https://github.com/remotion-dev/remotion/issues/11428) 记录了同类软件栅格化缺陷；[修复 #11446](https://github.com/remotion-dev/remotion/pull/11446) 仅在 Lambda 内加入 `--disable-gpu-rasterization`。本候选统一锁定所有 Remotion 包到首个包含该修复的 **4.0.527**，不改用户作品或强制给每个元素增加 compositor layer。
+
+升级验收必须使用真实 Lambda，不能用本机通过代替：比较 19 秒、24 秒转场和其他代表帧；下载完整 MP4，核对时长、音轨与画面，并保留旧输出供对照。
+
+`public/remotion-runtime.json` 的 `remotionVersion` 必须与应用依赖一致；导出 fingerprint 也包含版本，避免复用升级前的错误成片。发布时将 `REMOTION_LAMBDA_SERVE_URL`、`REMOTION_LAMBDA_FUNCTION_NAME` 与可选 `REMOTION_LAMBDA_RENDERER_FUNCTION_NAME` 一起切到兼容的 site/function，并保留旧值供回滚。可用 `npm run ops:remotion-lambda-provision -- --site-name <isolated-name> --with-function` 准备候选；该命令只创建版本化资源，不会自动更新生产配置。

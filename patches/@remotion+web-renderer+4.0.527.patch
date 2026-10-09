@@ -1,0 +1,59 @@
+diff --git a/node_modules/@remotion/web-renderer/dist/esm/index.mjs b/node_modules/@remotion/web-renderer/dist/esm/index.mjs
+index fcbfdbc..15c09c0 100644
+--- a/node_modules/@remotion/web-renderer/dist/esm/index.mjs
++++ b/node_modules/@remotion/web-renderer/dist/esm/index.mjs
+@@ -2608,8 +2608,11 @@ var hasRotateCssValue = (style) => {
+ var hasScaleCssValue = (style) => {
+   return style.scale !== "none" && style.scale !== "";
+ };
++var hasTranslateCssValue = (style) => {
++  return style.translate !== "none" && style.translate !== "";
++};
+ var hasAnyTransformCssValue = (style) => {
+-  return hasTransformCssValue(style) || hasRotateCssValue(style) || hasScaleCssValue(style);
++  return hasTransformCssValue(style) || hasRotateCssValue(style) || hasScaleCssValue(style) || hasTranslateCssValue(style);
+ };
+ 
+ // src/drawing/make-dom-matrix.ts
+@@ -3102,6 +3105,7 @@ var snapshotTransformStyle = (computedStyle) => {
+     display: computedStyle.display,
+     rotate: computedStyle.rotate,
+     scale: computedStyle.scale,
++    translate: computedStyle.translate,
+     transform: computedStyle.transform,
+     transformOrigin: computedStyle.transformOrigin
+   };
+@@ -3122,16 +3126,18 @@ var canApplyCssTransforms = ({
+   return isReplacedElement(element);
+ };
+ var makeTransformResetter = (element) => {
+-  const { transform, scale, rotate } = element.style;
++  const { transform, scale, rotate, translate } = element.style;
+   return (hasApplicableTransformCssValue) => {
+     if (hasApplicableTransformCssValue) {
+       element.style.transform = "none";
++      element.style.translate = "none";
+       element.style.scale = "none";
+       element.style.rotate = "none";
+     }
+     return () => {
+       if (hasApplicableTransformCssValue) {
+         element.style.transform = transform;
++        element.style.translate = translate;
+         element.style.scale = scale;
+         element.style.rotate = rotate;
+       }
+@@ -3210,8 +3216,12 @@ var calculateTransforms = ({
+       const toParse = hasApplicableTransformCssValue && hasTransformCssValue(transformStyle) ? transformStyle.transform : undefined;
+       const matrix = makeDOMMatrix(toParse);
+       const resetTransforms = makeTransformResetter(parent);
+-      const { scale, rotate } = parent.style;
++      const { scale, rotate, translate } = parent.style;
+       const additionalMatrices = [];
++      if (hasApplicableTransformCssValue && translate !== "" && translate !== "none") {
++        const translateParts = translate.trim().split(/\s+/);
++        additionalMatrices.push(makeDOMMatrix(`translate(${translateParts.join(", ")})`));
++      }
+       if (hasApplicableTransformCssValue && rotate !== "" && rotate !== "none") {
+         additionalMatrices.push(makeDOMMatrix(`rotate(${rotate})`));
+       }

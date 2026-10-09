@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { VERSION as REMOTION_VERSION } from 'remotion'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
@@ -162,11 +163,12 @@ export function assertRemotionRuntimeMarker(
     : {}
   if (value.runtimeVersion !== REMOTION_FONT_RUNTIME_VERSION
     || value.fontCatalogVersion !== REMOTION_FONT_CATALOG_VERSION
-    || value.editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION) {
+    || value.editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION
+    || value.remotionVersion !== REMOTION_VERSION) {
     throw new Error(
       `Remotion render site version mismatch: ${serveUrl}. `
       + `Expected ${REMOTION_FONT_RUNTIME_VERSION}/${REMOTION_FONT_CATALOG_VERSION}`
-      + `/${REMOTION_EDITABLE_RUNTIME_VERSION}.`,
+      + `/${REMOTION_EDITABLE_RUNTIME_VERSION}/Remotion ${REMOTION_VERSION}.`,
     )
   }
 }
