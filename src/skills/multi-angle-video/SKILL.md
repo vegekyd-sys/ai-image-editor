@@ -1,7 +1,7 @@
 ---
 name: multi-angle-video
 description: Change the camera coverage and cutting of a supplied single-camera take while preserving its recorded content, performance, dialogue and source clock. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.
-allowed-tools: read_file list_files analyze_video analyze_image transcribe_audio preview_frame generate_animation run_code write_file
+allowed-tools: read_file list_files inspect_retake retake_video analyze_video analyze_image transcribe_audio preview_frame generate_animation run_code write_file
 metadata:
   makaron:
     icon: "🎥"
@@ -19,6 +19,20 @@ metadata:
 ---
 
 # Multi-Angle Video
+
+## Bounded segment edits take the local-edit route
+
+When the user edits an explicit interval or a resolved scene inside an existing
+video, read `skills/video-segment-edit/SKILL.md` and use `inspect_retake` then
+`retake_video`. This applies to multi-angle coverage of that interval. A known
+interval needs no preliminary whole-video analysis or scripted clipping.
+Inspection already includes actual frame evidence and ASR. Use modify intent
+for new camera coverage within the recorded sequence, preserving its endpoints;
+only an explicit discarded/replaced shot uses replace. H3 is the local-edit
+default, with requested Seedance using Eco. This route delivers the complete
+video with original audio/duration and untouched footage outside the interval.
+Do not inherit the generated-soundtrack/direct-delivery workflow below for a
+segment edit. The remaining guide is for whole-take multi-angle generation.
 
 The source is a finished performance, not inspiration for a new film. Change
 only how we observe it: camera position/direction, framing, lens/focus and cuts.
