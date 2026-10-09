@@ -52,6 +52,18 @@ describe('Retake playback timeline', () => {
     expect(cached.container.querySelectorAll('img')).toHaveLength(0);
     expect(cached.container.querySelector('video')).not.toBeNull();
   });
+  it('samples portrait frames at their source aspect ratio and fits the whole image', async () => {
+    const draw = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((()=>({drawImage: draw})) as unknown as typeof HTMLCanvasElement.prototype.getContext);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,portrait');
+    const view = render(<LocaleProvider><VideoRetakeTimeline url="https://example.com/portrait-aspect.mp4" duration={15} range={{start:0,end:4}} onSeek={vi.fn()} /></LocaleProvider>);
+    const sampler = view.container.querySelector('video')!;
+    Object.defineProperties(sampler, {duration:{value:15},videoWidth:{value:1080},videoHeight:{value:1920}});
+    fireEvent.loadedData(sampler);
+    await act(async()=>{fireEvent.seeked(sampler);});
+    expect(draw).toHaveBeenCalledWith(sampler, 0, 0, 51, 90);
+    expect(view.container.querySelector('img')?.className).toContain('object-contain');
+  });
   it('tracks playback independently of the selected interval and clamps to the video', () => {
     const change=vi.fn();
     const timeline=(time:number)=><LocaleProvider><VideoRetakeTimeline url="https://example.com/v.mp4" duration={30} range={{start:10,end:14}} currentTime={time} onSeek={vi.fn()} onChange={change} /></LocaleProvider>;

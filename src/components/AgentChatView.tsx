@@ -1131,11 +1131,14 @@ export default function AgentChatView({
     }));
 
     onSendMessage(finalText, imageData.length > 0 ? imageData : undefined, videoData.length > 0 ? videoData : undefined);
+    // The submitted text already carries the source/range; clear the draft
+    // selection in both chat and GUI so it cannot leak into the next message.
+    if (retakeContext) onClearRetake?.();
     userScrolledUp.current = false;
     setInput('');
     setAttachments([]);
     if (selectedSkill) onSkillChange?.(null);
-  }, [input, attachments, isAgentActive, onSendMessage, selectedSkill, onSkillChange, retakeContext, t]);
+  }, [input, attachments, isAgentActive, onSendMessage, selectedSkill, onSkillChange, retakeContext, onClearRetake, t]);
 
   const handleAnimationEnd = useCallback(() => {
     if (isExiting) onBack();

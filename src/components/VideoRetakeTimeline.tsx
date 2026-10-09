@@ -54,8 +54,15 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
       sampler.onloadeddata = null; sampler.onerror = null; sampler.pause();
       sampler.removeAttribute('src'); sampler.load(); sampler.remove();
     };
-    const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 90;
+    const canvas = document.createElement('canvas');
     const collect = async () => {
+      // Decode at the source aspect ratio; a fixed 160×90 canvas stretches
+      // portrait footage before CSS has a chance to fit the thumbnail.
+      const sourceWidth = sampler.videoWidth || 160;
+      const sourceHeight = sampler.videoHeight || 90;
+      const scale = Math.min(90 / sourceHeight, 320 / sourceWidth);
+      canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+      canvas.height = Math.max(1, Math.round(sourceHeight * scale));
       const context = canvas.getContext('2d'); if (!context) return;
       const images = [...(thumbnailCache.get(thumbnailKey) ?? [])];
       for (let i = images.length; i < 8 && collecting; i++) {
@@ -67,7 +74,7 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
           sampler.currentTime = Math.min(sampler.duration - .05, sourceOffset + (i + .5) * length / 8);
         });
         if (!collecting) break;
-        context.drawImage(sampler, 0, 0, 160, 90); images.push(canvas.toDataURL('image/jpeg', .65));
+        context.drawImage(sampler, 0, 0, canvas.width, canvas.height); images.push(canvas.toDataURL('image/jpeg', .65));
         if (collecting) {
           rememberThumbnails(thumbnailKey, [...images]);
           setFrameState({ key: thumbnailKey, images: [...images] });
@@ -153,7 +160,7 @@ export default function VideoRetakeTimeline({ url, duration, range, currentTime 
       onLostPointerCapture={() => { dragging.current = null; }} onClick={event => event.stopPropagation()}>
       <div className="absolute inset-0 flex overflow-hidden rounded-md bg-white/10" aria-hidden="true">
         {Array.from({ length: 8 }, (_, i) => frames[i]
-          ? <img key={i} src={frames[i]} alt="" draggable={false} className="h-full min-w-0 flex-1 object-cover" />
+          ? <div key={i} className="h-full min-w-0 flex-1 bg-black/40"><img src={frames[i]} alt="" draggable={false} className="h-full w-full object-contain" /></div>
           : <div key={i} className="h-full min-w-0 flex-1 bg-white/5" />)}
         <div className="absolute inset-y-0 left-0 bg-black/65" style={{ width: `${start / length * 100}%` }} />
         <div className="absolute inset-y-0 right-0 bg-black/65" style={{ width: `${(length - end) / length * 100}%` }} />

@@ -20,9 +20,12 @@ describe('Retake chat selection context', () => {
     expect(screen.getByTestId('chat-retake-context').textContent).toContain('7.20');
     fireEvent.click(screen.getByRole('button', {name: /取消片段选择|Clear segment selection/}));
     expect(clear).toHaveBeenCalledOnce();
+    clear.mockClear();
     view.rerender(surface(7.2, 8.4));
     fireEvent.click(screen.getByRole('button', {name: 'Send message'}));
     expect(send).toHaveBeenCalledWith('把 @3 的 7.20–8.40 秒换成： 加入一个黄色角色', undefined, undefined);
+    expect(clear).toHaveBeenCalledOnce();
+    expect(send.mock.invocationCallOrder[0]).toBeLessThan(clear.mock.invocationCallOrder[0]);
   });
   it('leaves ordinary chat untouched when no selection is active', () => {
     const send = vi.fn();
