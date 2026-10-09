@@ -16,6 +16,16 @@ vi.mock('@/lib/supabase/service',()=>({getSupabaseAdmin:()=>({
 })}));
 import {createVideoRetake,retakeVideoMeta} from '@/lib/video-retake';
 beforeEach(()=>{stubs.jobs.length=0;stubs.provider.mockReset().mockResolvedValue({success:true,taskId:'provider-test'});vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','https://storage.example')});
+it.each([['modify',true],['replace',false]] as const)('derives native endpoint locks from edit intent: %s',async(editMode,locked)=>{
+  const result=await createVideoRetake({userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:3,end:6,editMode,cameraChange:true},script:'Apply the requested scene-informed edit.',videoModel:'fal-h3-max'});
+  expect(result.success).toBe(true);
+  expect(stubs.provider.mock.calls[0][0].h3RetakeBoundaryFrames.lockEndpoints).toBe(locked);
+  expect(stubs.jobs[0].source_meta.editMode).toBe(editMode);
+});
+it('rejects conflicting endpoint intent at the provider boundary before creating a job',async()=>{
+  const result=await createVideoRetake({userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:3,end:6,editMode:'modify',boundaryMode:'scene'},script:'Edit the interior.',videoModel:'fal-h3-max'});
+  expect(result.success).toBe(false);expect(stubs.jobs).toHaveLength(0);expect(stubs.provider).not.toHaveBeenCalled();
+});
 it.each(['fal-h3-max','seedance-2.5','seedance-2.5-eco'])('keeps creative image references through clip preparation and provider submission: %s',async model=>{
   const result=await createVideoRetake({userId:'owner',projectId:'project',images:['https://image.example/brand.jpg'],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:27.25,end:30.05},script:model==='fal-h3-max'?'Use Image 3 as a natural ending.':'Use <<<image_1>>> as a natural ending.',videoModel:model});
   expect(result.success).toBe(true);

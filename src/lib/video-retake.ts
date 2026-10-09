@@ -79,10 +79,16 @@ async function settle(job: Job) {
 }
 
 export async function createVideoRetake(input: CreateVideoInput): Promise<CreateVideoResult> {
+  input = {...input}
   let job: Job | undefined
   let posting = false
   try {
     if (!input.userId || !input.retake || !input.videoUrl) throw new Error('Retake requires an authenticated owner, source video and start/end seconds.')
+    if (input.retake.editMode) {
+      const boundaryMode = input.retake.editMode === 'modify' ? 'exact' : 'scene'
+      if (input.retake.boundaryMode && input.retake.boundaryMode !== boundaryMode) throw new Error('Edit mode conflicts with endpoint policy.')
+      input.retake = {...input.retake,boundaryMode}
+    }
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
     if (input.retake.boundaryMode === 'scene' && (input.retake.middleFrame || input.retake.endFrame)) throw new Error('Scene continuity uses source images as references, not native frame locks. Use exact boundaries for a native middle control or an explicit final image.')
@@ -115,7 +121,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const now = new Date().toISOString()
     job = { id, user_id: input.userId, project_id: input.projectId ?? null, fingerprint, stage: 'preparing', source_url: input.videoUrl,
       instruction: input.script, model_id: model, resolution: input.videoResolution && input.videoResolution !== 'auto' ? input.videoResolution : model === 'fal-h3-max' ? '768p' : '720p',
-      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}),...(input.retake.endFrame ? {endFrameUrl:input.retake.endFrame.imageUrl} : {}), ...(input.retake.cameraChange ? {cameraChange:true} : {}), ...(input.retake.boundaryMode ? {boundaryMode:input.retake.boundaryMode} : {}) },
+      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}),...(input.retake.endFrame ? {endFrameUrl:input.retake.endFrame.imageUrl} : {}), ...(input.retake.cameraChange ? {cameraChange:true} : {}), ...(input.retake.boundaryMode ? {boundaryMode:input.retake.boundaryMode} : {}), ...(input.retake.editMode ? {editMode:input.retake.editMode} : {}) },
       timings: {}, created_at: now, updated_at: now }
     const { error: insertError } = await admin.from(TABLE).insert(job)
     if (insertError) throw new Error('Could not create the Retake receipt. No provider submitted.')

@@ -16,6 +16,22 @@ const receipt = () => signRetakeInspection({ userId: 'owner', projectId: 'projec
   sourceUrl, start: 18, end: 21, model: 'fal-h3-max' }, 'test-server-secret', { outputSelection: { start: 1, end: 4 }, generationDuration: 5 })
 
 describe('Agent Retake paid-submission gate', () => {
+  it('preserves endpoints for a modification even with camera changes',async()=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,edit_mode:'modify',inspection_id:receipt(),source_observation:observation});
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({retake:{start:18,end:21,cameraChange:true,editMode:'modify'}}),expect.anything());
+  });
+  it('unlocks original endpoints for replacement independently of camera_change',async()=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    await (createInspectedRetakeVideoTool(scope).execute as any)({...input,edit_mode:'replace',camera_change:false,inspection_id:receipt(),source_observation:observation});
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({retake:{start:18,end:21,boundaryMode:'scene',editMode:'replace'}}),expect.anything());
+  });
+  it('rejects a conflicting legacy override without charging',async()=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    const result=await (createInspectedRetakeVideoTool(scope).execute as any)({...input,edit_mode:'modify',boundary_mode:'scene',inspection_id:receipt(),source_observation:observation});
+    expect(result).toMatchObject({success:false,errorCode:'retake_edit_mode_conflict'});
+    expect(submit).not.toHaveBeenCalled();
+  });
   it('carries scene continuity through inspection, source-marker binding and normal submission',async()=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
     await (createInspectedRetakeVideoTool(scope).execute as any)({...input,camera_change:false,boundary_mode:'scene',prompt:'Replace <<<media_1>>> with a sustained tighter shot.',inspection_id:receipt(),source_observation:observation});
