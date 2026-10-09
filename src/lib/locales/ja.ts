@@ -1,5 +1,4 @@
-import type {
- TranslationDictionary } from './index';
+import type { TranslationDictionary } from './index';
 
 const ja = {
   "mjLab.back": "Makaron に戻る",

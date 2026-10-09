@@ -1,8 +1,9 @@
 import zh from './zh';
-import type {
- TranslationDictionary } from './index';
+import type { TranslationDictionary } from './index';
 
 const zhHant = {
+
+  ...zh,
   "mjLab.back": "返回 Makaron",
   "mjLab.eyebrow": "本機試用 · Midjourney V8.2",
   "mjLab.title": "說出想法，探索視覺方向。",
@@ -45,7 +46,6 @@ const zhHant = {
   "mjLab.emptyTitle": "從一個想法開始。",
   "mjLab.emptyHint": "描述主體、場景或想要的感覺即可。每張候選都可下載，也可作為下一組的風格參考。",
 
-  ...zh,
   "skill.multiAngle.label": "多機位影片",
   "skill.multiAngle.description": "圍繞原片表演設計景別、細節與反應鏡頭，把單鏡頭影片變成有敘事感的多機位短片。",
   "homeOrbit.title1": "想像",
