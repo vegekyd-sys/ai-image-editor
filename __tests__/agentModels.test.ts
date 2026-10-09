@@ -28,6 +28,7 @@ describe('agent model catalog', () => {
     expect(AGENT_MODEL_IDS).toEqual([
       'gpt-6-luna',
       'gpt-6-sol',
+      'gpt-6.1-sol',
       'gpt-5.6-terra',
       'gpt-5.6-sol',
       'gpt-5.6-luna',
@@ -35,6 +36,29 @@ describe('agent model catalog', () => {
       'deepseek-v4-pro',
       'deepseek-flash',
     ]);
+  });
+
+  it('routes Sol 6.1 to the exact model and retains high reasoning with old unsupported overrides', () => {
+    const old = { key: process.env.AZURE_OPENAI_API_KEY, owner: process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
+      azure: process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT, codex: process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT };
+    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
+    process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT = 'minimal';
+    process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT = 'none';
+    try {
+      const api = createAgentModelRuntime('gpt-6.1-sol', 'sol61-api');
+      const plan = createAgentModelRuntime('gpt-6.1-sol-codex-subscription', 'sol61-plan', undefined, 'owner-id', true);
+      expect(api.spec).toMatchObject({ provider: 'azure-openai', providerModelId: 'gpt-6.1-sol', billingModelId: 'gpt-6.1-sol' });
+      expect(plan.spec).toMatchObject({ provider: 'codex-subscription', providerModelId: 'gpt-6.1-sol' });
+      expect(getAgentProviderOptions(api)).toMatchObject({ azure: { forceReasoning: true, reasoningEffort: 'high' } });
+      expect(getAgentProviderOptions(plan)).toMatchObject({ openai: { forceReasoning: true, reasoningEffort: 'high' } });
+      expect(createAzureAgentPromptCacheKey('gpt-6.1-sol', 'test')).toMatch(/^mk-sol-/);
+    } finally {
+      for (const [key, value] of Object.entries({ AZURE_OPENAI_API_KEY: old.key, CODEX_SUBSCRIPTION_OWNER_USER_ID: old.owner,
+        AZURE_OPENAI_AGENT_REASONING_EFFORT: old.azure, CODEX_SUBSCRIPTION_REASONING_EFFORT: old.codex })) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+    }
   });
 
   it('enables provider-native compaction only when a threshold is requested', () => {
@@ -171,9 +195,10 @@ describe('agent model catalog', () => {
       for (const [preference, modelId] of [
         [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[0], 'gpt-6-luna'],
         [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[1], 'gpt-6-sol'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[2], 'gpt-5.6-terra'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[3], 'gpt-5.6-sol'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[4], 'gpt-5.6-luna'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[2], 'gpt-6.1-sol'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[3], 'gpt-5.6-terra'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[4], 'gpt-5.6-sol'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[5], 'gpt-5.6-luna'],
       ] as const) {
         expect(resolveAgentModelSpecForUser(
           preference,

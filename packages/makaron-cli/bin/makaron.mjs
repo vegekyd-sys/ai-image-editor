@@ -32,11 +32,13 @@ const CHAT_AGENT_MODELS = [
   'auto',
   'gpt-6-luna',
   'gpt-6-sol',
+  'gpt-6.1-sol',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
   'gpt-6-luna-codex-subscription',
   'gpt-6-sol-codex-subscription',
+  'gpt-6.1-sol-codex-subscription',
   'gpt-5.6-terra-codex-subscription',
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
@@ -512,9 +514,9 @@ Options:
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --media-manifest <file|-> Import typed image/video media before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
-  --agent-model <id>        Agent LLM only: auto, gpt-6-luna, gpt-6-sol, gpt-5.6-terra, gpt-5.6-sol,
+  --agent-model <id>        Agent LLM only: auto, gpt-6-luna, gpt-6.1-sol, gpt-6-sol, gpt-5.6-terra, gpt-5.6-sol,
                             gpt-5.6-luna, grok-4.6, deepseek-v4-pro, deepseek-flash, or a
-                            gpt-6-*-codex-subscription, gpt-5.6-*-codex-subscription or
+                            gpt-6.1-sol-codex-subscription, gpt-6-*-codex-subscription, gpt-5.6-*-codex-subscription or
                             grok-4.6-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON (includes per-run "usage" credits).

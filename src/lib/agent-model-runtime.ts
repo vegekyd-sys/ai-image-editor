@@ -30,7 +30,7 @@ export function createAzureAgentPromptCacheKey(
   modelId: string,
   projectId: string,
 ): string {
-  const modelTier = modelId.replace(/^gpt-(?:5\.6|6)-/, '').replace(/[^a-z0-9-]/gi, '-');
+  const modelTier = modelId.replace(/^gpt-(?:5\.6|6(?:\.1)?)-/, '').replace(/[^a-z0-9-]/gi, '-');
   const projectHash = createHash('sha256').update(projectId).digest('hex').slice(0, 40);
   return `mk-${modelTier}-${projectHash}`;
 }
@@ -138,7 +138,8 @@ export function getAgentProviderOptions(
 ): Record<string, any> {
   if (runtime.spec.provider === 'azure-openai') {
     const allowedEfforts = new Set<AgentReasoningEffort>([
-      'none', 'minimal', 'low', 'medium', 'high', 'xhigh',
+      ...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
+      'low', 'medium', 'high', 'xhigh',
     ]);
     const configuredEffort = process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT
       ?.trim()
@@ -151,7 +152,7 @@ export function getAgentProviderOptions(
     return {
       azure: {
         // The pinned AI SDK predates GPT-6 and otherwise drops reasoning.effort.
-        ...(runtime.spec.id.startsWith('gpt-6-') ? { forceReasoning: true } : {}),
+        ...(runtime.spec.id.startsWith('gpt-6') ? { forceReasoning: true } : {}),
         parallelToolCalls: false,
         maxToolCalls: resolveAzureOpenAIWebSearchMaxCalls(),
         store: false,
@@ -175,7 +176,8 @@ export function getAgentProviderOptions(
 
   if (runtime.spec.provider === 'codex-subscription') {
     const allowedEfforts = new Set<AgentReasoningEffort>([
-      'none', 'minimal', 'low', 'medium', 'high', 'xhigh',
+      ...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
+      'low', 'medium', 'high', 'xhigh',
     ]);
     const configuredEffort = process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT
       ?.trim()
@@ -187,7 +189,7 @@ export function getAgentProviderOptions(
         : runtime.spec.defaultReasoningEffort);
     return {
       openai: {
-        ...(runtime.spec.id.startsWith('gpt-6-') ? { forceReasoning: true } : {}),
+        ...(runtime.spec.id.startsWith('gpt-6') ? { forceReasoning: true } : {}),
         parallelToolCalls: false,
         store: false,
         promptCacheKey: runtime.promptCacheKey,
@@ -227,7 +229,8 @@ export function getAgentProviderOptions(
   // Keep OpenRouter reasoning independent from Azure so one provider's tuning
   // cannot silently add several minutes of latency to another provider.
   const configuredOpenRouterEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT?.trim().toLowerCase();
-  const allowedOpenRouterEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+  const allowedOpenRouterEfforts = new Set([...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
+      'low', 'medium', 'high', 'xhigh', 'max']);
   const openRouterEffort = configuredOpenRouterEffort && allowedOpenRouterEfforts.has(configuredOpenRouterEffort)
     ? configuredOpenRouterEffort
     : runtime.spec.defaultReasoningEffort

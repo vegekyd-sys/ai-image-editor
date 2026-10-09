@@ -17,12 +17,13 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-10-09', localeKey: 'gpt61Sol' },
   { date: '2026-10-09', localeKey: 'localVideoEditing' },
   { date: '2026-10-08', localeKey: 'imageCapabilities' },
   { date: '2026-10-07', localeKey: 'nanoBanana21' },
@@ -1017,6 +1018,7 @@ const LOCALIZED_CHANGELOG_KEYS = {
     title: 'changelog.creativeHome.title',
     items: ['changelog.creativeHome.item1', 'changelog.creativeHome.item2'],
   },
+  gpt61Sol: { title: 'changelog.gpt61Sol.title', items: ['changelog.gpt61Sol.item1'] },
   gpt6AgentModels: {
     title: 'changelog.gpt6AgentModels.title',
     items: ['changelog.gpt6AgentModels.item1', 'changelog.gpt6AgentModels.item2'],

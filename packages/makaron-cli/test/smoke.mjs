@@ -740,11 +740,11 @@ try {
       cliModels,
       [
         'auto',
-        ...appModels.slice(0, 5),
+        ...appModels.filter(id => id.startsWith('gpt-')),
         ...subscriptionModels,
-        appModels[5],
+        'grok-4.6',
         ...grokSubscriptionModel,
-        ...appModels.slice(6),
+        ...appModels.filter(id => !id.startsWith('gpt-') && id !== 'grok-4.6'),
       ],
       'CLI Agent LLM allowlist must stay in sync with the app catalog',
     );
@@ -888,12 +888,12 @@ try {
     const requestStart = requests.length;
     await expectSuccess([
       'chat', '--project', 'project-models-1', '--agent-model',
-      'gpt-6-sol-codex-subscription', '--json', '-b',
+      'gpt-6.1-sol-codex-subscription', '--json', '-b',
       'use the personal Codex plan explicitly',
     ]);
     const runRequest = requests.slice(requestStart)
       .find(request => request.pathname === '/api/agent/run');
-    assert.equal(runRequest?.body?.agentModel, 'gpt-6-sol-codex-subscription');
+    assert.equal(runRequest?.body?.agentModel, 'gpt-6.1-sol-codex-subscription');
   }
 
   {

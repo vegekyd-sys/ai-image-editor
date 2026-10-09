@@ -12,11 +12,18 @@ describe('agent model preference persistence', () => {
 
   it('stores only the versioned per-project agent preference', () => {
     saveAgentModelPreference('project-a', 'gpt-5.6-sol');
-    expect(loadAgentModelPreference('project-a')).toBe('gpt-6-sol');
+    expect(loadAgentModelPreference('project-a')).toBe('gpt-6.1-sol');
     expect(loadAgentModelPreference('project-b')).toBe('auto');
     expect(JSON.parse(window.localStorage.getItem(
       getAgentModelPreferenceStorageKey('project-a'),
     ) || '{}')).toEqual({ v: 2, agentModel: 'gpt-5.6-sol' });
+  });
+
+  it('upgrades old Sol preferences without changing the chosen provider', () => {
+    saveAgentModelPreference('project-a', 'gpt-6-sol');
+    expect(loadAgentModelPreference('project-a')).toBe('gpt-6.1-sol');
+    saveCreateAgentModelPreference('gpt-6-sol-codex-subscription');
+    expect(loadCreateAgentModelPreference()).toBe('gpt-6.1-sol-codex-subscription');
   });
 
   it('rejects stale, malformed, and non-allowlisted values', () => {

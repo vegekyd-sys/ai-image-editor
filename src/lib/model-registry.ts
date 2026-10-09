@@ -37,7 +37,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'fal-h3-max', nameKey: 'model.falH3Max.name', descKey: 'model.falH3Max.desc', category: 'video', speedLabel: '768P · Reference' },
   // Agent LLM
   { id: 'gpt-6-luna', nameKey: 'model.gpt6Luna.name', descKey: 'model.gpt6Luna.desc', category: 'agent', speedLabel: 'Default' },
-  { id: 'gpt-6-sol', nameKey: 'model.gpt6Sol.name', descKey: 'model.gpt6Sol.desc', category: 'agent', speedLabel: 'Best' },
+  { id: 'gpt-6.1-sol', nameKey: 'model.gpt61Sol.name', descKey: 'model.gpt61Sol.desc', category: 'agent', speedLabel: 'Best' },
   { id: 'gpt-5.6-terra', nameKey: 'model.gpt56Terra.name', descKey: 'model.gpt56Terra.desc', category: 'agent' },
   { id: 'gpt-5.6-sol', nameKey: 'model.gpt56Sol.name', descKey: 'model.gpt56Sol.desc', category: 'agent', speedLabel: 'Best' },
   { id: 'gpt-5.6-luna', nameKey: 'model.gpt56Luna.name', descKey: 'model.gpt56Luna.desc', category: 'agent', speedLabel: 'Fast' },

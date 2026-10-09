@@ -10,11 +10,13 @@ const CREATE_STORAGE_KEY = 'makaron:create-agent-model:v2';
 const LEGACY_CREATE_STORAGE_KEY = 'makaron:create-agent-model:v1';
 
 const HIDDEN_MODEL_REPLACEMENTS: Record<string, AgentModelPreference> = {
+  'gpt-6-sol': 'gpt-6.1-sol',
+  'gpt-6-sol-codex-subscription': 'gpt-6.1-sol-codex-subscription',
   'gpt-5.6-terra': 'gpt-6-luna',
-  'gpt-5.6-sol': 'gpt-6-sol',
+  'gpt-5.6-sol': 'gpt-6.1-sol',
   'gpt-5.6-luna': 'gpt-6-luna',
   'gpt-5.6-terra-codex-subscription': 'gpt-6-luna-codex-subscription',
-  'gpt-5.6-sol-codex-subscription': 'gpt-6-sol-codex-subscription',
+  'gpt-5.6-sol-codex-subscription': 'gpt-6.1-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription': 'gpt-6-luna-codex-subscription',
 };
 

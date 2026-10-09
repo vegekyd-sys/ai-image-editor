@@ -27,6 +27,7 @@ describe('Azure OpenAI health contract', () => {
       data: [
         { id: 'gpt-6-luna-2026-09-22' },
         { id: 'gpt-6-sol-2026-09-22' },
+        { id: 'gpt-6.1-sol' },
         { id: 'gpt-5.6-terra-2026-07-09' },
         { id: 'gpt-5.6-sol-2026-07-09' },
         { id: 'gpt-5.6-luna-2026-07-09' },
@@ -39,6 +40,7 @@ describe('Azure OpenAI health contract', () => {
       data: [
         { id: 'gpt-6-luna-2026-09-22' },
         { id: 'gpt-6-sol-2026-09-22' },
+        { id: 'gpt-6.1-sol' },
         { id: 'gpt-5.6-terra-2026-07-09' },
         { id: 'gpt-5.6-sol-2026-07-09' },
       ],

@@ -1,6 +1,7 @@
 export const AGENT_MODEL_IDS = [
   'gpt-6-luna',
   'gpt-6-sol',
+  'gpt-6.1-sol',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
@@ -14,6 +15,7 @@ export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'gpt-6-luna-codex-subsc
 export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = [
   CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
   'gpt-6-sol-codex-subscription',
+  'gpt-6.1-sol-codex-subscription',
   'gpt-5.6-terra-codex-subscription',
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
@@ -44,6 +46,7 @@ export const DEFAULT_GPT56_AGENT_PROVIDER: GPT56AgentProvider = 'azure-openai';
 const GPT56_AGENT_MODEL_IDS = [
   'gpt-6-luna',
   'gpt-6-sol',
+  'gpt-6.1-sol',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
@@ -59,6 +62,11 @@ export const GPT56_PROVIDER_MODEL_IDS: Record<
     openrouter: 'openai/gpt-6-luna',
     'azure-openai': 'gpt-6-luna',
     'codex-subscription': 'gpt-6-luna',
+  },
+  'gpt-6.1-sol': {
+    openrouter: 'openai/gpt-6.1-sol',
+    'azure-openai': 'gpt-6.1-sol',
+    'codex-subscription': 'gpt-6.1-sol',
   },
   'gpt-6-sol': {
     openrouter: 'openai/gpt-6-sol',
@@ -243,6 +251,15 @@ export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
     provider: 'azure-openai',
     providerModelId: 'gpt-6-luna',
     billingModelId: 'gpt-6-luna',
+    cacheStrategy: 'automatic',
+    supportsImageInput: true,
+    defaultReasoningEffort: 'high',
+  },
+  'gpt-6.1-sol': {
+    id: 'gpt-6.1-sol',
+    provider: 'azure-openai',
+    providerModelId: 'gpt-6.1-sol',
+    billingModelId: 'gpt-6.1-sol',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
     defaultReasoningEffort: 'high',
