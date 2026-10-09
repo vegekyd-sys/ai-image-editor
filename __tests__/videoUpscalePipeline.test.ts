@@ -54,6 +54,21 @@ beforeEach(() => {
   mocks.upload.mockResolvedValue({ error: null }); mocks.refund.mockResolvedValue({ error: null })
 })
 describe('recoverable Eco and independent enhancement', () => {
+  it('retains the provider generation failure across polls without submitting enhancement or retrying', async () => {
+    mocks.job = root('generating', { generation_task_id: 'task-unified-generation', base_url: null })
+    mocks.generateStatus.mockResolvedValueOnce({ status: 'failed', errorCode: 'content_policy_violation', error: 'The generated video was blocked by content moderation.' })
+    const result = await advanceVideoPipeline(task, owner)
+    expect(result).toMatchObject({ status: 'failed', error: 'content_policy_violation: The generated video was blocked by content moderation.' })
+    expect(await advanceVideoPipeline(task, owner)).toMatchObject({ error: result.error })
+    expect(mocks.generateStatus).toHaveBeenCalledTimes(1)
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(mocks.submit).not.toHaveBeenCalled()
+  })
+  it('keeps a generic generation failure when the provider supplies no details', async () => {
+    mocks.job = root('generating', { generation_task_id: 'task-unified-generation', base_url: null })
+    mocks.generateStatus.mockResolvedValueOnce({ status: 'failed' })
+    expect(await advanceVideoPipeline(task, owner)).toMatchObject({ status: 'failed', error: '480p generation failed.' })
+  })
   it('reports a confirmed generation rejection instead of leaving a rendering root', async () => {
     mocks.create.mockResolvedValueOnce({ success: false, submissionUncertain: false, message: 'Provider rejected submission (HTTP 400).' })
     const result = await createVideoPipeline({ script: 'Replace the character', images: [], userId: owner, videoModel: 'seedance-2.5-eco', duration: -1 })

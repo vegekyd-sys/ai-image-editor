@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 describe('Evolink Seedance 2.5 payloads', () => {
+  it('returns the provider failure code and message for pipeline diagnosis', async () => {
+    vi.stubEnv('EVOLINK_API_KEY', 'test-evolink-key')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      status: 'failed', error: { code: 'content_policy_violation', message: 'The generated video was blocked by content moderation.' },
+    }), { status: 200 })))
+    const { getEvolinkTask } = await import('@/lib/evolink')
+    await expect(getEvolinkTask('task-failed')).resolves.toMatchObject({
+      status: 'failed', errorCode: 'content_policy_violation', error: 'The generated video was blocked by content moderation.',
+    })
+  })
   it.each([400, 401, 403, 404, 413, 415, 422, 429])('classifies HTTP %s as a rejected POST without leaking its body', async status => {
     vi.stubEnv('EVOLINK_API_KEY', 'test-evolink-key')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('private upstream body', { status })))

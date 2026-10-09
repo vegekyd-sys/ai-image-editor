@@ -123,7 +123,10 @@ export async function advanceVideoPipeline(taskId: string, userId?: string): Pro
       if (!job.generation_task_id) return status(job)
       const { getEvolinkTask } = await import('./evolink')
       const result = await getEvolinkTask(job.generation_task_id)
-      if (result.status === 'failed') await save(job, { stage: 'failed', error: '480p generation failed.' }, token)
+      if (result.status === 'failed') await save(job, {
+        stage: 'failed',
+        error: [result.errorCode, result.error].filter(Boolean).join(': ') || '480p generation failed.',
+      }, token)
       else if (result.status === 'completed' && result.videoUrl) await save(job, { stage: 'saving_base', base_provider_url: result.videoUrl }, token)
     }
     if (job.stage === 'saving_base' && job.base_provider_url) {

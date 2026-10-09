@@ -28,6 +28,7 @@ export interface EvolinkTaskResult {
   status: 'pending' | 'processing' | 'completed' | 'failed'
   videoUrl?: string
   error?: string
+  errorCode?: string
 }
 
 /** An explicit rejected POST has no paid receipt to reconcile. Transport/5xx
@@ -178,6 +179,7 @@ export async function getEvolinkTask(taskId: string): Promise<EvolinkTaskResult>
 
   const videoUrl = data.results?.[0] || undefined
   const error = data.error?.message || undefined
+  const errorCode = typeof data.error?.code === 'string' ? data.error.code : undefined
 
-  return { taskId, status, videoUrl, error }
+  return { taskId, status, videoUrl, error, ...(errorCode ? { errorCode } : {}) }
 }
