@@ -2,7 +2,7 @@ diff --git a/node_modules/@remotion/web-renderer/dist/esm/index.mjs b/node_modul
 index fcbfdbc..15c09c0 100644
 --- a/node_modules/@remotion/web-renderer/dist/esm/index.mjs
 +++ b/node_modules/@remotion/web-renderer/dist/esm/index.mjs
-@@ -2608,8 +2608,11 @@ var hasRotateCssValue = (style) => {
+@@ -2608,6 +2608,9 @@ var hasRotateCssValue = (style) => {
  var hasScaleCssValue = (style) => {
    return style.scale !== "none" && style.scale !== "";
  };
@@ -13,8 +13,6 @@ index fcbfdbc..15c09c0 100644
 -  return hasTransformCssValue(style) || hasRotateCssValue(style) || hasScaleCssValue(style);
 +  return hasTransformCssValue(style) || hasRotateCssValue(style) || hasScaleCssValue(style) || hasTranslateCssValue(style);
  };
- 
- // src/drawing/make-dom-matrix.ts
 @@ -3102,6 +3105,7 @@ var snapshotTransformStyle = (computedStyle) => {
      display: computedStyle.display,
      rotate: computedStyle.rotate,
