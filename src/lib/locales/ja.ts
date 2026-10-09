@@ -257,6 +257,11 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.localVideoEditing.title': '動画の部分編集：お気に入りを残して、新しいアイデアを加える',
+  'changelog.localVideoEditing.item1': '「@1 の 3〜6 秒を別のカットにして。」チャットで伝えるだけで、舞台を変えたり、画面を調整したり、気になるカットを差し替えたりできます。1回に最大15秒を編集し、元の音声とほかの部分を保った完成動画に自動で組み戻します。',
+  'changelog.localVideoEditing.item2': 'Makaron はまず対象の映像、前後のカット、時刻付きの音声認識結果を分析し、要望に合わせて映像と動きを具体化します。部分的な修正では元の始点・終点のフレームを参考につながりを調整し、カット全体の差し替えでは画角、構図、動きを新しく設計できます。',
+  'changelog.localVideoEditing.item3': 'タイムラインを広げ、両端をドラッグして範囲を調整したり、選択範囲全体を移動したりできます。再生位置と時刻の目盛りで、変えたい瞬間を確認。閉じて開き直してもサムネイルを再利用するので、何度も気軽に試せます。',
+  'changelog.localVideoEditing.item4': 'Web、アプリ、Makaron Chat CLI で同じ編集フローを利用でき、時間範囲を言葉で直接指定することもできます。fal H3 Max と Seedance 2.5 Eco に対応し、編集対象を切り出して参照動画にすることで、部分編集の試行コストを抑えます。',
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
   'changelog.nanoBanana21.item1': '通常の画像とCreative / Wild / Captions Tips画像の標準をNano Banana 2.1に更新。背景の変更やクリエイティブな編集で、元の人物や構図をより保ちやすくなりました。',
   'changelog.nanoBanana21.item2': '写実的な細部、質感、光の表現と文字描画を改善。商品の背景変更、ポートレート編集、文字入りのクリエイティブ画像に適しています。',

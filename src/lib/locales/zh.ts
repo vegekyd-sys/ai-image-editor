@@ -220,6 +220,11 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.localVideoEditing.title': '视频局部编辑：好片段留下，新想法加进来',
+  'changelog.localVideoEditing.item1': '“把 @1 的 3–6 秒换个镜头。”直接在聊天里说，给已有视频一次新的可能：换场景、调整画面，或替换不满意的镜头。每次可编辑最多 15 秒，完成后自动合回完整视频，保留原声与其余片段。',
+  'changelog.localVideoEditing.item2': 'Makaron 会先分析片段的画面、前后镜头与带时间点的语音，再结合你的要求补充画面与动作。局部修改会参考原片首尾画面来处理衔接；整段替换则可以重新设计景别、构图与动作。',
+  'changelog.localVideoEditing.item3': '展开时间线，拖动两端调整范围，或移动整个选区，跟着播放位置与时间刻度选准想改的瞬间。收起再展开时，缩略图保持就绪，让反复尝试更轻松。',
+  'changelog.localVideoEditing.item4': 'Web、App 与 Makaron Chat CLI 共用同一套编辑流程，也可以直接用文字指定时间范围。支持 fal H3 Max 与 Seedance 2.5 Eco，并裁出需要编辑的片段作为视频参考，让局部尝试更节省。',
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
   'changelog.nanoBanana21.item1': '普通图片与 Creative / Wild / Captions Tips 图片默认升级为 Nano Banana 2.1，换场景和创意编辑时更擅长保留原图人物与构图。',
   'changelog.nanoBanana21.item2': '更细腻的写实细节、材质与光照，更清晰的文字渲染，适合商品换背景、人物修图和带文字的创意图片。',

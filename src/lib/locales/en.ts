@@ -220,6 +220,11 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.localVideoEditing.title': 'Local Video Editing: Keep the Good Parts. Make Room for New Ideas.',
+  'changelog.localVideoEditing.item1': '“Replace seconds 3–6 of @1 with a different shot.” Say it in chat to explore a new setting, change the scene, or replace a shot you want to rethink. Edit up to 15 seconds at a time, then get the complete video with the original audio and the rest of your footage retained.',
+  'changelog.localVideoEditing.item2': 'Makaron first examines the selected footage, neighboring shots, and timestamped speech, then develops the visuals and action around your request. Local modifications use the original opening and ending frames to guide the joins; whole-shot replacements can introduce new framing, composition, and action.',
+  'changelog.localVideoEditing.item3': 'Expand the timeline, drag either end to adjust the range, or move the entire selection. Follow the playhead and time markers to find the moment you want to change. Thumbnails stay ready when you collapse and reopen the timeline, making each new attempt feel lighter.',
+  'changelog.localVideoEditing.item4': 'Web, the app, and Makaron Chat CLI share the same editing workflow, with time ranges you can specify directly in words. Use fal H3 Max or Seedance 2.5 Eco, with the selected clip extracted as the video reference to keep local experiments more economical.',
   'changelog.nanoBanana21.title': 'Nano Banana 2.1',
   'changelog.nanoBanana21.item1': 'Ordinary images and Creative / Wild / Captions Tips images now default to Nano Banana 2.1, with better preservation of people and composition when changing scenes or making creative edits.',
   'changelog.nanoBanana21.item2': 'Finer photorealistic detail, materials and lighting, plus clearer text rendering for product backgrounds, portrait edits and creative images with text.',
