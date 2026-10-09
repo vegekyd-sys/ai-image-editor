@@ -9,6 +9,7 @@ import { VIDEO_PLACEHOLDER_IMAGE } from './editor/timeline-derivations'
 import type { VideoMeta } from '@/types'
 import { toPublicStorageUrl } from './supabase/storage'
 import { materializeRetakeKeyframe } from './video-retake-keyframe'
+import { resolveClosestSupportedAspectRatio } from './video-model-capabilities'
 
 const TABLE = 'video_retake_jobs', PREFIX = 'video-retake-'
 type Job = {
@@ -115,13 +116,16 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const started = performance.now()
     const source = await readProviderImage(input.videoUrl, 512 * 1024 * 1024, {mediaType:'video'})
     const meta = await inspectRetakeSource(source)
+    // A local edit keeps its source canvas even when camera replacement omits
+    // Video 1. Do not let the provider's no-video default turn portrait into landscape.
+    const aspectRatio = resolveClosestSupportedAspectRatio(model, meta.width, meta.height)
     if(input.retake.endFrame && Math.abs(meta.duration!-input.retake.end)>1/meta.fps!+.001) throw new Error('An explicit final image requires selecting through the end of the source video; internal joins retain their original endpoint.')
     const plan = planRetake({ start: input.retake.start, end: input.retake.end }, meta.duration!, model)
     if (Math.round(plan.end * meta.fps!) <= Math.round(plan.start * meta.fps!)) throw new Error('Retake interval must include at least one source frame.')
     const now = new Date().toISOString()
     job = { id, user_id: input.userId, project_id: input.projectId ?? null, fingerprint, stage: 'preparing', source_url: input.videoUrl,
       instruction: input.script, model_id: model, resolution: input.videoResolution && input.videoResolution !== 'auto' ? input.videoResolution : model === 'fal-h3-max' ? '768p' : '720p',
-      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}),...(input.retake.endFrame ? {endFrameUrl:input.retake.endFrame.imageUrl} : {}), ...(input.retake.cameraChange ? {cameraChange:true} : {}), ...(input.retake.boundaryMode ? {boundaryMode:input.retake.boundaryMode} : {}), ...(input.retake.editMode ? {editMode:input.retake.editMode} : {}) },
+      plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, aspectRatio, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}),...(input.retake.endFrame ? {endFrameUrl:input.retake.endFrame.imageUrl} : {}), ...(input.retake.cameraChange ? {cameraChange:true} : {}), ...(input.retake.boundaryMode ? {boundaryMode:input.retake.boundaryMode} : {}), ...(input.retake.editMode ? {editMode:input.retake.editMode} : {}) },
       timings: {}, created_at: now, updated_at: now }
     const { error: insertError } = await admin.from(TABLE).insert(job)
     if (insertError) throw new Error('Could not create the Retake receipt. No provider submitted.')
@@ -158,6 +162,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
       images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages, ...(model !== 'fal-h3-max' && input.retake.endFrame ? [input.retake.endFrame.imageUrl] : [])], h3RetakeBoundaryFrames: boundaryFrames,
       script: prompt, duration: model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,
+      aspectRatio,
       referenceVideoDuration: useVideoReference ? plan.contextEnd - plan.contextStart : undefined, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
       videoOperation: model.startsWith('seedance-2.5') ? 'edit' : 'generate', videoReferType: 'feature',

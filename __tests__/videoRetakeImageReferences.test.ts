@@ -3,7 +3,7 @@ import {beforeEach,expect,it,vi} from 'vitest';
 const stubs=vi.hoisted(()=>({jobs:[] as any[],provider:vi.fn(),meta:vi.fn()}));
 vi.mock('@/lib/skills/create-video',()=>({createVideo:stubs.provider}));
 vi.mock('@/lib/provider-image-preflight',()=>({readProviderImage:async()=>Buffer.from('source')}));
-vi.mock('@/lib/video-retake-media',()=>({inspectRetakeSource:async()=>({duration:30.05,fps:30,width:1280,height:720}),extractRetakeContext:async()=>Buffer.from('context'),extractRetakeBoundaryFrames:async()=>({start:Buffer.from('start'),end:Buffer.from('end')}),assembleRetake:vi.fn()}));
+vi.mock('@/lib/video-retake-media',()=>({inspectRetakeSource:stubs.meta,extractRetakeContext:async()=>Buffer.from('context'),extractRetakeBoundaryFrames:async()=>({start:Buffer.from('start'),end:Buffer.from('end')}),assembleRetake:vi.fn()}));
 vi.mock('@/lib/supabase/storage',()=>({toPublicStorageUrl:(url:string)=>url}));
 vi.mock('@/lib/supabase/service',()=>({getSupabaseAdmin:()=>({
   from:(table:string)=>{
@@ -15,7 +15,14 @@ vi.mock('@/lib/supabase/service',()=>({getSupabaseAdmin:()=>({
   },rpc:async()=>({data:1,error:null}),storage:{from:()=>({upload:async()=>({error:null}),getPublicUrl:(path:string)=>({data:{publicUrl:'https://storage.example/'+path}})})}
 })}));
 import {createVideoRetake,retakeVideoMeta} from '@/lib/video-retake';
-beforeEach(()=>{stubs.jobs.length=0;stubs.provider.mockReset().mockResolvedValue({success:true,taskId:'provider-test'});vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','https://storage.example')});
+beforeEach(()=>{stubs.jobs.length=0;stubs.provider.mockReset().mockResolvedValue({success:true,taskId:'provider-test'});stubs.meta.mockReset().mockResolvedValue({duration:30.05,fps:30,width:1280,height:720});vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','https://storage.example')});
+it('retains the measured portrait canvas when replacement drops Video 1',async()=>{
+  stubs.meta.mockResolvedValue({duration:3.33,fps:30,width:1216,height:1632});
+  const result=await createVideoRetake({userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:.5,end:2.8,editMode:'replace',cameraChange:true},script:'Replace the scene.',videoModel:'fal-h3-max',aspectRatio:'16:9'});
+  expect(result.success).toBe(true);
+  expect(stubs.provider.mock.calls[0][0]).toMatchObject({aspectRatio:'3:4',videoUrl:undefined});
+  expect(stubs.jobs[0].source_meta.aspectRatio).toBe('3:4');
+});
 it.each([['modify',true],['replace',false]] as const)('derives native endpoint locks from edit intent: %s',async(editMode,locked)=>{
   const result=await createVideoRetake({userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:3,end:6,editMode,cameraChange:true},script:'Apply the requested scene-informed edit.',videoModel:'fal-h3-max'});
   expect(result.success).toBe(true);
