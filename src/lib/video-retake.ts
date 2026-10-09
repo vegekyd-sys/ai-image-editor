@@ -34,11 +34,11 @@ async function store(job: Job, bytes: Buffer, suffix: string, image = false) {
 }
 export function retakeVideoMeta(job: Job): VideoMeta {
   return { taskId: PREFIX + job.id, videoUrl: job.output_url ?? null, prompt: job.instruction,
-    sourceSnapshotIds: [], sourceUrls: [job.source_url, ...((job.source_meta.referenceImages as string[] | undefined) ?? []),...(job.source_meta.endFrameUrl ? [String(job.source_meta.endFrameUrl)] : [])], status: job.stage === 'completed' ? 'completed' : job.stage === 'failed' ? 'failed' : 'processing',
+    sourceSnapshotIds: [], sourceUrls: [job.source_url, ...((job.source_meta.referenceImages as string[] | undefined) ?? []),...(job.source_meta.endFrameUrl ? [String(job.source_meta.endFrameUrl)] : []),...(job.source_meta.correctedBoundaries ? Object.values(job.source_meta.correctedBoundaries as {startUrl:string;endUrl:string}) : [])], status: job.stage === 'completed' ? 'completed' : job.stage === 'failed' ? 'failed' : 'processing',
     duration: job.plan.sourceDuration, model: job.model_id, resolution: job.resolution as VideoMeta['resolution'], operation: 'edit',
     createdAt: job.created_at, error: job.error, pipelineStage: job.stage,
     retake: { start: job.plan.start, end: job.plan.end, sourceUrl: job.source_url,
-      inputDuration: (job.source_meta.boundaryFrames as { middle?: unknown } | undefined)?.middle || (job.model_id === 'fal-h3-max' && (job.source_meta.endFrameUrl || job.source_meta.cameraChange || job.source_meta.boundaryMode === 'scene')) ? 0
+      inputDuration: (job.source_meta.boundaryFrames as { middle?: unknown } | undefined)?.middle || (job.model_id === 'fal-h3-max' && (job.source_meta.correctedBoundaries || job.source_meta.endFrameUrl || job.source_meta.cameraChange || job.source_meta.boundaryMode === 'scene')) ? 0
         : job.context_url ? job.plan.contextEnd - job.plan.contextStart : undefined, generationDuration: job.plan.generationDuration },
     width: Number(job.source_meta.width), height: Number(job.source_meta.height) }
 }
@@ -92,6 +92,9 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     }
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
+    const corrected = input.retake.correctedBoundaries
+    if (corrected && (model !== 'fal-h3-max' || input.retake.editMode !== 'modify' || input.retake.endFrame || input.videoResolution === '1080p'
+      || !/^https?:\/\//.test(corrected.startUrl) || !/^https?:\/\//.test(corrected.endUrl))) throw new Error('Corrected boundary controls require checked hosted images, H3 native modify mode, and no competing final asset.')
     if (input.retake.boundaryMode === 'scene' && (input.retake.middleFrame || input.retake.endFrame)) throw new Error('Scene continuity uses source images as references, not native frame locks. Use exact boundaries for a native middle control or an explicit final image.')
     if(input.retake.endFrame && (!/^https?:\/\//.test(input.retake.endFrame.imageUrl) || (model==='fal-h3-max' && input.videoResolution==='1080p'))) throw new Error('An explicit final image requires a ready hosted image; H3 uses native 480p/768p.')
     if (!input.script.trim()) throw new Error('Describe what to change in the selected interval.')
@@ -138,15 +141,15 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const contextUrl = await store(job, context, 'context')
     let boundaryFrames: { startUrl: string; endUrl: string; lockEndpoints?: boolean; middle?: {imageUrl:string;time:number} } | undefined
     if (model === 'fal-h3-max') {
-      const frames = await extractRetakeBoundaryFrames(source, plan, meta.fps!)
-      const [startUrl, endUrl] = await Promise.all([store(job, frames.start, 'start', true), input.retake.endFrame
+      const frames = corrected ? undefined : await extractRetakeBoundaryFrames(source, plan, meta.fps!)
+      const [startUrl, endUrl] = await Promise.all([corrected ? Promise.resolve(corrected.startUrl) : store(job, frames!.start, 'start', true), corrected ? Promise.resolve(corrected.endUrl) : input.retake.endFrame
         ? materializeRetakeKeyframe(input.retake.endFrame.imageUrl, bytes=>store(job!,bytes,'end',true))
-        : store(job, frames.end, 'end', true)])
+        : store(job, frames!.end, 'end', true)])
       const middle = input.retake.middleFrame
         ? { ...input.retake.middleFrame, imageUrl: await materializeRetakeKeyframe(input.retake.middleFrame.imageUrl, bytes => store(job!, bytes, 'middle', true)) }
         : undefined
       boundaryFrames = { startUrl, endUrl, lockEndpoints: plan.outputMode === 'selection' && input.retake.boundaryMode !== 'scene', middle }
-      await save(job, { source_meta: { ...job.source_meta, boundaryFrames } })
+      await save(job, { source_meta: { ...job.source_meta, boundaryFrames, ...(corrected ? {correctedBoundaries:corrected} : {}) } })
     }
     await save(job, { context_url: contextUrl, stage: 'prepared', timings: { preparationMs: performance.now() - started } })
     const prompt = retakePrompt(input.script)
@@ -158,7 +161,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     }
     // Optional visual-state controls define the desired result alongside
     // source context; omit conflicting video references when those controls apply.
-    const useVideoReference = model !== 'fal-h3-max' || (!boundaryFrames?.middle && !input.retake.endFrame && !input.retake.cameraChange && input.retake.boundaryMode !== 'scene')
+    const useVideoReference = model !== 'fal-h3-max' || (!corrected && !boundaryFrames?.middle && !input.retake.endFrame && !input.retake.cameraChange && input.retake.boundaryMode !== 'scene')
     const result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
       images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages, ...(model !== 'fal-h3-max' && input.retake.endFrame ? [input.retake.endFrame.imageUrl] : [])], h3RetakeBoundaryFrames: boundaryFrames,
       script: prompt, duration: model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,

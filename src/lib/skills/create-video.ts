@@ -6,7 +6,7 @@ const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
 
 export interface CreateVideoInput {
   /** Product Retake interval, in source-video seconds. */
-  retake?: { start: number; end: number; middleFrame?: {imageUrl:string;time:number}; endFrame?: {imageUrl:string}; cameraChange?: boolean; boundaryMode?: 'exact' | 'scene'; editMode?: 'modify' | 'replace' };
+  retake?: { start: number; end: number; middleFrame?: {imageUrl:string;time:number}; endFrame?: {imageUrl:string}; correctedBoundaries?: {startUrl:string;endUrl:string}; cameraChange?: boolean; boundaryMode?: 'exact' | 'scene'; editMode?: 'modify' | 'replace' };
   /** Internal only, generated from the authenticated Retake source. */
   h3RetakeBoundaryFrames?: { startUrl: string; endUrl: string; lockEndpoints?: boolean; middle?: {imageUrl:string;time:number} };
   script: string;

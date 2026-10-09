@@ -16,6 +16,19 @@ vi.mock('@/lib/supabase/service',()=>({getSupabaseAdmin:()=>({
 })}));
 import {createVideoRetake,retakeVideoMeta} from '@/lib/video-retake';
 beforeEach(()=>{stubs.jobs.length=0;stubs.provider.mockReset().mockResolvedValue({success:true,taskId:'provider-test'});stubs.meta.mockReset().mockResolvedValue({duration:30.05,fps:30,width:1280,height:720});vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL','https://storage.example')});
+it('uses corrected native endpoints only for explicit H3 modification and removes defective video competition',async()=>{
+  const correctedBoundaries={startUrl:'https://image.example/corrected-open.jpg',endUrl:'https://image.example/corrected-close.jpg'};
+  const base={userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',script:'Modify the selected interior, preserving boundary composition and action.',videoModel:'fal-h3-max'};
+  for(const editMode of ['replace',undefined] as const){
+    const rejected=await createVideoRetake({...base,retake:{start:3,end:6,editMode,correctedBoundaries}});
+    expect(rejected.success).toBe(false);
+  }
+  expect(stubs.jobs).toHaveLength(0);expect(stubs.provider).not.toHaveBeenCalled();
+  const result=await createVideoRetake({...base,retake:{start:3,end:6,editMode:'modify',correctedBoundaries}});
+  expect(result.success).toBe(true);
+  expect(stubs.provider.mock.calls[0][0]).toMatchObject({videoUrl:undefined,images:[correctedBoundaries.startUrl,correctedBoundaries.endUrl],h3RetakeBoundaryFrames:{...correctedBoundaries,lockEndpoints:true}});
+  expect(retakeVideoMeta(stubs.jobs[0])).toMatchObject({retake:{inputDuration:0},sourceUrls:expect.arrayContaining(Object.values(correctedBoundaries))});
+});
 it('retains the measured portrait canvas when replacement drops Video 1',async()=>{
   stubs.meta.mockResolvedValue({duration:3.33,fps:30,width:1216,height:1632});
   const result=await createVideoRetake({userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:.5,end:2.8,editMode:'replace',cameraChange:true},script:'Replace the scene.',videoModel:'fal-h3-max',aspectRatio:'16:9'});

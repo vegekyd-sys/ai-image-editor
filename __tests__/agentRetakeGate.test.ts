@@ -16,6 +16,17 @@ const receipt = () => signRetakeInspection({ userId: 'owner', projectId: 'projec
   sourceUrl, start: 18, end: 21, model: 'fal-h3-max' }, 'test-server-secret', { outputSelection: { start: 1, end: 4 }, generationDuration: 5 })
 
 describe('Agent Retake paid-submission gate', () => {
+  it('binds inspected corrected boundary images without relaxing modify endpoint intent',async()=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    const refs={...scope,ctx:{...ctx,snapshotImages:[sourceUrl,'https://example.com/open.jpg','https://example.com/close.jpg']}};
+    await (createInspectedRetakeVideoTool(refs).execute as any)({...input,edit_mode:'modify',camera_change:false,prompt:'Retain <<<media_1>>> action with corrected opening <<<media_2>>> and closing <<<media_3>>>.',inspection_id:receipt(),source_observation:observation,corrected_boundary_media_indices:{start:2,end:3}});
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({script:'Retain the inspected original scene action with corrected opening Image 1 and closing Image 2.',images:[],retake:{start:18,end:21,editMode:'modify',correctedBoundaries:{startUrl:'https://example.com/open.jpg',endUrl:'https://example.com/close.jpg'}}}),expect.anything());
+  });
+  it.each([{edit_mode:'replace'},{model:'seedance-2.5-eco'},{end_frame_media_index:2}])('rejects incompatible corrected boundary controls before submission %j',async change=>{
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
+    const result=await (createInspectedRetakeVideoTool(scope).execute as any)({...input,edit_mode:'modify',inspection_id:receipt(),source_observation:observation,corrected_boundary_media_indices:{start:2,end:3},...change});
+    expect(result.success).toBe(false);expect(submit).not.toHaveBeenCalled();
+  });
   it.each(['creative','middle','ending'])('resolves a persisted same-turn %s image despite a stale data URL',async role=>{
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test-server-secret');
     const query:any={select:()=>query,eq:()=>query,order:async()=>({data:[{type:'video',video_meta:{}},{type:null,image_url:'https://example.com/ready.jpg'}]})};
