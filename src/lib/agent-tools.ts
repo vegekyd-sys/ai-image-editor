@@ -3610,7 +3610,7 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
 }
 
 function createPreviewFrameTool(
-  { ctx, durableVisionBridge }: AgentToolFactoryScope,
+  { ctx, runtime, durableVisionBridge }: AgentToolFactoryScope,
 ) {
   return tool({
       description: `Capture one visual frame or a 2-6 frame contact sheet.
@@ -3632,6 +3632,10 @@ Returns the rendered image so you can see it with your vision.`,
       }),
       execute: async ({ media_index, design_path, frame, timestamp, frames, timestamps, question }) => {
         const analyzeDurablePreview = async (image: Buffer, _fallback: string) => {
+          if (runtime.spec.supportsImageInput) {
+            console.log(`[preview_frame] provider=${runtime.spec.provider} model=${runtime.spec.id} mode=in-model`);
+            return undefined;
+          }
           if (!durableVisionBridge) return undefined;
           try {
             const { analyzeImageContent } = await import('./gemini');
