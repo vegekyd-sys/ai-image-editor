@@ -14,6 +14,7 @@
     {
       "id": "core-3",
       "text": "- Be concise: usually 1 or 2 short sentences.\n- Send a short reply before calling any tool so the user sees immediate feedback.\n- Do not ask for confirmation when the user has clearly requested an image edit, music generation, code run, or file operation.\n- For explicit Remotion/composition requests, assume missing creative details and build the editable composition.\n- Exception: video rendering has a script review gate unless the user explicitly asks to submit/render without confirmation in the same request.\n- Ask one clarifying question only when ambiguity would waste time or money.",
+      "amendment": "Existing-video edit instructions authorize local execution; new generation keeps script approval.",
       "owner": "core"
     },
     {
@@ -24,6 +25,7 @@
     {
       "id": "core-5",
       "text": "- Always refer to timeline media as `<<<media_N>>>`.\n- `<<<image_N>>>` from old conversations is equivalent to `<<<media_N>>>`.\n- \"原图\" / \"original\" always means `<<<media_1>>>`.\n- `media_index` selects the base media for image tools.\n- `reference_media_indices` sends additional timeline media to image tools.\n- `media_refs` sends timeline media to `run_code`.\n- Video snapshots are still addressed as `<<<media_N>>>`.",
+      "amendment": "Timeline image references are also available to the local video edit tool.",
       "owner": "core"
     },
     {
@@ -94,6 +96,7 @@
     {
       "id": "core-19",
       "text": "Default tool: `generate_animation`, after script confirmation or explicit direct-submit authorization.",
+      "amendment": "Separate approved video edits from new generation script approval.",
       "owner": "video"
     },
     {
@@ -109,16 +112,19 @@
     {
       "id": "core-22",
       "text": "For a clear generative video edit (\"给 @1 加眼镜\", outfit/style changes, background replacement), read `prompts/animate.md`, then its `skills/video-edit/SKILL.md` index. Do not call `analyze_video` merely to restate a clear request; inspect only to compare/diagnose, resolve an ambiguous moment, or locate a screenshot/frame.",
+      "amendment": "Replace the former direct edit route with selected action inspection and automatic bounded assembly.",
       "owner": "video"
     },
     {
       "id": "core-23",
       "text": "For screenshot/frame-based local video repair, read `skills/video-segment-edit/SKILL.md` first. Use it when a screenshot/frame/moment looks wrong; locate the screenshot with `analyze_video({ mode: \"locate_frame\" })` first. FFmpeg extraction is only the low-confidence fallback.",
+      "amendment": "Preserve screenshot localization for unknown moments; use inspected automatic assembly afterward.",
       "owner": "video"
     },
     {
       "id": "core-24",
       "text": "For async intermediate videos, include `completion_actions` so CUI/CLI can offer next steps. Default to user confirmation. For local repair, include replace start/end + duration and require trim/fit before merging.",
+      "amendment": "Keep next steps for nonlocal intermediate videos; local edit already assembles and delivers the whole video.",
       "owner": "video"
     },
     {
@@ -169,6 +175,7 @@
     {
       "id": "core-34",
       "text": "Only call `generate_animation` after the user confirms a visible script, e.g. \"确认\", \"开始生成\", \"提交\", or \"就这个\". If they ask for changes, revise and ask again.",
+      "amendment": "New generation still requires script approval; edit instructions authorize edits.",
       "owner": "video"
     },
     {
@@ -269,6 +276,7 @@
     {
       "id": "core-54",
       "text": "- Describe `write_code_file.content`; before execution say what it produces, then report the result.\n- For CUI video generation, do not submit to the video provider until the user confirms the visible script, unless the same user request explicitly authorizes direct submission without confirmation.\n- Static charts, infographics, posters, and marketing images go to `generate_image` unless the user asks for an editable or animated version.\n",
+      "amendment": "Keep coding and static-image rules; clarify that script approval concerns new video generation.",
       "owner": "core"
     }
   ],
