@@ -7,7 +7,7 @@ import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
 import { isBillingEnabled, recordSubscriptionUsage, requireCredits } from './credits'
 import { quoteVideo, type MediaQuote, type VideoQuoteInput } from './media-pricing'
 
-export interface McpVideoOwner { userId: string; apiKeyId: string | null; toolName: string }
+export interface McpVideoOwner { userId: string; apiKeyId: string; toolName: string }
 
 async function rpc(name: string, args: Record<string, unknown>) {
   const { data, error } = await getSupabaseAdmin().rpc(name, args)
@@ -30,10 +30,6 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
       .select('fingerprint,task_id,status').eq('id', requestId).eq('user_id', owner.userId).maybeSingle()
     if (error) throw new Error('Cannot verify prior billing request. Retry with the same request ID.')
     if (previous) {
-      // Retake owns a canonical source/range/instruction receipt, shared by GUI
-      // Agent and CLI. Its owner and exact effective parameters are checked
-      // before returning an existing job; this path never reserves again.
-      if (input.retake) return createVideo({ ...input, userId: owner.userId });
       if (previous.fingerprint !== fingerprint) throw new Error('Billing request conflict: parameters changed.')
       return { success: Boolean(previous.task_id), taskId: previous.task_id ?? undefined,
         retryable: false,
@@ -68,7 +64,7 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
     reservedQuote = quote
   }
   const result = await createVideo({
-    ...input, billingRequestId: requestId, userId: owner.userId, billingToolName: owner.toolName, billingSource: 'mcp',
+    ...input, userId: owner.userId, billingToolName: owner.toolName, billingSource: 'mcp',
     onBeforeProviderSubmit: async resolved => {
       usage = resolved; if (!subscription) await reserve()
       return { reservedUpscaleCredits: reservedQuote?.upscaleCredits ?? 0 }
@@ -91,7 +87,7 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
       return { ...result, retryable: false, message: `${result.message}\nBilling reconciliation required. Request: ${requestId}. Do not resubmit this job.` }
     }
   } else if (result.success && result.provider === 'grok-subscription') {
-    await recordSubscriptionUsage(owner.userId, 'grok-subscription', owner.toolName, 'grok', { apiKeyId: owner.apiKeyId ?? undefined })
+    await recordSubscriptionUsage(owner.userId, 'grok-subscription', owner.toolName, 'grok', { apiKeyId: owner.apiKeyId })
   }
   if (reserved && result.submissionUncertain && !result.taskId) {
     return { ...result, retryable: false, errorCode: 'SUBMISSION_UNCERTAIN',

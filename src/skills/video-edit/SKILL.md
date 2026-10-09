@@ -1,7 +1,7 @@
 ---
 name: video-edit
 description: Edit, transform, or faithfully recreate a supplied video. Use for source-preserving trims, repairs, captions, audio, effects, and subject/background replacement, or when a reference video's timing, camera, action, transitions, and beat structure must be reproduced with new content. Distinguishes source-edit from replication internally; use direct generation for a new video with no source authority and reference-video-studio for loose inspiration.
-allowed-tools: read_file list_files inspect_retake retake_video prepare_visual_asset analyze_video transcribe_audio analyze_image generate_image generate_animation generate_audio run_code write_code_file write_file preview_frame materialize_media studio_run
+allowed-tools: read_file list_files prepare_visual_asset analyze_video transcribe_audio analyze_image generate_image generate_animation generate_audio run_code write_code_file write_file preview_frame materialize_media studio_run
 metadata:
   makaron:
     icon: "⌁"
@@ -20,20 +20,6 @@ metadata:
 ---
 
 # Video Edit
-
-## Bounded visual edits
-
-For an explicit interval or a resolved scene inside an existing video, use
-`skills/video-segment-edit/SKILL.md`: inspect_retake (frames plus automatic ASR),
-then retake_video to modify or replace the interval and deliver the full video.
-This includes adding/changing objects, visual demonstrations of layers, camera
-coverage and whole-shot/background replacement. A known interval needs no
-preliminary analyze_video call, scripted trimming or second assembly pipeline.
-These visual edits use that route's models, endpoint intent and original-audio
-preservation, rather than the generation/replication instructions below.
-Depicting layers in a video does not request an actual editable composition.
-Dedicated precise cutting, subtitles, dubbing and explicit editable projects
-continue through their own capabilities.
 
 Use one Skill for any request in which a supplied video controls the result.
 "Edit" is a user intent, not a requirement to expose a provider's typed edit
@@ -63,8 +49,6 @@ generation in `prompts/animate.md`.
 2. Inspect only to the required depth. A clear source edit does not need
    `analyze_video`; replication must understand the complete clip and lock
    uncertain boundaries before paid generation.
-For a bounded change integrating a supplied image/logo into an existing scene or ending, use skills/video-segment-edit/SKILL.md and pass reference_media_indices. Natural/playful integration does not imply a Remotion overlay or editable timeline; explicit fixed layers and exact deterministic text/layout remain composition tasks.
-
 3. Choose the smallest capable path: deterministic FFmpeg, editable Remotion,
    reference-to-video synthesis, or a hybrid. Models decide semantic intent and
    visual labels; deterministic tools own measurements, timecodes, assembly,
@@ -74,10 +58,8 @@ For a bounded change integrating a supplied image/logo into an existing scene or
    the user to choose an "edit mode" and do not set
    `video_operation: "edit"`. Extension remains a distinct operation.
 5. Before paid work, state provider, current capability, billable duration/cost,
-   and retry ceiling. A clear existing-video edit instruction authorizes that
-   scoped edit without a GUI selection; ask only for genuinely missing source
-   or scope, or when the user requested review first. New video generation
-   retains its script confirmation gate.
+   and retry ceiling. Show the final script and respect the normal confirmation
+   gate unless the request explicitly authorizes submission.
 6. Verify the real output, not task completion: decode, streams, duration,
    changed content, preserved layers, identity, continuity, structure, and audio
    sync. Retry only against one or two measured failures.

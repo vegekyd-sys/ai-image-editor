@@ -126,16 +126,7 @@ describe('fal MiniMax H3 Max Turbo adapter', () => {
     expect(result.error).not.toContain('secret')
   })
 
-  it('settles a persisted typed downstream failure without leaking echoed inputs', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({status:'COMPLETED'}))
-      .mockResolvedValueOnce(Response.json({detail:[{loc:['body'],type:'downstream_service_unavailable',input:{prompt:'secret'}}]},{status:504})));
-    const {getFalH3MaxVideoTask}=await import('@/lib/fal-h3-max-video');
-    const result=await getFalH3MaxVideoTask('fal-h3max-reference-downstream');
-    expect(result).toMatchObject({status:'failed'});
-    expect(result.error).toContain('No video was produced');
-    expect(result.error).not.toContain('secret');
-  });
-  it.each([401, 403, 404, 429, 500, 503, 504])('does not terminalize/refund a result transport error %s', async status => {
+  it.each([401, 403, 404, 429, 500, 503])('does not terminalize/refund a result transport error %s', async status => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ status: 'COMPLETED' }))
       .mockResolvedValueOnce(Response.json({ detail: 'secret' }, { status })))
     const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')

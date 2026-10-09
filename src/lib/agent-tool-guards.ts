@@ -4,7 +4,6 @@ import type { AgentContext } from './agent-tools';
 export const DURABLE_IDEMPOTENT_TOOLS = new Set([
   'generate_image',
   'generate_animation',
-  'retake_video',
   'upscale_video',
   'materialize_media',
   'rotate_camera',
@@ -20,7 +19,6 @@ export const DURABLE_INPUT_GUARDED_TOOLS = new Set([
   'write_code_file',
   'run_code',
   'preview_frame',
-  'inspect_retake',
   'delete_file',
   'execution_checkpoint',
 ]);

@@ -9,11 +9,6 @@ import type { ImageBackground, ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { submitMcpVideo } from './billing/mcp-video';
-import { createInspectedRetakeVideoTool } from './agent-retake-tool';
-import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL, planRetake, validateRetakeRange } from './video-retake-contract';
-import { signRetakeInspection, verifyRetakeInspection, resolveRetakeInspectionReceipt, retakeInspectionScope, retakeOutputTime, retakeInspectionProofPath } from './video-retake-inspection';
-import { RETAKE_SCENE_READING, RETAKE_PROMPT_WRITING, retakePromptPlanning } from './video-retake-prompt-planning';
 import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
 import {
@@ -1385,12 +1380,11 @@ interface AgentToolFactoryScope {
 }
 
 function createGenerateImageTool(
-  { ctx, runtime }: AgentToolFactoryScope,
+  { ctx }: AgentToolFactoryScope,
 ) {
   return tool({
-      description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}` + '\nRetake camera/content keyframes: use retake_source after inspect_retake to edit an actual source frame, rather than a video poster or contact sheet. The returned image is a visual checkpoint for H3 middle-frame control or an explicitly requested boundary-attribute correction. For a boundary correction use the corresponding inspected selected opening/closing source time; retain that exact composition and action phase except the requested correction. Read its actual pixels and verify the requested camera/content and action phase before passing its mediaIndex to retake_video.',
+      description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}`,
       inputSchema: z.object({
-        retake_source: z.object({media_index:z.number().int().positive(),start:z.number().nonnegative(),end:z.number().positive(),source_time:z.number().nonnegative(),inspection_id:z.string(),model:z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL)}).optional().describe('Generate a Retake keyframe from a real inspected video frame inside start/end, in original-source seconds. Use the exact inspect_retake receipt. Omit ordinary media_index/reference_media_indices; the actual video frame supplies identity, pose, environment and motion phase. Write editPrompt as the requested new view/content while retaining that phase.'),
         editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
@@ -1401,7 +1395,7 @@ function createGenerateImageTool(
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, isNsfw, aspectRatio, imageResolution, background, media_index, reference_media_indices, retake_source }) => {
+      execute: async ({ editPrompt, skill, model, isNsfw, aspectRatio, imageResolution, background, media_index, reference_media_indices }) => {
         if (isNsfw) ctx.isNsfw = true;
         // GPT-5.6 currently fills omitted optional numeric tool fields with 0.
         // Treat that provider sentinel exactly like omission so empty projects
@@ -1409,7 +1403,6 @@ function createGenerateImageTool(
         const resolvedMediaIndex = normalizeGenerateImageMediaIndex(media_index);
         // Resolve which image to edit — agent must pass media_index to include a photo
         let editTarget: string | undefined;
-        let retakeSourcePreviewBase64: string | undefined;
         if (resolvedMediaIndex !== undefined) {
           const v = validateImageIndex(ctx.snapshotImages, resolvedMediaIndex);
           if (v.error) return { success: false as const, message: v.error };
@@ -1419,20 +1412,8 @@ function createGenerateImageTool(
           editTarget = ctx.currentImage;
         }
 
-        if (retake_source) {
-          const r = retake_source;
-          if (!ctx.userId || !ctx.projectId || media_index || reference_media_indices?.length || r.source_time < r.start || r.source_time >= r.end) return {success:false,message:'Retake keyframe requires an inspected in-selection source frame and no competing image target.'};
-          const source = await resolveVideoUrlForMediaIndex(ctx,r.media_index);
-          if (!source.videoUrl || !verifyRetakeInspection(await resolveRetakeInspectionReceipt(r.inspection_id,ctx,retakeInspectionScope(ctx,source.videoUrl,r.start,r.end,r.model)),retakeInspectionScope(ctx,source.videoUrl,r.start,r.end,r.model),process.env.SUPABASE_SERVICE_ROLE_KEY || '')) return {success:false,message:'Re-inspect this exact source/range/model before generating a Retake keyframe. No image provider submitted.'};
-          const {readProviderImage} = await import('./provider-image-preflight');
-          const {extractRetakeSourceFrame} = await import('./video-retake-media');
-          const frame = await extractRetakeSourceFrame(await readProviderImage(source.videoUrl,512*1024*1024,{mediaType:'video'}),r.source_time);
-          retakeSourcePreviewBase64 = frame.toString('base64');
-          editTarget = `data:image/jpeg;base64,${retakeSourcePreviewBase64}`;
-        }
-
         // Resolve reference images: user-uploaded + snapshot indices
-        const resolvedRefs = !retake_source && ctx.referenceImages ? [...ctx.referenceImages] : [];
+        const resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
         console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_media_indices?.length) {
           for (const refIdx of reference_media_indices) {
@@ -1442,7 +1423,7 @@ function createGenerateImageTool(
         }
 
         // Priority: UI selector > agent tool param > auto-route
-        const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model || (retake_source ? 'gpt-image-2.5-flare' : undefined)) as ModelId | undefined;
+        const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         let billingModel: ModelId | undefined;
         let imagePlan: ImageGenerationPlan;
         try {
@@ -1530,26 +1511,7 @@ function createGenerateImageTool(
           ? ` Resolved image URL: ${imageUrl}. Use this URL directly in Remotion composition props/code; do not use the <<<media_${mediaIndex}>>> marker inside composition code.`
           : '';
         const indexInfo = mediaIndex ? ` Now <<<media_${mediaIndex}>>>.${urlInfo}` : '';
-        let retakePreviewBase64: string | undefined;
-        let retakePreviewAnalysis: string | undefined;
-        if (retake_source && imageUrl) {
-          const {readProviderImage} = await import('./provider-image-preflight');
-          const raw = await readProviderImage(imageUrl,25*1024*1024);
-          const {default:sharp} = await import('sharp');
-          const bytes = await sharp(raw).jpeg({quality:90}).toBuffer();
-          if (runtime.spec.supportsImageInput) retakePreviewBase64 = bytes.toString('base64');
-          else {
-            const {analyzeImageContent} = await import('./gemini');
-            const {createContactSheet} = await import('./contact-sheet');
-            const sourceFrame = Buffer.from(retakeSourcePreviewBase64!, 'base64');
-            const sourceMeta = await sharp(sourceFrame).metadata();
-            const comparison = await createContactSheet([{image:sourceFrame,label:'frame 1 source'}, {image:bytes,label:'frame 2 edit'}],sourceMeta.width!,sourceMeta.height!,{columns:2});
-            retakePreviewAnalysis = await analyzeImageContent(`data:image/jpeg;base64,${comparison.toString('base64')}`,`Compare frame 1 (actual source at ${retake_source.source_time}s) with frame 2 (generated control). Requested edit: ${editPrompt}. Check both requested changes and retained composition, identity, positions, pose, action phase, object relationships and occlusion. Identify unintended changes or missing requirements; do not infer motion from a still. A requested new view may change framing, but an attribute-only correction must retain it.`,ctx.userId);
-          }
-        }
         return {
-          retakePreviewBase64, retakePreviewAnalysis,
-          ...(runtime.spec.supportsImageInput && retakePreviewBase64 ? {retakeSourcePreviewBase64, retakeSourceTime:retake_source?.source_time} : {}),
           success: skillResult.success as true,
           message: skillResult.message + indexInfo,
           ...(mediaIndex ? { mediaIndex } : {}),
@@ -1561,7 +1523,7 @@ function createGenerateImageTool(
       toModelOutput({ output }: { output: any }) {
         return {
           type: 'content' as const,
-          value: [...(output.retakeSourcePreviewBase64 ? [{type:'text' as const,text:`ACTUAL SOURCE at ${output.retakeSourceTime}s. Compare this with the generated control below, including retained composition, pose/action phase and object relationships.`},modelFileContent(output.retakeSourcePreviewBase64,'image/jpeg')] : []),...(output.retakePreviewBase64 ? [{type:'text' as const,text:'GENERATED CONTROL. Verify the requested difference AND retained attributes against the source. If a required attribute drifted, do not submit this control; repair and compare again. An attribute-only correction must not silently reframe or simplify the scene.'},modelFileContent(output.retakePreviewBase64,'image/jpeg')] : []),{ type: 'text' as const, text: formatGeneratedImageForModel(output) + (output.retakePreviewAnalysis ? '\nRetake keyframe visual evidence: '+output.retakePreviewAnalysis : '') }],
+          value: [{ type: 'text' as const, text: formatGeneratedImageForModel(output) }],
         };
       },
     });
@@ -2186,101 +2148,6 @@ function createGenerateAnimationTool(
     });
 }
 
-function createInspectRetakeTool(scope: AgentToolFactoryScope) {
-  const { ctx, runtime } = scope;
-  return tool({
-    description: 'Inspect the actual selected video interval BEFORE expanding a Retake prompt. Extracts labeled source and join frames, with optional extra source-time samples for short events or control-state comparisons and automatically transcribes source speech when an audio track exists, reusing the timeline ASR cache. Returns pixels (or verified vision analysis), selected speech with source/output word timecodes, separate adjacent speech, audio availability, a signed inspection_id, source/output mapping and a shot timing budget. Do not call transcribe_audio again for this same evidence. Use the same media_index/start/end/model for retake_video. ' + RETAKE_SCENE_READING + '\nIf visual inspection fails, do not generate blindly. If ASR is unavailable, do not claim speech understanding or precise synchronization.',
-    inputSchema: z.object({
-      media_index: z.number().int().positive(),
-      start: z.number().nonnegative(),
-      end: z.number().positive(),
-      model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
-      sample_times: z.array(z.number().nonnegative()).min(1).max(8).optional().describe('Optional extra SOURCE times inside start/end, for brief events, cuts, controls or failed-result checks. Defaults still include selected endpoints and adjacent joins. Choose close samples when coarse frames cannot establish whether an event occurred.'),
-    }),
-    execute: async ({ media_index, start, end, model, sample_times }, options) => {
-      if (!ctx.userId || !ctx.projectId) return { error: 'Retake inspection requires an authenticated project.' };
-      try {
-        validateRetakeRange({ start, end });
-        const source = await resolveVideoUrlForMediaIndex(ctx, media_index);
-        if (!source.videoUrl) return { error: source.error || 'Select a ready source video.' };
-        if (source.sourceRange && (start < source.sourceRange.start_sec || end > source.sourceRange.end_sec)) {
-          return { error: 'Inspect an interval within the visible original-source range.' };
-        }
-        const { readProviderImage } = await import('./provider-image-preflight');
-        const { inspectRetakeSource, extractRetakeInspectionFrames } = await import('./video-retake-media');
-        const { createContactSheet } = await import('./contact-sheet');
-        const bytes = await readProviderImage(source.videoUrl, 512 * 1024 * 1024, {mediaType:'video'});
-        const meta = await inspectRetakeSource(bytes);
-        const plan = planRetake({ start, end }, meta.duration!, model);
-        const { inspectRetakeAudio } = await import('./video-retake-audio');
-        const [sampled, audioEvidence] = await Promise.all([
-          extractRetakeInspectionFrames(bytes, plan, meta.fps!, sample_times),
-          inspectRetakeAudio({ hasAudio: !!meta.audioCodec, plan,
-            transcribe: async () => {
-              const result = await createTranscribeAudioTool(scope).execute!({ media_index }, options);
-              if (Symbol.asyncIterator in result) throw new Error('ASR did not return a final transcript.');
-              return result;
-            } }),
-        ]);
-        const sheet = await createContactSheet(sampled.frames.map((image, index) => ({ image,
-          label: `#${index + 1} ${sampled.timestamps[index].toFixed(2)}s : ${sampled.timestamps[index] < start || sampled.timestamps[index] >= end ? 'JOIN CONTEXT' : retakeOutputTime(plan, sampled.timestamps[index]).toFixed(2) + 's'}`,
-        })), meta.width!, meta.height!, { columns: 4 });
-        // Separate the edited action from adjacent shots: a context frame is
-        // evidence for the cut, never the selected closing pose.
-        const selectedIndices = sampled.timestamps.flatMap((time,index)=>time >= start && time < end ? [index] : []);
-        const contextIndices = sampled.timestamps.flatMap((time,index)=>time < start || time >= end ? [index] : []);
-        const visualEvidence = await Promise.all([
-          {role:'selection',indices:selectedIndices}, {role:'join_context',indices:contextIndices},
-        ].filter(group=>group.indices.length).map(async group=>({
-          role:group.role, timestamps:group.indices.map(index=>sampled.timestamps[index]),
-          base64Data:(group.indices.length === 1 ? sampled.frames[group.indices[0]] : await createContactSheet(group.indices.map(index=>({image:sampled.frames[index],label:`#${index + 1} ${sampled.timestamps[index].toFixed(2)}s : ${group.role==='join_context'?'JOIN CONTEXT':retakeOutputTime(plan,sampled.timestamps[index]).toFixed(2)+'s'}`})),meta.width!,meta.height!,{columns:group.role==='selection'?3:2})).toString('base64'),
-        })));
-        let analysis: string | undefined;
-        // A visual Agent reads the actual sheet itself. Only text-only models
-        // need the separate analyzer; its failure must not permit blind editing.
-        if (!runtime.spec.supportsImageInput) {
-          const { analyzeImageContent } = await import('./gemini');
-          analysis = await analyzeImageContent(`data:image/jpeg;base64,${sheet.toString('base64')}`,
-            `${RETAKE_SCENE_READING}\nSelected source interval: ${start}–${end}s; context: ${plan.contextStart}–${plan.contextEnd}s.`, ctx.userId);
-          if (!analysis?.trim()) return { error: 'Retake frame understanding failed. No video generation was submitted.' };
-        }
-        const workspacePath = `${ctx.projectId}/drafts/retake-inspection-${Date.now()}.jpg`;
-        const write = await workspace.writeFile(workspacePath, sheet, ctx.supabase, ctx.userId, 'image/jpeg');
-        const workspaceUrl = write.storageUrl ? toPublicStorageUrl(write.storageUrl) : '';
-        const inspectionScope = retakeInspectionScope(ctx, source.videoUrl, start, end, model);
-        const receipt = signRetakeInspection(inspectionScope, process.env.SUPABASE_SERVICE_ROLE_KEY || '', {
-          outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) }, generationDuration: plan.generationDuration,
-        });
-        const proof = await workspace.writeFile(retakeInspectionProofPath(inspectionScope),JSON.stringify({receipt}),ctx.supabase,ctx.userId,'application/json');
-        if (!proof.success) return {error:'Could not persist the Retake inspection receipt. No provider submitted.'};
-        const inspection_id = 'retake-evidence.current';
-        return { success: true, inspection_id, plan, timestamps: sampled.timestamps,
-          outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) },
-          sourceToOutputScale: plan.generationDuration / (plan.outputMode === 'selection' ? end - start : plan.contextEnd - plan.contextStart),
-          promptPlanning: retakePromptPlanning(plan),
-          audioEvidence, analysis, visualEvidence, base64Data: sheet.toString('base64'), mimeType: 'image/jpeg', workspacePath, workspaceUrl };
-      } catch (error) {
-        return { error: `Retake inspection failed: ${error instanceof Error ? error.message : String(error)}. No video generation was submitted.` };
-      }
-    },
-    toModelOutput({ output }: { output: any }) {
-      if (output.error) return { type: 'text' as const, value: output.error };
-      const { base64Data, mimeType, visualEvidence, ...receipt } = output;
-      return { type: 'content' as const, value: [
-        ...(!output.analysis ? visualEvidence?.length ? visualEvidence.flatMap((group:{role:string;timestamps:number[];base64Data:string})=>[
-          {type:'text' as const,text:`${group.role === 'selection' ? 'SELECTED ACTION ONLY' : 'ADJACENT JOIN CONTEXT ONLY — outside the replacement'}; SOURCE timestamps in image order: ${group.timestamps.join(', ')}s. Read every frame against its own label; do not attribute a neighboring shot to the selected endpoint.`},
-          modelFileContent(group.base64Data,mimeType),
-        ]) : [modelFileContent(base64Data, mimeType)] : []),
-        { type: 'text' as const, text: `Retake visual evidence and time mapping:\n${JSON.stringify(receipt)}\n${RETAKE_SCENE_READING}\n${RETAKE_PROMPT_WRITING}` },
-      ] };
-    },
-  });
-}
-
-function createRetakeVideoTool(scope: AgentToolFactoryScope) {
-  return createInspectedRetakeVideoTool({ ...scope, resolveSource: resolveVideoUrlForMediaIndex, submit: submitMcpVideo });
-}
-
 function createUpscaleVideoTool(scope: AgentToolFactoryScope) {
   const submit = createGenerateAnimationTool(scope, true);
   return tool({
@@ -2604,8 +2471,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             sourceRange = sourceRangeFromVideoMeta(videoMeta);
             const cached = videoMeta?.transcript as VolcengineAsrTranscript | undefined;
             if (
-              cached && typeof cached.text === 'string' && Array.isArray(cached.utterances)
-              && (!cached.sourceUrl || cached.sourceUrl === resolvedUrl || cached.sourceUrl === videoMeta?.videoUrl)
+              cached?.text
               && !force_refresh
               && isAsrTranscriptCacheCompatible(cached, language)
             ) {
@@ -3645,7 +3511,7 @@ Returns the rendered image so you can see it with your vision.`,
             return undefined;
           }
         };
-        let design = !design_path && media_index !== undefined ? undefined : (ctx as any).__lastDesignPayload;
+        let design = (ctx as any).__lastDesignPayload;
         let rawVideo: { url: string; duration?: number; fps?: number; sourceRange?: VideoSourceRange } | null = null;
         if (design_path) {
           try {
@@ -3671,7 +3537,7 @@ Returns the rendered image so you can see it with your vision.`,
               .eq('project_id', ctx.projectId)
               .order('sort_order', { ascending: true });
             const snap = snaps?.[v.idx] as { type?: string; image_url?: string; design_path?: string; video_meta?: Record<string, unknown> } | undefined;
-            if (snap?.design_path && snap.type !== 'video') {
+            if (snap?.design_path) {
               const storagePath = `${ctx.userId}/workspace/${snap.design_path}`;
               const { data: urlData } = ctx.supabase.storage.from('images').getPublicUrl(storagePath);
               if (urlData?.publicUrl) {
@@ -5475,8 +5341,6 @@ const tools = preserveOptionalToolFields({
     generate_image: createGenerateImageTool(scope),
 
     generate_animation: createGenerateAnimationTool(scope),
-    inspect_retake: createInspectRetakeTool(scope),
-    retake_video: createRetakeVideoTool(scope),
 
     upscale_video: createUpscaleVideoTool(scope),
 

@@ -1,5 +1,4 @@
 testcase/
-.env*
 test-results/
 scripts/batch-test*
 scripts/auto-optimize*

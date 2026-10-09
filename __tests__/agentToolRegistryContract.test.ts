@@ -36,8 +36,6 @@ describe('Agent tool registry contract', () => {
     expect(names).toEqual([
       'generate_image',
       'generate_animation',
-      'inspect_retake',
-      'retake_video',
       'upscale_video',
       'analyze_image',
       'analyze_video',
@@ -65,7 +63,6 @@ describe('Agent tool registry contract', () => {
     expect(extractSet(source, 'DURABLE_IDEMPOTENT_TOOLS')).toEqual([
       'generate_image',
       'generate_animation',
-      'retake_video',
       'upscale_video',
       'materialize_media',
       'rotate_camera',
@@ -82,7 +79,6 @@ describe('Agent tool registry contract', () => {
       'write_code_file',
       'run_code',
       'preview_frame',
-      'inspect_retake',
       'delete_file',
       'execution_checkpoint',
     ]);

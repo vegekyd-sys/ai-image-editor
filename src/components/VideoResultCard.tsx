@@ -31,18 +31,15 @@ interface VideoResultCardProps {
   onCreateNew: () => void;
   onAbandon: (taskId: string) => void;
   onRetry?: (anim: ProjectAnimation) => void;
-  onRetake?: (anim: ProjectAnimation, time: number) => void;
-  retakeActive?: boolean;
-  onSeek?: (time: number) => void;
+  onFrameEdit?: (anim: ProjectAnimation, time: number) => void;
   onViewDetail: (anim: ProjectAnimation) => void;
   currentTime?: number;
   currentDuration?: number;
-  sourceOffset?: number;
   isDesktop?: boolean;
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onAbandon, onRetake, retakeActive = false, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onAbandon, onFrameEdit, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
 
@@ -76,7 +73,8 @@ export default function VideoResultCard({
   const thumbSize = isDesktop ? 64 : 72;
   const cardWidth = isDesktop ? 176 : 200;
   const detailWidth = isDesktop ? 40 : 44;
-  const retakeAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
+  const frameEditWidth = cardWidth + detailWidth;
+  const frameEditAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
   const allSourceUploads = all.length > 0 && all.every(isSourceUpload);
 
   const selectedPillRef = useRef<HTMLDivElement>(null);
@@ -110,7 +108,7 @@ export default function VideoResultCard({
           to { transform: rotate(360deg); }
         }
       `}</style>
-      <PillCarousel toolbar={retakeActive ? <span className="text-[11px] text-white/35">{t('video.retakeSelectionHint')}</span> : toolbar} isDesktop={isDesktop}>
+      <PillCarousel toolbar={toolbar} isDesktop={isDesktop}>
         {all.map((anim, idx) => {
           const isSelected = anim.id === selectedVideoId;
           const isCompleted = anim.status === 'completed' && !!anim.videoUrl;
@@ -255,23 +253,20 @@ export default function VideoResultCard({
           </div>
         )}
 
-        {retakeAnim && onRetake && (
+        {frameEditAnim && onFrameEdit && (
           <div
             data-testid="video-frame-edit-pill"
-            data-active={retakeActive}
-            className={`mkr-liquid-pill mkr-liquid-pill-strong mkr-retake-pill flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border transition-all animate-tip-in ${retakeActive ? 'mkr-liquid-pill-selected border-fuchsia-500 ring-1 ring-fuchsia-500/50' : 'border-white/10'}`}
+            className="mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border border-white/10 transition-all animate-tip-in"
             style={{
-              background: retakeActive
-                ? 'linear-gradient(145deg, rgba(217,70,239,0.14), rgba(12,12,16,0.46))'
-                : 'linear-gradient(145deg, rgba(255,255,255,0.045), rgba(12,12,16,0.42))',
+              background: 'linear-gradient(145deg, rgba(217,70,239,0.075), rgba(12,12,16,0.42))',
+              width: frameEditWidth,
             }}
           >
             <button
-              aria-pressed={retakeActive}
-              onClick={() => onRetake(retakeAnim, clampTime(currentTime))}
+              onClick={() => onFrameEdit(frameEditAnim, clampTime(currentTime))}
               className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
               style={{
-                width: cardWidth,
+                width: '100%',
                 transition: 'filter 0.15s, transform 0.1s',
                 background: 'transparent',
                 border: 'none',
@@ -291,33 +286,15 @@ export default function VideoResultCard({
                     <circle cx="12" cy="13" r="3.5" />
                   </svg>
                 </div>
-                <div className={`min-w-0 flex-1 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
-                  <div className={`text-white font-semibold leading-tight tracking-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
-                    {t('video.retakeTitle')}
+                <div className={`min-w-0 flex-1 flex flex-col justify-center ${isDesktop ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
+                  <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
+                    {t('video.frameEdit')}
                   </div>
                   <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
-                    {retakeActive ? t('video.retakeClose') : t('video.retakeCurrent', formatTime(currentTime))}
+                    {t('video.frameEditHint', formatTime(currentTime))}
                   </div>
                 </div>
               </div>
-            </button>
-            <button
-              data-testid="video-retake-pill-edit"
-              data-makaron-editor-tap-target="true"
-              aria-label={t('video.retakeEdit')}
-              aria-expanded={retakeActive}
-              onClick={() => onRetake(retakeAnim, clampTime(currentTime))}
-              className={`mkr-liquid-pill mkr-retake-side-action ${retakeActive ? 'mkr-liquid-side-action' : ''} flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110`}
-              style={{
-                width: detailWidth,
-                background: retakeActive ? 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.30) 100%)' : 'rgba(255,255,255,0.035)',
-                borderLeft: retakeActive ? '1px solid rgba(217,70,239,0.42)' : '1px solid rgba(255,255,255,0.10)',
-                transition: 'background 180ms ease, border-color 180ms ease, color 180ms ease, transform 100ms ease',
-              }}>
-              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className={retakeActive ? 'text-fuchsia-200/80' : 'text-white/45'}>
-                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" />
-              </svg>
-              <span className={`font-medium ${isDesktop ? 'text-[9px]' : 'text-[10px]'} ${retakeActive ? 'text-fuchsia-100/70' : 'text-white/45'}`}>{t('video.retakeEdit')}</span>
             </button>
           </div>
         )}

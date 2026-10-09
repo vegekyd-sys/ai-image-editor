@@ -37,21 +37,4 @@ describe('composition contact sheet', () => {
     expect(svg).not.toContain('Arial');
     expect(svg).toContain('fill="#f3f3f5"');
   });
-
-  it('keeps all eight evidence frames readable in chronological rows', async () => {
-    const colors = [30, 55, 80, 105, 130, 155, 180, 205];
-    const frames = await Promise.all(colors.map(async (value, index) => ({
-      image: await sharp({ create: { width: 640, height: 360, channels: 3,
-        background: { r: value, g: value, b: value } } }).png().toBuffer(),
-      label: `#${index + 1} ${index}s : ${index}s`,
-    })));
-    const sheet = await createContactSheet(frames, 640, 360, { columns: 4 });
-    const { data, info } = await sharp(sheet).raw().toBuffer({ resolveWithObject: true });
-    expect([info.width, info.height]).toEqual([1920, 608]);
-    for (let index = 0; index < 8; index++) {
-      const x = index % 4 * 480 + 240;
-      const y = Math.floor(index / 4) * 304 + 135;
-      expect(Math.abs(data[(y * info.width + x) * info.channels] - colors[index])).toBeLessThan(3);
-    }
-  });
 });

@@ -157,15 +157,6 @@ export async function getFalH3MaxVideoTask(taskId: string): Promise<FalH3MaxTask
   const resultResponse = await fetch(`${queueBase}/requests/${encodeURIComponent(requestId)}`, {
     headers: authHeaders,
   })
-  // A completed queue can contain a persisted typed inference failure even
-  // with HTTP 5xx. Untyped gateway/auth errors still remain retryable reads.
-  if (resultResponse.status >= 500) {
-    const failure = await resultResponse.clone().json().catch(() => ({}))
-    if (Array.isArray(failure.detail) && failure.detail.some((item: { type?: string; loc?: string[] }) =>
-      item?.type === 'downstream_service_unavailable' && item.loc?.[0] === 'body')) {
-      return { taskId, status: 'failed', error: 'FAL H3 generation failed: downstream service unavailable. No video was produced.' }
-    }
-  }
   // COMPLETED means the queue job ended, not that inference succeeded. Fal
   // returns terminal validation/content failures as 422 from the result URL.
   // Auth, rate limits, missing result and 5xx remain polling errors, not refunds.

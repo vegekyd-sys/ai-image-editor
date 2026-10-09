@@ -9,7 +9,6 @@ import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
 import { getDefaultVideoModelId, resolveProductVideoModelId } from '../lib/video-model-capabilities';
 import { getVideoStatus } from '../lib/skills/get-video-status';
-import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from '../lib/video-retake-contract';
 import { analyzeVideo } from '../lib/skills/analyze-video';
 import { createAudio } from '../lib/skills/create-audio';
 import { createMusic } from '../lib/skills/create-music';
@@ -259,31 +258,6 @@ Tips:
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP write_video_script error]', msg);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
-      }
-    },
-  );
-
-  server.tool(
-    'makaron_retake_video',
-    'Replace a numeric interval in one video and automatically return the complete video. Original audio and total duration are preserved. Poll makaron_get_video_status with the root taskId; do not submit again to retry delivery. Seconds use the original source timebase.',
-    {
-      video_url: z.string().url(),
-      start: z.number().nonnegative(),
-      end: z.number().positive(),
-      prompt: z.string().min(1),
-      model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
-      project_id: z.string().uuid().optional(),
-      request_id: z.string().uuid().optional(),
-    },
-    async ({ video_url, start, end, prompt, model, project_id, request_id }) => {
-      try {
-        if (!options?.userId || !options.submitVideo) throw new Error('Retake requires authenticated hosted video submission.');
-        const result = await options.submitVideo({ images: [], script: prompt, videoUrl: video_url,
-          retake: { start, end }, videoModel: model, projectId: project_id, billingRequestId: request_id,
-        }, 'makaron_retake_video');
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], isError: !result.success };
-      } catch (e) {
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ success: false, message: e instanceof Error ? e.message : String(e) }) }], isError: true };
       }
     },
   );

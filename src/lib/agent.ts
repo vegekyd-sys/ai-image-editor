@@ -518,7 +518,6 @@ export async function* runMakaronAgent(
       'web_search',
       'generate_image',
       'generate_animation',
-      'retake_video',
       'upscale_video',
       'transcribe_audio',
       'rotate_camera',
@@ -982,8 +981,6 @@ export async function* runMakaronAgent(
               kind === 'voiceover' ? 'agent.status.generatingVoiceover' : 'agent.status.generatingAudio',
             ),
           };
-        } else if (event.toolName === 'inspect_retake') {
-          yield { type: 'status', text: translate(responseLocale, 'agent.status.understandingRetake') };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number; frames?: number[]; timestamps?: number[] };
           const batch = input.frames?.length ? input.frames.join(', ') : input.timestamps?.length ? input.timestamps.map(value => `${value}s`).join(', ') : '';
@@ -991,7 +988,7 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: translate(responseLocale, 'agent.status.capturingFrame', hint) };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingImage') };
-        } else if (event.toolName === 'generate_animation' || event.toolName === 'retake_video') {
+        } else if (event.toolName === 'generate_animation') {
           yield { type: 'status', text: translate(responseLocale, 'status.submittingVideo') };
         } else if (event.toolName === 'upscale_video') {
           yield { type: 'status', text: translate(responseLocale, 'status.videoUpscaling') };
@@ -1243,7 +1240,7 @@ export async function* runMakaronAgent(
         }
 
         // Emit preview_frame_captured so frontend shows the screenshot in CUI
-        if (toolName === 'preview_frame' || toolName === 'inspect_retake') {
+        if (toolName === 'preview_frame') {
 
           const toolOutput = (event as any).output as { workspaceUrl?: string } | undefined;
           const wsUrl = toolOutput?.workspaceUrl;

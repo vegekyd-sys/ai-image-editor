@@ -81,10 +81,7 @@ async function pollVideoProvider(taskId: string, userId?: string): Promise<{ tas
   const isSyncLipsync = taskId.startsWith('sync3-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
-  if (taskId.startsWith('video-retake-')) {
-    const { advanceVideoRetake } = await import('@/lib/video-retake');
-    return { taskId, ...await advanceVideoRetake(taskId, userId) };
-  } else if (taskId.startsWith('video-pipeline-')) {
+  if (taskId.startsWith('video-pipeline-')) {
     const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline');
     return { taskId, ...await advanceVideoPipeline(taskId, userId) };
   } else if (isMuleRouter) {
@@ -593,12 +590,6 @@ export async function GET(
                 const taskId = videoMeta.taskId as string;
                 const pollResult = await pollVideoProvider(taskId, ownerUserId);
                 if (pollResult.status === 'completed' && pollResult.videoUrl) {
-                  if (taskId.startsWith('video-retake-') && isPermanentUrl(pollResult.videoUrl)) {
-                    // Retake has already published its immutable full video and settled billing.
-                    v.status = 'completed';
-                    v.url = pollResult.videoUrl;
-                    return;
-                  }
                   const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl, ...(pollResult.stage ? { pipelineStage: pollResult.stage, baseVideoUrl: pollResult.baseVideoUrl, enhancementStatus: pollResult.enhancementStatus, requestedResolution: pollResult.requestedResolution, resolution: pollResult.actualResolution ?? videoMeta.resolution } : {}) };
                   await admin.from('snapshots')
                     .update({ video_meta: updatedMeta })

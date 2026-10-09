@@ -29,9 +29,6 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
   }
 
   try {
-    if (taskId.startsWith('video-retake-')) {
-      return await (await import('../video-retake')).advanceVideoRetake(taskId, input.userId);
-    }
     if (taskId.startsWith('video-pipeline-')) {
       const { advanceVideoPipeline } = await import('../video-upscale-pipeline');
       return await advanceVideoPipeline(taskId, input.userId);

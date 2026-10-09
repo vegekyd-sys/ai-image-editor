@@ -779,15 +779,6 @@ textarea {
     0 12px 32px rgba(0,0,0,0.26);
 }
 
-.mkr-retake-pill[data-active="false"]::after,
-.mkr-retake-pill[data-active="false"] .mkr-retake-side-action::after {
-  background: linear-gradient(115deg, transparent, rgba(255,255,255,0.055), transparent);
-}
-
-.mkr-retake-pill[data-active="false"] .mkr-retake-side-action {
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.075);
-}
-
 .mkr-liquid-nav {
   position: fixed;
   left: 50%;

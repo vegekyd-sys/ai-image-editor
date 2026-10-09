@@ -4,13 +4,6 @@ import path from 'path'
 const openAISdkOverride = process.env.OPENAI_SDK_TEST_OVERRIDE?.trim()
 
 export default defineConfig({
-  plugins: [{
-    name: 'markdown-prompts',
-    enforce: 'pre',
-    transform(source, id) {
-      if (id.endsWith('.md')) return { code: `export default ${JSON.stringify(source)}`, map: null }
-    },
-  }],
   test: {
     environment: 'happy-dom',
     globals: true,

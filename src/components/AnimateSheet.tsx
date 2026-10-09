@@ -28,15 +28,9 @@ interface AnimateSheetProps {
 export default function AnimateSheet({
   snapshots, projectId, onClose, onOpenCUI, onGeneratePrompt, onPreviewImage,
   animationState, onStateChange, isDesktop, desktopWidth = 500,
-  mode = 'create', detailAnimation: initialDetailAnimation, onRetry,
+  mode = 'create', detailAnimation, onRetry,
 }: AnimateSheetProps) {
   const { t } = useLocale();
-  const liveMeta = snapshots.find(snapshot => snapshot.id === initialDetailAnimation?.id)?.videoMeta;
-  const detailAnimation = initialDetailAnimation && liveMeta
-    ? { ...initialDetailAnimation, status: liveMeta.status, duration: liveMeta.duration,
-        retake: liveMeta.retake, videoModel: liveMeta.model, videoResolution: liveMeta.resolution,
-        prompt: liveMeta.prompt, error: liveMeta.error, videoUrl: liveMeta.videoUrl }
-    : initialDetailAnimation;
   const isDetail = mode === 'detail' && !!detailAnimation;
   const { prompt, userHint, status, error, duration, videoModel = getDefaultVideoModelId(), videoResolution = 'auto' } = animationState;
   const videoModels = getVideoModels();
@@ -172,8 +166,6 @@ export default function AnimateSheet({
     : (detailAnimation?.snapshotUrls ?? []);
   const detailPrompt = detailAnimation?.prompt ?? '';
   const detailDuration = detailAnimation?.duration;
-  const editRange = detailAnimation?.retake;
-  const seconds = (value: number) => Number(value.toFixed(2));
   const detailResolution = detailAnimation?.videoModel && detailAnimation.videoModel !== 'upload'
     ? normalizeVideoResolution(detailAnimation.videoModel, detailAnimation.videoResolution ?? 'auto')
     : null;
@@ -362,24 +354,8 @@ export default function AnimateSheet({
                   borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
                   fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
                 }}>
-                  {detailDuration != null
-                    ? editRange ? t('animate.fullVideoDuration', seconds(detailDuration)) : t('animate.seconds', Math.round(detailDuration))
-                    : t('animate.smart')}
+                  {detailDuration != null ? t('animate.seconds', Math.round(detailDuration)) : t('animate.smart')}
                 </div>
-                {editRange && (
-                  <div style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
-                    borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
-                    fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)' }}>
-                    {t('animate.localEditRange', seconds(editRange.start), seconds(editRange.end), seconds(editRange.end - editRange.start))}
-                  </div>
-                )}
-                {editRange?.generationDuration != null && (
-                  <div style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
-                    borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
-                    fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)' }}>
-                    {t('animate.generatedDuration', seconds(editRange.generationDuration))}
-                  </div>
-                )}
                 {detailResolution && (
                 <div style={{
                   padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
@@ -416,12 +392,6 @@ export default function AnimateSheet({
                     : t('video.abandoned')}
                 </div>
               </div>
-
-              {editRange?.inputDuration != null && editRange.inputDuration > 0 && (
-                <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>
-                  {t('animate.inputDuration', seconds(editRange.inputDuration))}
-                </div>
-              )}
 
               {/* Error reason for failed videos */}
               {detailAnimation?.status === 'failed' && detailAnimation.error && (
