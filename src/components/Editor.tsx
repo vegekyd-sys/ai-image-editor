@@ -416,6 +416,14 @@ export default function Editor({
           updated = { ...updated, videoMeta: fresh.videoMeta };
           changed = true;
         }
+        // Accepted generation prompts can arrive after the cached image itself.
+        if (fresh.metadata) {
+          const metadata = { ...updated.metadata, ...fresh.metadata };
+          if (JSON.stringify(metadata) !== JSON.stringify(updated.metadata)) {
+            updated = { ...updated, metadata };
+            changed = true;
+          }
+        }
         return updated;
       });
       return changed ? dedupeVideoSnapshots(merged) : prev;
