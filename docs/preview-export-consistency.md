@@ -114,3 +114,11 @@ style: {
 升级验收必须使用真实 Lambda，不能用本机通过代替：比较 19 秒、24 秒转场和其他代表帧；下载完整 MP4，核对时长、音轨与画面，并保留旧输出供对照。
 
 `public/remotion-runtime.json` 的 `remotionVersion` 必须与应用依赖一致；导出 fingerprint 也包含版本，避免复用升级前的错误成片。发布时将 `REMOTION_LAMBDA_SERVE_URL`、`REMOTION_LAMBDA_FUNCTION_NAME` 与可选 `REMOTION_LAMBDA_RENDERER_FUNCTION_NAME` 一起切到兼容的 site/function，并保留旧值供回滚。可用 `npm run ops:remotion-lambda-provision -- --site-name <isolated-name> --with-function` 准备候选；该命令只创建版本化资源，不会自动更新生产配置。
+
+### 2026-10-09 候选验收
+
+`codex/remotion-export-parity` 使用原 @15 代码、props、素材和 60 秒时间线，未修改项目记录。隔离的 4.0.527 site/function 完成真实 Lambda MP4（render ID `s07mq59y03`，58,928,585 bytes），无渲染错误；视频为 1920×1080、30fps、1800 帧，保留 AAC 音轨。已查看成片的 1、12、19、24、24.3、28、36、48、58 秒：旧 @17 的横向重复条带在 19/24 秒消失，其余抽查帧正常。
+
+本机 4.0.527 另渲染 frame 570/720 作为对照，构图正常；本机与 Lambda 仍有平台字体栅格化差异，本次验收针对重复条带，不声称逐像素相同。浏览器 `/moveable-test` 实际拖拽 `(111,55)` 并缩放 `1.20×` 后 PNG 导出，位移和尺寸与 Player 保持一致，迁移后的 translate 补丁生效。
+
+相关测试 25 files / 133 tests 通过；服务器版本入口调整后追加的 4 files / 28 tests 通过（与前者有重叠），TypeScript、改动文件 ESLint、Next.js production build 和服务器依赖 trace 检查通过。此记录仅代表隔离候选验收，尚未合并或切换生产配置；原项目 @17 仍是旧输出，发布后需重新导出。
