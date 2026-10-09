@@ -135,19 +135,21 @@ export async function assembleRetake(source: Buffer, patch: Buffer, plan: Retake
     const replacementFrames = endFrame - startFrame
     if (replacementFrames <= 0) throw new Error('Retake interval is shorter than one source frame.')
     const contextLength = plan.contextEnd - plan.contextStart
-    const fittedDuration = contextLength
     const offset = plan.patchOffset
     const scale = `scale=${meta.width}:${meta.height}:force_original_aspect_ratio=decrease,pad=${meta.width}:${meta.height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p`
     // Selection output: fit the entire generated action, retaining its actual
     // first/last frames even when provider audio outlasts the video track.
     const generatedFrames = generated.frameCount || Math.round(generated.duration * (generated.fps || fps))
-    const selectionPatch = replacementFrames === 1
-      ? `[1:v]${scale},trim=end_frame=1,setpts=PTS-STARTPTS[p]`
-      : replacementFrames === 2
-      ? `[1:v]${scale},split=2[pf][pl];[pf]trim=end_frame=1,setpts=PTS-STARTPTS[pfirst];[pl]trim=start_frame=${generatedFrames - 1},trim=end_frame=1,setpts=PTS-STARTPTS[plast];[pfirst][plast]concat=n=2:v=1:a=0,setpts=N/(${fps}*TB)[p]`
-      : `[1:v]${scale},split=3[pf][pm][pl];[pf]trim=end_frame=1,setpts=PTS-STARTPTS[pfirst];[pm]setpts=${(replacementFrames - 1) / fps / Math.max(1, generatedFrames - 1)}*N/TB,fps=${fps},trim=start_frame=1:end_frame=${replacementFrames - 1},setpts=PTS-STARTPTS[pmid];[pl]trim=start_frame=${generatedFrames - 1},trim=end_frame=1,setpts=PTS-STARTPTS[plast];[pfirst][pmid][plast]concat=n=3:v=1:a=0,setpts=N/(${fps}*TB)[p]`
+    const fitPatch = (frames: number, label: string) => frames === 1
+      ? `[1:v]${scale},trim=end_frame=1,setpts=PTS-STARTPTS[${label}]`
+      : frames === 2
+      ? `[1:v]${scale},split=2[pf][pl];[pf]trim=end_frame=1,setpts=PTS-STARTPTS[pfirst];[pl]trim=start_frame=${generatedFrames - 1},trim=end_frame=1,setpts=PTS-STARTPTS[plast];[pfirst][plast]concat=n=2:v=1:a=0,setpts=N/(${fps}*TB)[${label}]`
+      : `[1:v]${scale},split=3[pf][pm][pl];[pf]trim=end_frame=1,setpts=PTS-STARTPTS[pfirst];[pm]setpts=${(frames - 1) / fps / Math.max(1, generatedFrames - 1)}*N/TB,fps=${fps},trim=start_frame=1:end_frame=${frames - 1},setpts=PTS-STARTPTS[pmid];[pl]trim=start_frame=${generatedFrames - 1},trim=end_frame=1,setpts=PTS-STARTPTS[plast];[pfirst][pmid][plast]concat=n=3:v=1:a=0,setpts=N/(${fps}*TB)[${label}]`
+    const contextFrames = Math.max(1, Math.round(contextLength * fps))
+    const offsetFrames = Math.round(offset * fps)
     const graph = [
-      plan.outputMode === 'selection' ? selectionPatch : `[1:v]setpts=${fittedDuration / generated.duration}*(PTS-STARTPTS),fps=${fps},${scale},trim=start=${offset},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=1,trim=end_frame=${replacementFrames},setpts=PTS-STARTPTS[p]`,
+      plan.outputMode === 'selection' ? fitPatch(replacementFrames, 'p')
+        : `${fitPatch(contextFrames, 'pc')};[pc]trim=start_frame=${offsetFrames}:end_frame=${offsetFrames+replacementFrames},setpts=N/(${fps}*TB)[p]`,
     ]
     // Exact user-supplied final images are assets, not text for a model to
     // redraw. Settle gently onto the fitted original during the closing beat.
@@ -164,7 +166,8 @@ export async function assembleRetake(source: Buffer, patch: Buffer, plan: Retake
     if (startFrame > 0) { graph.push(`[0:v]fps=${fps},trim=end_frame=${startFrame},setpts=PTS-STARTPTS,setsar=1,format=yuv420p[b]`); legs.push('[b]') }
     legs.push(patchLeg)
     if (endFrame < totalFrames) { graph.push(`[0:v]fps=${fps},trim=start_frame=${endFrame}:end_frame=${totalFrames},setpts=PTS-STARTPTS,setsar=1,format=yuv420p[a]`); legs.push('[a]') }
-    graph.push(`${legs.join('')}concat=n=${legs.length}:v=1:a=0[v]`)
+    // Give the frame-fitted patch and untouched source legs one CFR clock.
+    graph.push(`${legs.join('')}concat=n=${legs.length}:v=1:a=0,setpts=N/(${fps}*TB)[v]`)
     const output = join(dir, 'final.mp4')
     await exec(ffmpeg, ['-v', 'error', '-y', '-protocol_whitelist', 'file,pipe', '-i', join(dir, 'source.mp4'), '-protocol_whitelist', 'file,pipe', '-i', join(dir, 'patch.mp4'),
       ...(finalImage ? ['-loop','1','-framerate',String(fps),'-i',join(dir,'ending.png')] : []),

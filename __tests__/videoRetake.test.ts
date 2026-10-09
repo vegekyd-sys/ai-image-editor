@@ -133,4 +133,22 @@ describe('Retake interval contract', () => {
       expect(audioHash(final)).toBe(audioHash(src));
     } finally { rmSync(dir, { recursive: true, force: true }); }
   }, 30_000);
+  it('fits context video frames independently of a longer provider audio tail', async () => {
+    const dir=mkdtempSync(join(tmpdir(),'retake-context-clock-'));
+    const ffmpeg=await findFfmpeg();
+    const run=(args:string[])=>execFileSync(ffmpeg,['-v','error','-y',...args],{maxBuffer:8*1024*1024});
+    try {
+      const src=join(dir,'source.mp4'),patch=join(dir,'patch.mp4'),final=join(dir,'final.mp4');
+      run(['-f','lavfi','-i','testsrc2=s=320x240:r=24:d=6','-c:v','libx264',src]);
+      run(['-f','lavfi','-i','color=blue:s=320x240:r=24:d=4.708333','-f','lavfi','-i','sine=frequency=440:duration=4.736','-c:v','libx264','-c:a','aac',patch]);
+      const result=await assembleRetake(readFileSync(src),readFileSync(patch),planRetake({start:0,end:5},6,'seedance-2.5-eco'));
+      const {writeFileSync}=await import('node:fs');writeFileSync(final,result.bytes);
+      expect(result.meta.frameCount).toBe(144);
+      const lastFrame=(file:string)=>run(['-i',file,'-vf','select=eq(n\\,120)','-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1']);
+      const a=lastFrame(src),b=lastFrame(final);
+      expect(b.length).toBe(a.length);
+      const meanError=a.reduce((sum,v,i)=>sum+Math.abs(v-b[i]),0)/a.length;
+      expect(meanError).toBeLessThan(3);
+    } finally {rmSync(dir,{recursive:true,force:true});}
+  },30_000);
 });
