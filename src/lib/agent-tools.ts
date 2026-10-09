@@ -2210,16 +2210,17 @@ function createGenerateAnimationTool(
     });
 }
 
-function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
+function createInspectRetakeTool(scope: AgentToolFactoryScope) {
+  const { ctx, runtime } = scope;
   return tool({
-    description: 'Inspect the actual selected video interval BEFORE expanding a Retake prompt. Downloads one source and extracts up to 8 labeled frames: denser samples inside the selection plus contextual boundaries. Returns pixels (or verified vision analysis), a signed inspection_id, source/output mapping and a shot timing budget. Use the same media_index/start/end/model for retake_video. ' + RETAKE_SCENE_READING + '\nIf inspection fails, do not generate blindly.',
+    description: 'Inspect the actual selected video interval BEFORE expanding a Retake prompt. Extracts up to 8 labeled frames and automatically transcribes source speech when an audio track exists, reusing the timeline ASR cache. Returns pixels (or verified vision analysis), selected speech with source/output word timecodes, separate adjacent speech, audio availability, a signed inspection_id, source/output mapping and a shot timing budget. Do not call transcribe_audio again for this same evidence. Use the same media_index/start/end/model for retake_video. ' + RETAKE_SCENE_READING + '\nIf visual inspection fails, do not generate blindly. If ASR is unavailable, do not claim speech understanding or precise synchronization.',
     inputSchema: z.object({
       media_index: z.number().int().positive(),
       start: z.number().nonnegative(),
       end: z.number().positive(),
       model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
     }),
-    execute: async ({ media_index, start, end, model }) => {
+    execute: async ({ media_index, start, end, model }, options) => {
       if (!ctx.userId || !ctx.projectId) return { error: 'Retake inspection requires an authenticated project.' };
       try {
         validateRetakeRange({ start, end });
@@ -2234,7 +2235,16 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
         const bytes = await readProviderImage(source.videoUrl, 512 * 1024 * 1024, {mediaType:'video'});
         const meta = await inspectRetakeSource(bytes);
         const plan = planRetake({ start, end }, meta.duration!, model);
-        const sampled = await extractRetakeInspectionFrames(bytes, plan, meta.fps!);
+        const { inspectRetakeAudio } = await import('./video-retake-audio');
+        const [sampled, audioEvidence] = await Promise.all([
+          extractRetakeInspectionFrames(bytes, plan, meta.fps!),
+          inspectRetakeAudio({ hasAudio: !!meta.audioCodec, plan,
+            transcribe: async () => {
+              const result = await createTranscribeAudioTool(scope).execute!({ media_index }, options);
+              if (Symbol.asyncIterator in result) throw new Error('ASR did not return a final transcript.');
+              return result;
+            } }),
+        ]);
         const sheet = await createContactSheet(sampled.frames.map((image, index) => ({ image,
           label: `#${index + 1} ${sampled.timestamps[index].toFixed(2)}s : ${sampled.timestamps[index] < start || sampled.timestamps[index] >= end ? 'JOIN CONTEXT' : retakeOutputTime(plan, sampled.timestamps[index]).toFixed(2) + 's'}`,
         })), meta.width!, meta.height!, { columns: 4 });
@@ -2271,7 +2281,7 @@ function createInspectRetakeTool({ ctx, runtime }: AgentToolFactoryScope) {
           outputSelection: { start: retakeOutputTime(plan, start), end: retakeOutputTime(plan, end) },
           sourceToOutputScale: plan.generationDuration / (plan.outputMode === 'selection' ? end - start : plan.contextEnd - plan.contextStart),
           promptPlanning: retakePromptPlanning(plan),
-          analysis, visualEvidence, base64Data: sheet.toString('base64'), mimeType: 'image/jpeg', workspacePath, workspaceUrl };
+          audioEvidence, analysis, visualEvidence, base64Data: sheet.toString('base64'), mimeType: 'image/jpeg', workspacePath, workspaceUrl };
       } catch (error) {
         return { error: `Retake inspection failed: ${error instanceof Error ? error.message : String(error)}. No video generation was submitted.` };
       }
@@ -2617,7 +2627,8 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             sourceRange = sourceRangeFromVideoMeta(videoMeta);
             const cached = videoMeta?.transcript as VolcengineAsrTranscript | undefined;
             if (
-              cached?.text
+              cached && typeof cached.text === 'string' && Array.isArray(cached.utterances)
+              && (!cached.sourceUrl || cached.sourceUrl === resolvedUrl || cached.sourceUrl === videoMeta?.videoUrl)
               && !force_refresh
               && isAsrTranscriptCacheCompatible(cached, language)
             ) {

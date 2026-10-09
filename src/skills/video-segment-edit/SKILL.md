@@ -34,6 +34,17 @@ Seedance route), and native Seedance 2.5 when explicitly requested.
 
 For a scene/action description, use analyze_video and preview_frame to locate the actual moment, then inspect and edit its bounded interval. Ask only if multiple scenes match or the requested scope is unclear.
 
+`inspect_retake` automatically includes cached or newly measured ASR when the
+source has audio. Read the selected speech together with the frame evidence;
+use its output-time word/utterance cues to plan visual changes against the
+retained original narration. Adjacent speech belongs to surrounding footage,
+and untimed text is not a precise cue. Do not transcribe the same source again.
+No recognized speech does not imply silence; ASR does not measure music beats,
+effects or lip synchronization. If unavailable speech is essential to the edit,
+resolve that evidence before submitting rather than inventing timing. This
+workflow preserves original audio; explain any conflict between a requested
+visual change and retained dialogue instead of claiming the dialogue changed.
+
 Plan from the footage and the user's intent. Decide which content, action, framing or presentation must change, and what continuity to retain. A persistent change can use one continuous beat; additional temporal phases, shots or transitions must serve the desired result. There is no standard multi-camera sequence and no compulsory intermediate-image generation. Suitable supplied images take priority; an optional new keyframe is useful only when this particular edit needs a missing visual state. Camera changes can be attempted directly with an inspected, concrete prompt; choose an optional visual control when it would improve the result.
 
 Interpret image roles from the request. A content reference to integrate into the scene belongs in reference_media_indices. An explicitly chosen final frame of the whole video belongs in end_frame_media_index when supported, with a range extending to the source end; reuse that actual image instead of generating a substitute. A desired intermediate state may use an optional middle-frame control. Read supplied images and honor their roles; do not treat creative references as screenshots to locate. Distinguish content phases from camera changes when writing camera_change. Composition serves explicit fixed layers/editability or deterministic text/layout; do not invent an editable timeline for a generative scene edit.
@@ -202,7 +213,8 @@ a delivery retry must not create another provider generation.
 ## Completion
 
 Confirm the delivered complete video is playable and the requested change is
-visible in the replaced interval, with coherent opening/ending action. Report the
+visible in the replaced interval, with coherent opening/ending action and visual
+meaning/timing consistent with retained narration where relevant. Report the
 actual replaced seconds and any failure honestly. Provider completion alone is
 not successful editing. Precise cuts, subtitles, audio replacement and extension
 use their dedicated tools, also from natural-language instructions.
