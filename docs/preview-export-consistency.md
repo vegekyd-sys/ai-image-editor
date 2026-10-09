@@ -122,3 +122,11 @@ style: {
 本机 4.0.527 另渲染 frame 570/720 作为对照，构图正常；本机与 Lambda 仍有平台字体栅格化差异，本次验收针对重复条带，不声称逐像素相同。浏览器 `/moveable-test` 实际拖拽 `(111,55)` 并缩放 `1.20×` 后 PNG 导出，位移和尺寸与 Player 保持一致，迁移后的 translate 补丁生效。
 
 相关测试 25 files / 133 tests 通过；服务器版本入口调整后追加的 4 files / 28 tests 通过（与前者有重叠），TypeScript、改动文件 ESLint、Next.js production build 和服务器依赖 trace 检查通过。此记录仅代表隔离候选验收，尚未合并或切换生产配置；原项目 @17 仍是旧输出，发布后需重新导出。
+
+### 2026-10-09 正式站与共享 Preview 发布验收
+
+修复已合入并推送 dev（`7f0eaae5`）。本次正式站按上一已验证生产版本加本修复发布，源码为 `7760ccbc`，部署 `ai-image-editor-2iz67he9v-vegekyd-sys-projects.vercel.app`；dev 中其他视频局部编辑改动未随本次正式站发布。共享 `ai-image-editor-git-dev-vegekyd-sys-projects.vercel.app` 已绑定重新部署的 dev（`ai-image-editor-672wmpr3y-vegekyd-sys-projects.vercel.app`）。Production、共享 Preview 与本机三个 Remotion 运行时变量均同步到 4.0.527 的 function/site；旧值和旧资源保留供回滚。
+
+正式站用 registry 新取回的 CLI 0.16.0 对原 @15 执行真实 `materialize --profile source --publish`，完成 job `cf2466f8-551d-4adc-8300-44e2cece00db`，发布为原项目 **@18**。共享 Preview 另有独立 job `80c1ca78-3dcf-4167-aaf7-d0e08be7d970`，不发布到时间线。两者任务记录均确认调用 `remotion-render-4-0-527-mem10240mb-disk5120mb-900sec`，完整 MP4 为 1920×1080、30fps、1800 帧，保留 AAC 音轨。实际正式站播放器和两份 MP4 的 19/24 秒横条消失，24.3 秒转场正常；正式站另抽查 1/12/36/48/58 秒。旧 @16/@17 仍保留，原 @15 未修改。
+
+合并后的 dev 全量 2332 tests 和仅修复生产版本全量 2181 tests 分别通过（两组有重叠），TypeScript、CLI 测试、lint 与生产/Preview 云端构建、服务器 trace 检查通过；两边健康检查各 12 healthy / 0 unhealthy。本次 CLI API 合同未变，npm `latest` 保持 0.16.0；registry tarball SHA-1 为 `7139cd7c44acf96c19c18a8af6f82f8c6aae8d1f`，7 个打包文件与已接受生产 CLI 逐字节一致，真实 materialize 验收通过，无需新发包。
