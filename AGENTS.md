@@ -6,6 +6,8 @@ Makaron 是图片、视频、音乐与动态设计产品。用中文协作；只
 
 较大代码/运行时实验用独立 worktree，保留他人改动；设计换方向前保留对比版本。执行和授权沿用全局规则。媒体相关改动检查实际可查看/播放的产物，发布按已有 release 流程验收并报告实际完成阶段。
 
+每次发布都检查 CLI 与 NPM 是否跟上已上线能力，包括模型、参数、help、README 和 bundled Skill；涉及更新时同步发包并验证 registry 全新安装，不能把网站上线当成 CLI 发布完成。步骤见 `docs/makaron-release-checklist.md` 的 CLI Publish。
+
 | 任务 | 入口及关系 |
 |---|---|
 | 编辑器状态与交互 | `src/components/Editor.tsx` 组织 GUI/CUI、消息与 snapshots；持久化入口 `src/hooks/useProject.ts` |
