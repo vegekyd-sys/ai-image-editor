@@ -221,7 +221,7 @@ export default function ImageCanvas({
     value: ImageTransparency;
   } | null>(null);
   const imageLoaded = Boolean(displayImage) && loadedImageSource === displayImage;
-  const imageTransparency = transparencyResult?.source === displayImage
+  const imageTransparency = transparencyResult !== null && transparencyResult.source === displayImage
     ? transparencyResult.value
     : (displayImage ? getCachedImageTransparency(displayImage) : undefined);
 
