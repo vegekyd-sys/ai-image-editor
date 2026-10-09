@@ -11,7 +11,7 @@ import { ImageCapabilityError, planImageGeneration } from '../image-model-capabi
 export interface EditImageInput {
   editPrompt: string;
   midjourney?: Omit<MidjourneyRequest, 'prompt' | 'aspectRatio' | 'imageUrls'>;
-  onMidjourneyReceipt?: (task: MidjourneyTask) => Promise<void>;
+  onMidjourneyReceipt?: (task: MidjourneyTask, request: MidjourneyRequest) => Promise<void>;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   aspectRatio?: string;
   imageResolution?: string;

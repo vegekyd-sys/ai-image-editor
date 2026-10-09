@@ -19,7 +19,7 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
   try {
     const result = await backend.generate(request);
     if (!result?.image) throw new Error(`${model} returned no image. Provider outcome may be unknown; no automatic retry or model fallback.`);
-    return { image: result.image, images: result.images, taskId: result.taskId, model, fallbackUsed: false, adjustments, usage: result.usage, provider: result.provider ?? result.usage?.provider };
+    return { image: result.image, images: result.images, taskId: result.taskId, model, fallbackUsed: false, adjustments: [...adjustments, ...(result.adjustments ?? [])], usage: result.usage, provider: result.provider ?? result.usage?.provider };
   } catch (error) {
     if (model === 'qwen-spicy') throw error instanceof SpicyImageRequestError ? error
       : new SpicyImageRequestError(error instanceof Error ? error.message : 'Qwen Spicy request outcome unknown.');

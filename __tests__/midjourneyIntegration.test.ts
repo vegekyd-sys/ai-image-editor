@@ -31,10 +31,11 @@ describe('Midjourney capability boundaries and full batches', () => {
     expect(result.images).toHaveLength(4);
     expect(read).toHaveBeenCalledTimes(4);
   });
-  it('does not publish a partial or undecodable batch, keeping its task ID', async () => {
+  it('keeps moderated candidate counts and does not publish an undecodable batch', async () => {
     const read = vi.fn(async () => 'image');
-    await expect(collectMidjourneyBatch({ ...complete, images: complete.images.slice(0, 3) }, 4, { get: vi.fn() }, read)).rejects.toMatchObject({ taskId: 'task-accepted' });
-    expect(read).not.toHaveBeenCalled();
+    const partial = await collectMidjourneyBatch({ ...complete, images: complete.images.slice(0, 3) }, 4, { get: vi.fn() }, read);
+    expect(partial.images).toHaveLength(3);
+    expect(read).toHaveBeenCalledTimes(3);
     await expect(collectMidjourneyBatch(complete, 4, { get: vi.fn() }, async () => { throw new Error('Corrupt image'); })).rejects.toMatchObject({ taskId: 'task-accepted' });
   });
   it('keeps the accepted task on timeout and never submits a replacement', async () => {

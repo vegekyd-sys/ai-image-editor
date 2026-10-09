@@ -42,7 +42,7 @@ export async function collectMidjourneyBatch(
       catch { if (++readFailures >= 3) throw new Error('Task query unavailable.'); }
     }
     if (task.status !== 'completed') throw new Error(`Provider failed${task.errorCode ? ` (${task.errorCode})` : ''}.`);
-    if (task.images.length !== expected) throw new Error(`Incomplete batch: expected ${expected}, received ${task.images.length}.`);
+    if (!task.images.length || task.images.length > expected) throw new Error(`Incomplete batch: expected ${expected}, received ${task.images.length}.`);
     if (task.providerCostUsd === undefined || task.providerCostUsd <= 0) throw new Error('Missing provider cost.');
     const images: string[] = [];
     for (const item of task.images) images.push(await readImage(item.url));
@@ -68,11 +68,13 @@ export const midjourneyBackend: ModelBackend = {
     buildMidjourneyRequest(request);
     const client = new MidjourneyClient();
     const receipt = await client.submit(request);
-    try { await req.onMidjourneyReceipt?.(receipt); }
+    try { await req.onMidjourneyReceipt?.(receipt, request); }
     catch { throw new MidjourneyRequestError('Accepted Midjourney receipt could not be persisted. Do not resubmit.', 'unknown', receipt.taskId); }
     const { task, images } = await collectMidjourneyBatch(receipt, request.speed === 'draft' ? 24 : 4, client);
     console.log(`[mj-v8.2] provider=evolink task=${task.taskId} candidates=${images.length} costUsd=${task.providerCostUsd} promptCostUsd=${prepared.cost}`);
-    return { image: images[0], images, taskId: task.taskId, provider: 'evolink', usage: {
+    return { image: images[0], images, taskId: task.taskId, provider: 'evolink',
+      adjustments: images.length < (request.speed === 'draft' ? 24 : 4) ? [`The completed provider batch returned ${images.length} of ${request.speed === 'draft' ? 24 : 4} expected candidates. Kept every available image; no replacement generation was submitted.`] : [],
+      usage: {
       modelId: 'mj-v8.2', inputTokens: prepared.usage.inputTokens ?? 0,
       outputTokens: prepared.usage.outputTokens ?? 0, provider: 'evolink',
       providerCostUsd: task.providerCostUsd! + prepared.cost,

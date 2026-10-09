@@ -11,7 +11,7 @@ export type ImageBackground = 'auto' | 'opaque' | 'transparent';
 
 export interface GenerateImageRequest {
   image?: string;           // input image (URL/base64). Missing = text-to-image
-  prompt: string;           // English editPrompt
+  prompt: string;           // model contract owns scene/context/edit preparation
   model?: string;          // explicit model preference; unknown IDs use Auto
   category?: string;        // tip category (for auto-routing)
   aspectRatio?: string;
@@ -23,7 +23,7 @@ export interface GenerateImageRequest {
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)
   midjourney?: Omit<import('../midjourney').MidjourneyRequest, 'prompt' | 'aspectRatio' | 'imageUrls'>;
   /** Persist accepted MJ receipt before polling; server-side only. */
-  onMidjourneyReceipt?: (task: import('../midjourney').MidjourneyTask) => Promise<void>;
+  onMidjourneyReceipt?: (task: import('../midjourney').MidjourneyTask, request: import('../midjourney').MidjourneyRequest) => Promise<void>;
   isNsfw?: boolean;         // project-level NSFW flag — skip Gemini entirely when true
 
 }
@@ -53,7 +53,7 @@ export interface GenerateImageResult {
 export interface ModelBackend {
   id: ModelId;
   canHandle(req: GenerateImageRequest): boolean;
-  generate(req: GenerateImageRequest): Promise<{ image: string | null; images?: string[]; taskId?: string; usage?: TokenUsage; provider?: string }>;
+  generate(req: GenerateImageRequest): Promise<{ image: string | null; images?: string[]; taskId?: string; adjustments?: string[]; usage?: TokenUsage; provider?: string }>;
 }
 
 export const FAL_IMAGE25_IDS = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] as const;

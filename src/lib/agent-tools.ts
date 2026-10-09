@@ -1485,10 +1485,10 @@ function createGenerateImageTool(
         }
         let receiptPath: string | undefined;
         const onMidjourneyReceipt = billingModel === 'mj-v8.2' && ctx.supabase && ctx.userId
-          ? async (task: import('./midjourney').MidjourneyTask) => {
+          ? async (task: import('./midjourney').MidjourneyTask, request: import('./midjourney').MidjourneyRequest) => {
               const { writeFile } = await import('./workspace');
               receiptPath = `${ctx.projectId}/midjourney/${task.taskId}.json`;
-              const saved = await writeFile(receiptPath, JSON.stringify({ model: task.model, taskId: task.taskId, status: task.status, brief: editPrompt, createdAt: new Date().toISOString() }), ctx.supabase, ctx.userId!, 'application/json');
+              const saved = await writeFile(receiptPath, JSON.stringify({ model: task.model, taskId: task.taskId, status: task.status, brief: editPrompt, request, createdAt: new Date().toISOString() }), ctx.supabase, ctx.userId!, 'application/json');
               if (!saved.success) throw new Error('Receipt persistence failed');
             } : undefined;
         const imageStartedAt = Date.now();
