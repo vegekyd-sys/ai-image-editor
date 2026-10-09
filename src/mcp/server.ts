@@ -1,10 +1,9 @@
-import { resolveModelChain } from '../lib/model-router';
+import { formatImageCapabilitiesForAgent, getImageModelCapability, planImageGeneration } from '../lib/image-model-capabilities';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { editImage } from '../lib/skills/edit-image';
-import { IMAGE_MODEL_INPUT_IDS } from '../lib/models/types';
 import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
@@ -97,7 +96,7 @@ export interface McpServerOptions {
     },
   ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
-  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: '1K' | '2K' | '4K'; spicyReachable?: boolean }) => Promise<{ allowed: boolean; message?: string }>;
+  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: string }) => Promise<{ allowed: boolean; message?: string }>;
   /** Called only before a Grok personal-plan request safely falls back to the paid API. */
   onBeforeGrokApiFallback?: (toolName: string, model?: string) => Promise<void>;
 }
@@ -112,49 +111,34 @@ export function createMakaronMcpServer(options?: McpServerOptions) {
     'makaron_edit_image',
     `Edit or generate an image using AI. Supports skill templates for different editing styles.
 
-## Recommended skill + model combinations
+${formatImageCapabilitiesForAgent()}
 
-| Use case | skill | model | Notes |
-|----------|-------|-------|-------|
-| Enhance/beautify/color grade | enhance | (auto) | Qwen Spicy primary, Gemini fallback |
-| Add creative fun elements | creative | (auto) | Gemini handles .md templates well |
-| Exaggerate/surreal transform | wild | (auto) | Gemini handles .md templates well |
-| Add text/captions/titles | captions | (auto) | Gemini handles .md templates well |
-| Text-to-image | (omit) | (auto) | Gemini→Qwen Spicy auto fallback |
-| NSFW/sensitive editing | (omit) | qwen-spicy | Keep it off Gemini; provider may still reject some content |
-| Product/e-commerce/infographic/design/layout/poster/text | (omit) | gpt-image-2.5-flare | Default design image route; preserve the user brief verbatim |
-| Fast lower-cost drafts | (omit) | gemini-lite | Nano Banana 2 Lite for fast 1K image drafts |
-| Qwen Spicy | (omit) | qwen-spicy | MuleRouter model, 1-3 image editing |
-| Wan 2.7 generation/editing | (omit) | wan2.7-image | Fast ~1K output, up to 9 input images; no automatic retries |
-| Not sure | (omit) | (auto) | Auto routing with fallback |
-
-When skill is omitted, editPrompt is sent directly. When skill is set, a structured .md template is injected to guide the AI.
+When skill is set, the caller reads the skill prompt and supplies its instructions in editPrompt.
 Input image can be a local file path (stdio), URL, or base64 data URL. Omit image for text-to-image generation.
-
-IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are fully supported and produce better results.`,
+Generation timing varies; report actual completion. No automatic retry or model switch after a failed/unknown submission.`,
     {
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback. For ordinary edits, use specific English editing instructions'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
-      model: z.enum(IMAGE_MODEL_INPUT_IDS).nullish().describe('Default to gpt-image-2.5-flare for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockups, face-identity restoration after a Gemini edit, and director storyboards. GPT Image 2 and the legacy openai parameter now resolve to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality with no subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; legacy qwen maps to qwen-spicy. Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite; Nano Banana 2.1 = gemini-2.1 (ordinary image default, OpenRouter, up to 14 total input images); classic Nano Banana 2 = gemini. Otherwise omit model for auto routing.'),
+      model: z.string().nullish().describe('Explicit image model preference; otherwise omit for Auto. Unknown IDs use Auto, Flare first. See the generated Image Model Capability table.'),
+      isNsfw: z.boolean().nullish().describe('Caller/Agent-assessed NSFW input; routes directly to Qwen Spicy.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5 supports up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
-      imageResolution: z.enum(['1K', '2K', '4K']).nullish().describe('Nano Banana 2.1 output resolution (default 1K). Supported with automatic routing or model gemini-2.1.'),
+      imageResolution: z.string().nullish().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.5 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
-      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2.5 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
+      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background preference. Set transparent for cutout/alpha assets. Conflicts are resolved to deliver an image; see the capability table.'),
     },
     async (params) => {
       try {
-        const chain = resolveModelChain({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined });
-        if (params.imageResolution && chain[0] !== 'gemini-2.1') return { isError: true, content: [{ type: 'text' as const, text: 'imageResolution requires Nano Banana 2.1.' }] };
-        const imageInputCount = (params.image ? 1 : 0) + (params.referenceImages?.length ?? 0);
+        const plan = planImageGeneration({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined, aspectRatio: params.aspectRatio ?? undefined, imageResolution: params.imageResolution ?? undefined, isNsfw: params.isNsfw ?? undefined });
+        const imageInputCount = (plan.request.image ? 1 : 0) + (plan.request.references?.length ?? 0);
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', chain[0], { imageInputCount, imageResolution: params.imageResolution ?? undefined, spicyReachable: chain.includes('qwen-spicy') });
+          const check = await options.onToolStart('makaron_edit_image', plan.model, { imageInputCount, imageResolution: plan.request.imageResolution });
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
         const image = params.image ? resolveImage(params.image) : undefined;
-        const wrappedPrompt = `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;
+        const wrappedPrompt = getImageModelCapability(plan.model).promptMode === 'context' ? params.editPrompt : `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;
 
         const ctx = {
           currentImage: image,
@@ -166,6 +150,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
             editPrompt: wrappedPrompt,
             skill: params.skill ?? undefined,
             preferredModel: params.model ?? undefined,
+            isNsfw: params.isNsfw ?? undefined,
             aspectRatio: params.aspectRatio ?? undefined,
             imageResolution: params.imageResolution ?? undefined,
             background: params.background ?? undefined,

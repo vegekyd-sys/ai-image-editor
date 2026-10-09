@@ -1153,11 +1153,24 @@ try {
     assert.equal(request.body.params.arguments.imageResolution, '4K');
     assert.equal(request.body.params.arguments.aspectRatio, '4:1');
     const before = requests.length;
-    const invalid = await expectFailure(['edit', '--image-model', 'gemini-2.1', '--image-resolution', '8K', 'A product.']);
-    assert.match(invalid.stderr, /Invalid --image-resolution/);
-    const wrongModel = await expectFailure(['edit', '--image-model', 'gemini-lite', '--image-resolution', '2K', 'A product.']);
-    assert.match(wrongModel.stderr, /requires --image-model gemini-2.1/);
-    assert.equal(requests.length, before);
+    await expectSuccess(['edit', '--image-model', 'gemini-2.1', '--image-resolution', '8K', 'A product.']);
+    await expectSuccess(['edit', '--image-model', 'gemini-lite', '--image-resolution', '2K', 'A product.']);
+    assert.equal(requests.length, before + 2);
+  }
+
+  {
+    await expectSuccess(['edit', '--image-resolution', '2K', '--aspect', '8:1', 'A panoramic banner.']);
+    let request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.model, undefined);
+    assert.equal(request.body.params.arguments.imageResolution, '2K');
+    assert.equal(request.body.params.arguments.aspectRatio, '8:1');
+    await expectSuccess(['edit', '--nsfw', 'Sensitive artwork.']);
+    request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.isNsfw, true);
+    await expectSuccess(['edit', '--image-model', 'future-image-id', '--background', 'transparent', '--aspect', '8:1', 'A banner.']);
+    request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.model, 'future-image-id');
+    assert.equal(request.body.params.arguments.background, 'transparent');
   }
 
   {

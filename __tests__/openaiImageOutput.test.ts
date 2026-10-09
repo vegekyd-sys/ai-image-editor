@@ -24,6 +24,13 @@ async function dataUrl(
 }
 
 describe('GPT Image 2 output normalization', () => {
+  it('preserves an actual 2K transparent PNG with a multi-megabyte base64 payload', async () => {
+    const png = await sharp({ create: { width: 2048, height: 2048, channels: 4, background: { r: 40, g: 110, b: 180, alpha: 0.5 } } }).png({ compressionLevel: 0 }).toBuffer();
+    const input = `data:image/png;base64,${png.toString('base64')}`;
+    expect(input.length).toBeGreaterThan(20_000_000);
+    const output = await normalizeOpenAIImageOutput(input, 'transparent');
+    expect(output === input).toBe(true);
+  });
   it('preserves a PNG with real transparency', async () => {
     const input = await dataUrl('png', 0);
     const output = await normalizeOpenAIImageOutput(input, 'transparent');

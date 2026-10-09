@@ -1,3 +1,4 @@
+import { validateImageModelRequest, getImageModelCapability } from '../image-model-capabilities';
 import sharp from 'sharp';
 import type { GenerateImageRequest, ModelBackend } from './types';
 import { validateProviderImages } from '../provider-image-preflight';
@@ -23,14 +24,15 @@ export function wanImageSize(aspectRatio?: string): string {
   if (!aspectRatio) return '1K';
   const match = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(aspectRatio);
   const ratio = match ? Number(match[1]) / Number(match[2]) : NaN;
-  if (!Number.isFinite(ratio) || ratio < 1 / 8 || ratio > 8) {
+  const contract = getImageModelCapability('wan2.7-image').aspectRatio;
+  if (!Number.isFinite(ratio) || contract.kind !== 'range' || ratio < contract.min || ratio > contract.max) {
     throw new Error('Wan 2.7 aspect ratio must be between 1:8 and 8:1.');
   }
   let width = Math.round(Math.sqrt(921600 * ratio) / 16) * 16;
   let height = Math.round(Math.sqrt(921600 / ratio) / 16) * 16;
   // Alignment must not push an extreme requested ratio outside the API limits.
-  if (width > height * 8) height = Math.ceil(width / 8 / 16) * 16;
-  if (height > width * 8) width = Math.ceil(height / 8 / 16) * 16;
+  if (width > height * contract.max) height = Math.ceil(width / contract.max / 16) * 16;
+  if (height > width / contract.min) width = Math.ceil(height * contract.min / 16) * 16;
   return `${width}*${height}`;
 }
 
@@ -51,12 +53,11 @@ function validateInputImage(image: string): string {
 }
 
 export function buildWanImageRequest(req: GenerateImageRequest) {
-  if (req.background === 'transparent') throw new Error('Wan 2.7 does not support transparent output.');
+  validateImageModelRequest(req, 'wan2.7-image');
   const images = [
     ...(req.image ? [{ url: req.image, role: 'Image 1: base image to edit' }] : []),
     ...(req.references ?? []),
   ];
-  if (images.length > 9) throw new Error('Wan 2.7 supports at most 9 input images, including the base image.');
   // Keep the single-reference prompt unchanged; annotate roles only for multi-image edits.
   const prompt = images.length > 1
     ? `${images.map((ref, i) => `Image ${i + 1}: ${ref.role}`).join('\n')}\n\n${req.prompt}`

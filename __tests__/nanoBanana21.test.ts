@@ -20,7 +20,7 @@ describe('Nano Banana 2.1 OpenRouter contract', () => {
     vi.stubEnv('OPENROUTER_API_KEY', 'test');
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
     await expect(nanoBanana21Backend.generate({ image: 'base', references: Array.from({ length: 14 }, () => ({ url: 'ref', role: 'reference' })), prompt: 'Combine' })).rejects.toThrow('at most 14');
-    await expect(nanoBanana21Backend.generate({ prompt: 'Scene', aspectRatio: '7:3' })).rejects.toThrow('aspect ratio');
+    await expect(nanoBanana21Backend.generate({ prompt: 'Scene', aspectRatio: '7:3' })).rejects.toThrow('aspectRatio=7:3');
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -44,5 +44,16 @@ describe('Nano Banana 2.1 OpenRouter contract', () => {
     else fetch.mockResolvedValue(Response.json({ data: mode === 'empty' ? [] : [{ b64_json: 'aW52YWxpZA==', media_type: 'image/png' }], usage: { prompt_tokens: 1, completion_tokens: 1, ...(mode === 'no-cost' ? {} : { cost: 0.04 }) } }));
     await expect(nanoBanana21Backend.generate({ prompt: 'Scene' })).rejects.toThrow('No automatic retry');
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it('identifies invalid JSON without logging response bodies or repeating the paid POST', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetch = vi.fn().mockResolvedValue(new Response('private image response', { status: 200, headers: { 'content-type': 'text/plain', 'x-request-id': 'diag-1' } }));
+    vi.stubGlobal('fetch', fetch);
+    await expect(nanoBanana21Backend.generate({ prompt: 'private prompt', imageResolution: '4K' })).rejects.toThrow('response JSON');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith('[gemini-2.1] failed', expect.objectContaining({ stage: 'response JSON', status: 200, requestId: 'diag-1', resolution: '4K', errorType: 'SyntaxError' }));
+    expect(JSON.stringify(log.mock.calls)).not.toContain('private');
+    log.mockRestore();
   });
 });

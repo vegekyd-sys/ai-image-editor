@@ -31,6 +31,7 @@ const IOS_CUI_PAN_COMMIT_PX = 86;
 const IOS_CUI_PAN_MIN_DX = 10;
 import { downloadAsset, getDownloadAssetPreview, prepareDownloadAsset, PreparedDownloadCache, trySavePaidDownload, type DownloadAssetParams } from '@/lib/editor/download';
 import { isWatermarkSaveFlowEnabled } from '@/lib/free-media-policy';
+import { trySaveSmallImage } from '@/lib/editor/image-save';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
@@ -213,6 +214,7 @@ export default function Editor({
   const [creditPopupOpen, setCreditPopupOpen] = useState(false);
   const [watermarkCheckout, setWatermarkCheckout] = useState(false);
   const [saveRequest, setSaveRequest] = useState<DownloadAssetParams | null>(null);
+  const [saveNeedsWatermark, setSaveNeedsWatermark] = useState(true);
   const saveAssetCache = useRef<PreparedDownloadCache | null>(null);
   if (!saveAssetCache.current) saveAssetCache.current = new PreparedDownloadCache();
   useEffect(() => () => saveAssetCache.current?.clear(), [projectId]);
@@ -356,7 +358,7 @@ export default function Editor({
   const pendingAnalysisRef = useRef<{ id: string; image: string }[]>([]);
   const lastEditPromptRef = useRef<string | null>(null); // captures editPrompt from generate_image tool calls
   const lastEditInputImagesRef = useRef<string[] | null>(null); // captures input images from generate_image tool calls
-  const isNsfwRef = useRef(false); // NSFW flag — set when Gemini blocks content, session-level
+  const isNsfwRef = useRef(false); // Main Agent NSFW assessment, retained for subsequent turns
   const agentRunIdRef = useRef<string | null>(null); // current run ID from server
   const isAgentActiveRef = useRef(false);
   const [videoRetakeSelection, setVideoRetakeSelection] = useState<{ anim: ProjectAnimation; start: number; end: number } | null>(null);
@@ -3020,7 +3022,19 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [timeline, viewIndex, isViewingVideo, currentSnap?.videoMeta?.videoUrl, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
   const handleDownload = useCallback(async () => {
     const generated = Boolean(currentSnap?.design || currentSnap?.messageId || isGeneratedVideoSnapshot(currentSnap) || draftParentIndexRef.current !== null);
+    if (!isViewingVideo && !currentSnap?.design?.animation) {
+      const watermarkRequired = isWatermarkSaveFlowEnabled() && generated;
+      const params = downloadParams();
+      setSaveNeedsWatermark(watermarkRequired);
+      try {
+        if (!(await trySaveSmallImage(params, saveAssetCache.current!, watermarkRequired))) setSaveRequest(params);
+      } catch {
+        setAgentStatus(t('editor.saveFailed'));
+      }
+      return;
+    }
     if (isWatermarkSaveFlowEnabled() && generated) {
+      setSaveNeedsWatermark(true);
       const params = downloadParams();
       try {
         if (!(await trySavePaidDownload(params, saveAssetCache.current!))) setSaveRequest(params);
@@ -3056,7 +3070,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       if (index < 0) return;
       const snap = snapshots[index];
       const restoredIndex = timelineFromSnap(index, draftParentIndexRef.current);
-      setViewIndex(restoredIndex);setReturningToSave(true);
+      setViewIndex(restoredIndex);setReturningToSave(true);setSaveNeedsWatermark(true);
       setSaveRequest({ ...downloadParams(), viewIndex: restoredIndex,
         isViewingVideo: snap.type === 'video', currentVideoUrl: snap.videoMeta?.videoUrl, currentVideoSize: undefined });
     } catch { sessionStorage.removeItem('mkr_save_checkout'); }
@@ -4529,7 +4543,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       })()}
 
       {saveRequest && <SaveMediaDialog prepare={prepareSave} preview={savePreview} onClose={closeSaveDialog}
-        onSaved={showSaveToast} suspended={creditPopupOpen} returningFromCheckout={returningToSave}
+        onSaved={showSaveToast} suspended={creditPopupOpen} returningFromCheckout={returningToSave} watermarkRequired={saveNeedsWatermark}
         onUpgrade={() => {
           const index = snapFromTimeline(saveRequest.viewIndex, saveRequest.draftParentIndex) ?? saveRequest.draftParentIndex;
           const snap = index === null ? undefined : snapshotsRef.current[index];

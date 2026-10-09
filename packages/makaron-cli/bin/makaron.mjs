@@ -1938,7 +1938,8 @@ Options:
   --ref <file|url>          Additional reference image. Repeatable; model-specific limit (Nano Banana 2.1: 14 total inputs).
   --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.5-flare, gpt-image-2.5-sunburst, or wan2.7-image. Legacy qwen maps to qwen-spicy.
   --skill <id>              enhance, creative, wild, or captions.
-  --image-resolution <id>  Nano Banana 2.1 only: 1K (default), 2K, or 4K.
+  --image-resolution <id>  1K, 2K, or 4K; Auto chooses Nano Banana 2.1.
+  --nsfw                  Route NSFW directly to Qwen Spicy.
   --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
   --background <mode>       auto, opaque, or transparent.
   --out <file>              Save the generated image to this path.
@@ -3035,10 +3036,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
     else if (args[i] === '--image-resolution' && args[i + 1]) {
       const resolution = args[++i];
-      if (!['1K', '2K', '4K'].includes(resolution)) { console.error('Invalid --image-resolution. Use 1K, 2K, or 4K.'); process.exit(1); }
       editArgs.imageResolution = resolution;
     }
     else if (args[i] === '--aspect' && args[i + 1]) editArgs.aspectRatio = args[++i];
+    else if (args[i] === '--nsfw') editArgs.isNsfw = true;
     else if (args[i] === '--background' && args[i + 1]) {
       const background = args[++i];
       if (!['auto', 'opaque', 'transparent'].includes(background)) {
@@ -3050,7 +3051,6 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else if (args[i] === '--out' && args[i + 1]) outputPath = args[++i];
     else promptParts.push(args[i]);
   }
-  if (editArgs.imageResolution && editArgs.model !== 'gemini-2.1') { console.error('--image-resolution requires --image-model gemini-2.1.'); process.exit(1); }
   editArgs.editPrompt = promptParts.join(' ');
   if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');

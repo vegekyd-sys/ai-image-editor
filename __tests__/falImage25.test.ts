@@ -7,6 +7,28 @@ beforeEach(() => vi.stubEnv('FAL_KEY', 'test-key'));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe('fal Image 2.5 paid request contract', () => {
+  it('sends native high resolution within the edge, ratio and pixel budget for both variants', () => {
+    expect(image25Size()).toBe('auto');
+    expect(image25Size(undefined, '2K')).toEqual({ width: 2048, height: 2048 });
+    expect(image25Size(undefined, '4K')).toEqual({ width: 3840, height: 2160 });
+    expect(image25Size('9:16', '4K')).toEqual({ width: 2160, height: 3840 });
+    expect(() => image25Size('1:1', '4K')).toThrow('pixel budget');
+    for (const resolution of ['1K', '2K', '4K']) {
+      for (const aspectRatio of ['1:3', '9:16', '16:9', '2:1', '3:1']) {
+        const size = image25Size(aspectRatio, resolution);
+        expect(size).not.toBe('auto');
+        if (size === 'auto') throw new Error('explicit size expected');
+        expect(size.width % 16).toBe(0); expect(size.height % 16).toBe(0);
+        expect(Math.max(size.width, size.height)).toBeLessThanOrEqual(3840);
+        expect(Math.max(size.width / size.height, size.height / size.width)).toBeLessThanOrEqual(3);
+        expect(size.width * size.height).toBeGreaterThanOrEqual(655360);
+        expect(size.width * size.height).toBeLessThanOrEqual(8294400);
+      }
+    }
+    for (const variant of ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] as const) {
+      expect(buildFalImage25Request({ prompt: 'Scene', imageResolution: '2K' }, variant).body.image_size).toEqual({ width: 2048, height: 2048 });
+    }
+  });
   it('explicitly sends low and every ordered reference to the correct variant edit endpoint', () => {
     const request = buildFalImage25Request({ prompt: 'Edit', image: 'https://example.com/base.png', references: [{ url: 'https://example.com/ref.png', role: 'Color reference' }], background: 'transparent', aspectRatio: '1:1' }, 'gpt-image-2.5-sunburst');
     expect(request.endpoint).toBe('openai/gpt-image-2.5/sunburst/edit');
@@ -30,13 +52,17 @@ describe('fal Image 2.5 paid request contract', () => {
       .mockResolvedValueOnce(Response.json({ images: [{ url: 'https://v3.fal.media/output.png' }] }, { headers: { 'x-fal-billable-units': '0.0062' } }))
       .mockResolvedValueOnce(new Response(new Uint8Array(png)));
     vi.stubGlobal('fetch', fetcher);
-    const result = await createFalImage25Backend(model).generate({ prompt: 'Sticker', background: 'transparent', codexSubscription: { userId: 'owner', projectId: 'project' } });
+    const result = await createFalImage25Backend(model).generate({ prompt: 'Sticker', background: 'transparent' });
     expect(result.image).toMatch(/^data:image\/png;base64,/);
     expect(result).toMatchObject({ provider: 'fal', usage: { modelId: model, providerCostUsd: 0.0062, inputTokens: 0, outputTokens: 0 } });
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
     expect(fetcher.mock.calls[2][0]).toBe('https://queue.fal.run/openai/gpt-image-2.5/requests/request-123/status');
   });
-  it.each([undefined, '16:9'])('keeps the transparent canvas contract for %s', async (aspectRatio) => {
+  it.each([
+    { aspectRatio: undefined, imageResolution: undefined, width: 80, height: 60 },
+    { aspectRatio: '16:9', imageResolution: undefined, width: 32, height: 18 },
+    { aspectRatio: undefined, imageResolution: '2K', width: 32, height: 32 },
+  ])('keeps the transparent canvas contract for %j', async ({ aspectRatio, imageResolution, width, height }) => {
     const source = await sharp({ create: { width: 80, height: 60, channels: 3, background: 'red' } }).png().toBuffer();
     const output = await sharp({ create: { width: 32, height: 32, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 0.5 } } }).png().toBuffer();
     const endpoint = 'openai/gpt-image-2.5/flare/edit';
@@ -46,9 +72,9 @@ describe('fal Image 2.5 paid request contract', () => {
       .mockResolvedValueOnce(Response.json({ images: [{ url: 'https://v3.fal.media/result.png' }] }, { headers: { 'x-fal-billable-units': '0.014' } }))
       .mockResolvedValueOnce(new Response(new Uint8Array(output)));
     vi.stubGlobal('fetch', fetcher);
-    const result = await createFalImage25Backend(model).generate({ prompt: 'Cut out', image: `data:image/png;base64,${source.toString('base64')}`, background: 'transparent', aspectRatio });
+    const result = await createFalImage25Backend(model).generate({ prompt: 'Cut out', image: `data:image/png;base64,${source.toString('base64')}`, background: 'transparent', aspectRatio, imageResolution });
     const metadata = await sharp(Buffer.from(result.image!.split(',')[1], 'base64')).metadata();
-    expect(metadata).toMatchObject(aspectRatio ? { width: 32, height: 18, hasAlpha: true } : { width: 80, height: 60, hasAlpha: true });
+    expect(metadata).toMatchObject({ width, height, hasAlpha: true });
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });
   it('never resubmits after an accepted request fails', async () => {

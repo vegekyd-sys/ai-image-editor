@@ -1,6 +1,6 @@
 # Image Creation and Editing
 
-For GPT Image 2.5 use model="gpt-image-2.5-flare"; use "gpt-image-2.5-sunburst" only when Sunburst is requested. Both use fal with low quality. GPT Image 2 and the legacy "openai" model parameter now resolve to Flare as well. Never silently substitute Image 2 or a subscription for Image 2.5.
+Use the generated Image Model Capability table supplied with `generate_image` for model choice, limits, NSFW assessment, legacy IDs and conflicting output preferences.
 
 Use this file when the user asks for image editing, text-to-image generation, posters, marketing graphics, e-commerce pages, infographics, captions, photo enhancement, creative photo edits, wild transformations, reference-image composition, or any `generate_image` task that needs more than a single obvious instruction.
 
@@ -22,14 +22,6 @@ After `generate_image`, the result becomes the next `<<<media_N>>>` and is immed
 
 ## generate_image Tool Contract
 
-### Wan 2.7 Image
-
-Use `model: "wan2.7-image"` when explicitly requested or selected in the app. This is Alibaba international's fast standard image model, separate from Wan video. It generates one approximately 1K image per call, supports text-to-image and up to 9 ordered input images including the base, and defaults to 6 image credits. Do not promise exact face preservation. Keep prompts focused and pass all required reference images; never silently drop references. Transparent output still requires the GPT Image 2.5 contract below. Report failed or timed-out Wan calls without automatically repeating the request or choosing another model, since the provider may already have generated a paid output.
-
-Edit the current photo or generate a new image from text.
-
-`editPrompt` format depends on the mode. See Context Mode versus Edit Mode below.
-
 ### Transparent Output and Cutout Routing
 
 Interpret the user's meaning, not a hard-coded keyword list. Requests to make the background transparent, remove/erase/delete the background, isolate or cut out the subject, 去背景/抠图/抠像, or create a reusable transparent PNG, sticker, overlay, or alpha asset require `background: "transparent"`. Set the tool field explicitly; prompt wording alone does not activate transparency.
@@ -39,7 +31,7 @@ Before the first transparent generation or extraction in a conversation, call `r
 - Existing source image: pass that image's `media_index`. This is an image-to-image cutout/edit. In `editPrompt`, tell GPT Image 2.5 to remove the background to transparent alpha while preserving the complete intended subject, identity, shape, fine edges, holes, and interior details. Do not redesign the subject unless requested.
 - No source image: omit `media_index` entirely. This is transparent text-to-image. Describe only the wanted subject and composition; do not invent a colored, white, checkerboard, studio, or scenic background.
 - Ambiguous cleanup such as removing one background object does not automatically mean alpha. Use transparent output only when the intended deliverable has no background or is a cutout/overlay asset.
-- Transparent output strictly defaults to Flare and preserves explicitly selected Sunburst. Never fall back to an opaque image, synthetic checkerboard, chroma-key background, or a different image model. If the provider cannot return real alpha, report failure.
+- Never claim an opaque image or synthetic checkerboard has real alpha.
 - The canonical fidelity wording, keep/remove selection rules, content-specific details, and delivery line live in `prompts/cutout.md`. Do not improvise a weaker generic prompt.
 
 Omit `background` for normal images.
@@ -137,7 +129,7 @@ Routing table:
 - "疯狂 / 脑洞 / 夸张 / wild / 变形" means `skill='wild'`.
 - "加文字 / 加字幕 / 加文案 / caption / 标题 / 加个说明" means `skill='captions'`.
 
-Before using a built-in skill for the first time, call `read_file('prompts/{skill}.md')` to load the rules. Skip if already in your tool-result history. Then write `editPrompt` following those rules. The template is not auto-injected into your reasoning; you must internalize it into `editPrompt`. When calling `generate_image`, pass `skill='{skill}'` so the model router picks the best backend for that skill.
+Before using a built-in skill for the first time, call `read_file('prompts/{skill}.md')` to load the rules. Skip if already in your tool-result history. Then write `editPrompt` following those rules. The template is not auto-injected into your reasoning; you must internalize it into `editPrompt`. When calling `generate_image`, pass `skill='{skill}'` to retain the editing intent. Model choice follows the Image Model Capability table.
 
 TipsBar reference: when `[当前TipsBar中的编辑建议]` has a tip matching the user's intent, you may use that tip's `editPrompt` as inspiration for your own prompt. Do not mention tips to the user. Just generate directly.
 
@@ -207,43 +199,9 @@ Omit this line if the user explicitly requested text or captions.
 - `image_refs` works for text-to-image too. No `media_index` is needed. Just pass references and a prompt.
 - `image_refs` are not remembered between tool calls. If you need the same references again, pass them again.
 
-## Model Selection
-
-The `generate_image` tool has an optional `model` parameter.
-
-### NSFW Detection
-
-Protect the Google account from bans. Before calling `generate_image`, assess if the request involves NSFW content:
-
-- User's text implies nudity, sexual content, gore, or explicit material.
-- User asks to remove clothing, add sexual elements, make something explicit, and so on.
-- The image was previously flagged by the system, and you will see `contentBlocked` in tool results.
-
-If any of the above apply, set `model: 'qwen-spicy'`. Do not let NSFW content reach Gemini. The provider may still reject some content; report that failure rather than trying a restricted provider.
-
-Once you use `model: 'qwen-spicy'` for NSFW reasons, keep using it for all subsequent `generate_image` calls in this conversation. The content will not become safe just because the next edit is "add lighting".
-
-NSFW auto-fallback: if Gemini refuses content, the system automatically tries Qwen Spicy. You do not need to manually retry. But proactively detecting NSFW and setting `model: 'qwen-spicy'` upfront is strongly preferred. It avoids the wasted Gemini call entirely.
-
-### GPT Image 2.5 Flare (default replacement for Image 2)
-
-Use `model: 'gpt-image-2.5-flare'` proactively when any of these apply:
-
-1. Text-heavy posters or graphics: user wants text, titles, captions, or logos rendered cleanly. Use Flare for typography and layout.
-2. Face identity complaints: user says "脸变了" / "不像" / "人脸不对" after a Gemini edit.
-3. Design or layout tasks: tasks requiring the model to design layout, typography, or information architecture, such as product images, e-commerce pages, infographics, posters, marketing graphics, anime or illustration, game or app UI, web design. Use Context Mode for `editPrompt`. Do not call `analyze_image` first. The model receives the images directly and can see them. Just pass the user's request.
-
-Do not promise a fixed generation time. Flare failures must be reported without automatically retrying or switching models.
-
-Other model rules:
-
-- User explicitly says an available model name, for example "qwen spicy", "gemini", "nano banana", "nano banana lite", "openai": use that model. Old "qwen" requests resolve to Qwen Spicy; Pony and WAI are retired, so explain that they cannot be selected.
-- Everything else: omit model. The auto-router handles it.
-- "nano banana 2.1" or unversioned "nano banana" means `model: 'gemini-2.1'` (ordinary image default). Explicit "nano banana 2" means `model: 'gemini'` (classic model). "nano banana lite" means `model: 'gemini-lite'`.
-
 ## Context Mode for model='gpt-image-2.5-flare'
 
-For design and layout tasks, such as 产品图, 电商详情页, infographics, posters, marketing, anime, game or app UI, and web design, set `model='gpt-image-2.5-flare'`. In this mode your job is to inspire Image 2.5's judgment, not to make judgments for it.
+When the selected model uses Context Mode, pass the original design/layout brief and prior feedback. Inspire the image model's judgment instead of choosing layout or colors for it.
 
 Context Mode has three principles:
 

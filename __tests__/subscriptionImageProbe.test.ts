@@ -3,10 +3,10 @@ import {
   aspectRatioToCodexSize,
   buildCodexSubscriptionImageRequest,
   parseCodexSubscriptionImageResponse,
-} from '@/lib/codex-subscription-image';
+} from '../scripts/subscription-image-probe';
 import { resolveAnalyzeImageProvider } from '@/lib/agent-image-analysis';
 
-describe('Codex subscription image routing', () => {
+describe('Offline subscription image comparison helpers', () => {
   it('builds a GPT Image 2 subscription request with image-edit context', () => {
     const body = buildCodexSubscriptionImageRequest({
       prompt: 'Turn the wall blue.',

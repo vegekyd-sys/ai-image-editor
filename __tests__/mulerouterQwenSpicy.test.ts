@@ -146,13 +146,22 @@ describe('MuleRouter Qwen Image Edit Spicy integration', () => {
     })
   })
 
-  it('declines requests with more than three total images', async () => {
-    const fetchMock = vi.fn()
+  it('keeps the base and first references when NSFW editing exceeds the input limit or asks for a ratio', async () => {
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url) === 'https://cdn.example.com/output.webp') return new Response(new Uint8Array([82, 73, 70, 70]), { headers: { 'content-type': 'image/webp' } })
+      if (init?.method === 'POST') return taskCreated()
+      if (init?.method === 'DELETE') return new Response('{}', { status: 200 })
+      return taskCompleted()
+    })
     vi.stubGlobal('fetch', fetchMock)
     const { qwenSpicyBackend } = await import('@/lib/models/qwen-spicy')
     const request = {
       image: 'https://example.com/base.jpg',
       prompt: 'Combine everything.',
+      isNsfw: true,
+      aspectRatio: '8:1',
+      imageResolution: '4K' as const,
+      background: 'transparent' as const,
       references: [
         { url: 'https://example.com/one.jpg', role: 'one' },
         { url: 'https://example.com/two.jpg', role: 'two' },
@@ -160,9 +169,11 @@ describe('MuleRouter Qwen Image Edit Spicy integration', () => {
       ],
     }
 
-    expect(qwenSpicyBackend.canHandle(request)).toBe(false)
-    await expect(qwenSpicyBackend.generate(request)).resolves.toEqual({ image: null })
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(qwenSpicyBackend.canHandle(request)).toBe(true)
+    await expect(qwenSpicyBackend.generate(request)).resolves.toMatchObject({ provider: 'mulerouter' })
+    const submission = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!
+    expect(JSON.parse(String(submission[1]?.body))).toEqual({ image: request.image, reference_images: ['https://example.com/one.jpg', 'https://example.com/two.jpg'], prompt: request.prompt })
+    expect(fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1)
   })
 
   it('surfaces provider failures instead of returning a fake successful image', async () => {

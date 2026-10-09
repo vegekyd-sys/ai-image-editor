@@ -41,11 +41,11 @@ import { POST } from '@/app/api/mcp/route';
 import { invalidateBillingCache } from '@/lib/billing/credits';
 import { invalidatePricingCache } from '@/lib/billing/pricing';
 
-async function callNano(model: string | undefined = 'gemini-2.1') {
+async function callNano(model: string | undefined = 'gemini-2.1', aspectRatio = '16:9') {
   const response = await POST(new Request('http://localhost/api/mcp', {
     method: 'POST',
     headers: { Authorization: 'Bearer mk_live_test', 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'makaron_edit_image', arguments: { editPrompt: 'A red mug.', model: model === 'auto-omitted' ? undefined : model, aspectRatio: '16:9', imageResolution: '2K' } } }),
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'makaron_edit_image', arguments: { editPrompt: 'A red mug.', model: model === 'auto-omitted' ? undefined : model, aspectRatio, imageResolution: '2K' } } }),
   }));
   return { response, payload: await response.json() };
 }
@@ -89,11 +89,12 @@ describe('Nano Banana 2.1 MCP → shared skill → provider → billing', () => 
     expect(payload.result.isError).toBe(true);
     expect(state.fetch).not.toHaveBeenCalled();
   });
-  it('routes omitted model to 2.1, accepts 2K and charges actual cost once', async () => {
+  it('routes an omitted model with panorama and 2K to 2.1 and charges actual cost once', async () => {
     // JSON omits the undefined field, exercising the actual automatic MCP path.
-    const { payload } = await callNano('auto-omitted');
+    const { payload } = await callNano('auto-omitted', '8:1');
     expect(payload.result.content[0].text).toContain('(model: gemini-2.1)');
     expect(state.fetch).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(state.fetch.mock.calls[0][1].body)).toMatchObject({ resolution: '2K', aspect_ratio: '8:1' });
     expect(state.rpc.mock.calls.filter(([name]) => name === 'deduct_and_log')).toHaveLength(1);
   });
 

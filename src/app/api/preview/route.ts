@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateImage } from '@/lib/model-router';
+import { planImageGeneration } from '@/lib/image-model-capabilities';
 import { generateTipsPreviewImageOpenRouter, TIPS_PREVIEW_IMAGE_MODEL } from '@/lib/gemini';
 import { NanoBanana21RequestError, NANO_BANANA_21_MODEL } from '@/lib/models/nano-banana-21';
 import { requireCredits, deductByTokens, deductCredits, isBillingEnabled } from '@/lib/billing/credits';
@@ -36,28 +37,25 @@ export async function POST(req: NextRequest) {
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
-    if (isNsfw && background === 'transparent') {
-      return Response.json({ error: 'NSFW transparent editing is not supported by Qwen Spicy.' }, { status: 400 });
-    }
-
     const transparent = background === 'transparent';
-    const spicyFirst = !transparent && (isNsfw === true || category === 'enhance');
+    const spicyFirst = isNsfw === true || (!transparent && category === 'enhance');
     const nano21Preview = TIPS_PREVIEW_IMAGE_MODEL === NANO_BANANA_21_MODEL;
-    if (transparent && await isBillingEnabled()) {
+    const routePlan = transparent || spicyFirst ? planImageGeneration({ image, prompt: editPrompt, aspectRatio, background, category, isNsfw, model: spicyFirst ? 'qwen-spicy' : undefined }) : undefined;
+    if (routePlan?.model.startsWith('gpt-image-2.5') && await isBillingEnabled()) {
       const rate = await getTokenRate('gpt-image-2.5-flare');
       if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) {
         return Response.json({ error: 'GPT Image 2.5 pricing is not configured.', code: 'pricing_unavailable' }, { status: 503 });
       }
       const check = await requireCredits(user.id, 5);
       if (!check.ok) return check.response;
-    } else if (!transparent && !spicyFirst && nano21Preview && await isBillingEnabled()) {
+    } else if ((routePlan?.model === 'gemini-2.1' || (!transparent && !spicyFirst && nano21Preview)) && await isBillingEnabled()) {
       const rate = await getTokenRate(NANO_BANANA_21_MODEL);
       if (!rate || rate.model_id !== NANO_BANANA_21_MODEL || !Number.isFinite(rate.markup) || rate.markup <= 0) {
         return Response.json({ error: 'Nano Banana 2.1 pricing is not configured.', code: 'pricing_unavailable' }, { status: 503 });
       }
       const check = await requireCredits(user.id, Math.ceil((0.0336 + 1120 * 1.5 / 1_000_000) * rate.markup / 0.01));
       if (!check.ok) return check.response;
-    } else if (!transparent) {
+    } else if (!transparent || routePlan?.model === 'qwen-spicy') {
       // The first provider determines the initial quote. A failed Lite attempt
       // gets a separate Spicy preflight before the more expensive fallback.
       const toolName = spicyFirst ? 'edit_image_qwen-spicy' : 'preview';
@@ -97,7 +95,7 @@ export async function POST(req: NextRequest) {
     }
     const result = liteResult.image
       ? { image: liteResult.image, model: nano21Preview ? 'gemini-2.1' as const : 'gemini' as const, fallbackUsed: false, contentBlocked: undefined, usage: liteResult.usage }
-      : await generateImage({ image, prompt: editPrompt, aspectRatio, background, category, isNsfw, ...(!spicyFirst && !transparent ? { model: 'qwen-spicy' as const } : {}) });
+      : await generateImage(routePlan?.request ?? { image, prompt: editPrompt, aspectRatio, background, category, isNsfw, ...(!spicyFirst && !transparent ? { model: 'qwen-spicy' as const } : {}) });
 
     // Do not return a generated image until its debit and usage log commit.
     // Token usage can be billable even when the provider returned no image.
@@ -127,7 +125,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!result.image) {
-      const transparentUnavailable = background === 'transparent';
+      const transparentUnavailable = routePlan?.request.background === 'transparent';
       return new Response(
         JSON.stringify({
           error: transparentUnavailable
@@ -140,7 +138,7 @@ export async function POST(req: NextRequest) {
     }
 
     return new Response(
-      JSON.stringify({ image: result.image, contentBlocked: result.contentBlocked || previewBlocked || undefined }),
+      JSON.stringify({ image: result.image, contentBlocked: result.contentBlocked || previewBlocked || undefined, background: routePlan?.request.background, adjustments: routePlan?.adjustments }),
       { headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {

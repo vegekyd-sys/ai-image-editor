@@ -16,13 +16,13 @@
   },
   "src/lib/prompts/image.md": {
     "baselineSha256": "fc3ff3be94e2ce9d6921b2982a138b9a5503e1ac052426b9ceb6d5f4d0e32715",
-    "sha256": "5ca975a481ad6b2d3e6b16ccb5845ac962524100da5ff0b96813497b0307e3ef",
-    "reason": "Retire Vast image models in the candidate: route NSFW to Qwen Spicy, map legacy Qwen to Spicy, and remove Pony/WAI selection. Preserve the prior Flare context-mode and transparency rules. Regression: vastRetirementRouting.test.ts and agentMediaScenarioMatrix.test.ts. User-selected Nano Banana 2.1 ordinary image default; preserve explicit classic Nano Banana 2."
+    "sha256": "5b3738e85b5b3a711eb92eae2a8795e72872b65e44dab16c2fc84827df9010cc",
+    "reason": "2026-10-08 user-authorized second cleanup: model priority, legacy IDs, NSFW and output-conflict policy have one owner in generated Image Model Capability. Context-mode summary is generated beside the tool; detailed original-brief examples, face/reference/edit preservation and cutout fidelity/content rules remain unchanged. Preserve real-alpha honesty while using shared conflict planning. Regression: agentMediaScenarioMatrix.test.ts, imageModelCapabilities.test.ts, editImageReferences.test.ts, falImage25.test.ts; before/after provider payload parity and CLI Chat image QA."
   },
   "src/lib/prompts/generate_image_tool.md": {
     "baselineSha256": "d0dad379bc778a008f0adeaa580868085bb0cbd2483c459ed891003c12c3a3e7",
-    "sha256": "491ae80b137b4bc0c4d1dc5d0c3d42074d67010fc5814d55a395b8e4ba2417d7",
-    "reason": "Retire Vast image models in the candidate and route NSFW to Qwen Spicy. Preserve the prior Flare and transparent-output contracts. Regression: vastRetirementRouting.test.ts and agentMediaScenarioMatrix.test.ts. User-selected Nano Banana 2.1 ordinary default, classic Nano Banana 2 opt-in; shorten to fit the existing 2500-character budget."
+    "sha256": "ecf7577299e139a40f598099633dd5800073f4115a3c3c01a6b9125cc82031cf",
+    "reason": "2026-10-08 user-authorized second cleanup: model priority, legacy IDs, NSFW and output-conflict policy have one owner in generated Image Model Capability. Context-mode summary is generated beside the tool; detailed original-brief examples, face/reference/edit preservation and cutout fidelity/content rules remain unchanged. Preserve real-alpha honesty while using shared conflict planning. Regression: agentMediaScenarioMatrix.test.ts, imageModelCapabilities.test.ts, editImageReferences.test.ts, falImage25.test.ts; before/after provider payload parity and CLI Chat image QA."
   },
   "src/lib/prompts/cutout.md": {
     "baselineSha256": "e1ffb7d39f0cad95e702d7a3971c9fdd97e4bc4f9720c7b31c7ee5ca98d6d202",

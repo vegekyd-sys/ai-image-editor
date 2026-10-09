@@ -19,15 +19,15 @@ describe('Vast retirement image routing', () => {
     expect(IMAGE_MODEL_INPUT_IDS).not.toContain('wai');
     expect(resolveImageModel('qwen')).toBe('qwen-spicy');
     expect(resolveModelChain({ prompt: 'Edit', model: 'qwen' })).toEqual(['qwen-spicy']);
-    expect(() => resolveModelChain({ prompt: 'Anime', model: 'pony' })).toThrow('retired');
-    expect(() => resolveModelChain({ prompt: 'Anime', model: 'wai' })).toThrow('retired');
+    expect(resolveModelChain({ prompt: 'Anime', model: 'pony' })).toEqual(['gpt-image-2.5-flare']);
+    expect(resolveModelChain({ prompt: 'Anime', model: 'wai' })).toEqual(['gpt-image-2.5-flare']);
   });
 
   it('routes NSFW exclusively to Spicy, including explicit legacy/Fal/Gemini selections', () => {
     for (const model of ['qwen', 'pony', 'wai', 'gemini', 'gpt-image-2.5-flare'] as const) {
       expect(resolveModelChain({ prompt: 'Sensitive edit', model, isNsfw: true })).toEqual(['qwen-spicy']);
     }
-    expect(() => resolveModelChain({ prompt: 'Cutout', isNsfw: true, background: 'transparent' })).toThrow('not supported');
+    expect(resolveModelChain({ prompt: 'Cutout', isNsfw: true, background: 'transparent' })).toEqual(['qwen-spicy']);
   });
 
   it('never repeats a paid NSFW submission after a null result or unknown outcome', async () => {
@@ -49,28 +49,12 @@ describe('Vast retirement image routing', () => {
     await expect(generateImage({ prompt: 'Edit', model: 'qwen' })).resolves.toMatchObject({ model: 'qwen-spicy', provider: 'mulerouter' });
   });
 
-  it('does not repeat an auto-fallback paid Spicy request after an unknown outcome', async () => {
-    const geminiGenerate = vi.fn().mockRejectedValue(new NanoBanana21RequestError('blocked', true));
-    const spicyGenerate = vi.fn().mockRejectedValue(new Error('provider task completed but output download failed'));
-    vi.mocked(getBackend).mockImplementation(id => id === 'gemini-2.1'
-      ? { id, canHandle: () => true, generate: geminiGenerate }
-      : { id: 'qwen-spicy', canHandle: () => true, generate: spicyGenerate });
-
-    const result = await editImage({ editPrompt: 'Creative edit', skill: 'creative' }, { currentImage: 'https://example.com/a.jpg' });
-    expect(result).toMatchObject({ success: false, message: expect.stringContaining('Do not retry automatically') });
-    expect(geminiGenerate).toHaveBeenCalledTimes(1);
-    expect(spicyGenerate).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not repeat an auto-fallback paid Spicy request after a null image', async () => {
-    const geminiGenerate = vi.fn().mockRejectedValue(new NanoBanana21RequestError('blocked', true));
-    const spicyGenerate = vi.fn().mockResolvedValue({ image: null });
-    vi.mocked(getBackend).mockImplementation(id => id === 'gemini-2.1'
-      ? { id, canHandle: () => true, generate: geminiGenerate }
-      : { id: 'qwen-spicy', canHandle: () => true, generate: spicyGenerate });
-
-    const result = await editImage({ editPrompt: 'Creative edit', skill: 'creative' }, { currentImage: 'https://example.com/a.jpg' });
-    expect(result).toMatchObject({ success: false, message: expect.stringContaining('Do not retry automatically') });
-    expect(spicyGenerate).toHaveBeenCalledTimes(1);
+  it('does not try Spicy after a definite 2.1 rejection in Auto', async () => {
+    const nano = vi.fn().mockRejectedValue(new NanoBanana21RequestError('blocked', true));
+    vi.mocked(getBackend).mockReturnValue({ id: 'gemini-2.1', canHandle: () => true, generate: nano });
+    const result = await editImage({ editPrompt: 'Creative edit', skill: 'creative', aspectRatio: '8:1' }, { currentImage: 'https://example.com/a.jpg' });
+    expect(result.success).toBe(false);
+    expect(nano).toHaveBeenCalledTimes(1);
+    expect(getBackend).toHaveBeenCalledExactlyOnceWith('gemini-2.1');
   });
 });

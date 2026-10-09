@@ -5,6 +5,7 @@ import ts from 'typescript';
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
 import { IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, type ModelId } from '@/lib/models/types';
+import { formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration, resolveImageModelChain as resolveModelChain } from '@/lib/image-model-capabilities';
 import { normalizeGenerateImageMediaIndex } from '@/lib/generate-image-input';
 import { resolveToolName } from '@/lib/billing/pricing';
 
@@ -24,12 +25,11 @@ function setup(provider = 'azure') {
   const getToolPrice = vi.fn().mockResolvedValue({ credits: 6, isFree: false });
   const getTokenRate = vi.fn().mockResolvedValue({ model_id: 'gpt-image-2.5-flare', markup: 2, is_active: true });
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
-  const resolveModelChain = vi.fn(({ model }: { model?: ModelId }) => model ? [resolveImageModel(model)] : ['gemini-2.1', 'qwen-spicy']);
-  const ctx = { preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined };
+  const ctx = { preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined, isNsfw: false };
   const context = vm.createContext({
     tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, resolveModelChain, getTokenRate,
-    generateImageToolPrompt: '', normalizeGenerateImageMediaIndex,
-    validateImageIndex: vi.fn(), getToolPrice, isBillingEnabled,
+    generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration,
+    validateImageIndex: (images: string[], index: number) => images[index - 1] ? { idx: index - 1 } : { error: 'Invalid media index' }, getToolPrice, isBillingEnabled,
     resolveToolName,
     editImage, requireCredits, deductCredits, refreshSnapshotUrls: vi.fn(), console,
     require: (name: string) => {
@@ -192,12 +192,70 @@ describe('Nano Banana 2.1 Agent execution and billing', () => {
 });
 
 
-it('preflights the default Nano Banana 2.1 route and accepts its resolution', async () => {
+it('preflights native Flare 2K in Auto', async () => {
   const {tool,ctx,getTokenRate,requireCredits,editImage}=setup();
   ctx.preferredModel=undefined;
-  getTokenRate.mockResolvedValue({model_id:'google/gemini-nano-banana-2.1',markup:2,is_active:true});
+  getTokenRate.mockResolvedValue({model_id:'gpt-image-2.5-flare',markup:2,is_active:true});
   await tool.execute({editPrompt:'A forest scene',imageResolution:'2K'});
-  expect(getTokenRate).toHaveBeenCalledWith('google/gemini-nano-banana-2.1');
-  expect(requireCredits).toHaveBeenCalledWith('test-user',11);
+  expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+  expect(requireCredits).toHaveBeenCalledWith('test-user',5);
   expect(editImage).toHaveBeenCalledWith(expect.objectContaining({preferredModel:undefined,imageResolution:'2K'}),expect.anything());
+});
+
+
+describe('Image capability Agent integration cases', () => {
+  it('R01/R17: Auto quotes Flare and delivers once', async () => {
+    const { tool, ctx, getTokenRate, requireCredits, editImage } = setup();
+    ctx.preferredModel = undefined;
+    editImage.mockResolvedValue({ success: true, image: 'image', usedModel: 'gpt-image-2.5-flare' });
+    expect((await tool.execute({ editPrompt: 'A portrait.' })).success).toBe(true);
+    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    expect(requireCredits).toHaveBeenCalledWith('test-user', 5);
+    expect(editImage).toHaveBeenCalledTimes(1);
+  });
+  it('R02/R17: original 8:1 banner Auto request quotes Nano before generation', async () => {
+    const { tool, ctx, getTokenRate, editImage } = setup();
+    ctx.preferredModel = undefined;
+    ctx.snapshotImages = ['source-V'];
+    getTokenRate.mockResolvedValue({ model_id: 'google/gemini-nano-banana-2.1', markup: 2 });
+    await tool.execute({ editPrompt: '用参考图里的 V 生成一张超宽横幅，比例严格 8:1。', aspectRatio: '8:1', media_index: 1 });
+    expect(getTokenRate).toHaveBeenCalledWith('google/gemini-nano-banana-2.1');
+    expect(editImage).toHaveBeenCalledWith(expect.objectContaining({ aspectRatio: '8:1', preferredModel: undefined }), expect.objectContaining({ currentImage: 'source-V' }));
+    expect(editImage).toHaveBeenCalledTimes(1);
+  });
+  it('R14/R06: Agent NSFW flag overrides app preference and stays active', async () => {
+    const { tool, ctx, getToolPrice, editImage } = setup();
+    ctx.preferredModel = 'gpt-image-2.5-flare';
+    await tool.execute({ editPrompt: 'Sensitive artwork.', isNsfw: true });
+    expect(ctx.isNsfw).toBe(true);
+    expect(getToolPrice).toHaveBeenCalledWith('generate_image_qwen-spicy');
+    expect(editImage.mock.calls[0][0]).toMatchObject({ isNsfw: true });
+    await tool.execute({ editPrompt: 'Add lighting.', isNsfw: false });
+    expect(editImage.mock.calls[1][0]).toMatchObject({ isNsfw: true });
+  });
+  it('R13/R14/R17: incompatible Flare preference quotes Nano and continues generation', async () => {
+    const { tool, ctx, editImage, getTokenRate, requireCredits, deductCredits } = setup();
+    ctx.preferredModel = 'gpt-image-2.5-flare';
+    getTokenRate.mockResolvedValue({ model_id: 'google/gemini-nano-banana-2.1', markup: 2 });
+    const result = await tool.execute({ editPrompt: 'Banner.', model: 'gemini-2.1', aspectRatio: '8:1', imageResolution: '4K' });
+    expect(result.success).toBe(true);
+    expect(editImage).toHaveBeenCalledTimes(1);
+    expect(getTokenRate).toHaveBeenCalledWith('google/gemini-nano-banana-2.1');
+    expect(requireCredits).toHaveBeenCalledWith('test-user', 16);
+    expect(deductCredits).toHaveBeenCalledTimes(1);
+  });
+  it('R15: media index zero remains text-to-image, uploaded and timeline references are counted', async () => {
+    const { tool, ctx, editImage, getTokenRate } = setup();
+    ctx.preferredModel = undefined;
+    await tool.execute({ editPrompt: 'Draw.', media_index: 0 });
+    expect(editImage.mock.calls[0][1].currentImage).toBeUndefined();
+    ctx.preferredModel = 'gemini-2.1';
+    ctx.snapshotImages = ['base', 'timeline-reference'];
+    ctx.referenceImages = Array.from({ length: 13 }, () => 'uploaded-reference');
+    getTokenRate.mockClear();
+    const result = await tool.execute({ editPrompt: 'Combine.', media_index: 1, reference_media_indices: [2] });
+    expect(result.success).toBe(true);
+    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    expect(editImage).toHaveBeenCalledTimes(2);
+  });
 });

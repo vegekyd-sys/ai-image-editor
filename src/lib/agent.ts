@@ -1293,11 +1293,11 @@ export async function* runMakaronAgent(
           // Image output (from toModelOutput won't have base64Data here, but pushImage in execute already handled it)
         }
 
-        // Detect generate_image failure or NSFW content block
+        // Keep the main Agent's NSFW assessment active in subsequent client turns.
         if (toolName === 'generate_image') {
 
           const toolResult = (event as any).result as { contentBlocked?: boolean } | undefined;
-          if (toolResult?.contentBlocked) {
+          if (ctx.isNsfw || toolResult?.contentBlocked) {
             yield { type: 'nsfw_detected' };
           }
           if (imagesSent === ctx.generatedImages.length) {

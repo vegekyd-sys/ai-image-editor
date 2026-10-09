@@ -6,7 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { createCodexSubscriptionFetch, getCodexSubscriptionUsage } from '../src/lib/codex-subscription';
-import { buildCodexSubscriptionImageRequest, parseCodexSubscriptionImageResponse } from '../src/lib/codex-subscription-image';
+import { buildCodexSubscriptionImageRequest, parseCodexSubscriptionImageResponse } from './subscription-image-probe';
 
 async function main() {
   const userId = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;

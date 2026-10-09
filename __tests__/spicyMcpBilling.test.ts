@@ -37,12 +37,12 @@ vi.mock('@/lib/supabase/service', () => ({ getSupabaseAdmin: () => ({
 import { POST } from '@/app/api/mcp/route'
 import { invalidateBillingCache } from '@/lib/billing/credits'
 
-async function callSpicy(imageCount: number, model: string | null = 'qwen-spicy') {
+async function callSpicy(imageCount: number, model: string | null = 'qwen-spicy', isNsfw?: boolean) {
   const response = await POST(new Request('http://localhost/api/mcp', {
     method: 'POST',
     headers: { Authorization: 'Bearer mk_live_test', 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'makaron_edit_image', arguments: {
-      editPrompt: 'A red mug.', ...(model ? { model } : {}),
+      editPrompt: 'A red mug.', ...(model ? { model } : {}), ...(isNsfw ? { isNsfw } : {}),
       ...(imageCount ? { image: 'data:image/png;base64,YQ==' } : {}),
       ...(imageCount > 1 ? { referenceImages: Array.from({ length: imageCount - 1 }, () => 'data:image/png;base64,Yg==') } : {}),
     } } }),
@@ -85,9 +85,9 @@ describe('MCP Spicy price-to-ledger path', () => {
     expect(state.rpc.mock.calls.filter(([name]) => name === 'deduct_and_log')).toHaveLength(0)
   })
 
-  it('also preflights the Spicy fallback when no model was selected', async () => {
+  it('preflights direct NSFW Spicy routing when no model was selected', async () => {
     state.balance = 7
-    const { payload } = await callSpicy(1, null)
+    const { payload } = await callSpicy(1, null, true)
     expect(payload.result.isError).toBe(true)
     expect(state.editImage).not.toHaveBeenCalled()
     expect(state.rpc.mock.calls.filter(([name]) => name === 'deduct_and_log')).toHaveLength(0)

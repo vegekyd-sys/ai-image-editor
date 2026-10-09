@@ -3,11 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import SaveMediaDialog from '@/components/SaveMediaDialog';
 
-const mocks = vi.hoisted(() => ({ access: vi.fn(), save: vi.fn(), image: vi.fn(), video: vi.fn(), preload: vi.fn(), native: vi.fn(), nativeWatermark: vi.fn(), nativeVideo: vi.fn() }));
+const mocks = vi.hoisted(() => ({ access: vi.fn(), save: vi.fn(), image: vi.fn(), video: vi.fn(), preload: vi.fn(), native: vi.fn(), nativeWatermark: vi.fn(), nativeVideo: vi.fn(), inspect: vi.fn(), export: vi.fn() }));
 const translate = (key: string) => ({ 'project.save': 'Save', 'editor.removeWatermark': 'Remove watermark' }[key] || key);
 vi.mock('@/lib/i18n', () => ({ useLocale: () => ({ t: translate }) }));
 vi.mock('@/lib/editor/download', () => ({ checkMediaDownload: mocks.access, savePreparedDownload: mocks.save }));
 vi.mock('@/lib/native-media', () => ({ isNativeVideoWatermarkAvailable: mocks.nativeWatermark, saveWatermarkedVideoToNativePhotoLibrary: mocks.nativeVideo }));
+vi.mock('@/lib/editor/image-export', async original => ({ ...await original<typeof import('@/lib/editor/image-export')>(), inspectImageExport: mocks.inspect, exportImageDownload: mocks.export }));
 vi.mock('@/lib/editor/web-watermark', () => ({
   watermarkImage: mocks.image, watermarkVideo: mocks.video, preloadWatermarkVideo: mocks.preload, watermarkDataUrl: () => 'data:image/png;base64,mark',
   watermarkGeometry: () => ({ width: .28, height: .07, left: .695, top: .905 }),
@@ -22,11 +23,45 @@ describe('SaveMediaDialog choices and checkout return', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.access.mockResolvedValue(false);mocks.image.mockResolvedValue(marked);mocks.save.mockResolvedValue(undefined);
+    mocks.inspect.mockResolvedValue({ width: 4096, height: 4096, mimeType: 'image/png' });
+    mocks.export.mockImplementation(async asset => asset);
     mocks.native.mockReturnValue(false);mocks.nativeWatermark.mockReturnValue(false);mocks.nativeVideo.mockResolvedValue(undefined);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:clean-preview');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
   });
   afterEach(() => {cleanup();vi.restoreAllMocks();});
+
+  it('shows native 4K pixels, downsized choices and format selection without changing web entitlement', async () => {
+    render(<SaveMediaDialog {...props} watermarkRequired={false} />);
+    await screen.findByTestId('image-save-options');
+    expect(screen.getByTestId('image-save-dimensions').textContent).toBe('4096 × 4096');
+    expect(screen.getByRole('option', { name: /4K/ })).toBeTruthy();
+    expect(mocks.access).not.toHaveBeenCalled();expect(screen.queryByTestId('save-upgrade')).toBeNull();
+    fireEvent.change(screen.getByTestId('image-save-size'), { target: { value: '2k' } });
+    fireEvent.change(screen.getByTestId('image-save-format'), { target: { value: 'jpeg' } });
+    expect(screen.getByTestId('image-save-dimensions').textContent).toBe('2048 × 2048');
+    fireEvent.click(screen.getByTestId('save-clean'));
+    await waitFor(() => expect(mocks.export).toHaveBeenCalledWith(expect.objectContaining({ blob: original }), expect.objectContaining({ width: 4096 }), '2k', 'jpeg'));
+    expect(mocks.image).not.toHaveBeenCalled();
+  });
+
+  it('does not offer 2K or sharing sizes that would enlarge a smaller original', async () => {
+    mocks.inspect.mockResolvedValue({ width: 1024, height: 768, mimeType: 'image/jpeg' });
+    render(<SaveMediaDialog {...props} watermarkRequired={false} />);
+    await screen.findByTestId('image-save-options');
+    expect(screen.getByTestId('image-save-size').querySelectorAll('option')).toHaveLength(1);
+    expect(screen.getByTestId('image-save-dimensions').textContent).toBe('1024 × 768');
+  });
+
+  it('still saves original bytes when the browser cannot inspect the original image', async () => {
+    mocks.inspect.mockRejectedValue(new Error('Unsupported browser image decoder'));
+    render(<SaveMediaDialog {...props} watermarkRequired={false} />);
+    await waitFor(() => expect(screen.getByTestId('save-clean').hasAttribute('disabled')).toBe(false));
+    fireEvent.click(screen.getByTestId('save-clean'));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ blob: original, filename: 'work.png' })));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(mocks.export).not.toHaveBeenCalled();
+  });
 
   it('makes Save the primary choice and downloads the marked image without opening checkout', async () => {
     render(<SaveMediaDialog {...props} />);

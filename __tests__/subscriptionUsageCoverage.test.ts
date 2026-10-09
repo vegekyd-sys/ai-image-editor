@@ -22,13 +22,13 @@ describe('personal subscription Usage coverage', () => {
     expect(durableRunner).toContain('provider: billingProvider');
   });
 
-  it('records Codex image and Grok video subscription tools at zero cost', () => {
+  it('keeps subscription accounting for video and analysis after retiring subscription image generation', () => {
     const agentTools = source('src/lib/agent-tools.ts');
     const animateRoute = source('src/app/api/animate/route.ts');
     const videoSnapshotRoute = source('src/app/api/video-snapshot/route.ts');
     const mcpRoute = source('src/app/api/mcp/route.ts');
 
-    expect(agentTools).toContain("'codex-subscription',\n              'generate_image'");
+    expect(agentTools).not.toContain("'codex-subscription',\n              'generate_image'");
     expect(agentTools).toContain("skillResult.provider === 'grok-subscription'");
     expect(animateRoute).toContain("recordSubscriptionUsage(\n            user.id,\n            'grok-subscription'");
     expect(videoSnapshotRoute).toContain("recordSubscriptionUsage(\n            userId,\n            'grok-subscription'");

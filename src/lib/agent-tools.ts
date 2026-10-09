@@ -6,8 +6,6 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ImageBackground, ModelId } from './models/types';
-import { IMAGE_MODEL_IDS } from './models/types';
-import { resolveModelChain } from './model-router';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
@@ -47,6 +45,7 @@ import {
 } from './narration-cues';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
+import { formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration, type ImageGenerationPlan } from './image-model-capabilities';
 import { normalizeGenerateImageMediaIndex } from './generate-image-input';
 import type { DesignPayload, VideoMeta, VideoModel, VideoSourceRange } from '@/types';
 import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
@@ -255,7 +254,7 @@ export interface AgentContext {
   explicitMediaIndices: number[];
   /** 0-based index of the snapshot the user is currently viewing */
   currentSnapshotIndex: number;
-  /** NSFW flag — set when Gemini refuses content. All subsequent calls skip Gemini. */
+  /** NSFW flag — assessed by the main Agent before image submission and retained during the session. */
   isNsfw?: boolean;
   /** Timeline version: 1 = legacy (project_animations), 2 = video-in-timeline (snapshots) */
   timelineVersion?: number;
@@ -349,7 +348,7 @@ export type AgentStreamEvent =
   | { type: 'image_analyzed'; imageIndex: number }  // emitted after analyze_image completes (1-based)
   | { type: 'capture_frame'; frame: number; uploadPath: string; captureId: string }  // request frontend to capture a frame via renderStillOnWeb
   | { type: 'preview_frame_captured'; workspaceUrl: string }  // emitted after preview_frame completes — CUI shows inline
-  | { type: 'nsfw_detected' }  // emitted when Gemini blocks content — session switches to Qwen-only
+  | { type: 'nsfw_detected' }  // main Agent assessment persists in the client session
   | { type: 'reasoning_start' }           // new thinking round started
   | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
@@ -1386,22 +1385,24 @@ interface AgentToolFactoryScope {
 }
 
 function createGenerateImageTool(
-  { ctx, runtime }: AgentToolFactoryScope,
+  { ctx }: AgentToolFactoryScope,
 ) {
   return tool({
-      description: generateImageToolPrompt + '\nRetake camera/content keyframes: use retake_source after inspect_retake to edit an actual source frame, rather than a video poster or contact sheet. The returned image is a visual checkpoint for H3 middle-frame control or an explicitly requested boundary-attribute correction. For a boundary correction use the corresponding inspected selected opening/closing source time; retain that exact composition and action phase except the requested correction. Read its actual pixels and verify the requested camera/content and action phase before passing its mediaIndex to retake_video.',
+      description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}` + '\nRetake camera/content keyframes: use retake_source after inspect_retake to edit an actual source frame, rather than a video poster or contact sheet. The returned image is a visual checkpoint for H3 middle-frame control or an explicitly requested boundary-attribute correction. For a boundary correction use the corresponding inspected selected opening/closing source time; retain that exact composition and action phase except the requested correction. Read its actual pixels and verify the requested camera/content and action phase before passing its mediaIndex to retake_video.',
       inputSchema: z.object({
         retake_source: z.object({media_index:z.number().int().positive(),start:z.number().nonnegative(),end:z.number().positive(),source_time:z.number().nonnegative(),inspection_id:z.string(),model:z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL)}).optional().describe('Generate a Retake keyframe from a real inspected video frame inside start/end, in original-source seconds. Use the exact inspect_retake receipt. Omit ordinary media_index/reference_media_indices; the actual video frame supplies identity, pose, environment and motion phase. Write editPrompt as the requested new view/content while retaining that phase.'),
         editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(IMAGE_MODEL_IDS).optional().describe('Use gpt-image-2.5-flare by default for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockup images, face-identity restoration after a Gemini edit, and director storyboard images required by long-video-director. This replaces GPT Image 2; the legacy openai parameter also resolves to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality, never a subscription or automatic fallback. Qwen Spicy = qwen-spicy, including NSFW requests; Pony and WAI are retired. Wan 2.7 Image = wan2.7-image; Lite = gemini-lite; Nano Banana 2.1 = gemini-2.1 (ordinary image default, OpenRouter, up to 14 input images); classic Nano Banana 2 = gemini. Otherwise omit model for normal auto routing.'),
-        imageResolution: z.enum(['1K', '2K', '4K']).optional().describe('Nano Banana 2.1 output resolution; defaults to 1K. Use 2K/4K only when requested. Other image models do not support this parameter.'),
+        model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
+        isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
+        imageResolution: z.string().optional().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.5 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Use larger tiers only when requested. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
-        background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2.5 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
+        background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background preference. Set "transparent" for transparent/no background, background removal, 抠图/抠像/去背景 or reusable alpha assets. Also pass media_index for source-image cutout. Conflicts are resolved to deliver an image; see the capability table.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, aspectRatio, imageResolution, background, media_index, reference_media_indices, retake_source }) => {
+      execute: async ({ editPrompt, skill, model, isNsfw, aspectRatio, imageResolution, background, media_index, reference_media_indices, retake_source }) => {
+        if (isNsfw) ctx.isNsfw = true;
         // GPT-5.6 currently fills omitted optional numeric tool fields with 0.
         // Treat that provider sentinel exactly like omission so empty projects
         // can still use pure text-to-image. Positive indices remain validated.
@@ -1443,23 +1444,20 @@ function createGenerateImageTool(
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model || (retake_source ? 'gpt-image-2.5-flare' : undefined)) as ModelId | undefined;
         let billingModel: ModelId | undefined;
-        let modelChain: ModelId[];
+        let imagePlan: ImageGenerationPlan;
         try {
-          modelChain = resolveModelChain({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, background, isNsfw: ctx.isNsfw });
-          billingModel = modelChain[0];
+          imagePlan = planImageGeneration({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, aspectRatio, imageResolution, background, isNsfw: ctx.isNsfw });
+          billingModel = imagePlan.model;
         } catch (error) {
-          return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: 'model_retired' };
+          return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: error instanceof ImageCapabilityError ? error.code : 'model_retired', ...(error instanceof ImageCapabilityError ? { conflicts: error.conflicts, compatibleModels: error.compatibleModels } : {}) };
         }
-        if (imageResolution && billingModel !== 'gemini-2.1') return { success: false, message: 'imageResolution requires Nano Banana 2.1.', error: 'unsupported_parameter' };
-        const imageInputCount = (editTarget ? 1 : 0) + resolvedRefs.length;
-        const spicyReachable = imageInputCount <= 3 && !(ctx.isNsfw && background === 'transparent')
-          && modelChain.includes('qwen-spicy');
-        if (ctx.userId && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
+        const imageInputCount = (imagePlan.request.image ? 1 : 0) + (imagePlan.request.references?.length ?? 0);
+        if (ctx.userId && await isBillingEnabled()) {
           let requiredCredits = 0;
           if (billingModel === 'gemini-2.1') {
             const rate = await getTokenRate('google/gemini-nano-banana-2.1');
             if (!rate || rate.model_id !== 'google/gemini-nano-banana-2.1' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Nano Banana 2.1 pricing is not configured.', error: 'pricing_unavailable' };
-            const outputCost = imageResolution === '4K' ? 0.0756 : imageResolution === '2K' ? 0.0504 : 0.0336;
+            const outputCost = imagePlan.request.imageResolution === '4K' ? 0.0756 : imagePlan.request.imageResolution === '2K' ? 0.0504 : 0.0336;
             requiredCredits = Math.ceil((outputCost + imageInputCount * 1120 * 1.5 / 1_000_000) * rate.markup / 0.01);
           }
           if (isFalImage25(billingModel)) {
@@ -1475,12 +1473,6 @@ function createGenerateImageTool(
             }
             if (price && !price.isFree) requiredCredits = Math.max(requiredCredits, price.credits);
           }
-          if (spicyReachable) {
-            const spicyToolName = resolveToolName('edit_image', 'qwen-spicy', imageInputCount);
-            const spicyPrice = await getToolPrice(spicyToolName);
-            if (!spicyPrice) return { success: false, message: `Tool pricing is not configured: ${spicyToolName}`, error: 'pricing_unavailable' };
-            if (!spicyPrice.isFree) requiredCredits = Math.max(requiredCredits, spicyPrice.credits);
-          }
           // For token-priced, non-Spicy auto routes this remains an estimate;
           // the final debit still uses actual provider usage before publishing.
           const check = await requireCredits(ctx.userId, requiredCredits || 5);
@@ -1492,32 +1484,10 @@ function createGenerateImageTool(
           {
             currentImage: editTarget,
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
-            codexSubscription: runtime.spec.provider === 'codex-subscription' && ctx.userId
-              ? {
-                  userId: ctx.userId,
-                  projectId: ctx.projectId,
-                  agentModelId: runtime.spec.providerModelId,
-                }
-              : undefined,
           },
         );
         // Bill for image generation (separate from Agent LLM tokens)
-        if (skillResult.usage && skillResult.provider === 'codex-subscription' && ctx.userId) {
-          try {
-            await recordSubscriptionUsage(
-              ctx.userId,
-              'codex-subscription',
-              'generate_image',
-              skillResult.usage.modelId,
-              {
-                inputTokens: skillResult.usage.inputTokens,
-                outputTokens: skillResult.usage.outputTokens,
-              },
-            );
-          } catch (error) {
-            console.error('[billing] generate_image subscription usage logging error:', error);
-          }
-        } else if (skillResult.usage && skillResult.provider !== 'codex-subscription') {
+        if (skillResult.usage) {
           const { deductByTokens } = await import('./billing/credits');
           await deductByTokens(
               ctx.userId ?? '',
@@ -1531,8 +1501,7 @@ function createGenerateImageTool(
               skillResult.usage!.providerCostUsd,
           );
         } else if (
-          skillResult.provider !== 'codex-subscription'
-          && skillResult.success
+          skillResult.success
           && skillResult.image
           && skillResult.usedModel
           && skillResult.usedModel !== 'gemini'
@@ -1543,13 +1512,13 @@ function createGenerateImageTool(
             : 'edit_image';
           await deductCredits(ctx.userId ?? '', null, billingTool, skillResult.usedModel, Date.now() - imageStartedAt);
         }
-        // NSFW detection: flag session so all subsequent calls skip Gemini
+        // Preserve compatibility with older tool results that reported a content block.
         if (skillResult.contentBlocked) ctx.isNsfw = true;
         if (skillResult.image) {
           ctx.currentImage = skillResult.image;
           ctx.snapshotImages.push(skillResult.image);
           ctx.generatedImages.push(skillResult.image);
-          ctx.lastImageBackground = background;
+          ctx.lastImageBackground = imagePlan.request.background;
           if (skillResult.usedModel) ctx.lastUsedModel = skillResult.usedModel;
           // Refresh URLs from DB — DualWriter uploads to Storage in parallel,
           // so base64 entries get replaced with http URLs for downstream tools
