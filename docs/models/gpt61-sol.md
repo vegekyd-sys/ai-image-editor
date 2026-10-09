@@ -14,7 +14,8 @@ The existing Azure resource passed the same check with the exact 6.1 model ID.
 Credentials, owner identity, and allowlist are unchanged.
 
 Rates per million tokens: $2 input, $10 output, $0.10 cached input; automatic
-caching has no separate cache-write charge. Product API markup remains 2x.
+caching has no write premium. When upstream reports cold input as cache-write
+tokens, that slice costs the ordinary $2 input rate. Product API markup remains 2x.
 Subscription Agent usage is recorded with zero credits; media tools retain their
 normal prices. The two exact provider billing IDs are registered by the accompanying
 migration. [Official model](https://developers.openai.com/api/docs/models/gpt-6.1-sol).
