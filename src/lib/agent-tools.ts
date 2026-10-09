@@ -216,6 +216,7 @@ export interface AgentContext {
   userId?: string;            // Current user ID for workspace
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
+  generatedImageMetadata?: Map<number, import('@/types').PhotoMetadata>;
   /** Background contract for the most recently generated image. */
   lastImageBackground?: ImageBackground;
   /** Which model was used for the last image generation */
@@ -1484,8 +1485,12 @@ function createGenerateImageTool(
           if (!check.ok) return { success: false, message: `Insufficient credits. Need ${requiredCredits || 5}, have ${check.balance}.`, error: 'insufficient_credits' };
         }
         let receiptPath: string | undefined;
+        let mjGeneration: import('@/types').PhotoMetadata['midjourneyGeneration'];
         const onMidjourneyReceipt = billingModel === 'mj-v8.2' && ctx.supabase && ctx.userId
           ? async (task: import('./midjourney').MidjourneyTask, request: import('./midjourney').MidjourneyRequest) => {
+              const { buildMidjourneyRequest } = await import('./midjourney');
+              const payload = buildMidjourneyRequest(request);
+              mjGeneration = { prompt: payload.prompt, taskId: task.taskId, quality: payload.quality, speed: payload.model_params.speed };
               const { writeFile } = await import('./workspace');
               receiptPath = `${ctx.projectId}/midjourney/${task.taskId}.json`;
               const saved = await writeFile(receiptPath, JSON.stringify({ model: task.model, taskId: task.taskId, status: task.status, brief: editPrompt, request, createdAt: new Date().toISOString() }), ctx.supabase, ctx.userId!, 'application/json');
@@ -1531,6 +1536,10 @@ function createGenerateImageTool(
         const mediaIndices: number[] = [];
         for (const image of batchImages) {
           ctx.snapshotImages.push(image);
+          if (mjGeneration) {
+            ctx.generatedImageMetadata ??= new Map();
+            ctx.generatedImageMetadata.set(ctx.generatedImages.length, { midjourneyGeneration: mjGeneration });
+          }
           ctx.generatedImages.push(image);
           mediaIndices.push(ctx.snapshotImages.length);
         }

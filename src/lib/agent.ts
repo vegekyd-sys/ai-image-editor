@@ -84,10 +84,12 @@ function* flushPendingImageSnapshots(ctx: AgentContext): Generator<AgentStreamEv
   ctx.pendingImageSnapshots = undefined;
 }
 
-function generatedImageMetadata(ctx: AgentContext, image: string): import('@/types').PhotoMetadata | undefined {
-  if (ctx.lastImageBackground !== 'transparent') return undefined;
+function generatedImageMetadata(ctx: AgentContext, image: string, index: number): import('@/types').PhotoMetadata | undefined {
+  const metadata = ctx.generatedImageMetadata?.get(index);
+  if (ctx.lastImageBackground !== 'transparent') return metadata;
   const mime = image.match(/^data:(image\/[^;]+);/i)?.[1] || 'image/png';
   return {
+    ...metadata,
     imageMimeType: mime,
     hasAlpha: true,
     generationBackground: 'transparent',
@@ -1303,7 +1305,7 @@ export async function* runMakaronAgent(
         }
 
         while (imagesSent < ctx.generatedImages.length) {
-          yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel, metadata: generatedImageMetadata(ctx, ctx.generatedImages[imagesSent]) };
+          yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel, metadata: generatedImageMetadata(ctx, ctx.generatedImages[imagesSent], imagesSent) };
           finalStepDeliveredArtifact = true;
           attemptDeliveredArtifact = true;
           imagesSent++;
@@ -1525,7 +1527,7 @@ export async function* runMakaronAgent(
 
     // Flush remaining images
     while (imagesSent < ctx.generatedImages.length) {
-      yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel, metadata: generatedImageMetadata(ctx, ctx.generatedImages[imagesSent]) };
+      yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel, metadata: generatedImageMetadata(ctx, ctx.generatedImages[imagesSent], imagesSent) };
       imagesSent++;
     }
     yield* flushPendingImageSnapshots(ctx);

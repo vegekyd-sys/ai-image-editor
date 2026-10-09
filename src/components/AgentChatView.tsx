@@ -20,6 +20,7 @@ import { removeAllInlineVideoUrls, removeInlineMediaNavigationMarkers, removeRen
 import type { ArtifactCompletionAction as CompletionAction } from '@/types';
 import { buildStudioRunStagePlacements, StudioRunProgress, StudioRunStageCard, useStudioRun } from '@/components/StudioRunDock';
 import { resolveOpenAIWebCitations } from '@/lib/web-citations';
+import { resolveImagePromptCard } from '@/lib/editor/image-prompt-card';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
 const videoArCache = new Map<string, string>();
@@ -83,8 +84,8 @@ function InlineCuiVideo({ url, aspectRatio, posterUrl, snapIndex, isDesktop, onN
   );
 }
 
-/** Collapsible card showing the English editPrompt sent to Gemini, with optional input images */
-function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; inputImages?: string[]; editModel?: string }) {
+/** Collapsible card showing a submitted prompt, or a labeled legacy MJ brief. */
+function EditPromptCard({ prompt, inputImages, editModel, isBrief }: { prompt: string; inputImages?: string[]; editModel?: string; isBrief?: boolean }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const inputImageLabels = [t('chat.currentImage'), t('chat.referenceImage')];
@@ -107,7 +108,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
           />
         )}
         <span className="text-[11px] font-medium flex-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          {t('chat.promptCard').replace(/nano banana 2|qwen edit|OpenAI Image 2/gi, modelLabel)}
+          {isBrief ? t('chat.midjourneyBrief') : t('chat.promptCard').replace(/nano banana 2|qwen edit|OpenAI Image 2/gi, modelLabel)}
         </span>
         <span className="text-[11px] flex-shrink-0" style={{ color: 'rgba(255,255,255,0.3)' }}>{open ? t('chat.collapse') : t('chat.expand')}</span>
       </button>
@@ -1628,9 +1629,10 @@ export default function AgentChatView({
                     )}
 
                     {/* editPrompt card — collapsible */}
-                    {msg.editPrompt && (
-                      <EditPromptCard prompt={msg.editPrompt} inputImages={msg.editInputImages} editModel={msg.editModel} />
-                    )}
+                    {(() => {
+                      const card = resolveImagePromptCard(msg, snapshots);
+                      return card && <EditPromptCard prompt={card.prompt} inputImages={msg.editInputImages} editModel={card.model} isBrief={card.isBrief} />;
+                    })()}
 
                     {/* Inline music — format: "music:INDEX|TITLE|DURATION|TAGS|playUrl|finalUrl" */}
                     {(() => {

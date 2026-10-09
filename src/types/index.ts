@@ -85,6 +85,13 @@ export interface PhotoMetadata {
   hasAlpha?: boolean;
   transparentRatio?: number;
   generationBackground?: 'auto' | 'opaque' | 'transparent';
+  /** Exact submitted MJ payload, persisted with every candidate for prompt transparency. */
+  midjourneyGeneration?: {
+    prompt: string;
+    taskId: string;
+    quality: 'standard' | 'hd';
+    speed: 'fast' | 'draft';
+  };
 }
 
 // ── Annotation types ──

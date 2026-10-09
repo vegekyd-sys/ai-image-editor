@@ -397,6 +397,7 @@ const en = {
   'chat.currentImage': 'Current image (edit base)',
   'chat.referenceImage': 'Reference image',
   'chat.promptCard': 'Prompt sent to nano banana 2',
+  'chat.midjourneyBrief': 'Original Midjourney brief (before conversion)',
   'chat.expand': 'Expand ▼',
   'chat.collapse': 'Collapse ▲',
   'chat.inputImages': 'Input images',

@@ -433,6 +433,7 @@ const ja = {
   'chat.currentImage': '現在の画像（編集元）',
   'chat.referenceImage': '参照画像',
   'chat.promptCard': 'Nano Banana 2に送信したプロンプト',
+  'chat.midjourneyBrief': 'Midjourney への元の要望（変換前）',
   'chat.expand': '展開 ▼',
   'chat.collapse': '折りたたむ ▲',
   'chat.inputImages': '入力画像',

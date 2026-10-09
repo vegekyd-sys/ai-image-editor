@@ -435,6 +435,7 @@ const zhHant = {
   'chat.currentImage': '目前圖片（編輯基礎）',
   'chat.referenceImage': '參考圖片',
   'chat.promptCard': '傳送給 Nano Banana 2 的提示詞',
+  'chat.midjourneyBrief': 'Midjourney 原始需求（轉換前）',
   'chat.expand': '展開 ▼',
   'chat.collapse': '收合 ▲',
   'chat.inputImages': '輸入圖片',

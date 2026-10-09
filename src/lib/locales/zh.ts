@@ -397,6 +397,7 @@ const zh = {
   'chat.currentImage': '当前图（编辑基础）',
   'chat.referenceImage': '参考图',
   'chat.promptCard': '发给 nano banana 2 的 prompt',
+  'chat.midjourneyBrief': 'Midjourney 原始需求（转换前）',
   'chat.expand': '展开 ▼',
   'chat.collapse': '收起 ▲',
   'chat.inputImages': '传入图片',
