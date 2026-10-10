@@ -12,6 +12,7 @@ describe('interactive Agent fast lane', () => {
   const projectsPage = read('src/app/projects/page.tsx');
   const projectEditor = read('src/components/ProjectEditorContainer.tsx');
   const cron = read('src/app/api/cron/agent-executions/route.ts');
+  const executionOrigin = read('src/lib/agent-execution-origin.ts');
 
   it('streams the first durable attempt inline without a second worker dispatch', () => {
     expect(editor).toContain('durable: true');
@@ -26,7 +27,8 @@ describe('interactive Agent fast lane', () => {
     expect(route).toContain('encoder,');
     expect(route).toContain('leaseSeconds: inlineLeaseSeconds');
     expect(projectsPage).toContain('durable: true');
-    expect(cron).toContain('lease_expires_at.lte');
+    expect(cron).toContain('agentExecutionRecoveryFilter(origin, now)');
+    expect(executionOrigin).toContain('lease_expires_at.lte');
     expect(cron).toContain('runAgentExecutionAttempt(runId');
     expect(route).toContain("mode: 'inline-first-attempt'");
   });

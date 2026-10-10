@@ -7,6 +7,7 @@ import { enterBillingAttribution, resolveRequestBillingSource } from '@/lib/bill
 import { AgentPerf } from '@/lib/agent-perf';
 import { getRequestLocale } from '@/lib/server-locale';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
+import { resolveAgentExecutionWorkerOrigin } from '@/lib/agent-execution-origin';
 import { translate } from '@/lib/locales';
 import {
   normalizeRequestedAgentModelPreference,
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
       headless: !!headless,
     });
     const locale = getRequestLocale(req);
+    const executionOrigin = resolveAgentExecutionWorkerOrigin(req.nextUrl.origin);
     const [codexSubscriptionAllowed, skillLaunchContext] = await Promise.all([
       isDynamicCodexSubscriptionUserAllowed(userId),
       verifySkillLaunchContext(supabase, rawSkillLaunchContext, userId),
@@ -231,7 +233,7 @@ export async function POST(req: NextRequest) {
         isNsfw,
         analysisOnly,
         firstMessageId,
-        executionOwnerOrigin: req.nextUrl.origin,
+        executionOwnerOrigin: executionOrigin,
         executionRequest: {
           locale,
           preferredModel,
@@ -250,7 +252,7 @@ export async function POST(req: NextRequest) {
           isNsfw,
           audioAttachments,
           codexSubscriptionAllowed,
-          origin: req.nextUrl.origin,
+          origin: executionOrigin,
         },
       };
       inlineRunPreload = {
@@ -312,7 +314,7 @@ export async function POST(req: NextRequest) {
             const result = await runnerRuntime.runAgentExecutionAttempt(runId, {
               admin: supabase,
               workerId: inlineInitialClaim?.workerId,
-              origin: req.nextUrl.origin,
+              origin: executionOrigin || undefined,
               controller,
               encoder,
               timelineVersion,
