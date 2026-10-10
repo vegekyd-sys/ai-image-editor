@@ -13,7 +13,10 @@ export function normalizeAgentExecutionOrigin(value?: string | null): string | n
 /** Vercel invokes production cron routes on the immutable deployment host. */
 export function resolveAgentExecutionWorkerOrigin(
   value?: string | null,
-  env: { VERCEL_ENV?: string; VERCEL_URL?: string } = process.env,
+  env: { VERCEL_ENV?: string; VERCEL_URL?: string } = {
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    VERCEL_URL: process.env.VERCEL_URL,
+  },
 ): string | null {
   const origin = normalizeAgentExecutionOrigin(value);
   const deployment = env.VERCEL_URL
