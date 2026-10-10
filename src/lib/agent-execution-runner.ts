@@ -1,4 +1,4 @@
-import { canRunAgentExecution, normalizeAgentExecutionOrigin } from './agent-execution-origin';
+import { canRunAgentExecution, resolveAgentExecutionWorkerOrigin } from './agent-execution-origin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runMakaronAgent, type AgentStreamEvent } from './agent';
 import { AgentDualWriter } from './agentDualWriter';
@@ -339,7 +339,7 @@ export async function runAgentExecutionAttempt(
     run.metadata as Record<string, unknown> | null,
     { runId, projectId: run.project_id },
   ));
-  const workerOrigin = normalizeAgentExecutionOrigin(options.origin);
+  const workerOrigin = resolveAgentExecutionWorkerOrigin(options.origin);
   const taskOrigin = typeof run.metadata?.executionOwnerOrigin === 'string'
     ? run.metadata.executionOwnerOrigin
     : (run.metadata?.executionRequest as ExecutionRequest | undefined)?.origin;
@@ -1144,7 +1144,9 @@ export async function runAgentExecutionAttempt(
           },
         },
       }).eq('id', runId).eq('status', 'running').eq('lease_token', claim.lease_token);
-      void dispatchAgentExecutionAttempt(runId, workerOrigin!);
+      // Keep the dispatch alive until the next request acknowledges scheduling.
+      // A fire-and-forget fetch can be frozen when this serverless attempt ends.
+      await dispatchAgentExecutionAttempt(runId, workerOrigin!);
       return {
         claimed: true,
         runId,

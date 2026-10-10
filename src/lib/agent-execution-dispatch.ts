@@ -27,6 +27,7 @@ export async function dispatchAgentExecutionAttempt(runId: string, origin?: stri
     const response = await fetch(`${origin.replace(/\/$/, '')}/api/agent/execution/${runId}`, {
       method: 'POST',
       headers: { 'x-agent-execution-token': createAgentExecutionDispatchToken(runId) },
+      signal: AbortSignal.timeout(10_000),
     });
     return response.ok;
   } catch (error) {

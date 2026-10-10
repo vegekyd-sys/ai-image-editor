@@ -10,6 +10,21 @@ export function normalizeAgentExecutionOrigin(value?: string | null): string | n
   } catch { return null; }
 }
 
+/** Vercel invokes production cron routes on the immutable deployment host. */
+export function resolveAgentExecutionWorkerOrigin(
+  value?: string | null,
+  env: Pick<NodeJS.ProcessEnv, 'VERCEL_ENV' | 'VERCEL_URL'> = process.env,
+): string | null {
+  const origin = normalizeAgentExecutionOrigin(value);
+  const deployment = env.VERCEL_URL
+    ? normalizeAgentExecutionOrigin(`https://${env.VERCEL_URL}`)
+    : null;
+  if (env.VERCEL_ENV === 'production' && origin && origin === deployment) {
+    return PRODUCTION_ORIGINS[0];
+  }
+  return origin;
+}
+
 export function canRunAgentExecution(taskOrigin: string | null | undefined, workerOrigin: string | null | undefined): boolean {
   const worker = normalizeAgentExecutionOrigin(workerOrigin);
   if (!worker) return false;

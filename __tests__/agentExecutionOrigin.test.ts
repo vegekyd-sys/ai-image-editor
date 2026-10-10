@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { agentExecutionOriginFilter, canRunAgentExecution, normalizeAgentExecutionOrigin } from '@/lib/agent-execution-origin';
+import { agentExecutionOriginFilter, canRunAgentExecution, normalizeAgentExecutionOrigin, resolveAgentExecutionWorkerOrigin } from '@/lib/agent-execution-origin';
 
 describe('Agent execution origin ownership', () => {
+  it('recovers public-domain tasks when production cron arrives on its deployment host', () => {
+    const origin = resolveAgentExecutionWorkerOrigin('https://current.vercel.app', {
+      VERCEL_ENV: 'production', VERCEL_URL: 'current.vercel.app',
+    });
+    expect(origin).toBe('https://www.makaron.app');
+    expect(canRunAgentExecution('https://www.makaron.app', origin)).toBe(true);
+    expect(agentExecutionOriginFilter(origin!)).toContain('origin.is.null');
+  });
+  it('never promotes Preview or unrelated deployment origins to production', () => {
+    expect(resolveAgentExecutionWorkerOrigin('https://current.vercel.app', {
+      VERCEL_ENV: 'preview', VERCEL_URL: 'current.vercel.app',
+    })).toBe('https://current.vercel.app');
+    expect(resolveAgentExecutionWorkerOrigin('https://other.vercel.app', {
+      VERCEL_ENV: 'production', VERCEL_URL: 'current.vercel.app',
+    })).toBe('https://other.vercel.app');
+    expect(resolveAgentExecutionWorkerOrigin('http://localhost:3000', {
+      VERCEL_ENV: 'production', VERCEL_URL: 'current.vercel.app',
+    })).toBe('http://localhost:3000');
+  });
   it('keeps local and each Preview separate from production and one another', () => {
     const origins = ['http://localhost:3000', 'http://localhost:4395', 'https://preview-a.vercel.app', 'https://preview-b.vercel.app', 'https://www.makaron.app'];
     for (const task of origins) for (const worker of origins) expect(canRunAgentExecution(task, worker), `${task} on ${worker}`).toBe(task === worker);

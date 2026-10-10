@@ -1,4 +1,4 @@
-import { agentExecutionOriginFilter } from '@/lib/agent-execution-origin';
+import { agentExecutionOriginFilter, resolveAgentExecutionWorkerOrigin } from '@/lib/agent-execution-origin';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
 import { runAgentExecutionAttempt } from '@/lib/agent-execution-runner';
@@ -10,12 +10,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const admin = getSupabaseAdmin();
+  const origin = resolveAgentExecutionWorkerOrigin(req.nextUrl.origin);
+  if (!origin) return NextResponse.json({ error: 'Invalid execution origin' }, { status: 500 });
   const now = new Date().toISOString();
   const { data: runs, error } = await admin
     .from('agent_runs')
     .select('id')
     .eq('status', 'running')
-    .or(`and(or(next_attempt_at.lte.${now},lease_expires_at.lte.${now}),or(${agentExecutionOriginFilter(req.nextUrl.origin)}))`)
+    .or(`and(or(next_attempt_at.lte.${now},lease_expires_at.lte.${now}),or(${agentExecutionOriginFilter(origin)}))`)
     .order('next_attempt_at', { ascending: true, nullsFirst: false })
     .limit(2);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -24,7 +26,7 @@ export async function GET(req: NextRequest) {
   for (const runId of runIds) {
     after(async () => {
       try {
-        await runAgentExecutionAttempt(runId, { admin, workerId: `cron-${crypto.randomUUID()}`, origin: req.nextUrl.origin });
+        await runAgentExecutionAttempt(runId, { admin, workerId: `cron-${crypto.randomUUID()}`, origin });
       } catch (attemptError) {
         console.error(`[cron/agent-executions] ${runId}:`, attemptError);
       }
