@@ -770,6 +770,7 @@ const ja = {
   'agent.error.connectionEnded': 'Agentの接続が完了前に終了しました。保存済みの作業は保持されています。「続ける」と送信すると再開できます。',
   'agent.error.runtimeDraftSaved': 'Agentの実行環境が停止しましたが、下書きは保存されています。「続ける」と送信すると再開できます。',
   'agent.error.runtimeNoDraft': 'Agentの実行環境が停止し、再開可能な下書きも保存されませんでした。もう一度お試しください。',
+  'agent.error.repeatedInterruptions': '実行が繰り返し中断されたため、自動再試行を停止しました。素材と下書きは保存されています。問題を解決した後に「続けて」と送信してください。',
   'agent.mock.tipsTeaser': 'ミニチュアの世界にしてみませんか？このシーンにぴったりです。',
   'agent.mock.tipReaction': 'いい仕上がりです！編集が自然になじんでいます。',
   'agent.mock.nameProject': 'コーヒーの午後',

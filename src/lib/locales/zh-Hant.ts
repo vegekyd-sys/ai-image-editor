@@ -764,6 +764,7 @@ const zhHant = {
   'agent.error.connectionEnded': 'Agent 連線在完成結果前結束。已儲存的工作會保留，傳送「繼續」即可恢復。',
   'agent.error.runtimeDraftSaved': 'Agent 執行環境已停止，但草稿已儲存。傳送「繼續」即可從草稿恢復。',
   'agent.error.runtimeNoDraft': 'Agent 執行環境已停止，且沒有可恢復的草稿。請重新傳送要求。',
+  'agent.error.repeatedInterruptions': '執行連續多次中斷，已停止自動重試。已有素材和草稿仍保留；處理阻塞原因後可傳送「繼續」。',
   'agent.mock.tipsTeaser': '試試把它變成微縮模型？很適合這個場景。',
   'agent.mock.tipReaction': '效果很棒！新的圖片很自然。',
   'agent.mock.nameProject': '咖啡午後',

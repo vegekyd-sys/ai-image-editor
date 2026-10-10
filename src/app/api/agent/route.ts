@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
       enterBillingAttribution({ runId, projectId, source: billingSource, apiKeyId: apiKeyId ?? null });
       const inlineLeaseSeconds = Math.max(
         60,
-        Math.min(900, Number(process.env.AGENT_INLINE_LEASE_SECONDS) || 120),
+        Math.min(300, Number(process.env.AGENT_INLINE_LEASE_SECONDS) || 120),
       );
       const leaseToken = crypto.randomUUID();
       const inlineWorkerId = `inline-${crypto.randomUUID()}`;

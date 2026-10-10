@@ -4,10 +4,13 @@
  * Sandbox is reused across renders within the same Lambda instance.
  */
 
+import { createHash, randomUUID } from 'node:crypto';
+import { awaitPreviewOperation, runPreviewCommand } from './remotion-preview-command';
 import type { DesignPayload } from '@/types';
 import { hasRemotionAudioSources } from '@/lib/remotion-audio';
 import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver';
 import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization';
+import { collectPreviewMediaSources, localizePreviewMedia, PREVIEW_MEDIA_PREFETCH_SCRIPT } from './remotion-preview-media';
 
 function readEnv(name: string): string | undefined {
   const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim();
@@ -18,8 +21,34 @@ function readEnv(name: string): string | undefined {
 
 type SandboxInstance = import('@vercel/sandbox').Sandbox;
 
-let _sandboxId: string | null = null;
-let _sandboxPromise: Promise<SandboxInstance> | null = null;
+interface SandboxPoolEntry {
+  promise: Promise<SandboxInstance> | null;
+  createdAt: number;
+  prefetchTail: Promise<void>;
+}
+const sandboxPool = new Map<string, SandboxPoolEntry>();
+const SANDBOX_LIFETIME_MS = 10 * 60 * 1000;
+function previewPoolKey(design: DesignPayload): string {
+  return 'preview:' + createHash('sha256').update(collectPreviewMediaSources(design).map(s => s.path).join('\n')).digest('hex');
+}
+function poolEntry(key: string): SandboxPoolEntry {
+  let entry = sandboxPool.get(key);
+  if (!entry) { entry = {promise:null,createdAt:0,prefetchTail:Promise.resolve()}; sandboxPool.set(key,entry); }
+  return entry;
+}
+async function preparePreviewMedia(design: DesignPayload, sandbox: SandboxInstance, entry: SandboxPoolEntry, signal: AbortSignal): Promise<DesignPayload> {
+  const sources = collectPreviewMediaSources(design);
+  if (!sources.length) return design;
+  const previous = entry.prefetchTail;
+  const current = previous.catch(() => undefined).then(async () => {
+    signal.throwIfAborted();
+    await awaitPreviewOperation(sandbox.writeFiles([{ path: '/tmp/makaron-preview-prefetch.mjs', content: Buffer.from(PREVIEW_MEDIA_PREFETCH_SCRIPT) }], {signal}), signal);
+    await runPreviewCommand(sandbox, ['/tmp/makaron-preview-prefetch.mjs', JSON.stringify(sources)], signal);
+  });
+  entry.prefetchTail = current;
+  await awaitPreviewOperation(current, signal);
+  return localizePreviewMedia(design, sources);
+}
 
 export function normalizeRemotionServerCode(code: string): string {
   return code
@@ -64,38 +93,31 @@ ${normalized}`;
 }
 
 /** Get or create a Sandbox from snapshot. Reuses across renders and requests. */
-async function ensureSandbox(): Promise<SandboxInstance> {
+async function ensureSandbox(key = 'export', signal?: AbortSignal): Promise<SandboxInstance> {
   const { Sandbox } = await import('@vercel/sandbox');
-
-  // Try to reuse existing sandbox
-  if (_sandboxPromise) {
+  // Keep different source sets out of one another's cache/queue. Do not trust
+  // the SDK object's cached status after the service's lifetime has elapsed.
+  for (const [oldKey, old] of sandboxPool) {
+    if (Date.now() - old.createdAt >= SANDBOX_LIFETIME_MS) sandboxPool.delete(oldKey);
+  }
+  const entry = poolEntry(key);
+  if (entry.promise && Date.now() - entry.createdAt < SANDBOX_LIFETIME_MS - 60_000) {
     try {
-      const sandbox = await _sandboxPromise;
+      const sandbox = await entry.promise;
       if (sandbox.status === 'running') return sandbox;
     } catch { /* sandbox died or 410 */ }
-    _sandboxPromise = null;
-    _sandboxId = null;
   }
-
-  // Create new sandbox from snapshot
   const snapshotId = process.env.REMOTION_SNAPSHOT_ID;
   if (!snapshotId) throw new Error('REMOTION_SNAPSHOT_ID not set');
-
-  _sandboxPromise = (async () => {
-    console.log('🖥️ [remotion-server] Creating Sandbox from snapshot...');
-    const t0 = Date.now();
-    const vcpus = Number(process.env.REMOTION_SANDBOX_VCPUS || 8);
-    const sandbox = await Sandbox.create({
-      source: { type: 'snapshot', snapshotId },
-      resources: { vcpus },
-      timeout: 5 * 60 * 1000,
-    });
-    _sandboxId = sandbox.sandboxId;
-    console.log(`🖥️ [remotion-server] Sandbox ready in ${((Date.now() - t0) / 1000).toFixed(1)}s (${sandbox.sandboxId})`);
-    return sandbox;
-  })();
-
-  return _sandboxPromise;
+  entry.createdAt = Date.now();
+  entry.prefetchTail = Promise.resolve();
+  entry.promise = Sandbox.create({
+    source: { type: 'snapshot', snapshotId },
+    resources: { vcpus: Number(process.env.REMOTION_SANDBOX_VCPUS || 8) },
+    timeout: SANDBOX_LIFETIME_MS,
+    signal,
+  });
+  return entry.promise;
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
@@ -108,7 +130,9 @@ async function ensureSandbox(): Promise<SandboxInstance> {
 export async function renderDesignFrame(
   design: DesignPayload,
   frame = 0,
+  options: { signal?: AbortSignal } = {},
 ): Promise<Buffer> {
+  options.signal?.throwIfAborted();
   if (readEnv('REMOTION_RENDERER') === 'local') {
     const { renderDesignFrameLocal } = await import('@/lib/remotion-local-renderer');
     return renderDesignFrameLocal(design, frame, {
@@ -117,32 +141,34 @@ export async function renderDesignFrame(
     });
   }
 
-  const { renderStillOnVercel } = await import('@remotion/vercel');
+  const key = previewPoolKey(design);
+  const frameSignal = AbortSignal.any([...(options.signal ? [options.signal] : []), AbortSignal.timeout(330_000)]);
 
   const fps = design.animation?.fps || 30;
   const dur = design.animation?.durationInSeconds || 0;
   const durationInFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
-  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+  const fontManifestUrl = await awaitPreviewOperation(resolveRemotionFontManifestUrlForDesign({
     code: design.code,
     props: design.props || {},
     substitutions: design.fontSubstitutions || {},
-  });
+  }), frameSignal);
   // Unique output file per render — prevents concurrent renders from overwriting each other
-  const outputFile = `/tmp/still-${frame}-${Date.now()}.jpeg`;
+  const outputFile = `/tmp/still-${frame}-${randomUUID()}.jpeg`;
 
   // Retry once if Sandbox is gone (410/expired)
   for (let attempt = 0; attempt < 2; attempt++) {
-    const sandbox = await ensureSandbox();
+    const sandbox = await awaitPreviewOperation(ensureSandbox(key, frameSignal), frameSignal);
     console.log(`🎨 [remotion-server] Rendering frame ${frame} (${design.width}x${design.height})${attempt > 0 ? ' [retry]' : ''}...`);
     const t0 = Date.now();
 
     try {
-      await renderStillOnVercel({
-        sandbox,
+      const renderDesign = await preparePreviewMedia(design, sandbox, poolEntry(key), AbortSignal.any([frameSignal, AbortSignal.timeout(240_000)]));
+      await runPreviewCommand(sandbox, ['render-still.mjs', JSON.stringify({
+        serveUrl: '/vercel/sandbox/remotion-bundle',
         compositionId: 'dynamic-design',
         inputProps: {
-          code: prepareRemotionCodeForSandbox(design.code),
-          designProps: normalizeRemotionTextValue(design.props || {}),
+          code: prepareRemotionCodeForSandbox(renderDesign.code),
+          designProps: normalizeRemotionTextValue(renderDesign.props || {}),
           fps,
           durationInFrames,
           width: design.width || 1080,
@@ -158,23 +184,34 @@ export async function renderDesignFrame(
         },
         imageFormat: 'jpeg',
         jpegQuality: 90,
+        envVariables: {},
+        scale: 1,
+        logLevel: 'info',
+        offthreadVideoCacheSizeInBytes: null,
+        mediaCacheSizeInBytes: null,
+        offthreadVideoThreads: null,
+        licenseKey: null,
         chromiumOptions: { disableWebSecurity: true, gl: null },
         frame: Math.min(frame, durationInFrames - 1),
-        outputFile,
+        output: outputFile,
         timeoutInMilliseconds: 30000,
-      });
+        chromeMode: 'headless-shell',
+        browserExecutable: null,
+        binariesDirectory: null,
+      })], AbortSignal.any([frameSignal, AbortSignal.timeout(60_000)]));
 
-      const buffer = await sandbox.readFileToBuffer({ path: outputFile });
+      options.signal?.throwIfAborted();
+      const buffer = await awaitPreviewOperation(sandbox.readFileToBuffer({ path: outputFile }, {signal:frameSignal}), frameSignal);
       if (!buffer) throw new Error('Rendered file not found in Sandbox');
 
       console.log(`✅ [remotion-server] Frame rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s: ${(buffer.length / 1024).toFixed(0)} KB`);
       return buffer;
     } catch (err) {
+      frameSignal.throwIfAborted();
       const msg = err instanceof Error ? err.message : String(err);
       if (attempt === 0 && (msg.includes('410') || msg.includes('gone') || msg.includes('not ok'))) {
         console.warn(`⚠️ [remotion-server] Sandbox expired, recreating...`);
-        _sandboxPromise = null;
-        _sandboxId = null;
+        sandboxPool.delete(key);
         continue; // retry with fresh sandbox
       }
       throw err;
@@ -265,8 +302,7 @@ export async function renderDesignVideo(
       const msg = err instanceof Error ? err.message : String(err);
       if (attempt === 0 && (msg.includes('410') || msg.includes('gone') || msg.includes('not ok'))) {
         console.warn(`⚠️ [remotion-server] Sandbox expired, recreating...`);
-        _sandboxPromise = null;
-        _sandboxId = null;
+        sandboxPool.delete('export');
         continue;
       }
       throw err;

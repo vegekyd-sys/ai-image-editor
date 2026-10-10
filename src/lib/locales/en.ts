@@ -862,6 +862,7 @@ const en = {
   'agent.error.connectionEnded': 'The agent connection ended without a completed result. Your saved work is preserved; send “continue” to resume.',
   'agent.error.runtimeDraftSaved': 'The agent runtime stopped, but your draft was saved. Send “continue” to resume from it.',
   'agent.error.runtimeNoDraft': 'The agent runtime stopped and no resumable draft was saved. Please retry the request.',
+  'agent.error.repeatedInterruptions': 'Execution was repeatedly interrupted, so automatic retries stopped. Existing assets and drafts are preserved; send “continue” after resolving the blocker.',
   'agent.mock.tipsTeaser': 'Try turning it into a miniature scene.',
   'agent.mock.tipReaction': 'Nice, that edit feels natural.',
   'agent.mock.nameProject': 'Coffee Afternoon',

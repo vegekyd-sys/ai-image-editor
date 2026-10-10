@@ -3,11 +3,26 @@ import type { AgentModelProvider } from './agent-models';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const EXECUTION_SCHEMA_VERSION = 1;
-export const DEFAULT_ATTEMPT_LEASE_SECONDS = 1_800;
+// Heartbeat lease, independent of the 25-minute model attempt budget.
+export const DEFAULT_ATTEMPT_LEASE_SECONDS = 180;
 export const DEFAULT_ATTEMPT_BUDGET_MS = 1_500_000;
 export const DEFAULT_ATTEMPT_MAX_STEPS = 60;
 export const DEFAULT_MAX_ATTEMPTS = 40;
 export const MAX_SAME_PROVIDER_ATTEMPTS = 5;
+export const MAX_CONSECUTIVE_INTERRUPTED_ATTEMPTS = 3;
+
+export function countConsecutiveInterruptedAttempts(
+  attemptsNewestFirst: ProviderAttemptObservation[],
+  inputEpoch: number,
+): number {
+  let count = 0;
+  for (const attempt of attemptsNewestFirst) {
+    if (Number(attempt.metadata?.inputEpoch ?? 0) !== inputEpoch
+      || attempt.terminal_code !== 'lease_expired') break;
+    count += 1;
+  }
+  return count;
+}
 
 export interface AgentContextPolicy {
   contextWindowTokens: number;
@@ -52,6 +67,7 @@ export interface DurableExecutionSnapshot {
 }
 
 export interface DurableExecutionRef {
+  leaseToken?: string;
   runId: string;
   attemptId: string;
   attemptNo: number;

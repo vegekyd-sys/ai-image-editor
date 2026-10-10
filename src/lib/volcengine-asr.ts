@@ -12,6 +12,23 @@ const DEFAULT_RESOURCE_ID = 'volc.bigasr.auc_turbo'
 const MAX_DOWNLOAD_BYTES = 220 * 1024 * 1024
 const MAX_AUDIO_BASE64_BYTES = 100 * 1024 * 1024
 const DEFAULT_FETCH_TIMEOUT_MS = 120_000
+const ASR_CONFIG_VERSION = 3
+
+// Recording-file flash accepts these recognition locales, not arbitrary voice locales.
+const RECOGNITION_LOCALES = [
+  'zh-CN', 'en-US', 'ja-JP', 'id-ID', 'es-MX', 'pt-BR', 'de-DE', 'fr-FR',
+  'ko-KR', 'fil-PH', 'ms-MY', 'th-TH', 'ar-SA', 'it-IT', 'bn-BD', 'el-GR',
+  'nl-NL', 'ru-RU', 'tr-TR', 'vi-VN', 'pl-PL', 'ro-RO', 'ne-NP', 'uk-UA', 'yue-CN',
+]
+
+export function normalizeAsrLanguage(language?: string): string | undefined {
+  const value = language?.trim().replace(/_/g, '-')
+  if (!value || /^(auto|default)$/i.test(value)) return undefined
+  const base = value.toLowerCase().split('-')[0]
+  const canonical = RECOGNITION_LOCALES.find(locale => locale.toLowerCase().split('-')[0] === base)
+  if (!canonical) throw new Error(`Unsupported Volcengine ASR language: ${value}. Use a supported recognition language or omit for multilingual detection.`)
+  return canonical
+}
 
 export interface TranscriptWord {
   text: string
@@ -35,6 +52,8 @@ export interface VolcengineAsrTranscript {
   requestId: string
   providerLogId?: string
   requestedLanguage?: string
+  asrConfigVersion?: number
+  inverseTextNormalization?: boolean
   text: string
   durationMs: number | null
   utterances: TranscriptUtterance[]
@@ -58,7 +77,8 @@ export function isAsrTranscriptCacheCompatible(
   transcript: VolcengineAsrTranscript,
   requestedLanguage?: string,
 ): boolean {
-  return !requestedLanguage || transcript.requestedLanguage === requestedLanguage
+  return transcript.asrConfigVersion === ASR_CONFIG_VERSION
+    && transcript.requestedLanguage === normalizeAsrLanguage(requestedLanguage)
 }
 
 function env(name: string): string | undefined {
@@ -72,17 +92,15 @@ function fetchTimeoutMs(): number {
 }
 
 async function fetchWithTimeout(input: string | URL, init?: RequestInit): Promise<Response> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), fetchTimeoutMs())
+  // The deadline must remain attached while response bodies are streamed/read.
+  // Clearing a timer after headers leaves a stalled media download unbounded.
   try {
-    return await fetch(input, { ...init, signal: init?.signal || controller.signal })
+    return await fetch(input, { ...init, signal: init?.signal || AbortSignal.timeout(fetchTimeoutMs()) })
   } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
+    if (err instanceof Error && ['AbortError', 'TimeoutError'].includes(err.name)) {
       throw new Error(`Volcengine ASR request timed out after ${fetchTimeoutMs()}ms.`)
     }
     throw err
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
@@ -118,13 +136,29 @@ async function downloadMedia(mediaUrl: string, dir: string): Promise<string> {
 
   const length = Number(res.headers.get('content-length') || 0)
   if (length > MAX_DOWNLOAD_BYTES) {
+    await res.body?.cancel()
     throw new Error(`Media is too large for ASR preprocessing (${Math.round(length / 1024 / 1024)}MB).`)
   }
 
-  const buffer = Buffer.from(await res.arrayBuffer())
-  if (buffer.length > MAX_DOWNLOAD_BYTES) {
-    throw new Error(`Media is too large for ASR preprocessing (${Math.round(buffer.length / 1024 / 1024)}MB).`)
+  if (!res.body) throw new Error('ASR media download returned no body.')
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let downloaded = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      downloaded += value.byteLength
+      if (downloaded > MAX_DOWNLOAD_BYTES) {
+        await reader.cancel()
+        throw new Error(`Media is too large for ASR preprocessing (${Math.round(downloaded / 1024 / 1024)}MB).`)
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
   }
+  const buffer = Buffer.concat(chunks, downloaded)
 
   const inputPath = path.join(dir, `input${extensionFromContentType(res.headers.get('content-type'), mediaUrl)}`)
   await writeFile(inputPath, buffer)
@@ -245,49 +279,71 @@ function buildHeaders(requestId: string): HeadersInit {
 }
 
 export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions): Promise<VolcengineAsrTranscript> {
-  const requestId = options.requestId || crypto.randomUUID()
+  const language = normalizeAsrLanguage(options.language)
+  // Arabic compound numerals can be corrupted by provider ITN: measured
+  // "اثنا عشر" (twelve) became "اثنا 10". Preserve spoken words for Arabic
+  // and automatic multilingual recognition, where Arabic is also possible.
+  const inverseTextNormalization = !!language && language !== 'ar-SA'
+  let requestId = options.requestId || crypto.randomUUID()
   const endpoint = env('VOLCENGINE_ASR_ENDPOINT') || DEFAULT_ENDPOINT
   const resourceId = env('VOLCENGINE_ASR_RESOURCE_ID') || DEFAULT_RESOURCE_ID
 
-  let audio: { url: string; language?: string } | { data: string; language?: string }
+  let audio: { url?: string; data?: string; format: string; language?: string }
   let extractedAudio = false
-  if (isAudioUrl(options.mediaUrl) && !options.localMediaPath) {
-    audio = { url: options.mediaUrl }
+  if (isAudioUrl(options.mediaUrl) && !options.localMediaPath && !options.sourceRange) {
+    audio = { url: options.mediaUrl, format: path.extname(options.mediaUrl.split('?')[0]).slice(1).toLowerCase() }
   } else {
     const extracted = await extractAudioBase64(options.mediaUrl, options.localMediaPath, options.sourceRange)
-    audio = { data: extracted.data }
+    audio = { data: extracted.data, format: 'mp3' }
     extractedAudio = extracted.extractedAudio
   }
 
-  if (options.language) audio.language = options.language
+  if (language) audio.language = language
 
-  const res = await fetchWithTimeout(endpoint, {
-    method: 'POST',
-    headers: buildHeaders(requestId),
-    body: JSON.stringify({
-      user: { uid: options.uid || 'makaron-agent' },
-      audio,
-      request: {
-        model_name: 'bigmodel',
-        enable_itn: true,
-        enable_punc: true,
-      },
-    }),
-  })
+  let body: JsonRecord = {}
+  let providerLogId: string | undefined
+  // Retry only the provider's URL-download failure, once, with the same audio bytes.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetchWithTimeout(endpoint, {
+      method: 'POST',
+      headers: buildHeaders(requestId),
+      body: JSON.stringify({
+        user: { uid: options.uid || 'makaron-agent' },
+        audio,
+        request: {
+          model_name: 'bigmodel',
+          enable_itn: inverseTextNormalization,
+          enable_punc: true,
+          show_utterances: true,
+          ...(!language ? { enable_auto_lang: true } : {}),
+        },
+      }),
+    })
 
-  const bodyText = await res.text()
-  let body: JsonRecord
-  try {
-    body = JSON.parse(bodyText) as JsonRecord
-  } catch {
-    body = { raw: bodyText }
-  }
-
-  const statusCode = res.headers.get('x-api-status-code')
-  const statusMessage = res.headers.get('x-api-message')
-  const providerLogId = res.headers.get('x-tt-logid') || undefined
-  if (!res.ok || (statusCode && statusCode !== '20000000')) {
+    const bodyText = await res.text()
+    try {
+      body = JSON.parse(bodyText) as JsonRecord
+    } catch {
+      body = { raw: bodyText }
+    }
+    const statusCode = res.headers.get('x-api-status-code')
+    const statusMessage = res.headers.get('x-api-message')
+    providerLogId = res.headers.get('x-tt-logid') || undefined
+    if (res.ok && (!statusCode || statusCode === '20000000')) break
     const msg = statusMessage || (typeof body.message === 'string' ? body.message : bodyText.slice(0, 300))
+    if (attempt === 0 && audio.url && /audio download failed|21701/i.test(msg)) {
+      const workDir = await mkdtemp(path.join(tmpdir(), 'makaron-asr-retry-'))
+      try {
+        const inputPath = await downloadMedia(audio.url, workDir)
+        const bytes = await readFile(inputPath)
+        if (bytes.length > MAX_AUDIO_BASE64_BYTES) throw new Error('Audio is too large for Volcengine ASR binary retry.')
+        audio = { data: bytes.toString('base64'), format: audio.format, ...(language ? { language } : {}) }
+      } finally {
+        await rm(workDir, { recursive: true, force: true }).catch(() => {})
+      }
+      requestId = crypto.randomUUID()
+      continue
+    }
     throw new Error(
       `Volcengine ASR failed (${res.status}${statusCode ? `/${statusCode}` : ''}): ${msg}`
       + `${providerLogId ? ` (logid: ${providerLogId})` : ''}`,
@@ -304,7 +360,9 @@ export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions)
     resourceId,
     requestId,
     providerLogId,
-    requestedLanguage: options.language,
+    requestedLanguage: language,
+    asrConfigVersion: ASR_CONFIG_VERSION,
+    inverseTextNormalization,
     text,
     durationMs: parseDurationMs(body),
     utterances,

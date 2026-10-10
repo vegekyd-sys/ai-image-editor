@@ -862,6 +862,7 @@ const zh = {
   'agent.error.connectionEnded': 'Agent 在没有完成结果时结束了。已保存的工作会保留，发送“继续”即可恢复。',
   'agent.error.runtimeDraftSaved': 'Agent 运行环境已中断，但草稿已经保存。发送“继续”会从这份草稿恢复。',
   'agent.error.runtimeNoDraft': 'Agent 运行环境已中断，且没有可恢复的草稿。请重新发送请求。',
+  'agent.error.repeatedInterruptions': '执行连续多次中断，已停止自动重试。已有素材和草稿仍保留；处理阻塞原因后可发送“继续”。',
   'agent.mock.tipsTeaser': '试试把它变成微缩模型？特别适合这种场景。',
   'agent.mock.tipReaction': '效果很棒！新图很自然。',
   'agent.mock.nameProject': '咖啡下午茶',

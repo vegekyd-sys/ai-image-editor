@@ -36,7 +36,7 @@ export function wrapDurableInputAwareTools(
     definition.execute = async (input: unknown, executionOptions?: unknown) => {
       const { data: runState, error } = await ctx.supabase
         .from('agent_runs')
-        .select('status, input_version')
+        .select('status, input_version, lease_token')
         .eq('id', ctx.execution!.runId)
         .eq('user_id', ctx.userId)
         .maybeSingle();
@@ -44,6 +44,7 @@ export function wrapDurableInputAwareTools(
       if (
         error
         || runState?.status !== 'running'
+        || (ctx.execution!.leaseToken !== undefined && runState?.lease_token !== ctx.execution!.leaseToken)
         || currentInputVersion > ctx.execution!.inputEpoch
       ) {
         if (error) {
@@ -52,12 +53,25 @@ export function wrapDurableInputAwareTools(
         return {
           success: false,
           terminal: true,
-          errorCode: 'agent_input_received',
+          errorCode: error ? 'agent_state_unverified'
+            : runState?.status !== 'running' ? 'agent_run_stopped'
+            : currentInputVersion > ctx.execution!.inputEpoch ? 'agent_input_received'
+            : 'execution_lease_lost',
           message: error
             ? 'Could not verify the latest Agent Run input before a durable mutation. Hand off and retry safely.'
+            : runState?.status !== 'running' ? 'This Agent Run has stopped. Do not perform any further mutations.'
+            : currentInputVersion <= ctx.execution!.inputEpoch ? 'Another worker owns this execution lease. Stop this attempt without further mutations.'
             : 'A newer instruction arrived in this Agent Run. Stop this attempt before further durable mutations so the next attempt can continue with the new context.',
-          userMessage: {
+          userMessage: !error && runState?.status !== 'running' ? {
+            zh: '任务已停止，已取消后续操作。', 'zh-Hant': '任務已停止，已取消後續操作。',
+            en: 'The task has stopped. Further operations are cancelled.', ja: 'タスクは停止しました。以降の操作を中止しました。',
+          } : (error || currentInputVersion <= ctx.execution!.inputEpoch) ? {
+            zh: '当前执行权限已失效，正在安全退出。', 'zh-Hant': '目前執行權限已失效，正在安全退出。',
+            en: 'This attempt no longer has verified execution ownership. Stopping safely.', ja: '実行権限を確認できなくなったため、安全に停止します。',
+          } : {
             zh: '已收到更新指令，正在从当前进度切换，不会继续执行旧目标。',
+            'zh-Hant': '已收到更新指令，正在從目前進度切換，不會繼續執行舊目標。',
+            ja: '新しい指示を受信しました。これまでの進行状況から切り替えます。',
             en: 'A newer instruction was received. Switching from the current progress without continuing the old target.',
           },
         };

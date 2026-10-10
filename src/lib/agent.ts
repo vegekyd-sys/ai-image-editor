@@ -265,6 +265,7 @@ export interface RunMakaronAgentOptions {
   execution?: DurableExecutionRef;
   /** Workflow context for model guidance only. It never controls Agent termination or retries. */
   studioWorkflowStage?: string;
+  studioResumeAuthorized?: boolean;
   agentRunId?: string;
   attemptBudgetMs?: number;
   maxSteps?: number;
@@ -290,6 +291,8 @@ export async function* runMakaronAgent(
     options?.codexSubscriptionAllowed,
   );
   const ctx: AgentContext = {
+    studioResumeAuthorized: options?.studioResumeAuthorized,
+    abortSignal: options?.abortSignal,
     corePromptMode,
     currentImage,
     referenceImages: options?.referenceImages,
@@ -1145,9 +1148,8 @@ export async function* runMakaronAgent(
             const localized = outputRecord.userMessage && typeof outputRecord.userMessage === 'object'
               ? outputRecord.userMessage as Record<string, unknown>
               : undefined;
-            const localizedMessage = responseLocale.startsWith('zh')
-              ? localized?.zh
-              : localized?.en;
+            const localizedMessage = localized?.[responseLocale]
+              || (responseLocale.startsWith('zh') ? localized?.zh : localized?.en);
             const userFacingMessage = typeof localizedMessage === 'string' && localizedMessage.trim()
               ? localizedMessage
               : rawMessage;

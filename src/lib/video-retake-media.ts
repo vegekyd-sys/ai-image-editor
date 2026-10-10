@@ -16,14 +16,14 @@ async function withFiles<T>(files: Record<string, Buffer>, run: (dir: string, ff
   } finally { await rm(dir, { recursive: true, force: true }) }
 }
 
-async function probeRetakeVideoFile(file: string): Promise<VideoProbe> {
-  const meta = await probeVideoFile(file,true)
+async function probeRetakeVideoFile(file: string, signal?: AbortSignal): Promise<VideoProbe> {
+  const meta = await probeVideoFile(file,true,signal)
   if (!meta.frameCount && meta.fps) {
     // FFmpeg is bundled in serverless; FFprobe may be absent. Count video
     // packets without decoding so audio padding cannot invent video frames.
     const {stdout} = await exec(await findFfmpeg(),['-v','error','-protocol_whitelist','file,pipe','-i',file,
       '-map','0:v:0','-c:v','copy','-an','-f','framehash','-hash','md5','-'],
-      {timeout:120_000,maxBuffer:16*1024*1024})
+      {timeout:120_000,maxBuffer:16*1024*1024,signal})
     // Stream-copy progress counters vary across bundled FFmpeg versions.
     // Framehash emits one record per video packet, including in serverless.
     const count = stdout.split(/\r?\n/).filter(line=>/^\s*0\s*,/.test(line)).length
@@ -56,8 +56,8 @@ export async function extractRetakeContext(source: Buffer, plan: RetakePlan): Pr
 }
 
 /** The container can outlast its video track because of audio padding. */
-async function lastSourceFrameTime(file: string, fps: number): Promise<number> {
-  const meta = await probeRetakeVideoFile(file)
+async function lastSourceFrameTime(file: string, fps: number, measured?: VideoProbe): Promise<number> {
+  const meta = measured ?? await probeRetakeVideoFile(file)
   const video = (meta.streams as Array<{ codec_type?: string; duration?: string }> | undefined)?.find(stream => stream.codec_type === 'video')
   const videoDuration = Number(video?.duration)
   const duration = videoDuration > 0 ? videoDuration : meta.frameCount ? meta.frameCount / fps : meta.duration
@@ -68,10 +68,10 @@ async function lastSourceFrameTime(file: string, fps: number): Promise<number> {
 
 const stillFilter = "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuvj420p"
 
-async function extractSourceStill(dir: string, ffmpeg: string, time: number, output: string, duration: number, quality = 3) {
+async function extractSourceStill(dir: string, ffmpeg: string, time: number, output: string, duration: number, quality = 3, signal?: AbortSignal) {
   await exec(ffmpeg, ['-v','error','-y','-protocol_whitelist','file,pipe','-ss',String(time),
     '-i',join(dir,'source.mp4'),'-frames:v','1','-vf',stillFilter,'-q:v',String(quality),'-threads','1',output],
-    {timeout:120_000,maxBuffer:1024*1024})
+    {timeout:120_000,maxBuffer:1024*1024,signal})
   try { return {image:await readFile(output),time} } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || time < duration - 2) throw error
   }
@@ -80,7 +80,7 @@ async function extractSourceStill(dir: string, ffmpeg: string, time: number, out
   const {stderr} = await exec(ffmpeg,['-v','info','-y','-protocol_whitelist','file,pipe','-sseof','-2','-copyts',
     '-i',join(dir,'source.mp4'),'-map','0:v:0','-an','-vf',stillFilter+',showinfo',
     '-fps_mode','passthrough','-q:v',String(quality),'-threads','1','-f','image2','-update','1',output],
-    {timeout:120_000,maxBuffer:2*1024*1024})
+    {timeout:120_000,maxBuffer:2*1024*1024,signal})
   const samples = Array.from(stderr.matchAll(/pts_time:([\d.-]+)/g),match=>Number(match[1]))
   const actualTime = samples.at(-1)
   if (actualTime == null || !Number.isFinite(actualTime) || actualTime < 0 || actualTime > time + .1) {
@@ -102,12 +102,21 @@ export async function extractRetakeInspectionFrames(source: Buffer, plan: Retake
 
 /** A source-led still for the Agent's Retake camera/content keyframe edit. */
 export async function extractRetakeSourceFrame(source: Buffer, time: number, quality = 3): Promise<Buffer> {
+  return (await extractRetakeSourceFrames(source, [time], quality))[0]
+}
+
+/** One download, temporary file and measured visual tail for a preview batch. */
+export async function extractRetakeSourceFrames(source: Buffer, times: number[], quality = 3, signal?: AbortSignal): Promise<Buffer[]> {
   return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
-    const output = join(dir, 'frame.jpg')
-    const meta = await probeRetakeVideoFile(join(dir, 'source.mp4'))
-    const last = await lastSourceFrameTime(join(dir, 'source.mp4'), meta.fps || 30)
-    const sampleTime = Math.min(time, last)
-    return (await extractSourceStill(dir,ffmpeg,sampleTime,output,meta.duration!,quality)).image
+    signal?.throwIfAborted()
+    const meta = await probeRetakeVideoFile(join(dir, 'source.mp4'),signal)
+    const last = await lastSourceFrameTime(join(dir, 'source.mp4'), meta.fps || 30, meta)
+    const images: Buffer[] = []
+    for (const [index,time] of times.entries()) {
+      signal?.throwIfAborted()
+      images.push((await extractSourceStill(dir,ffmpeg,Math.min(time,last),join(dir,`frame-${index}.jpg`),meta.duration!,quality,signal)).image)
+    }
+    return images
   })
 }
 

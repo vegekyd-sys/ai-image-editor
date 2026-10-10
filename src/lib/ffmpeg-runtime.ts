@@ -114,7 +114,7 @@ function parseDuration(value?: string): number | null {
   return Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)
 }
 
-async function probeVideoFileWithFfmpeg(filePath: string, localOnly = false): Promise<VideoProbe> {
+async function probeVideoFileWithFfmpeg(filePath: string, localOnly = false, signal?: AbortSignal): Promise<VideoProbe> {
   const ffmpegPath = await findFfmpeg()
   try {
     // Header inspection intentionally exits without an output. Decoding the
@@ -122,8 +122,10 @@ async function probeVideoFileWithFfmpeg(filePath: string, localOnly = false): Pr
     await execFileAsync(ffmpegPath, ['-hide_banner', ...(localOnly ? ['-protocol_whitelist', 'file,pipe'] : []), '-i', filePath], {
       timeout: 30_000,
       maxBuffer: 10 * 1024 * 1024,
+      signal,
     })
   } catch (e) {
+    signal?.throwIfAborted()
     const stderr = typeof (e as { stderr?: unknown }).stderr === 'string'
       ? (e as { stderr: string }).stderr
       : ''
@@ -144,9 +146,10 @@ async function probeVideoFileWithFfmpeg(filePath: string, localOnly = false): Pr
   return { duration: null }
 }
 
-export async function probeVideoFile(filePath: string, localOnly = false): Promise<VideoProbe> {
+export async function probeVideoFile(filePath: string, localOnly = false, signal?: AbortSignal): Promise<VideoProbe> {
+  signal?.throwIfAborted()
   const ffprobePath = await findFfprobe().catch(() => null)
-  if (!ffprobePath) return probeVideoFileWithFfmpeg(filePath, localOnly)
+  if (!ffprobePath) return probeVideoFileWithFfmpeg(filePath, localOnly, signal)
 
   const { stdout } = await execFileAsync(ffprobePath, [
     '-v', 'error',
@@ -155,7 +158,7 @@ export async function probeVideoFile(filePath: string, localOnly = false): Promi
     '-show_format',
     '-show_streams',
     filePath,
-  ], { timeout: 30_000, maxBuffer: 10 * 1024 * 1024 })
+  ], { timeout: 30_000, maxBuffer: 10 * 1024 * 1024, signal })
 
   const parsed = JSON.parse(stdout)
   const streams = Array.isArray(parsed.streams) ? parsed.streams : []

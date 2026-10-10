@@ -44,6 +44,25 @@ function transcript(): VolcengineAsrTranscript {
 }
 
 describe('buildNarrationCueSheet', () => {
+  it('aligns vocalized Arabic scripts to unvocalized measured words', () => {
+    const input = transcript()
+    input.text = 'اثنا عشر عاما من الخبرة من الطباعة إلى صناعة الأكياس'
+    const phrases = ['اثنا عشر عاما من الخبرة', 'من الطباعة إلى صناعة الأكياس']
+    input.utterances = phrases.map((text, index) => ({
+      text, startMs: index * 2500, endMs: index * 2500 + 2000,
+      words: text.split(' ').map((text, wordIndex) => ({
+        text, startMs: index * 2500 + wordIndex * 300,
+        endMs: index * 2500 + (wordIndex + 1) * 300,
+      })),
+    }))
+    const sheet = buildNarrationCueSheet({ transcript: input, fps: 30, sections: [
+      { id: 'experience', text: 'اِثْنَا عَشَرَ عَامًا مِنَ الْخِبْرَةِ.' },
+      { id: 'process', text: 'مِنَ الطِّبَاعَةِ إِلَى صِنَاعَةِ الْأَكْيَاسِ.' },
+    ] })
+    expect(sheet.verification).toMatchObject({ scope: 'timing_alignment', overallMatchScore: 1 })
+    expect(sheet.cues.map(cue => cue.matchScore)).toEqual([1, 1])
+    expect(sheet.cues.map(cue => [cue.startFrame, cue.endFrame])).toEqual([[0, 45], [75, 120]])
+  })
   it('drops structured-tool placeholders without weakening real script verification', () => {
     expect(normalizeExpectedNarrationSections([{ id: '_', text: '_' }])).toBeUndefined()
     expect(normalizeExpectedNarrationSections([{ id: 'placeholder', text: 'placeholder' }])).toBeUndefined()

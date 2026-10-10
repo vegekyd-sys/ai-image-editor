@@ -211,6 +211,8 @@ function modelFileContent(base64Data: string, mediaType: string) {
 // ---------------------------------------------------------------------------
 
 export interface AgentContext {
+  abortSignal?: AbortSignal;
+  studioResumeAuthorized?: boolean;
   /** Pinned with the system prompt for this invocation, including model retries. */
   corePromptMode?: CorePromptMode;
   currentImage: string;       // base64 data URL – updated after each generation
@@ -2561,13 +2563,13 @@ function createTranscribeAudioTool(
 
 Use this when the user asks for transcript, subtitles, dialogue, spoken words, lyrics-like speech timing, time-based editing such as "cut the part where they say X", or when \`prompts/audio.md\` requires verification of Seed Audio exact speech, brand names, numbers, multilingual lines, duration, or cue timing.
 
-For narrated Remotion/Explainer work, pass expected_sections from the approved Script plus the Composition fps. The tool will align the measured speech to those section IDs, convert the same timebase to frames, and persist a narration cue sheet. That cue sheet is authoritative for Storyboard ranges, Remotion Sequences, subtitles, visual beats, and music ducking. Narration alignment is optional: if it fails, the successful ASR transcript is still returned with a warning.
+For narrated Remotion/Explainer work, pass expected_sections from the approved Script plus the Composition fps. The tool will align the measured speech to those section IDs, convert the same timebase to frames, and persist a narration cue sheet. That cue sheet is authoritative for Storyboard ranges, Remotion Sequences, subtitles, visual beats, and music ducking. Its verification score measures timing alignment, not exact pronunciation or factual accuracy; separately check names, numbers and omissions against the actual transcript. Narration alignment is optional: if it fails, the successful ASR transcript is still returned with a warning.
 
 For timeline videos, pass media_index. For external audio/video URLs, pass media_url. Results are cached into the video snapshot's video_meta.transcript when media_index is used. Use analyze_video instead for visual scene/action understanding.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based Media Index index of the video to transcribe (<<<media_1>>> = 1). Preferred for timeline videos.'),
         media_url: z.string().optional().describe('External public audio/video URL to transcribe. Use only when the media is not in Media Index.'),
-        language: z.string().optional().describe('Optional ASR language code such as zh-CN, en-US, ja-JP, ko-KR, id-ID. Omit for auto/default.'),
+        language: z.string().optional().describe('Optional spoken language code, e.g. zh-CN, en-US, ja-JP, ar-AE or ar. Voice locale aliases are normalized to the provider recognition locale (Arabic: ar-SA). Omit for multilingual automatic detection.'),
         force_refresh: z.boolean().optional().describe('Set true to ignore cached transcript and call ASR again. Default false.'),
         expected_sections: z.array(z.object({
           id: z.string().min(1).describe('Stable Script section ID.'),
@@ -2921,7 +2923,7 @@ function createStudioRunTool(
   return tool({
       description: `Create and advance a Studio workflow invocation inside the current Agent Run for multi-stage video production.
 Use this only when the user explicitly requests Studio, Remotion, an editable composition/timeline, precise programmatic compositing, launches a trusted Skill template, or requests a video longer than 15 seconds whose selected Skill requires Studio. A video up to and including 15 seconds stays on direct \`generate_animation\` even when it is an explainer or includes multiple scenes, voiceover, music, or subtitles.
-The workflow persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation. It is not a separate model-facing run and cannot be adopted by another Agent Run.
+The workflow persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation. When the user explicitly confirms or resumes previous work, call status with its saved run_id; the server can transfer the existing workflow from a stopped Agent Run in the same owner/project while retaining approvals and artifacts. An active previous run cannot be transferred.
 Operations:
 - start: create the run before producing the creative packet. By default it returns only run state, keeping later stage schemas out of the model context. Set include_stage_schemas=true only for legacy/manual authoring.
 - put_creative_packet: for approval_policy=auto, submit the brief, concept options, selected direction, and timed script once. The harness deterministically projects it into separate Brief, Proposal, and Script artifacts and emits one CUI event per stage.
@@ -2970,6 +2972,20 @@ Review means previewing and patching the Remotion source before export, not auth
 
           if (operation === 'start') {
             if (!delivery_promise) return { success: false, error: 'start requires delivery_promise' };
+            const previous = ctx.studioResumeAuthorized
+              ? (await store.listRuns(ctx.projectId)).find(candidate => (
+                candidate.agentRunId && candidate.agentRunId !== ctx.agentRunId
+                && candidate.status !== 'completed'
+                && candidate.recipe === (recipe || 'explainer-video')
+                && Object.entries(delivery_promise).every(([key,value]) => candidate.deliveryPromise[key as keyof typeof candidate.deliveryPromise] === value)
+              )) : undefined;
+            if (previous) {
+              const resumed = await studio.resumePersistedStudioRun({
+                store, supabase: ctx.supabase, run: previous, agentRunId: ctx.agentRunId,
+                projectId: ctx.projectId, userId: ctx.userId, authorized: true,
+              });
+              return {success:true,resumed:true,studioRun:studio.summarizeStudioRun(resumed),statePath:studio.studioRunStatePath(resumed.projectId,resumed.id)};
+            }
             const run = await studio.startPersistedStudioRun({
               store,
               agentRunId: ctx.agentRunId,
@@ -3003,7 +3019,11 @@ Review means previewing and patching the Remotion source before export, not auth
             : (await store.listRuns(ctx.projectId)).find(candidate => candidate.agentRunId === ctx.agentRunId);
           if (!run) return { success: false, error: 'Studio workflow not found in the current Agent Run. Start one first.' };
           if (run.agentRunId !== ctx.agentRunId) {
-            return { success: false, error: 'Studio workflow belongs to a different Agent Run and cannot be adopted.' };
+            run = await studio.resumePersistedStudioRun({
+              store, supabase: ctx.supabase, run, agentRunId: ctx.agentRunId,
+              projectId: ctx.projectId, userId: ctx.userId,
+              authorized: ctx.studioResumeAuthorized === true,
+            });
           }
           const runAtOperationStart = run;
 
@@ -3734,13 +3754,11 @@ Returns the rendered image so you can see it with your vision.`,
           }
 
           try {
-            const { extractVideoFrame } = await import('./video-frame');
             const { createContactSheet } = await import('./contact-sheet');
             const sourceStart = rawVideo.sourceRange?.start_sec || 0;
             const sourceTimestamps = targetTimestamps.map(value => sourceStart + value);
-            const rendered = await Promise.all(sourceTimestamps.map(value =>
-              extractVideoFrame(rawVideo.url, { timestamp: value })
-            ));
+            const { extractVideoFrames } = await import('./video-frame');
+            const rendered = await extractVideoFrames(rawVideo.url, sourceTimestamps, { signal: ctx.abortSignal });
             const firstMetadata = await sharp(rendered[0]).metadata();
             const sourceWidth = firstMetadata.width || 1280;
             const sourceHeight = firstMetadata.height || 720;
@@ -3835,9 +3853,18 @@ Returns the rendered image so you can see it with your vision.`,
           if (targetFrames.length < 2) return { error: 'Contact sheet frames collapse to fewer than two unique in-range frames.' };
 
           try {
+            const contactSignal = AbortSignal.any([...(ctx.abortSignal ? [ctx.abortSignal] : []), AbortSignal.timeout(360_000)]);
             const { renderDesignFrame } = await import('./remotion-server');
             const { createContactSheet } = await import('./contact-sheet');
-            const rendered = await Promise.all(targetFrames.map(targetFrame => renderDesignFrame(design, targetFrame)));
+            // Each call starts a renderer/decoder process. Keep one active so
+            // a contact sheet does not multiply large-source downloads and
+            // decoder memory by its frame count inside the source-set Sandbox.
+            const rendered: Buffer[] = [];
+            for (const targetFrame of targetFrames) {
+              contactSignal.throwIfAborted();
+              rendered.push(await renderDesignFrame(design, targetFrame, { signal: contactSignal }));
+            }
+            ctx.abortSignal?.throwIfAborted();
             const stamp = Date.now();
             const framePaths = targetFrames.map(targetFrame => `${ctx.projectId}/drafts/design-contact-frame${targetFrame}-${stamp}.jpg`);
             const frameUrls: string[] = [];
@@ -3935,7 +3962,8 @@ Returns the rendered image so you can see it with your vision.`,
 
           try {
             const { extractVideoFrame } = await import('./video-frame');
-            const jpegBuffer = await extractVideoFrame(rawVideo.url, { timestamp: sourceTimestamp });
+            const jpegBuffer = await extractVideoFrame(rawVideo.url, { timestamp: sourceTimestamp, signal: ctx.abortSignal });
+            ctx.abortSignal?.throwIfAborted();
 
             let wsUrl = '';
             const wsPath = `${ctx.projectId}/drafts/video-media${targetMediaIndex || 'current'}-t${clampedTimestamp.toFixed(2).replace('.', '-')}-${Date.now()}.jpg`;
@@ -3998,7 +4026,8 @@ Returns the rendered image so you can see it with your vision.`,
         try {
           // Server-side Sandbox rendering
           const { renderDesignFrame } = await import('./remotion-server');
-          const jpegBuffer = await renderDesignFrame(design, targetFrame);
+          const jpegBuffer = await renderDesignFrame(design, targetFrame, { signal: ctx.abortSignal });
+          ctx.abortSignal?.throwIfAborted();
 
           const drafts = (ctx as any).__runCodeDrafts || [];
           const b64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;

@@ -42,6 +42,7 @@ export interface NarrationCueSheet {
   transcriptText: string
   verification: {
     passed: true
+    scope?: 'timing_alignment'
     overallMatchScore: number
     averageSectionMatchScore: number
     matchedSectionRatio: number
@@ -56,7 +57,12 @@ interface TimedTextUnit {
 }
 
 function normalizeText(value: string): string {
-  return value.toLocaleLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '')
+  return value.toLocaleLowerCase()
+    // Approved Arabic scripts may contain vocalization marks while ASR
+    // returns unvocalized text. These marks must not shift cue alignment.
+    .replace(/[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed\u0640]/g, '')
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/[\s\p{P}\p{S}]+/gu, '')
 }
 
 function timedWords(utterances: TranscriptUtterance[]): TimedTextUnit[] {
@@ -254,6 +260,7 @@ export function buildNarrationCueSheet(input: {
     transcriptText: input.transcript.text,
     verification: {
       passed: true,
+      scope: 'timing_alignment',
       overallMatchScore: Number(overallMatchScore.toFixed(4)),
       averageSectionMatchScore: Number(averageSectionMatchScore.toFixed(4)),
       matchedSectionRatio: Number(matchedSectionRatio.toFixed(4)),
