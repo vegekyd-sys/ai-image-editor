@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agentExecutionOriginFilter, canRunAgentExecution, normalizeAgentExecutionOrigin, resolveAgentExecutionWorkerOrigin } from '@/lib/agent-execution-origin';
+import { agentExecutionOriginFilter, agentExecutionRecoveryFilter, canRunAgentExecution, normalizeAgentExecutionOrigin, resolveAgentExecutionWorkerOrigin } from '@/lib/agent-execution-origin';
 
 describe('Agent execution origin ownership', () => {
   it('recovers public-domain tasks when production cron arrives on its deployment host', () => {
@@ -43,5 +43,12 @@ describe('Agent execution origin ownership', () => {
     expect(agentExecutionOriginFilter('https://makaron.app')).toContain('origin.is.null');
     expect(agentExecutionOriginFilter('https://preview-a.vercel.app')).not.toContain('is.null');
     expect(() => agentExecutionOriginFilter('bad')).toThrow();
+  });
+  it('only automatically recovers recently interrupted work, before queue pagination', () => {
+    const filter = agentExecutionRecoveryFilter('https://www.makaron.app', new Date('2026-10-10T12:00:00Z'));
+    expect(filter).toContain('or(next_attempt_at.lte.2026-10-10T12:00:00.000Z,lease_expires_at.lte.2026-10-10T12:00:00.000Z)');
+    expect(filter).toContain('or(next_attempt_at.gte.2026-10-09T12:00:00.000Z,lease_expires_at.gte.2026-10-09T12:00:00.000Z)');
+    expect(filter).toContain('origin.eq."https://www.makaron.app"');
+    expect(agentExecutionRecoveryFilter('https://preview-a.vercel.app')).not.toContain('origin.is.null');
   });
 });

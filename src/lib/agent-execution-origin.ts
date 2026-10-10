@@ -13,7 +13,7 @@ export function normalizeAgentExecutionOrigin(value?: string | null): string | n
 /** Vercel invokes production cron routes on the immutable deployment host. */
 export function resolveAgentExecutionWorkerOrigin(
   value?: string | null,
-  env: Pick<NodeJS.ProcessEnv, 'VERCEL_ENV' | 'VERCEL_URL'> = process.env,
+  env: { VERCEL_ENV?: string; VERCEL_URL?: string } = process.env,
 ): string | null {
   const origin = normalizeAgentExecutionOrigin(value);
   const deployment = env.VERCEL_URL
@@ -42,4 +42,11 @@ export function agentExecutionOriginFilter(workerOrigin: string): string {
   const filters = origins.map(value => `${path}.eq.${JSON.stringify(value)}`);
   if (origin === PRODUCTION_ORIGINS[0]) filters.push(`${path}.is.null`, `${path}.eq.""`);
   return filters.join(',');
+}
+
+/** Automatic recovery must not wake abandoned jobs from weeks-old queues. */
+export function agentExecutionRecoveryFilter(workerOrigin: string, now = new Date()): string {
+  const at = now.toISOString();
+  const recent = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+  return `and(or(next_attempt_at.lte.${at},lease_expires_at.lte.${at}),or(next_attempt_at.gte.${recent},lease_expires_at.gte.${recent}),or(${agentExecutionOriginFilter(workerOrigin)}))`;
 }
