@@ -32,11 +32,13 @@ const CHAT_AGENT_MODELS = [
   'auto',
   'gpt-6-luna',
   'gpt-6-sol',
+  'gpt-6.1-sol',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
   'gpt-6-luna-codex-subscription',
   'gpt-6-sol-codex-subscription',
+  'gpt-6.1-sol-codex-subscription',
   'gpt-5.6-terra-codex-subscription',
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
@@ -512,9 +514,9 @@ Options:
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --media-manifest <file|-> Import typed image/video media before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
-  --agent-model <id>        Agent LLM only: auto, gpt-6-luna, gpt-6-sol, gpt-5.6-terra, gpt-5.6-sol,
+  --agent-model <id>        Agent LLM only: auto, gpt-6-luna, gpt-6.1-sol, gpt-6-sol, gpt-5.6-terra, gpt-5.6-sol,
                             gpt-5.6-luna, grok-4.6, deepseek-v4-pro, deepseek-flash, or a
-                            gpt-6-*-codex-subscription, gpt-5.6-*-codex-subscription or
+                            gpt-6.1-sol-codex-subscription, gpt-6-*-codex-subscription, gpt-5.6-*-codex-subscription or
                             grok-4.6-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON (includes per-run "usage" credits).
@@ -1994,7 +1996,7 @@ Recent model choices:
                   5/10/15s; native 768p default or 480p; no video/audio/multi-image references.
   wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
   wan-3.0         Wan standard tier with the same public duration/resolution range.
-  seedance-2.5    4-30s; 480p/720p; generate/edit/extend and multimodal refs.
+  seedance-2.5    Defaults to Eco; 4-30s; 1080p default, 720p/2k/4k; multimodal refs.
   seedance-2.5-eco  480p generation → ByteDance Fast; 1080p default, 2k/4k.
   minimax-h3      4-15s; 768p default or 2k; image/video/audio feature refs.
   grok            T2V/reference generation plus typed edit/extend.
@@ -2079,7 +2081,7 @@ Commands:
 
   edit [--image <file>] "prompt"     Image edit, text-to-image, or transparent PNG
   analyze --video <file|url>         Analyze video content
-  video script|create|status         H3 Max, Wan, Seedance, Grok, lip-sync, and more
+  video script|create|retake|status  H3 Max, Wan, Seedance, Grok, lip-sync; interval retake
   music create|status                Music generation
 
   admin                              Admin commands (skills, credits, upload, set-admin)
@@ -2232,6 +2234,7 @@ Not sure which built-in skill to use? Start with:
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
     else if (subtopic === 'create') printVideoCreateHelp();
+    else if (subtopic === 'retake') console.log('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else printVideoHelp();
   } else if (topic === 'music') {
@@ -3084,6 +3087,47 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const result = await callMcpTool(baseUrl, headers, 'makaron_write_video_script', { images, userRequest: promptParts.join(' ') || undefined, language });
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) console.log(text);
+
+  } else if (sub === 'retake') {
+    const params = { model: 'fal-h3-max' };
+    let wait = false, json = false;
+    for (let i = 2; i < args.length; i++) {
+      const flag = args[i];
+      if (flag === '--wait') wait = true;
+      else if (flag === '--json') json = true;
+      else if (flag === '--video' && args[i + 1]) params.video_url = args[++i];
+      else if (flag === '--start' && args[i + 1]) params.start = Number(args[++i]);
+      else if (flag === '--end' && args[i + 1]) params.end = Number(args[++i]);
+      else if (flag === '--audio-mode' && args[i + 1]) params.audio_mode = args[++i];
+      else if (flag === '--prompt' && args[i + 1]) params.prompt = args[++i];
+      else if ((flag === '--model' || flag === '--video-model') && args[i + 1]) params.model = args[++i];
+      else if (flag === '--project' && args[i + 1]) params.project_id = args[++i];
+      else if (flag === '--request-id' && args[i + 1]) params.request_id = args[++i];
+      else { console.error('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]'); process.exit(1); }
+    }
+    if (!params.video_url || !params.prompt || !Number.isFinite(params.start) || !Number.isFinite(params.end)
+      || params.start < 0 || params.end - params.start < .1 || params.end - params.start > 15
+      || (params.audio_mode && !['original','generated'].includes(params.audio_mode))
+      || !['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max'].includes(params.model)) {
+      console.error('Retake needs one video, a prompt, a valid 0.1–15 second interval, and a supported model.'); process.exit(1);
+    }
+    if (!isHttpUrl(params.video_url)) {
+      if (!params.project_id) { console.error('Local video upload requires --project <id>.'); process.exit(1); }
+      const valid = validateVideoFileForAnalysis(params.video_url);
+      if (!valid.ok) { console.error(valid.error); process.exit(1); }
+      params.video_url = await uploadFileViaSignedUrl(baseUrl, headers, params.project_id, params.video_url, valid.mime);
+      if (!params.video_url) process.exit(1);
+    }
+    const receipt = await callMcpTool(baseUrl, headers, 'makaron_retake_video', params);
+    const raw = receipt?.content?.find(c => c.type === 'text')?.text;
+    let result;
+    try { result = JSON.parse(raw); } catch { throw new Error(raw || 'Retake returned no receipt.'); }
+    if (wait && result.success && result.taskId && !result.videoUrl) {
+      const url = await pollVideo(baseUrl, headers, result.taskId, result.snapshotId);
+      result = { ...result, status: url ? 'completed' : 'processing', videoUrl: url || undefined };
+    }
+    console.log(json ? JSON.stringify(result) : [result.message, result.taskId && `Task: ${result.taskId}`, result.videoUrl && `Video: ${result.videoUrl}`].filter(Boolean).join('\n'));
+    if (!result.success) process.exitCode = 1;
 
   } else if (sub === 'create') {
     let images = [];

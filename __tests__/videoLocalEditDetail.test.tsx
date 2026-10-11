@@ -1,0 +1,24 @@
+import React from 'react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import AnimateSheet from '@/components/AnimateSheet';
+import { LocaleProvider } from '@/lib/i18n';
+import type { AnimationState } from '@/lib/editor/types';
+import type { ProjectAnimation, Snapshot, VideoMeta } from '@/types';
+vi.mock('@/lib/supabase/storage', () => ({ getThumbnailUrl: (url: string) => url }));
+afterEach(cleanup);
+it('shows local input and output durations and updates an open detail card when the task completes', () => {
+  localStorage.setItem('locale', 'en');
+  const state: AnimationState = { imageUrls:[],prompt:'',userHint:'',taskId:null,videoUrl:null,status:'idle',error:null,duration:null,pollSeconds:0,videoModel:'seedance-2.5-eco' };
+  const initial: ProjectAnimation = {id:'edit',projectId:'project',taskId:'task',videoUrl:null,prompt:'Edit the ending',snapshotUrls:[],status:'processing',duration:30.14,createdAt:'2026-10-08',videoModel:'seedance-2.5-eco'};
+  const meta: VideoMeta = {taskId:'task',videoUrl:null,prompt:initial.prompt,sourceSnapshotIds:[],sourceUrls:[],status:'processing',duration:30.14,model:'seedance-2.5-eco',resolution:'720p',createdAt:initial.createdAt,retake:{start:12.3,end:26,sourceUrl:'https://example.com/source.mp4',inputDuration:13.7,generationDuration:13.7}};
+  const view = (videoMeta: VideoMeta) => <LocaleProvider initialLocale="en"><AnimateSheet snapshots={[{id:'edit',image:'',tips:[],messageId:'',videoMeta} satisfies Snapshot]} projectId="project" onClose={vi.fn()} animationState={state} onStateChange={vi.fn()} mode="detail" detailAnimation={initial} isDesktop /></LocaleProvider>;
+  const {rerender} = render(view(meta));
+  expect(screen.getByText('Edit 12.3–26s · 13.7s')).toBeTruthy();
+  expect(screen.getByText('Generated clip 13.7s')).toBeTruthy();
+  expect(screen.getByText('Full video 30.14s')).toBeTruthy();
+  expect(screen.getByText('Model input: 13.7s video clip')).toBeTruthy();
+  rerender(view({...meta,status:'completed',videoUrl:'https://example.com/final.mp4'}));
+  expect(screen.getByText('Completed')).toBeTruthy();
+  expect(screen.queryByText('Rendering')).toBeNull();
+});

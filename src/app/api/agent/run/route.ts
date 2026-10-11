@@ -7,6 +7,7 @@ import { enterBillingAttribution, resolveRequestBillingSource } from '@/lib/bill
 import { getRequestLocale } from '@/lib/server-locale';
 import { translate } from '@/lib/locales';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
+import { resolveAgentExecutionWorkerOrigin } from '@/lib/agent-execution-origin';
 import {
   normalizeRequestedAgentModelPreference,
   resolveAgentModelSpecForUser,
@@ -114,6 +115,7 @@ export async function POST(req: NextRequest) {
     }
 
     const locale = getRequestLocale(req);
+    const executionOrigin = resolveAgentExecutionWorkerOrigin(req.nextUrl.origin);
 
     const persistHeadlessUserMessage = async () => {
       if (clientPersistedUserMessage) return;
@@ -177,7 +179,7 @@ export async function POST(req: NextRequest) {
       // run is attributed to it (usage_logs.run_id / source).
       billing: { source: billingSource, apiKeyId: apiKeyId ?? null },
       ...(durableExecution ? {
-        executionOwnerOrigin: req.nextUrl.origin,
+        executionOwnerOrigin: executionOrigin,
         executionRequest: {
           locale,
           preferredModel,
@@ -196,7 +198,7 @@ export async function POST(req: NextRequest) {
           isNsfw,
           audioAttachments,
           codexSubscriptionAllowed,
-          origin: req.nextUrl.origin,
+          origin: executionOrigin,
         },
       } : {}),
     };
@@ -239,7 +241,7 @@ export async function POST(req: NextRequest) {
           // initialization path. The durable worker loads it after the browser
           // already has the run id and can begin its lightweight event watch.
           const { runAgentExecutionAttempt } = await import('@/lib/agent-execution-runner');
-          await runAgentExecutionAttempt(runId, { admin: supabase as any, workerId: `initial-${crypto.randomUUID()}`, origin: req.nextUrl.origin });
+          await runAgentExecutionAttempt(runId, { admin: supabase as any, workerId: `initial-${crypto.randomUUID()}`, origin: executionOrigin || undefined });
         } catch (executionError) {
           console.error(`[agent/run] durable attempt failed for ${runId}:`, executionError);
           // Leave the execution running with its due timestamp. Cron recovery

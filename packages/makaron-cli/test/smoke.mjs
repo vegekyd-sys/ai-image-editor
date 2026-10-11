@@ -248,6 +248,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/mcp') {
+    if (body.params?.name === 'makaron_retake_video') {
+      sendJson(200, { jsonrpc: '2.0', id: body.id, result: { content: [{ type: 'text', text: JSON.stringify({
+        success: true, taskId: 'video-retake-00000000-0000-4000-8000-000000000001', status: 'processing', message: 'Retake submitted.',
+      }) }] } });
+      return;
+    }
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
     if (body?.params?.name === 'makaron_edit_image' && body.params.arguments.model === 'wan2.7-image') {
       const rejected = body.params.arguments.editPrompt === 'reject-wan-test';
@@ -734,11 +740,11 @@ try {
       cliModels,
       [
         'auto',
-        ...appModels.slice(0, 5),
+        ...appModels.filter(id => id.startsWith('gpt-')),
         ...subscriptionModels,
-        appModels[5],
+        'grok-4.6',
         ...grokSubscriptionModel,
-        ...appModels.slice(6),
+        ...appModels.filter(id => !id.startsWith('gpt-') && id !== 'grok-4.6'),
       ],
       'CLI Agent LLM allowlist must stay in sync with the app catalog',
     );
@@ -882,12 +888,12 @@ try {
     const requestStart = requests.length;
     await expectSuccess([
       'chat', '--project', 'project-models-1', '--agent-model',
-      'gpt-6-sol-codex-subscription', '--json', '-b',
+      'gpt-6.1-sol-codex-subscription', '--json', '-b',
       'use the personal Codex plan explicitly',
     ]);
     const runRequest = requests.slice(requestStart)
       .find(request => request.pathname === '/api/agent/run');
-    assert.equal(runRequest?.body?.agentModel, 'gpt-6-sol-codex-subscription');
+    assert.equal(runRequest?.body?.agentModel, 'gpt-6.1-sol-codex-subscription');
   }
 
   {
@@ -1179,6 +1185,21 @@ try {
     const failure = await expectFailure(['edit', '--image-model', 'wan2.7-image', 'reject-wan-test']);
     assert.match(failure.stderr, /No automatic retry/);
     assert.equal(requests.length, before + 1);
+  }
+
+  {
+    const result = await expectSuccess(['video', 'retake', '--video', 'https://cdn.example/source.mp4', '--start', '2.5', '--end', '4.2', '--prompt', 'Make the umbrella red', '--model', 'fal-h3-max', '--json']);
+    assert.match(JSON.parse(result.stdout).taskId, /^video-retake-/);
+    const request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.name, 'makaron_retake_video');
+    assert.deepEqual(request.body.params.arguments, { model: 'fal-h3-max', video_url: 'https://cdn.example/source.mp4', start: 2.5, end: 4.2, prompt: 'Make the umbrella red' });
+    await expectSuccess(['video', 'retake', '--video', 'https://cdn.example/source.mp4', '--start', '2.5', '--end', '4.2', '--prompt', 'Use multiple camera angles', '--json']);
+    assert.equal(requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params.arguments.model, 'fal-h3-max');
+    const count = requests.length;
+    await expectFailure(['video', 'retake', '--video', 'https://cdn.example/source.mp4', '--start', '2', '--end', '3', '--prompt', 'Change it', '--model', 'ltx-2.3-retake']);
+    assert.equal(requests.length, count);
+    await expectFailure(['video', 'retake', '--video', 'https://cdn.example/source.mp4', '--start', '2', '--end', '1', '--prompt', 'Change it']);
+    assert.equal(requests.length, count);
   }
 
   {

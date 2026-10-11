@@ -97,7 +97,7 @@ schema. It does not print the ChatGPT account id or access credential.
 ## VLab relay + Vercel Preview
 
 The relay in `services/codex-subscription-relay` is a separate Node service. It
-must use its own Unix user, `CODEX_HOME`, pinned Codex CLI (currently `0.156.1`), loopback port, and
+must use its own Unix user, `CODEX_HOME`, pinned Codex CLI (currently `0.162.0`), loopback port, and
 service unit. Copy only the already-authorized `auth.json` into that dedicated
 home; do not share another Agent's sessions, config, workspace, or App Server.
 

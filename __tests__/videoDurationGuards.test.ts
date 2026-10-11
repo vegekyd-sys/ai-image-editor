@@ -147,12 +147,12 @@ describe('video duration guards', () => {
     expect(error).toBeNull()
   })
 
-  it('allows provider-managed duration for Seedance 2.5 reference repainting', () => {
+  it.each(['seedance-2.5', 'seedance-2.5-eco'])('allows provider-managed duration for %s reference repainting', model => {
     const error = validateVideoScript({
       prompt: 'Use <<<media_1>>> as the new character and <<<media_2>>> as the source motion reference.',
       imageCount: 2,
       availableMediaIndices: [1, 2],
-      model: 'seedance-2.5',
+      model,
       duration: -1,
     })
 

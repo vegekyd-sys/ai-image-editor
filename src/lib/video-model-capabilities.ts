@@ -1111,6 +1111,11 @@ export function validateVideoModelRequest(options: {
     return 'Seedance 2.5 video edit requires duration=-1 so the output follows the input video.'
   }
 
+  if (['seedance-2.5', 'seedance-2.5-eco'].includes(normalizedModel)
+    && options.outputDuration != null && !Number.isInteger(options.outputDuration)) {
+    return 'Seedance 2.5 duration must be an integer number of seconds, or -1 to follow the source video duration.'
+  }
+
   if (options.operation !== 'edit' && options.outputDuration != null && options.outputDuration !== -1 && options.outputDuration < capability.minOutputDuration) {
     return `${capability.label} duration must be ${capability.minOutputDuration} seconds or more.`
   }

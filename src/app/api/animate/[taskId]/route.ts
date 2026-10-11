@@ -58,7 +58,11 @@ export async function GET(
       grokOwnerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id
     }
 
-    if (taskId.startsWith('video-pipeline-')) {
+    if (taskId.startsWith('video-retake-')) {
+      const { advanceVideoRetake } = await import('@/lib/video-retake')
+      result = { taskId, ...await advanceVideoRetake(taskId, 'auth' in authResult ? authResult.auth.userId : publicOwnerUserId) }
+      return NextResponse.json(result)
+    } else if (taskId.startsWith('video-pipeline-')) {
       const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline')
       result = { taskId, ...await advanceVideoPipeline(taskId, 'auth' in authResult ? authResult.auth.userId : publicOwnerUserId) }
     } else if (isMuleRouter) {

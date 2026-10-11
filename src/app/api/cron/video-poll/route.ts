@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
 
   const admin = getSupabaseAdmin()
   const pipelineReconciliation = import('@/lib/video-upscale-pipeline').then(m => m.reconcileVideoPipelines()).catch(() => 0)
+  const retakeReconciliation = import('@/lib/video-retake').then(m => m.reconcileVideoRetakes()).catch(() => 0)
   const mcpReconciliation = reconcileMcpVideos().catch(error => {
     console.error('[cron/video-poll] MCP billing reconciliation failed:', error)
     return 0
@@ -65,7 +66,10 @@ export async function GET(req: NextRequest) {
     try {
       let result: { taskId?: string; status: string; videoUrl?: string; error?: string } & Partial<import('@/lib/skills/get-video-status').GetVideoStatusResult>
 
-      if (vm.taskId.startsWith('video-pipeline-')) {
+      if (vm.taskId.startsWith('video-retake-')) {
+        const { advanceVideoRetake } = await import('@/lib/video-retake')
+        result = { taskId: vm.taskId, ...await advanceVideoRetake(vm.taskId, ownerUserId) }
+      } else if (vm.taskId.startsWith('video-pipeline-')) {
         const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline')
         result = { taskId: vm.taskId, ...await advanceVideoPipeline(vm.taskId, ownerUserId) }
       } else if (vm.taskId.startsWith('mr-wan30-')) {
@@ -101,7 +105,8 @@ export async function GET(req: NextRequest) {
       }
 
       if (result.status === 'failed') {
-        if (await tryHandleVideoFailure(snap.id, result.error)) processed++
+        if (vm.taskId.startsWith('video-retake-')) processed++
+        else if (await tryHandleVideoFailure(snap.id, result.error)) processed++
       } else if (result.status === 'completed' && result.videoUrl) {
         const updatedMeta = { ...vm, status: 'completed' as const, videoUrl: result.videoUrl, providerUrl: result.videoUrl, ...(result.stage ? { pipelineStage: result.stage, baseVideoUrl: result.baseVideoUrl, enhancementStatus: result.enhancementStatus, requestedResolution: result.requestedResolution, resolution: result.actualResolution ?? vm.resolution } : {}) }
         await admin.from('snapshots').update({
@@ -121,12 +126,12 @@ export async function GET(req: NextRequest) {
         processed++
       }
       // still processing after 30min → mark timeout
-      if (result.status !== 'completed' && result.status !== 'failed' && !vm.taskId.startsWith('video-pipeline-') && age > 30 * 60 * 1000) {
+      if (result.status !== 'completed' && result.status !== 'failed' && !vm.taskId.startsWith('video-retake-') && !vm.taskId.startsWith('video-pipeline-') && age > 30 * 60 * 1000) {
         if (await tryHandleVideoFailure(snap.id, 'Timed out after 30 minutes')) processed++
       }
     } catch (e) {
       console.error(`[cron/video-poll] Error polling ${snap.id}:`, e)
-      if (!vm.taskId.startsWith('video-pipeline-') && age > 30 * 60 * 1000) {
+      if (!vm.taskId.startsWith('video-retake-') && !vm.taskId.startsWith('video-pipeline-') && age > 30 * 60 * 1000) {
         if (await tryHandleVideoFailure(snap.id, 'Provider polling failed after 30 minutes')) processed++
       }
     }
@@ -171,6 +176,7 @@ export async function GET(req: NextRequest) {
     processed,
     mcpProcessed: await mcpReconciliation,
     pipelineProcessed: await pipelineReconciliation,
+    retakeProcessed: await retakeReconciliation,
     total: stale?.length || 0,
     remotionProcessed,
     ...(remotionError ? { remotionError } : {}),

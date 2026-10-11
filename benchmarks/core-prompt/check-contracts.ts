@@ -13,7 +13,19 @@ async function main() {
  const coding=bundleAgentPrompt('prompts/agent-coding.md',read('src/lib/prompts/agent-coding.md'));
  const effective=[core,video,coding].join('\n\n');
  const paragraphs=baseline.agent.split(/\n\s*\n/).filter((s:string)=>s.trim());
- const coverage=paragraphs.map((text:string,index:number)=>({id:`core-${index+1}`,text,owner:core.includes(text)?'core':video.includes(text)?'video':coding.includes(text)?'coding':null}));
+ const paragraphAmendments=JSON.parse(read('benchmarks/core-prompt/core-paragraph-amendments.json'));
+ const coverage=paragraphs.map((text:string,index:number)=>{
+  const id=`core-${index+1}`;
+  const amendment=paragraphAmendments[id];
+  if(amendment){
+   assert.equal(createHash('sha256').update(text).digest('hex'),amendment.baselineSha256,`Core amendment baseline mismatch: ${id}`);
+   assert.ok(amendment.reason.trim(),`Core amendment needs a reason: ${id}`);
+   assert.ok(amendment.replacement.trim(),`Core amendment needs its complete replacement: ${id}`);
+  }
+  const activeText=amendment?.replacement ?? text;
+  return {id,text,...(amendment?{amendment:amendment.reason}:{}),owner:core.includes(activeText)?'core':video.includes(activeText)?'video':coding.includes(activeText)?'coding':null};
+ });
+ for(const id of Object.keys(paragraphAmendments))assert.ok(coverage.some((item:any)=>item.id===id),`Unknown core amendment: ${id}`);
  assert.deepEqual(coverage.filter((x:any)=>!x.owner),[], 'Every original core paragraph needs an exact owner');
  // The frozen rollback stays byte-for-byte intact; the active guide gains
  // the verified H3 Max capability and user-selected Seedance 2.5 Eco default.

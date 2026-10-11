@@ -20,6 +20,7 @@ function cachedTranscript(requestedLanguage?: string): VolcengineAsrTranscript {
     resourceId: 'test',
     requestId: 'cached-request',
     requestedLanguage,
+    asrConfigVersion: 3,
     text: 'cached',
     durationMs: 1000,
     utterances: [],
@@ -47,6 +48,7 @@ describe('volcengine ASR client', () => {
         model_name: 'bigmodel',
         enable_itn: true,
         enable_punc: true,
+        show_utterances: true,
       })
       expect(body).not.toHaveProperty('additions')
 
@@ -98,11 +100,13 @@ describe('volcengine ASR client', () => {
       expect(body.audio).toEqual({
         url: 'https://cdn.example.com/japanese.mp3',
         language: 'ja-JP',
+        format: 'mp3',
       })
       expect(body.request).toEqual({
         model_name: 'bigmodel',
         enable_itn: true,
         enable_punc: true,
+        show_utterances: true,
       })
       expect(body).not.toHaveProperty('additions')
 
@@ -211,6 +215,73 @@ describe('volcengine ASR client', () => {
     expect(isAsrTranscriptCacheCompatible(cachedTranscript('ja-JP'), 'ja-JP')).toBe(true)
     expect(isAsrTranscriptCacheCompatible(cachedTranscript('zh-CN'), 'ja-JP')).toBe(false)
     expect(isAsrTranscriptCacheCompatible(cachedTranscript(), 'ja-JP')).toBe(false)
-    expect(isAsrTranscriptCacheCompatible(cachedTranscript('zh-CN'), undefined)).toBe(true)
+    expect(isAsrTranscriptCacheCompatible(cachedTranscript('zh-CN'), undefined)).toBe(false)
+    expect(isAsrTranscriptCacheCompatible(cachedTranscript(), undefined)).toBe(true)
+    expect(isAsrTranscriptCacheCompatible({ ...cachedTranscript('ar-SA'), asrConfigVersion: undefined }, 'ar-AE')).toBe(false)
+    expect(isAsrTranscriptCacheCompatible(cachedTranscript('ar-SA'), 'ar-AE')).toBe(true)
+    expect(isAsrTranscriptCacheCompatible({ ...cachedTranscript('ar-SA'), asrConfigVersion: 2 }, 'ar')).toBe(false)
   })
+
+  it.each(['ar-AE', 'ar', 'AR_sa'])('normalizes Arabic recognition locale %s', async language => {
+    vi.stubEnv('VOLCENGINE_ASR_API_KEY', 'test-api-key')
+    const fetchMock = vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init.body))
+      expect(body.audio.language).toBe('ar-SA')
+      expect(body.request.show_utterances).toBe(true)
+      expect(body.request.enable_itn).toBe(false)
+      expect(body.request).not.toHaveProperty('enable_auto_lang')
+      return new Response(JSON.stringify({ result: { text: 'مرحبا' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(transcribeWithVolcengineAsr({ mediaUrl: 'https://cdn.example.com/ar.mp3', language }))
+      .resolves.toMatchObject({ requestedLanguage: 'ar-SA', asrConfigVersion: 3, inverseTextNormalization: false })
+  })
+
+  it('enables multilingual detection when no language is specified', async () => {
+    vi.stubEnv('VOLCENGINE_ASR_API_KEY', 'test-api-key')
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      const body = JSON.parse(String(init.body))
+      expect(body.audio).not.toHaveProperty('language')
+      expect(body.request).toMatchObject({ enable_auto_lang: true, show_utterances: true, enable_itn: false })
+      return new Response(JSON.stringify({ result: { text: 'مرحبا' } }))
+    }))
+    await transcribeWithVolcengineAsr({ mediaUrl: 'https://cdn.example.com/ar.mp3' })
+  })
+
+  it('rejects unsupported languages before requesting ASR', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(transcribeWithVolcengineAsr({ mediaUrl: 'https://cdn.example.com/a.mp3', language: 'xx-XX' }))
+      .rejects.toThrow('Unsupported Volcengine ASR language')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('retries only URL-download failures once using the same audio bytes', async () => {
+    vi.stubEnv('VOLCENGINE_ASR_API_KEY', 'test-api-key')
+    const bytes = Buffer.from('same-audio')
+    const fetchMock = vi.fn(async (url, init) => {
+      if (url === 'https://cdn.example.com/ar.mp3') return new Response(bytes)
+      const body = JSON.parse(String(init.body))
+      if (body.audio.url) return new Response('{}', { headers: {
+        'X-Api-Status-Code': '55000000', 'X-Api-Message': 'code: 21701 audio download failed',
+      } })
+      expect(body.audio).toEqual({ data: bytes.toString('base64'), format: 'mp3', language: 'ar-SA' })
+      return new Response(JSON.stringify({ result: { text: 'مرحبا' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(transcribeWithVolcengineAsr({ mediaUrl: 'https://cdn.example.com/ar.mp3', language: 'ar' }))
+      .resolves.toMatchObject({ text: 'مرحبا' })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not repeat provider recognition errors', async () => {
+    vi.stubEnv('VOLCENGINE_ASR_API_KEY', 'test-api-key')
+    const fetchMock = vi.fn(async () => new Response('{}', { headers: {
+      'X-Api-Status-Code': '55000000', 'X-Api-Message': 'invalid audio',
+    } }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(transcribeWithVolcengineAsr({ mediaUrl: 'https://cdn.example.com/a.mp3' })).rejects.toThrow('invalid audio')
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
 })

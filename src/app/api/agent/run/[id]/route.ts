@@ -10,6 +10,7 @@ import { resolveWorkspaceFile } from '@/lib/workspace';
 import { normalizeLocale, translate } from '@/lib/locales';
 import { getRunUsage } from '@/lib/billing/run-usage';
 import { getBalance } from '@/lib/billing/credits';
+import { deriveAgentRunProgress } from '@/lib/agent-run-progress';
 
 export const maxDuration = 300;
 
@@ -81,7 +82,10 @@ async function pollVideoProvider(taskId: string, userId?: string): Promise<{ tas
   const isSyncLipsync = taskId.startsWith('sync3-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
-  if (taskId.startsWith('video-pipeline-')) {
+  if (taskId.startsWith('video-retake-')) {
+    const { advanceVideoRetake } = await import('@/lib/video-retake');
+    return { taskId, ...await advanceVideoRetake(taskId, userId) };
+  } else if (taskId.startsWith('video-pipeline-')) {
     const { advanceVideoPipeline } = await import('@/lib/video-upscale-pipeline');
     return { taskId, ...await advanceVideoPipeline(taskId, userId) };
   } else if (isMuleRouter) {
@@ -194,6 +198,7 @@ export async function GET(
     // A platform hard-kill cannot run route finally blocks. Heartbeats make
     // that failure observable: after the lease expires, atomically close the
     // run and preserve the latest saved write_file draft as a resume point.
+    let latestActivityAt: string | undefined;
     if (run.status === 'running') {
       const { data: lastEvent } = streamView
         ? latestStreamEventResult
@@ -205,6 +210,7 @@ export async function GET(
             .limit(1)
             .maybeSingle();
       const lastActivityAt = Date.parse(lastEvent?.created_at || run.started_at || '') || 0;
+      latestActivityAt = lastEvent?.created_at || run.started_at;
       if (lastActivityAt > 0 && Date.now() - lastActivityAt > getAgentRunStaleMs()) {
         const executionPolicy = run.execution_policy as Record<string, unknown> | null;
         const durable = executionPolicy?.durable === true;
@@ -257,10 +263,15 @@ export async function GET(
 
     if (streamView) {
       const metadata = (run.metadata as Record<string, unknown> | null) ?? {};
-      const terminal = metadata.terminal as { message?: string } | undefined;
+      const terminal = metadata.terminal as { message?: string; code?: string } | undefined;
       return NextResponse.json({
         id: run.id,
         status: run.status,
+        progress: deriveAgentRunProgress({ ...run, lastActivityAt: latestActivityAt,
+          terminalCode: terminal?.code,
+          outputs: (streamEventsResult.data ?? []).filter(event => event.type === 'studio_run')
+            .map(event => ({type:'studio_run',status:event.data?.status})),
+        }),
         ...(run.status !== 'running' ? { agent_status: run.status } : {}),
         first_message_id: metadata.firstMessageId,
         events: streamEventsResult.data ?? [],
@@ -590,6 +601,12 @@ export async function GET(
                 const taskId = videoMeta.taskId as string;
                 const pollResult = await pollVideoProvider(taskId, ownerUserId);
                 if (pollResult.status === 'completed' && pollResult.videoUrl) {
+                  if (taskId.startsWith('video-retake-') && isPermanentUrl(pollResult.videoUrl)) {
+                    // Retake has already published its immutable full video and settled billing.
+                    v.status = 'completed';
+                    v.url = pollResult.videoUrl;
+                    return;
+                  }
                   const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl, ...(pollResult.stage ? { pipelineStage: pollResult.stage, baseVideoUrl: pollResult.baseVideoUrl, enhancementStatus: pollResult.enhancementStatus, requestedResolution: pollResult.requestedResolution, resolution: pollResult.actualResolution ?? videoMeta.resolution } : {}) };
                   await admin.from('snapshots')
                     .update({ video_meta: updatedMeta })
@@ -838,6 +855,9 @@ export async function GET(
     return NextResponse.json({
       id: run.id,
       status: effectiveStatus,
+      progress: deriveAgentRunProgress({ ...run, outputs: finalOutput, lastActivityAt: latestActivityAt,
+        terminalCode: ((run.metadata as Record<string, unknown> | null)?.terminal as {code?:string} | undefined)?.code,
+      }),
       incomplete,
       project_id: run.project_id,
       project_url: `https://www.makaron.app/projects/${run.project_id}`,

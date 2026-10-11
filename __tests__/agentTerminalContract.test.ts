@@ -35,7 +35,7 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain("'publish_draft',");
     expect(agentSource).toContain('sourceDesignPath');
     expect(agentSource).toContain("currentInputVersion > ctx.execution!.inputEpoch");
-    expect(agentSource).toContain("errorCode: 'agent_input_received'");
+    expect(agentSource).toContain("'agent_input_received'");
     expect(agentSource).toContain('A Studio Run is only a persisted workflow');
     expect(agentSource).not.toContain('requestsMaterializedVideo');
     expect(agentSource).not.toContain('requestsStudioRunCompletion');

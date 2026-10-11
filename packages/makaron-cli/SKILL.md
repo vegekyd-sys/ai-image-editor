@@ -81,7 +81,7 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`, `grok-4.6-grok-subscription`). `auto` uses GPT-6 Luna through the Codex subscription for eligible accounts (including admins) and through Azure API otherwise; base GPT-5.6 and GPT-6 IDs select Azure API and base `grok-4.6` selects OpenRouter API, while suffixed IDs explicitly request the corresponding personal plan where authorized. Never put an image or video model ID in `--agent-model`.
+`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6.1-sol-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`, `grok-4.6-grok-subscription`). `auto` uses GPT-6 Luna through the Codex subscription for eligible accounts (including admins) and through Azure API otherwise; base GPT-5.6, GPT-6 and GPT-6.1 IDs select Azure API and base `grok-4.6` selects OpenRouter API, while suffixed IDs explicitly request the corresponding personal plan where authorized. Never put an image or video model ID in `--agent-model`.
 
 ```bash
 npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --json -b "make a 20s badminton video"
@@ -275,7 +275,21 @@ npx makaron-cli video create --script "make it warmer and cinematic" --video htt
 
 # 4. Check status
 npx makaron-cli video status <taskId>
+
+# Retake a known interval; --project publishes the complete result to its timeline.
+npx makaron-cli video retake --video https://example.com/input.mp4 --start 2 --end 5 --prompt "Make the umbrella red; preserve everything else" --model seedance-2.5 --project <id> --wait --json
 ```
+
+Video segment editing also works directly from natural-language chat, without a GUI selection:
+
+```bash
+npx makaron-cli chat --project <id> "把 @1 的 18–21 秒切成多机位，其余不变"
+npx makaron-cli chat --project <id> "把 @1 的最后三秒改成夜景"
+```
+
+Chat resolves the source/range, inspects the footage, expands the edit instruction, and delivers the complete video. It asks only when the source or scope remains ambiguous. Precise cuts, subtitles, dubbing and extension also start from chat. Local editing accepts a 0.1–15s range in a source up to 120s; longer scopes use the appropriate whole-video workflow rather than silently shortening the request.
+
+`video retake` uses original-source seconds, supports a 0.1–15s selection in a source up to 120s, and automatically replaces only that interval while preserving duration. Audio defaults to original; `--audio-mode generated` uses synchronized new audio inside the selection and source audio outside. Models: `fal-h3-max` (default), `seedance-2.5-eco` (preferred Seedance option), and explicitly selected native `seedance-2.5`. For sources shorter than 2 seconds, explicitly use Seedance. A local file requires `--project`. Save the root taskId and billing request ID; use the same receipt to resume polling instead of submitting another paid generation.
 
 `video create` returns a provider task id and does not create or update a Makaron project timeline. For project/timeline video editing, use:
 
@@ -289,7 +303,7 @@ Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <
 
 For fal H3 Turbo, use `--video-model minimax-h3-max`; it supports exactly 5/10/15s at 480p/768p and defaults to native 768p, with no image for T2V or exactly one image for I2V. It does not accept reference video/audio or multiple images.
 
-For Seedance 2.5, use `--video-model seedance-2.5`; it supports 4-30s, 480p/720p (defaults to economical 480p; request 720p explicitly), up to 30 image + 10 video + 10 audio references, and repeatable local-file/URL flags. Typed modes use `--video-operation generate|edit|extend`, with `--extend-direction`, `--output-format mp4|mov`, and optional `--web-search`. Evolink does not expose 4K for this route.
+Seedance 2.5 uses `--video-model seedance-2.5` or `seedance-2.5-eco` for 4-30s videos: generate at 480p, then automatically upscale to 720p, 1080p (default), 2K or 4K in one task. This is upscaled output. Use `seedance-2.5-native` explicitly for unenhanced native output at 480p (default) or 720p; the native Evolink route does not expose 4K. All Seedance 2.5 routes accept up to 30 images + 10 videos + 10 audios, repeatable local/URL references, `--video-operation generate|edit|extend`, `--extend-direction`, and `--web-search`. Eco delivers MP4; native also supports `--output-format mov`. Use `makaron chat` to enhance an existing video without regeneration, or MCP `makaron_upscale_video` with one video URL and `resolution=720p|1080p|2k|4k` (up to 60s).
 
 For Wan 3.0, use `--video-model wan-3.0` or the faster `--video-model wan-3.0-prime`. Both support 2-30s generation, up to 10 image + 5 video + 5 audio feature references, native audio, and 480p/720p/1080p/2K/4K. Pass `--video-resolution 2k|4k` to use the matching FlashVSR/Pro endpoint automatically; Pro is not a separate model selector. They do not expose typed edit/extend or a relaxed-content-filter flag.
 

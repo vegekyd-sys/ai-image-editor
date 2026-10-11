@@ -84,7 +84,7 @@
   },
   {
     "name": "multi-angle-video",
-    "description": "Change the camera coverage and cutting of a supplied single-camera take while preserving its recorded content, performance, dialogue and source clock. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.",
+    "description": "Whole-take multi-angle/multi-camera re-shoot of a supplied performance, preserving recorded content and source clock. Bounded scene/interval camera edits belong to video-edit instead; simple crops and existing multicam synchronization use ordinary editing.",
     "modelPreference": [
       "wan-3.0-prime",
       "wan-3.0",
@@ -149,10 +149,6 @@
   {
     "name": "video-ffmpeg-lab",
     "description": "Real MP4 editing mindset for Makaron Agent using run_code runtime=node, FFmpeg, FFprobe, and workspace outputs."
-  },
-  {
-    "name": "video-segment-edit",
-    "description": "Locate a user-provided screenshot/frame inside a video, regenerate only the"
   },
   {
     "name": "video-translate",

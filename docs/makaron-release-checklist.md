@@ -80,18 +80,30 @@ Expected: alias resolves, app loads, and `/api/health` reports all critical serv
 
 ## CLI Publish
 
-If the release touches `packages/makaron-cli`, or the user asks to bump/publish npm, keep CLI release in the same release loop.
+Every release must assess CLI and npm parity, including model/provider and API changes that do not directly touch `packages/makaron-cli`. Check whether the shipped capabilities, parameters, help, README, and bundled Skill need an update. If they do, update and publish the CLI in the same release loop; a website deployment does not complete a CLI release. If no package update is needed, record that conclusion in the release result.
+
+Before publishing:
+
+- Compare the npm package contents with the accepted repository package. Equal version numbers alone do not prove parity.
+- Update CLI behavior, help, README, and canonical `packages/makaron-cli/skills/makaron/SKILL.md` as applicable. Keep unaccepted feature branches out of the package.
+- Bump and align `package.json`, `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `evals/agent-discovery.json`.
+- Run `npm run build:agent-discovery` and `npm run check:agent-discovery` when Skill contents change; inspect the actual tarball, including references and plugin metadata.
+- Release any required production API before the npm package that depends on it. Reuse authorization for the agreed release scope; a request to prepare without publishing still takes precedence.
 
 ```bash
 npm --prefix packages/makaron-cli test
-npm publish --prefix packages/makaron-cli --dry-run
-npm publish --prefix packages/makaron-cli
-npm view makaron-cli version
+cd packages/makaron-cli
+npm publish --dry-run
+npm publish
+npm view makaron-cli version dist.shasum
 npm dist-tag ls makaron-cli
-npx -y makaron-cli@latest --help
+npm exec --yes --package=makaron-cli@<published-version> -- makaron --version
+npm exec --yes --package=makaron-cli@<published-version> -- makaron --help
 ```
 
-Confirm package version and docs match the shipped product behavior.
+Wait for the registry to expose the published version and `latest` tag, then install into a fresh temporary directory and check the affected commands and bundled Skill. Verify the published tarball hash matches the inspected artifact. A successful `npm publish` response alone is not completion evidence.
+
+The release result must state the app deployment status, CLI version, npm `latest`, and fresh-install verification separately. Do not leave npm publishing as an untracked follow-up after announcing the feature is released.
 
 ## Public Copy
 

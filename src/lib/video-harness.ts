@@ -44,7 +44,7 @@ export function validateVideoScript(opts: {
   }
 
   const capability = getVideoModelCapability(model)
-  const providerManagedAdaptiveDuration = normalizeVideoModelId(model) === 'seedance-2.5'
+  const providerManagedAdaptiveDuration = ['seedance-2.5', 'seedance-2.5-eco'].includes(normalizeVideoModelId(model))
     && (opts.operation === 'edit' || duration === -1)
   const resolutionError = validateVideoResolutionRequest({ model, resolution })
   if (resolutionError) return resolutionError

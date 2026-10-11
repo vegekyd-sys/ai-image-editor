@@ -107,7 +107,7 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` routes image and video models automatically, but you may select the Agent LLM with `--agent-model`. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`, `grok-4.6-grok-subscription`). `auto` resolves to GPT-6 Luna through the Codex subscription for eligible accounts (including admins) and through Azure API otherwise. Base GPT-5.6 and GPT-6 IDs select Azure API and base `grok-4.6` selects OpenRouter API; the suffixed IDs explicitly request the corresponding personal plan where authorized. This flag changes only the reasoning/tool-calling Agent LLM.
+`chat` routes image and video models automatically, but you may select the Agent LLM with `--agent-model`. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6.1-sol-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`, `grok-4.6-grok-subscription`). `auto` resolves to GPT-6 Luna through the Codex subscription for eligible accounts (including admins) and through Azure API otherwise. Base GPT-5.6, GPT-6 and GPT-6.1 IDs select Azure API and base `grok-4.6` selects OpenRouter API; the suffixed IDs explicitly request the corresponding personal plan where authorized. This flag changes only the reasoning/tool-calling Agent LLM.
 
 ```bash
 # Explicit lower-cost Agent LLM for a controlled comparison
@@ -417,7 +417,19 @@ npx makaron-cli video create --script "continue the camera move into the next be
 
 # 4. Check status
 npx makaron-cli video status <taskId>
+
+# Rebuild only 2–5 seconds and publish the complete video into the project.
+npx makaron-cli video retake --video input.mp4 --start 2 --end 5 --prompt "Make the umbrella red" --project <id> --model seedance-2.5 --wait --json
 ```
+
+Video segment editing also works directly from natural-language chat, without a GUI selection:
+
+```bash
+npx makaron-cli chat --project <id> "把 @1 的 18–21 秒切成多机位，其余不变"
+npx makaron-cli chat --project <id> "把 @1 的最后三秒改成夜景"
+```
+
+Chat resolves the source/range, inspects the footage, expands the edit instruction, and delivers the complete video. It asks only when the source or scope remains ambiguous. Precise cuts, subtitles, dubbing and extension also start from chat. Local editing accepts a 0.1–15s range in a source up to 120s; longer scopes use the appropriate whole-video workflow rather than silently shortening the request.
 
 For project/timeline video editing, use:
 

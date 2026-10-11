@@ -1,7 +1,7 @@
 ---
 name: multi-angle-video
-description: Change the camera coverage and cutting of a supplied single-camera take while preserving its recorded content, performance, dialogue and source clock. Use for multi-angle, multi-camera re-shoot, 多机位, or 单镜头变专业视频 requests; simple crops and existing multicam synchronization use ordinary editing.
-allowed-tools: read_file list_files analyze_video analyze_image transcribe_audio preview_frame generate_animation run_code write_file
+description: Whole-take multi-angle/multi-camera re-shoot of a supplied performance, preserving recorded content and source clock. Bounded scene/interval camera edits belong to video-edit instead; simple crops and existing multicam synchronization use ordinary editing.
+allowed-tools: read_file list_files inspect_retake retake_video analyze_video analyze_image transcribe_audio preview_frame generate_animation run_code write_file
 metadata:
   makaron:
     icon: "🎥"
@@ -19,6 +19,13 @@ metadata:
 ---
 
 # Multi-Angle Video
+
+## Scope before coverage
+
+For a requested interval or a resolved scene inside an existing video, follow
+`skills/video-edit/SKILL.md` → Bounded visual edits. Do not apply this guide's
+whole-take generation/soundtrack workflow to a local edit. The remaining guide
+owns whole-take multi-angle generation only.
 
 The source is a finished performance, not inspiration for a new film. Change
 only how we observe it: camera position/direction, framing, lens/focus and cuts.

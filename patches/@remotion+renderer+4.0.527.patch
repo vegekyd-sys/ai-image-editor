@@ -1,0 +1,26 @@
+diff --git a/node_modules/@remotion/renderer/dist/esm/index.mjs b/node_modules/@remotion/renderer/dist/esm/index.mjs
+index fe2695b..2b4de0b 100644
+--- a/node_modules/@remotion/renderer/dist/esm/index.mjs
++++ b/node_modules/@remotion/renderer/dist/esm/index.mjs
+@@ -7248,7 +7248,7 @@ var internalOpenBrowser = async ({
+     logLevel,
+     indent,
+     userDataDir,
+-    timeout: 25000,
++    timeout: Number(process.env.REMOTION_BROWSER_LAUNCH_TIMEOUT_MS) || 25000,
+     args: [
+       "about:blank",
+       "--allow-pre-commit-input",
+diff --git a/node_modules/@remotion/renderer/dist/open-browser.js b/node_modules/@remotion/renderer/dist/open-browser.js
+index 73d6b85..707838d 100644
+--- a/node_modules/@remotion/renderer/dist/open-browser.js
++++ b/node_modules/@remotion/renderer/dist/open-browser.js
+@@ -101,7 +101,7 @@ const internalOpenBrowser = async ({ browser, browserExecutable, chromiumOptions
+         logLevel,
+         indent,
+         userDataDir,
+-        timeout: 25000,
++        timeout: Number(process.env.REMOTION_BROWSER_LAUNCH_TIMEOUT_MS) || 25000,
+         args: [
+             'about:blank',
+             '--allow-pre-commit-input',

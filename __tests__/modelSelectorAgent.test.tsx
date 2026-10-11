@@ -77,7 +77,7 @@ describe('ModelSelector Agent tab', () => {
     expect(agentTab.getAttribute('aria-controls')).toBe(agentPanel.id);
     expect(agentPanel.getAttribute('aria-labelledby')).toBe(agentTab.id);
 
-    for (const id of ['gpt-6-luna', 'gpt-6-sol', 'grok-4.6', 'deepseek-v4-pro', 'deepseek-flash']) {
+    for (const id of ['gpt-6-luna', 'gpt-6.1-sol', 'grok-4.6', 'deepseek-v4-pro', 'deepseek-flash']) {
       expect(await screen.findByTestId(`agent-model-${id}`)).not.toBeNull();
     }
     expect(screen.queryByTestId('agent-model-grok-4.5')).toBeNull();
@@ -86,7 +86,7 @@ describe('ModelSelector Agent tab', () => {
       expect(screen.queryByTestId(`agent-model-${id}-codex-subscription`)).toBeNull();
     }
     expect(await screen.findByTestId('agent-model-gpt-6-luna-codex-subscription')).not.toBeNull();
-    expect(await screen.findByTestId('agent-model-gpt-6-sol-codex-subscription')).not.toBeNull();
+    expect(await screen.findByTestId('agent-model-gpt-6.1-sol-codex-subscription')).not.toBeNull();
     expect(await screen.findByTestId('agent-model-grok-4.6-grok-subscription')).not.toBeNull();
     expect(screen.getByTestId('agent-model-grok-4.6-grok-subscription').getAttribute('data-agent-provider'))
       .toBe('grok-subscription');
@@ -113,8 +113,8 @@ describe('ModelSelector Agent tab', () => {
     fireEvent.click(screen.getByTestId('model-auto-agent'));
     expect(onAgentModelChange).toHaveBeenCalledWith('gpt-6-luna');
 
-    fireEvent.click(screen.getByTestId('agent-model-gpt-6-sol'));
-    expect(onAgentModelChange).toHaveBeenCalledWith('gpt-6-sol');
+    fireEvent.click(screen.getByTestId('agent-model-gpt-6.1-sol'));
+    expect(onAgentModelChange).toHaveBeenCalledWith('gpt-6.1-sol');
 
     fireEvent.click(screen.getByTestId('agent-model-grok-4.6-grok-subscription'));
     expect(onAgentModelChange).toHaveBeenCalledWith('grok-4.6-grok-subscription');

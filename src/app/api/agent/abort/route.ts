@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
+import { stopAgentRun } from '@/lib/agent-run-stop';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,16 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Only abort runs owned by this user that are still running
-    const { error } = await supabase
-      .from('agent_runs')
-      .update({ status: 'aborted', ended_at: new Date().toISOString() })
-      .eq('id', runId)
-      .eq('user_id', userId)
-      .eq('status', 'running');
-
-    if (error) {
-      return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-    }
+    await stopAgentRun(supabase, runId, userId);
 
     return new Response(JSON.stringify({ ok: true }));
   } catch (err) {

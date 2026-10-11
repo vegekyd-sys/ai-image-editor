@@ -81,7 +81,7 @@ export async function createVideoPipeline(input: CreateVideoInput): Promise<Crea
           if (billing) await save(job, { reserved_upscale_credits: billing.reservedUpscaleCredits })
         } : undefined })
       if (!result.success || !result.taskId) {
-        await save(job, { stage: result.submissionUncertain ? 'submission_uncertain' : 'failed' })
+        await save(job, { stage: result.submissionUncertain ? 'submission_uncertain' : 'failed', error: result.message })
         if (!result.submissionUncertain) return result
       } else {
         console.info('[video-pipeline] generation receipt', { id: job.id, taskId: result.taskId })
@@ -123,7 +123,10 @@ export async function advanceVideoPipeline(taskId: string, userId?: string): Pro
       if (!job.generation_task_id) return status(job)
       const { getEvolinkTask } = await import('./evolink')
       const result = await getEvolinkTask(job.generation_task_id)
-      if (result.status === 'failed') await save(job, { stage: 'failed', error: '480p generation failed.' }, token)
+      if (result.status === 'failed') await save(job, {
+        stage: 'failed',
+        error: [result.errorCode, result.error].filter(Boolean).join(': ') || '480p generation failed.',
+      }, token)
       else if (result.status === 'completed' && result.videoUrl) await save(job, { stage: 'saving_base', base_provider_url: result.videoUrl }, token)
     }
     if (job.stage === 'saving_base' && job.base_provider_url) {

@@ -5,6 +5,11 @@ export interface AgentSnapshotIndexRow {
   video_meta?: Record<string, unknown> | null;
 }
 
+/** Blank composition posters still occupy a Timeline Media Index slot. */
+export function initializeAgentSnapshotUrls(urls: string[] | undefined, currentImage: string): string[] {
+  return urls ? [...urls] : currentImage ? [currentImage] : [];
+}
+
 export function snapshotUrlForAgent(row: AgentSnapshotIndexRow, fallback = ''): string {
   if (row.type === 'video') {
     const videoUrl = row.video_meta?.videoUrl;

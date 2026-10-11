@@ -75,6 +75,16 @@ it('does not refund on poll transport errors', async () => {
   await settleMcpVideoStatus('owner', 'task', 'failed')
   expect(mocks.rpc).toHaveBeenCalledWith('settle_mcp_video', { p_user_id: 'owner', p_task_id: 'task', p_failed: true })
 })
+it('reuses a canonical Retake receipt across CLI and Agent without reserving again', async () => {
+  mocks.previous.mockResolvedValue({ data: { fingerprint: 'CLI channel fingerprint', task_id: 'video-retake-id', status: 'completed' } })
+  mocks.create.mockResolvedValue({ success: true, taskId: 'video-retake-id', snapshotId: 'id', status: 'completed', message: 'existing' })
+  const result = await submitMcpVideo({ ...input, videoModel: 'seedance-2.5', videoUrl: 'https://example.com/source.mp4',
+    retake: { start: 2, end: 4 }, billingRequestId: 'id' }, { ...owner, apiKeyId: null, toolName: 'retake_video' })
+  expect(result.status).toBe('completed')
+  expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ userId: 'owner', billingRequestId: 'id', retake: { start: 2, end: 4 } }))
+  expect(mocks.quote).not.toHaveBeenCalled()
+  expect(mocks.rpc).not.toHaveBeenCalled()
+})
 it('keeps subscription free but reserves before a paid fallback', async () => {
   mocks.allowed.mockResolvedValue(true)
   mocks.create.mockImplementationOnce(async args => {
