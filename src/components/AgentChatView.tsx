@@ -651,9 +651,9 @@ export default function AgentChatView({
   readOnly,
 }: AgentChatViewProps) {
   const { t } = useLocale();
-  const [imageGalleryEnabled, setImageGalleryEnabled] = useState(isImageGalleryEnabled(process.env.NODE_ENV === 'development', process.env.NEXT_PUBLIC_IMAGE_GALLERY_EXPERIMENT === '1'));
+  const [imageGalleryEnabled, setImageGalleryEnabled] = useState(isImageGalleryEnabled());
   useEffect(() => {
-    setImageGalleryEnabled(isImageGalleryEnabled(process.env.NODE_ENV === 'development', process.env.NEXT_PUBLIC_IMAGE_GALLERY_EXPERIMENT === '1', new URLSearchParams(window.location.search).get('imageGallery')));
+    setImageGalleryEnabled(isImageGalleryEnabled(new URLSearchParams(window.location.search).get('imageGallery')));
   }, []);
 
   // Find 1-based snapshot index by messageId (for @N badge on inline images)

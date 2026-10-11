@@ -308,6 +308,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.midjourney82.title': 'Midjourney V8.2 と複数画像の表示',
+  'changelog.midjourney82.item1': 'Midjourney V8.2 に対応しました。自然な言葉でアイデアを伝えると、Makaron がモデルに適した英語のプロンプトに整えます。',
+  'changelog.midjourney82.item2': '生成された複数の画像を従来のデザインのまま縦に並べ、対応するプロンプトも保存します。各画像を確認、保存し、続けて編集できます。',
   'changelog.localVideoEditing.title': '動画の部分編集：お気に入りを残して、新しいアイデアを加える',
   'changelog.localVideoEditing.item1': '「@1 の 3〜6 秒を別のカットにして。」チャットで伝えるだけで、舞台を変えたり、画面を調整したり、気になるカットを差し替えたりできます。1回に最大15秒を編集し、元の音声とほかの部分を保った完成動画に自動で組み戻します。',
   'changelog.localVideoEditing.item2': 'Makaron はまず対象の映像、前後のカット、時刻付きの音声認識結果を分析し、要望に合わせて映像と動きを具体化します。部分的な修正では元の始点・終点のフレームを参考につながりを調整し、カット全体の差し替えでは画角、構図、動きを新しく設計できます。',

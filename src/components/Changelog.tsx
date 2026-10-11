@@ -17,12 +17,13 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-10-11', localeKey: 'midjourney82' },
   { date: '2026-10-09', localeKey: 'gpt61Sol' },
   { date: '2026-10-09', localeKey: 'localVideoEditing' },
   { date: '2026-10-08', localeKey: 'imageCapabilities' },
@@ -1017,6 +1018,10 @@ const LOCALIZED_CHANGELOG_KEYS = {
   creativeHome: {
     title: 'changelog.creativeHome.title',
     items: ['changelog.creativeHome.item1', 'changelog.creativeHome.item2'],
+  },
+  midjourney82: {
+    title: 'changelog.midjourney82.title',
+    items: ['changelog.midjourney82.item1', 'changelog.midjourney82.item2'],
   },
   gpt61Sol: { title: 'changelog.gpt61Sol.title', items: ['changelog.gpt61Sol.item1'] },
   gpt6AgentModels: {

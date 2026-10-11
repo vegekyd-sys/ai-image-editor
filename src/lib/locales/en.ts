@@ -272,6 +272,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.midjourney82.title': 'Midjourney V8.2 and multiple image results',
+  'changelog.midjourney82.item1': 'Midjourney V8.2 is now available: describe your idea naturally, and Makaron will prepare an English prompt for the model.',
+  'changelog.midjourney82.item2': 'Multiple generated images appear vertically in the familiar layout with their matching prompts, so you can view, save, and continue editing each result.',
   'changelog.localVideoEditing.title': 'Local Video Editing: Keep the Good Parts. Make Room for New Ideas.',
   'changelog.localVideoEditing.item1': '“Replace seconds 3–6 of @1 with a different shot.” Say it in chat to explore a new setting, change the scene, or replace a shot you want to rethink. Edit up to 15 seconds at a time, then get the complete video with the original audio and the rest of your footage retained.',
   'changelog.localVideoEditing.item2': 'Makaron first examines the selected footage, neighboring shots, and timestamped speech, then develops the visuals and action around your request. Local modifications use the original opening and ending frames to guide the joins; whole-shot replacements can introduce new framing, composition, and action.',

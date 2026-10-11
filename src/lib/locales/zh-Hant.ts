@@ -310,6 +310,9 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.midjourney82.title': 'Midjourney V8.2 與多圖展示',
+  'changelog.midjourney82.item1': '新增 Midjourney V8.2，用自然語言描述想法，Makaron 會自動整理為適合模型的英文提示詞。',
+  'changelog.midjourney82.item2': '一次生成的多張圖片會沿用原有樣式直向展示，並保留對應提示詞，方便逐張查看、儲存和繼續編輯。',
   'changelog.localVideoEditing.title': '影片局部編輯：好片段留下，新想法加進來',
   'changelog.localVideoEditing.item1': '「把 @1 的 3–6 秒換個鏡頭。」直接在聊天裡說，給既有影片一次新的可能：換場景、調整畫面，或替換不滿意的鏡頭。每次可編輯最多 15 秒，完成後自動合回完整影片，保留原音與其餘片段。',
   'changelog.localVideoEditing.item2': 'Makaron 會先分析片段的畫面、前後鏡頭與帶時間點的語音，再結合你的要求補充畫面與動作。局部修改會參考原片首尾畫面來處理銜接；整段替換則可以重新設計景別、構圖與動作。',

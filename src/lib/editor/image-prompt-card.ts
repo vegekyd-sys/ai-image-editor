@@ -40,7 +40,7 @@ export function resolveImagePromptCard(message: Message, snapshots: Snapshot[]) 
   return { prompt: message.editPrompt, model: message.editModel, isBrief: message.editModel === 'mj-v8.2', inputImages: message.editInputImages };
 }
 
-/** Local experiment by default. Production requires explicit opt-in. */
-export function isImageGalleryEnabled(development: boolean, optIn: boolean, mode?: string | null) {
-  return (development || optIn) && mode !== 'classic';
+/** Accepted vertical image presentation is default; classic remains a comparison option. */
+export function isImageGalleryEnabled(mode?: string | null) {
+  return mode !== 'classic';
 }

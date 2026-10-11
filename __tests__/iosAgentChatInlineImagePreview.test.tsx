@@ -98,12 +98,13 @@ describe('AgentChatView inline image preview', () => {
       </LocaleProvider>,
     );
 
-    fireEvent.click(screen.getByAltText('Generated'));
+    fireEvent.click(document.querySelector('[data-snapshot-id="snap-image"] button')!);
 
     expect(onImageTap).toHaveBeenCalledWith(
       'msg-image',
       expect.objectContaining({ width: expect.any(Number), height: expect.any(Number) }),
       'https://example.com/generated.jpg',
+      'snap-image',
     );
     expect(screen.queryByTestId('cui-inline-image-preview')).toBeNull();
   });
@@ -155,8 +156,8 @@ it('shows every generated candidate and selects its exact snapshot rather than t
   const snapshots: Snapshot[] = Array.from({ length: 4 }, (_, index) => ({ id: `candidate-${index}`, image: `https://example.com/${index}.png`, imageUrl: `https://example.com/${index}.png`, messageId: 'mj-message', tips: [] }));
   render(<LocaleProvider><AgentChatView messages={[{ id: 'mj-message', role: 'assistant', content: '', image: snapshots[0].image, timestamp: Date.now() }]}
     snapshots={snapshots} currentSnapshotIndex={3} isAgentActive={false} agentStatus="" onSendMessage={() => {}} onBack={() => {}} onPipTap={() => {}} onImageTap={onImageTap} mode="overlay" /></LocaleProvider>);
-  expect(document.querySelectorAll('[data-testid="generated-image-candidates"] img')).toHaveLength(4);
-  expect(document.querySelectorAll('[data-testid="generated-image-candidates"] button')[2].getAttribute('aria-pressed')).toBe('true');
-  fireEvent.click(document.querySelectorAll('[data-testid="generated-image-candidates"] button')[2]);
+  expect(document.querySelectorAll('[data-testid="generated-image-gallery"] img')).toHaveLength(4);
+  expect(document.querySelectorAll('[data-testid="generated-image-gallery"] button')[2].getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(document.querySelectorAll('[data-testid="generated-image-gallery"] button')[2]);
   expect(onImageTap).toHaveBeenCalledWith('mj-message', expect.anything(), snapshots[2].imageUrl, 'candidate-2');
 });

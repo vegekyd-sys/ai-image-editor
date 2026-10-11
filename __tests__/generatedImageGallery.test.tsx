@@ -50,11 +50,10 @@ describe('model-independent generated image gallery', () => {
     expect(cards[0].prompt).toBeUndefined();
     expect(cards[1].prompt?.prompt).toBe('last prompt');
   });
-  it('leaves production off by default and supports classic comparison', () => {
-    expect(isImageGalleryEnabled(false, false)).toBe(false);
-    expect(isImageGalleryEnabled(true, false)).toBe(true);
-    expect(isImageGalleryEnabled(true, false, 'classic')).toBe(false);
-    expect(isImageGalleryEnabled(false, true)).toBe(true);
+  it('enables the accepted vertical presentation by default and supports classic comparison', () => {
+    expect(isImageGalleryEnabled()).toBe(true);
+    expect(isImageGalleryEnabled(null)).toBe(true);
+    expect(isImageGalleryEnabled('classic')).toBe(false);
   });
 });
 

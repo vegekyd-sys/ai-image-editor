@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
+import { webcrypto } from 'node:crypto';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { z } from 'zod';
@@ -32,7 +33,7 @@ function setup(provider = 'azure') {
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration,
     validateImageIndex: (images: string[], index: number) => images[index - 1] ? { idx: index - 1 } : { error: 'Invalid media index' }, getToolPrice, isBillingEnabled,
     resolveToolName,
-    editImage, requireCredits, deductCredits, refreshSnapshotUrls: vi.fn(), console,
+    editImage, requireCredits, deductCredits, refreshSnapshotUrls: vi.fn(), console, crypto: webcrypto,
     require: (name: string) => {
       if (name === './billing/credits') return { deductByTokens };
       throw new Error(`Unexpected import ${name}`);

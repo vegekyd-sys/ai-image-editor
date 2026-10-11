@@ -272,6 +272,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.midjourney82.title': 'Midjourney V8.2 与多图展示',
+  'changelog.midjourney82.item1': '新增 Midjourney V8.2，用自然语言描述想法，Makaron 会自动整理为适合模型的英文提示词。',
+  'changelog.midjourney82.item2': '一次生成的多张图片会沿用原有样式竖向展示，并保留对应提示词，方便逐张查看、保存和继续编辑。',
   'changelog.localVideoEditing.title': '视频局部编辑：好片段留下，新想法加进来',
   'changelog.localVideoEditing.item1': '“把 @1 的 3–6 秒换个镜头。”直接在聊天里说，给已有视频一次新的可能：换场景、调整画面，或替换不满意的镜头。每次可编辑最多 15 秒，完成后自动合回完整视频，保留原声与其余片段。',
   'changelog.localVideoEditing.item2': 'Makaron 会先分析片段的画面、前后镜头与带时间点的语音，再结合你的要求补充画面与动作。局部修改会参考原片首尾画面来处理衔接；整段替换则可以重新设计景别、构图与动作。',
