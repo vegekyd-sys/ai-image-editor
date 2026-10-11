@@ -384,7 +384,17 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 npx makaron-cli edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output routes strictly to GPT Image 2.5 Flare and is returned only when the provider supplies real PNG/WebP alpha.
+Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image|mj-v8.2`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output routes strictly to GPT Image 2.5 Flare and is returned only when the provider supplies real PNG/WebP alpha.
+
+Midjourney V8.2 (`mj-v8.2`) accepts natural-language briefs and prepares the English prompt automatically. Fast returns up to 4 images, Draft up to 24 smaller drafts, and HD regenerates up to 4 higher-resolution images. Every returned image is saved; `--out scene.png` produces `scene-1.png`, `scene-2.png`, etc. A single result keeps the requested filename. Provider filtering can reduce the batch size.
+
+```bash
+npx makaron-cli edit --image-model mj-v8.2 --aspect 16:9 --out scene.png "星空下被水淹没的宫殿走廊"
+npx makaron-cli edit --image-model mj-v8.2 --mj-quality hd --mj-stylize 400 --mj-chaos 10 --out hallway.png "A hallway flooded. A starry night sky with big puffy clouds above."
+npx makaron-cli edit --image-model mj-v8.2 --style-ref 2231018166 --style-ref 4162055066 --out city.png "A massive city skyline peeking through a sea of clouds."
+```
+
+Midjourney-only options: `--mj-speed fast|draft`, `--mj-quality standard|hd`, repeatable `--style-ref <public-HTTPS-url|numeric-sref-code>`, `--mj-style-weight 0..1000`, `--mj-stylize 0..1000`, `--mj-chaos 0..100`, `--mj-seed 0..4294967295`, and `--mj-raw`. Draft cannot be combined with HD. This is image generation: do not use `--image` for precise edits, promise identity preservation, request transparent output or 4K, or treat HD as lossless upscaling. Public URL content references use `--ref`; local/base64 references are unsupported for this route. Failures and unknown paid outcomes are not automatically retried or switched to another model; keep the returned task ID. One provider batch is billed once, not once per candidate.
 
 `wan2.7-image` uses Alibaba international for fast, approximately 1K generation and editing (default 6 credits/image). Failed or timed-out Wan requests are not automatically retried or switched to another model. Face identity can change. Example: `makaron edit --image portrait.jpg --image-model wan2.7-image --aspect 16:9 --out stadium.jpg "Place this woman in a baseball stadium, preserving her face."`
 

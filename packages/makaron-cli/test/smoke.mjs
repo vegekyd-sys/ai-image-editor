@@ -255,6 +255,14 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    if (body?.params?.name === 'makaron_edit_image' && body.params.arguments.model === 'mj-v8.2') {
+      const prompt = body.params.arguments.editPrompt;
+      const count = prompt === 'partial-mj' ? 3 : 4;
+      sendJson(200, { jsonrpc: '2.0', id: body.id, result: prompt === 'reject-mj'
+        ? { isError: true, content: [{ type: 'text', text: 'Provider failed (content_policy_violation). Task: mj-accepted. No automatic retry.' }] }
+        : { content: [{ type: 'text', text: 'Midjourney batch complete.' }, ...Array.from({ length: count }, (_, index) => ({ type: 'image', mimeType: 'image/png', data: Buffer.from(`mj-candidate-${index + 1}`).toString('base64') }))] } });
+      return;
+    }
     if (body?.params?.name === 'makaron_edit_image' && body.params.arguments.model === 'wan2.7-image') {
       const rejected = body.params.arguments.editPrompt === 'reject-wan-test';
       sendJson(200, {
@@ -1143,6 +1151,31 @@ try {
     const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
     assert.equal(runRequest?.body?.projectId, 'project-existing-1');
     assert.equal(runRequest?.body?.prompt, 'use this reference');
+  }
+
+  {
+    const out = path.join(tmpHome, 'mj-batch.jpg');
+    const result = await expectSuccess(['edit', '--image-model', 'mj-v8.2', '--mj-quality', 'hd', '--mj-speed', 'fast', '--style-ref', '2231018166', '--style-ref', 'https://cdn.example/style.png', '--mj-style-weight', '350', '--mj-stylize', '400', '--mj-chaos', '10', '--mj-seed', '0', '--mj-raw', '--aspect', '16:9', '--out', out, '星空走廊']);
+    const actual = requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params.arguments;
+    assert.equal(actual.editPrompt, '星空走廊');
+    assert.deepEqual(actual.midjourney, { quality: 'hd', speed: 'fast', styleReferences: ['2231018166', 'https://cdn.example/style.png'], styleWeight: 350, stylize: 400, chaos: 10, seed: 0, raw: true });
+    const paths = result.stdout.trim().split('\n');
+    assert.equal(paths.length, 4);
+    for (let index = 0; index < 4; index++) {
+      assert.equal(paths[index], path.join(tmpHome, `mj-batch-${index + 1}.png`));
+      assert.equal(readFileSync(paths[index], 'utf8'), `mj-candidate-${index + 1}`);
+    }
+    const partial = await expectSuccess(['edit', '--image-model', 'mj-v8.2', '--out', path.join(tmpHome, 'partial.png'), 'partial-mj']);
+    assert.equal(partial.stdout.trim().split('\n').length, 3);
+    const before = requests.length;
+    for (const flags of [['--mj-speed', 'draft', '--mj-quality', 'hd'], ['--mj-chaos', '101'], ['--mj-seed', '-1'], ['--mj-style-weight', '200'], ['--style-ref', 'local.png'], ['--mj-stylize']]) {
+      await expectFailure(['edit', '--image-model', 'mj-v8.2', 'scene', ...flags]);
+    }
+    await expectFailure(['edit', '--mj-speed', 'draft', 'scene']);
+    assert.equal(requests.length, before, 'invalid MJ options must fail before any paid call');
+    const failure = await expectFailure(['edit', '--image-model', 'mj-v8.2', 'reject-mj']);
+    assert.match(failure.stderr, /mj-accepted/);
+    assert.equal(requests.length, before + 1, 'a failed batch must never submit twice');
   }
 
   {

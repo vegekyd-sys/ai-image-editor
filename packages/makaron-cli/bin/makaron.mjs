@@ -1872,32 +1872,26 @@ function validateVideoFileForAnalysis(videoPath) {
 
 function saveMcpImage(result, outputPath) {
   const content = result?.content || [];
-  const textBlock = content.find(c => c.type === 'text');
-  const imageBlock = content.find(c => c.type === 'image');
-  if (textBlock) process.stderr.write(`${textBlock.text}\n`);
-  if (imageBlock) {
-    const extension = imageBlock.mimeType === 'image/png'
-      ? 'png'
-      : imageBlock.mimeType === 'image/webp'
-        ? 'webp'
-        : 'jpg';
-    let out = outputPath || `makaron-output-${Date.now()}.${extension}`;
-    if (outputPath) {
-      const requestedExtension = path.extname(outputPath).slice(1).toLowerCase();
-      const compatible = extension === 'jpg'
-        ? ['jpg', 'jpeg'].includes(requestedExtension)
-        : requestedExtension === extension;
-      if (!compatible) {
-        out = `${outputPath.slice(0, outputPath.length - path.extname(outputPath).length)}.${extension}`;
-        process.stderr.write(`Output is ${imageBlock.mimeType}; saving as ${out} so bytes and filename agree.\n`);
-      }
-    }
-    fs.writeFileSync(out, Buffer.from(imageBlock.data, 'base64'));
+  const texts = content.filter(c => c.type === 'text');
+  const images = content.filter(c => c.type === 'image');
+  for (const text of texts) process.stderr.write(`${text.text}\n`);
+  if (result?.isError) { process.exitCode = 1; return null; }
+  const saved = [];
+  const stamp = Date.now();
+  for (const [index, image] of images.entries()) {
+    const extension = image.mimeType === 'image/png' ? 'png' : image.mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const requestedExtension = outputPath ? path.extname(outputPath).slice(1).toLowerCase() : '';
+    const compatible = extension === 'jpg' ? ['jpg', 'jpeg'].includes(requestedExtension) : requestedExtension === extension;
+    const stem = outputPath ? outputPath.slice(0, outputPath.length - path.extname(outputPath).length) : `makaron-output-${stamp}`;
+    const suffix = images.length > 1 ? `-${index + 1}` : '';
+    const out = `${stem}${suffix}.${compatible ? requestedExtension : extension}`;
+    if (outputPath && !compatible) process.stderr.write(`Output is ${image.mimeType}; saving as ${out} so bytes and filename agree.\n`);
+    fs.writeFileSync(out, Buffer.from(image.data, 'base64'));
     console.log(out);
-    return out;
+    saved.push(out);
   }
-  if (textBlock) console.log(textBlock.text);
-  return null;
+  if (!images.length) for (const text of texts) console.log(text.text);
+  return saved.length === 1 ? saved[0] : saved;
 }
 
 async function analyzeVideoCli(baseUrl, headers, rawVideo, questionParts) {
@@ -1938,16 +1932,26 @@ Usage:
 Options:
   --image <file|url>        Base image to edit. Omit for text-to-image.
   --ref <file|url>          Additional reference image. Repeatable; model-specific limit (Nano Banana 2.1: 14 total inputs).
-  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.5-flare, gpt-image-2.5-sunburst, or wan2.7-image. Legacy qwen maps to qwen-spicy.
+  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.5-flare, gpt-image-2.5-sunburst, wan2.7-image, or mj-v8.2. Legacy qwen maps to qwen-spicy.
   --skill <id>              enhance, creative, wild, or captions.
   --image-resolution <id>  1K, 2K, or 4K; Auto chooses Nano Banana 2.1.
   --nsfw                  Route NSFW directly to Qwen Spicy.
   --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
   --background <mode>       auto, opaque, or transparent.
-  --out <file>              Save the generated image to this path.
+  --out <file>              Save images; batches use name-1.ext, name-2.ext, etc.
+  --mj-speed <mode>         fast (up to 4 images) or draft (up to 24).
+  --mj-quality <mode>       standard or hd; HD regenerates, not lossless upscaling.
+  --style-ref <url|code>    Repeatable Midjourney public HTTPS style URL or numeric sref code.
+  --mj-style-weight <n>    Style reference weight, integer 0–1000.
+  --mj-stylize <n>         Stylization, integer 0–1000.
+  --mj-chaos <n>           Variety, integer 0–100.
+  --mj-seed <n>            Seed, integer 0–4294967295.
+  --mj-raw                 Use Raw mode.
   --help, -h                Show this help.
 
 Notes:
+  MJ options require --image-model mj-v8.2; Draft + HD is invalid. Describe the scene
+  naturally; the server prepares the English prompt. MJ is generation, not precise editing.
   Model selection is optional. Transparent output routes strictly to GPT Image 2.5 Flare
   and fails instead of returning an opaque fallback.
 
@@ -3022,6 +3026,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 } else if (command === 'edit') {
   const { headers, baseUrl } = getAuth();
   const editArgs = {};
+  const mjArgs = {};
   const promptParts = [];
   let outputPath = null;
   for (let i = 1; i < args.length; i++) {
@@ -3051,10 +3056,36 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       editArgs.background = background;
     }
     else if (args[i] === '--out' && args[i + 1]) outputPath = args[++i];
+    else if (['--mj-speed', '--mj-quality', '--style-ref', '--mj-style-weight', '--mj-stylize', '--mj-chaos', '--mj-seed'].includes(args[i])) {
+      const flag = args[i], value = args[++i];
+      if (!value || value.startsWith('--')) { console.error(`Missing value for ${flag}.`); process.exit(1); }
+      if (flag === '--style-ref') {
+        if (!/^\d{1,12}$/.test(value) && !/^https:\/\//.test(value)) { console.error('Style references require public HTTPS URLs or numeric sref codes.'); process.exit(1); }
+        (mjArgs.styleReferences ||= []).push(value);
+      } else if (flag === '--mj-speed' || flag === '--mj-quality') {
+        const allowed = flag === '--mj-speed' ? ['fast', 'draft'] : ['standard', 'hd'];
+        if (!allowed.includes(value)) { console.error(`Invalid ${flag}: use ${allowed.join(' or ')}.`); process.exit(1); }
+        mjArgs[flag === '--mj-speed' ? 'speed' : 'quality'] = value;
+      } else {
+        const fields = { '--mj-style-weight': ['styleWeight', 1000], '--mj-stylize': ['stylize', 1000], '--mj-chaos': ['chaos', 100], '--mj-seed': ['seed', 4294967295] };
+        const [key, max] = fields[flag], number = Number(value);
+        if (!Number.isInteger(number) || number < 0 || number > max) { console.error(`${flag} must be an integer from 0 to ${max}.`); process.exit(1); }
+        mjArgs[key] = number;
+      }
+    }
+    else if (args[i] === '--mj-raw') mjArgs.raw = true;
+    else if (args[i].startsWith('--mj-')) { console.error(`Unknown Midjourney option: ${args[i]}`); process.exit(1); }
     else promptParts.push(args[i]);
   }
+  if (Object.keys(mjArgs).length) {
+    if (editArgs.model !== 'mj-v8.2') { console.error('Midjourney options require --image-model mj-v8.2.'); process.exit(1); }
+    if (mjArgs.speed === 'draft' && mjArgs.quality === 'hd') { console.error('Midjourney Draft cannot be combined with HD.'); process.exit(1); }
+    if (mjArgs.styleWeight !== undefined && !mjArgs.styleReferences?.length) { console.error('--mj-style-weight requires --style-ref.'); process.exit(1); }
+    if ((mjArgs.styleReferences?.length || 0) > 20) { console.error('Midjourney accepts at most 20 style references.'); process.exit(1); }
+    editArgs.midjourney = mjArgs;
+  }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image|mj-v8.2] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);
