@@ -27,7 +27,7 @@ async function content() {
   const r = await fetch(row.storage_url); return { text: await r.text(), source: row.marketplace_source };
 }
 async function execute(templateContext = false) {
-  const project = checked(await admin.from('projects').insert({user_id: state.userId, name: 'Marketplace synchronization acceptance'}).select('id').single());
+  const project = checked(await admin.from('projects').insert({user_id: state.userId, title: 'Marketplace synchronization acceptance'}).select('id').single());
   const prompt = `[Active skill: ${state.name}]\nRun the selected acceptance Skill now. Read its complete SKILL.md first and follow its instructions exactly. This is a text fixture: do not create images, video, audio or any paid media.`;
   let run;
   if (templateContext) {

@@ -272,6 +272,8 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.marketplaceSkillUpdates.title': '模板自动使用最新版',
+  'changelog.marketplaceSkillUpdates.item1': '从市场模板启动时，现在会自动使用当前发布的最新版 Skill，无需手动删装；模板未更新时直接复用已有安装。',
   'changelog.midjourney82.title': 'Midjourney V8.2 与多图展示',
   'changelog.midjourney82.item1': '新增 Midjourney V8.2，用自然语言描述想法，Makaron 会自动整理为适合模型的英文提示词。',
   'changelog.midjourney82.item2': '一次生成的多张图片会沿用原有样式竖向展示，并保留对应提示词，方便逐张查看、保存和继续编辑。',

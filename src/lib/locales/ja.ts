@@ -308,6 +308,8 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.marketplaceSkillUpdates.title': 'テンプレートを常に最新版で開始',
+  'changelog.marketplaceSkillUpdates.item1': 'マーケットプレイスのテンプレートから開始すると、公開中の最新 Skill を自動的に使用します。手動での再インストールは不要で、更新がない場合は既存のインストールを再利用します。',
   'changelog.midjourney82.title': 'Midjourney V8.2 と複数画像の表示',
   'changelog.midjourney82.item1': 'Midjourney V8.2 に対応しました。自然な言葉でアイデアを伝えると、Makaron がモデルに適した英語のプロンプトに整えます。',
   'changelog.midjourney82.item2': '生成された複数の画像を従来のデザインのまま縦に並べ、対応するプロンプトも保存します。各画像を確認、保存し、続けて編集できます。',

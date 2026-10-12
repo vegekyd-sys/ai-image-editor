@@ -310,6 +310,8 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.marketplaceSkillUpdates.title': '範本自動使用最新版',
+  'changelog.marketplaceSkillUpdates.item1': '從市場範本啟動時，現在會自動使用目前發布的最新版 Skill，無需手動刪除重裝；範本未更新時直接重用既有安裝。',
   'changelog.midjourney82.title': 'Midjourney V8.2 與多圖展示',
   'changelog.midjourney82.item1': '新增 Midjourney V8.2，用自然語言描述想法，Makaron 會自動整理為適合模型的英文提示詞。',
   'changelog.midjourney82.item2': '一次生成的多張圖片會沿用原有樣式直向展示，並保留對應提示詞，方便逐張查看、儲存和繼續編輯。',
