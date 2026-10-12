@@ -1,5 +1,4 @@
 import type { HomeSkill } from '@/lib/home-skills'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface HomeSkillLaunchContext {
   source: 'home-skill-template'
@@ -72,45 +71,6 @@ export function normalizeSkillLaunchContext(value: unknown): SkillLaunchContext 
     skillName,
     intent: 'complete-result',
   }
-}
-
-export async function verifySkillLaunchContext(
-  supabase: Pick<SupabaseClient, 'from'>,
-  value: unknown,
-  userId: string,
-): Promise<SkillLaunchContext | undefined> {
-  const context = normalizeSkillLaunchContext(value)
-  if (!context || !userId) return undefined
-  const { data, error } = await supabase
-    .from('home_skills')
-    .select('id, skill_path, is_active')
-    .eq('id', context.homeSkillId)
-    .single()
-  if (
-    error
-    || !data
-    || data.is_active === false
-    || !data.skill_path
-  ) {
-    return undefined
-  }
-  const expectedPath = `skills/${context.skillName}/SKILL.md`
-  const { data: installedFiles, error: installedError } = await supabase
-    .from('workspace_files')
-    .select('path')
-    .eq('user_id', userId)
-    .eq('marketplace_id', context.homeSkillId)
-    .eq('path', expectedPath)
-    .limit(1)
-  if (
-    installedError
-    || !Array.isArray(installedFiles)
-    || installedFiles.length !== 1
-    || installedFiles[0]?.path !== expectedPath
-  ) {
-    return undefined
-  }
-  return context
 }
 
 export function getSkillLaunchSystemDirective(context: SkillLaunchContext | undefined): string {

@@ -159,7 +159,7 @@ function skillContentHash(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex');
 }
 
-function buildUserSkillManifestEntry(
+export function buildUserSkillManifestEntry(
   filePath: string,
   skillMd: string,
   source: Pick<WorkspaceFile, 'size' | 'updatedAt'> = {},
@@ -366,8 +366,15 @@ async function writeLocalMirror(userId: string, filePath: string, body: string |
   return localPath;
 }
 
+function workspaceMirrorPath(userId: string, file: WorkspaceFile): string {
+  const ordinary = getLocalWorkspacePath(userId, file.path);
+  return file.storageUrl?.includes('/marketplace-revisions/')
+    ? `${ordinary}.revision-${createHash('sha256').update(file.storageUrl).digest('hex').slice(0, 20)}`
+    : ordinary;
+}
+
 async function hydrateLocalMirror(file: WorkspaceFile, userId: string): Promise<WorkspaceFileHandle> {
-  const localPath = getLocalWorkspacePath(userId, file.path);
+  const localPath = workspaceMirrorPath(userId, file);
   if (await localFileMatches(localPath, file.size)) {
     console.log(`[workspace] local hit ${file.path}`);
     return { ...file, localPath, localAvailable: true, hydrated: false };
@@ -434,7 +441,7 @@ async function dbListFiles(supabase: SupabaseClient, userId: string, pattern?: s
   }
 
   return (data || []).map((row: { path: string; content_type: string; size_bytes: number | null; storage_url: string; updated_at: string | null }) => {
-    const localPath = getLocalWorkspacePath(userId, row.path);
+    const localPath = workspaceMirrorPath(userId, { path: row.path, storageUrl: row.storage_url, contentType: row.content_type });
     return {
       path: row.path,
       contentType: row.content_type,
@@ -746,7 +753,7 @@ export async function resolveWorkspaceFile(
       if (options.hydrate) {
         return hydrateLocalMirror(file, userId);
       }
-      const localPath = getLocalWorkspacePath(userId, file.path);
+      const localPath = workspaceMirrorPath(userId, file);
       return {
         ...file,
         localPath,
@@ -848,7 +855,7 @@ export async function listFiles(pattern?: string, supabase?: SupabaseClient, use
  */
 export async function readFile(filePath: string, supabase?: SupabaseClient, userId?: string): Promise<WorkspaceReadResult | null> {
   const cacheKey = `read:${userId || ''}:${filePath}`;
-  const cached = getCached<WorkspaceReadResult>(cacheKey);
+  const cached = supabase && userId && filePath.startsWith('skills/') ? undefined : getCached<WorkspaceReadResult>(cacheKey);
   if (cached) return cached;
 
   // Try Supabase first
@@ -984,7 +991,7 @@ export async function installSkill(opts: {
 /** Get a skill by name. Checks: DB user skills → built-in skills. */
 export async function getSkill(name: string, supabase?: SupabaseClient, userId?: string): Promise<ParsedSkill | null> {
   const cacheKey = `skill:${name}:${userId || ''}`;
-  const cached = getCached<ParsedSkill>(cacheKey);
+  const cached = supabase && userId ? undefined : getCached<ParsedSkill>(cacheKey);
   if (cached) return cached;
 
   // Try DB
@@ -1015,7 +1022,7 @@ const LEGACY_PROMPTS = new Set(['enhance', 'creative', 'wild', 'captions']);
 /** Get all skills (built-in SKILL.md + user). Excludes legacy prompt templates. */
 export async function getAllSkills(supabase?: SupabaseClient, userId?: string): Promise<ParsedSkill[]> {
   const cacheKey = `skills:all:${userId || 'anonymous'}`;
-  const cached = getCached<ParsedSkill[]>(cacheKey);
+  const cached = supabase && userId ? undefined : getCached<ParsedSkill[]>(cacheKey);
   if (cached) return cached;
 
   const builtIn = loadBuiltInSkills();

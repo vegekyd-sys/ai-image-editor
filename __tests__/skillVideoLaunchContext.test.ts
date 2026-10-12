@@ -1,10 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   createHomeSkillLaunchContext,
   getSkillLaunchSystemDirective,
   normalizeSkillLaunchContext,
-  verifySkillLaunchContext,
 } from '@/lib/skill-launch-context'
+import { verifySkillLaunchContext } from '@/lib/skill-launch-server'
+
+vi.mock('@/lib/marketplace-skill-install', () => ({
+  marketplaceSourceFingerprint: () => 'current-source',
+  ensureMarketplaceSkill: vi.fn(async () => ({ skillName: 'cinematic-launch' })),
+}))
 
 const skillTemplate = {
   id: 'skill-template',
@@ -39,7 +44,7 @@ function createVerifiedAdmin(options?: { installedPath?: string | null; active?:
         const result = {
           data: options?.installedPath === null
             ? []
-            : [{ path: options?.installedPath ?? `skills/${installedSkillName}/SKILL.md` }],
+            : [{ path: options?.installedPath ?? `skills/${installedSkillName}/SKILL.md`, marketplace_source: 'current-source' }],
           error: null,
         }
         const builder: Record<string, (...args: unknown[]) => unknown> = {}

@@ -20,7 +20,7 @@ import {
   getAgentContextPolicy,
 } from '@/lib/agent-execution';
 import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
-import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
+import { verifySkillLaunchContext } from '@/lib/skill-launch-server';
 import {
   appendAgentRunInput,
   decideAgentRunAdmission,
