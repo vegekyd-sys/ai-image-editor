@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { parseSkillMd } from '@/lib/skill-registry';
-import { installSkill, deleteFile, listFiles, type SkillAsset } from '@/lib/workspace';
+import { getAllSkills, installSkill, deleteFile, listFiles, type SkillAsset } from '@/lib/workspace';
 import JSZip from 'jszip';
 import { ensureMarketplaceSkill } from '@/lib/marketplace-skill-install';
 
