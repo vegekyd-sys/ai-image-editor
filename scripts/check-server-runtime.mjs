@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,8 +47,25 @@ export function checkServerRuntime(root = process.cwd(), routes = checksumRoutes
   return routes.length;
 }
 
+export function checkLocalCampaignExclusion(root = process.cwd()) {
+  const apiRoot = path.join(root, '.next/server/app/api');
+  let checked = 0;
+  for (const relative of readdirSync(apiRoot, { recursive: true })) {
+    if (typeof relative !== 'string' || !relative.endsWith('.nft.json')) continue;
+    const manifest = path.join(apiRoot, relative);
+    const { files } = JSON.parse(readFileSync(manifest, 'utf8'));
+    for (const file of files || []) {
+      const resolved = path.relative(root, path.resolve(path.dirname(manifest), file)).replaceAll('\\', '/');
+      if (resolved.startsWith('marketing/')) throw new Error(`Local campaign data entered a server bundle: ${relative}`);
+    }
+    checked++;
+  }
+  return checked;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
+    console.log(`Local campaign exclusion: ${checkLocalCampaignExclusion()} API traces contain no local marketing records.`);
     console.log(`Server runtime packaging: ${checkServerRuntime()} API traces include the CRC32C entry.`);
     console.log(`Video media runtime: ${checkVideoMediaRuntime()} API traces include FFmpeg.`);
   } catch (error) {

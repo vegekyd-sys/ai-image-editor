@@ -45,3 +45,6 @@ mcp-output/
 testcase old/
 app-store-assets/
 *.tsbuildinfo
+
+# Local campaign records and media never belong to the deployed application.
+marketing/**

@@ -43,7 +43,6 @@ export async function ensureMarketplaceSkill(
     source = undefined;
     const fingerprint = marketplaceSourceFingerprint(current);
     if (existing?.marketplace_source === fingerprint) {
-      clearWorkspaceCache();
       return { success: true, skillName: existing.path.split('/')[1], alreadyInstalled: true, sourceFingerprint: fingerprint };
     }
     const response = await fetch(current.skill_path, { cache: 'no-store' });
