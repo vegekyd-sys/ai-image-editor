@@ -14,13 +14,6 @@ export interface MarketplaceSource {
 export function marketplaceSourceFingerprint(source: MarketplaceSource): string {
   return createHash('sha256').update(JSON.stringify([source.skill_path, new Date(source.updated_at).toISOString()])).digest('hex');
 }
-export async function getMarketplaceSource(supabase: Pick<SupabaseClient, 'from'>, id: string): Promise<MarketplaceSource> {
-  const { data, error } = await supabase.from('home_skills')
-    .select('id, skill_path, updated_at, labels').eq('id', id).eq('is_active', true).single();
-  if (error || !data?.skill_path || !data.updated_at) throw new Error('Skill template could not be verified');
-  return data as MarketplaceSource;
-}
-
 // Publish immutable objects first; only the RPC may expose them to workspace readers.
 // No mutable Storage URL, partial file index, or process-local lock participates in publication.
 export async function ensureMarketplaceSkill(
@@ -31,14 +24,24 @@ export async function ensureMarketplaceSkill(
   admin: SupabaseClient = getSupabaseAdmin(),
 ): Promise<{ success: true; skillName: string; alreadyInstalled?: boolean; updated?: boolean; sourceFingerprint: string; assetsUploaded?: number }> {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const current = source || await getMarketplaceSource(supabase, marketplaceId);
+    let current: MarketplaceSource;
+    let existing: { path: string; marketplace_source?: string } | undefined;
+    if (source) {
+      current = source;
+      const { data: installed, error } = await supabase.from('workspace_files')
+        .select('path, marketplace_source').eq('user_id', userId).eq('marketplace_id', marketplaceId)
+        .like('path', 'skills/%/SKILL.md').limit(1);
+      if (error) throw new Error('Failed to check installed Skill');
+      existing = installed?.[0];
+    } else {
+      // Resolve both pieces in one snapshot/round trip on the unchanged hot path.
+      const { data, error } = await admin.rpc('resolve_marketplace_skill', { p_user_id: userId, p_marketplace_id: marketplaceId });
+      if (error || !data?.source) throw new Error('Skill template could not be verified');
+      current = data.source as MarketplaceSource;
+      existing = data.installed || undefined;
+    }
     source = undefined;
     const fingerprint = marketplaceSourceFingerprint(current);
-    const { data: installed, error } = await supabase.from('workspace_files')
-      .select('path, marketplace_source').eq('user_id', userId).eq('marketplace_id', marketplaceId)
-      .like('path', 'skills/%/SKILL.md');
-    if (error) throw new Error('Failed to check installed Skill');
-    const existing = installed?.[0];
     if (existing?.marketplace_source === fingerprint) {
       clearWorkspaceCache();
       return { success: true, skillName: existing.path.split('/')[1], alreadyInstalled: true, sourceFingerprint: fingerprint };

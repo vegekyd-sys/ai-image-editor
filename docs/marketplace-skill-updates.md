@@ -7,7 +7,8 @@ Skills without a marketplace relationship retain their normal independent lifecy
 A SHA-256 source fingerprint covers the published `skill_path` and `updated_at`.
 Publish ZIPs at a new immutable URL and update the marketplace row; republishing at
 the same URL must advance `updated_at` and invalidate upstream storage/CDN caches.
-The admin editor advances `updated_at` when saving. Cosmetic metadata saves may
+The unchanged installation check resolves source and installed revision in a single
+service-only database RPC. The admin editor advances `updated_at` when saving. Cosmetic metadata saves may
 cause one extra synchronization; unchanged launches avoid ZIP downloads entirely.
 
 Legacy installations synchronize once. Their selected Skill name remains stable.

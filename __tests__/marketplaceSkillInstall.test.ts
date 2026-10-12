@@ -10,7 +10,7 @@ function fake(options: { installed?: any[]; failUpload?: number; result?: any } 
   const rpc = vi.fn(async (_name, args) => { rows.push(...args.p_files); return { data: options.result || { committed: true, skillName: args.p_name }, error: null }; });
   const db = { from: () => {
     let filter = '';
-    const q: any = { select: () => q, eq: () => q, like: () => q, in: () => { filter = 'references'; return q; },
+    const q: any = { select: () => q, eq: () => q, like: () => q, limit: () => q, in: () => { filter = 'references'; return q; },
       then: (resolve: any) => resolve({ data: filter === 'references' ? [] : options.installed || [], error: null }) };
     return q;
   }, storage: { from: () => ({ upload: vi.fn(async (object, body) => {
@@ -54,6 +54,13 @@ describe('marketplace version synchronization', () => {
     await ensureMarketplaceSkill(f.db as never, 'user', source.id, source, f.db as never);
     const md = f.uploads.find(u => u.object.endsWith('/SKILL.md')).body;
     expect(md).toContain('description: Makaron marketplace Skill: template-1');expect(md).toContain('Execute latest instructions.');
+  });
+  it('resolves source and matching install in one RPC without extra reads', async () => {
+    const f = fake();
+    f.rpc.mockResolvedValueOnce({ data: { source, installed: { path: 'skills/sample/SKILL.md', marketplace_source: marketplaceSourceFingerprint(source) } }, error: null });
+    const from = vi.spyOn(f.db, 'from'); const fetch = vi.fn();vi.stubGlobal('fetch', fetch);
+    const result = await ensureMarketplaceSkill(f.db as never, 'user', source.id, undefined, f.db as never);
+    expect(result.alreadyInstalled).toBe(true);expect(f.rpc).toHaveBeenCalledOnce();expect(from).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled();
   });
   it('canonicalizes timestamps in source fingerprints', () => {
     expect(marketplaceSourceFingerprint(source)).toBe(marketplaceSourceFingerprint({ ...source, updated_at: '2026-10-12 00:00:00+00' }));
