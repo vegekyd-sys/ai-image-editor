@@ -46,7 +46,7 @@ async function execute(templateContext = false) {
     const r=await fetch(`${base}/api/agent/run/${run.runId}`,{headers:{Authorization:`Bearer ${state.key}`}});const data=await r.json();
     const status=data.status || data.run?.status;
     if(['completed','failed','cancelled'].includes(status)) {
-      const events=checked(await admin.from('agent_events').select('event_type,data').eq('run_id',run.runId).order('seq'));
+      const events=checked(await admin.from('agent_events').select('type,data').eq('run_id',run.runId).order('seq'));
       const serialized=JSON.stringify(events);
       assert.ok(serialized.includes('SYNC-PUBLISHED-V2'), 'latest marker missing from actual execution');
       assert.ok(serialized.includes('read_file'), 'Agent did not read Skill instructions');

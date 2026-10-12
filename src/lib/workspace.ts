@@ -1021,8 +1021,12 @@ const LEGACY_PROMPTS = new Set(['enhance', 'creative', 'wild', 'captions']);
 
 /** Get all skills (built-in SKILL.md + user). Excludes legacy prompt templates. */
 export async function getAllSkills(supabase?: SupabaseClient, userId?: string): Promise<ParsedSkill[]> {
-  const cacheKey = `skills:all:${userId || 'anonymous'}`;
-  const cached = supabase && userId ? undefined : getCached<ParsedSkill[]>(cacheKey);
+  // A cheap row-metadata check invalidates discovery across server instances.
+  // Unchanged versions keep parsed bodies cached; updates never reuse old URLs.
+  const userFiles = supabase && userId ? await dbListFiles(supabase, userId, 'skills/%/SKILL.md') : [];
+  const revision = createHash('sha256').update(JSON.stringify(userFiles.map(f => [f.path, f.storageUrl, f.updatedAt]))).digest('hex');
+  const cacheKey = `skills:all:${userId || 'anonymous'}:${revision}`;
+  const cached = getCached<ParsedSkill[]>(cacheKey);
   if (cached) return cached;
 
   const builtIn = loadBuiltInSkills();
@@ -1030,7 +1034,6 @@ export async function getAllSkills(supabase?: SupabaseClient, userId?: string): 
   const skills = [...builtIn.values()].filter(s => !LEGACY_PROMPTS.has(s.name));
 
   if (supabase && userId) {
-    const userFiles = await dbListFiles(supabase, userId, 'skills/%/SKILL.md');
     const parsedUserSkills = await Promise.all(userFiles.map(async (file) => {
       const pathName = file.path.match(/^skills\/([^/]+)\/SKILL\.md$/)?.[1];
       if (!pathName || builtIn.has(pathName)) return null;

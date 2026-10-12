@@ -48,6 +48,13 @@ describe('marketplace version synchronization', () => {
     await expect(ensureMarketplaceSkill(f.db as never, 'user', source.id, source, f.db as never)).rejects.toThrow('fixture failure');
     expect(f.rpc).not.toHaveBeenCalled(); expect(f.remove).toHaveBeenCalledWith([f.uploads[0].object]);
   });
+  it('normalizes legacy markdown-only marketplace packages while leaving ZIP uploads independent', async () => {
+    const f = fake(); const zip = new JSZip();zip.file('SKILL.md', '# Legacy template\n\nExecute latest instructions.');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(await zip.generateAsync({ type: 'arraybuffer' }))));
+    await ensureMarketplaceSkill(f.db as never, 'user', source.id, source, f.db as never);
+    const md = f.uploads.find(u => u.object.endsWith('/SKILL.md')).body;
+    expect(md).toContain('description: Makaron marketplace Skill: template-1');expect(md).toContain('Execute latest instructions.');
+  });
   it('canonicalizes timestamps in source fingerprints', () => {
     expect(marketplaceSourceFingerprint(source)).toBe(marketplaceSourceFingerprint({ ...source, updated_at: '2026-10-12 00:00:00+00' }));
     expect(marketplaceSourceFingerprint(source)).not.toBe(marketplaceSourceFingerprint({ ...source, skill_path: 'https://example.com/v3.zip' }));
