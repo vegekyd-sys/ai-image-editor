@@ -217,8 +217,14 @@ describe('Agent FFmpeg video lab', () => {
         code: `
           const fs = require('fs');
           const probe = await probeVideo(inputFiles[0].inputPath);
+          const video = probe.streams.find(stream => stream.codec_type === 'video');
+          const audio = probe.streams.find(stream => stream.codec_type === 'audio');
           return {type: 'text', content: JSON.stringify({
             duration: probe.duration,
+            videoDuration: Number(video.duration),
+            videoFrameCount: Number(video.nb_frames),
+            audioSampleRate: Number(audio.sample_rate),
+            audioCodec: audio.codec_name,
             bytes: fs.statSync(inputFiles[0].inputPath).size,
             sourceRange: inputFiles[0].sourceRange,
           })};
@@ -242,7 +248,17 @@ describe('Agent FFmpeg video lab', () => {
 
       expect(result.type).toBe('text')
       const content = JSON.parse(result.content || '{}')
-      expect(content.duration).toBeCloseTo(1.2, 1)
+      // FFmpeg versions round each cut endpoint to a whole 24fps frame. Bound
+      // the video by those endpoints, then check AAC packet padding separately.
+      const minFrames = Math.floor(2.3 * 24) - Math.ceil(1.1 * 24)
+      const maxFrames = Math.ceil(2.3 * 24) - Math.floor(1.1 * 24)
+      expect(content.videoFrameCount).toBeGreaterThanOrEqual(minFrames)
+      expect(content.videoFrameCount).toBeLessThanOrEqual(maxFrames)
+      expect(Math.abs(content.videoDuration - content.videoFrameCount / 24)).toBeLessThanOrEqual(1e-6)
+      expect(content.audioCodec).toBe('aac')
+      expect(content.audioSampleRate).toBeGreaterThan(0)
+      expect(content.duration).toBeGreaterThanOrEqual(content.videoDuration)
+      expect(content.duration).toBeLessThanOrEqual(content.videoDuration + 2 * 1024 / content.audioSampleRate + 0.001)
       expect(content.bytes).toBeLessThan(source.length)
       expect(content.sourceRange).toMatchObject({ start_sec: 1.1, end_sec: 2.3 })
     } finally {
