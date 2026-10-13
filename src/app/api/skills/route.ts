@@ -79,8 +79,7 @@ async function installFromZip(
     }
   }
   if (!skillMdContent) return { success: false, error: 'No SKILL.md found in zip' };
-  const installableSkillMd = skillMdContent;
-  if (!parseSkillMd(installableSkillMd)) return { success: false, error: 'Invalid SKILL.md format' };
+  if (!parseSkillMd(skillMdContent)) return { success: false, error: 'Invalid SKILL.md format' };
 
   const skillDir = skillMdPath.includes('/') ? skillMdPath.substring(0, skillMdPath.lastIndexOf('/') + 1) : '';
   const assetsPrefix = skillDir + 'assets/';
@@ -100,7 +99,7 @@ async function installFromZip(
     assets.push({ filename, data: Buffer.from(data), contentType: ct });
   }
 
-  const result = await installSkill({ skillMd: installableSkillMd, assets, supabase, userId });
+  const result = await installSkill({ skillMd: skillMdContent, assets, supabase, userId });
   if (!result.success) return { success: false, error: result.error };
   return { success: true, skillName: result.skillName, assetsUploaded: assets.length };
 }
@@ -113,6 +112,7 @@ export async function POST(req: NextRequest) {
     const { supabase, userId } = authResult.auth;
 
     const ct = req.headers.get('content-type') || '';
+    let buffer: ArrayBuffer;
     if (ct.includes('application/json')) {
       const { skillPath, homeSkillId } = await req.json();
       if (!skillPath) return NextResponse.json({ error: 'skillPath required' }, { status: 400 });
@@ -122,24 +122,19 @@ export async function POST(req: NextRequest) {
         const result = await ensureMarketplaceSkill(supabase, userId, homeSkillId);
         return NextResponse.json(result);
       }
-      const trustedSkillPath = skillPath as string;
-      const resp = await fetch(trustedSkillPath);
+      const resp = await fetch(skillPath);
       if (!resp.ok) return NextResponse.json({ error: `Failed to fetch skill: ${resp.status}` }, { status: 502 });
-      const buffer = await resp.arrayBuffer();
-
-      const result = await installFromZip(buffer, supabase, userId);
-      if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
-      return NextResponse.json(result);
+      buffer = await resp.arrayBuffer();
+    } else {
+      const formData = await req.formData();
+      const file = formData.get('file') as File | null;
+      if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        return NextResponse.json({ error: INVALID_ZIP_MESSAGE }, { status: 400 });
+      }
+      buffer = await file.arrayBuffer();
     }
 
-    const formData = await req.formData();
-    const file = formData.get('file') as File | null;
-    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-    if (!file.name.toLowerCase().endsWith('.zip')) {
-      return NextResponse.json({ error: INVALID_ZIP_MESSAGE }, { status: 400 });
-    }
-
-    const buffer = await file.arrayBuffer();
     const result = await installFromZip(buffer, supabase, userId);
     if (!result.success) return NextResponse.json({ error: result.error }, { status: 400 });
 
