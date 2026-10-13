@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import JSZip from 'jszip';
@@ -56,9 +57,7 @@ describe('ZIP Skill install inputs', () => {
     }
     const form = new FormData();
     form.set('file', new File([buffer], 'skill.ZIP', { type: 'application/zip' }));
-    const req = new NextRequest('http://localhost/api/skills', { method: 'POST' });
-    vi.spyOn(req, 'formData').mockResolvedValue(form);
-    return req;
+    return new NextRequest('http://localhost/api/skills', { method: 'POST', body: form });
   }
 
   describe.each(['remote ZIP', 'local upload'])('%s', (input) => {
@@ -94,6 +93,37 @@ describe('ZIP Skill install inputs', () => {
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: 'Fixture installation failed' });
     });
+
+    it('requires authentication before reading either input', async () => {
+      const req = request(input, await archive());
+      mocks.authenticateRequest.mockResolvedValue({ error: new Response('Unauthorized', { status: 401 }) });
+      const readBody = vi.spyOn(req, input === 'remote ZIP' ? 'json' : 'formData');
+      const { POST } = await import('@/app/api/skills/route');
+      expect((await POST(req)).status).toBe(401);
+      expect(readBody).not.toHaveBeenCalled();
+      expect(mocks.installSkill).not.toHaveBeenCalled();
+      if (input === 'remote ZIP') expect(fetch).not.toHaveBeenCalled();
+    });
+  });
+
+  it('preserves the missing remote path response', async () => {
+    const { POST } = await import('@/app/api/skills/route');
+    const response = await POST(new NextRequest('http://localhost/api/skills', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+    }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'skillPath required' });
+    expect(mocks.installSkill).not.toHaveBeenCalled();
+  });
+
+  it.each([null, 'skill.txt'])('preserves upload validation for %s', async (filename) => {
+    const form = new FormData();
+    if (filename) form.set('file', new File([await archive()], filename));
+    const { POST } = await import('@/app/api/skills/route');
+    const response = await POST(new NextRequest('http://localhost/api/skills', { method: 'POST', body: form }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: filename ? invalidZipMessage : 'No file provided' });
+    expect(mocks.installSkill).not.toHaveBeenCalled();
   });
 
   it('preserves remote fetch errors without attempting installation', async () => {

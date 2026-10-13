@@ -30,6 +30,10 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - name: Install media test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
       - run: npm run lint
       - run: npm test
       - run: npm run build

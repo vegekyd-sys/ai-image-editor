@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, aroundEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 
 const state = vi.hoisted(() => ({ balance: 100, credits: 6, configured: true, enabled: true, free: false, rpc: vi.fn(), fetch: vi.fn() }));
@@ -38,7 +38,7 @@ vi.mock('@/lib/supabase/service', () => ({ getSupabaseAdmin: () => ({
 }) }));
 
 import { POST } from '@/app/api/mcp/route';
-import { deductCredits, invalidateBillingCache } from '@/lib/billing/credits';
+import { deductCredits, invalidateBillingCache, runWithBillingAttribution } from '@/lib/billing/credits';
 import { invalidatePricingCache } from '@/lib/billing/pricing';
 
 async function callWan() {
@@ -49,6 +49,12 @@ async function callWan() {
   }));
   return { response, payload: await response.json() };
 }
+
+// MCP enters ambient billing attribution. Scope each case so the Node 20 runner
+// cannot carry a previous MCP case's API-key identity into an App billing case.
+aroundEach(async (runTest) => {
+  await runWithBillingAttribution({}, runTest);
+});
 
 beforeEach(async () => {
   state.balance = 100; state.credits = 6; state.configured = true; state.enabled = true; state.free = false;
