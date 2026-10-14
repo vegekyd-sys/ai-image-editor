@@ -64,7 +64,7 @@ async function main(){
   assert(value('--tarball'),'--verify requires the inspected --tarball');
   const file=path.resolve(value('--tarball')),inspected=inspectTarball(file,pkg);
   const dist=JSON.parse(run('npm',['view',`${pkg.name}@${pkg.version}`,'--json','--registry=https://registry.npmjs.org/']));
-  const tags=JSON.parse(run('npm',['dist-tag','ls',pkg.name,'--json','--registry=https://registry.npmjs.org/']));
+  const tags=JSON.parse(run('npm',['view',pkg.name,'dist-tags','--json','--registry=https://registry.npmjs.org/']));
   assert(dist.version===pkg.version&&dist.dist?.shasum===inspected.shasum,'Registry version or tarball hash mismatch');assert(tags.latest===pkg.version,'npm latest differs from release');
   const temp=fs.mkdtempSync(path.join(os.tmpdir(),'makaron-cli-fresh-'));
   try{
