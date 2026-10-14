@@ -17,7 +17,8 @@ function movie(audio: boolean): Buffer {
 }
 function run() {
   const value = createStudioRun({ agentRunId: 'agent', projectId: 'project', recipe: 'avatar-spokesperson', title: 'Native AV with editable captions', approvalPolicy: 'auto', deliveryPromise: { durationSeconds: 25, width: 720, height: 1280, fps: 30, renderRuntime: 'remotion', compositionMode: 'editable', audioRequired: true, subtitlesRequired: true } });
-  value.stages.storyboard.status = 'completed';
+  for (const stage of ['brief', 'proposal', 'script', 'storyboard'] as const) value.stages[stage].status = 'completed';
+  value.currentStage = 'assets';
   return value;
 }
 const video = { id: 'native-av', type: 'video', path: 'https://example.test/native.mp4', source: 'generated', sceneIds: ['scene'], status: 'ready', costUsd: 3.45 };
@@ -33,7 +34,7 @@ describe('native audiovisual assets in Studio', () => {
     await assertEmbeddedAudioAssets({ assets: parsed.assets, probe: async () => probeVideoMetadata(movie(true)) });
     const result = putStudioArtifact({ run: run(), stage: 'assets', artifact: manifest(asset), artifactPath: 'assets.json' });
     expect(result.run.stages.assets.status).toBe('completed');
-    expect(result.run.currentStage).not.toBe('delivery');
+    expect(result.run.currentStage).toBe('composition');
   });
 
   it.each([undefined, false])('rejects a video with hasAudio=%s when sound is promised', hasAudio => {
