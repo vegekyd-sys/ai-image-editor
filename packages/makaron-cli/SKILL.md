@@ -68,10 +68,37 @@ npx makaron-cli responses get $RUN_ID --wait --json
 
 ## Primary: `chat` (Agent-driven creative work)
 
-For an explicitly selected internal workflow, use `chat --skill <exact-name>`.
-Read [internal workflows](skills/makaron/references/internal-workflows.md) for discovery,
-long-video/replication/explainer selection, delegated review and production evidence.
-Atomic tool calls and reading a Skill alone do not start that internal workflow.
+### Built-in production skills
+
+Pass the complete brief, source roles, budget and granted review authority to
+`makaron chat` in natural language; the internal Agent selects a matching Skill.
+Use `--skill <name>` when explicitly selecting an entry below.
+Makaron's internal Agent reads the selected Skill and its dependencies and owns
+the production/review workflow. Let that Skill own the detailed procedure.
+
+| Request | `--skill` entry |
+| --- | --- |
+| Ordinary image editing/generation, music or single-clip video | Omit `--skill` for automatic routing |
+| Multi-part narrative with consistent characters/scenes | `long-video-director` |
+| Faithfully recreate reference shot structure with replacement content | `video-edit`; request the replication profile in the brief |
+| Explain a topic, product or process | `explainer-video` |
+| Trailer, teaser, brand film or cinematic short | `cinematic-video` |
+| Speech-led cuts, captions and B-roll | `talking-head` |
+| Translate/dub/localize an existing video | `video-translate` |
+| Package existing source footage for TikTok/Douyin | `tiktok-video` |
+| Whole-take multi-angle re-shoot preserving the performance/timebase | `multi-angle-video` |
+| Explicitly create progressive story images before video | `photo-to-video` |
+
+For a low-cost planning check, include: "Select the matching Skill and give a
+short production plan; stop before generating any image, video or audio."
+Planning still uses Agent inference. Detailed production remains internal.
+
+When a name or scope is uncertain, use `makaron skills list --built-in`,
+`makaron skills search "<request>" --built-in`, or
+`makaron skills show <name> --built-in`; the live list is authoritative.
+Built-in Skills need no marketplace installation. Supporting anchor/storyboard
+Skills are internal dependencies rather than separate production entrypoints.
+For invocation/status diagnostics, see [internal workflows](skills/makaron/references/internal-workflows.md).
 
 Use `chat` for all creative tasks. Makaron Agent decides how to execute — it can edit images, generate videos, compose music, and create designs in a single conversation.
 

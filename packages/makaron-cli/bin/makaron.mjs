@@ -543,7 +543,11 @@ What you can ask:
   Marketplace skill
     makaron chat --project auto --image selfie.jpg --skill "Football Captain" "make this cinematic"
 
-  Complete internal video workflows (discover the exact name first)
+  Natural-language workflow routing
+    makaron chat --project auto "make a 30s Chinese product explainer"
+    makaron chat --project auto "identify the Skill and outline a plan; stop before media generation"
+
+  Explicit internal video workflows (use the current discovered name)
     makaron chat --project auto --skill long-video-director "<full narrative brief>"
     makaron chat --project auto --video reference.mp4 --skill video-edit "<replication brief>"
     makaron chat --project auto --skill explainer-video "<full explainer brief>"

@@ -5,44 +5,71 @@ description: "Create or edit media with Makaron when requested or selected; mana
 
 # Makaron CLI
 
-Use Makaron for the user's selected creative task. Prefer `makaron chat --project` for conversational work and persistent timelines; use direct `edit`, `video`, or `music` commands for requested models/tools or standalone outputs. A Makaron repository code task alone does not require creative generation.
+用户选择 Makaron 创作图片、视频、音乐或动态设计时，优先使用 `makaron chat`。
+可以直接用自然语言描述需求，由内部 Agent 匹配 Skill。
+需要明确指定入口时使用 `--skill`；内部 Agent 负责读取该 Skill 及依赖、执行制作流程和审核。
 
-## Normal path
+## 调用
 
-Use the installed `makaron` command, or `npx makaron-cli` when unavailable. Check the relevant `--help` only when flags or behavior are uncertain. Existing auth is in `MAKARON_API_KEY` or `~/.makaron/auth.json`; never display it. Setup is needed only when auth is absent or the user requests it.
+使用已安装的 `makaron`；不可用时使用 `npx makaron-cli`。复用现有认证，勿输出凭据。
+只有需要注册、登录或查询额度时才读取 [setup](references/setup.md)。
 
 ```bash
-makaron chat --project auto --image photo.jpg -b "make it cinematic and create a 5s video"
-# Use the returned run ID:
+# 自然语言匹配内部 Skill
+makaron chat --project auto --json -b "<完整需求>"
+# 明确选择内部 Skill
+makaron chat --project auto --skill <name> --json -b "<完整需求>"
 makaron responses get <runId> --wait --json
 ```
 
-Use an existing project ID when continuing its timeline; omit `--image` for text-only requests. `chat` defaults to automatic routing. The installed CLI supports `--agent-model` for an explicitly requested Agent LLM; confirm supported IDs with `chat --help`. Image/video model flags and legacy `--model` do not belong to `chat`; use the corresponding direct command when a specific media model is required.
+按素材需要使用可重复的 `--image`、`--video`、`--audio`；文本任务省略附件。
+继续修改时使用返回的 `--project <projectId>`，保留同一项目和已知 run。
+将用户完整需求、素材角色、预算/重试上限及已授予的审核权限一起传入。
+获准自行审核中间环节时明确写入 brief；内部制作和检查要求仍须执行。
+详细流程由内部 Skill 负责，外部宿主无需重新编排。
 
-## Internal production workflows
+## 需求 → 入口
 
-For an explicitly selected internal workflow, use `chat --skill <exact-name>`.
-Read [internal workflows](references/internal-workflows.md) for discovery,
-long-video/replication/explainer selection, delegated review and production evidence.
-Atomic tool calls and reading a Skill alone do not start that internal workflow.
+| 需求 | `--skill` |
+| --- | --- |
+| 普通图片编辑/生成、音乐、单段视频 | 省略，自动路由 |
+| 跨段人物/场景一致的长叙事 | `long-video-director` |
+| 按参考片镜头结构精确复刻、替换内容 | `video-edit`，brief 指定 replication |
+| 主题、产品或流程讲解 | `explainer-video` |
+| 预告片、品牌短片、电影感叙事 | `cinematic-video` |
+| 口播清理、字幕、B-roll | `talking-head` |
+| 现有视频翻译、配音、本地化 | `video-translate` |
+| 用已有素材制作 TikTok/抖音成片 | `tiktok-video` |
+| 保留整段表演和时间线，重新制作多机位 | `multi-angle-video` |
+| 明确要求先做渐进故事图片，再生成视频 | `photo-to-video` |
 
-## Completion and scope
+需要低成本预检时，可以先用自然语言要求识别流程并停在生成之前：
 
-- One active run per project: a new message can interrupt the previous run. Resume/status-check a known run instead of submitting duplicates.
-- Wait for final requested media unless the user asked only for submission. An in-progress response or a timeout is not completion; use its run ID to continue. Follow `next_poll_after_ms` when polling.
-- A design/JSON artifact alone is not an exported MP4. When MP4 is requested, finish the corresponding export and inspect a downloadable, playable result. Return concise artifact/project links and state any actual failure.
-- Read-only diagnosis and finishing the authorized run can continue autonomously. A retry that creates a new paid generation requires checking the existing task and its authorization/budget first.
-- Reply in the current conversation. Sending through another app or to another recipient requires explicit authorization covering that destination; a service-flow example is not authorization.
+```bash
+makaron chat --project auto --json -b "做30秒中文产品讲解视频。先识别适用 Skill 并给简短计划，在生成图片、视频或音频前停下。"
+```
 
-## Read only the relevant reference
+规划预检仍会消耗 Agent 推理；详细制作流程交给内部 Skill。
 
-| Need | Reference |
-|---|---|
-| Register, authenticate, claim an account, check credits | [setup](references/setup.md) |
-| Existing timeline, video/audio input, screenshot-directed edits | [project media](references/project-media.md) |
-| Browse/use skills or authorized marketplace administration | [marketplace](references/marketplace.md) |
-| Standalone image, video, or music tools | [direct tools](references/direct-tools.md) |
-| Response fields, exit codes, polling or incremental integration | [responses](references/responses.md) |
-| Export an editable composition or JSON to MP4 | [materialize](references/materialize.md) |
+名称或适用范围不确定时，查询当前服务端目录：
 
-Reference examples are usage aids. Consult current command help for changed provider capabilities, defaults and flags; do not treat old duration estimates as completion signals. Use `watch --jsonl` only when incremental events are useful to the requested integration.
+```bash
+makaron skills list --built-in
+makaron skills search "<需求关键词>" --built-in
+makaron skills show <name> --built-in
+```
+
+内置 Skill 无需安装。人物锚点、分镜等辅助 Skill 由内部流程按需读取。
+市场模板按 [marketplace](references/marketplace.md) 发现与使用。
+
+## 完成与交付
+
+- 已知 run 优先查询/恢复，按 `next_poll_after_ms` 等待，避免重复提交或干扰正在执行的任务。
+- 等到用户要求的成品可用；读取 Skill、提交成功、超时或只产出计划均不代表完整交付。
+- 需要 MP4 而只有可编辑 composition 时，按 [materialize](references/materialize.md) 完成导出。
+- 检查实际可查看/播放的产物，返回成品和项目链接；新付费生成/重试遵守现有预算和授权。
+- 在当前对话交付。跨应用或向其他收件人发送需要对应授权。
+
+仅在需要时读取：[项目素材](references/project-media.md)、[状态与响应](references/responses.md)、
+[独立工具](references/direct-tools.md)、[内部工作流调用诊断](references/internal-workflows.md)。
+模型、参数或能力不确定时查看当前命令 `--help`。仅用户明确选择 Agent LLM 时使用 `--agent-model`。

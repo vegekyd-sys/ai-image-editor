@@ -6,6 +6,11 @@ project; direct `video create` / atomic MCP calls execute individual operations.
 Reading a guide through plugin `makaron_craft` lets the external host execute it;
 it does not start Makaron's internal Agent.
 
+Natural-language `makaron chat` requests can select a matching Skill without
+`--skill`; use that flag when the exact workflow is explicitly selected. For a
+planning-only preflight, ask to select the Skill and outline the plan, then stop
+before any image/video/audio generation. This still consumes Agent inference.
+
 ## Discover and select
 
 ```bash
@@ -28,8 +33,7 @@ check, not a guessed slug or a substitute paid generation.
 | Recreate an exact reference's shot order, timing, framing, camera/action and beats with replacement content | `video-edit`, explicitly request its **replication** profile | Exact reference and replacement roles; full-clip evidence; Shot Blueprint; preserve/change contract; appropriate reference submission; measured structure/identity/audio comparison and final QA |
 | Explain a topic/product/process with requested narration/text | `explainer-video` | Chosen visual carrier and plan; generated audiovisual scenes or authored diagrams/source assembly; relevant visual/audio QA; final video; editable composition/preview/export when that route is requested or selected |
 
-For loose reference inspiration use the discovered `reference-video-studio`
-instead of demanding structural replication. An explainer label or duration alone
+An explainer label or duration alone
 does not force Remotion. For provider-generated video, take single-call duration
 and reference limits from current capabilities, not an old fixed 15-second rule.
 Supporting anchor/storyboard Skills are dependencies; select the director as the

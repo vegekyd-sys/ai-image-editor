@@ -153,24 +153,36 @@ npx makaron-cli chat --project auto --image selfie.jpg --skill <marketplace-id-o
 
 ### Built-in production skills
 
-Use `makaron chat --skill <exact-name>` to request a complete internal workflow.
-For long narratives select `long-video-director`; for faithful source replication
-select `video-edit` and request its replication profile; for explanations select
-`explainer-video`. Discover the current names first. See
-[internal workflow invocation and acceptance](skills/makaron/references/internal-workflows.md)
-for source bindings, review authorization and evidence of actual production.
+Pass the complete brief, source roles, budget and granted review authority to
+`makaron chat` in natural language; the internal Agent selects a matching Skill.
+Use `--skill <name>` when explicitly selecting an entry below.
+Makaron's internal Agent reads the selected Skill and its dependencies and owns
+the production/review workflow. Let that Skill own the detailed procedure.
 
-Discover the available production workflows before choosing `--skill`:
+| Request | `--skill` entry |
+| --- | --- |
+| Ordinary image editing/generation, music or single-clip video | Omit `--skill` for automatic routing |
+| Multi-part narrative with consistent characters/scenes | `long-video-director` |
+| Faithfully recreate reference shot structure with replacement content | `video-edit`; request the replication profile in the brief |
+| Explain a topic, product or process | `explainer-video` |
+| Trailer, teaser, brand film or cinematic short | `cinematic-video` |
+| Speech-led cuts, captions and B-roll | `talking-head` |
+| Translate/dub/localize an existing video | `video-translate` |
+| Package existing source footage for TikTok/Douyin | `tiktok-video` |
+| Whole-take multi-angle re-shoot preserving the performance/timebase | `multi-angle-video` |
+| Explicitly create progressive story images before video | `photo-to-video` |
 
-```bash
-npx makaron-cli skills list --built-in
-npx makaron-cli skills search "talking head captions" --built-in
-npx makaron-cli skills show talking-head --built-in
-npx makaron-cli chat --project auto --video talk.mp4 --skill talking-head -b "make a tight captioned edit"
-```
+For a low-cost planning check, include: "Select the matching Skill and give a
+short production plan; stop before generating any image, video or audio."
+Planning still uses Agent inference. Detailed production remains internal.
 
-The default list shows callable/discoverable skills with their purpose and input
-requirements. Add `--all` to include internal adapters and helper skills.
+When a name or scope is uncertain, use `makaron skills list --built-in`,
+`makaron skills search "<request>" --built-in`, or
+`makaron skills show <name> --built-in`; the live list is authoritative.
+Built-in Skills need no marketplace installation. Supporting anchor/storyboard
+Skills are internal dependencies rather than separate production entrypoints.
+For invocation/status diagnostics, see [internal workflows](skills/makaron/references/internal-workflows.md).
+
 
 ### With additional images (existing project)
 
