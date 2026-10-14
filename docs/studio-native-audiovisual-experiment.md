@@ -2,7 +2,7 @@
 
 日期：2026-10-14（Asia/Shanghai）  
 分支：`codex/studio-native-audiovisual`  
-状态：代码、真实生成、真实 Agent 及字幕云端导出验收完成，已合入 dev；生产发布按 release 流程独立验收。
+状态：修复已合入 dev，网站和 CLI 0.17.1 已发布并完成生产验收；见 [发布记录](releases/2026-10-14-native-audiovisual.md)。
 
 ## 结果
 
@@ -126,4 +126,4 @@ node benchmarks/studio-native-audiovisual/serve-review.mjs private-dir 3189
 `verify-agent` 只验收已有工具记录、完成状态及真实媒体，不发起新的生成。
 `render-captions` 产出可编辑设计、字幕、普通预览与属性修改预览；叠字后原声 PCM 一致。
 
-本次没有合并、网站发布、CLI/NPM 发布或修改生产配置，也未覆盖原项目数据。
+最初的独立实验阶段未发布，未修改生产配置或覆盖原项目。后续经用户授权合入 dev 并发布网站与 CLI；生产验收和恢复记录见上述发布记录。
