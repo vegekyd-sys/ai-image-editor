@@ -46,9 +46,7 @@ translation, then captions, B-roll, platform layout, composition, and export in 
 
 ## Choose The Production Route
 
-- A generated audiovisual clip keeps its native sound when adding captions or
-  platform packaging. The source-footage mute/VO default below does not apply
-  to that clip; follow `skills/_shared/native-audiovisual.md`.
+- A generated audiovisual clip keeps native sound during caption/platform packaging; follow `skills/_shared/native-audiovisual.md`. This overrides the source-footage mute/VO default below.
 - Decide the visual carrier before platform packaging. When the user asks for
   newly imagined scenes, subject performance, transformation, cinematic camera
   action, or motion generated from text/image/video references within the

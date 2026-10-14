@@ -25,6 +25,8 @@ model's single-call limit use `prompts/animate.md` and one `generate_animation`
 with native narration, music, effects and requested text. An explainer label or
 duration above 15 seconds does not require Remotion. The composition guidance
 below applies to authored diagrams, source-led assembly or explicit editability.
+For that route, this is a local Remotion composition workflow,
+not the Open Montage workflow runtime.
 
 ## When To Use
 
