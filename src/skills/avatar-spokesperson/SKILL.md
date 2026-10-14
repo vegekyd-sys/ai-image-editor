@@ -1,7 +1,7 @@
 ---
 name: avatar-spokesperson
 description: Create presenter videos with native speech, lip sync, music and subtitles in one video generation; use the supplied identity and product references. This is a direct video workflow.
-allowed-tools: read_file analyze_video analyze_image transcribe_audio generate_animation preview_frame
+allowed-tools: read_file analyze_video analyze_image transcribe_audio generate_animation preview_frame write_code_file run_code publish_draft materialize_media
 metadata:
   makaron:
     icon: "◫"
@@ -44,9 +44,13 @@ the same generation. Inspect actual words, identity, mouth motion and sound in
 the returned MP4; provider success alone is not quality acceptance.
 
 If the user explicitly requires editable/deterministic captions, retain the
-generated audiovisual video as the source, then use the normal composition
-workflow only for those text layers. Do not change the picture/sound production
-method or invoke the old avatar Studio recipe. Supplied presenter footage
+generated audiovisual video as the source. Transcribe that video, then use
+direct `run_code(runtime: "composition")`, preview, `publish_draft` and
+`materialize_media` only for those text layers. This small overlay does not
+start `studio_run` or need eight production-stage artifacts. Keep the video
+audible; never duplicate its voice in another audio layer. Do not change the
+picture/sound production method or invoke the old avatar Studio recipe.
+Supplied presenter footage
 instead follows `skills/talking-head/SKILL.md` or `skills/video-edit/SKILL.md`.
 
 ## Failure And Delivery
