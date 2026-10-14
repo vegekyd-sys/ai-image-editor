@@ -3,6 +3,9 @@
 Choose the production method from the requested result before entering a recipe.
 Studio tracks production; its stages do not require separate model generations.
 
+- Bind reference markers from the current Media Index and actual image contents;
+  attachment order and labels copied from an earlier attempt are not identity
+  evidence. Keep presenter and product references in their correct roles.
 - For new generated motion within the selected model's single-call limit, use
   one `generate_animation` with all shots, quoted dialogue, voice performance,
   music, ambience, and sound effects in `story_prompt`. Preserve user/app model

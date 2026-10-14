@@ -2,7 +2,8 @@
 name: avatar-spokesperson
 description: >
   Create presenter-led videos from a supplied identity image, presenter footage,
-  script, or voiceover, with captions and editable delivery. Use when an avatar
+  script, or voiceover, with native speech, sound and captions; add editable
+  layers only when requested. Use when an avatar
   or on-screen spokesperson should deliver the message; do not promise exact lip
   sync unless the selected provider supports it.
 allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
@@ -65,7 +66,7 @@ delivery artifact; a generated plate is not that delivery.
 ## Production Modes
 
 - **source-presenter**: edit supplied presenter footage while keeping speech authoritative.
-- **generated-presenter**: animate a supplied identity image with an approved voice/script.
+- **generated-presenter**: generate the supplied identity, approved dialogue and supporting sound together; preserve native audio.
 - **voiceover-composite**: use presenter visuals plus timed voiceover and captions when exact lip sync is unavailable.
 
 Lock identity, language, voice, framing, duration, and lip-sync expectation in the
