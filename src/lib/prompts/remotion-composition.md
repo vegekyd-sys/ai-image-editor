@@ -112,7 +112,11 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   narration cue ends. Do not replace measured cue ranges with planned Script
   timing, estimated reading speed, or equal scene lengths. Wording, grouping,
   placement, typography, and motion remain specific to the current Composition.
-- When the active TikTok Skill uses its default audio route, every source
+- For generated audiovisual clips, preserve the embedded soundtrack when adding
+  editable text or graphics. Do not mute the clip or duplicate its speech in an
+  additional audio layer. Native captions that already pass review do not need
+  a second caption layer.
+- When the active TikTok Skill uses its source-footage default audio route, every source
   `<Video>` and `<OffthreadVideo>` must be explicitly silent with `volume={0}`
   (or an equivalent deterministic mute). Use the one generated mixed VO+BGM
   master as the only audible layer. Its persisted `transcribe_audio` cue sheet

@@ -26,6 +26,12 @@ not by itself require an editable Composition. Switch to Remotion only when the
 user explicitly requests Remotion/editability or the work is fundamentally
 source-led timeline editing, deterministic compositing, or post-production.
 
+Generated presenter, cinematic and explainer Skills follow
+`skills/_shared/native-audiovisual.md`: one generation can contain picture,
+speech, lip sync, music and subtitles together. A recipe or Studio stage does
+not require separating those outputs. If editable text is explicitly requested,
+keep the same native audiovisual generation and add only those overlays later.
+
 Source-video index: when an existing video controls the result, now read
 `skills/video-edit/SKILL.md`. That Skill owns the change/preserve contract,
 chooses source-edit versus replication, and may return here for the provider

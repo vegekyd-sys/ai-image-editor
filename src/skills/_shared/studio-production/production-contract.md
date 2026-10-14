@@ -1,5 +1,18 @@
 # Studio Production Contract
 
+## Production Method Before Stages
+
+First follow `skills/_shared/native-audiovisual.md`. A Skill recipe, a 25-second
+duration, narration, music, subtitles, or multiple shots does not force Studio.
+Use one complete native audiovisual generation within the selected model's
+limit unless the user needs source-led assembly or explicitly editable/code
+compositing. Native subtitles may be part of that same generation.
+
+The contract below is for the composition route. Even here, generated scenes
+retain their native sound; Studio must not turn them into silent plates plus
+separate voice/music/lip-sync jobs. A request for editable subtitles changes
+the text treatment, not the audio architecture.
+
 This contract turns a Makaron video skill into a durable Studio Run. The user
 chooses a recipe; the recipe chooses the production logic. The eight Studio Run
 stages remain stable so progress, resume, approvals, invalidation, and delivery
@@ -28,8 +41,12 @@ work the same across video types.
    Submit it once with `studio_run(operation: "put_creative_packet")`. The
    harness projects it into separately validated Brief, Proposal, and Script
    artifacts and emits each stage to CUI without another model continuation.
-   Then generate and transcribe continuous narration before authoring Storyboard
-   from real speech timing. Guided/manual runs continue to use one
+   For generated scenes, generate the complete audiovisual clip now and
+   transcribe its actual speech before authoring Storyboard. Its shot plan is
+   already in the approved Script; do not demand a separate voice master or a
+   prior final Storyboard to generate it. For local/code animation, generate or
+   load the final soundtrack instead. Author Storyboard from real speech timing.
+   Guided/manual runs continue to use one
    `put_artifact` at a time so their approval pauses remain explicit.
 5. Build editable video with `run_code({ runtime: "composition" })`, save the
    first complete draft, and pass the Composition draft gate before any publish
@@ -48,8 +65,9 @@ work the same across video types.
 - `storyboard`: shot/scene plan, visual relationships, treatment, transition, safe areas,
   asset links, and real narration timing evidence when subtitles are promised.
 - `assets`: every source, generated asset, voice, music, font, and code module
-  that the composition actually uses. Persist this stage only after required
-  voice/music generation; missing assets or promised audio block composition.
+  that the composition actually uses. Embedded audio in a video asset satisfies
+  required audio with verified `hasAudio: true`; no separate audio/music asset
+  is needed. Missing assets or promised audio block composition.
 - `composition`: the real editable Remotion design path plus draft-gate evidence
   for full timeline coverage, every scene boundary, the ending, audio sources,
   three or more preview frames, and per-section subtitle/narration/visual timing.
@@ -114,7 +132,8 @@ work the same across video types.
   harness does not inject caption JSX, impose a visual style, or select a
   renderer.
 - Resolve continuous narration timing before final Storyboard. Generate or load
-  the isolated Seed Audio voice master after Script, call `transcribe_audio`
+  the accepted audiovisual video after Script (or the soundtrack for local/code
+  animation), call `transcribe_audio`
   with every narrated Script section plus the locked FPS, and persist the
   returned narration cue sheet. Set Storyboard scene boundaries from those
   measured seconds and frames so every narrated section fits its linked visual
@@ -126,7 +145,8 @@ work the same across video types.
   and confirm a three-way match: the authored subtitle or kinetic phrase, the
   visual action/information on screen, and the narration actually sounding at
   that time. Do not infer speech timing from planned Script section boundaries.
-  A continuous voiceover needs real timing evidence from `transcribe_audio`;
+  Continuous speech, including a video's embedded voice, needs real timing
+  evidence from `transcribe_audio`;
   independently placed scene clips may use their explicit Remotion start times.
   Persist one `subtitleSyncEvidence` record per narrated Script section. The
   record must include the `subtitleText` intended for its representative frame.

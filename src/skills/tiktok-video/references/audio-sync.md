@@ -6,6 +6,10 @@ video. This reference only defines TikTok's default generated-audio route.
 
 ## Default Audio Contract
 
+An already generated audiovisual clip keeps its native soundtrack during
+caption/branding packaging. Transcribe that video and do not mute it or generate
+a replacement mix. This takes precedence over the source-footage default below.
+
 For an under-specified source-footage TikTok, the default finished soundtrack
 contains natural VO plus continuous instrumental BGM, while every source video
 clip is muted. User direction for source sound, silence, music-only, isolated VO,

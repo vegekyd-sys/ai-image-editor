@@ -72,8 +72,8 @@ function assertArtifactHonorsDeliveryPromise(run: StudioRun, stage: StudioStageI
     if (!nearlyEqual(lastScene.endSeconds, promise.durationSeconds)) mismatch('scene duration');
   }
   if (stage === 'assets' && promise.audioRequired) {
-    const hasAudioAsset = value.assets.some((asset: { type?: string }) => (
-      asset.type === 'audio' || asset.type === 'music'
+    const hasAudioAsset = value.assets.some((asset: { type?: string; hasAudio?: boolean }) => (
+      asset.type === 'audio' || asset.type === 'music' || (asset.type === 'video' && asset.hasAudio === true)
     ));
     if (!hasAudioAsset) mismatch('required audio asset');
   }

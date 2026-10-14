@@ -1,0 +1,65 @@
+[
+  {
+    "label": "eco-product-minimal",
+    "input": {
+      "script": "Kitchen product. <<<media_1>>> is the exact stainless steel range hood reference. Show it in an empty modern kitchen with one slow camera push. Soft fan hum and a gentle musical chime. Natural realistic light.",
+      "images": [
+        "https://example.invalid/product.jpg"
+      ],
+      "duration": 5,
+      "aspectRatio": "9:16",
+      "videoModel": "seedance-2.5-eco",
+      "videoResolution": "720p",
+      "generateAudio": true,
+      "contentFilter": true
+    }
+  },
+  {
+    "label": "eco-tt04s-compact",
+    "input": {
+      "videoModel": "seedance-2.5-eco",
+      "videoResolution": "720p",
+      "duration": 25,
+      "aspectRatio": "9:16",
+      "images": [
+        "https://example.invalid/presenter-original.jpg",
+        "https://example.invalid/product.jpg"
+      ],
+      "generateAudio": true,
+      "script": "TT04S 英文产品介绍\n25秒9:16竖屏真实广告。<<<media_1>>>是讲解者身份参考，保持同一成年女性面容、米色头巾、黑色服装，空手自然讲解。<<<media_2>>>是产品参考，保持不锈钢烟机、方形大面罩、烟囱、滤网和比例，不改变产品型号。\n温暖现代厨房。镜头顺序：主持人和产品中景开场；大面罩与灶面覆盖关系；三片金属滤网拆洗归位；铁风轮和密封电机的简洁技术示意；油杯及活性炭功能示意后回到主持人与产品收尾。镜头自然连续，不做幻灯片。\n音画同时生成。全片同一温暖清晰的女性英文讲解声，主持人出现时自然口型同步，产品特写时口播连续。轻快干净的器乐低于人声，数字清晰，语速适配25秒，在结尾之前完整读完，不添加其他说话声。完整口播：\"Meet the TT04S — a stainless-steel range hood built for hard-working kitchens. Its 900-by-480 canopy covers more of your hob, so smoke never gets away. Three stainless-steel filters wash clean again and again — no replacements, ever. An iron fan and housing outlast plastic, with a sealed 180-watt motor and a 3-year warranty. Oil drains into the cup; add carbon filters for duct-free air. TT04S — cleaner air, easier living.\"。TT04S读作tee tee zero four ess，900-by-480读作nine hundred by four hundred eighty。\n同期生成与口播准确一致的单层底部英文字幕，最多两行，右上角常驻TT04S，结尾显示中山市沪颖电器有限公司。",
+      "contentFilter": true
+    }
+  },
+  {
+    "label": "eco-tt04s-crop-native",
+    "input": {
+      "videoModel": "seedance-2.5-eco",
+      "videoResolution": "720p",
+      "duration": 25,
+      "aspectRatio": "9:16",
+      "images": [
+        "https://example.invalid/presenter-upper62pct.jpg",
+        "https://example.invalid/product.jpg"
+      ],
+      "generateAudio": true,
+      "script": "TT04S 英文产品介绍\n25秒9:16竖屏真实广告。<<<media_1>>>是讲解者身份参考，保持同一成年女性面容、米色头巾、黑色服装，空手自然讲解。<<<media_2>>>是产品参考，保持不锈钢烟机、方形大面罩、烟囱、滤网和比例，不改变产品型号。\n温暖现代厨房。镜头顺序：主持人和产品中景开场；大面罩与灶面覆盖关系；三片金属滤网拆洗归位；铁风轮和密封电机的简洁技术示意；油杯及活性炭功能示意后回到主持人与产品收尾。镜头自然连续，不做幻灯片。\n音画同时生成。全片同一温暖清晰的女性英文讲解声，主持人出现时自然口型同步，产品特写时口播连续。轻快干净的器乐低于人声，数字清晰，语速适配25秒，在结尾之前完整读完，不添加其他说话声。完整口播：\"Meet the TT04S — a stainless-steel range hood built for hard-working kitchens. Its 900-by-480 canopy covers more of your hob, so smoke never gets away. Three stainless-steel filters wash clean again and again — no replacements, ever. An iron fan and housing outlast plastic, with a sealed 180-watt motor and a 3-year warranty. Oil drains into the cup; add carbon filters for duct-free air. TT04S — cleaner air, easier living.\"。TT04S读作tee tee zero four ess，900-by-480读作nine hundred by four hundred eighty。\n同期生成与口播准确一致的单层底部英文字幕，最多两行，右上角常驻TT04S，结尾显示中山市沪颖电器有限公司。",
+      "contentFilter": true
+    }
+  },
+  {
+    "label": "eco-tt04s-crop-post",
+    "input": {
+      "videoModel": "seedance-2.5-eco",
+      "videoResolution": "720p",
+      "duration": 25,
+      "aspectRatio": "9:16",
+      "images": [
+        "https://example.invalid/presenter-upper62pct.jpg",
+        "https://example.invalid/product.jpg"
+      ],
+      "generateAudio": true,
+      "script": "TT04S 英文产品介绍\n25秒9:16竖屏真实广告。<<<media_1>>>是讲解者身份参考，保持同一成年女性面容、米色头巾、黑色服装，空手自然讲解。<<<media_2>>>是产品参考，保持不锈钢烟机、方形大面罩、烟囱、滤网和比例，不改变产品型号。\n温暖现代厨房。镜头顺序：主持人和产品中景开场；大面罩与灶面覆盖关系；三片金属滤网拆洗归位；铁风轮和密封电机的简洁技术示意；油杯及活性炭功能示意后回到主持人与产品收尾。镜头自然连续，不做幻灯片。\n音画同时生成。全片同一温暖清晰的女性英文讲解声，主持人出现时自然口型同步，产品特写时口播连续。轻快干净的器乐低于人声，数字清晰，语速适配25秒，在结尾之前完整读完，不添加其他说话声。完整口播：\"Meet the TT04S — a stainless-steel range hood built for hard-working kitchens. Its 900-by-480 canopy covers more of your hob, so smoke never gets away. Three stainless-steel filters wash clean again and again — no replacements, ever. An iron fan and housing outlast plastic, with a sealed 180-watt motor and a 3-year warranty. Oil drains into the cup; add carbon filters for duct-free air. TT04S — cleaner air, easier living.\"。TT04S读作tee tee zero four ess，900-by-480读作nine hundred by four hundred eighty。\n画面不烘焙文字和字幕，保留底部和右上角安全区用于后期字幕。完整口播和音乐仍然同期生成。",
+      "contentFilter": true
+    }
+  }
+]

@@ -1,11 +1,10 @@
 ---
 name: explainer-video
 description: >
-  Create a narrated explainer video longer than 15s, typically 30-90s, about a
-  topic, product, feature, company, or process. Use Makaron's current Remotion
-  composition runtime with design references, synced subtitles, voiceover,
-  generated sound design, and optional generated media/sticker overlays.
-allowed-tools: read_file studio_run prepare_visual_asset run_code write_file publish_draft preview_frame materialize_media transcribe_audio generate_audio generate_image analyze_image analyze_video
+  Create an explainer video about a topic, product, feature, company, or process. Prefer complete native
+  audiovisual generation for generated scenes within the selected model limit;
+  use Remotion for authored diagrams, source-led assembly or explicit editability.
+allowed-tools: read_file studio_run prepare_visual_asset generate_animation run_code write_file publish_draft preview_frame materialize_media transcribe_audio generate_audio generate_image analyze_image analyze_video
 metadata:
   makaron:
     icon: "🎙️"
@@ -20,14 +19,18 @@ metadata:
 
 # Explainer Video
 
-You are making a polished, editable explainer video in Makaron's current
-architecture. This is a local Remotion composition workflow, not a provider
-long-video generation workflow and not the Open Montage workflow runtime.
+Choose the visual carrier before the runtime. Read
+`skills/_shared/native-audiovisual.md` first. Generated scenes within the selected
+model's single-call limit use `prompts/animate.md` and one `generate_animation`
+with native narration, music, effects and requested text. An explainer label or
+duration above 15 seconds does not require Remotion. The composition guidance
+below applies to authored diagrams, source-led assembly or explicit editability.
+For that route, this is a local Remotion composition workflow,
+not the Open Montage workflow runtime.
 
 ## When To Use
 
-Use this skill when the requested video is longer than 15 seconds and the user
-asks for:
+Use this skill when the user asks for:
 
 - "explainer video", "Explainer Video", "解释视频", "讲解视频"
 - a 30-90 second topic, product, feature, company, or process explainer
@@ -35,13 +38,10 @@ asks for:
   screenshots, generated visual inserts, sticker overlays, music beds, sound
   effects, ambience, or mixed sound design
 
-For a video up to and including 15 seconds, return to the normal Agent video
-path in `prompts/animate.md`; the explainer label alone does not justify this
-Studio workflow.
-
-If the user explicitly asks for a provider-rendered cinematic video instead,
-route to the video generation flow. Otherwise, build an editable Remotion
-composition.
+For generated motion within the model limit, return to the video path in
+`prompts/animate.md`. Only continue below for the composition route. When it
+includes generated footage, keep that footage's native sound and transcribe
+the video; the local-animation soundtrack instructions do not replace it.
 
 ## Shared Remotion Director Contract First
 

@@ -7,3 +7,4 @@ export * from './service';
 export * from './resume';
 export * from './subtitle-sync';
 export * from './visual-asset-evidence';
+export * from './embedded-audio';

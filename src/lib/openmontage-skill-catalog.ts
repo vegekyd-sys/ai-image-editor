@@ -142,7 +142,7 @@ const pipeline = (
 const pipelines: OpenMontageSkillCatalogEntry[] = [
   pipeline('animated-explainer', 'explainer-video', 'generated-explainer', false),
   pipeline('animation', 'motion-design-video', 'local-animation', false),
-  pipeline('avatar-spokesperson', 'avatar-spokesperson', 'generated-presenter', false, 'adapted', true),
+  { name: 'avatar-spokesperson', sourceKind: 'pipeline', family: 'video-generation', supportLevel: 'adapted', canonicalSkill: 'avatar-spokesperson', sourceMediaRequired: false, userSelectable: true },
   pipeline('character-animation', 'character-animation', 'local-character-animation', false, 'native', true),
   pipeline('cinematic', 'cinematic-video', 'generated-or-hybrid', false),
   pipeline('clip-factory', 'content-repurpose', 'batch-source-led', true),

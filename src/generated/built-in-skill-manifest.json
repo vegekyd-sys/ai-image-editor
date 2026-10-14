@@ -5,9 +5,7 @@
   },
   {
     "name": "avatar-spokesperson",
-    "description": "Create presenter-led videos from a supplied identity image, presenter footage,",
-    "studioRunRecipe": "avatar-spokesperson",
-    "studioRunProfile": "generated-presenter"
+    "description": "Create presenter videos with native speech, lip sync, music and subtitles in one video generation; use the supplied identity and product references. This is a direct video workflow."
   },
   {
     "name": "character-animation",
@@ -51,7 +49,7 @@
   },
   {
     "name": "explainer-video",
-    "description": "Create a narrated explainer video longer than 15s, typically 30-90s, about a",
+    "description": "Create an explainer video about a topic, product, feature, company, or process. Prefer complete native",
     "studioRunRecipe": "explainer-video",
     "studioRunProfile": "generated-explainer"
   },

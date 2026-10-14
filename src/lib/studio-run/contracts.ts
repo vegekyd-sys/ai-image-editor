@@ -143,6 +143,7 @@ const assetManifestSchema = z.object({
     source: z.string().min(1),
     sceneIds: z.array(z.string()).min(1),
     status: z.enum(['ready', 'missing', 'failed']),
+    hasAudio: z.boolean().optional().describe('For video assets only: measured embedded audio track presence. The server verifies true against the actual media; this is not a request to generate separate audio.'),
     costUsd: z.number().nonnegative(),
     role: z.enum(['hero', 'support', 'decoration']).optional(),
     prepared: preparedVisualAssetSchema.optional(),

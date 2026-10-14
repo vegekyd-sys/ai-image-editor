@@ -3,7 +3,7 @@ name: cinematic-video
 description: >
   Produce an authored trailer, teaser, launch film, mood piece, or cinematic
   short with shot-led storytelling, deliberate sound design, and a distinct
-  editable visual language.
+  visual language; use editable composition only when required by the result.
 allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image generate_image generate_animation transcribe_audio generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
@@ -25,6 +25,12 @@ shorts, and story-led pieces where image, edit rhythm, and sound carry meaning.
 Do not route ordinary tutorials or quick social clips here.
 
 ## Required Directors
+
+First read `skills/_shared/native-audiovisual.md`. Within the selected model's
+single-call limit, generate the complete film, native sound and requested text
+with `generate_animation`; read `prompts/animate.md`. A cinematic label or
+multi-shot script does not require separate generations or editable composition.
+The directors and workflow below apply when composition is actually required.
 
 Read `skills/_shared/studio-production/production-contract.md`,
 `skills/_shared/studio-production/audio-direction.md`,

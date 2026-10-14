@@ -46,6 +46,7 @@ translation, then captions, B-roll, platform layout, composition, and export in 
 
 ## Choose The Production Route
 
+- A generated audiovisual clip keeps native sound during caption/platform packaging; follow `skills/_shared/native-audiovisual.md`. This overrides the source-footage mute/VO default below.
 - Decide the visual carrier before platform packaging. When the user asks for
   newly imagined scenes, subject performance, transformation, cinematic camera
   action, or motion generated from text/image/video references within the
@@ -72,7 +73,6 @@ translation, then captions, B-roll, platform layout, composition, and export in 
   not require wall-to-wall narration; keep useful BGM-led breathing room.
 
 ## Direct The Footage
-
 An underspecified TikTok request is an invitation to direct. Inspect the whole
 source set, propose genuinely different creator-native concepts, choose one
 emotional engine or point of view, and commit to it. The result may be playful,
