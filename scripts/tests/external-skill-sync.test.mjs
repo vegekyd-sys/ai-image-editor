@@ -49,3 +49,9 @@ test('routing receipt tampering and source drift fail the gate',t=>{
   checkRoutingEvidence(dir,receipt);receipt.rows[0].calls.push({name:'generate_animation',executed:true});assert.throws(()=>checkRoutingEvidence(dir,receipt),/unsafe/);
   receipt.rows[0].calls.pop();fs.appendFileSync(path.join(dir,'src/skills/_shared/native-audiovisual.md'),'\nUpdated shared routing rule.\n');assert.throws(()=>checkRoutingEvidence(dir,receipt),/stale/);
 });
+
+test('macOS Finder metadata does not invalidate source evidence',t=>{
+  const dir=fixture(t);const before=routingFingerprint(dir);
+  fs.writeFileSync(path.join(dir,'src/skills/.DS_Store'),'Finder metadata');
+  assert.equal(routingFingerprint(dir),before);checkRoutingEvidence(dir);
+});
