@@ -1,6 +1,6 @@
 # 外部 Agent 调用内部 Skill：候选交付
 
-2026-10-14。本文件记录首轮候选；后续目录收敛与自然语言验证见 [最新实测记录](natural-routing-review.md)。发布验收将记录在 `docs/releases/2026-10-14-cli-0.17.2-skill-routing.md`。主入口支持自然语言 `makaron chat` 与明确的 `--skill` 选择。
+2026-10-14。本文件记录首轮候选；后续目录收敛与自然语言验证见 [最新实测记录](natural-routing-review.md)。CLI/npm 0.17.2 已发布，本机入口已更新，详见 [发布验收](../../releases/2026-10-14-cli-0.17.2-skill-routing.md)。主入口支持自然语言 `makaron chat` 与明确的 `--skill` 选择。下文保留首轮调查时的候选状态。
 
 ## 改动与权威来源
 

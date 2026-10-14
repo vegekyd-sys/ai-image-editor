@@ -31,4 +31,4 @@
 本测试的硬拦截只用于评测，不宣称已加入生产。
 
 原始请求、读取路径、模型回答与 token usage 见 `natural-routing-results.json`。
-入口仍为候选，未覆盖本机已安装 Skill、未更新插件 cache、未部署或发 npm。
+后续 CLI/npm 0.17.2 已发布，本机入口已更新；详见 [发布验收](../../releases/2026-10-14-cli-0.17.2-skill-routing.md)。独立插件 cache 与网站未在此发布范围内更新。
