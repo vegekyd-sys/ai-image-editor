@@ -1,5 +1,5 @@
 /** Bounded real-provider experiment. Private input/results stay outside Git.
- * Usage: node --import tsx .../experiment.ts <submit|poll|transcribe> <private-dir>
+ * Usage: node --import tsx .../experiment.ts <submit|submit-smoke|poll|transcribe> <private-dir>
  * input.json: { images: [presenterUrl, productUrl], budgetUsd: 10 }
  * Load credentials in the parent process. Never automatically resubmit.
  */
@@ -36,10 +36,21 @@ function prompt(nativeCaptions: boolean): string {
   ].join('\n');
 }
 
+function smokePrompt(nativeCaptions: boolean): string {
+  return [
+    'TT04S Product Introduction. One 10-second 9:16 commercial.',
+    'Image 1 is the exact product reference. Preserve this stainless-steel range hood, canopy, chimney, proportions and material in a modern kitchen. One fictional adult female presenter, about 30, beige headscarf and black abaya, empty hands. Stable medium shot beside the hood for the first sentence, cut to closeups of the filters and motor for the middle sentence, return to the presenter for the ending. No other people or unrelated products.',
+    'Generate sound and picture together. The presenter speaks all of this exact English dialogue in a warm clear natural female voice, matching visible mouth motion: "Meet the TT04S, a stainless-steel range hood. Three washable filters, a powerful sealed motor. Cleaner air, easier living." Pronounce TT04S tee tee zero four ess. Light clean upbeat instrumental music under the voice, no extra speech. Finish the complete final sentence within ten seconds.',
+    nativeCaptions
+      ? 'Render the exact spoken English as clear white bottom-center subtitles, one layer, at most two lines, comfortable safe margin, perfectly timed to speech. Persistent upper-right TT04S label. No other text.'
+      : 'No text, subtitles or labels in the picture. Reserve bottom safe area and upper-right for post-produced captions and TT04S label. Still generate the complete synchronized voice and instrumental music.',
+  ].join('\n');
+}
+
 type Sample = { variant: string; prompt: string; reservedUsd: number; submittedAt: string; taskId?: string; status?: string; readyAt?: string; error?: string };
 async function main() {
   const [operation, directory] = process.argv.slice(2);
-  if (!directory || !['submit', 'poll', 'transcribe'].includes(operation)) throw new Error('Expected submit|poll|transcribe <private-dir>');
+  if (!directory || !['submit', 'submit-smoke', 'poll', 'transcribe'].includes(operation)) throw new Error('Expected submit|submit-smoke|poll|transcribe <private-dir>');
   const root = path.resolve(directory);
   await mkdir(root, { recursive: true });
   const input = JSON.parse(await readFile(path.join(root, 'input.json'), 'utf8')) as { images: string[]; budgetUsd: number };
@@ -47,18 +58,28 @@ async function main() {
   const statePath = path.join(root, 'state.json');
   const samples: Sample[] = await readFile(statePath, 'utf8').then(JSON.parse).catch((e: NodeJS.ErrnoException) => { if(e.code === 'ENOENT') return []; throw e; });
   const save = () => writeFile(statePath, JSON.stringify(samples, null, 2), { mode: 0o600 });
-  if (operation === 'submit') {
+  if (operation === 'submit' || operation === 'submit-smoke') {
     // Reserve BEFORE submission, including ambiguous transport failures. Never
     // reuse a variant reservation or spend the ASR/overrun reserve on retries.
-    const quote = estimateVideoProviderCostUsd({ model: 'seedance-2.5', resolution: '480p', durationSec: 25 });
-    if (!quote || quote * 2 + 1 > input.budgetUsd) throw new Error('Two generations plus the $1 reserve exceed the approved budget.');
-    for (const variant of ['native-captions', 'post-captions']) {
+    // Direct supplier prices verified at https://evolink.ai/seedance-2-5,
+    // 2026-10-14: image references 480p $0.138/output second. These are NOT
+    // Makaron customer credit quotes. Count failed/ambiguous attempts at full
+    // reservation; do not assume a refund. Keep at least $0.30 for ASR.
+    const smoke = operation === 'submit-smoke';
+    const duration = smoke ? 10 : 25;
+    const quote = estimateVideoProviderCostUsd({ model: 'seedance-2.5', resolution: '480p', durationSec: duration });
+    const variants = ['native-captions', 'post-captions'].map(v => smoke ? 'smoke-' + v : v);
+    const total = samples.reduce((sum, sample) => sum + sample.reservedUsd, 0);
+    const missing = variants.filter(v => !samples.some(s => s.variant === v)).length;
+    if (!quote || total + quote * missing + 0.30 > input.budgetUsd) throw new Error('Generations plus the ASR reserve exceed the approved budget.');
+    for (const variant of variants) {
       if (samples.some(s => s.variant === variant)) continue;
-      const sample: Sample = { variant, prompt: prompt(variant === 'native-captions'), reservedUsd: quote, submittedAt: new Date().toISOString(), status: 'submitting' };
+      const native = variant.endsWith('native-captions');
+      const sample: Sample = { variant, prompt: smoke ? smokePrompt(native) : prompt(native), reservedUsd: quote, submittedAt: new Date().toISOString(), status: 'submitting' };
       samples.push(sample);
       await save();
       try {
-        sample.taskId = await createEvolinkTask({ prompt: sample.prompt, images: input.images, duration: 25, aspectRatio: '9:16', quality: '480p', model: 'seedance-2.5-reference-to-video', generateAudio: true, contentFilter: true });
+        sample.taskId = await createEvolinkTask({ prompt: sample.prompt, images: smoke ? [input.images[1]] : input.images, duration, aspectRatio: '9:16', quality: '480p', model: 'seedance-2.5-reference-to-video', generateAudio: true, contentFilter: true });
         sample.status = 'pending';
       } catch (error) {
         sample.status = 'submission-error';
