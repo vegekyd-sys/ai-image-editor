@@ -148,7 +148,8 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).not.toContain('generate_music')
 
     expect(skill?.description).toContain('explainer video')
-    expect(skill?.description).toContain('longer than 15s')
+    expect(skill?.description).toContain('selected model limit')
+    expect(skill?.description).not.toContain('longer than 15s')
     expect(rawSkill).toContain('"explainer video"')
     expect(rawSkill).toContain('"Explainer Video"')
     expect(rawSkill).toContain('"解释视频"')
