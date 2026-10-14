@@ -24,10 +24,16 @@ Studio tracks production; its stages do not require separate model generations.
   generate the complete audiovisual clip after Script, transcribe THAT clip,
   then derive Storyboard and subtitle timing from the real speech. Editable
   captions do not require editable speech or separate music generation.
+- Simple captions/labels over one accepted generated clip use direct
+  composition, preview, publish and materialize. They do not start Studio or
+  require separate Brief, Proposal, Script, Storyboard and Assets documents.
 - Record a ready audible video in the Asset Manifest as `type: "video"` with
   `hasAudio: true` and its actual URL/workspace path. The server verifies the
   embedded audio track. Keep it audible in Remotion and avoid duplicating it
   with a second `<Audio>` or muting it under a platform's source-footage rule.
+- ASR supplies timing and a fallible transcript. Check ambiguous names or
+  numbers against the audible video before paying to regenerate speech; a
+  transcription typo alone does not prove the native voice said it wrong.
 - Independent audio generation remains appropriate for an audio deliverable,
   a locally animated/code-led film without generated speaking footage, or an
   explicitly requested replacement soundtrack. Those routes follow the shared
