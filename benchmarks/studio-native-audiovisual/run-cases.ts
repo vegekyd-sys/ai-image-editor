@@ -4,7 +4,7 @@
  * cases.json = [{label,input:CreateVideoInput}], state uses diagnosis.json.
  * Every label reserves one POST before submission; poll never regenerates.
  */
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, open, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createVideo, type CreateVideoInput } from '../../src/lib/skills/create-video';
@@ -16,6 +16,9 @@ async function main() {
   if (!directory || !['submit', 'poll'].includes(operation)) throw new Error('Expected submit|poll <private-dir>');
   const root = path.resolve(directory);
   await mkdir(root, { recursive: true });
+  const lockPath = path.join(root, 'diagnosis.lock');
+  const lock = await open(lockPath, 'wx');
+  try {
   const statePath = path.join(root, 'diagnosis.json');
   const state = JSON.parse(await readFile(statePath, 'utf8')) as { userId: string; projectId: string; jobs: Entry[] };
   const save = () => writeFile(statePath, JSON.stringify(state, null, 2), { mode: 0o600 });
@@ -34,6 +37,7 @@ async function main() {
   } else {
     for (const job of state.jobs) {
       if (!job.result?.taskId || ['completed', 'failed'].includes(job.status || '')) continue;
+      try {
       const result = await getVideoStatus({ taskId: job.result.taskId, userId: state.userId });
       if (result.queryFailed) { console.log(JSON.stringify({ label: job.label, queryFailed: true })); continue; }
       job.status = result.status;
@@ -50,7 +54,16 @@ async function main() {
       }
       await save();
       console.log(JSON.stringify({ label: job.label, model: job.model, status: job.status, error: job.error, stage: result.stage, readyAt: job.readyAt }));
+      } catch (e) {
+        // Query/download failures are not provider failure or permission to
+        // regenerate. Retain the original receipt and continue other cases.
+        job.status = 'delivery-pending';
+        job.error = e instanceof Error ? e.message : String(e);
+        await save();
+        console.log(JSON.stringify({ label: job.label, deliveryPending: true, error: job.error }));
+      }
     }
   }
+  } finally { await lock.close(); await unlink(lockPath); }
 }
 main().catch(error => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
