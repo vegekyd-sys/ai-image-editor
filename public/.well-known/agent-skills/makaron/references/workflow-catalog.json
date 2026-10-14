@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "revision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
+  "excluded": [
+    "motion-design-video",
+    "source-video-studio",
+    "website-to-video",
+    "reference-video-studio"
+  ],
+  "entries": [
+    {
+      "name": "long-video-director",
+      "request": {
+        "en": "Multi-part narrative with consistent characters/scenes",
+        "zh": "跨段人物/场景一致的长叙事"
+      },
+      "description": "Orchestrate and review provider-generated long-video workflows. Use for multi-part generated clips, over-15s provider output, consistent anchors across clips, per-segment storyboards, or transitions between generated clips. Do not use when the user explicitly requests Studio Run, Remotion, or an editable Composition workflow.",
+      "triggers": [],
+      "tags": [
+        "video",
+        "workflow",
+        "long-video",
+        "director"
+      ],
+      "sourceMediaRequired": false
+    },
+    {
+      "name": "video-edit",
+      "request": {
+        "en": "Faithfully recreate reference shot structure with replacement content",
+        "zh": "按参考片镜头结构精确复刻、替换内容"
+      },
+      "profile": "replication",
+      "description": "Edit, transform, or faithfully recreate a supplied video. Use for source-preserving trims, repairs, captions, audio, effects, and subject/background replacement, or when a reference video's timing, camera, action, transitions, and beat structure must be reproduced with new content. Distinguishes source-edit from replication internally; use direct generation for a new video with no source authority and reference-video-studio for loose inspiration.",
+      "triggers": [],
+      "tags": [
+        "video",
+        "edit",
+        "replication",
+        "source-led",
+        "reference-to-video",
+        "ffmpeg",
+        "remotion"
+      ],
+      "sourceMediaRequired": true
+    },
+    {
+      "name": "explainer-video",
+      "request": {
+        "en": "Explain a topic, product or process",
+        "zh": "主题、产品或流程讲解"
+      },
+      "description": "Create an explainer video about a topic, product, feature, company, or process. Prefer complete native audiovisual generation for generated scenes within the selected model limit; use Remotion for authored diagrams, source-led assembly or explicit editability.",
+      "triggers": [],
+      "tags": [
+        "video",
+        "workflow",
+        "explainer",
+        "remotion",
+        "voiceover",
+        "subtitles",
+        "audio"
+      ],
+      "sourceMediaRequired": false
+    },
+    {
+      "name": "cinematic-video",
+      "request": {
+        "en": "Trailer, teaser, brand film or cinematic short",
+        "zh": "预告片、品牌短片、电影感叙事"
+      },
+      "description": "Produce an authored trailer, teaser, launch film, mood piece, or cinematic short with shot-led storytelling, deliberate sound design, and a distinct visual language; use editable composition only when required by the result.",
+      "triggers": [],
+      "tags": [
+        "video",
+        "workflow",
+        "studio-run",
+        "cinematic",
+        "trailer",
+        "brand-film",
+        "remotion"
+      ],
+      "sourceMediaRequired": false
+    },
+    {
+      "name": "talking-head",
+      "request": {
+        "en": "Speech-led cuts, captions and B-roll",
+        "zh": "口播清理、字幕、B-roll"
+      },
+      "description": "Edit talking-head footage with transcript-led cuts, synced captions, B-roll, and highlights; continue through video-translate for another language and tiktok-video for TikTok/Douyin delivery.",
+      "triggers": [],
+      "tags": [
+        "video",
+        "talking-head",
+        "transcript",
+        "asr",
+        "b-roll",
+        "highlights",
+        "remotion"
+      ],
+      "sourceMediaRequired": true,
+      "inputHint": "A talking-head video with clear, audible speech"
+    },
+    {
+      "name": "video-translate",
+      "request": {
+        "en": "Translate/dub/localize an existing video",
+        "zh": "现有视频翻译、配音、本地化"
+      },
+      "description": "Translate accepted video into another language; compose first with talking-head when visible-speaker cuts are requested and finish through tiktok-video for TikTok/Douyin. Use Seed Audio for off-screen VO and SeeDance 2.0 for a visible speaker.",
+      "triggers": [],
+      "tags": [
+        "video",
+        "translation",
+        "dubbing",
+        "talking-head",
+        "voiceover",
+        "captions",
+        "seed-audio",
+        "seedance"
+      ],
+      "sourceMediaRequired": true
+    },
+    {
+      "name": "tiktok-video",
+      "request": {
+        "en": "Package existing source footage for TikTok/Douyin",
+        "zh": "用已有素材制作 TikTok/抖音成片"
+      },
+      "description": "Package accepted source-led footage for TikTok/Douyin in editable Remotion; compose first with talking-head and video-translate for visible-speaker editing or translation.",
+      "triggers": [],
+      "tags": [
+        "video",
+        "tiktok",
+        "vertical",
+        "social",
+        "captions",
+        "safe-zone",
+        "remotion"
+      ],
+      "sourceMediaRequired": false
+    },
+    {
+      "name": "multi-angle-video",
+      "request": {
+        "en": "Whole-take multi-angle re-shoot preserving the performance/timebase",
+        "zh": "保留整段表演和时间线，重新制作多机位"
+      },
+      "description": "Whole-take multi-angle/multi-camera re-shoot of a supplied performance, preserving recorded content and source clock. Bounded scene/interval camera edits belong to video-edit instead; simple crops and existing multicam synchronization use ordinary editing.",
+      "triggers": [],
+      "tags": [
+        "video",
+        "multi-angle",
+        "multi-camera",
+        "coverage",
+        "source-edit"
+      ],
+      "sourceMediaRequired": true
+    },
+    {
+      "name": "photo-to-video",
+      "request": {
+        "en": "Explicitly create progressive story images before video",
+        "zh": "明确要求先做渐进故事图片，再生成视频"
+      },
+      "description": "Use when the user explicitly selects Photo-to-Video or asks to create progressive story images before making a video. Single photo evolves into a wild 3-act visual story; multiple photos are selected and sequenced. Ordinary photo animation or requests for an interesting, stylish video do not by themselves activate this workflow.",
+      "triggers": [],
+      "tags": [
+        "video",
+        "workflow"
+      ],
+      "sourceMediaRequired": false
+    }
+  ]
+}

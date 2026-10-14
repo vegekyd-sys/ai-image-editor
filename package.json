@@ -59,7 +59,14 @@
     "mcp": "npx tsx --require ./md-loader.cjs mcp-server.ts --stdio",
     "mcp:http": "npx tsx --require ./md-loader.cjs mcp-server.ts",
     "check:core-prompt": "node --import tsx --require ./md-loader.cjs benchmarks/core-prompt/check-contracts.ts",
-    "eval:core-prompt": "node --import tsx --require ./md-loader.cjs benchmarks/core-prompt/evaluate.ts"
+    "eval:core-prompt": "node --import tsx --require ./md-loader.cjs benchmarks/core-prompt/evaluate.ts",
+    "build:skill-sync": "npm run build:agent-startup-manifest && npm run build:agent-discovery",
+    "check:skill-sync": "npm run check:agent-startup && npm run check:agent-discovery && node --import tsx scripts/check-skill-routing-evidence.ts",
+    "test:skill-sync": "node --import tsx --test scripts/tests/external-skill-sync.test.mjs",
+    "test:skill-routing": "node --import tsx --require ./md-loader.cjs benchmarks/external-skill-routing/preflight.ts",
+    "release:cli:prepare": "node scripts/makaron-cli-release.mjs --prepare",
+    "release:cli:verify": "node scripts/makaron-cli-release.mjs --verify",
+    "prebuild": "npm run build:skill-sync"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "3.0.42",

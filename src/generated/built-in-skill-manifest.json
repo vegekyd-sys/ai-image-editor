@@ -1,7 +1,7 @@
 [
   {
     "name": "anchor",
-    "description": "Produce and review reusable long-video visual anchors: character cards,"
+    "description": "Produce and review reusable long-video visual anchors: character cards, scene cards, and prop cards."
   },
   {
     "name": "avatar-spokesperson",
@@ -9,19 +9,19 @@
   },
   {
     "name": "character-animation",
-    "description": "Build a reusable local character animation proof with a consistent character",
+    "description": "Build a reusable local character animation proof with a consistent character spec, pose system, action beats, and frame-driven SVG, Canvas, or Remotion motion.",
     "studioRunRecipe": "character-animation",
     "studioRunProfile": "local-character-animation"
   },
   {
     "name": "cinematic-video",
-    "description": "Produce an authored trailer, teaser, launch film, mood piece, or cinematic",
+    "description": "Produce an authored trailer, teaser, launch film, mood piece, or cinematic short with shot-led storytelling, deliberate sound design, and a distinct visual language; use editable composition only when required by the result.",
     "studioRunRecipe": "cinematic-video",
     "studioRunProfile": "generated-or-hybrid"
   },
   {
     "name": "content-repurpose",
-    "description": "Convert a long video, interview, webinar, livestream, or podcast into ranked",
+    "description": "Convert a long video, interview, webinar, livestream, or podcast into ranked short clips, audiograms, quote-led videos, and a coherent batch package.",
     "studioRunRecipe": "content-repurpose",
     "studioRunProfile": "batch-source-led",
     "sourceMediaRequired": true
@@ -49,24 +49,24 @@
   },
   {
     "name": "explainer-video",
-    "description": "Create an explainer video about a topic, product, feature, company, or process. Prefer complete native",
+    "description": "Create an explainer video about a topic, product, feature, company, or process. Prefer complete native audiovisual generation for generated scenes within the selected model limit; use Remotion for authored diagrams, source-led assembly or explicit editability.",
     "studioRunRecipe": "explainer-video",
     "studioRunProfile": "generated-explainer"
   },
   {
     "name": "localization-dub",
-    "description": "Produce multi-locale subtitle, dub, or subtitle-plus-dub variants from one",
+    "description": "Produce multi-locale subtitle, dub, or subtitle-plus-dub variants from one accepted source; use video-translate for the single-video translation route.",
     "studioRunRecipe": "localization-dub",
     "studioRunProfile": "source-led-variant",
     "sourceMediaRequired": true
   },
   {
     "name": "long-video-director",
-    "description": "Orchestrate and review provider-generated long-video workflows. Use for"
+    "description": "Orchestrate and review provider-generated long-video workflows. Use for multi-part generated clips, over-15s provider output, consistent anchors across clips, per-segment storyboards, or transitions between generated clips. Do not use when the user explicitly requests Studio Run, Remotion, or an editable Composition workflow."
   },
   {
     "name": "makaron-mascot",
-    "description": "Generate images featuring Pixel Wizard, the Makaron mascot character.",
+    "description": "Generate images featuring Pixel Wizard, the Makaron mascot character. A cheeky, slightly cowardly bubble-ghost with pixel expressions who guides Makaron's Spark creative energy. Activate when user mentions: mascot, pixel wizard, 吉祥物, or wants to add the brand character to their photo.",
     "referenceImages": [
       "assets/makaron-spark-pixel-wizard-concepts.png"
     ],
@@ -76,7 +76,7 @@
   },
   {
     "name": "motion-design-video",
-    "description": "Create motion-first videos using kinetic typography, diagrams, charts,",
+    "description": "Create motion-first videos using kinetic typography, diagrams, charts, illustrative animation, UI motion, and synchronized sound instead of a repeated slide or card template.",
     "studioRunRecipe": "motion-design-video",
     "studioRunProfile": "local-animation"
   },
@@ -92,7 +92,7 @@
   },
   {
     "name": "music-to-video",
-    "description": "Turn a supplied song, beat, or voice track into an editable audio-led video",
+    "description": "Turn a supplied song, beat, or voice track into an editable audio-led video whose cuts, motion, typography, and visual energy follow the music. Use when the original audio is the timing authority rather than background decoration.",
     "studioRunRecipe": "music-to-video",
     "studioRunProfile": "audio-led-local-animation"
   },
@@ -109,24 +109,24 @@
   },
   {
     "name": "screen-demo",
-    "description": "Create an editable product walkthrough from real screen footage or an honest",
+    "description": "Create an editable product walkthrough from real screen footage or an honest synthetic UI or terminal sequence, with readable actions, callouts, captions, and optional narration.",
     "studioRunRecipe": "screen-demo",
     "studioRunProfile": "capture-or-synthetic"
   },
   {
     "name": "source-video-studio",
-    "description": "Turn real uploaded footage into a polished talking-head edit, hybrid story,",
+    "description": "Turn real uploaded footage into a polished talking-head edit, hybrid story, documentary montage, or source-led feature while preserving the footage as primary evidence; use tiktok-video only for source-led TikTok/Douyin editing, never solely because a platform is named.",
     "studioRunRecipe": "source-video-studio",
     "studioRunProfile": "source-led",
     "sourceMediaRequired": true
   },
   {
     "name": "sticker-maker",
-    "description": "Generate, extract, and prepare transparent image assets for video composition. Prefers native"
+    "description": "Generate, extract, and prepare transparent image assets for video composition. Prefers native GPT Image 2.5 alpha, falls back to controlled chroma keying when needed, and verifies the result on five backgrounds before handing the PNG to Remotion."
   },
   {
     "name": "storyboard",
-    "description": "Produce and review one OpenAI 6+ panel storyboard image per approved long-video"
+    "description": "Produce and review one OpenAI 6+ panel storyboard image per approved long-video segment."
   },
   {
     "name": "talking-head",
@@ -155,7 +155,7 @@
   },
   {
     "name": "website-to-video",
-    "description": "Turn a real website, screen recording, or screenshots into an editable product",
+    "description": "Turn a real website, screen recording, or screenshots into an editable product demo or launch video with readable actions, callouts, pacing, and optional narration. Use when the website experience is the source evidence.",
     "studioRunRecipe": "website-to-video",
     "studioRunProfile": "site-led-remotion"
   }

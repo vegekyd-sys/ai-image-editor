@@ -148,3 +148,15 @@ test-kling.mjs
 AGENTS.md
 !/AGENTS.md
 infra/
+
+# External Skill lifecycle gates
+!/scripts/build-external-skill-directory.ts
+!/scripts/check-skill-routing-evidence.ts
+!/scripts/makaron-cli-release.mjs
+!/scripts/lib/
+/scripts/lib/*
+!/scripts/lib/external-skill-directory.ts
+!/scripts/lib/skill-routing-evidence.ts
+!/scripts/tests/
+/scripts/tests/*
+!/scripts/tests/external-skill-sync.test.mjs

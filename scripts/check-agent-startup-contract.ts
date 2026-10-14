@@ -20,7 +20,8 @@ function buildManifest() {
     .filter(skill => !legacyPromptNames.has(skill.name) && skill.makaron?.manifestVisible !== false)
     .map(skill => ({
       name: skill.name,
-      description: skill.description.trim().split('\n')[0],
+      description: skill.description.trim().replace(/\s+/g, ' '),
+      ...(skill.makaron?.triggers?.length ? { triggers: skill.makaron.triggers } : {}),
       ...(skill.makaron?.referenceImages?.length ? { referenceImages: skill.makaron.referenceImages } : {}),
       ...(skill.makaron?.modelPreference?.length ? { modelPreference: skill.makaron.modelPreference } : {}),
       ...(skill.makaron?.studioRunRecipe ? { studioRunRecipe: skill.makaron.studioRunRecipe } : {}),

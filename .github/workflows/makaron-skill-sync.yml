@@ -1,0 +1,68 @@
+name: Makaron Skill Sync
+on:
+  pull_request:
+    paths:
+      - 'src/skills/**'
+      - 'src/generated/built-in-skill-manifest.json'
+      - 'src/lib/agent*.ts'
+      - 'src/lib/prompts/agent.md'
+      - 'src/lib/workspace.ts'
+      - 'src/lib/skill-registry.ts'
+      - 'config/makaron-external-skills.json'
+      - 'packages/makaron-cli/**'
+      - 'public/.well-known/agent-skills/**'
+      - 'public/skill.md'
+      - 'docs/agent-guidance/makaron-cli-entry.zh.md'
+      - 'benchmarks/external-skill-routing/**'
+      - 'scripts/**'
+      - 'package*.json'
+      - '.github/workflows/makaron-skill-sync.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'src/skills/**'
+      - 'src/generated/built-in-skill-manifest.json'
+      - 'src/lib/agent*.ts'
+      - 'src/lib/prompts/agent.md'
+      - 'src/lib/workspace.ts'
+      - 'src/lib/skill-registry.ts'
+      - 'config/makaron-external-skills.json'
+      - 'packages/makaron-cli/**'
+      - 'public/.well-known/agent-skills/**'
+      - 'public/skill.md'
+      - 'docs/agent-guidance/makaron-cli-entry.zh.md'
+      - 'benchmarks/external-skill-routing/**'
+      - 'scripts/**'
+      - 'package*.json'
+      - '.github/workflows/makaron-skill-sync.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  skill-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      # Check before any build can silently regenerate stale artifacts.
+      # This validates an existing read-only routing receipt, never calls models.
+      - run: npm run check:skill-sync
+      - name: Validate package and version bump against the PR base
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: npm run release:cli:prepare -- --base "$BASE_SHA"
+      - name: Validate dev package against the previous revision
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        env:
+          BASE_SHA: ${{ github.event.before }}
+        run: npm run release:cli:prepare -- --base "$BASE_SHA"
+      - name: Validate package on initial/manual runs
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000')
+        run: npm run release:cli:prepare

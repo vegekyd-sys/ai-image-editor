@@ -9,16 +9,14 @@ import { buildSystemPrompt } from '../../src/lib/agent';
 import { createTools } from '../../src/lib/agent-tools';
 import { createAgentModelRuntime, getAgentProviderOptions } from '../../src/lib/agent-model-runtime';
 import { bundleAgentPrompt } from '../../src/lib/agent-prompt-bundles';
+import { buildCatalog, routingFingerprint } from '../../scripts/lib/external-skill-directory';
 
-config({path:'/Users/tianyicai/ai-image-editor/.env.local',quiet:true});
+const envIndex=process.argv.indexOf('--env');
+if(envIndex>=0)config({path:process.argv[envIndex+1],quiet:true});
 const root=process.cwd();
-const out=path.join(root,'docs/research/external-skill-workflow-contract/natural-routing-results.json');
+const out=path.join(root,'benchmarks/external-skill-routing/accepted.json');
 const stopInstruction='本轮只选择适用的内部 Skill、说明理由并给出简短制作计划。在任何图片、视频或音频生成前停下来；不要分析媒体、上传、导出、运行代码或写入项目。可读取所需 Skill 文件。';
-const cases=[
- {id:'natural-long-narrative',expected:'long-video-director',media:'<<<media_1>>> 人物甲参考图；<<<media_2>>> 人物乙参考图。当前只提供素材元信息用于规划。',prompt:'用这两张人物参考图做一支60秒故事短片，分段保持人物、造型与场景一致，包含完整导演规划、人物锚点和逐段分镜。'},
- {id:'natural-reference-replication',expected:'video-edit',media:'<<<media_1>>> 12秒参考视频；<<<media_2>>> 替换人物参考图。当前只提供素材元信息用于规划。',prompt:'把这支参考片复刻成新的品牌版本，用参考图替换人物，保留原片镜头顺序、时长、构图、运镜、动作和节拍。'},
- {id:'natural-product-explainer',expected:'explainer-video',media:'No media.',prompt:'做一支30秒中文产品讲解视频，面向第一次使用的用户，有旁白和字幕，讲清这个产品如何工作。'},
-];
+const cases=JSON.parse(fs.readFileSync(path.join(root,'benchmarks/external-skill-routing/cases.json'),'utf8'));
 
 async function main(){
  const runtime=createAgentModelRuntime(undefined,'external-skill-natural-preflight');
@@ -30,7 +28,7 @@ async function main(){
  const originals=Object.fromEntries(Object.entries(discovered).filter(([,t]:[string,any])=>t.inputSchema));
  const disabledProviderTools=Object.keys(discovered).filter(name=>!(name in originals));
  const schemas=Object.fromEntries(Object.entries(originals).map(([name,t]:[string,any])=>[name,t.inputSchema]));
- const summary:any={kind:'controlled-live-natural-language-routing',model:runtime.spec.id,provider:runtime.spec.provider,guard:'Only local read_file executes. All other tools are intercepted and end the case. No real media was supplied.',disabledProviderTools,maxCases:cases.length,maxStepsPerCase:5,maxRetries:0,mediaOperationsExecuted:0,rows:[]};
+ const summary:any={routingFingerprint:routingFingerprint(root),catalogRevision:buildCatalog(root).revision,kind:'controlled-live-natural-language-routing',model:runtime.spec.id,provider:runtime.spec.provider,guard:'Only local read_file executes. All other tools are intercepted and end the case. No real media was supplied.',disabledProviderTools,maxCases:cases.length,maxStepsPerCase:5,maxRetries:0,mediaOperationsExecuted:0,rows:[]};
  if(!process.argv.includes('--live')){console.log(JSON.stringify({model:runtime.spec.id,tools:Object.keys(schemas).length,systemChars:system.length,caseCount:cases.length,live:false}));return;}
  for(const scenario of cases){
   const calls:any[]=[];let text='',error:string|undefined;
@@ -49,7 +47,7 @@ async function main(){
    const response=streamText({model:runtime.model,system,messages:[{role:'user',content:`[Media Index]\n${scenario.media}\n\n${scenario.prompt}\n\n${stopInstruction}`}],tools:tools as any,providerOptions:getAgentProviderOptions(runtime),stopWhen:[stepCountIs(5),()=>calls.some(c=>c.blocked)],maxOutputTokens:1600,maxRetries:0,abortSignal:AbortSignal.timeout(120000)});
    for await(const part of response.fullStream){if(part.type==='text-delta')text+=part.text;if(part.type==='error')throw part.error;}
    usage=await response.totalUsage;
-  }catch(e){error=e instanceof Error?e.message:String(e);}
+  }catch(e){error=e instanceof Error?e.message:String(e);for(const [name,value]of Object.entries(process.env))if(value&&/(KEY|TOKEN|PASSWORD|SECRET|URL)/i.test(name))error=error.split(value).join('[redacted]');}
   const selectedFile=`skills/${scenario.expected}/SKILL.md`;
   const selected=calls.some(c=>c.name==='read_file'&&c.path===selectedFile&&c.executed);
   const stoppedBeforeProduction=!calls.some(c=>c.blocked);

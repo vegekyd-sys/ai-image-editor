@@ -159,6 +159,7 @@ Use `--skill <name>` when explicitly selecting an entry below.
 Makaron's internal Agent reads the selected Skill and its dependencies and owns
 the production/review workflow. Let that Skill own the detailed procedure.
 
+<!-- makaron:workflow-directory:start -->
 | Request | `--skill` entry |
 | --- | --- |
 | Ordinary image editing/generation, music or single-clip video | Omit `--skill` for automatic routing |
@@ -171,6 +172,7 @@ the production/review workflow. Let that Skill own the detailed procedure.
 | Package existing source footage for TikTok/Douyin | `tiktok-video` |
 | Whole-take multi-angle re-shoot preserving the performance/timebase | `multi-angle-video` |
 | Explicitly create progressive story images before video | `photo-to-video` |
+<!-- makaron:workflow-directory:end -->
 
 For a low-cost planning check, include: "Select the matching Skill and give a
 short production plan; stop before generating any image, video or audio."

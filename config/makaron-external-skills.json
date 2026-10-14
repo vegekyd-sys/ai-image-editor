@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "excluded": [
+    "motion-design-video",
+    "source-video-studio",
+    "website-to-video",
+    "reference-video-studio"
+  ],
+  "entries": [
+    {
+      "name": "long-video-director",
+      "request": {
+        "en": "Multi-part narrative with consistent characters/scenes",
+        "zh": "跨段人物/场景一致的长叙事"
+      }
+    },
+    {
+      "name": "video-edit",
+      "request": {
+        "en": "Faithfully recreate reference shot structure with replacement content",
+        "zh": "按参考片镜头结构精确复刻、替换内容"
+      },
+      "profile": "replication"
+    },
+    {
+      "name": "explainer-video",
+      "request": {
+        "en": "Explain a topic, product or process",
+        "zh": "主题、产品或流程讲解"
+      }
+    },
+    {
+      "name": "cinematic-video",
+      "request": {
+        "en": "Trailer, teaser, brand film or cinematic short",
+        "zh": "预告片、品牌短片、电影感叙事"
+      }
+    },
+    {
+      "name": "talking-head",
+      "request": {
+        "en": "Speech-led cuts, captions and B-roll",
+        "zh": "口播清理、字幕、B-roll"
+      }
+    },
+    {
+      "name": "video-translate",
+      "request": {
+        "en": "Translate/dub/localize an existing video",
+        "zh": "现有视频翻译、配音、本地化"
+      }
+    },
+    {
+      "name": "tiktok-video",
+      "request": {
+        "en": "Package existing source footage for TikTok/Douyin",
+        "zh": "用已有素材制作 TikTok/抖音成片"
+      }
+    },
+    {
+      "name": "multi-angle-video",
+      "request": {
+        "en": "Whole-take multi-angle re-shoot preserving the performance/timebase",
+        "zh": "保留整段表演和时间线，重新制作多机位"
+      }
+    },
+    {
+      "name": "photo-to-video",
+      "request": {
+        "en": "Explicitly create progressive story images before video",
+        "zh": "明确要求先做渐进故事图片，再生成视频"
+      }
+    }
+  ]
+}

@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 
 const root = process.cwd()
 const checkOnly = process.argv.includes('--check')
+execFileSync(process.execPath, ['--import', 'tsx', 'scripts/build-external-skill-directory.ts', ...(checkOnly ? ['--check'] : [])], { cwd: root, stdio: 'inherit' })
 const sourceRoot = path.join(root, 'packages/makaron-cli/skills')
 const publicRoot = path.join(root, 'public/.well-known/agent-skills')
 const canonicalSkillName = 'makaron'

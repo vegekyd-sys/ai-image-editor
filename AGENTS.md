@@ -8,6 +8,8 @@ Makaron 是图片、视频、音乐与动态设计产品。用中文协作；只
 
 每次发布都检查 CLI 与 NPM 是否跟上已上线能力，包括模型、参数、help、README 和 bundled Skill；涉及更新时同步发包并验证 registry 全新安装，不能把网站上线当成 CLI 发布完成。步骤见 `docs/makaron-release-checklist.md` 的 CLI Publish。
 
+更新内部 Skill 或对外入口配置时，执行 `npm run build:skill-sync` 与 `npm run check:skill-sync`；路由证据过期则执行受控预检，停在媒体生成前。主要目录只在 `config/makaron-external-skills.json` 维护，保留四项排除。流程及发布验收见 `docs/agent-guidance/makaron-skill-sync.md`。
+
 | 任务 | 入口及关系 |
 |---|---|
 | 编辑器状态与交互 | `src/components/Editor.tsx` 组织 GUI/CUI、消息与 snapshots；持久化入口 `src/hooks/useProject.ts` |

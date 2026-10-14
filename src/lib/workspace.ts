@@ -30,6 +30,7 @@ type SupabaseClient = any;
 interface BuiltInSkillManifestEntry {
   name: string;
   description: string;
+  triggers?: string[];
   referenceImages?: string[];
   modelPreference?: string[];
   studioRunRecipe?: string;
@@ -1074,6 +1075,7 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
   const builtIn = builtInSkillManifest as BuiltInSkillManifestEntry[];
   const lines: string[] = builtIn.map(s => {
     const extras: string[] = [];
+    if (s.triggers?.length) extras.push(`triggers: ${s.triggers.join('; ')}`);
     if (s.referenceImages?.length) extras.push('has reference images');
     if (s.modelPreference?.length) extras.push(`prefers: ${s.modelPreference.join('/')}`);
     if (s.studioRunRecipe) extras.push(`Studio Run recipe: ${s.studioRunRecipe}`);

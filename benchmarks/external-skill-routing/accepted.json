@@ -1,0 +1,116 @@
+{
+  "routingFingerprint": "03ca90826790070a99ce8d64235498c8a89b0c16fa7b64cdb89bd914d7459ac2",
+  "catalogRevision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
+  "kind": "controlled-live-natural-language-routing",
+  "model": "gpt-6-luna",
+  "provider": "azure-openai",
+  "guard": "Only local read_file executes. All other tools are intercepted and end the case. No real media was supplied.",
+  "disabledProviderTools": [],
+  "maxCases": 3,
+  "maxStepsPerCase": 5,
+  "maxRetries": 0,
+  "mediaOperationsExecuted": 0,
+  "rows": [
+    {
+      "id": "natural-long-narrative",
+      "prompt": "用这两张人物参考图做一支60秒故事短片，分段保持人物、造型与场景一致，包含完整导演规划、人物锚点和逐段分镜。",
+      "stopInstruction": "本轮只选择适用的内部 Skill、说明理由并给出简短制作计划。在任何图片、视频或音频生成前停下来；不要分析媒体、上传、导出、运行代码或写入项目。可读取所需 Skill 文件。",
+      "expected": "long-video-director",
+      "selected": true,
+      "stoppedBeforeProduction": true,
+      "passed": true,
+      "calls": [
+        {
+          "name": "read_file",
+          "path": "skills/long-video-director/SKILL.md",
+          "executed": true
+        }
+      ],
+      "text": "我会先读取最适用的长视频导演 Skill，仅据你提供的素材说明规划；本轮不查看两张参考图，也不生成或写入任何素材。**主 Skill：`long-video-director`**。60 秒成片超出单次生成时长，且需要跨段保持人物与场景连贯、制作人物锚点和逐段分镜；该 Skill 适合分段导演与逐关审核，并衔接锚点和分镜专用 Skill。\n\n**简短计划：**后续按约 4 段、每段 15 秒规划；先确定故事方向，再为人物甲、乙制作并审核锚点，随后制定分段大纲与段间衔接、导演节拍板，并为每段制作分镜图。分镜与脚本经你逐阶段确认后，才进入视频生成。本轮未查看参考图，也未生成或写入任何素材。",
+      "usage": {
+        "inputTokens": 49081,
+        "inputTokenDetails": {
+          "noCacheTokens": 6,
+          "cacheReadTokens": 23265,
+          "cacheWriteTokens": 25810
+        },
+        "outputTokens": 750,
+        "outputTokenDetails": {
+          "textTokens": 250,
+          "reasoningTokens": 500
+        },
+        "totalTokens": 49831
+      },
+      "durationMs": 16675
+    },
+    {
+      "id": "natural-reference-replication",
+      "prompt": "把这支参考片复刻成新的品牌版本，用参考图替换人物，保留原片镜头顺序、时长、构图、运镜、动作和节拍。",
+      "stopInstruction": "本轮只选择适用的内部 Skill、说明理由并给出简短制作计划。在任何图片、视频或音频生成前停下来；不要分析媒体、上传、导出、运行代码或写入项目。可读取所需 Skill 文件。",
+      "expected": "video-edit",
+      "selected": true,
+      "stoppedBeforeProduction": true,
+      "passed": true,
+      "calls": [
+        {
+          "name": "read_file",
+          "path": "skills/video-edit/SKILL.md",
+          "executed": true
+        },
+        {
+          "name": "read_file",
+          "path": "skills/video-edit/references/replication-protocol.md",
+          "executed": true
+        }
+      ],
+      "text": "我会先读取视频编辑 Skill，以区分“复刻镜头结构”与普通素材编辑；本轮只做工作流规划，不查看媒体内容或启动生成。适用项已明确为 `video-edit` 的 **replication**（复刻）路径，而非保留原片像素的 source-edit；我再核对其复刻规范，只用来完善后续计划，不分析素材。**适用 Skill：`video-edit` → `replication`（复刻）路径。**参考视频是镜头顺序、时长、构图、运镜、动作和节拍的结构依据，参考图则用于替换人物；这不同于保留原片像素的普通局部编辑。\n\n**简短计划：**若后续进入制作，先检查完整 12 秒参考片并整理镜头节奏与动作，再以 `<<<media_2>>>` 作为替换人物参考进行整段复刻，最后核对镜头结构、人物替换及节拍是否到位。本轮按要求停在规划阶段：未分析媒体，也未启动任何生成或导出。",
+      "usage": {
+        "inputTokens": 74950,
+        "inputTokenDetails": {
+          "noCacheTokens": 9,
+          "cacheReadTokens": 71640,
+          "cacheWriteTokens": 3301
+        },
+        "outputTokens": 1038,
+        "outputTokenDetails": {
+          "textTokens": 319,
+          "reasoningTokens": 719
+        },
+        "totalTokens": 75988
+      },
+      "durationMs": 31007
+    },
+    {
+      "id": "natural-product-explainer",
+      "prompt": "做一支30秒中文产品讲解视频，面向第一次使用的用户，有旁白和字幕，讲清这个产品如何工作。",
+      "stopInstruction": "本轮只选择适用的内部 Skill、说明理由并给出简短制作计划。在任何图片、视频或音频生成前停下来；不要分析媒体、上传、导出、运行代码或写入项目。可读取所需 Skill 文件。",
+      "expected": "explainer-video",
+      "selected": true,
+      "stoppedBeforeProduction": true,
+      "passed": true,
+      "calls": [
+        {
+          "name": "read_file",
+          "path": "skills/explainer-video/SKILL.md",
+          "executed": true
+        }
+      ],
+      "text": "我会先核对「explainer-video」Skill 的制作流程；本轮只给出适用 Skill 和简短计划，不启动任何生成或项目操作。**适用 Skill：`explainer-video`。**它专门用于带旁白、字幕的产品与流程讲解，适合面向新手说明产品如何工作。\n\n**简短计划（30 秒）：**开场点明产品能做什么 → 用简明步骤讲清工作流程 → 展示新用户的首次使用路径与结果 → 用一句话回顾。画面以清晰的流程示意和界面式动效辅助讲解，中文旁白与字幕同步。具体内容待补充产品信息后再确定；本轮未进行媒体分析或任何生成、导出、代码及项目操作。",
+      "usage": {
+        "inputTokens": 52275,
+        "inputTokenDetails": {
+          "noCacheTokens": 6,
+          "cacheReadTokens": 46352,
+          "cacheWriteTokens": 5917
+        },
+        "outputTokens": 420,
+        "outputTokenDetails": {
+          "textTokens": 214,
+          "reasoningTokens": 206
+        },
+        "totalTokens": 52695
+      },
+      "durationMs": 10324
+    }
+  ]
+}

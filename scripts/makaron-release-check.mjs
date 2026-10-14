@@ -20,7 +20,8 @@ Usage:
 
 Modes:
   --print   Print the release checklist. This is the default.
-  --local   Run local pre-merge gates: tsc, test, CLI test, build.
+  --local   Run local pre-merge gates: Skill sync, tsc, test, CLI test, build.
+  --cli     Check Skill sync, routing evidence and CLI package readiness.
   --health  Check the production/preview base URL and /api/health.
 
 Notes:
@@ -64,6 +65,7 @@ async function healthCheck() {
 }
 
 function localCheck() {
+  run('npm', ['run', 'check:skill-sync']);
   run('npx', ['tsc', '--noEmit']);
   run('npm', ['run', 'test']);
   run('npm', ['run', 'test:cli']);
@@ -81,6 +83,8 @@ function localCheck() {
 try {
   if (has('--help') || has('-h')) {
     usage();
+  } else if (has('--cli')) {
+    run('npm', ['run', 'release:cli:prepare']);
   } else if (has('--local')) {
     localCheck();
   } else if (has('--health')) {
