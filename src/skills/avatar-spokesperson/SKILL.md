@@ -35,13 +35,17 @@ not invoke OpenMontage Python tools, HyperFrames, or unexposed provider APIs.
 
 ## Required Reading
 
-1. Follow this adapter before using tools.
-2. Read `skills/_shared/studio-production/production-contract.md` before starting substantial production.
+1. Follow `skills/_shared/native-audiovisual.md` before selecting production tools.
+2. Read `prompts/animate.md` for generated presenter footage. Within the model's
+   limit, generate the supplied identity, all dialogue, music and requested
+   native subtitles together. Do not create a voice master and silent plate.
+3. Read `skills/_shared/studio-production/production-contract.md` only when
+   source-led assembly or explicitly editable overlays require composition.
 
 ## Execution Contract
 
-- Run the full Studio Run contract for substantial work. Preserve source evidence, make production choices explicit, and use the canonical Makaron workflow for execution.
-- Start recipe `avatar-spokesperson` and keep that recipe id through delivery.
+- For the composition route, run the Studio Run contract. Preserve source evidence and use generated audiovisual footage as the audible source.
+- When Studio is needed, start recipe `avatar-spokesperson` and keep that recipe id through delivery.
 - Use a supplied presenter image/video when available. Makaron can create presenter-led video, voiceover, captions, and compositing; do not promise exact phoneme lip sync unless the selected provider exposes it.
 - Keep provider and runtime claims honest. An adapted skill preserves the goal,
   not an unavailable vendor implementation.
@@ -53,7 +57,9 @@ not invoke OpenMontage Python tools, HyperFrames, or unexposed provider APIs.
 
 ## Completion
 
-Complete all applicable stages with an editable source, reviewed MP4, and delivery artifact.
+Direct generation delivers the reviewed audiovisual MP4. The composition route
+also completes all applicable stages with the requested editable source and
+delivery artifact; a generated plate is not that delivery.
 
 
 ## Production Modes
@@ -62,4 +68,7 @@ Complete all applicable stages with an editable source, reviewed MP4, and delive
 - **generated-presenter**: animate a supplied identity image with an approved voice/script.
 - **voiceover-composite**: use presenter visuals plus timed voiceover and captions when exact lip sync is unavailable.
 
-Lock identity, language, voice, framing, duration, and lip-sync expectation in the brief. Prove one representative line before a long or paid generation, then review face consistency, mouth behavior, captions, and audio timing.
+Lock identity, language, voice, framing, duration, and lip-sync expectation in the
+script. Review face consistency, mouth behavior, captions and audio timing in
+the generated MP4. Do not add a paid voice sample or separate lip-sync job by
+default; use one only when explicitly required by the requested treatment.

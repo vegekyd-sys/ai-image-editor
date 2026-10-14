@@ -51,7 +51,7 @@
   },
   {
     "name": "explainer-video",
-    "description": "Create a narrated explainer video longer than 15s, typically 30-90s, about a",
+    "description": "Explain a topic, product, feature, company, or process. Prefer complete native",
     "studioRunRecipe": "explainer-video",
     "studioRunProfile": "generated-explainer"
   },
