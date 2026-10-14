@@ -447,7 +447,6 @@ describe('agent prompt policy guards', () => {
 
   it('routes long video work through the long-video-director skill before short video scripts', () => {
     const agent = read('src/lib/prompts/agent.md')
-    const agentTs = read('src/lib/agent.ts')
     const skill = read('src/skills/long-video-director/SKILL.md')
     const anchor = read('src/skills/long-video-anchor/SKILL.md')
     const storyboard = read('src/skills/long-video-storyboard/SKILL.md')
