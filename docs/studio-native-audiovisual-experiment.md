@@ -1,114 +1,129 @@
-# 音画一体生成：独立候选修复与实验
+# 音画一体生成：独立修复与实测
 
 日期：2026-10-14（Asia/Shanghai）  
 分支：`codex/studio-native-audiovisual`  
-状态：候选修复已提交并通过本地验证；未合并、未部署。真实质量 A/B 被供应商审核拦截，不能据此宣布原生字幕或后期字幕质量胜出。
+状态：代码、真实生成、真实 Agent 及字幕云端导出验收完成；未合并、未部署。
 
-## 问题与边界
+## 结果
 
-复现来源是用户提供的项目 `0ace911f-a165-4216-b3b8-2f87d2e9973e`。
-原请求是 25 秒 TT04S 英文数字人口播广告，包含参考人物、参考产品、口播、音乐与可编辑字幕。
+普通数字人广告直接生成完整音画；字幕只决定是否追加文字后期，不再决定整个生产路径。
+实际通过项目的 Seedance 2.5 **Eco** 路径取得六条可播放的有声视频（五个受控样本及一次真实 Agent 生成）。
+原生字幕和后期字幕各取得完整 25 秒、720×1280 样本。
 
-原 session 实际做了三次 Seed Audio、三次 ASR，再以 Seedance 2.5 Eco
-生成无声底片。两次视频请求都显式设置 `generate_audio: false`，脚本同时
-禁止旁白、说话声、音乐和音效。原始底片及 720p 文件都没有音轨。
-合成源码已保存，但没有执行合成和最终导出。不能把时间线中的底片视为成片。
+真实 Agent 已验证两条路径：
 
-原因不只是模型选择：
+| 场景 | 实际调用 | 最终结果 |
+| --- | --- | --- |
+| 新数字人视频 | 读三个指引 → 一次 `generate_animation(seedance-2.5-eco, generate_audio: true, 25s)` | 25.041667 秒画面及 AAC 音轨，五句口播完整 |
+| 已有原生音画加可编辑字幕 | ASR → 一次 `run_code` → 两次预览 → `publish_draft` → `materialize_media` | 云端导出 completed，720×1280、25.066667 秒画面，有声 MP4 与可编辑设计已保存 |
 
-1. 数字人/Explainer/Cinematic 适配器与 Studio 的通用音频要求，覆盖了视频生成指南中的原生音画合同。
-2. Studio Assets 仅接受独立 audio/music 作为音频证据，即使视频本身已经包含声音，也不能满足 `audioRequired`。
-3. 字幕可编辑性被扩展成了画面、声音、口型都必须分开制作。超过 15 秒的旧路由阈值进一步扩大了 Studio 的使用范围。
+两条实际工具记录中均为 **0 Studio、0 单独音频生成**。字幕路径也为 0 视频生成。
+字幕导出经 AAC 重编码，与原视频音频对齐后波形相关性 0.99945；编码偏移约 42.7ms。
+独立本地字幕对照还复制了原 AAC，解码 PCM 完全一致。
+这些是已下载、探测和查看的 MP4，不是排队状态或仅保存的合成代码。
 
-## 修复后的生产选择
+## 原 session 的问题
 
-音画生成方式与字幕制作方式分开决定。
+来源：用户提供的项目 `0ace911f-a165-4216-b3b8-2f87d2e9973e`。
+要求是 25 秒 TT04S 英文讲解广告，含人物/产品参考、口播、音乐、字幕、型号与公司名。
+原 session 做了三次 Seed Audio、三次 ASR，再以 Eco 生成无声底片。
+两次视频请求都显式设置 `generate_audio: false`，脚本还禁止人声、音乐和音效。
+原始底片及 720p 文件均无音轨；合成源码虽保存，却未执行合成和最终导出。
 
-| 用户要的结果 | 生成与后期 |
-| --- | --- |
-| 模型单次时长范围内的新视频 | 一次 `generate_animation`，同一脚本包含全部镜头、对白、表演、音乐和音效 |
-| 成片字幕/标识，无可编辑要求 | 可以同次指示模型生成；检查实际字形、拼写、阅读性和语音同步 |
-| 明确要求确定性/可编辑文字 | 仍先生成完整音画，仅不烘焙文字；转写真实视频，再叠文字，保留原生声音 |
-| 代码动画、独立音频、明确替换配乐 | 保留单独音频工具和 Remotion 路径 |
-| 源素材剪辑、复杂拼接或明确要求 Studio/Remotion | 保留相应生产工具；生成片段进入合成时保留其原生声音 |
+找到并修复的触发点：
 
-共享规则放在 `src/skills/_shared/native-audiovisual.md`。
-数字人、Explainer、Cinematic、Studio 生产和音频指南以及 TikTok 包装引用这一规则。
-不通过用户提示词关键词检测或新的固定模板来决定路线；尊重用户/App 的模型选择及模型实际时长限制。
-不因为 Skill 名称、镜头数量、口播、字幕或超过 15 秒就启动拆分制作。
+1. Avatar Skill 的 `studioRunRecipe`、`studioRunProfile` 以及目录/启动 manifest 中的 `Studio Run recipe: avatar-spokesperson` 仍把数字人带进 Studio。已移除并重建 manifest；数字人归入 video-generation。
+2. Avatar、Explainer、Cinematic 及 Studio 音频/生产指南要求先配音、做无声底片，覆盖了原生音画能力。已统一共享合同，去掉仅因口播、多镜头、字幕或超过 15 秒就拆分的要求。
+3. 可编辑字幕被误扩展成画面和声音也必须分别生成。现在单素材字幕直接合成、预览、发布及导出，无需八阶段文档。
+4. Studio Assets 原先只有独立 audio/music 才满足 `audioRequired`。现在实际验证过的有声视频也可满足要求，避免因资产结构强行重做声音。
+5. 原 session 中参考素材角色被写反。共享指南要求结合当前 Media Index 和实际图像绑定人物/产品，不能复用旧文本标签作为身份依据。
 
-### 运行时改动
+共享合同位于 `src/skills/_shared/native-audiovisual.md`。工具参数合同仍由工具描述拥有，不新增用户关键词分类器或另一套固定时长路由。
 
-- 视频资产支持可选 `hasAudio`；经过验证的内嵌音轨满足 Studio 的音频要求。
-- 在所有 Studio Assets 的 validate、单项写入和批量写入路径，读取实际 MP4/MOV 的 `moov/trak/mdia/hdlr`，验证其音频轨。
-- 无法读取、损坏、无音轨或仅在文件负载中出现 `soun` 字样，都不会被当作音频存在。
-- 旧的独立 audio/music 资产继续可用，不需要数据库迁移或修改已有项目数据。
-- 叠字幕时保留视频声音，不因平台源素材默认静音策略重新配音或重复叠音。
+## 审核排查与恢复
 
-音轨存在只证明容器中有声音；不能代替人声可懂度、口型、产品一致性或字幕质量验收。
-这次没有新增异步后期自动编排器，也没有改动 Agent 回合完成语义；需要后期的中间任务仍应保留 task ID 和明确的 continuation action。不能把生成排队、素材返回或代码保存当作最终 Delivery。
+初始四个直接供应商基线均返回 `content_policy_violation`：
 
-## 真实供应商实验
+| 样本 | task ID | 结果 |
+| --- | --- | --- |
+| 原参考、25 秒、原生字幕 | `task-unified-1791952852-ttb0yuap` | 审核失败 |
+| 原参考、25 秒、后期字幕底片 | `task-unified-1791952853-pzc13qtw` | 审核失败 |
+| 仅产品参考、10 秒、原生字幕 | `task-unified-1791953192-w26h0xzy` | 审核失败 |
+| 仅产品参考、10 秒、后期字幕底片 | `task-unified-1791953192-zksdya75` | 审核失败 |
 
-用户授权总预算不超过 $10。使用 EvoLink Seedance 2.5 reference-to-video，
-480p、9:16、`generate_audio: true`、默认审核开启。
-480p 是本次预算内的生成质量样本规格；未付费放大到 720p。
+初次以失败任务的报价预留推算已达预算并停止，是错误处理。预留不是结算，失败退款不能按成功费用累计。
+用户明确要求继续修复后，改用项目实际 `createVideo/getVideoStatus` Eco 流程继续做对照。
+没有把未提供逐笔账单的估算冒充实际净支出；当前回归 harness 不再使用旧的失败预留停止规则。
+原始供应商 harness 已改为仅查询既有回执，新生成统一走实际应用流程。
 
-公开供应商单价为 $0.138/输出秒；音画字幕同次生成不额外收费。
-价格来源：[EvoLink Seedance 2.5 公开价](https://evolink.ai/seedance-2-5)。
-这些是直接供应商估算，不是 Makaron 用户 Credits 报价或已经结算的实扣费用。
+| 实际应用路径样本 | 控制变量 | 结果 |
+| --- | --- | --- |
+| Eco 5 秒纯文本厨房 | 无图片、最简提示 | 成功、有声、720p |
+| Eco 5 秒产品参考 | 加入原产品参考 | 成功、有声、720p |
+| Eco 25 秒简洁完整脚本 | **原人物与产品参考不变**，保留五句英文口播/音乐/原生字幕 | 成功、有声、720p |
+| Eco 25 秒人物上半身裁切、原生字幕 | 仅裁去原人物下部手/厨刀，保持紧凑脚本 | 成功、有声、720p |
+| Eco 25 秒同裁切、后期字幕底片 | 同参考/脚本，改为不生成文字，仍生成全部声音 | 成功、有声、720p |
+| Wan 3.0 Prime：最简及两种完整字幕条件 | 兼容替代模型 | 三条供应商完成，但输出 CDN 在本机证书链失败，其他标准 TLS 环境返回 403；未计入可播放交付 |
 
-| 实验 | 控制条件 | task ID | 预算预留 | 结果 |
-| --- | --- | --- | --- | --- |
-| 25 秒原生字幕 | 原人物及产品参考、完整五句口播，音画字幕同时生成 | `task-unified-1791952852-ttb0yuap` | $3.45 | `content_policy_violation` |
-| 25 秒后期字幕底片 | 同参考、口播与镜头；保留原生音画，不生成文字 | `task-unified-1791952853-pzc13qtw` | $3.45 | `content_policy_violation` |
-| 10 秒原生字幕 | 仅产品参考、虚构成年讲解者、相同短口播和镜头 | `task-unified-1791953192-w26h0xzy` | $1.38 | `content_policy_violation` |
-| 10 秒后期字幕底片 | 同短样本条件；保留原生音画，不生成文字 | `task-unified-1791953192-zksdya75` | $1.38 | `content_policy_violation` |
+这证明普通内容可在 Eco 路径恢复，**不证明某个词或厨刀就是唯一审核原因**。
+原人物未裁切也能成功；仅产品参考在旧提示下也曾失败。提示形式与实际路由同时发生变化，生成及审核亦有随机性。
+供应商只返回通用错误，没有可追溯到某个词/帧的审核详情。恢复无需关闭审核，也不以绕过审核作为产品逻辑。
+Avatar Skill 已要求检查真实输入/错误、减少无关限制、在用户授权恢复时测试兼容模型，并保留原 task ID，避免原样循环重试。
 
-25 秒两条在北京时间 12:40 提交；10 秒两条在 12:46 提交。
-后两条是独立受控短实验，不能视为人物身份一致性或完整 25 秒口播的验收。
-每组只改变文字生成要求；模型结果本身仍具有随机性，不能当作严格像素配对实验。
+受控样本的精确提示和参数（参考 URL 已替换为占位符）见 `benchmarks/studio-native-audiovisual/cases.example.json`。
 
-累计按全额预留计 $9.66，余下不再发起生成。没有假定失败任务已退款，也没有使用
-不确定的退款继续试错。没有产出可下载的成功视频，所以没有 ASR、口型或字幕质量评分；
-没有把供应商完成状态、预测能力或合成信号样本冒充生成质量证据。
+## 字幕及音画质量比较
 
-四条请求都经过数分钟处理后返回同类审核错误。仅凭此不能确定是参考图、人物、
-提示词还是供应商审核误判；仅使用产品参考仍失败，也不足以把根因归到原人物图中的厨刀。
+| 项目 | 模型原生字幕 | 原生音画 + 后期可编辑字幕 |
+| --- | --- | --- |
+| 声音 | 五句口播、同一女声和背景音乐，无需独立配音 | 保留同类原生音画及原声，不重新配音 |
+| 英文文字 | 实际出现 `range hot`、`ft hard-working`、尺寸/型号拼写错误 | 使用规范原文、ASR 真实时间；完整显示尺寸、功率及质保文案 |
+| 精确品牌/公司名 | 不稳定，中文公司名错误或遗漏 | `TT04S` 及 `中山市沪颖电器有限公司` 可准确显示和修改 |
+| 成本/步骤 | 一次生成即可，但错字无法确定性修正 | 一次音画生成，只追加文字合成；没有 Studio 和配音链路 |
 
-## 本地验收
+对要求精确广告文案的这类任务，推荐原生音画 + 轻量文字后期。普通成片需求仍可以尝试原生字幕。
+比较使用两条受控生成视频，非同画面的严格配对；也没有拿旧 session 的失败无声底片宣称音质全面胜出。
+ASR 会把 hood、four-eighty 等误识别；独立视频审阅确认尺寸发音，并未仅凭 ASR 错字重新花钱配音。
+真实 Agent 样本转写覆盖全部五句及结尾，但 `Oil drains` 实际转写为 `Oil drips`，尚不能承诺模型逐字不差。
 
-- 全量 Vitest：2,469 通过、1 跳过、0 失败（共 2,470 项）。
-- TypeScript `tsc --noEmit`、变更辅助模块/实验脚本 ESLint、Agent startup manifest 合同、`git diff --check` 通过。
-- 新增回归覆盖：原生视频音轨满足 Assets、没有声音仍拒绝、伪造 `hasAudio` 拒绝、无法读取拒绝、真实 track handler 与普通字节串区分、截断及大尺寸 box。
-- 本地生成 3 秒测试信号 MP4，叠加字幕时复制原生音轨。叠加前后分辨率和时长相同，解码 PCM 完全一致。
-- 用原 session 的真实 25.041667 秒无声 MP4 验证新的音轨校验，正确拒绝将其声明为带声音的视频。
+原生生成仍有质量边界：人物口型并非逐帧完美；滤网/电机内部有生成式细节和虚构产品字样。
+路径修复和有声交付已验收，不能据此宣称这条广告已达到品牌发布验收标准。
 
-本地测试信号只用于验证音轨传递和文本叠加，不是 Seedance 音画/字幕的质量样本。
-没有运行真实 Agent 重新完成原始 25 秒交付；目前不能声称修复已得到生产端到端验收。
+## 运行时验证
 
-复现命令（运行 `submit` 前必须重新核实预算与供应商价格）：
+`hasAudio` 是可选资产字段，不需要数据库迁移。
+服务端在 Assets validate、单项和批量写入路径探测实际 MP4/MOV 的 `moov/trak/mdia/hdlr` 音频轨。
+伪造字段、负载里的 `soun` 字符串、截断文件、无法读取或无音轨均不能冒充音频证据。
+容器存在音轨仍不等于声音质量合格，需要查看/播放成片。
+
+- 最新完整 Vitest：2,469 通过、1 跳过、0 失败，共 2,470 项。
+- TypeScript、变更模块/脚本 ESLint、Agent startup 合同与 diff 检查通过。
+- 真实原 session 无声 MP4 被正确拒绝为有声资产；本地真实 MP4 及字幕渲染验证音轨传递。
+- 真实 Agent 生成 run：`cc9498b1-72f0-4d84-acde-15c21e335f35`。
+- 真实字幕 Agent run：`d85893b2-e207-4bc4-9791-f01a471e85b3`。
+- 字幕云端导出 job：`cff8f53d-5510-4095-bcce-7d47f43d2d9c`，completed，渲染 49.867 秒。
+- 本地 Agent 的代码来自独立 worktree，使用真实服务和新建的所属测试项目；原 session 仅查询。
+- 内置浏览器已经显示对照页面、解码和播放有声视频；文字预览和末帧公司名已查看。
+
+## 复现入口
+
+凭据从现有私有环境加载；原始响应、媒体 URL 和用户数据留在忽略的 `.tmp/`。
+新生成前按当前授权确认实验范围和实际模型报价，不把失败预留当作实扣。
 
 ```sh
 npx vitest run __tests__/studioNativeAudio.test.ts __tests__/studioRun.test.ts
 node --import tsx benchmarks/studio-native-audiovisual/verify-media.ts .tmp/native-media-acceptance
-# 凭据从本机现有环境加载，private-dir/input.json 提供参考 URL 与预算。
-node --import tsx benchmarks/studio-native-audiovisual/experiment.ts submit private-dir
-node --import tsx benchmarks/studio-native-audiovisual/experiment.ts poll private-dir
-node --import tsx benchmarks/studio-native-audiovisual/experiment.ts transcribe private-dir
+# cases.example.json 替换为真实参考 URL，放入私有目录的 cases.json。
+# diagnosis.json 提供测试账号 userId、所属 projectId 及 jobs: []。
+node --env-file=.env.local --require ./md-loader.cjs --import tsx benchmarks/studio-native-audiovisual/run-cases.ts submit private-dir
+node --env-file=.env.local --require ./md-loader.cjs --import tsx benchmarks/studio-native-audiovisual/run-cases.ts poll private-dir
+node --import tsx benchmarks/studio-native-audiovisual/render-captions.ts private-dir eco-tt04s-crop-post
+node --import tsx benchmarks/studio-native-audiovisual/verify-agent.ts private-dir
+node benchmarks/studio-native-audiovisual/serve-review.mjs private-dir 3189
 ```
 
-`submit` 在 POST 之前持久化预算预留；同 variant 不重复提交；失败和不确定的提交也占用预算。
-脚本的实验价格常量来源于当天公开价，未接入供应商实时账单系统。
-私有原始响应、参考 URL 和本地运行日志保存在 worktree 的 `.tmp/`，不进入 Git。
+`run-cases` 在 POST 前持久化每个 label，文件锁阻止并发覆盖；状态查询不重新生成，下载错误保留供应商回执。
+`verify-agent` 只验收已有工具记录、完成状态及真实媒体，不发起新的生成。
+`render-captions` 产出可编辑设计、字幕、普通预览与属性修改预览；叠字后原声 PCM 一致。
 
-## 结论与仍需完成的验收
-
-可以落地的工程修复是：完整生成音画，字幕方式独立选择；Studio 不再要求为满足
-音频资产结构而拆出配音，也不在后期字幕处理中丢掉原生声音。
-
-还不能落地为质量结论的是“原生字幕已经可以全面替代后期字幕”。需要解决当前供应商
-审核阻断后，取得成功样本，实测完整口播、数字读法、口型、字幕拼写/阅读性/同步与
-产品外观，再决定字幕默认策略。上线前也需要当前代码下真实 Agent 的完整交付验收。
-
-本候选没有修改生产配置、定价、数据库或原 session；没有发布网站或 CLI/NPM。
+本次没有合并、网站发布、CLI/NPM 发布或修改生产配置，也未覆盖原项目数据。
