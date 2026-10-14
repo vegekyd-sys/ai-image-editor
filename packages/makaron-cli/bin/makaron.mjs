@@ -513,7 +513,7 @@ Options:
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --media-manifest <file|-> Import typed image/video media before this run.
-  --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
+  --skill <id|label|name>   Select a built-in/installed skill or auto-install a marketplace skill.
   --agent-model <id>        Agent LLM only: auto, gpt-6-luna, gpt-6.1-sol, gpt-6-sol, gpt-5.6-terra, gpt-5.6-sol,
                             gpt-5.6-luna, grok-4.6, deepseek-v4-pro, deepseek-flash, or a
                             gpt-6.1-sol-codex-subscription, gpt-6-*-codex-subscription, gpt-5.6-*-codex-subscription or
@@ -542,6 +542,11 @@ What you can ask:
 
   Marketplace skill
     makaron chat --project auto --image selfie.jpg --skill "Football Captain" "make this cinematic"
+
+  Complete internal video workflows (discover the exact name first)
+    makaron chat --project auto --skill long-video-director "<full narrative brief>"
+    makaron chat --project auto --video reference.mp4 --skill video-edit "<replication brief>"
+    makaron chat --project auto --skill explainer-video "<full explainer brief>"
 
   Built-in production skill
     makaron skills list --built-in
@@ -1398,6 +1403,7 @@ function printBuiltInSkill(skill) {
   if (Array.isArray(skill.tags) && skill.tags.length) {
     console.log(`\nKeywords:\n  ${skill.tags.join(', ')}`);
   }
+  console.log('\nThis is a discovery summary; verify production artifacts after the run.');
   console.log('\nUse with chat:');
   const media = skill.sourceMediaRequired ? ' --video <file>' : '';
   console.log(`  makaron chat --project auto${media} --skill ${skill.name} "describe the result you want"`);

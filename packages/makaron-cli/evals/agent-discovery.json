@@ -31,6 +31,24 @@
       "prompt": "Continue my existing Makaron project, make the selected visual more premium, and add matching background music.",
       "expectedSkill": "makaron",
       "expectedBehavior": "Pass the complete follow-up request to makaron chat with the supplied project id, then wait for and return completed results."
+    },
+    {
+      "id": "internal-long-video-complete",
+      "prompt": "Use Makaron long-video-director for a 60-second story from these two portraits. You may self-review intermediate gates within the approved budget. Deliver the complete film.",
+      "expectedSkill": "makaron",
+      "expectedBehavior": "Discover/show the live built-in Skill, select --skill long-video-director, and pass the complete brief and delegated approval. Preserve project/run, require actual anchors, Director Beat Board, reviewed segment storyboards and submitted reference evidence, and inspect the joined film. Loading files or two portrait-only video calls is incomplete workflow evidence."
+    },
+    {
+      "id": "internal-faithful-video-replication",
+      "prompt": "Use Makaron to recreate reference.mp4 with replacement.jpg, keeping shot order, timing, camera movement and action beats.",
+      "expectedSkill": "makaron",
+      "expectedBehavior": "Discover/show video-edit, select --skill video-edit and its replication profile with the exact reference/replacement roles. Preserve project/run and require full-source evidence, Shot Blueprint and comparison QA; do not select loose inspiration or substitute a standalone create_video call."
+    },
+    {
+      "id": "internal-explainer-carrier",
+      "prompt": "Use Makaron explainer-video for a narrated Chinese product explanation and deliver an MP4.",
+      "expectedSkill": "makaron",
+      "expectedBehavior": "Discover/show and select --skill explainer-video. Pass the full explanation brief and requested audio/language/output. Let the selected Skill choose generated audiovisual scenes or authored composition, then verify visual/audio output and materialize a composition when needed. Do not force Remotion from the label alone."
     }
   ],
   "negative": [

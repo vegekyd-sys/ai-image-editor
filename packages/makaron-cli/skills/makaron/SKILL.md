@@ -138,6 +138,11 @@ Returns immediately:
 
 ### Built-in production skills
 
+For an explicitly selected internal workflow, use `chat --skill <exact-name>`.
+Read [internal workflows](references/internal-workflows.md) for discovery,
+long-video/replication/explainer selection, delegated review and production evidence.
+Atomic tool calls and reading a Skill alone do not start that internal workflow.
+
 When the request names a production format or the correct workflow is unclear,
 discover the current built-in skills before starting. Do not guess a skill slug
 from memory: the server list is the source of truth.

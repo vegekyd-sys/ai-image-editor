@@ -153,6 +153,13 @@ npx makaron-cli chat --project auto --image selfie.jpg --skill <marketplace-id-o
 
 ### Built-in production skills
 
+Use `makaron chat --skill <exact-name>` to request a complete internal workflow.
+For long narratives select `long-video-director`; for faithful source replication
+select `video-edit` and request its replication profile; for explanations select
+`explainer-video`. Discover the current names first. See
+[internal workflow invocation and acceptance](skills/makaron/references/internal-workflows.md)
+for source bindings, review authorization and evidence of actual production.
+
 Discover the available production workflows before choosing `--skill`:
 
 ```bash

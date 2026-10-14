@@ -68,6 +68,11 @@ npx makaron-cli responses get $RUN_ID --wait --json
 
 ## Primary: `chat` (Agent-driven creative work)
 
+For an explicitly selected internal workflow, use `chat --skill <exact-name>`.
+Read [internal workflows](skills/makaron/references/internal-workflows.md) for discovery,
+long-video/replication/explainer selection, delegated review and production evidence.
+Atomic tool calls and reading a Skill alone do not start that internal workflow.
+
 Use `chat` for all creative tasks. Makaron Agent decides how to execute — it can edit images, generate videos, compose music, and create designs in a single conversation.
 
 ### Submit a request

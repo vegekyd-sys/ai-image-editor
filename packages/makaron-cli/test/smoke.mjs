@@ -1459,6 +1459,16 @@ try {
     assert.equal(requests.filter(req => req.pathname === '/api/agent/run').length, runCount);
   }
 
+  for (const skill of ['long-video-director', 'video-edit', 'explainer-video']) {
+    const installsBefore = requests.filter(req => req.pathname === '/api/skills' && req.method === 'POST').length;
+    const brief = 'Execute the complete workflow; self-review the required stages within the authorized budget and deliver a verified MP4.';
+    await expectSuccess(['chat', '--project', 'project-existing-1', '--skill', skill, '--json', '-b', brief]);
+    const submission = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
+    assert.equal(submission.body.projectId, 'project-existing-1');
+    assert.equal(submission.body.prompt, `[Active skill: ${skill}]\n${brief}`);
+    assert.equal(requests.filter(req => req.pathname === '/api/skills' && req.method === 'POST').length, installsBefore);
+  }
+
   {
     await expectSuccess(['chat', '--project', 'auto', '--skill', '夜店钻石风', '--json', '-b', 'make me shine']);
     const runRequests = requests.filter(req => req.pathname === '/api/agent/run');
