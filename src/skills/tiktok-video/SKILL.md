@@ -73,7 +73,6 @@ translation, then captions, B-roll, platform layout, composition, and export in 
   not require wall-to-wall narration; keep useful BGM-led breathing room.
 
 ## Direct The Footage
-
 An underspecified TikTok request is an invitation to direct. Inspect the whole
 source set, propose genuinely different creator-native concepts, choose one
 emotional engine or point of view, and commit to it. The result may be playful,

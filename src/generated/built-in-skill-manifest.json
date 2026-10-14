@@ -51,7 +51,7 @@
   },
   {
     "name": "explainer-video",
-    "description": "Explain a topic, product, feature, company, or process. Prefer complete native",
+    "description": "Create an explainer video about a topic, product, feature, company, or process. Prefer complete native",
     "studioRunRecipe": "explainer-video",
     "studioRunProfile": "generated-explainer"
   },

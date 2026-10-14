@@ -1,7 +1,7 @@
 ---
 name: explainer-video
 description: >
-  Explain a topic, product, feature, company, or process. Prefer complete native
+  Create an explainer video about a topic, product, feature, company, or process. Prefer complete native
   audiovisual generation for generated scenes within the selected model limit;
   use Remotion for authored diagrams, source-led assembly or explicit editability.
 allowed-tools: read_file studio_run prepare_visual_asset generate_animation run_code write_file publish_draft preview_frame materialize_media transcribe_audio generate_audio generate_image analyze_image analyze_video
