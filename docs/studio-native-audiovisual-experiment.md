@@ -2,7 +2,7 @@
 
 日期：2026-10-14（Asia/Shanghai）  
 分支：`codex/studio-native-audiovisual`  
-状态：代码、真实生成、真实 Agent 及字幕云端导出验收完成；未合并、未部署。
+状态：代码、真实生成、真实 Agent 及字幕云端导出验收完成，已合入 dev；生产发布按 release 流程独立验收。
 
 ## 结果
 

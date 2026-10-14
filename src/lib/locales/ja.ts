@@ -308,6 +308,8 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.nativeAudiovisual.title': "プレゼンター動画を音声と同時に生成",
+  'changelog.nativeAudiovisual.item1': "プレゼンターや商品紹介の映像、音声、音楽をまとめて生成できます。正確な字幕や編集可能な字幕が必要な場合は、元の音声を保ったまま文字を追加します。",
   'changelog.marketplaceSkillUpdates.title': 'テンプレートを常に最新版で開始',
   'changelog.marketplaceSkillUpdates.item1': 'マーケットプレイスのテンプレートから開始すると、公開中の最新 Skill を自動的に使用します。手動での再インストールは不要で、更新がない場合は既存のインストールを再利用します。',
   'changelog.midjourney82.title': 'Midjourney V8.2 と複数画像の表示',

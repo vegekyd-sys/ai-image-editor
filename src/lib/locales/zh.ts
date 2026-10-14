@@ -272,6 +272,8 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.nativeAudiovisual.title': "数字人音画一次生成",
+  'changelog.nativeAudiovisual.item1': "数字人与产品视频可同时生成画面、口播和音乐；需要准确或可编辑字幕时，保留原声，只追加文字后期。",
   'changelog.marketplaceSkillUpdates.title': '模板自动使用最新版',
   'changelog.marketplaceSkillUpdates.item1': '从市场模板启动时，现在会自动使用当前发布的最新版 Skill，无需手动删装；模板未更新时直接复用已有安装。',
   'changelog.midjourney82.title': 'Midjourney V8.2 与多图展示',

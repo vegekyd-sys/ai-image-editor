@@ -272,6 +272,8 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.nativeAudiovisual.title': "Presenter videos with sound in one generation",
+  'changelog.nativeAudiovisual.item1': "New presenter and product videos can generate picture, speech and music together. For precise or editable subtitles, add text while keeping the original soundtrack.",
   'changelog.marketplaceSkillUpdates.title': 'Templates stay up to date',
   'changelog.marketplaceSkillUpdates.item1': 'Starting from a marketplace template now automatically uses its latest published Skill. Updates no longer require uninstalling and reinstalling, while unchanged templates reuse the existing installation.',
   'changelog.midjourney82.title': 'Midjourney V8.2 and multiple image results',

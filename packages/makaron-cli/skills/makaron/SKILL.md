@@ -79,6 +79,18 @@ npx makaron-cli responses get $RUN_ID --wait --json
 
 Use `chat` for all creative tasks. Makaron Agent decides how to execute — it can edit images, generate videos, compose music, and create designs in a single conversation.
 
+For a new presenter or product video within the chosen model's single-call
+limit, pass the complete brief to `chat`: generate picture, speech, lip sync,
+music and ambience together. Naming Seedance 2.5 defaults to Eco. Do not split
+ordinary presenter work into a voice master, silent video and Studio recipe.
+Native subtitles can be generated in the same call. When exact or editable
+captions are required, retain the generated soundtrack and add only the text
+overlays through direct composition; subtitles do not require Studio. Inspect
+the final audible MP4 and caption spelling before delivery. ASR is fallible;
+a transcription typo alone is not a reason to regenerate speech. On moderation
+failure, inspect the actual inputs/error and recover with a revised prompt or
+compatible model when authorized; poll an accepted task instead of regenerating.
+
 For clearly adult, erotic, or NSFW requests, read `references/nsfw.md`
 ([public copy](https://www.makaron.app/.well-known/agent-skills/makaron/references/nsfw.md))
 before submitting the job. It adds per-job routing exceptions only; do not load
