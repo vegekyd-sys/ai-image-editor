@@ -1,6 +1,6 @@
 import { canRunAgentExecution, resolveAgentExecutionWorkerOrigin } from './agent-execution-origin';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { runMakaronAgent, type AgentStreamEvent } from './agent';
+import { prefetchAgentPrompt, runMakaronAgent, type AgentStreamEvent } from './agent';
 import { AgentDualWriter } from './agentDualWriter';
 import { AgentPerf } from './agent-perf';
 import { buildPromptContext } from './agent-context';
@@ -684,6 +684,9 @@ export async function runAgentExecutionAttempt(
     const projectPromise = options.timelineVersion !== undefined
       ? Promise.resolve({ data: { timeline_version: options.timelineVersion }, error: null })
       : Promise.resolve(admin.from('projects').select('timeline_version').eq('id', run.project_id).single());
+    // Prompt workspace reads do not depend on conversation context. Start
+    // them first so both read-only paths overlap ahead of the model request.
+    const promptPrefetch = prefetchAgentPrompt(admin, run.user_id, run.project_id);
     const endContext = perf.span('build_prompt_context');
     modelAbortController.signal.throwIfAborted();
     const ctx = await buildPromptContext(run.project_id, admin, run.user_id, {
@@ -896,6 +899,7 @@ export async function runAgentExecutionAttempt(
           studioWorkflowStage: activeStudioWorkflowStage,
           studioResumeAuthorized: isStudioResumeRequest(pendingInputs.at(-1)?.content || run.prompt || ''),
           agentRunId: runId,
+          promptPrefetch,
           perf,
         },
       )) {
