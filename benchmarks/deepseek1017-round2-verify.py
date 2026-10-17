@@ -24,6 +24,15 @@ def _verify(job):
     kind='image' if c['kind']=='image' else 'video'
     outputs=[x for x in v.get('output',[]) if x.get('type')==kind and x.get('status')=='completed' and x.get('url')]
     if not outputs:return
+    first=t.read(folder/'first-artifact.json')
+    if t.read(folder/'submission.json').get('formal') and first:
+        initial=[x for x in first.get('outputs',[]) if x.get('type')==kind and x.get('url')]
+        if initial:
+            for output in outputs:
+                if output['url']!=initial[0]['url']:
+                    version=folder/'versions'/output.get('task_id','additional-output')
+                    t.save(version/'latest.json',{'status':'completed','output':[output]})
+            outputs=initial[:1]
     url=outputs[-1]['url'];qa=t.read(folder/'qa.json')
     if qa.get('url')==url:return
     target=folder/('output.jpg' if kind=='image' else 'output.mp4')

@@ -27,6 +27,10 @@ for c in t.CASES:
                 folder=recovery.parent;v=candidate;first=t.read(folder/'first-artifact.json');qa=t.read(folder/'qa.json');terminal=t.read(folder/'terminal.json')
         usage=v.get('usage') or t.read(folder/'usage-live.json').get('summary') or {}
         outputs=[x for x in v.get('output',[]) if x.get('type')==expected and x.get('status')=='completed' and x.get('url')]
+        live_outputs=outputs
+        if sub.get('formal') and first:
+            initial=[x for x in first.get('outputs',[]) if x.get('type')==expected and x.get('url')]
+            if initial:outputs=initial[:1]
         status=v.get('status',('正式Preview重跑准备中' if c['kind']=='tiktok' else '未提交') if not sub else '已提交')
         if status=='completed' and not outputs:status='执行结束，未交付产物'
         row['models'].append({'model':model,'label':label,'status':status,'url':outputs[-1]['url'] if outputs else None,'seconds':first.get('client_elapsed_seconds') if outputs else None,'terminal_seconds':terminal.get('client_elapsed_seconds'),'credits':usage.get('credits_net'),'project_url':sub.get('projectUrl'),'run_id':sub.get('runId'),'formal':bool(sub.get('formal')),'runtime':sub.get('origin'),'qa':qa,'actual_models':sorted(set(e.get('model','') for e in usage.get('entries',[]))),'text':v.get('result',{}).get('text','')[-1500:]})
@@ -47,12 +51,34 @@ for c in t.CASES:
             entry['observed_seconds']=entry['seconds'];entry['seconds']=ready['seconds'];entry['timing_source']='server_export_completed';entry['render_seconds']=ready.get('render_seconds')
         if sub.get('formal') and sub.get('projectId'):
             entry['project_url']=sub['origin']+'/projects/'+sub['projectId']
+        if sub.get('formal') and v.get('completed_at'):
+            entry['agent_seconds']=(dt.datetime.fromisoformat(v['completed_at'].replace('Z','+00:00'))-dt.datetime.fromisoformat(sub['submitted_at'])).total_seconds()
+        if sub.get('formal') and not terminal and v.get('agent_status') not in ('completed','failed','aborted'):
+            entry['running_seconds']=(dt.datetime.now(dt.timezone.utc)-dt.datetime.fromisoformat(sub['submitted_at'])).total_seconds()
         entry['host_intervention']=t.read(original_folder/'host-intervention.json')
         if qa.get('local_file') and (qa.get('decode_ok') or qa.get('image_ok')):
             source=Path(qa['local_file']);link=PUBLIC/'assets'/f"{c['id']}-{model}{source.suffix}"
             if link.is_symlink() and link.resolve()!=source:link.unlink()
             if not link.exists():link.symlink_to(source)
             entry['display_url']=f'assets/{link.name}'
+        final_ready=t.read(original_folder/'final-video-ready.json')
+        if final_ready:entry['final_seconds']=final_ready.get('seconds')
+        if sub.get('formal') and live_outputs and outputs and live_outputs[-1]['url']!=outputs[0]['url']:
+            revision=live_outputs[-1];version=original_folder/'versions'/revision.get('task_id','additional-output');version_qa=t.read(version/'qa.json')
+            entry['revision_url']=revision['url'];entry['revision_qa']=version_qa
+            if version_qa.get('decode_ok'):
+                source=Path(version_qa['local_file']);link=PUBLIC/'assets'/f"{c['id']}-{model}-revision{source.suffix}"
+                if not link.exists():link.symlink_to(source)
+                entry['revision_display_url']=f'assets/{link.name}'
+        repair_folder=original_folder/'repair-01'
+        repair=t.read(repair_folder/'latest.json');repair_qa=t.read(repair_folder/'qa.json');repair_first=t.read(repair_folder/'first-artifact.json');repair_ready=t.read(repair_folder/'first-video-ready.json')
+        repair_outputs=[x for x in repair.get('output',[]) if x.get('type')==expected and x.get('status')=='completed' and x.get('url')]
+        if repair_outputs:
+            entry['repair_url']=repair_outputs[-1]['url'];entry['repair_seconds']=repair_ready.get('seconds',repair_first.get('client_elapsed_seconds'));entry['repair_credits']=(repair.get('usage') or {}).get('credits_net');entry['repair_qa']=repair_qa
+            if repair_qa.get('decode_ok'):
+                source=Path(repair_qa['local_file']);link=PUBLIC/'assets'/f"{c['id']}-{model}-repair{source.suffix}"
+                if not link.exists():link.symlink_to(source)
+                entry['repair_display_url']=f'assets/{link.name}'
     rows.append(row)
 t.save(PUBLIC/'data.json',{'generated_at':t.stamp(),'rows':rows,'budget':t.budget(),'notes':'本轮新增预算上限30美元，含早期本地尝试。60秒TikTok统一在同一独立Preview以全新项目正式重跑；本地受阻阶段仅归档，不计入正式速度结论。Scene素材与brief冻结配对；计时从各自提交开始至服务端首次MP4导出完成；另存客户端首次观察上界与Agent结束时间，尚无服务端时间时显示轮询上界。15秒mascot视频与图片沿用已完成配对。创作全部通过Makaron Chat CLI，Scene检索通过Scene CLI；Luna明确保留Codex套餐路由。'})
 shutil.copyfile(ROOT/'benchmarks/deepseek1017-round2-review.html',PUBLIC/'index.html')

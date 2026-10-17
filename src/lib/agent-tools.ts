@@ -53,6 +53,7 @@ import { formatAspectRatio } from './media-aspect';
 import { filterWorkspaceFilesForAgentScope } from './agent-workspace-scope';
 import { normalizeCompositionAnimation } from './composition-duration';
 import { createRemotionExportJob } from '@/lib/remotion-export';
+import { materializeStatus } from './agent-materialize-status';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import {
   rebuildAgentSnapshotUrls,
@@ -3674,17 +3675,11 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
             runRemotionExportAfterResponse(job.id);
           }
           return {
-            success: true,
-            queued: job.status !== 'completed',
-            jobId: job.id,
-            status: job.status,
+            ...materializeStatus(job),
             taskId,
             publishSnapshotId,
             renderProfile,
             studioRunPending: Boolean(studioCheckpoint.studioRunId) && job.status !== 'completed',
-            message: shouldPublish
-              ? `MP4 export submitted. A processing video is in the timeline and will update automatically. Job: ${job.id}`
-              : `MP4 export submitted. Job: ${job.id}`,
           };
         } catch (err) {
           return { success: false, error: err instanceof Error ? err.message : String(err) };

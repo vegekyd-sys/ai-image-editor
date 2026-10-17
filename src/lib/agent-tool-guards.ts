@@ -1,5 +1,6 @@
 import { stableOperationKey } from './agent-execution';
 import type { AgentContext } from './agent-tools';
+import { refreshMaterializeStatus } from './agent-materialize-status';
 
 export const DURABLE_IDEMPOTENT_TOOLS = new Set([
   'generate_image',
@@ -107,8 +108,17 @@ export function wrapDurableIdempotentTools(
       const claim = Array.isArray(data) ? data[0] : data;
       if (!claim?.claimed) {
         if (claim?.operation_status === 'completed' && claim?.operation_result != null) {
+          let result = typeof claim.operation_result === 'object' ? claim.operation_result : { result: claim.operation_result };
+          if (toolName === 'materialize_media') {
+            const { getRemotionExportJob, resolveRemotionExportDownloadUrl } = await import('./remotion-export');
+            result = await refreshMaterializeStatus(result, { userId: ctx.userId!, projectId: ctx.projectId }, async (id) => {
+              const job = await getRemotionExportJob(id);
+              if (!job || job.user_id !== ctx.userId || job.project_id !== ctx.projectId) return null;
+              return { ...job, storage_url: await resolveRemotionExportDownloadUrl(job) };
+            });
+          }
           return {
-            ...(typeof claim.operation_result === 'object' ? claim.operation_result : { result: claim.operation_result }),
+            ...result,
             reused: true,
             operationKey,
           };

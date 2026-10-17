@@ -13,7 +13,7 @@ spec=importlib.util.spec_from_file_location('trial',ROOT/'benchmarks/deepseek101
 def collect(folder):
     sub=t.read(folder/'submission.json')
     first=t.read(folder/'first-artifact.json')
-    if sub.get('formal') and first and not (folder/'first-video-ready.json').exists():
+    if (sub.get('formal') or sub.get('repair_not_formal')) and first and not (folder/'first-video-ready.json').exists():
         for output in first.get('outputs',[]):
             task=output.get('task_id','')
             if not task.startswith('remotion-export-'):continue
@@ -26,6 +26,17 @@ def collect(folder):
                 if elapsed<0:raise RuntimeError('Clock mismatch: export completed before submission')
                 t.save(folder/'first-video-ready.json',{'seconds':elapsed,'completed_at':job['completed_at'],'task_id':task,'source':'Makaron composition status completed_at; client submission UTC start','render_seconds':job.get('render_seconds'),'created_at':job.get('created_at'),'started_at':job.get('started_at'),'observed_upper_bound_seconds':first['client_elapsed_seconds']})
                 break
+    if sub.get('formal'):
+        videos=[x for x in t.read(folder/'latest.json').get('output',[]) if x.get('type')=='video' and x.get('status')=='completed' and x.get('url')]
+        if videos:
+            output=videos[-1];task=output.get('task_id','');prior=t.read(folder/'final-video-ready.json')
+            if task.startswith('remotion-export-') and prior.get('task_id')!=task:
+                p=subprocess.run(['node',str(ROOT/'packages/makaron-cli/bin/makaron.mjs'),'composition','status',task.removeprefix('remotion-export-'),'--json'],cwd=ROOT,env=t.OBSERVATION_ENV,capture_output=True,text=True,timeout=60)
+                if p.returncode:raise RuntimeError('Final export status failed')
+                job=json.loads(p.stdout);t.save(folder/'final-export-job.json',job)
+                if job.get('completed_at'):
+                    elapsed=(dt.datetime.fromisoformat(job['completed_at'].replace('Z','+00:00'))-dt.datetime.fromisoformat(sub['submitted_at'])).total_seconds()
+                    t.save(folder/'final-video-ready.json',{'seconds':elapsed,'task_id':task,'completed_at':job['completed_at'],'url':output['url']})
     if not (folder/'terminal.json').exists() or (folder/'timing-evidence.json').exists():return
     sub=t.read(folder/'submission.json');data=t.cli(['makaron','responses','get',sub['runId'],'--events','--json']);page=data.get('events',[])
     while len(page)==1000:
