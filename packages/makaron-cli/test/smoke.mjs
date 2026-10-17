@@ -238,6 +238,22 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname.startsWith('/api/agent/run/run_stream_handoff')) {
+    const partial = url.pathname.endsWith('_partial');
+    sendJson(200, { status: 'completed', projectId: 'project-models-1',
+      events: (partial ? ['Al', 'ready ', 'continued reply'] : ['Recovered reply'])
+        .map((text, seq) => ({ seq, type: 'content', data: { text } })), result: {} });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/agent' && body.prompt.startsWith('stream handoff')) {
+    const partial = body.prompt.endsWith('partial');
+    res.writeHead(200, { 'Content-Type': 'text/event-stream',
+      'X-Agent-Run-Id': `run_stream_handoff${partial ? '_partial' : ''}` });
+    res.end(partial ? 'data: {"type":"content","text":"Already "}\n\n' : '');
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/agent') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -906,6 +922,17 @@ try {
     const runRequest = requests.slice(requestStart)
       .find(request => request.pathname === '/api/agent/run');
     assert.equal(runRequest?.body?.agentModel, 'gpt-6.1-sol-codex-subscription');
+  }
+
+  for (const partial of [false, true]) {
+    const requestStart = requests.length;
+    const result = await expectSuccess(['chat', '--project', 'project-models-1', '--stream',
+      `stream handoff${partial ? ' partial' : ''}`]);
+    assert.equal(result.stdout.trim(), partial ? 'Already continued reply' : 'Recovered reply');
+    const newRequests = requests.slice(requestStart);
+    assert.equal(newRequests.filter(r => r.method === 'POST' && r.pathname === '/api/agent').length, 1);
+    assert.equal(newRequests.filter(r => r.method === 'POST' && r.pathname === '/api/agent/run').length, 0);
+    assert.ok(newRequests.some(r => r.pathname === `/api/agent/run/run_stream_handoff${partial ? '_partial' : ''}`));
   }
 
   {

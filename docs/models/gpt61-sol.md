@@ -3,7 +3,7 @@
 The visible Sol choice is `gpt-6.1-sol`. Base IDs select Azure Responses;
 `gpt-6.1-sol-codex-subscription` explicitly selects the authorized personal plan relay.
 Old Sol 6 UI preferences upgrade to 6.1 without changing the chosen provider;
-explicit legacy IDs remain supported by the API and CLI. Auto remains Luna.
+explicit legacy IDs remain supported by the API and CLI. Auto now defaults to DeepSeek Flash; Sol remains an explicit choice.
 Both routes use native vision and default High reasoning. None/minimal overrides
 are unsupported for 6.1 and resolve to High. No new SDK is required.
 

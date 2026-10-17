@@ -702,9 +702,12 @@ export async function* runMakaronAgent(
           return true;
         },
       ],
-      prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
-        messages: runtime.normalizeMessages(messages),
-      }),
+      prepareStep: ({ messages }: { messages: ModelMessage[] }) => {
+        // Capture before the request, rather than when its first stream event
+        // arrives: a slow first token may cross a peak/off-peak boundary.
+        modelRequestStartedAt = new Date();
+        return { messages: runtime.normalizeMessages(messages) };
+      },
       onStepFinish: () => { stepCount++; },
       // Durable execution owns retry, failover, and checkpoint semantics. Letting
       // the SDK retry internally turns one timed-out model call into several
@@ -770,7 +773,6 @@ export async function* runMakaronAgent(
       try {
         for await (const event of result.fullStream) {
       if (event.type === 'start-step') {
-        modelRequestStartedAt = new Date();
         finalStepTextChars = 0;
         finalStepToolCalls = 0;
         finalStepDeliveredArtifact = false;

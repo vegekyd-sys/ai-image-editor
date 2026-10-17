@@ -308,6 +308,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.deepseekFlashDefault.title': '標準の制作アシスタントが DeepSeek Flash に',
+  'changelog.deepseekFlashDefault.item1': 'Auto は新版 DeepSeek Flash を標準で使用します。参考画像やプレビューを理解し、画像、動画、音楽、編集可能なデザインの制作を進めます。',
+  'changelog.deepseekFlashDefault.item2': 'モデルメニューから Luna、Sol、利用許可済みの個人プランを選べます。会話は実際の入力、キャッシュ、出力の使用量に応じて課金されます。',
   'changelog.nativeAudiovisual.title': "プレゼンター動画を音声と同時に生成",
   'changelog.nativeAudiovisual.item1': "プレゼンターや商品紹介の映像、音声、音楽をまとめて生成できます。正確な字幕や編集可能な字幕が必要な場合は、元の音声を保ったまま文字を追加します。",
   'changelog.marketplaceSkillUpdates.title': 'テンプレートを常に最新版で開始',
@@ -1050,7 +1053,7 @@ const ja = {
   'changelog.externalImages.title': 'Scene画像を動画で直接利用',
   'changelog.externalImages.item1': 'Sceneから読み込んだ画像を画像として処理し、PreviewとMP4書き出しで動画と誤認しないようになりました。',
   'model.agentAutoConfiguredDesc': 'サーバー設定の既定 Agent を使用し、実際のモデル使用量で課金します',
-  'model.agentAutoDesc': '既定の GPT-6 Luna を Azure API で使用します',
+  'model.agentAutoDesc': '現在の標準制作モデルを使用',
   'model.agentAutoCodexDesc': '既定の GPT-5.6 Terra を個人の Codex プランで優先的に使用します',
   'model.agentLabel': 'Agentモデル',
   'model.closeAgentSelector': 'Agentモデル選択を閉じる',

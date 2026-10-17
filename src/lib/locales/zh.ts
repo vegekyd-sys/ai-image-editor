@@ -272,6 +272,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.deepseekFlashDefault.title': 'DeepSeek Flash 成为默认创作助手',
+  'changelog.deepseekFlashDefault.item1': 'Auto 现在默认使用新版 DeepSeek Flash，看懂参考图和预览画面，继续完成图片、视频、音乐与可编辑设计创作。',
+  'changelog.deepseekFlashDefault.item2': '可随时在模型菜单选择 Luna、Sol 或已授权的个人套餐；对话按实际输入、缓存和输出用量计费。',
   'changelog.nativeAudiovisual.title': "数字人音画一次生成",
   'changelog.nativeAudiovisual.item1': "数字人与产品视频可同时生成画面、口播和音乐；需要准确或可编辑字幕时，保留原声，只追加文字后期。",
   'changelog.marketplaceSkillUpdates.title': '模板自动使用最新版',
@@ -1054,7 +1057,7 @@ const zh = {
   'changelog.externalImages.title': 'Scene 图片可直接用于视频',
   'changelog.externalImages.item1': '从 Scene 导入的图片现在会按图片渲染，Preview 与 MP4 导出不再把它误当成视频。',
   'model.agentAutoConfiguredDesc': '使用服务器配置的默认 Agent，按实际模型用量计费',
-  'model.agentAutoDesc': '默认 GPT-6 Luna，走 Azure API',
+  'model.agentAutoDesc': '使用当前默认创作模型',
   'model.agentAutoCodexDesc': '默认 GPT-5.6 Terra，优先使用你的个人 Codex 套餐',
   'model.agentLabel': 'Agent 模型',
   'model.closeAgentSelector': '关闭模型选择',

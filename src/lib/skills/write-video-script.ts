@@ -4,8 +4,10 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { parseTotalDuration } from '../kling';
 import animatePrompt from '../prompts/animate.md';
-import { DEFAULT_AGENT_MODEL_ID } from '../agent-models';
 import { createAgentModelRuntime, getAgentProviderOptions, sumOpenRouterProviderCost } from '../agent-model-runtime';
+import { getTokenRate } from '../billing/token-rates';
+import { deepSeekFlashProviderCost, deepSeekFlashTariffMultiplier } from '../billing/deepseek-flash-rate';
+import { PricingUnavailableError } from '../billing/media-pricing';
 
 // Lazy-loaded animate.md from disk (for standalone MCP server / non-webpack environments)
 let _diskAnimatePrompt: string | null = null;
@@ -56,16 +58,20 @@ export async function writeVideoScript(input: WriteVideoScriptInput): Promise<Wr
           buf = Buffer.from(raw, 'base64');
         }
 
-        // Compress if > 600KB
-        if (buf.length > 600_000) {
+        const format = (await sharp(buf).metadata()).format;
+        let mediaType = `image/${format}`;
+        // Preserve the actual MIME for small PNG/WebP inputs; only converted
+        // images are JPEG. The Flash vision request validates this field.
+        if (buf.length > 600_000 || !['jpeg', 'png', 'webp', 'gif'].includes(format || '')) {
           buf = await sharp(buf)
             .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
             .jpeg({ quality: 75 })
             .toBuffer();
+          mediaType = 'image/jpeg';
         }
 
         const base64Data = buf.toString('base64');
-        return `data:image/jpeg;base64,${base64Data}`;
+        return `data:${mediaType};base64,${base64Data}`;
       })
     );
 
@@ -83,7 +89,11 @@ export async function writeVideoScript(input: WriteVideoScriptInput): Promise<Wr
     console.log(`\n🎬 [write_video_script] ${images.length} images, language=${language}, userRequest=${userRequest?.slice(0, 50) || 'none'}`);
     const t0 = Date.now();
 
-    const runtime = createAgentModelRuntime(DEFAULT_AGENT_MODEL_ID, 'mcp:write-video-script');
+    const runtime = createAgentModelRuntime(undefined, 'mcp:write-video-script');
+    const rate = runtime.spec.id === 'deepseek-flash' ? await getTokenRate(runtime.spec.billingModelId) : null;
+    if (runtime.spec.id === 'deepseek-flash' && !rate) throw new PricingUnavailableError('DeepSeek Flash pricing is not configured');
+    const requestStartedAt = new Date();
+    if (rate) deepSeekFlashTariffMultiplier(requestStartedAt);
     const result = await generateText({
       model: runtime.model,
       system: prompt,
@@ -127,7 +137,13 @@ export async function writeVideoScript(input: WriteVideoScriptInput): Promise<Wr
         outputTokens: result.usage.outputTokens ?? 0,
         modelId: runtime.spec.billingModelId,
         provider: runtime.spec.provider,
-        providerCostUsd: sumOpenRouterProviderCost(runtime, result.steps),
+        providerCostUsd: rate ? deepSeekFlashProviderCost(rate, {
+          noCacheInput: result.usage.inputTokenDetails?.noCacheTokens
+            ?? Math.max(0, (result.usage.inputTokens ?? 0) - (result.usage.inputTokenDetails?.cacheReadTokens ?? 0) - (result.usage.inputTokenDetails?.cacheWriteTokens ?? 0)),
+          cacheRead: result.usage.inputTokenDetails?.cacheReadTokens ?? 0,
+          cacheWrite: result.usage.inputTokenDetails?.cacheWriteTokens ?? 0,
+          output: result.usage.outputTokens ?? 0,
+        }, requestStartedAt) : sumOpenRouterProviderCost(runtime, result.steps),
       },
       message: `Video script generated successfully. ${estimatedDuration ? `Estimated duration: ${estimatedDuration}s.` : 'Duration: smart mode.'}`,
     };

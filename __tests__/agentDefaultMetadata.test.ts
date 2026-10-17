@@ -10,6 +10,13 @@ vi.mock('@/lib/grok-subscription', () => ({ isGrokSubscriptionAllowedUser: vi.fn
 afterEach(() => vi.unstubAllEnvs());
 
 describe('configured DeepSeek default', () => {
+  it('defaults unconfigured Auto to native-vision Flash for regular and plan-enabled users', () => {
+    vi.stubEnv('AGENT_MODEL', '');
+    for (const allowed of [true, false]) {
+      expect(resolveAgentModelSpecForUser('auto', undefined, 'user', 'azure-openai', allowed))
+        .toMatchObject({ id: 'deepseek-flash', provider: 'deepseek', supportsImageInput: true });
+    }
+  });
   it('reports actual Auto identity even when subscription usage is unavailable', async () => {
     vi.stubEnv('AGENT_MODEL', 'deepseek-flash');
     const { GET } = await import('@/app/api/agent/subscription-usage/route');

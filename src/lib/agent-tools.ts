@@ -3679,7 +3679,7 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
             taskId,
             publishSnapshotId,
             renderProfile,
-            studioRunPending: Boolean(studioCheckpoint.studioRunId) && job.status !== 'completed',
+            studioRunPending: Boolean(studioCheckpoint.studioRunId) && job.status !== 'completed' && job.status !== 'failed',
           };
         } catch (err) {
           return { success: false, error: err instanceof Error ? err.message : String(err) };

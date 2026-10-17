@@ -272,6 +272,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.deepseekFlashDefault.title': 'DeepSeek Flash is now the default creative assistant',
+  'changelog.deepseekFlashDefault.item1': 'Auto now uses the latest DeepSeek Flash to understand reference images and previews and continue creating images, videos, music and editable designs.',
+  'changelog.deepseekFlashDefault.item2': 'Choose Luna, Sol or an authorized personal plan from the model menu anytime. Chat billing follows actual input, cached input and output usage.',
   'changelog.nativeAudiovisual.title': "Presenter videos with sound in one generation",
   'changelog.nativeAudiovisual.item1': "New presenter and product videos can generate picture, speech and music together. For precise or editable subtitles, add text while keeping the original soundtrack.",
   'changelog.marketplaceSkillUpdates.title': 'Templates stay up to date',
@@ -1054,7 +1057,7 @@ const en = {
   'changelog.externalImages.title': 'Use Scene Images Directly in Video',
   'changelog.externalImages.item1': 'Scene images now render as images in Preview and MP4 export instead of being mistaken for videos.',
   'model.agentAutoConfiguredDesc': 'Use the server-configured default Agent, billed by actual model usage',
-  'model.agentAutoDesc': 'Use the default GPT-6 Luna through Azure API',
+  'model.agentAutoDesc': 'Use the current default creative model',
   'model.agentAutoCodexDesc': 'Use the default GPT-5.6 Terra through your personal Codex plan first',
   'model.agentLabel': 'Agent model',
   'model.closeAgentSelector': 'Close model selector',

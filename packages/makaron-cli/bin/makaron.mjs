@@ -520,7 +520,7 @@ Options:
                             grok-4.6-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON (includes per-run "usage" credits).
-  --stream                  Legacy live SSE stream.
+  --stream                  Live SSE; follows the same run after handoff.
   --help, -h                Show this help.
 
 Agent LLM defaults to auto, following the server-configured Agent model.
@@ -643,9 +643,15 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
   process.on('SIGINT', sigintHandler);
 
   const results = { images: [], designs: [], animationTasks: [], musicTasks: [], text: '' };
+  let completed = false;
 
   while (true) {
-    const { done, value } = await reader.read();
+    let chunk;
+    try { chunk = await reader.read(); } catch (error) {
+      if (controller.signal.aborted) throw error;
+      break; // The durable run can continue after the SSE connection closes.
+    }
+    const { done, value } = chunk;
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
@@ -711,14 +717,15 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
           break;
 
         case 'done':
+          completed = true;
           break;
       }
     }
   }
 
   process.removeListener('SIGINT', sigintHandler);
-  if (results.text) process.stdout.write('\n');
-  return { runId, results };
+  if (completed && results.text) process.stdout.write('\n');
+  return { runId, results, completed };
 }
 
 // ─── Run + Poll (non-blocking) ──────────────────────────────────────────────
@@ -759,7 +766,9 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
   if (background) return;
 
   let lastSeq = -1;
-  let printedText = '';
+  let printedText = opts.alreadyPrintedText || '';
+  let replayPrefix = printedText;
+  let replayBuffer = '';
   const start = Date.now();
 
   while (true) {
@@ -790,7 +799,15 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         if (json) continue; // skip printing in json mode
         switch (ev.type) {
           case 'content': {
-            const newText = ev.data?.text || '';
+            let newText = ev.data?.text || '';
+            if (replayPrefix) {
+              replayBuffer += newText;
+              if (replayPrefix.startsWith(replayBuffer)) break;
+              newText = replayBuffer.startsWith(replayPrefix)
+                ? replayBuffer.slice(replayPrefix.length) : replayBuffer;
+              replayPrefix = '';
+              replayBuffer = '';
+            }
             process.stdout.write(newText);
             printedText += newText;
             break;
@@ -2676,18 +2693,27 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (useStream) {
     // Legacy SSE mode
-    const { runId: streamRunId, results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
+    const { runId: streamRunId, results, completed } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
       agentModel,
       uploadedVideoCount: uploadedTurnVideoCount,
       turnMediaCount: uploadedTurnMediaCount,
     });
-    process.stderr.write('\n━━━ Results ━━━\n');
-    for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
-    for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
-    process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
-    printRunUsage(await fetchRunUsage(baseUrl, headers, streamRunId));
-    for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId, task.snapshotId);
-    for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
+    if (!completed) {
+      if (!streamRunId) {
+        console.error('Stream ended without completion or a run ID; unable to follow the original run.');
+        process.exit(1);
+      }
+      process.stderr.write(`\n↪ Following the same run after stream handoff: ${streamRunId}\n`);
+      await pollRun(baseUrl, headers, streamRunId, { alreadyPrintedText: results.text });
+    } else {
+      process.stderr.write('\n━━━ Results ━━━\n');
+      for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
+      for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
+      process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
+      printRunUsage(await fetchRunUsage(baseUrl, headers, streamRunId));
+      for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId, task.snapshotId);
+      for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
+    }
   } else {
     // Default: fire-and-forget + poll
     const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, {
