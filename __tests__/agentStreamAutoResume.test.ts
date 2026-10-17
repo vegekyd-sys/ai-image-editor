@@ -50,6 +50,10 @@ describe('Agent stream ownership', () => {
             taskId: 'task-unified-1',
             videoMeta: { status: 'processing', taskId: 'task-unified-1' },
           },
+        }, {
+          seq: 2,
+          type: 'done',
+          data: {},
         }],
         next_poll_after_ms: 10_000,
       }), {
@@ -74,6 +78,27 @@ describe('Agent stream ownership', () => {
       expect.objectContaining({ status: 'processing' }),
     );
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('drains final text when the terminal status is newer than the parallel event read', async () => {
+    const jsonResponse = (body: object) => new Response(JSON.stringify(body), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-final-text' }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'completed', events: [] }))
+      .mockResolvedValueOnce(jsonResponse({ status: 'completed', events: [
+        { seq: 1, type: 'content', data: { text: 'Hello from the completed run' } },
+        { seq: 2, type: 'done', data: {} },
+      ] }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onContent = vi.fn();
+    const onDone = vi.fn();
+    await streamAgent({ prompt: 'hi', image: '', projectId: 'project-1', durable: true }, { onContent, onDone });
+    expect(onContent).toHaveBeenCalledWith('Hello from the completed run');
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/api/agent/run')).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('aborts a durable run even when cancellation happens before the start response returns', async () => {

@@ -178,6 +178,8 @@ async function streamDurableAgent(
   let lastSeq = -1;
   let firstMessageSeen = false;
   let receivedVisibleOutput = false;
+  let receivedDoneEvent = false;
+  let terminalDrainStarted = false;
   try {
     while (!signal?.aborted) {
       // The full run-status representation resolves and enriches every async
@@ -212,6 +214,7 @@ async function streamDurableAgent(
       for (const event of run.events || []) {
         if (event.seq <= lastSeq) continue;
         lastSeq = event.seq;
+        if (event.type === 'done') receivedDoneEvent = true;
         if (
           event.type === 'content'
           || event.type === 'reasoning'
@@ -227,6 +230,13 @@ async function streamDurableAgent(
       }
       const agentStatus = run.agent_status || run.status;
       if (agentStatus === 'completed') {
+        // Status and events are read in parallel. A terminal status can be
+        // newer than this event batch; drain the same run before releasing
+        // the UI, including paginated batches. Never start a new model call.
+        if (!receivedDoneEvent && (!terminalDrainStarted || (run.events?.length || 0) > 0)) {
+          terminalDrainStarted = true;
+          continue;
+        }
         callbacks.onDone?.();
         return;
       }

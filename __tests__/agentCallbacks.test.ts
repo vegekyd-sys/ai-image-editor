@@ -412,6 +412,17 @@ describe('makeAgentCallbacks', () => {
   });
 
   describe('onMessageId', () => {
+    it('binds an Editor-created placeholder before its first text arrives', () => {
+      messages = [{ id: 'local-first', role: 'assistant', content: '', timestamp: 1 }];
+      const { callbacks, setCurrentMsgId, getAgentMsgIds } = makeAgentCallbacks(ctx);
+      setCurrentMsgId('local-first');
+      callbacks.onMessageId?.('server-first');
+      callbacks.onMessageId?.('server-first'); // The durable poll repeats the ID.
+      callbacks.onContent?.('first visible reply');
+      expect(messages).toEqual([{ id: 'server-first', role: 'assistant', content: 'first visible reply', timestamp: 1 }]);
+      expect(getAgentMsgIds()).toEqual(['server-first']);
+    });
+
     it('replaces first message ID with server ID', () => {
       ctx = createMockContext({
         setMessages: vi.fn((updater: (prev: typeof messages) => typeof messages) => {

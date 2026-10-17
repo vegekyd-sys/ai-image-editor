@@ -617,7 +617,12 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
   return {
     callbacks,
     getCurrentMsgId: () => currentMsgId,
-    setCurrentMsgId: (id: string) => { currentMsgId = id; },
+    setCurrentMsgId: (id: string) => {
+      currentMsgId = id;
+      // Editor creates the first placeholder before starting the request.
+      // Track it so the server header can bind that same bubble to its ID.
+      if (id && agentMsgIds.length === 0) agentMsgIds.push(id);
+    },
     getAgentMsgIds: () => agentMsgIds,
   };
 }
