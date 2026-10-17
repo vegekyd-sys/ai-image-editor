@@ -34,7 +34,7 @@ BRAND = '''以附带的Makaron Spark + Pixel Wizard官方参考表作为品牌�
 def stamp(): return dt.datetime.now(dt.timezone.utc).isoformat()
 def save(path, value):
     path = Path(path); path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix+'.tmp'); tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2)); tmp.replace(path)
+    tmp = path.with_suffix(path.suffix+f'.{os.getpid()}.{time.monotonic_ns()}.tmp'); tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2)); tmp.replace(path)
 def read(path): return json.loads(path.read_text()) if path.exists() else {}
 def cli(args, timeout=420):
     env=OBSERVATION_ENV if args[0]=='makaron' and args[1] in ('responses','usage') else ENV

@@ -44,6 +44,11 @@ def collect(folder):
         if page and page[-1]['seq']<=after:raise RuntimeError('Event cursor did not advance')
         data['events'].extend(page)
     t.save(folder/'complete-events.json',data)
+    image_urls={x.get('url') for x in first.get('outputs',[]) if x.get('type')=='image'}
+    image_events=[e for e in data.get('events',[]) if e['type']=='image' and e.get('data',{}).get('imageUrl') in image_urls]
+    if image_events:
+        completed=image_events[0]['created_at'];elapsed=(dt.datetime.fromisoformat(completed)-dt.datetime.fromisoformat(sub['submitted_at'])).total_seconds()
+        t.save(folder/'image-ready.json',{'seconds':elapsed,'completed_at':completed,'source':'server generated image event matching actual deliverable URL','observed_upper_bound_seconds':first['client_elapsed_seconds']})
     t.save(folder/'usage.json',t.cli(['makaron','usage','--run',sub['runId'],'--json']))
     tools=[{'type':e['type'],'tool':e.get('data',{}).get('tool'),'at':e.get('created_at'),'seq':e.get('seq')} for e in data.get('events',[]) if e['type'] in ('tool_call','tool_result')]
     t.save(folder/'timing-evidence.json',{'actual_models':data.get('usage',{}).get('entries',[]),'tool_events':tools,'tool_call_counts':dict(collections.Counter(x['tool'] for x in tools if x['type']=='tool_call')),'created_at':data.get('created_at'),'completed_at':data.get('completed_at'),'server_seconds':data.get('progress',{}).get('run_wall_seconds'),'event_count':len(data.get('events',[]))})

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shutil
 import datetime as dt
+import csv
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('trial',ROOT/'benchmarks/deepseek1017-round2.py')
@@ -46,6 +47,11 @@ for c in t.CASES:
             entry['polling_uncertainty_seconds']=(dt.datetime.fromisoformat(first['observed_at'])-dt.datetime.fromisoformat(previous['observed_at'])).total_seconds()
         if entry['recovery'] and first.get('observed_at'):
             entry['recovery_seconds']=entry['seconds'];entry['seconds']=(dt.datetime.fromisoformat(first['observed_at'])-dt.datetime.fromisoformat(sub['submitted_at'])).total_seconds()
+        image_ready=t.read(folder/'image-ready.json')
+        if image_ready:
+            entry['observed_seconds']=entry['seconds'];entry['seconds']=image_ready['seconds'];entry['timing_source']='server_image_event'
+            if entry['recovery']:
+                entry['recovery_seconds']=entry['seconds'];entry['seconds']=(dt.datetime.fromisoformat(image_ready['completed_at'])-dt.datetime.fromisoformat(sub['submitted_at'])).total_seconds()
         ready=t.read(folder/'first-video-ready.json')
         if ready:
             entry['observed_seconds']=entry['seconds'];entry['seconds']=ready['seconds'];entry['timing_source']='server_export_completed';entry['render_seconds']=ready.get('render_seconds')
@@ -74,13 +80,21 @@ for c in t.CASES:
         repair=t.read(repair_folder/'latest.json');repair_qa=t.read(repair_folder/'qa.json');repair_first=t.read(repair_folder/'first-artifact.json');repair_ready=t.read(repair_folder/'first-video-ready.json')
         repair_outputs=[x for x in repair.get('output',[]) if x.get('type')==expected and x.get('status')=='completed' and x.get('url')]
         if repair_outputs:
-            entry['repair_url']=repair_outputs[-1]['url'];entry['repair_seconds']=repair_ready.get('seconds',repair_first.get('client_elapsed_seconds'));entry['repair_credits']=(repair.get('usage') or {}).get('credits_net');entry['repair_qa']=repair_qa
+            entry['repair_url']=repair_outputs[-1]['url'];
+            if repair_ready.get('completed_at'):
+                entry['repair_total_seconds']=(dt.datetime.fromisoformat(repair_ready['completed_at'].replace('Z','+00:00'))-dt.datetime.fromisoformat(sub['submitted_at'])).total_seconds()
+            entry['repair_seconds']=repair_ready.get('seconds',repair_first.get('client_elapsed_seconds'));entry['repair_credits']=(repair.get('usage') or {}).get('credits_net');entry['repair_qa']=repair_qa
             if repair_qa.get('decode_ok'):
                 source=Path(repair_qa['local_file']);link=PUBLIC/'assets'/f"{c['id']}-{model}-repair{source.suffix}"
                 if not link.exists():link.symlink_to(source)
                 entry['repair_display_url']=f'assets/{link.name}'
     rows.append(row)
-t.save(PUBLIC/'data.json',{'generated_at':t.stamp(),'rows':rows,'budget':t.budget(),'notes':'本轮新增预算上限30美元，含早期本地尝试。60秒TikTok统一在同一独立Preview以全新项目正式重跑；本地受阻阶段仅归档，不计入正式速度结论。Scene素材与brief冻结配对；计时从各自提交开始至服务端首次MP4导出完成；另存客户端首次观察上界与Agent结束时间，尚无服务端时间时显示轮询上界。15秒mascot视频与图片沿用已完成配对。创作全部通过Makaron Chat CLI，Scene检索通过Scene CLI；Luna明确保留Codex套餐路由。'})
+t.save(PUBLIC/'data.json',{'generated_at':t.stamp(),'rows':rows,'budget':t.budget(),'notes':'本轮新增预算上限30美元，含早期本地尝试。60秒TikTok统一在同一独立Preview以全新项目正式重跑；本地受阻阶段仅归档，不计入正式速度结论。Scene素材与brief冻结配对；计时从各自提交开始至服务端首次MP4导出完成；另存客户端首次观察上界与Agent结束时间，尚无服务端时间时显示轮询上界。图片采用匹配成品URL的服务端生成事件时间；15秒mascot视频仍为首次观察上界，轮询区间明确列出。创作全部通过Makaron Chat CLI，Scene检索通过Scene CLI；Luna明确保留Codex套餐路由。'})
+with (PUBLIC/'timings.csv').open('w',newline='',encoding='utf-8-sig') as f:
+    writer=csv.writer(f);writer.writerow(['case','kind','model','first_seconds','first_source','final_mp4_seconds','agent_end_seconds','credits','repair_seconds','repair_total_from_original_submission_seconds','repair_credits','duration','width','height','lufs','review'])
+    for row in rows:
+        for m in row['models']:
+            q=m['qa'];writer.writerow([row['id'],row['kind'],m['model'],m.get('seconds'),m.get('timing_source','client_observation_upper_bound'),m.get('final_seconds'),m.get('agent_seconds',m.get('terminal_seconds')),m.get('credits'),m.get('repair_seconds'),m.get('repair_total_seconds'),m.get('repair_credits'),q.get('duration'),q.get('width'),q.get('height'),q.get('integrated_lufs'),q.get('visual_review')])
 shutil.copyfile(ROOT/'benchmarks/deepseek1017-round2-review.html',PUBLIC/'index.html')
 old=ROOT/'artifacts/deepseek1017-luna/review'
 link=old/'round2'
