@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     codexSubscriptionAllowedPromise.catch(() => { /* surfaced by Promise.all below */ });
     skillLaunchContextPromise.catch(() => { /* surfaced by Promise.all below */ });
     activeRunPromise.catch(() => { /* surfaced by Promise.all below */ });
-    const timelineVersionPromise = projectPromise.then(({ data: projectRow }) => {
+    const timelineVersionPromise = Promise.resolve(projectPromise).then(({ data: projectRow }) => {
       const timelineVersion = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
       endProjectLoad({ timelineVersion });
       return timelineVersion;
