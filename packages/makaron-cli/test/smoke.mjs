@@ -709,7 +709,8 @@ try {
     const result = await expectHelp(['chat', '--help'], /Agent LLM defaults to auto/);
     assert.match(result.stdout, /^\s+--agent-model <id>/m);
     assert.match(result.stdout, /deepseek-v4-pro/);
-    assert.match(result.stdout, /GPT-6 Luna through the Codex subscription for\s+eligible accounts, including admins, or Azure API otherwise/);
+    assert.match(result.stdout, /auto, following the server-configured Agent model/);
+    assert.match(result.stdout, /When that default is a GPT model, eligible accounts can use the Codex plan/);
     assert.match(result.stdout, /gpt-5\.6-\*-codex-subscription/);
     assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-model/m);

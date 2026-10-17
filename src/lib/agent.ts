@@ -46,6 +46,9 @@ import {
   type NativeVisionImageInput,
 } from './agent-image-analysis';
 import { extractWebSearchSources } from './web-citations';
+import { getTokenRate } from './billing/token-rates';
+import { deepSeekFlashProviderCost, deepSeekFlashTariffMultiplier } from './billing/deepseek-flash-rate';
+import { PricingUnavailableError } from './billing/media-pricing';
 import * as workspace from './workspace';
 import {
   createTools,
@@ -503,6 +506,15 @@ export async function* runMakaronAgent(
       : 300_000;
     const attemptResults: any[] = [];
     let billedNoCacheTokens = 0;
+    const deepSeekRate = runtime.spec.id === 'deepseek-flash'
+      ? await getTokenRate(runtime.spec.billingModelId)
+      : null;
+    if (runtime.spec.id === 'deepseek-flash' && !deepSeekRate) {
+      throw new PricingUnavailableError('DeepSeek Flash pricing is not configured');
+    }
+    if (deepSeekRate) deepSeekFlashTariffMultiplier(new Date());
+    let deepSeekCostUsd = 0;
+    let modelRequestStartedAt = new Date();
     let billedCacheReadTokens = 0;
     let billedCacheWriteTokens = 0;
     let billedOutputTokens = 0;
@@ -556,6 +568,11 @@ export async function* runMakaronAgent(
       billedCacheWriteTokens += cacheWrite;
       billedOutputTokens += usage.outputTokens ?? 0;
       billedStepMetadata.push({ providerMetadata: event.providerMetadata });
+      if (deepSeekRate) {
+        deepSeekCostUsd += deepSeekFlashProviderCost(deepSeekRate, {
+          noCacheInput: noCache, cacheRead, cacheWrite, output: usage.outputTokens ?? 0,
+        }, modelRequestStartedAt);
+      }
     };
 
     const buildUsageEvent = (): Extract<AgentStreamEvent, { type: 'usage' }> | null => {
@@ -566,7 +583,9 @@ export async function* runMakaronAgent(
       const hitRate = totalInput > 0
         ? ((billedCacheReadTokens / totalInput) * 100).toFixed(1)
         : '0';
-      const providerCostUsd = sumOpenRouterProviderCost(runtime, billedStepMetadata);
+      const providerCostUsd = deepSeekRate
+        ? deepSeekCostUsd
+        : sumOpenRouterProviderCost(runtime, billedStepMetadata);
       const cacheWriteLog = cacheWriteTelemetryComplete
         ? String(billedCacheWriteTokens)
         : 'unreported';
@@ -714,6 +733,7 @@ export async function* runMakaronAgent(
       try {
         for await (const event of result.fullStream) {
       if (event.type === 'start-step') {
+        modelRequestStartedAt = new Date();
         finalStepTextChars = 0;
         finalStepToolCalls = 0;
         finalStepDeliveredArtifact = false;

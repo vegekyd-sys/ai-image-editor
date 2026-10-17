@@ -1024,6 +1024,7 @@ const zhHant = {
   'changelog.sceneImportReliability.item2': '照片與動態編排的影片片段混剪時，匯出會保留完整時間軸，避免成片被提前截短。',
   'changelog.externalImages.title': 'Scene 圖片可直接用於影片',
   'changelog.externalImages.item1': '從 Scene 匯入的圖片現在會按圖片渲染，Preview 與 MP4 匯出不再把它誤當成影片。',
+  'model.agentAutoConfiguredDesc': '使用伺服器設定的預設 Agent，按實際模型用量計費',
   'model.agentAutoDesc': '預設 GPT-6 Luna，使用 Azure API',
   'model.agentAutoCodexDesc': '預設 GPT-5.6 Terra，優先使用你的個人 Codex 套餐',
   'model.agentLabel': 'Agent 模型',

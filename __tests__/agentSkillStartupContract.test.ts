@@ -8,6 +8,20 @@ function source(relativePath: string): string {
 }
 
 describe('Agent Skill startup contract', () => {
+  it('lists readable full paths when public names differ from source directories', async () => {
+    const { clearWorkspaceCache, getSkillManifest, readBuiltInFile } = await import('@/lib/workspace');
+    clearWorkspaceCache();
+    const index = await getSkillManifest();
+    for (const [name, file] of [
+      ['anchor', 'skills/long-video-anchor/SKILL.md'],
+      ['storyboard', 'skills/long-video-storyboard/SKILL.md'],
+    ]) {
+      expect(manifest.find(skill => skill.name === name)?.path).toBe(file);
+      expect(index.split('\n').find(line => line.startsWith(`- **${name}**:`))).toContain(file);
+      expect((await readBuiltInFile(file))?.content).toContain('name: ' + name);
+    }
+  });
+
   it('keeps full Skill loading out of every Agent startup entrypoint', () => {
     for (const relativePath of [
       'src/app/api/agent/route.ts',

@@ -12,6 +12,8 @@ import {
   isCodexSubscriptionAgentModelPreference,
   isGrokSubscriptionAgentModelPreference,
   type AgentModelPreference,
+  type AgentModelId,
+  type AgentModelProvider,
   type GPT56AgentModelId,
 } from '@/lib/agent-models';
 
@@ -34,7 +36,8 @@ interface SubscriptionUsageState {
   status: 'idle' | 'loading' | 'available' | 'unavailable';
   codexAvailable?: boolean;
   grokAvailable?: boolean;
-  defaultProvider?: 'azure-openai' | 'codex-subscription';
+  defaultProvider?: AgentModelProvider;
+  defaultModelId?: AgentModelId;
   codex?: {
     available: boolean;
     planType?: string | null;
@@ -82,12 +85,24 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     : value;
   const selected = models.find(model => model.id === selectedModelId);
   const ownerDefaultsToCodex = subscriptionUsage.defaultProvider === 'codex-subscription';
+  const autoModel = models.find(model => model.id === subscriptionUsage.defaultModelId);
+  const autoProviderSuffix = ownerDefaultsToCodex
+    ? t('model.codexSubscription.suffix')
+    : subscriptionUsage.defaultProvider === 'azure-openai'
+    ? t('model.azureApiBadge')
+    : subscriptionUsage.defaultProvider === 'openrouter'
+    ? t('model.openRouterApiBadge')
+    : '';
+  const autoLabel = autoModel
+    ? `Auto · ${t(autoModel.nameKey as Parameters<typeof t>[0])}${autoProviderSuffix ? ` · ${autoProviderSuffix}` : ''}`
+    : 'Auto';
+  const autoUsesOtherApi = Boolean(autoModel && !ownerDefaultsToCodex && subscriptionUsage.defaultProvider !== 'azure-openai');
   const label = isCodexSubscriptionAgentModelPreference(value) && selected
     ? `${t(selected.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`
     : isGrokSubscriptionAgentModelPreference(value) && selected
     ? `${t(selected.nameKey as Parameters<typeof t>[0])} · ${t('model.grokSubscription.suffix')}`
     : value === 'auto'
-    ? `Auto · ${t('model.gpt6Luna.name')} · ${ownerDefaultsToCodex ? t('model.codexSubscription.suffix') : t('model.azureApiBadge')}`
+    ? autoLabel
     : selected
       ? `${t(selected.nameKey as Parameters<typeof t>[0])}${/^gpt-(?:5\.6|6(?:\.1)?)-/.test(selected.id) ? ` · ${t('model.azureApiBadge')}` : selected.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
       : value;
@@ -104,13 +119,14 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
           available?: boolean;
           grokAvailable?: boolean;
           defaultProvider?: SubscriptionUsageState['defaultProvider'];
+          defaultModelId?: AgentModelId;
           planType?: string | null;
           weekly?: PlanUsage | null;
           codex?: SubscriptionUsageState['codex'];
           grok?: SubscriptionUsageState['grok'];
         };
         if (!payload.available && !payload.grokAvailable) {
-          setSubscriptionUsage({ status: 'unavailable', codexAvailable: false, grokAvailable: false, defaultProvider: payload.defaultProvider });
+          setSubscriptionUsage({ status: 'unavailable', codexAvailable: false, grokAvailable: false, defaultProvider: payload.defaultProvider, defaultModelId: payload.defaultModelId });
           return;
         }
         setSubscriptionUsage({
@@ -118,6 +134,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
           codexAvailable: Boolean(payload.available),
           grokAvailable: Boolean(payload.grokAvailable),
           defaultProvider: payload.defaultProvider,
+          defaultModelId: payload.defaultModelId,
           codex: payload.codex ?? {
             available: Boolean(payload.available),
             planType: payload.planType,
@@ -283,10 +300,10 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
       label: t('model.agentGroup.azure'),
       detail: t('model.agentGroup.azureDesc'),
       options: [
-        ...(!ownerDefaultsToCodex ? [{
+        ...(!ownerDefaultsToCodex && !autoUsesOtherApi ? [{
           id: 'auto' as AgentModelPreference,
-          name: `Auto · ${t('model.gpt6Luna.name')}`,
-          desc: t('model.agentAutoDesc'),
+          name: autoLabel,
+          desc: t('model.agentAutoConfiguredDesc'),
         }] : []),
         ...azureOptions,
       ],
@@ -301,8 +318,8 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
       options: [
         ...(ownerDefaultsToCodex ? [{
           id: 'auto' as AgentModelPreference,
-          name: `Auto · ${t('model.gpt6Luna.name')}`,
-          desc: t('model.agentAutoCodexDesc'),
+          name: autoLabel,
+          desc: t('model.agentAutoConfiguredDesc'),
         }] : []),
         ...codexSubscriptionOptions,
       ],
@@ -318,7 +335,14 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
       id: 'other',
       label: t('model.agentGroup.other'),
       detail: t('model.agentGroup.otherDesc'),
-      options: otherOptions,
+      options: [
+        ...(autoUsesOtherApi ? [{
+          id: 'auto' as AgentModelPreference,
+          name: autoLabel,
+          desc: t('model.agentAutoConfiguredDesc'),
+        }] : []),
+        ...otherOptions,
+      ],
     }] : []),
   ];
 

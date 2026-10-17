@@ -15,7 +15,7 @@ const envIndex=process.argv.indexOf('--env');
 if(envIndex>=0)config({path:process.argv[envIndex+1],quiet:true});
 const root=process.cwd();
 const out=path.join(root,'benchmarks/external-skill-routing/accepted.json');
-const stopInstruction='本轮只选择适用的内部 Skill、说明理由并给出简短制作计划。在任何图片、视频或音频生成前停下来；不要分析媒体、上传、导出、运行代码或写入项目。可读取所需 Skill 文件。';
+const stopInstruction='本轮只选择适用的内部 Skill、说明理由并给出简短制作计划。在任何图片、视频或音频生成前停下来；不要分析媒体、上传、导出、运行代码或写入项目。工具只允许使用 read_file 读取所需 Skill 文件；不要调用 list_files 或任何其他工具，它们都会被测试拦截。';
 const cases=JSON.parse(fs.readFileSync(path.join(root,'benchmarks/external-skill-routing/cases.json'),'utf8'));
 
 async function main(){
@@ -51,7 +51,8 @@ async function main(){
   const selectedFile=`skills/${scenario.expected}/SKILL.md`;
   const selected=calls.some(c=>c.name==='read_file'&&c.path===selectedFile&&c.executed);
   const stoppedBeforeProduction=!calls.some(c=>c.blocked);
-  const row={id:scenario.id,prompt:scenario.prompt,stopInstruction,expected:scenario.expected,selected,stoppedBeforeProduction,passed:selected&&stoppedBeforeProduction&&!error,calls,text,usage,durationMs:Date.now()-start,...(error?{error}: {})};
+  const allReadsSucceeded=calls.every(c=>c.name==='read_file'&&c.executed===true&&!c.error);
+  const row={id:scenario.id,prompt:scenario.prompt,stopInstruction,expected:scenario.expected,selected,stoppedBeforeProduction,passed:selected&&stoppedBeforeProduction&&allReadsSucceeded&&!error,calls,text,usage,durationMs:Date.now()-start,...(error?{error}: {})};
   summary.rows.push(row);fs.writeFileSync(out,JSON.stringify(summary,null,2)+'\n');
   console.log(JSON.stringify({case:row.id,selected,stoppedBeforeProduction,passed:row.passed,readFiles:calls.filter(c=>c.name==='read_file').map(c=>c.path),blockedCalls:calls.filter(c=>c.blocked).map(c=>c.name),usage,durationMs:row.durationMs,...(error?{error}: {})}));
  }

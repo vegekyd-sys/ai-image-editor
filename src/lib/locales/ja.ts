@@ -1049,6 +1049,7 @@ const ja = {
   'changelog.sceneImportReliability.item2': '写真と動的に配置した動画クリップを組み合わせても、書き出し時にタイムライン全体の長さを維持します。',
   'changelog.externalImages.title': 'Scene画像を動画で直接利用',
   'changelog.externalImages.item1': 'Sceneから読み込んだ画像を画像として処理し、PreviewとMP4書き出しで動画と誤認しないようになりました。',
+  'model.agentAutoConfiguredDesc': 'サーバー設定の既定 Agent を使用し、実際のモデル使用量で課金します',
   'model.agentAutoDesc': '既定の GPT-6 Luna を Azure API で使用します',
   'model.agentAutoCodexDesc': '既定の GPT-5.6 Terra を個人の Codex プランで優先的に使用します',
   'model.agentLabel': 'Agentモデル',

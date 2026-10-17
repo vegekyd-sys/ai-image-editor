@@ -1053,6 +1053,7 @@ const zh = {
   'changelog.sceneImportReliability.item2': '照片与动态编排的视频片段混剪时，导出会保留完整时间线，避免成片被提前截短。',
   'changelog.externalImages.title': 'Scene 图片可直接用于视频',
   'changelog.externalImages.item1': '从 Scene 导入的图片现在会按图片渲染，Preview 与 MP4 导出不再把它误当成视频。',
+  'model.agentAutoConfiguredDesc': '使用服务器配置的默认 Agent，按实际模型用量计费',
   'model.agentAutoDesc': '默认 GPT-6 Luna，走 Azure API',
   'model.agentAutoCodexDesc': '默认 GPT-5.6 Terra，优先使用你的个人 Codex 套餐',
   'model.agentLabel': 'Agent 模型',

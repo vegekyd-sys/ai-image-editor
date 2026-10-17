@@ -29,6 +29,7 @@ type SupabaseClient = any;
 
 interface BuiltInSkillManifestEntry {
   name: string;
+  path: string;
   description: string;
   triggers?: string[];
   referenceImages?: string[];
@@ -1075,6 +1076,7 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
   const builtIn = builtInSkillManifest as BuiltInSkillManifestEntry[];
   const lines: string[] = builtIn.map(s => {
     const extras: string[] = [];
+    if (s.path !== `skills/${s.name}/SKILL.md`) extras.push(`read: \`${s.path}\``);
     if (s.triggers?.length) extras.push(`triggers: ${s.triggers.join('; ')}`);
     if (s.referenceImages?.length) extras.push('has reference images');
     if (s.modelPreference?.length) extras.push(`prefers: ${s.modelPreference.join('/')}`);
@@ -1105,7 +1107,7 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
     return '';
   }
 
-  const manifest = `\n## Available Skills\n\nThis is the semantic routing index. Select a skill when the user request clearly matches its name, description, or trigger, then read \`skills/{name}/SKILL.md\` before planning or choosing tools. The selected Skill owns its workflow. Every video-model generation reads \`prompts/animate.md\` first; that guide indexes any supplied-video work into \`skills/video-edit/SKILL.md\`, which distinguishes source-preserving edits from shot-grammar replication internally. Without source authority, continue direct generation within the selected model's limit regardless of platform, copy, subtitles, branding, or shot count. A named platform is not by itself a workflow override. Explicit Studio/Remotion/editability and source-led assembly remain Composition routes; longer requests may activate the best matching production Skill.\n\n${lines.join('\n')}\n`;
+  const manifest = `\n## Available Skills\n\nThis is the semantic routing index. Select a skill when the user request clearly matches its name, description, or trigger, then read its listed file path (or \`skills/{name}/SKILL.md\` when no path is listed) before planning or choosing tools. A Skill name may differ from its directory; use the listed path without guessing an alias. The selected Skill owns its workflow. Every video-model generation reads \`prompts/animate.md\` first; that guide indexes any supplied-video work into \`skills/video-edit/SKILL.md\`, which distinguishes source-preserving edits from shot-grammar replication internally. Without source authority, continue direct generation within the selected model's limit regardless of platform, copy, subtitles, branding, or shot count. A named platform is not by itself a workflow override. Explicit Studio/Remotion/editability and source-led assembly remain Composition routes; longer requests may activate the best matching production Skill.\n\n${lines.join('\n')}\n`;
   setCache(cacheKey, manifest);
   return manifest;
 }

@@ -1053,6 +1053,7 @@ const en = {
   'changelog.sceneImportReliability.item2': 'Video exports now preserve the full intended timeline when photos and dynamically arranged clips are mixed.',
   'changelog.externalImages.title': 'Use Scene Images Directly in Video',
   'changelog.externalImages.item1': 'Scene images now render as images in Preview and MP4 export instead of being mistaken for videos.',
+  'model.agentAutoConfiguredDesc': 'Use the server-configured default Agent, billed by actual model usage',
   'model.agentAutoDesc': 'Use the default GPT-6 Luna through Azure API',
   'model.agentAutoCodexDesc': 'Use the default GPT-5.6 Terra through your personal Codex plan first',
   'model.agentLabel': 'Agent model',
