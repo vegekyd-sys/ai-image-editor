@@ -378,6 +378,9 @@ const server = http.createServer(async (req, res) => {
       project_id: 'project-auto-1',
       status: 'failed',
       incomplete: false,
+      ...(url.searchParams.get('events') === 'true' ? {
+        events: [{ type: 'status', seq: 1, data: { detail: 'x'.repeat(256000) } }],
+      } : {}),
       output: [{
         id: 'out_video_failed',
         type: 'video',
@@ -1732,6 +1735,23 @@ try {
     assert.equal(data.status, 'failed');
     assert.equal(data.output[0].status, 'failed');
     assert.equal(data.output[0].completion_actions[0].label, '改安全点重试');
+  }
+
+  // Failure status must survive while the entire JSON trace drains to a pipe.
+  for (const flags of [['--events', '--json'], ['--wait', '--json']]) {
+    const result = await expectFailure(['responses', 'get', 'run_failed_video', ...flags]);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.status, 'failed');
+    assert.equal(data.events[0].data.detail.length, 256000);
+    assert.equal(requests.at(-1).search, '?events=true');
+  }
+
+  {
+    await expectFailure(['responses', 'get', 'run_failed_video', '--events', '--after', '42', '--json']);
+    assert.equal(requests.at(-1).search, '?events=true&after=42');
+    const before = requests.length;
+    await expectFailure(['responses', 'get', 'run_failed_video', '--after', 'invalid', '--json']);
+    assert.equal(requests.length, before);
   }
 
   {

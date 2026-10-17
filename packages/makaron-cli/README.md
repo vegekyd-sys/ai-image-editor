@@ -382,6 +382,8 @@ npx makaron-cli responses get <runId> --pick output            # full output arr
 npx makaron-cli responses get <runId> --pick status
 npx makaron-cli responses get <runId> --pick credits_used      # net credits this run cost
 npx makaron-cli responses get <runId> --pick usage             # per-tool credit breakdown
+npx makaron-cli responses get <runId> --events --json          # timestamped raw tool/event evidence, including active runs
+npx makaron-cli responses get <runId> --events --after 1000 --json # next page after the last returned event sequence
 ```
 
 ## Fallback: Direct tool calls (no project context)

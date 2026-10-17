@@ -876,7 +876,8 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         printRunUsage(data.usage);
       }
 
-      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
+      // Let piped JSON drain before exiting; immediate exit truncates long traces.
+      if (data.status === 'failed' || data.status === 'aborted') process.exitCode = 1;
       return data;
     }
   }
@@ -2167,7 +2168,7 @@ function printHelp(topic, subtopic) {
   } else if (topic === 'chat') {
     printChatHelp();
   } else if (topic === 'responses' || topic === 'run') {
-    if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>] [--materialize|--export-compositions] [--publish-exports]');
+    if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--events] [--after <seq>] [--pick <field>] [--materialize|--export-compositions] [--publish-exports]');
     else if (subtopic === 'watch') console.log('Usage: makaron responses watch <runId> [--jsonl] [--interval <ms>]');
     else if (subtopic === 'list') console.log('Usage: makaron responses list --project <id>');
     else console.log(`Responses commands:
@@ -2730,10 +2731,16 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   if (sub === 'get') {
     const runId = args[2];
     if (!runId) { console.error('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>] [--materialize|--export-compositions]'); process.exit(1); }
-    let wait = false, jsonOutput = false, pick = null, exportCompositions = false, publishExports = false;
+    let wait = false, jsonOutput = false, pick = null, exportCompositions = false, publishExports = false, includeEvents = false, afterSeq = null;
     for (let i = 3; i < args.length; i++) {
       if (args[i] === '--wait') wait = true;
       if (args[i] === '--json') jsonOutput = true;
+      if (args[i] === '--events') includeEvents = true;
+      if (args[i] === '--after' && args[i + 1]) {
+        afterSeq = Number(args[++i]);
+        if (!Number.isSafeInteger(afterSeq) || afterSeq < 0) throw new Error('--after requires a non-negative integer sequence');
+        includeEvents = true;
+      }
       if (args[i] === '--export-compositions') exportCompositions = true;
       if (args[i] === '--materialize') {
         exportCompositions = true;
@@ -2757,7 +2764,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         console.log(JSON.stringify(data, null, 2));
       }
     } else {
-      const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
+      const eventQuery = includeEvents ? `?events=true${afterSeq !== null ? `&after=${afterSeq}` : ''}` : '';
+      const res = await fetch(`${baseUrl}/api/agent/run/${runId}${eventQuery}`, { headers });
       if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
       let data = await res.json();
       data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
@@ -2770,7 +2778,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       } else {
         console.log(JSON.stringify(data, null, 2));
       }
-      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
+      if (data.status === 'failed' || data.status === 'aborted') process.exitCode = 1;
     }
 
   } else if (sub === 'watch') {

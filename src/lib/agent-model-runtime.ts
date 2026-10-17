@@ -11,6 +11,7 @@ import {
   type AgentModelSpec,
 } from './agent-models';
 import { normalizeToolCallInputs } from './tool-inputs';
+import { normalizeDeepSeekToolVision } from './deepseek-tool-vision';
 import {
   createAzureOpenAIResponsesModel,
   createAzureOpenAIWebSearchTool as createNativeWebSearchTool,
@@ -95,7 +96,11 @@ export function createAgentModelRuntime(
     }
     if (spec.id === 'deepseek-flash') {
       const deepseek = createDeepSeek({ apiKey });
-      return { spec, model: deepseek.chat(spec.providerModelId), normalizeMessages: normalizeToolCallInputs };
+      return {
+        spec,
+        model: deepseek.chat(spec.providerModelId),
+        normalizeMessages: (messages) => normalizeDeepSeekToolVision(normalizeToolCallInputs(messages)),
+      };
     }
     const deepseek = createOpenAI({
       name: 'deepseek',
