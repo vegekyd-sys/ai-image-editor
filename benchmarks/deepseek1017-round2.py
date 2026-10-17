@@ -106,7 +106,7 @@ def poll(c,model):
     kind='image' if c['kind']=='image' else 'video'
     outputs=[x for x in value.get('output',[]) if x.get('type')==kind and x.get('status')=='completed' and x.get('url')]
     # Attached reference is input, not a generated deliverable.
-    with (folder/'observations.jsonl').open('a') as f: f.write(json.dumps({'observed_at':stamp(),'status':value.get('status'),'elapsed':elapsed,'usage':value.get('usage'),'progress':value.get('progress')},ensure_ascii=False)+'\n')
+    with (folder/'observations.jsonl').open('a') as f: f.write(json.dumps({'observed_at':stamp(),'status':value.get('status'),'elapsed':elapsed,'usage':value.get('usage'),'progress':value.get('progress'),'has_output':bool(outputs)},ensure_ascii=False)+'\n')
     if outputs and not (folder/'first-artifact.json').exists():
         save(folder/'first-artifact.json',{'observed_at':stamp(),'client_elapsed_seconds':elapsed,'outputs':outputs,'timing_note':'First observed completed output; polling upper bound; generated-output provenance checked separately.'})
     if value.get('status') not in ('in_progress','running','queued') and not (folder/'terminal.json').exists():

@@ -2,11 +2,30 @@
 import collections
 import concurrent.futures
 import importlib.util
+import datetime as dt
+import json
+import os
+import subprocess
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('trial',ROOT/'benchmarks/deepseek1017-round2.py');t=importlib.util.module_from_spec(spec);spec.loader.exec_module(t)
 def collect(folder):
+    sub=t.read(folder/'submission.json')
+    first=t.read(folder/'first-artifact.json')
+    if sub.get('formal') and first and not (folder/'first-video-ready.json').exists():
+        for output in first.get('outputs',[]):
+            task=output.get('task_id','')
+            if not task.startswith('remotion-export-'):continue
+            job_id=task.removeprefix('remotion-export-')
+            p=subprocess.run(['node',str(ROOT/'packages/makaron-cli/bin/makaron.mjs'),'composition','status',job_id,'--json'],cwd=ROOT,env=t.OBSERVATION_ENV,capture_output=True,text=True,timeout=60)
+            if p.returncode:raise RuntimeError('Export status CLI failed: '+p.stderr[-250:])
+            job=json.loads(p.stdout);t.save(folder/'first-export-job.json',job)
+            if job.get('status')=='completed' and job.get('completed_at'):
+                elapsed=(dt.datetime.fromisoformat(job['completed_at'].replace('Z','+00:00'))-dt.datetime.fromisoformat(sub['submitted_at'])).total_seconds()
+                if elapsed<0:raise RuntimeError('Clock mismatch: export completed before submission')
+                t.save(folder/'first-video-ready.json',{'seconds':elapsed,'completed_at':job['completed_at'],'task_id':task,'source':'Makaron composition status completed_at; client submission UTC start','render_seconds':job.get('render_seconds'),'created_at':job.get('created_at'),'started_at':job.get('started_at'),'observed_upper_bound_seconds':first['client_elapsed_seconds']})
+                break
     if not (folder/'terminal.json').exists() or (folder/'timing-evidence.json').exists():return
     sub=t.read(folder/'submission.json');data=t.cli(['makaron','responses','get',sub['runId'],'--events','--json']);page=data.get('events',[])
     while len(page)==1000:
