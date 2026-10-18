@@ -25,6 +25,10 @@ export function materializeStatus(job: ExportStatus) {
   };
 }
 
+function unknownMaterializeStatus(jobId: string, error: string) {
+  return { success: false, jobId, status: 'unknown', error };
+}
+
 /** Replay protects the render mutation; job status must still be read live. */
 export async function refreshMaterializeStatus(
   cached: Record<string, unknown>,
@@ -35,7 +39,7 @@ export async function refreshMaterializeStatus(
   try {
     const job = await lookup(cached.jobId);
     if (!job || job.user_id !== owner.userId || job.project_id !== owner.projectId) {
-      return { success: false, jobId: cached.jobId, status: 'unknown', error: 'Could not verify this export job in the current project. Do not create a duplicate.' };
+      return unknownMaterializeStatus(cached.jobId, 'Could not verify this export job in the current project. Do not create a duplicate.');
     }
     const { url: _url, workspacePath: _path, completedAt: _completed, ...identity } = cached;
     return {
@@ -47,6 +51,6 @@ export async function refreshMaterializeStatus(
       statusVerified: true,
     };
   } catch {
-    return { success: false, jobId: cached.jobId, status: 'unknown', error: 'Export status could not be refreshed. Keep the existing job and retry the status check; do not create a duplicate.' };
+    return unknownMaterializeStatus(cached.jobId, 'Export status could not be refreshed. Keep the existing job and retry the status check; do not create a duplicate.');
   }
 }
