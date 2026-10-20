@@ -1,3 +1,4 @@
+import { fetchPublicDownload, isPublicDownloadUrl } from '@/lib/parallel-download';
 import type { Snapshot } from '@/types';
 import type { LocaleContextValue } from '@/lib/i18n';
 import { isNativePhotoLibrarySaveAvailable, saveBlobToNativePhotoLibrary, saveUrlToNativePhotoLibrary } from '@/lib/native-media';
@@ -94,14 +95,29 @@ export function prepareDownloadAsset(params: DownloadAssetParams, cache?: Prepar
   return cache.get(key, () => loadDownloadAsset(params));
 }
 
+async function loadVideoDownload(source: string, proxyUrl: string): Promise<Blob> {
+  if (isPublicDownloadUrl(source)) {
+    try {
+      const direct = await fetchPublicDownload(source);
+      if (direct.ok) return await direct.blob();
+      await direct.body?.cancel();
+    } catch {
+      // Preserve the existing same-origin proxy for networks that cannot reach
+      // the CDN, unavailable CORS, and failed/changed ranges. No partial blob is saved.
+    }
+  }
+  const response = await fetch(proxyUrl);
+  if (!response.ok) throw new Error('Could not load video');
+  return response.blob();
+}
+
 async function loadDownloadAsset(params: DownloadAssetParams): Promise<PreparedDownload> {
   const { timeline, viewIndex, isViewingVideo, currentVideoUrl, draftParentIndex, snapshotsRef, projectTitle } = params;
   const index = snapFromTimeline(viewIndex, draftParentIndex);
   const snap = index === null ? undefined : snapshotsRef.current[index];
   if (isViewingVideo && currentVideoUrl) {
-    const response = await fetch(`/api/proxy-video?url=${encodeURIComponent(currentVideoUrl)}&full=1`);
-    if (!response.ok) throw new Error('Could not load video');
-    return { blob: await response.blob(), filename: `makaron-video-${Date.now()}.mp4`, kind: 'video' };
+    const blob = await loadVideoDownload(currentVideoUrl, `/api/proxy-video?url=${encodeURIComponent(currentVideoUrl)}&full=1`);
+    return { blob, filename: `makaron-video-${Date.now()}.mp4`, kind: 'video' };
   }
   if (snap?.design?.animation) {
     document.dispatchEvent(new Event('music-play'));
@@ -114,7 +130,7 @@ async function loadDownloadAsset(params: DownloadAssetParams): Promise<PreparedD
     source = await captureDesignPoster(snap.design) || source;
   }
   if (!source) throw new Error('Image unavailable');
-  const response = await fetch(source);
+  const response = await fetchPublicDownload(source);
   if (!response.ok) throw new Error('Could not load image');
   const blob = await response.blob();
   const slug = (projectTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
@@ -261,9 +277,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       }
 
       const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}&download=1`;
-      const res = await fetch(proxyUrl);
-      if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
-      const blob = await res.blob();
+      const blob = await loadVideoDownload(videoSrc, proxyUrl);
       const file = new File([blob], filename, { type: 'video/mp4' });
       // Try native share (iOS/Android) — wrapped in its own try/catch so share failure
       // falls through to blob download instead of navigating away
@@ -442,7 +456,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       }
     }
 
-    const res = await fetch(img);
+    const res = await fetchPublicDownload(img);
     const blob = await res.blob();
     const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg';
     const filename = `makaron-${slug}-${idx}.${ext}`;
