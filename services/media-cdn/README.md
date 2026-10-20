@@ -46,11 +46,12 @@ The benchmark runs serially across baseline/cold/warm and validates four Range r
 
 - Worker logic: 14 tests pass, including fallback, conditions, versioning, no-cache and infrastructure-cookie handling.
 - Workerd local runtime against a real 19,726,445-byte Supabase MP4: cold MISS downloaded exact source bytes; warm full HIT and Range HIT; only the cold run logged an origin GET. SHA-256 `a393f0c381180afd71392ade7d554d3b250b313336e8bbe411904598e24368d7`.
+- Real public JPEG: 433,683 bytes, cold MISS and warm HIT, both match source SHA-256 `c17cbc7d788148a2a45ccfbdf6dafce83956382604d3a4c1aff500aed2748722`.
 - Local cache timings are not cloud-network speed evidence and are excluded from speed claims.
 - Browser, same 142,048,671-byte source: candidate four-way 20.4249 s; single-way 20.4782 s. Both exact SHA-256. No material gain in this sample. Earlier different-time samples showed larger gains and must remain separate.
 - Editor original-save integration and download regression: 40 tests pass; type checking and focused lint pass.
 - Cloudflare candidate name `makaron-media-cdn` exists but currently contains only the initial Hello World placeholder. No media worker was deployed, no R2 binding attached, no production route changed. Dashboard editor did not finish loading; Wrangler OAuth requires explicit access approval and its initial attempt expired.
-- Public image coverage, real cloud cold/warm measurements, multi-location behavior, CPU/time limits, retention and a production decision remain open.
+- Real cloud cold/warm measurements, multi-location behavior, CPU/time limits, retention and a production decision remain open.
 
 ## Rollback
 
