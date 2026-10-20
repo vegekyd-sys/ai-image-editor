@@ -238,6 +238,22 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname.startsWith('/api/agent/run/run_stream_handoff')) {
+    const partial = url.pathname.endsWith('_partial');
+    sendJson(200, { status: 'completed', projectId: 'project-models-1',
+      events: (partial ? ['Al', 'ready ', 'continued reply'] : ['Recovered reply'])
+        .map((text, seq) => ({ seq, type: 'content', data: { text } })), result: {} });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/agent' && body.prompt.startsWith('stream handoff')) {
+    const partial = body.prompt.endsWith('partial');
+    res.writeHead(200, { 'Content-Type': 'text/event-stream',
+      'X-Agent-Run-Id': `run_stream_handoff${partial ? '_partial' : ''}` });
+    res.end(partial ? 'data: {"type":"content","text":"Already "}\n\n' : '');
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/agent') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -378,6 +394,9 @@ const server = http.createServer(async (req, res) => {
       project_id: 'project-auto-1',
       status: 'failed',
       incomplete: false,
+      ...(url.searchParams.get('events') === 'true' ? {
+        events: [{ type: 'status', seq: 1, data: { detail: 'x'.repeat(256000) } }],
+      } : {}),
       output: [{
         id: 'out_video_failed',
         type: 'video',
@@ -706,7 +725,8 @@ try {
     const result = await expectHelp(['chat', '--help'], /Agent LLM defaults to auto/);
     assert.match(result.stdout, /^\s+--agent-model <id>/m);
     assert.match(result.stdout, /deepseek-v4-pro/);
-    assert.match(result.stdout, /GPT-6 Luna through the Codex subscription for\s+eligible accounts, including admins, or Azure API otherwise/);
+    assert.match(result.stdout, /auto, following the server-configured Agent model/);
+    assert.match(result.stdout, /When that default is a GPT model, eligible accounts can use the Codex plan/);
     assert.match(result.stdout, /gpt-5\.6-\*-codex-subscription/);
     assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
@@ -902,6 +922,17 @@ try {
     const runRequest = requests.slice(requestStart)
       .find(request => request.pathname === '/api/agent/run');
     assert.equal(runRequest?.body?.agentModel, 'gpt-6.1-sol-codex-subscription');
+  }
+
+  for (const partial of [false, true]) {
+    const requestStart = requests.length;
+    const result = await expectSuccess(['chat', '--project', 'project-models-1', '--stream',
+      `stream handoff${partial ? ' partial' : ''}`]);
+    assert.equal(result.stdout.trim(), partial ? 'Already continued reply' : 'Recovered reply');
+    const newRequests = requests.slice(requestStart);
+    assert.equal(newRequests.filter(r => r.method === 'POST' && r.pathname === '/api/agent').length, 1);
+    assert.equal(newRequests.filter(r => r.method === 'POST' && r.pathname === '/api/agent/run').length, 0);
+    assert.ok(newRequests.some(r => r.pathname === `/api/agent/run/run_stream_handoff${partial ? '_partial' : ''}`));
   }
 
   {
@@ -1459,6 +1490,16 @@ try {
     assert.equal(requests.filter(req => req.pathname === '/api/agent/run').length, runCount);
   }
 
+  for (const skill of ['long-video-director', 'video-edit', 'explainer-video']) {
+    const installsBefore = requests.filter(req => req.pathname === '/api/skills' && req.method === 'POST').length;
+    const brief = 'Execute the complete workflow; self-review the required stages within the authorized budget and deliver a verified MP4.';
+    await expectSuccess(['chat', '--project', 'project-existing-1', '--skill', skill, '--json', '-b', brief]);
+    const submission = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
+    assert.equal(submission.body.projectId, 'project-existing-1');
+    assert.equal(submission.body.prompt, `[Active skill: ${skill}]\n${brief}`);
+    assert.equal(requests.filter(req => req.pathname === '/api/skills' && req.method === 'POST').length, installsBefore);
+  }
+
   {
     await expectSuccess(['chat', '--project', 'auto', '--skill', '夜店钻石风', '--json', '-b', 'make me shine']);
     const runRequests = requests.filter(req => req.pathname === '/api/agent/run');
@@ -1722,6 +1763,23 @@ try {
     assert.equal(data.status, 'failed');
     assert.equal(data.output[0].status, 'failed');
     assert.equal(data.output[0].completion_actions[0].label, '改安全点重试');
+  }
+
+  // Failure status must survive while the entire JSON trace drains to a pipe.
+  for (const flags of [['--events', '--json'], ['--wait', '--json']]) {
+    const result = await expectFailure(['responses', 'get', 'run_failed_video', ...flags]);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.status, 'failed');
+    assert.equal(data.events[0].data.detail.length, 256000);
+    assert.equal(requests.at(-1).search, '?events=true');
+  }
+
+  {
+    await expectFailure(['responses', 'get', 'run_failed_video', '--events', '--after', '42', '--json']);
+    assert.equal(requests.at(-1).search, '?events=true&after=42');
+    const before = requests.length;
+    await expectFailure(['responses', 'get', 'run_failed_video', '--after', 'invalid', '--json']);
+    assert.equal(requests.length, before);
   }
 
   {

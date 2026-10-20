@@ -65,15 +65,18 @@ export async function GET(req: NextRequest) {
     isDynamicCodexSubscriptionUserAllowed(userId),
     isGrokSubscriptionAllowedUser(userId),
   ]);
-  const defaultProvider = resolveAgentModelSpecForUser(
+  const defaultModel = resolveAgentModelSpecForUser(
     'auto', process.env.AGENT_MODEL, userId, process.env.GPT56_AGENT_PROVIDER, codexAvailable,
-  ).provider === 'codex-subscription' ? 'codex-subscription' : 'azure-openai';
+  );
+  const defaultProvider = defaultModel.provider;
+  const defaultModelId = defaultModel.id;
   if (!codexAvailable && !grokAvailable) {
     return NextResponse.json(
       {
         available: false,
         grokAvailable: false,
         defaultProvider,
+        defaultModelId,
         codex: { available: false },
         grok: { available: false },
       },
@@ -100,6 +103,7 @@ export async function GET(req: NextRequest) {
       available: codexAvailable,
       grokAvailable,
       defaultProvider,
+      defaultModelId,
       ...(codexUsage ?? {}),
       codex: {
         available: codexAvailable,

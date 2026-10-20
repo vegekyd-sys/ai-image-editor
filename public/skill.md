@@ -79,6 +79,18 @@ npx makaron-cli responses get $RUN_ID --wait --json
 
 Use `chat` for all creative tasks. Makaron Agent decides how to execute — it can edit images, generate videos, compose music, and create designs in a single conversation.
 
+For a new presenter or product video within the chosen model's single-call
+limit, pass the complete brief to `chat`: generate picture, speech, lip sync,
+music and ambience together. Naming Seedance 2.5 defaults to Eco. Do not split
+ordinary presenter work into a voice master, silent video and Studio recipe.
+Native subtitles can be generated in the same call. When exact or editable
+captions are required, retain the generated soundtrack and add only the text
+overlays through direct composition; subtitles do not require Studio. Inspect
+the final audible MP4 and caption spelling before delivery. ASR is fallible;
+a transcription typo alone is not a reason to regenerate speech. On moderation
+failure, inspect the actual inputs/error and recover with a revised prompt or
+compatible model when authorized; poll an accepted task instead of regenerating.
+
 For clearly adult, erotic, or NSFW requests, read `references/nsfw.md`
 ([public copy](https://www.makaron.app/.well-known/agent-skills/makaron/references/nsfw.md))
 before submitting the job. It adds per-job routing exceptions only; do not load
@@ -99,7 +111,7 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6.1-sol-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`). `auto` uses GPT-6 Luna through the Codex subscription for eligible accounts (including admins) and through Azure API otherwise; base GPT-5.6, GPT-6 and GPT-6.1 IDs select Azure API, while suffixed IDs explicitly request the personal plan where authorized. Never put an image or video model ID in `--agent-model`.
+`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6.1-sol-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`). `auto` defaults to DeepSeek Flash with native vision, following the server-configured Agent model; eligible accounts can use the Codex subscription when that default is a GPT model; base GPT-5.6, GPT-6 and GPT-6.1 IDs select Azure API, while suffixed IDs explicitly request the personal plan where authorized. Never put an image or video model ID in `--agent-model`.
 
 ```bash
 npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --json -b "make a 20s badminton video"
@@ -126,30 +138,37 @@ Returns immediately:
 
 ### Built-in production skills
 
-When the request names a production format or the correct workflow is unclear,
-discover the current built-in skills before starting. Do not guess a skill slug
-from memory: the server list is the source of truth.
+Pass the complete brief, source roles, budget and granted review authority to
+`makaron chat` in natural language; the internal Agent selects a matching Skill.
+Use `--skill <name>` when explicitly selecting an entry below.
+Makaron's internal Agent reads the selected Skill and its dependencies and owns
+the production/review workflow. Let that Skill own the detailed procedure.
 
-```bash
-# Short list of callable/discoverable production skills and their purpose
-npx makaron-cli skills list --built-in
+<!-- makaron:workflow-directory:start -->
+| Request | `--skill` entry |
+| --- | --- |
+| Ordinary image editing/generation, music or single-clip video | Omit `--skill` for automatic routing |
+| Multi-part narrative with consistent characters/scenes | `long-video-director` |
+| Faithfully recreate reference shot structure with replacement content | `video-edit`; request the replication profile in the brief |
+| Explain a topic, product or process | `explainer-video` |
+| Trailer, teaser, brand film or cinematic short | `cinematic-video` |
+| Speech-led cuts, captions and B-roll | `talking-head` |
+| Translate/dub/localize an existing video | `video-translate` |
+| Package existing source footage for TikTok/Douyin | `tiktok-video` |
+| Whole-take multi-angle re-shoot preserving the performance/timebase | `multi-angle-video` |
+| Explicitly create progressive story images before video | `photo-to-video` |
+<!-- makaron:workflow-directory:end -->
 
-# Search by task, format, or keyword
-npx makaron-cli skills search "talking head captions" --built-in
+For a low-cost planning check, include: "Select the matching Skill and give a
+short production plan; stop before generating any image, video or audio."
+Planning still uses Agent inference. Detailed production remains internal.
 
-# Inspect input requirements, workflow, keywords, and exact invocation
-npx makaron-cli skills show talking-head --built-in
-
-# Use the exact slug returned by list/show
-npx makaron-cli chat --project auto --video talk.mp4 \
-  --skill talking-head -b "remove false starts, add synced captions and useful B-roll"
-```
-
-Use `--all` only when debugging adapters or looking for an internal helper Skill.
-For ordinary creative work, choose from the default built-in list. A named
-destination takes priority over a generic source workflow: for example,
-explicit TikTok/Douyin work uses `tiktok-video`; ordinary speech-led cleanup
-uses `talking-head`; broader mixed-footage editing uses `source-video-studio`.
+When a name or scope is uncertain, use `makaron skills list --built-in`,
+`makaron skills search "<request>" --built-in`, or
+`makaron skills show <name> --built-in`; the live list is authoritative.
+Built-in Skills need no marketplace installation. Supporting anchor/storyboard
+Skills are internal dependencies rather than separate production entrypoints.
+For invocation/status diagnostics, see [internal workflows](references/internal-workflows.md).
 
 ### Marketplace skills
 

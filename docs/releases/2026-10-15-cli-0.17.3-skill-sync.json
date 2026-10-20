@@ -1,0 +1,20 @@
+{
+  "kind": "registry-fresh-install-readonly-accepted",
+  "version": "0.17.3",
+  "latest": "0.17.3",
+  "shasum": "500131609d578f83dd7bc196d4bbbc3688786313",
+  "filesCompared": 9,
+  "catalogRevision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
+  "discoveredEntries": [
+    "long-video-director",
+    "video-edit",
+    "explainer-video",
+    "cinematic-video",
+    "talking-head",
+    "video-translate",
+    "tiktok-video",
+    "multi-angle-video",
+    "photo-to-video"
+  ],
+  "mediaOperationsExecuted": 0
+}

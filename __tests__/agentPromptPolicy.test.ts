@@ -361,7 +361,8 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('Platform, copy, subtitles, branding, or shot count do not override')
     expect(agent).toContain('Model selection happens after workflow routing')
     expect(agent).not.toContain('matched built-in Composition requests route to that editable workflow')
-    expect(agentTs).toContain('A video up to and including 15 seconds stays on direct \\`generate_animation\\`')
+    expect(agentTs).toContain("within the selected model's single-call limit stays on direct \\`generate_animation\\`")
+    expect(agentTs).toContain('Never split native picture/voice/music into separate generation jobs to satisfy Studio stages')
     expect(agentTs).not.toContain('resolveVideoWorkflowRoute')
     expect(agentTs).not.toContain('videoWorkflowRoute')
     expect(workspace).toContain('This is the semantic routing index')
@@ -446,7 +447,6 @@ describe('agent prompt policy guards', () => {
 
   it('routes long video work through the long-video-director skill before short video scripts', () => {
     const agent = read('src/lib/prompts/agent.md')
-    const agentTs = read('src/lib/agent.ts')
     const skill = read('src/skills/long-video-director/SKILL.md')
     const anchor = read('src/skills/long-video-anchor/SKILL.md')
     const storyboard = read('src/skills/long-video-storyboard/SKILL.md')

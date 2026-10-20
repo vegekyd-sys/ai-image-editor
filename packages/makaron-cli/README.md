@@ -107,7 +107,7 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` routes image and video models automatically, but you may select the Agent LLM with `--agent-model`. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6.1-sol-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`, `grok-4.6-grok-subscription`). `auto` resolves to GPT-6 Luna through the Codex subscription for eligible accounts (including admins) and through Azure API otherwise. Base GPT-5.6, GPT-6 and GPT-6.1 IDs select Azure API and base `grok-4.6` selects OpenRouter API; the suffixed IDs explicitly request the corresponding personal plan where authorized. This flag changes only the reasoning/tool-calling Agent LLM.
+`chat` routes image and video models automatically, but you may select the Agent LLM with `--agent-model`. Accepted values are `auto`, the base model IDs (`gpt-6-luna`, `gpt-6.1-sol`, `gpt-6-sol`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`, `deepseek-flash`), and the personal-plan routes (`gpt-6-luna-codex-subscription`, `gpt-6.1-sol-codex-subscription`, `gpt-6-sol-codex-subscription`, `gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`, `grok-4.6-grok-subscription`). `auto` defaults to DeepSeek Flash with native vision, following the server-configured Agent model. When that default is a GPT model, eligible accounts (including admins) can use the Codex subscription; an explicitly selected model or personal-plan route is preserved. Base GPT-5.6, GPT-6 and GPT-6.1 IDs select Azure API and base `grok-4.6` selects OpenRouter API; the suffixed IDs explicitly request the corresponding personal plan where authorized. This flag changes only the reasoning/tool-calling Agent LLM.
 
 ```bash
 # Explicit lower-cost Agent LLM for a controlled comparison
@@ -153,17 +153,38 @@ npx makaron-cli chat --project auto --image selfie.jpg --skill <marketplace-id-o
 
 ### Built-in production skills
 
-Discover the available production workflows before choosing `--skill`:
+Pass the complete brief, source roles, budget and granted review authority to
+`makaron chat` in natural language; the internal Agent selects a matching Skill.
+Use `--skill <name>` when explicitly selecting an entry below.
+Makaron's internal Agent reads the selected Skill and its dependencies and owns
+the production/review workflow. Let that Skill own the detailed procedure.
 
-```bash
-npx makaron-cli skills list --built-in
-npx makaron-cli skills search "talking head captions" --built-in
-npx makaron-cli skills show talking-head --built-in
-npx makaron-cli chat --project auto --video talk.mp4 --skill talking-head -b "make a tight captioned edit"
-```
+<!-- makaron:workflow-directory:start -->
+| Request | `--skill` entry |
+| --- | --- |
+| Ordinary image editing/generation, music or single-clip video | Omit `--skill` for automatic routing |
+| Multi-part narrative with consistent characters/scenes | `long-video-director` |
+| Faithfully recreate reference shot structure with replacement content | `video-edit`; request the replication profile in the brief |
+| Explain a topic, product or process | `explainer-video` |
+| Trailer, teaser, brand film or cinematic short | `cinematic-video` |
+| Speech-led cuts, captions and B-roll | `talking-head` |
+| Translate/dub/localize an existing video | `video-translate` |
+| Package existing source footage for TikTok/Douyin | `tiktok-video` |
+| Whole-take multi-angle re-shoot preserving the performance/timebase | `multi-angle-video` |
+| Explicitly create progressive story images before video | `photo-to-video` |
+<!-- makaron:workflow-directory:end -->
 
-The default list shows callable/discoverable skills with their purpose and input
-requirements. Add `--all` to include internal adapters and helper skills.
+For a low-cost planning check, include: "Select the matching Skill and give a
+short production plan; stop before generating any image, video or audio."
+Planning still uses Agent inference. Detailed production remains internal.
+
+When a name or scope is uncertain, use `makaron skills list --built-in`,
+`makaron skills search "<request>" --built-in`, or
+`makaron skills show <name> --built-in`; the live list is authoritative.
+Built-in Skills need no marketplace installation. Supporting anchor/storyboard
+Skills are internal dependencies rather than separate production entrypoints.
+For invocation/status diagnostics, see [internal workflows](skills/makaron/references/internal-workflows.md).
+
 
 ### With additional images (existing project)
 
@@ -297,6 +318,8 @@ npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "spli
 ```
 
 Video files are uploaded via signed URL. CLI local video uploads support `.mp4`, `.mov`, or `.webm`, max 50MB, max 900s (15 minutes) with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits.
+For a new presenter or product video, ask for picture, speech, lip sync and music together in one `chat` brief. Seedance 2.5 defaults to Eco. Native subtitles can be included; for precise or editable captions, Makaron keeps the native soundtrack and adds text through a lightweight composition, without a Studio production recipe or another voice generation. Review the completed MP4 for speech, caption spelling and synchronization.
+
 The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct `video create` is standalone and does not write timeline entries.
 
@@ -359,6 +382,8 @@ npx makaron-cli responses get <runId> --pick output            # full output arr
 npx makaron-cli responses get <runId> --pick status
 npx makaron-cli responses get <runId> --pick credits_used      # net credits this run cost
 npx makaron-cli responses get <runId> --pick usage             # per-tool credit breakdown
+npx makaron-cli responses get <runId> --events --json          # timestamped raw tool/event evidence, including active runs
+npx makaron-cli responses get <runId> --events --after 1000 --json # next page after the last returned event sequence
 ```
 
 ## Fallback: Direct tool calls (no project context)
@@ -708,3 +733,5 @@ npx makaron-cli admin fetch-skill https://www.makaron.app/s/4c4cbd57
 FAL video models: **fal H3 Turbo** uses `minimax-h3-max` for single-start-frame I2V/T2V. **FAL H3 Max** uses the new selector `fal-h3-max`: native T2V or image/video/audio reference-to-video, default 768p, optional 480p/1080p, integer 5–15s; at most 9 images / 3 videos / 3 audios / 12 total. Reference video/audio each 2–15s and each modality totals at most 15s. Source-video modifications use generation with feature references, not typed edit/extend. Reference input tokens are billed in addition to output video; query current pricing.
 
 The legacy `openai` image-model parameter now resolves to GPT Image 2.5 Flare.
+
+`chat --stream` follows the original durable run when its live connection ends before completion. It does not submit another generation; already printed reply text is not replayed.

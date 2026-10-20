@@ -91,15 +91,15 @@ Before publishing:
 - Release any required production API before the npm package that depends on it. Reuse authorization for the agreed release scope; a request to prepare without publishing still takes precedence.
 
 ```bash
-npm --prefix packages/makaron-cli test
-cd packages/makaron-cli
-npm publish --dry-run
-npm publish
-npm view makaron-cli version dist.shasum
-npm dist-tag ls makaron-cli
-npm exec --yes --package=makaron-cli@<published-version> -- makaron --version
-npm exec --yes --package=makaron-cli@<published-version> -- makaron --help
+npm run build:skill-sync
+# 内部 Skill / 路由源变化时，先执行已授权的受控预检；不会生成媒体
+npm run test:skill-routing -- --live --env <已有私密环境文件>
+npm run release:cli:prepare -- --base <合入前提交> --out <临时目录>
+npm publish <prepared.json 指定的.tgz> --access public --tag latest --ignore-scripts
+npm run release:cli:verify -- --tarball <同一个.tgz> --report <验收.json>
 ```
+
+目录来源、自动生成范围、CI 与正文/元数据变更的发布规则见 [Skill 同步机制](agent-guidance/makaron-skill-sync.md)。普通 CI 只检查已提交的路由回执，不调用模型。
 
 Wait for the registry to expose the published version and `latest` tag, then install into a fresh temporary directory and check the affected commands and bundled Skill. Verify the published tarball hash matches the inspected artifact. A successful `npm publish` response alone is not completion evidence.
 

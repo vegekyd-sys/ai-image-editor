@@ -46,6 +46,9 @@ import {
   type NativeVisionImageInput,
 } from './agent-image-analysis';
 import { extractWebSearchSources } from './web-citations';
+import { getTokenRate } from './billing/token-rates';
+import { deepSeekFlashProviderCost, deepSeekFlashTariffMultiplier } from './billing/deepseek-flash-rate';
+import { PricingUnavailableError } from './billing/media-pricing';
 import * as workspace from './workspace';
 import {
   createTools,
@@ -106,8 +109,22 @@ function estTokens(chars: number): number {
 
 export async function buildSystemPrompt(supabase?: any, userId?: string, projectId?: string, mode: CorePromptMode = 'layered'): Promise<string> {
   const base = getAgentSystemPrompt(mode);
-  const manifest = await workspace.getSkillManifest(supabase, userId);
-  const projectPath = projectId ? `${projectId}/` : '';
+  const readMemory = async (path: string): Promise<string> => {
+    if (!supabase || !userId) return '';
+    try {
+      const file = await workspace.readFile(path, supabase, userId);
+      return file?.content || '';
+    } catch {
+      return ''; // No memory file yet.
+    }
+  };
+  // These workspace reads share no inputs. Start them together so a slow
+  // manifest or MEMORY.md lookup does not serialize the first model request.
+  const [manifest, userMemory, projectMemory] = await Promise.all([
+    workspace.getSkillManifest(supabase, userId),
+    readMemory('memory/MEMORY.md'),
+    projectId ? readMemory(`projects/${projectId}/memory/MEMORY.md`) : Promise.resolve(''),
+  ]);
   const workspaceSection = `
 
 ## Workspace
@@ -118,7 +135,7 @@ Tools: \`list_files\`, \`read_file\`, \`write_code_file\`, \`write_file\`, \`del
 
 ### File organization
 - **User-level** (shared across projects): \`skills/\`, \`memory/\`
-- **Project-level** (current project): \`${projectPath}code/\`${projectId ? ` — save composition/code files here` : ''}
+- **Project-level** (current project): the \`code/\` directory inside the project workspace named in "Current project" at the end of this prompt — save composition/code files there.
 - **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
 
 ${mode === 'legacy' ? legacyWorkspaceAuthoring : 'Before coding, read `prompts/agent-coding.md` once. Before creating a reusable skill, read `skills/SKILL_README.md` and an existing skill (for example `skills/makaron-mascot/SKILL.md`). Skills must work across projects; describe a style, technique, or character, not one photo.'}
@@ -126,33 +143,49 @@ ${mode === 'legacy' ? legacyWorkspaceAuthoring : 'Before coding, read `prompts/a
 ${manifest}
 `;
 
-  // Memory injection — read user-level and project-level MEMORY.md
-  let memorySection = '';
-  if (supabase && userId) {
-    try {
-      const userMem = await workspace.readFile('memory/MEMORY.md', supabase, userId);
-      if (userMem?.content) memorySection += '\n\n## User Memory\n' + userMem.content;
-    } catch { /* no user memory yet */ }
-    if (projectId) {
-      try {
-        const projMem = await workspace.readFile(`projects/${projectId}/memory/MEMORY.md`, supabase, userId);
-        if (projMem?.content) memorySection += '\n\n## Project Memory\n' + projMem.content;
-      } catch { /* no project memory yet */ }
-    }
-  }
+  const userMemorySection = userMemory ? '\n\n## User Memory\n' + userMemory : '';
 
-  const full = base + workspaceSection + memorySection;
+  // Keep every project-specific byte after the stable base, manifest, and
+  // user memory. This lets the provider reuse the same prefix when the user
+  // opens a new project without changing any prompt capability.
+  const projectSection = [
+    projectId
+      ? `\n\n## Current project\n\nProject-level workspace files live under \`${projectId}/\`. Save composition/code files in \`${projectId}/code/\`.`
+      : '',
+    projectMemory ? '\n\n## Project Memory\n' + projectMemory : '',
+  ].join('');
+
+  const full = base + workspaceSection + userMemorySection + projectSection;
 
   // Observability — prompt size breakdown
   const baseLen = base.length;
   const wsLen = workspaceSection.length;
-  const memLen = memorySection.length;
+  const memLen = userMemorySection.length + projectSection.length;
+  const cacheablePrefixLen = baseLen + wsLen + userMemorySection.length;
   const total = full.length;
   console.log(
-    `[agent-prompt] mode=${mode} system base=${baseLen} workspace=${wsLen} memory=${memLen} total=${total} chars (~${estTokens(total)} tokens)`
+    `[agent-prompt] mode=${mode} system base=${baseLen} workspace=${wsLen} memory=${memLen} cacheablePrefix=${cacheablePrefixLen} total=${total} chars (~${estTokens(total)} tokens)`
   );
 
   return full;
+}
+
+export interface AgentPromptPrefetch {
+  corePromptMode: Promise<CorePromptMode>;
+  systemPrompt: Promise<string>;
+}
+
+/**
+ * Start read-only prompt loading before prompt-context construction. The
+ * agent still owns fallback behavior, so a failed prefetch cannot remove the
+ * inline prompt build or surface as an unhandled rejection.
+ */
+export function prefetchAgentPrompt(supabase?: any, userId?: string, projectId?: string): AgentPromptPrefetch {
+  const corePromptMode = getCorePromptMode();
+  const systemPrompt = corePromptMode.then(mode => buildSystemPrompt(supabase, userId, projectId, mode));
+  corePromptMode.catch(() => {});
+  systemPrompt.catch(() => {});
+  return { corePromptMode, systemPrompt };
 }
 
 function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?: string): string {
@@ -273,6 +306,8 @@ export interface RunMakaronAgentOptions {
   maxSteps?: number;
   contextCompactAtTokens?: number;
   historyBoundary?: string;
+  /** Started by the caller before prompt-context construction. */
+  promptPrefetch?: AgentPromptPrefetch;
 }
 
 export async function* runMakaronAgent(
@@ -283,8 +318,10 @@ export async function* runMakaronAgent(
   options?: RunMakaronAgentOptions,
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
-  const corePromptMode = await getCorePromptMode();
-  perf?.mark('core_prompt_mode', { mode: corePromptMode });
+  const prefetch = options?.promptPrefetch;
+  const prefetchedMode = prefetch ? await prefetch.corePromptMode.catch(() => null) : null;
+  const corePromptMode = prefetchedMode ?? await getCorePromptMode();
+  perf?.mark('core_prompt_mode', { mode: corePromptMode, prefetched: prefetchedMode !== null });
   const runtime = createAgentModelRuntime(
     options?.agentModel,
     projectId,
@@ -406,9 +443,12 @@ export async function* runMakaronAgent(
     injectedSkillBodies: 0,
     mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
   });
+  const prefetchedSystemPrompt = prefetch && !analysisOnly && !tipReactionOnly
+    ? await prefetch.systemPrompt.catch(() => null)
+    : null;
   const baseSystemPrompt = (analysisOnly || tipReactionOnly)
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
-    : await buildSystemPrompt(options?.supabase, options?.userId, projectId, corePromptMode);
+    : (prefetchedSystemPrompt ?? await buildSystemPrompt(options?.supabase, options?.userId, projectId, corePromptMode));
   const continuationExecution = durableContinuation ? options?.execution : undefined;
   const durableExecutionDirective = continuationExecution
     ? `\n\n## Durable execution contract\nThis is attempt ${continuationExecution.attemptNo} of Agent Run ${continuationExecution.runId}. A later attempt may continue in a fresh model context only after a technical interruption, provider failure, context handoff, or newer user input. Preserve decisions and durable artifact pointers with execution_checkpoint after meaningful progress and before a long, risky generation step. Do not repeat expensive side effects whose tool result is already present. A Studio Run is only a persisted workflow that you follow with studio_run; its stage never decides whether this Agent Run ends or retries. Finish normally when you have completed the current user-facing turn, even if the workflow remains at Review or another stage. If this attempt advances the workflow into Composition, switch to numbered composition parts immediately and never begin a monolithic run_code payload. A newer queued user instruction has precedence over an older delivery target.`
@@ -503,6 +543,15 @@ export async function* runMakaronAgent(
       : 300_000;
     const attemptResults: any[] = [];
     let billedNoCacheTokens = 0;
+    const deepSeekRate = runtime.spec.id === 'deepseek-flash'
+      ? await getTokenRate(runtime.spec.billingModelId)
+      : null;
+    if (runtime.spec.id === 'deepseek-flash' && !deepSeekRate) {
+      throw new PricingUnavailableError('DeepSeek Flash pricing is not configured');
+    }
+    if (deepSeekRate) deepSeekFlashTariffMultiplier(new Date());
+    let deepSeekCostUsd = 0;
+    let modelRequestStartedAt = new Date();
     let billedCacheReadTokens = 0;
     let billedCacheWriteTokens = 0;
     let billedOutputTokens = 0;
@@ -556,6 +605,11 @@ export async function* runMakaronAgent(
       billedCacheWriteTokens += cacheWrite;
       billedOutputTokens += usage.outputTokens ?? 0;
       billedStepMetadata.push({ providerMetadata: event.providerMetadata });
+      if (deepSeekRate) {
+        deepSeekCostUsd += deepSeekFlashProviderCost(deepSeekRate, {
+          noCacheInput: noCache, cacheRead, cacheWrite, output: usage.outputTokens ?? 0,
+        }, modelRequestStartedAt);
+      }
     };
 
     const buildUsageEvent = (): Extract<AgentStreamEvent, { type: 'usage' }> | null => {
@@ -566,7 +620,9 @@ export async function* runMakaronAgent(
       const hitRate = totalInput > 0
         ? ((billedCacheReadTokens / totalInput) * 100).toFixed(1)
         : '0';
-      const providerCostUsd = sumOpenRouterProviderCost(runtime, billedStepMetadata);
+      const providerCostUsd = deepSeekRate
+        ? deepSeekCostUsd
+        : sumOpenRouterProviderCost(runtime, billedStepMetadata);
       const cacheWriteLog = cacheWriteTelemetryComplete
         ? String(billedCacheWriteTokens)
         : 'unreported';
@@ -646,9 +702,12 @@ export async function* runMakaronAgent(
           return true;
         },
       ],
-      prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
-        messages: runtime.normalizeMessages(messages),
-      }),
+      prepareStep: ({ messages }: { messages: ModelMessage[] }) => {
+        // Capture before the request, rather than when its first stream event
+        // arrives: a slow first token may cross a peak/off-peak boundary.
+        modelRequestStartedAt = new Date();
+        return { messages: runtime.normalizeMessages(messages) };
+      },
       onStepFinish: () => { stepCount++; },
       // Durable execution owns retry, failover, and checkpoint semantics. Letting
       // the SDK retry internally turns one timed-out model call into several

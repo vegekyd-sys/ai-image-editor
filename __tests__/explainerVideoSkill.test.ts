@@ -148,7 +148,8 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).not.toContain('generate_music')
 
     expect(skill?.description).toContain('explainer video')
-    expect(skill?.description).toContain('longer than 15s')
+    expect(skill?.description).toContain('selected model limit')
+    expect(skill?.description).not.toContain('longer than 15s')
     expect(rawSkill).toContain('"explainer video"')
     expect(rawSkill).toContain('"Explainer Video"')
     expect(rawSkill).toContain('"解释视频"')
@@ -157,8 +158,8 @@ describe('Explainer Video built-in skill', () => {
     expect(agent).toContain("For output within the selected model's single-generation limit")
     expect(agent).toContain('including explainers, product films, platform-native shorts')
     expect(agent).toContain('Beyond that limit, activate and read the matching Skill')
-    expect(rawSkill).toContain('For a video up to and including 15 seconds')
-    expect(rawSkill).toContain('the explainer label alone does not justify this')
+    expect(rawSkill).toContain('duration above 15 seconds does not require Remotion')
+    expect(rawSkill).toContain('Only continue below for the composition route')
   })
 
   it('uses the first-class Visual Asset Bridge for sticker preparation', () => {

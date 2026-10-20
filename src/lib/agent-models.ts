@@ -40,7 +40,7 @@ export interface AgentModelSpec {
   defaultReasoningEffort?: AgentReasoningEffort;
 }
 
-export const DEFAULT_AGENT_MODEL_ID: AgentModelId = 'gpt-6-luna';
+export const DEFAULT_AGENT_MODEL_ID: AgentModelId = 'deepseek-flash';
 export const DEFAULT_GPT56_AGENT_PROVIDER: GPT56AgentProvider = 'azure-openai';
 
 const GPT56_AGENT_MODEL_IDS = [
@@ -381,7 +381,7 @@ function isRetiredClaudeModel(value: unknown): boolean {
 /**
  * Normalize the public API boundary without keeping Claude as a model option.
  * Old app/CLI clients may still submit a retired Claude id while their cached
- * JavaScript is rolling over; those requests safely move to Auto/Terra. Truly
+ * JavaScript is rolling over; those requests safely move to Auto. Truly
  * unknown values remain invalid so the server can return 400.
  */
 export function normalizeRequestedAgentModelPreference(

@@ -513,19 +513,19 @@ Options:
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --media-manifest <file|-> Import typed image/video media before this run.
-  --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
+  --skill <id|label|name>   Select a built-in/installed skill or auto-install a marketplace skill.
   --agent-model <id>        Agent LLM only: auto, gpt-6-luna, gpt-6.1-sol, gpt-6-sol, gpt-5.6-terra, gpt-5.6-sol,
                             gpt-5.6-luna, grok-4.6, deepseek-v4-pro, deepseek-flash, or a
                             gpt-6.1-sol-codex-subscription, gpt-6-*-codex-subscription, gpt-5.6-*-codex-subscription or
                             grok-4.6-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON (includes per-run "usage" credits).
-  --stream                  Legacy live SSE stream.
+  --stream                  Live SSE; follows the same run after handoff.
   --help, -h                Show this help.
 
-Agent LLM defaults to auto (GPT-6 Luna through the Codex subscription for
-eligible accounts, including admins, or Azure API otherwise). GPT-5.6 and GPT-6
-base ids select Azure API; append -codex-subscription to
+Agent LLM defaults to auto, following the server-configured Agent model.
+When that default is a GPT model, eligible accounts can use the Codex plan.
+GPT-5.6 and GPT-6 base ids select Azure API; append -codex-subscription to
 select the personal plan explicitly. Base grok-4.6 selects OpenRouter API;
 grok-4.6-grok-subscription selects the personal SuperGrok plan. Image/video
 model routing stays automatic in chat.
@@ -542,6 +542,15 @@ What you can ask:
 
   Marketplace skill
     makaron chat --project auto --image selfie.jpg --skill "Football Captain" "make this cinematic"
+
+  Natural-language workflow routing
+    makaron chat --project auto "make a 30s Chinese product explainer"
+    makaron chat --project auto "identify the Skill and outline a plan; stop before media generation"
+
+  Explicit internal video workflows (use the current discovered name)
+    makaron chat --project auto --skill long-video-director "<full narrative brief>"
+    makaron chat --project auto --video reference.mp4 --skill video-edit "<replication brief>"
+    makaron chat --project auto --skill explainer-video "<full explainer brief>"
 
   Built-in production skill
     makaron skills list --built-in
@@ -634,9 +643,15 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
   process.on('SIGINT', sigintHandler);
 
   const results = { images: [], designs: [], animationTasks: [], musicTasks: [], text: '' };
+  let completed = false;
 
   while (true) {
-    const { done, value } = await reader.read();
+    let chunk;
+    try { chunk = await reader.read(); } catch (error) {
+      if (controller.signal.aborted) throw error;
+      break; // The durable run can continue after the SSE connection closes.
+    }
+    const { done, value } = chunk;
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
@@ -702,14 +717,15 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
           break;
 
         case 'done':
+          completed = true;
           break;
       }
     }
   }
 
   process.removeListener('SIGINT', sigintHandler);
-  if (results.text) process.stdout.write('\n');
-  return { runId, results };
+  if (completed && results.text) process.stdout.write('\n');
+  return { runId, results, completed };
 }
 
 // ─── Run + Poll (non-blocking) ──────────────────────────────────────────────
@@ -750,7 +766,9 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
   if (background) return;
 
   let lastSeq = -1;
-  let printedText = '';
+  let printedText = opts.alreadyPrintedText || '';
+  let replayPrefix = printedText;
+  let replayBuffer = '';
   const start = Date.now();
 
   while (true) {
@@ -781,7 +799,15 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         if (json) continue; // skip printing in json mode
         switch (ev.type) {
           case 'content': {
-            const newText = ev.data?.text || '';
+            let newText = ev.data?.text || '';
+            if (replayPrefix) {
+              replayBuffer += newText;
+              if (replayPrefix.startsWith(replayBuffer)) break;
+              newText = replayBuffer.startsWith(replayPrefix)
+                ? replayBuffer.slice(replayPrefix.length) : replayBuffer;
+              replayPrefix = '';
+              replayBuffer = '';
+            }
             process.stdout.write(newText);
             printedText += newText;
             break;
@@ -867,7 +893,8 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         printRunUsage(data.usage);
       }
 
-      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
+      // Let piped JSON drain before exiting; immediate exit truncates long traces.
+      if (data.status === 'failed' || data.status === 'aborted') process.exitCode = 1;
       return data;
     }
   }
@@ -1398,6 +1425,7 @@ function printBuiltInSkill(skill) {
   if (Array.isArray(skill.tags) && skill.tags.length) {
     console.log(`\nKeywords:\n  ${skill.tags.join(', ')}`);
   }
+  console.log('\nThis is a discovery summary; verify production artifacts after the run.');
   console.log('\nUse with chat:');
   const media = skill.sourceMediaRequired ? ' --video <file>' : '';
   console.log(`  makaron chat --project auto${media} --skill ${skill.name} "describe the result you want"`);
@@ -2157,7 +2185,7 @@ function printHelp(topic, subtopic) {
   } else if (topic === 'chat') {
     printChatHelp();
   } else if (topic === 'responses' || topic === 'run') {
-    if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>] [--materialize|--export-compositions] [--publish-exports]');
+    if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--events] [--after <seq>] [--pick <field>] [--materialize|--export-compositions] [--publish-exports]');
     else if (subtopic === 'watch') console.log('Usage: makaron responses watch <runId> [--jsonl] [--interval <ms>]');
     else if (subtopic === 'list') console.log('Usage: makaron responses list --project <id>');
     else console.log(`Responses commands:
@@ -2665,18 +2693,27 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (useStream) {
     // Legacy SSE mode
-    const { runId: streamRunId, results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
+    const { runId: streamRunId, results, completed } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
       agentModel,
       uploadedVideoCount: uploadedTurnVideoCount,
       turnMediaCount: uploadedTurnMediaCount,
     });
-    process.stderr.write('\n━━━ Results ━━━\n');
-    for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
-    for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
-    process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
-    printRunUsage(await fetchRunUsage(baseUrl, headers, streamRunId));
-    for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId, task.snapshotId);
-    for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
+    if (!completed) {
+      if (!streamRunId) {
+        console.error('Stream ended without completion or a run ID; unable to follow the original run.');
+        process.exit(1);
+      }
+      process.stderr.write(`\n↪ Following the same run after stream handoff: ${streamRunId}\n`);
+      await pollRun(baseUrl, headers, streamRunId, { alreadyPrintedText: results.text });
+    } else {
+      process.stderr.write('\n━━━ Results ━━━\n');
+      for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
+      for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
+      process.stderr.write(`🔗  ${APP_URL}/projects/${projectId}\n`);
+      printRunUsage(await fetchRunUsage(baseUrl, headers, streamRunId));
+      for (const task of results.animationTasks) await pollVideo(baseUrl, headers, task.taskId, task.snapshotId);
+      for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
+    }
   } else {
     // Default: fire-and-forget + poll
     const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, {
@@ -2720,10 +2757,16 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   if (sub === 'get') {
     const runId = args[2];
     if (!runId) { console.error('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>] [--materialize|--export-compositions]'); process.exit(1); }
-    let wait = false, jsonOutput = false, pick = null, exportCompositions = false, publishExports = false;
+    let wait = false, jsonOutput = false, pick = null, exportCompositions = false, publishExports = false, includeEvents = false, afterSeq = null;
     for (let i = 3; i < args.length; i++) {
       if (args[i] === '--wait') wait = true;
       if (args[i] === '--json') jsonOutput = true;
+      if (args[i] === '--events') includeEvents = true;
+      if (args[i] === '--after' && args[i + 1]) {
+        afterSeq = Number(args[++i]);
+        if (!Number.isSafeInteger(afterSeq) || afterSeq < 0) throw new Error('--after requires a non-negative integer sequence');
+        includeEvents = true;
+      }
       if (args[i] === '--export-compositions') exportCompositions = true;
       if (args[i] === '--materialize') {
         exportCompositions = true;
@@ -2747,7 +2790,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         console.log(JSON.stringify(data, null, 2));
       }
     } else {
-      const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
+      const eventQuery = includeEvents ? `?events=true${afterSeq !== null ? `&after=${afterSeq}` : ''}` : '';
+      const res = await fetch(`${baseUrl}/api/agent/run/${runId}${eventQuery}`, { headers });
       if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
       let data = await res.json();
       data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
@@ -2760,7 +2804,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       } else {
         console.log(JSON.stringify(data, null, 2));
       }
-      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
+      if (data.status === 'failed' || data.status === 'aborted') process.exitCode = 1;
     }
 
   } else if (sub === 'watch') {

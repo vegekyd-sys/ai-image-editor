@@ -110,9 +110,13 @@ describe('Makaron CLI Agent discovery', () => {
     const pkg = JSON.parse(read('packages/makaron-cli/package.json'))
 
     expect(evals.version).toBe(pkg.version)
-    expect(evals.positive).toHaveLength(5)
+    expect(evals.positive.map(test => test.id)).toEqual([
+      'direct-makaron-product-ad', 'indirect-product-campaign', 'indirect-edit-animate',
+      'indirect-social-pack', 'direct-existing-project', 'internal-long-video-complete',
+      'internal-faithful-video-replication', 'internal-explainer-carrier',
+    ])
     expect(evals.negative).toHaveLength(3)
-    expect(new Set(evals.positive.map((test) => test.id)).size).toBe(5)
+    expect(new Set(evals.positive.map((test) => test.id)).size).toBe(8)
     expect(new Set(evals.negative.map((test) => test.id)).size).toBe(3)
     expect(evals.positive.every((test) => test.prompt && test.expectedSkill && test.expectedBehavior)).toBe(true)
     expect(evals.positive.every((test) => test.expectedSkill === 'makaron')).toBe(true)

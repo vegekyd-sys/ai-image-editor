@@ -34,3 +34,11 @@ it('reads the merged Gemini 3.8 price from the database without a hidden default
   expect(tokensToCredits(rate, 1000, 1000)).toBe(1)
   expect(await getTokenRate('gemini-3.8-flash')).toBeNull()
 })
+
+it('requires the exact Flash rate instead of borrowing a different DeepSeek row', async () => {
+  const wrongRate = { model_id: 'deepseek/deepseek', input_per_1m: 10, output_per_1m: 20, markup: 2, is_active: true }
+  const order = vi.fn().mockResolvedValue({ data: [wrongRate], error: null })
+  mock.from.mockReturnValue({ select: () => ({ eq: () => ({ order }) }) })
+  const { getTokenRate } = await import('@/lib/billing/token-rates')
+  expect(await getTokenRate('deepseek/deepseek-flash')).toBeNull()
+})

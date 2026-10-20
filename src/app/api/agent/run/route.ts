@@ -19,7 +19,7 @@ import {
   DEFAULT_ATTEMPT_MAX_STEPS,
   getAgentContextPolicy,
 } from '@/lib/agent-execution';
-import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
+import { verifySkillLaunchContext } from '@/lib/skill-launch-server';
 import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
 import {
   appendAgentRunInput,

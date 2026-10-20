@@ -108,6 +108,26 @@ describe('local-first workspace runtime', () => {
     )
   })
 
+  it('reads equal-size marketplace updates through new immutable mirror paths despite a warm cache', async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), 'makaron-skill-revision-test-'))
+    const previousCacheDir = process.env.MAKARON_WORKSPACE_CACHE_DIR
+    process.env.MAKARON_WORKSPACE_CACHE_DIR = cacheDir
+    const supabase = createFakeSupabase()
+    const row = { user_id: 'revision-user', path: 'skills/revision/SKILL.md', content_type: 'text/markdown', size_bytes: 3, storage_url: 'https://example.com/marketplace-revisions/v1/SKILL.md', updated_at: '2026-10-12T00:00:00Z' }
+    supabase.rows.push(row)
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(url.includes('/v1/') ? 'OLD' : 'NEW')))
+    try {
+      expect((await workspace.readFile(row.path, supabase, 'revision-user'))?.content).toBe('OLD')
+      row.storage_url = 'https://example.com/marketplace-revisions/v2/SKILL.md'
+      row.updated_at = '2026-10-12T01:00:00Z'
+      expect((await workspace.readFile(row.path, supabase, 'revision-user'))?.content).toBe('NEW')
+    } finally {
+      if (previousCacheDir === undefined) delete process.env.MAKARON_WORKSPACE_CACHE_DIR
+      else process.env.MAKARON_WORKSPACE_CACHE_DIR = previousCacheDir
+      await rm(cacheDir, { recursive: true, force: true })
+    }
+  })
+
   it('writes workspace files to a local mirror before persisting them', async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), 'makaron-workspace-local-test-'))
     const previousCacheDir = process.env.MAKARON_WORKSPACE_CACHE_DIR

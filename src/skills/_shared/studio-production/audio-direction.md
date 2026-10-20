@@ -2,9 +2,20 @@
 
 Treat audio as part of the edit, not a final attachment.
 
+## Choose The Audible Source
+
+Follow `skills/_shared/native-audiovisual.md` before choosing an audio tool.
+Generated scenes use one audiovisual generation with native speech, lip sync,
+music and effects. This remains true inside Studio and when captions are added
+later. Transcribe the accepted VIDEO for timing; preserve its embedded sound.
+Do not manufacture an isolated audio master just to enter Storyboard or Assets.
+The standalone-audio instructions below apply to audio deliverables, local/code
+animation, and explicitly requested soundtrack replacement, not those scenes.
+
 ## Voice
 
-- Lock one audio architecture before generation. If the finished track contains
+- For standalone audio or local/code animation, lock one audio architecture
+  before generation. If the finished track contains
   narration/dialogue plus music, ambience, or SFX, call
   `generate_audio({ kind: "mixed", ... })` exactly once with every layer in the
   same prompt. Do not generate a voice track and supporting track separately.

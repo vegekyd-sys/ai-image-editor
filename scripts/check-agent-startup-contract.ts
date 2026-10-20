@@ -15,12 +15,14 @@ function buildManifest() {
     .map(skillPath => {
       const parsed = parseSkillMd(readFileSync(skillPath, 'utf8'));
       if (!parsed) throw new Error(`Invalid Skill frontmatter: ${path.relative(repoRoot, skillPath)}`);
-      return parsed;
+      return { ...parsed, manifestPath: `skills/${path.basename(path.dirname(skillPath))}/SKILL.md` };
     })
     .filter(skill => !legacyPromptNames.has(skill.name) && skill.makaron?.manifestVisible !== false)
     .map(skill => ({
       name: skill.name,
-      description: skill.description.trim().split('\n')[0],
+      path: skill.manifestPath,
+      description: skill.description.trim().replace(/\s+/g, ' '),
+      ...(skill.makaron?.triggers?.length ? { triggers: skill.makaron.triggers } : {}),
       ...(skill.makaron?.referenceImages?.length ? { referenceImages: skill.makaron.referenceImages } : {}),
       ...(skill.makaron?.modelPreference?.length ? { modelPreference: skill.makaron.modelPreference } : {}),
       ...(skill.makaron?.studioRunRecipe ? { studioRunRecipe: skill.makaron.studioRunRecipe } : {}),

@@ -11,7 +11,10 @@ for transcription.
 
 - Source speech: transcribe the source `media_index` and omit
   `expected_sections`.
-- Generated narration: transcribe the accepted final audio master with the
+- Generated audiovisual scenes: transcribe the accepted video with the approved
+  Script in `expected_sections` and the Composition FPS. Its embedded speech is
+  authoritative; do not generate or transcribe a replacement voice master.
+- Standalone generated narration: transcribe the accepted final audio master with the
   approved Script in `expected_sections` and the Composition FPS.
 
 Persist and reuse that result. Its utterance and word timestamps are the only

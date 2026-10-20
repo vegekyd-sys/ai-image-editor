@@ -310,6 +310,13 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.deepseekFlashDefault.title': 'DeepSeek Flash 成為預設創作助手',
+  'changelog.deepseekFlashDefault.item1': 'Auto 現在預設使用新版 DeepSeek Flash，看懂參考圖和預覽畫面，繼續完成圖片、影片、音樂與可編輯設計創作。',
+  'changelog.deepseekFlashDefault.item2': '可隨時在模型選單選擇 Luna、Sol 或已授權的個人方案；對話按實際輸入、快取和輸出用量計費。',
+  'changelog.nativeAudiovisual.title': "數位人音畫一次生成",
+  'changelog.nativeAudiovisual.item1': "數位人與產品影片可同時生成畫面、口播和音樂；需要準確或可編輯字幕時，保留原聲，只追加文字後製。",
+  'changelog.marketplaceSkillUpdates.title': '範本自動使用最新版',
+  'changelog.marketplaceSkillUpdates.item1': '從市場範本啟動時，現在會自動使用目前發布的最新版 Skill，無需手動刪除重裝；範本未更新時直接重用既有安裝。',
   'changelog.midjourney82.title': 'Midjourney V8.2 與多圖展示',
   'changelog.midjourney82.item1': '新增 Midjourney V8.2，用自然語言描述想法，Makaron 會自動整理為適合模型的英文提示詞。',
   'changelog.midjourney82.item2': '一次生成的多張圖片會沿用原有樣式直向展示，並保留對應提示詞，方便逐張查看、儲存和繼續編輯。',
@@ -1020,7 +1027,8 @@ const zhHant = {
   'changelog.sceneImportReliability.item2': '照片與動態編排的影片片段混剪時，匯出會保留完整時間軸，避免成片被提前截短。',
   'changelog.externalImages.title': 'Scene 圖片可直接用於影片',
   'changelog.externalImages.item1': '從 Scene 匯入的圖片現在會按圖片渲染，Preview 與 MP4 匯出不再把它誤當成影片。',
-  'model.agentAutoDesc': '預設 GPT-6 Luna，使用 Azure API',
+  'model.agentAutoConfiguredDesc': '使用伺服器設定的預設 Agent，按實際模型用量計費',
+  'model.agentAutoDesc': '使用目前預設創作模型',
   'model.agentAutoCodexDesc': '預設 GPT-5.6 Terra，優先使用你的個人 Codex 套餐',
   'model.agentLabel': 'Agent 模型',
   'model.closeAgentSelector': '關閉模型選擇',

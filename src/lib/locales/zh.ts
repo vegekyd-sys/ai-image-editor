@@ -272,6 +272,13 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.deepseekFlashDefault.title': 'DeepSeek Flash 成为默认创作助手',
+  'changelog.deepseekFlashDefault.item1': 'Auto 现在默认使用新版 DeepSeek Flash，看懂参考图和预览画面，继续完成图片、视频、音乐与可编辑设计创作。',
+  'changelog.deepseekFlashDefault.item2': '可随时在模型菜单选择 Luna、Sol 或已授权的个人套餐；对话按实际输入、缓存和输出用量计费。',
+  'changelog.nativeAudiovisual.title': "数字人音画一次生成",
+  'changelog.nativeAudiovisual.item1': "数字人与产品视频可同时生成画面、口播和音乐；需要准确或可编辑字幕时，保留原声，只追加文字后期。",
+  'changelog.marketplaceSkillUpdates.title': '模板自动使用最新版',
+  'changelog.marketplaceSkillUpdates.item1': '从市场模板启动时，现在会自动使用当前发布的最新版 Skill，无需手动删装；模板未更新时直接复用已有安装。',
   'changelog.midjourney82.title': 'Midjourney V8.2 与多图展示',
   'changelog.midjourney82.item1': '新增 Midjourney V8.2，用自然语言描述想法，Makaron 会自动整理为适合模型的英文提示词。',
   'changelog.midjourney82.item2': '一次生成的多张图片会沿用原有样式竖向展示，并保留对应提示词，方便逐张查看、保存和继续编辑。',
@@ -1049,7 +1056,8 @@ const zh = {
   'changelog.sceneImportReliability.item2': '照片与动态编排的视频片段混剪时，导出会保留完整时间线，避免成片被提前截短。',
   'changelog.externalImages.title': 'Scene 图片可直接用于视频',
   'changelog.externalImages.item1': '从 Scene 导入的图片现在会按图片渲染，Preview 与 MP4 导出不再把它误当成视频。',
-  'model.agentAutoDesc': '默认 GPT-6 Luna，走 Azure API',
+  'model.agentAutoConfiguredDesc': '使用服务器配置的默认 Agent，按实际模型用量计费',
+  'model.agentAutoDesc': '使用当前默认创作模型',
   'model.agentAutoCodexDesc': '默认 GPT-5.6 Terra，优先使用你的个人 Codex 套餐',
   'model.agentLabel': 'Agent 模型',
   'model.closeAgentSelector': '关闭模型选择',

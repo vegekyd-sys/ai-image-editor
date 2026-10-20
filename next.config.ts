@@ -67,6 +67,7 @@ const nextConfig: NextConfig = {
       './testcase old/**',
       './test-results/**',
       './app-store-assets/**',
+      './marketing/**',
     ],
   },
   outputFileTracingIncludes: {

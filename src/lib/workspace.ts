@@ -29,7 +29,9 @@ type SupabaseClient = any;
 
 interface BuiltInSkillManifestEntry {
   name: string;
+  path: string;
   description: string;
+  triggers?: string[];
   referenceImages?: string[];
   modelPreference?: string[];
   studioRunRecipe?: string;
@@ -159,7 +161,7 @@ function skillContentHash(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex');
 }
 
-function buildUserSkillManifestEntry(
+export function buildUserSkillManifestEntry(
   filePath: string,
   skillMd: string,
   source: Pick<WorkspaceFile, 'size' | 'updatedAt'> = {},
@@ -366,8 +368,15 @@ async function writeLocalMirror(userId: string, filePath: string, body: string |
   return localPath;
 }
 
+function workspaceMirrorPath(userId: string, file: WorkspaceFile): string {
+  const ordinary = getLocalWorkspacePath(userId, file.path);
+  return file.storageUrl?.includes('/marketplace-revisions/')
+    ? `${ordinary}.revision-${createHash('sha256').update(file.storageUrl).digest('hex').slice(0, 20)}`
+    : ordinary;
+}
+
 async function hydrateLocalMirror(file: WorkspaceFile, userId: string): Promise<WorkspaceFileHandle> {
-  const localPath = getLocalWorkspacePath(userId, file.path);
+  const localPath = workspaceMirrorPath(userId, file);
   if (await localFileMatches(localPath, file.size)) {
     console.log(`[workspace] local hit ${file.path}`);
     return { ...file, localPath, localAvailable: true, hydrated: false };
@@ -434,7 +443,7 @@ async function dbListFiles(supabase: SupabaseClient, userId: string, pattern?: s
   }
 
   return (data || []).map((row: { path: string; content_type: string; size_bytes: number | null; storage_url: string; updated_at: string | null }) => {
-    const localPath = getLocalWorkspacePath(userId, row.path);
+    const localPath = workspaceMirrorPath(userId, { path: row.path, storageUrl: row.storage_url, contentType: row.content_type });
     return {
       path: row.path,
       contentType: row.content_type,
@@ -746,7 +755,7 @@ export async function resolveWorkspaceFile(
       if (options.hydrate) {
         return hydrateLocalMirror(file, userId);
       }
-      const localPath = getLocalWorkspacePath(userId, file.path);
+      const localPath = workspaceMirrorPath(userId, file);
       return {
         ...file,
         localPath,
@@ -848,7 +857,7 @@ export async function listFiles(pattern?: string, supabase?: SupabaseClient, use
  */
 export async function readFile(filePath: string, supabase?: SupabaseClient, userId?: string): Promise<WorkspaceReadResult | null> {
   const cacheKey = `read:${userId || ''}:${filePath}`;
-  const cached = getCached<WorkspaceReadResult>(cacheKey);
+  const cached = supabase && userId && filePath.startsWith('skills/') ? undefined : getCached<WorkspaceReadResult>(cacheKey);
   if (cached) return cached;
 
   // Try Supabase first
@@ -984,7 +993,7 @@ export async function installSkill(opts: {
 /** Get a skill by name. Checks: DB user skills → built-in skills. */
 export async function getSkill(name: string, supabase?: SupabaseClient, userId?: string): Promise<ParsedSkill | null> {
   const cacheKey = `skill:${name}:${userId || ''}`;
-  const cached = getCached<ParsedSkill>(cacheKey);
+  const cached = supabase && userId ? undefined : getCached<ParsedSkill>(cacheKey);
   if (cached) return cached;
 
   // Try DB
@@ -1014,7 +1023,11 @@ const LEGACY_PROMPTS = new Set(['enhance', 'creative', 'wild', 'captions']);
 
 /** Get all skills (built-in SKILL.md + user). Excludes legacy prompt templates. */
 export async function getAllSkills(supabase?: SupabaseClient, userId?: string): Promise<ParsedSkill[]> {
-  const cacheKey = `skills:all:${userId || 'anonymous'}`;
+  // A cheap row-metadata check invalidates discovery across server instances.
+  // Unchanged versions keep parsed bodies cached; updates never reuse old URLs.
+  const userFiles = supabase && userId ? await dbListFiles(supabase, userId, 'skills/%/SKILL.md') : [];
+  const revision = createHash('sha256').update(JSON.stringify(userFiles.map(f => [f.path, f.storageUrl, f.updatedAt]))).digest('hex');
+  const cacheKey = `skills:all:${userId || 'anonymous'}:${revision}`;
   const cached = getCached<ParsedSkill[]>(cacheKey);
   if (cached) return cached;
 
@@ -1023,7 +1036,6 @@ export async function getAllSkills(supabase?: SupabaseClient, userId?: string): 
   const skills = [...builtIn.values()].filter(s => !LEGACY_PROMPTS.has(s.name));
 
   if (supabase && userId) {
-    const userFiles = await dbListFiles(supabase, userId, 'skills/%/SKILL.md');
     const parsedUserSkills = await Promise.all(userFiles.map(async (file) => {
       const pathName = file.path.match(/^skills\/([^/]+)\/SKILL\.md$/)?.[1];
       if (!pathName || builtIn.has(pathName)) return null;
@@ -1064,6 +1076,8 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
   const builtIn = builtInSkillManifest as BuiltInSkillManifestEntry[];
   const lines: string[] = builtIn.map(s => {
     const extras: string[] = [];
+    if (s.path !== `skills/${s.name}/SKILL.md`) extras.push(`read: \`${s.path}\``);
+    if (s.triggers?.length) extras.push(`triggers: ${s.triggers.join('; ')}`);
     if (s.referenceImages?.length) extras.push('has reference images');
     if (s.modelPreference?.length) extras.push(`prefers: ${s.modelPreference.join('/')}`);
     if (s.studioRunRecipe) extras.push(`Studio Run recipe: ${s.studioRunRecipe}`);
@@ -1093,7 +1107,7 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
     return '';
   }
 
-  const manifest = `\n## Available Skills\n\nThis is the semantic routing index. Select a skill when the user request clearly matches its name, description, or trigger, then read \`skills/{name}/SKILL.md\` before planning or choosing tools. The selected Skill owns its workflow. Every video-model generation reads \`prompts/animate.md\` first; that guide indexes any supplied-video work into \`skills/video-edit/SKILL.md\`, which distinguishes source-preserving edits from shot-grammar replication internally. Without source authority, continue direct generation within the selected model's limit regardless of platform, copy, subtitles, branding, or shot count. A named platform is not by itself a workflow override. Explicit Studio/Remotion/editability and source-led assembly remain Composition routes; longer requests may activate the best matching production Skill.\n\n${lines.join('\n')}\n`;
+  const manifest = `\n## Available Skills\n\nThis is the semantic routing index. Select a skill when the user request clearly matches its name, description, or trigger, then read its listed file path (or \`skills/{name}/SKILL.md\` when no path is listed) before planning or choosing tools. A Skill name may differ from its directory; use the listed path without guessing an alias. The selected Skill owns its workflow. Every video-model generation reads \`prompts/animate.md\` first; that guide indexes any supplied-video work into \`skills/video-edit/SKILL.md\`, which distinguishes source-preserving edits from shot-grammar replication internally. Without source authority, continue direct generation within the selected model's limit regardless of platform, copy, subtitles, branding, or shot count. A named platform is not by itself a workflow override. Explicit Studio/Remotion/editability and source-led assembly remain Composition routes; longer requests may activate the best matching production Skill.\n\n${lines.join('\n')}\n`;
   setCache(cacheKey, manifest);
   return manifest;
 }

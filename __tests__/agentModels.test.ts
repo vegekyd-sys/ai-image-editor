@@ -292,15 +292,15 @@ describe('agent model catalog', () => {
     }
   });
 
-  it('keeps the GPT-6 Auto subscription route when an old configured model is retired', () => {
+  it('moves retired configured models to the Flash default without using a personal plan', () => {
     const previousDefault = process.env.AGENT_MODEL;
     const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
     try {
       process.env.AGENT_MODEL = 'us.anthropic.claude-sonnet-5';
       process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
-      expect(defaultsToCodexSubscription('auto', 'owner-id', 'owner-id')).toBe(true);
+      expect(defaultsToCodexSubscription('auto', 'owner-id', 'owner-id')).toBe(false);
       expect(resolveAgentModelSpecForUser('auto', process.env.AGENT_MODEL, 'owner-id', 'azure-openai', true))
-        .toMatchObject({ id: 'gpt-6-luna', provider: 'codex-subscription' });
+        .toMatchObject({ id: 'deepseek-flash', provider: 'deepseek' });
     } finally {
       if (previousDefault === undefined) delete process.env.AGENT_MODEL;
       else process.env.AGENT_MODEL = previousDefault;
@@ -482,11 +482,11 @@ describe('agent model catalog', () => {
     }
   });
 
-  it('defaults auto to GPT-6 Luna and ignores retired Claude AGENT_MODEL values', () => {
-    expect(resolveAgentModelSpec('auto').id).toBe('gpt-6-luna');
+  it('defaults auto to DeepSeek Flash and ignores retired Claude AGENT_MODEL values', () => {
+    expect(resolveAgentModelSpec('auto').id).toBe('deepseek-flash');
     expect(resolveAgentModelSpec('auto', 'gpt-5.6-luna').id).toBe('gpt-5.6-luna');
     expect(resolveAgentModelSpec(undefined, 'us.anthropic.claude-sonnet-5').id)
-      .toBe('gpt-6-luna');
+      .toBe('deepseek-flash');
   });
 
   it('falls invalid client preferences back to auto', () => {
@@ -503,13 +503,13 @@ describe('agent model catalog', () => {
     expect(resolveAgentModelSpec('auto', 'x-ai/grok-4.5').id).toBe('grok-4.6');
   });
 
-  it('rolls retired Claude requests to Auto/Luna but still rejects unknown API ids', () => {
+  it('rolls retired Claude requests to Auto/Flash but still rejects unknown API ids', () => {
     expect(normalizeRequestedAgentModelPreference('sonnet-5')).toBe('auto');
     expect(normalizeRequestedAgentModelPreference('us.anthropic.claude-opus-4-6-v1')).toBe('auto');
     expect(normalizeRequestedAgentModelPreference('arbitrary/provider-model')).toBeNull();
     expect(resolveAgentModelSpec(
       normalizeRequestedAgentModelPreference('sonnet-5') ?? undefined,
-    ).id).toBe('gpt-6-luna');
+    ).id).toBe('deepseek-flash');
   });
 
   it('marks DeepSeek as text-only so image analysis uses the vision helper', () => {
@@ -620,7 +620,7 @@ describe('agent model catalog', () => {
       expect(Object.keys(getAgentProviderTools(
         createAgentModelRuntime('gpt-6-sol', 'project-a'),
       ))).toEqual(['web_search']);
-      const subscriptionAuto = createAgentModelRuntime('auto', 'project-a', 'azure-openai', 'owner', true);
+      const subscriptionAuto = createAgentModelRuntime('gpt-6-luna-codex-subscription', 'project-a', 'azure-openai', 'owner', true);
       expect(subscriptionAuto.spec.provider).toBe('codex-subscription');
       expect(Object.keys(getAgentProviderTools(subscriptionAuto))).toEqual(['web_search']);
       expect(getAgentProviderTools(
@@ -697,9 +697,9 @@ describe('agent model catalog', () => {
 });
 
 describe('DeepSeek V4.1 Flash', () => {
-  it('selects the official multimodal model without changing Auto', () => {
+  it('selects the official multimodal model as the Auto default', () => {
     expect(normalizeRequestedAgentModelPreference('deepseek-flash')).toBe('deepseek-flash');
     expect(resolveAgentModelSpec('deepseek-flash')).toMatchObject({provider: 'deepseek', providerModelId: 'deepseek-flash', billingModelId: 'deepseek/deepseek-flash', supportsImageInput: true});
-    expect(resolveAgentModelSpec('auto').id).toBe('gpt-6-luna');
+    expect(resolveAgentModelSpec('auto').id).toBe('deepseek-flash');
   });
 });

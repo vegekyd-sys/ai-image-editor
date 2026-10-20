@@ -1,9 +1,9 @@
-import { probeMP4Dimensions, probeMP4Duration } from './mp4-probe';
+import { probeMP4Dimensions, probeMP4Duration, probeMP4HasAudio } from './mp4-probe';
 
-export interface ProbedVideoMetadata { width?: number; height?: number; duration?: number }
+export interface ProbedVideoMetadata { width?: number; height?: number; duration?: number; hasAudio?: boolean }
 
 export function probeVideoMetadata(bytes: Uint8Array): ProbedVideoMetadata {
-  return { ...probeMP4Dimensions(bytes), duration: probeMP4Duration(bytes) };
+  return { ...probeMP4Dimensions(bytes), duration: probeMP4Duration(bytes), hasAudio: probeMP4HasAudio(bytes) };
 }
 
 /** Bounded container inspection only: never infer duration from an LLM description. */

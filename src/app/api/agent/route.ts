@@ -20,7 +20,7 @@ import {
   getAgentContextPolicy,
 } from '@/lib/agent-execution';
 import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
-import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
+import { verifySkillLaunchContext } from '@/lib/skill-launch-server';
 import {
   appendAgentRunInput,
   decideAgentRunAdmission,
@@ -58,13 +58,12 @@ export async function POST(req: NextRequest) {
     });
     const locale = getRequestLocale(req);
     const executionOrigin = resolveAgentExecutionWorkerOrigin(req.nextUrl.origin);
-    const [codexSubscriptionAllowed, skillLaunchContext] = await Promise.all([
-      isDynamicCodexSubscriptionUserAllowed(userId),
-      verifySkillLaunchContext(supabase, rawSkillLaunchContext, userId),
-    ]);
-    if (rawSkillLaunchContext && !skillLaunchContext) {
+
+    // Reject malformed requests before any credit check, which may expire a
+    // trial grant or claim welcome credits as part of its billing contract.
+    if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
       return new Response(
-        JSON.stringify({ error: 'Skill template launch could not be verified' }),
+        JSON.stringify({ error: 'projectId and (image or prompt) are required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
       );
     }
@@ -76,34 +75,6 @@ export async function POST(req: NextRequest) {
         { status: 400, headers: { 'Content-Type': 'application/json' } },
       );
     }
-    const resolvedAgentModel = resolveAgentModelSpecForUser(
-      requestedAgentModel,
-      process.env.AGENT_MODEL,
-      userId,
-      undefined,
-      codexSubscriptionAllowed,
-    );
-
-    if (shouldRequireAgentCredits(resolvedAgentModel.provider)) {
-      const endCreditCheck = perf.span('credit_check', { userId });
-      const creditCheck = await requireCredits(userId, 5);
-      endCreditCheck({ ok: creditCheck.ok });
-      if (!creditCheck.ok) return creditCheck.response;
-    }
-
-    if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
-      return new Response(
-        JSON.stringify({ error: 'projectId and (image or prompt) are required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    const MOCK_TEXTS = {
-      tipsTeaser: translate(locale, 'agent.mock.tipsTeaser'),
-      tipReaction: translate(locale, 'agent.mock.tipReaction'),
-      nameProject: translate(locale, 'agent.mock.nameProject'),
-      previewsReady: translate(locale, 'agent.mock.previewsReady'),
-    };
 
     // Only dual-write for normal agent flow (not lightweight teaser/name/reaction/analysis branches)
     const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly;
@@ -117,19 +88,75 @@ export async function POST(req: NextRequest) {
     const writerRuntimePromise = isNormalMode
       ? import('@/lib/agentDualWriter')
       : Promise.resolve(null);
+    agentRuntimePromise.catch(() => { /* surfaced when awaited by the stream */ });
+    durableRunnerPromise.catch(() => { /* surfaced when awaited by the stream */ });
+    writerRuntimePromise.catch(() => { /* surfaced when awaited by the stream */ });
 
-    // Timeline and admission are independent. Keep both off the serial path.
+    // All four gates below are read-only and independent. Start them together;
+    // no rejected request reaches the side-effecting credit check or a write.
     const endProjectLoad = perf.span('load_project', { projectId });
     const projectPromise = supabase.from('projects').select('timeline_version').eq('id', projectId).single();
+    const codexSubscriptionAllowedPromise = isDynamicCodexSubscriptionUserAllowed(userId);
+    const skillLaunchContextPromise = verifySkillLaunchContext(supabase, rawSkillLaunchContext, userId);
     const activeRunPromise = isNormalMode
       ? findActiveAgentRun(supabase, projectId, userId)
       : Promise.resolve(null);
-    const timelineVersionPromise = projectPromise.then(({ data: projectRow }) => {
+    codexSubscriptionAllowedPromise.catch(() => { /* surfaced by Promise.all below */ });
+    skillLaunchContextPromise.catch(() => { /* surfaced by Promise.all below */ });
+    activeRunPromise.catch(() => { /* surfaced by Promise.all below */ });
+    const timelineVersionPromise = Promise.resolve(projectPromise).then(({ data: projectRow }) => {
       const timelineVersion = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
       endProjectLoad({ timelineVersion });
       return timelineVersion;
     });
+    timelineVersionPromise.catch(() => { /* surfaced when awaited by the stream */ });
+
+    const endGate = perf.span('authorize_request', { userId });
+    const [codexSubscriptionAllowed, skillLaunchContext] = await Promise.all([
+      codexSubscriptionAllowedPromise,
+      skillLaunchContextPromise,
+    ]);
     const activeRun = await activeRunPromise;
+    const resolvedAgentModel = resolveAgentModelSpecForUser(
+      requestedAgentModel,
+      process.env.AGENT_MODEL,
+      userId,
+      undefined,
+      codexSubscriptionAllowed,
+    );
+    endGate({ provider: resolvedAgentModel.provider });
+
+    if (rawSkillLaunchContext && !skillLaunchContext) {
+      return new Response(
+        JSON.stringify({ error: 'Skill template launch could not be verified' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const admission = isNormalMode ? decideAgentRunAdmission(activeRun) : null;
+    // A legacy active run cannot accept input safely. Reject it before billing
+    // touches trial or welcome-credit state.
+    if (admission?.kind === 'conflict') {
+      return new Response(JSON.stringify({
+        error: 'active_agent_run_conflict',
+        message: 'The project has an active legacy Agent Run that cannot safely accept another instruction.',
+        runId: admission.runId,
+      }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    if (shouldRequireAgentCredits(resolvedAgentModel.provider)) {
+      const endCreditCheck = perf.span('credit_check', { userId });
+      const creditCheck = await requireCredits(userId, 5);
+      endCreditCheck({ ok: creditCheck.ok });
+      if (!creditCheck.ok) return creditCheck.response;
+    }
+
+    const MOCK_TEXTS = {
+      tipsTeaser: translate(locale, 'agent.mock.tipsTeaser'),
+      tipReaction: translate(locale, 'agent.mock.tipReaction'),
+      nameProject: translate(locale, 'agent.mock.nameProject'),
+      previewsReady: translate(locale, 'agent.mock.previewsReady'),
+    };
 
     let runId: string | null = null;
     let firstMessageId: string | null = null;
@@ -152,9 +179,7 @@ export async function POST(req: NextRequest) {
       input_version: number;
       metadata: Record<string, unknown>;
     } | null = null;
-    if (isNormalMode) {
-      const endRunCreate = perf.span('create_agent_run', { projectId, userId });
-      const admission = decideAgentRunAdmission(activeRun);
+    if (isNormalMode && admission) {
       if (admission.kind === 'append') {
         if (headless) {
           await supabase.from('messages').insert({
@@ -188,14 +213,7 @@ export async function POST(req: NextRequest) {
           },
         });
       }
-      if (admission.kind === 'conflict') {
-        return new Response(JSON.stringify({
-          error: 'active_agent_run_conflict',
-          message: 'The project has an active legacy Agent Run that cannot safely accept another instruction.',
-          runId: admission.runId,
-        }), { status: 409, headers: { 'Content-Type': 'application/json' } });
-      }
-
+      const endRunCreate = perf.span('create_agent_run', { projectId, userId });
       runId = crypto.randomUUID();
       firstMessageId = crypto.randomUUID();
       enterBillingAttribution({ runId, projectId, source: billingSource, apiKeyId: apiKeyId ?? null });

@@ -53,6 +53,7 @@ import { formatAspectRatio } from './media-aspect';
 import { filterWorkspaceFilesForAgentScope } from './agent-workspace-scope';
 import { normalizeCompositionAnimation } from './composition-duration';
 import { createRemotionExportJob } from '@/lib/remotion-export';
+import { materializeStatus } from './agent-materialize-status';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import {
   rebuildAgentSnapshotUrls,
@@ -2972,7 +2973,8 @@ function createStudioRunTool(
 ) {
   return tool({
       description: `Create and advance a Studio workflow invocation inside the current Agent Run for multi-stage video production.
-Use this only when the user explicitly requests Studio, Remotion, an editable composition/timeline, precise programmatic compositing, launches a trusted Skill template, or requests a video longer than 15 seconds whose selected Skill requires Studio. A video up to and including 15 seconds stays on direct \`generate_animation\` even when it is an explainer or includes multiple scenes, voiceover, music, or subtitles.
+Use this only for an explicitly requested Studio production, substantial source-led assembly, or substantial authored/programmatic composition. A Skill launch or duration above 15 seconds alone does not require Studio: a complete generated video within the selected model's single-call limit stays on direct \`generate_animation\`, including presenter films, explainers, multiple scenes, voice, music, and native subtitles. For editable captions over generated footage, generate the complete audiovisual video first, preserve its embedded sound, then use direct composition only for the requested overlays. Never split native picture/voice/music into separate generation jobs to satisfy Studio stages.
+Simple editable captions or a fixed label over one accepted audiovisual clip use direct composition, publish and materialize; they do not require a Studio Run or eight stage artifacts. Do not start the old avatar recipe for that overlay.
 The workflow persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation. When the user explicitly confirms or resumes previous work, call status with its saved run_id; the server can transfer the existing workflow from a stopped Agent Run in the same owner/project while retaining approvals and artifacts. An active previous run cannot be transferred.
 Operations:
 - start: create the run before producing the creative packet. By default it returns only run state, keeping later stage schemas out of the model context. Set include_stage_schemas=true only for legacy/manual authoring.
@@ -3194,6 +3196,19 @@ Review means previewing and patching the Remotion source before export, not auth
             storyboardOverride?: unknown,
           ): Promise<void> => {
             const manifest = studio.validateStudioArtifact('assets', candidate) as Record<string, any>;
+            await studio.assertEmbeddedAudioAssets({
+              assets: manifest.assets,
+              probe: async assetPath => {
+                const { probeVideoMetadata, probeVideoMetadataFromUrl } = await import('./video-metadata');
+                if (/^https?:\/\//i.test(assetPath)) return probeVideoMetadataFromUrl(assetPath, MAX_VIDEO_DIMENSION_PROBE_BYTES);
+                const file = await workspace.resolveWorkspaceFile(assetPath, ctx.supabase, ctx.userId, { hydrate: true });
+                if (file?.localAvailable && file.localPath) {
+                  const { readFile } = await import('node:fs/promises');
+                  return probeVideoMetadata(await readFile(file.localPath));
+                }
+                return file?.storageUrl ? probeVideoMetadataFromUrl(file.storageUrl, MAX_VIDEO_DIMENSION_PROBE_BYTES) : null;
+              },
+            });
             const storyboard = studio.validateStudioArtifact(
               'storyboard',
               storyboardOverride ?? await loadStudioArtifact('storyboard'),
@@ -3660,17 +3675,11 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
             runRemotionExportAfterResponse(job.id);
           }
           return {
-            success: true,
-            queued: job.status !== 'completed',
-            jobId: job.id,
-            status: job.status,
+            ...materializeStatus(job),
             taskId,
             publishSnapshotId,
             renderProfile,
-            studioRunPending: Boolean(studioCheckpoint.studioRunId) && job.status !== 'completed',
-            message: shouldPublish
-              ? `MP4 export submitted. A processing video is in the timeline and will update automatically. Job: ${job.id}`
-              : `MP4 export submitted. Job: ${job.id}`,
+            studioRunPending: Boolean(studioCheckpoint.studioRunId) && job.status !== 'completed' && job.status !== 'failed',
           };
         } catch (err) {
           return { success: false, error: err instanceof Error ? err.message : String(err) };
