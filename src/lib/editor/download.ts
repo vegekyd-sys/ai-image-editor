@@ -4,6 +4,7 @@ import { isNativePhotoLibrarySaveAvailable, saveBlobToNativePhotoLibrary, saveUr
 import { snapFromTimeline } from './timeline-utils';
 import { resolveNativeVideoPlaybackUrl } from '@/lib/video-playback-url';
 import { getOptimizedUrl } from '@/lib/supabase/storage';
+import { loadVideoDownload } from './video-download';
 
 export async function checkMediaDownload(): Promise<boolean> {
   const response = await fetch('/api/media/unlock', { cache: 'no-store' });
@@ -99,9 +100,8 @@ async function loadDownloadAsset(params: DownloadAssetParams): Promise<PreparedD
   const index = snapFromTimeline(viewIndex, draftParentIndex);
   const snap = index === null ? undefined : snapshotsRef.current[index];
   if (isViewingVideo && currentVideoUrl) {
-    const response = await fetch(`/api/proxy-video?url=${encodeURIComponent(currentVideoUrl)}&full=1`);
-    if (!response.ok) throw new Error('Could not load video');
-    return { blob: await response.blob(), filename: `makaron-video-${Date.now()}.mp4`, kind: 'video' };
+    const blob = await loadVideoDownload(currentVideoUrl, 'full');
+    return { blob, filename: `makaron-video-${Date.now()}.mp4`, kind: 'video' };
   }
   if (snap?.design?.animation) {
     document.dispatchEvent(new Event('music-play'));
@@ -240,7 +240,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     projectTitle,
   } = params;
 
-  // Video download — proxy through our API to avoid CORS
+  // Public Storage videos download directly, with the proxy retained as fallback.
   if (isViewingVideo && currentVideoUrl) {
     const videoSrc = currentVideoUrl;
     const filename = `makaron-video-${Date.now()}.mp4`;
@@ -260,10 +260,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
         }
       }
 
-      const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}&download=1`;
-      const res = await fetch(proxyUrl);
-      if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
-      const blob = await res.blob();
+      const blob = await loadVideoDownload(videoSrc, 'download');
       const file = new File([blob], filename, { type: 'video/mp4' });
       // Try native share (iOS/Android) — wrapped in its own try/catch so share failure
       // falls through to blob download instead of navigating away
@@ -283,6 +280,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       link.click();
       URL.revokeObjectURL(url);
       setIsSaving(false);
+      setAgentStatus(t('editor.done'));
       showSaveToast();
     } catch {
       setIsSaving(false);

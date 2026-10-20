@@ -235,6 +235,45 @@ describe('iOS editor image save flow', () => {
     expect(params.showSaveToast).toHaveBeenCalledTimes(1);
   });
 
+  it('prepares a public video directly without bypassing the existing paid-save flow', async () => {
+    const source = 'https://cdn.makaron.app/storage/v1/object/public/images/prepared.mp4';
+    const request = vi.fn().mockResolvedValue(new Response('complete-video'));
+    vi.stubGlobal('fetch', request);
+    const asset = await prepareDownloadAsset(makeParams({ isViewingVideo: true, currentVideoUrl: source }));
+    expect(await asset.blob.text()).toBe('complete-video');
+    expect(asset.kind).toBe('video');
+    expect(request).toHaveBeenCalledExactlyOnceWith(
+      source.replace('cdn.makaron.app', 'sdyrtztrjgmmpnirswxt.supabase.co'),
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(saveUrlToNativePhotoLibrary).not.toHaveBeenCalled();
+    expect(saveBlobToNativePhotoLibrary).not.toHaveBeenCalled();
+  });
+
+  it('saves a public video from the web entry and clears the saving status', async () => {
+    vi.mocked(isNativePhotoLibrarySaveAvailable).mockReturnValue(false);
+    const source = 'https://cdn.makaron.app/storage/v1/object/public/images/saved.mp4';
+    const request = vi.fn().mockResolvedValue(new Response('complete-video'));
+    vi.stubGlobal('fetch', request);
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:saved-video') });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      const params = makeParams({ isViewingVideo: true, currentVideoUrl: source });
+      await downloadAsset(params);
+      expect(request).toHaveBeenCalledExactlyOnceWith(
+        source.replace('cdn.makaron.app', 'sdyrtztrjgmmpnirswxt.supabase.co'),
+        { signal: expect.any(AbortSignal) },
+      );
+      expect(click).toHaveBeenCalledOnce();
+      expect(params.setAgentStatus).toHaveBeenLastCalledWith('editor.done');
+      expect(params.setIsSaving).toHaveBeenLastCalledWith(false);
+      expect(params.showSaveToast).toHaveBeenCalledOnce();
+    } finally {
+      click.mockRestore();
+    }
+  });
+
   it('falls back to the video proxy when native video URL save fails', async () => {
     vi.mocked(saveUrlToNativePhotoLibrary).mockRejectedValueOnce(new Error('video url save failed'));
     vi.stubGlobal('fetch', vi.fn(async () => ({
