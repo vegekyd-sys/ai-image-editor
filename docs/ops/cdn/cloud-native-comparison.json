@@ -1,0 +1,190 @@
+{
+  "started": "2026-10-20T13:34:57.325Z",
+  "candidate": "https://makaron-media-cdn.vegekyd.workers.dev",
+  "results": [
+    {
+      "label": "1-baseline",
+      "http": 200,
+      "seconds": 64.240544,
+      "ttfb": 0.939242,
+      "bytes": 142048671,
+      "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121",
+      "cache": null,
+      "cfCache": "DYNAMIC",
+      "ray": "a4d8672b492619c3-NRT",
+      "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+    },
+    {
+      "label": "1-cold",
+      "http": 200,
+      "seconds": 66.194244,
+      "ttfb": 1.608241,
+      "bytes": 142048671,
+      "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121",
+      "cache": "MISS",
+      "cfCache": null,
+      "ray": "a4d868be7df25c8b-NRT",
+      "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+    },
+    {
+      "label": "1-warm",
+      "http": 200,
+      "seconds": 67.851856,
+      "ttfb": 1.262093,
+      "bytes": 142048671,
+      "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121",
+      "cache": "R2",
+      "cfCache": null,
+      "ray": "a4d86a5f38df21a5-NRT",
+      "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+    },
+    {
+      "label": "1-parallel",
+      "seconds": 17.57511129199999,
+      "bytes": 142048671,
+      "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121",
+      "parts": [
+        {
+          "label": "1-parallel-0",
+          "http": 206,
+          "seconds": 17.478962,
+          "ttfb": 1.74366,
+          "bytes": 35512168,
+          "sha256": "bb6b96e4e56ada4950fe0ceade64364929f0fc4d78dcb1e4a29ca5082c1288ed",
+          "cache": "R2",
+          "cfCache": null,
+          "ray": "a4d86c08d8dfd4d4-NRT",
+          "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+        },
+        {
+          "label": "1-parallel-1",
+          "http": 206,
+          "seconds": 16.430213,
+          "ttfb": 0.789205,
+          "bytes": 35512168,
+          "sha256": "be1e76ff7d54a0a929741a4e3b4db270a97525db2bc68ca9752fa050143138f4",
+          "cache": "R2",
+          "cfCache": null,
+          "ray": "a4d86c04c8320f1b-NRT",
+          "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+        },
+        {
+          "label": "1-parallel-2",
+          "http": 206,
+          "seconds": 16.954071,
+          "ttfb": 1.242743,
+          "bytes": 35512168,
+          "sha256": "2576eebf176cd42f0db55be09329a3aa058dc01c1d1061bdc87e106b6a08acce",
+          "cache": "R2",
+          "cfCache": null,
+          "ray": "a4d86c075ca45087-NRT",
+          "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+        },
+        {
+          "label": "1-parallel-3",
+          "http": 206,
+          "seconds": 16.634071,
+          "ttfb": 0.834789,
+          "bytes": 35512167,
+          "sha256": "f57c30d9b9174cb03f95c689293ee6d113f351375fbaff45a8210685ad334e75",
+          "cache": "R2",
+          "cfCache": null,
+          "ray": "a4d86c04fb355bfc-NRT",
+          "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+        }
+      ]
+    },
+    {
+      "label": "5-baseline",
+      "http": 200,
+      "seconds": 10.108264,
+      "ttfb": 0.890841,
+      "bytes": 19726445,
+      "sha256": "a393f0c381180afd71392ade7d554d3b250b313336e8bbe411904598e24368d7",
+      "cache": null,
+      "cfCache": "DYNAMIC",
+      "ray": "a4d86c72ef40197b-NRT",
+      "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+    },
+    {
+      "label": "5-cold",
+      "http": 200,
+      "seconds": 10.089202,
+      "ttfb": 0.937137,
+      "bytes": 19726445,
+      "sha256": "a393f0c381180afd71392ade7d554d3b250b313336e8bbe411904598e24368d7",
+      "cache": "MISS",
+      "cfCache": null,
+      "ray": "a4d86cb20f47fd57-NRT",
+      "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+    },
+    {
+      "label": "5-warm",
+      "http": 200,
+      "seconds": 9.830411,
+      "ttfb": 0.779587,
+      "bytes": 19726445,
+      "sha256": "a393f0c381180afd71392ade7d554d3b250b313336e8bbe411904598e24368d7",
+      "cache": "HIT",
+      "cfCache": "HIT",
+      "ray": "a4d86cf25d4fd530-NRT",
+      "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+    },
+    {
+      "label": "5-parallel",
+      "seconds": 3.1964963340000248,
+      "bytes": 19726445,
+      "sha256": "a393f0c381180afd71392ade7d554d3b250b313336e8bbe411904598e24368d7",
+      "parts": [
+        {
+          "label": "5-parallel-0",
+          "http": 206,
+          "seconds": 2.961114,
+          "ttfb": 0.584082,
+          "bytes": 4931612,
+          "sha256": "2fc7cc41dc38bb9ce5b3be5144c39e95aecb0d7bd43fb54bddcc4b2af2eb504d",
+          "cache": "HIT",
+          "cfCache": "HIT",
+          "ray": "a4d86d2f1bc4c0b4-NRT",
+          "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+        },
+        {
+          "label": "5-parallel-1",
+          "http": 206,
+          "seconds": 3.026881,
+          "ttfb": 0.765697,
+          "bytes": 4931612,
+          "sha256": "def0562ad5ea5f26d89595f06c523ffd273aa846e3480bcbbc1b01943acedb5f",
+          "cache": "HIT",
+          "cfCache": "HIT",
+          "ray": "a4d86d309a80b5fb-NRT",
+          "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+        },
+        {
+          "label": "5-parallel-2",
+          "http": 206,
+          "seconds": 2.923034,
+          "ttfb": 0.58322,
+          "bytes": 4931612,
+          "sha256": "6f7bf937e0944366a69780df12861357a73d81d52f28c936cde916964cf47e65",
+          "cache": "HIT",
+          "cfCache": "HIT",
+          "ray": "a4d86d2eda5fa9f1-NRT",
+          "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+        },
+        {
+          "label": "5-parallel-3",
+          "http": 206,
+          "seconds": 3.170767,
+          "ttfb": 0.585394,
+          "bytes": 4931609,
+          "sha256": "598c687d6bc24f1bd0768c13af6cfee5b29998caad2acb45802d8309d802ddcd",
+          "cache": "HIT",
+          "cfCache": "HIT",
+          "ray": "a4d86d2f2ce4ebfd-NRT",
+          "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+        }
+      ]
+    }
+  ]
+}

@@ -59,38 +59,6 @@ function withStatus(response, status, freshness) {
   return new Response(response.body, { status: response.status, headers });
 }
 
-// Response.clone()/ReadableStream.tee() can buffer an entire movie when one
-// consumer is slower. Pump to both writers with backpressure instead. A failed
-// replica never breaks the user's download; a cancelled download can finish its
-// replica within waitUntil's remaining lifetime.
-export function boundedCopy(source, streams) {
-  const reader = source.getReader();
-  let writers = streams.map(stream => stream.writable.getWriter());
-  const done = (async () => {
-    try {
-      while (writers.length) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const results = await Promise.allSettled(writers.map(writer => writer.write(value)));
-        writers = writers.filter((writer, index) => {
-          if (results[index].status === 'fulfilled') return true;
-          writer.releaseLock();
-          return false;
-        });
-      }
-      if (!writers.length) await reader.cancel();
-      await Promise.allSettled(writers.map(writer => writer.close()));
-    } catch (error) {
-      await Promise.allSettled(writers.map(writer => writer.abort(error)));
-      throw error;
-    } finally {
-      reader.releaseLock();
-      for (const writer of writers) writer.releaseLock();
-    }
-  })();
-  return { readable: streams[0].readable, done };
-}
-
 function hasUserCookies(headers) {
   const cookies = typeof headers.getSetCookie === 'function' ? headers.getSetCookie() : (headers.get('set-cookie') || '').split(/,(?=\s*[^;,=\s]+=)/);
   // Supabase's public CDN attaches Cloudflare bot-management cookies even to
@@ -105,11 +73,6 @@ function cacheableResponse(headers) {
     && (!headers.get('content-encoding') || headers.get('content-encoding') === 'identity');
 }
 
-async function releaseUnread(promise, readable) {
-  try { return await promise; }
-  finally { await readable.cancel().catch(() => {}); }
-}
-
 function logFailure(operation, error) {
   // Do not log media URLs, query strings, or request headers.
   console.warn(`media-cdn ${operation}: ${error?.name || 'Error'}`);
@@ -118,7 +81,6 @@ function logFailure(operation, error) {
 export function createHandler({
   fetchOrigin = fetch,
   edgeCache = () => caches.default,
-  fixedStream = size => new FixedLengthStream(size),
 } = {}) {
   return async function handle(request, env, ctx) {
     env = { ORIGIN_HOST: 'sdyrtztrjgmmpnirswxt.supabase.co', CDN_HOST: 'cdn.makaron.app', FRESHNESS_SECONDS: '60', MEASURE_ORIGIN: '1', ...env };
@@ -228,7 +190,8 @@ export function createHandler({
           warmEdge(env.MEDIA_CACHE, r2Key, bodyKey, metadata, cache, ctx, ttl);
           return new Response(object.body, { status: 206, headers });
         }
-        return copyToEdge(object.body, bodyKey, metadata, headers, cache, ctx, ttl);
+        warmEdge(env.MEDIA_CACHE, r2Key, bodyKey, metadata, cache, ctx, ttl);
+        return new Response(object.body, { headers });
       }
 
       const response = await fetchAnonymous('GET', range ? {
@@ -249,36 +212,20 @@ export function createHandler({
       }
       headers.set('x-makaron-cache', 'MISS');
       if (range) {
-        fillFromOrigin(fetchAnonymous, env.MEDIA_CACHE, r2Key, metadata, bodyKey, cache, ctx, ttl);
+        fillFromOrigin(fetchAnonymous, env.MEDIA_CACHE, r2Key, metadata, bodyKey, cache, ctx, ttl, env.MEASURE_ORIGIN === '1');
         return new Response(response.body, { status: 206, headers });
       }
-      const download = new TransformStream();
-      const replica = fixedStream(metadata.size);
-      const upload = env.MEDIA_CACHE.put(r2Key, replica.readable, {
-        httpMetadata: new Headers(metadata.headers),
-      });
-      const copied = boundedCopy(response.body, [download, replica]);
-      ctx.waitUntil(Promise.all([copied.done, releaseUnread(upload, replica.readable)])
-        .then(() => warmEdge(env.MEDIA_CACHE, r2Key, bodyKey, metadata, cache, ctx, ttl))
-        .catch(error => logFailure('replica write', error)));
-      return new Response(copied.readable, { headers });
+      // Native streaming preserves Content-Length and avoids JavaScript work per
+      // chunk. A separate, globally locked fill keeps a cache failure or CPU/time
+      // limit from truncating the user's response. Cold full GET costs up to 2x
+      // origin bytes; measure this explicitly before enabling production traffic.
+      fillFromOrigin(fetchAnonymous, env.MEDIA_CACHE, r2Key, metadata, bodyKey, cache, ctx, ttl, env.MEASURE_ORIGIN === '1');
+      return new Response(response.body, { headers });
     } catch (error) {
       logFailure('cache fallback', error);
       return withStatus(await passThrough(), 'BYPASS');
     }
   };
-}
-
-function copyToEdge(body, key, metadata, headers, cache, ctx, ttl) {
-  if (metadata.size > MAX_EDGE_OBJECT) return new Response(body, { headers });
-  const download = new TransformStream();
-  const replica = new TransformStream();
-  const copy = boundedCopy(body, [download, replica]);
-  const put = cache.put(key, new Response(replica.readable, {
-    headers: publicHeaders(new Headers(metadata.headers), 'HIT', ttl),
-  }));
-  ctx.waitUntil(Promise.all([copy.done, releaseUnread(put, replica.readable)]).catch(error => logFailure('edge write', error)));
-  return new Response(copy.readable, { headers });
 }
 
 function warmEdge(bucket, key, bodyKey, metadata, cache, ctx, ttl) {
@@ -297,19 +244,43 @@ function warmEdge(bucket, key, bodyKey, metadata, cache, ctx, ttl) {
   return promise;
 }
 
-function fillFromOrigin(fetchAnonymous, bucket, key, metadata, bodyKey, cache, ctx, ttl) {
+export async function acquireFillLock(bucket, key) {
+  const lockKey = `v1/locks/${key}`;
+  const now = Date.now();
+  const lock = JSON.stringify({ expires: now + 90_000 });
+  let acquired = await bucket.put(lockKey, lock, { onlyIf: { etagDoesNotMatch: '*' } });
+  if (!acquired) {
+    const previous = await bucket.get(lockKey);
+    if (!previous) return null;
+    let expires;
+    try { expires = (await previous.json()).expires; } catch { return null; }
+    if (!Number.isFinite(expires) || expires > now) return null;
+    acquired = await bucket.put(lockKey, lock, { onlyIf: { etagMatches: previous.etag } });
+  }
+  return acquired ? lockKey : null;
+}
+
+function fillFromOrigin(fetchAnonymous, bucket, key, metadata, bodyKey, cache, ctx, ttl, measure = false) {
   if (pendingFills.has(key)) return;
   const promise = (async () => {
-    const full = await fetchAnonymous('GET', { 'if-match': metadata.etag });
-    if (full.status !== 200 || full.headers.get('etag') !== metadata.etag
-      || Number(full.headers.get('content-length')) !== metadata.size || !cacheableResponse(full.headers)) {
-      await full.body?.cancel();
-      return;
+    const lockKey = await acquireFillLock(bucket, key);
+    if (!lockKey) return;
+    {
+      // Another request may have completed between our initial miss and lock.
+      if (await bucket.head(key)) return;
+      const full = await fetchAnonymous('GET', { 'if-match': metadata.etag });
+      if (full.status !== 200 || full.headers.get('etag') !== metadata.etag
+        || Number(full.headers.get('content-length')) !== metadata.size || !cacheableResponse(full.headers)) {
+        await full.body?.cancel();
+        return;
+      }
+      await bucket.put(key, full.body, { httpMetadata: new Headers(metadata.headers) });
+      if (measure) console.log(JSON.stringify({ event: 'media-replica', key: key.split('/')[1].slice(0, 16), completedBytes: metadata.size }));
+      // Keep the fill within the background lifetime. A subsequent R2 hit can
+      // populate the edge independently; chaining both here can exceed 30s.
     }
-    await bucket.put(key, full.body, {
-      httpMetadata: new Headers(metadata.headers),
-    });
-    await warmEdge(bucket, key, bodyKey, metadata, cache, ctx, ttl);
+    // Keep the lease until it expires. Deleting it could remove a new owner's
+    // lease if this fill outlived its 90-second term. Bucket lifecycle clears it.
   })().catch(error => logFailure('range warm', error)).finally(() => pendingFills.delete(key));
   pendingFills.set(key, promise);
   ctx.waitUntil(promise);

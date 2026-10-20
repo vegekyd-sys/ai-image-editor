@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHandler, parseRange, boundedCopy } from '../src/worker.mjs';
+import { createHandler, parseRange, acquireFillLock } from '../src/worker.mjs';
 
 function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', cookie } = {}) {
   let data = new TextEncoder().encode('0123456789abcdef'), etag = '"v1"';
   let missing = false;
-  const calls = [], objects = new Map(), edges = new Map(), tasks = [];
+  const calls = [], objects = new Map(), locks = new Map(), edges = new Map(), tasks = [];
+  let generation = 0;
   const headers = () => ({ ...(cookie ? { 'set-cookie': cookie } : {}), 'content-type': type, 'content-length': String(data.length), etag, 'cache-control': policy, 'last-modified': 'Mon, 19 Oct 2026 00:00:00 GMT' });
   const fetchOrigin = async (input, init = {}) => {
     const req = input instanceof Request ? input : new Request(input, init);
@@ -31,10 +32,22 @@ function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', cookie }
     async delete(req) { return edges.delete(req.url); },
   };
   const bucket = {
-    async get(key, options) { const bytes = objects.get(key); if (!bytes) return null; const range = options?.range; return { body: new Response(range ? bytes.slice(range.offset, range.offset + range.length) : bytes).body }; },
-    async put(key, stream) { objects.set(key, new Uint8Array(await new Response(stream).arrayBuffer())); return {}; },
+    async head(key) { return objects.has(key) ? {} : null; },
+    async get(key, options) {
+      if (key.startsWith('v1/locks/')) { const lock = locks.get(key); return lock ? { etag: lock.etag, json: async () => JSON.parse(lock.body) } : null; }
+      const bytes = objects.get(key); if (!bytes) return null; const range = options?.range; return { body: new Response(range ? bytes.slice(range.offset, range.offset + range.length) : bytes).body };
+    },
+    async put(key, stream, options) {
+      if (typeof stream === 'string') {
+        const previous = locks.get(key);
+        if (options?.onlyIf?.etagDoesNotMatch === '*' && previous) return null;
+        if (options?.onlyIf?.etagMatches && options.onlyIf.etagMatches !== previous?.etag) return null;
+        const etag = String(++generation); locks.set(key, { body: stream, etag }); return { etag };
+      }
+      objects.set(key, new Uint8Array(await new Response(stream).arrayBuffer())); return {};
+    },
   };
-  const handle = createHandler({ fetchOrigin, edgeCache: () => cache, fixedStream: () => new TransformStream() });
+  const handle = createHandler({ fetchOrigin, edgeCache: () => cache,  });
   return {
     calls, objects, edges, bucket,
     change() { data = new TextEncoder().encode('fedcba9876543210'); etag = '"v2"'; edges.clear(); },
@@ -50,10 +63,10 @@ test('cold full response fills R2; warm edge and R2 serve exact bytes without or
   const f = fixture();
   const first = await f.request(); assert.equal(first.headers.get('x-makaron-cache'), 'MISS'); assert.equal(await first.text(), '0123456789abcdef'); await f.settle();
   assert.equal(f.objects.size, 1);
-  const warm = await f.request(); assert.equal(warm.headers.get('x-makaron-cache'), 'HIT'); assert.equal(await warm.text(), '0123456789abcdef');
+  const warm = await f.request(); assert.equal(warm.headers.get('x-makaron-cache'), 'R2'); assert.equal(await warm.text(), '0123456789abcdef'); await f.settle();
   f.edges.clear();
   const r2 = await f.request(); assert.equal(r2.headers.get('x-makaron-cache'), 'R2'); assert.equal(await r2.text(), '0123456789abcdef'); await f.settle();
-  assert.equal(f.calls.filter(c => c.method === 'GET').length, 1);
+  assert.equal(f.calls.filter(c => c.method === 'GET').length, 2);
 });
 test('cold Range returns requested bytes and warms one complete replica', async () => {
   const f = fixture(); const response = await f.request({ headers: { range: 'bytes=4-7' } });
@@ -102,10 +115,10 @@ test('rejected replica writes do not hang or truncate user download', async () =
   const f = fixture(); f.bucket.put = async () => { throw new Error('quota'); };
   const r = await f.request(); assert.equal(await r.text(), '0123456789abcdef'); await f.settle();
 });
-test('bounded copy survives a cancelled replica', async () => {
-  const first = new TransformStream(), second = new TransformStream();
-  const copy = boundedCopy(new Response('some data').body, [first, second]);
-  await second.readable.cancel(); assert.equal(await new Response(copy.readable).text(), 'some data'); await copy.done;
+test('R2 conditional lease prevents duplicate fills across independent requests', async () => {
+  const f = fixture();
+  const leases = await Promise.all([acquireFillLock(f.bucket, 'shared'), acquireFillLock(f.bucket, 'shared'), acquireFillLock(f.bucket, 'shared')]);
+  assert.equal(leases.filter(Boolean).length, 1);
 });
 test('range parser rejects multi-range and unsafe numbers', () => {
   assert.equal(parseRange('bytes=0-1,3-4', 10), 'unsupported'); assert.equal(parseRange('bytes=999999999999999999999-', 10), 'unsupported'); assert.deepEqual(parseRange('bytes=3-99', 10), { offset: 3, length: 7 });
@@ -114,7 +127,7 @@ test('origin no-cache revalidates metadata on every request but reuses stored me
   const f = fixture({ policy: 'no-cache' });
   for (let i = 0; i < 3; i++) { const r = await f.request(); assert.match(r.headers.get('cache-control'), /max-age=0/); await r.text(); await f.settle(); }
   assert.equal(f.calls.filter(c => c.method === 'HEAD').length, 3);
-  assert.equal(f.calls.filter(c => c.method === 'GET').length, 1);
+  assert.equal(f.calls.filter(c => c.method === 'GET').length, 2);
 });
 
 test('only known Cloudflare infrastructure cookies can be removed before caching', async () => {
