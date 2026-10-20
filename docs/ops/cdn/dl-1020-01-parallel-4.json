@@ -1,0 +1,53 @@
+{
+  "elapsed": 17.01112787501188,
+  "bytes": 142048671,
+  "MB_per_second": 8.350338204714765,
+  "parts": [
+    {
+      "part": 0,
+      "exit": 0,
+      "error": "",
+      "code": 206,
+      "total": 16.527407,
+      "speed": 2148683,
+      "cache": "HIT",
+      "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\"",
+      "valid": true
+    },
+    {
+      "part": 1,
+      "exit": 0,
+      "error": "",
+      "code": 206,
+      "total": 16.99152,
+      "speed": 2089993,
+      "cache": "HIT",
+      "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\"",
+      "valid": true
+    },
+    {
+      "part": 2,
+      "exit": 0,
+      "error": "",
+      "code": 206,
+      "total": 16.52891,
+      "speed": 2148488,
+      "cache": "HIT",
+      "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\"",
+      "valid": true
+    },
+    {
+      "part": 3,
+      "exit": 0,
+      "error": "",
+      "code": 206,
+      "total": 16.736948,
+      "speed": 2121782,
+      "cache": "HIT",
+      "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\"",
+      "valid": true
+    }
+  ],
+  "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121",
+  "matches_original": true
+}

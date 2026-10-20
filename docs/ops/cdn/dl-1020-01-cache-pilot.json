@@ -1,0 +1,43 @@
+{
+  "zone": "makaron.app",
+  "rule_id": "80a92d9f490c4c66b643cc7f2a48eb6f",
+  "description": "Bypass 其他",
+  "before_expression": "(http.host eq \"cdn.makaron.app\")",
+  "pilot_expression": "(http.host eq \"cdn.makaron.app\" and not (http.request.method in {\"GET\" \"HEAD\"} and http.request.uri.path in {\"/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/306b00b5-40e8-4e55-b432-1fb70c44f997/media/remotion-waysun-field-to-gate-9x16-proxy-export-2385f1d5.mp4\" \"/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/96af1ad8-9848-4675-a764-0df144c3b246/media/remotion-waysun-first-gate-9x16-104784aa.mp4\" \"/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/99d7d089-78e6-4940-8785-a835d382e972/media/remotion-waysun-aseptic-filling-sealing-9x16-8fd167a5.mp4\" \"/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/6dcf40a2-3cb2-4adb-a9e4-0d4c4d7757a1/media/remotion-waysun-220l-drum-line-en-9x16-2f5df882.mp4\" \"/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/b88cfd6c-fe39-4275-97d2-401d7fbeffb1/media/remotion-ws-en-005-inside-the-lab-86748af9.mp4\" \"/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/6f3ac56d-6a1a-4d54-bff6-1ffbb72cb77a/media/remotion-ws-en-006-one-plant-seven-lines-9x16-en-2e77e9be.mp4\" \"/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/82e611f4-f6bd-48f6-a1e7-d405fa3af493/media/remotion-waysun-stock-on-the-floor-9x16-0589f41e.mp4\" \"/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/32bebf73-8009-476d-a738-0ebf062a79fc/media/remotion-ws-en-008-loading-day-9x16-d1819041.mp4\" \"/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/582e53b2-37e3-45b9-8760-f2660ad0871d/media/remotion-ws-en-009-people-behind-the-line-7030ea7a.mp4\" \"/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/a8de8b40-4a96-4f6d-808a-c0a7fca6f7aa/media/remotion-waysun-factory-asmr-1080x1920-bd9e881d.mp4\"}))",
+  "unchanged_action": "bypass_cache",
+  "public_media_paths": [
+    "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/306b00b5-40e8-4e55-b432-1fb70c44f997/media/remotion-waysun-field-to-gate-9x16-proxy-export-2385f1d5.mp4",
+    "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/96af1ad8-9848-4675-a764-0df144c3b246/media/remotion-waysun-first-gate-9x16-104784aa.mp4",
+    "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/99d7d089-78e6-4940-8785-a835d382e972/media/remotion-waysun-aseptic-filling-sealing-9x16-8fd167a5.mp4",
+    "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/6dcf40a2-3cb2-4adb-a9e4-0d4c4d7757a1/media/remotion-waysun-220l-drum-line-en-9x16-2f5df882.mp4",
+    "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/b88cfd6c-fe39-4275-97d2-401d7fbeffb1/media/remotion-ws-en-005-inside-the-lab-86748af9.mp4",
+    "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/6f3ac56d-6a1a-4d54-bff6-1ffbb72cb77a/media/remotion-ws-en-006-one-plant-seven-lines-9x16-en-2e77e9be.mp4",
+    "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/82e611f4-f6bd-48f6-a1e7-d405fa3af493/media/remotion-waysun-stock-on-the-floor-9x16-0589f41e.mp4",
+    "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/32bebf73-8009-476d-a738-0ebf062a79fc/media/remotion-ws-en-008-loading-day-9x16-d1819041.mp4",
+    "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/582e53b2-37e3-45b9-8760-f2660ad0871d/media/remotion-ws-en-009-people-behind-the-line-7030ea7a.mp4",
+    "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/a8de8b40-4a96-4f6d-808a-c0a7fca6f7aa/media/remotion-waysun-factory-asmr-1080x1920-bd9e881d.mp4"
+  ],
+  "existing_cache_rule": {
+    "id": "c2d104056aef4eff988935c1391c0178",
+    "edge_ttl_seconds": 86400,
+    "ignore_origin_cache_control": true
+  },
+  "status": "completed; cache bypass restored to before_expression",
+  "scope": "10 exact public MP4 paths only; GET/HEAD; manifest and all other paths remain bypassed",
+  "observed_effective_at": "2026-10-20T18:36:18+08:00",
+  "tiered_cache": {
+    "before": "off",
+    "after": "Smart Tiered Cache active",
+    "rollback": "Disable Smart Tiered Cache in zone Caching > Tiered Cache",
+    "benefit_measured": false
+  },
+  "response_header_rule": {
+    "name": "DL-1020-01 range validation headers",
+    "scope": "GET/HEAD on the same ten exact public video paths",
+    "action": "Add Access-Control-Expose-Headers: Content-Range, ETag, Accept-Ranges",
+    "rollback": "Disable this response header transform rule",
+    "verified": "HTTP 206 includes header; browser downloaded 142048671 bytes with matching SHA256",
+    "rule_id": "0ca660fab23d4e338bd1381625d02f51"
+  },
+  "restored_verified": "2026-10-20: HTTP 206, cf-cache-status DYNAMIC, original ETag; CORS exposure remains"
+}
