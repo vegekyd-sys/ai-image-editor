@@ -68,6 +68,10 @@ describe('export media preparation runtime', () => {
     expect(await f.manifest()).toMatchObject({prepared:false,reason:'compatible'});
     expect(await readdir(f.work)).not.toContain('prepared.mp4');
   },30000);
+  it('does not transcode ordinary H.264 solely because its fps exceeds composition fps', async () => {
+    const f = await fixture({fps:60}); await f.run();
+    expect(await f.manifest()).toMatchObject({prepared:false,reason:'compatible'});
+  },30000);
   it('enforces the download budget, removes partials, and redacts signed URLs', async () => {
     const f = await fixture({hevc:true});
     const error = await f.run({maxBytes:10}).catch(e=>e);

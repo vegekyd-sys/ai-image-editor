@@ -71,8 +71,9 @@ try {
     // A remote metadata read uses Range; ordinary H.264 sources need no full download/transcode.
     const original = await probe(config.url,true);
     const targetFps = Math.min(original.fps || config.fps, config.fps);
+    const highResolution = original.width * original.height >= 3840 * 2160;
     const needsPreparation = !original.alpha && (original.codec !== 'h264' || original.pixelFormat !== 'yuv420p'
-      || original.fps > config.fps + 0.1 || original.bitrate > 50000000);
+      || (highResolution && original.fps > config.fps + 0.1) || original.bitrate > 50000000);
     if (!needsPreparation) {
       await fs.writeFile(manifestFile,JSON.stringify({prepared:false,original,reason:original.alpha?'preserve-alpha':'compatible'}));
     } else {
