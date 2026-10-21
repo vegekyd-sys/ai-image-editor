@@ -3913,16 +3913,12 @@ Returns the rendered image so you can see it with your vision.`,
 
           try {
             const contactSignal = AbortSignal.any([...(ctx.abortSignal ? [ctx.abortSignal] : []), AbortSignal.timeout(360_000)]);
-            const { renderDesignFrame } = await import('./remotion-server');
+            const { renderDesignFrames } = await import('./remotion-server');
             const { createContactSheet } = await import('./contact-sheet');
             // Each call starts a renderer/decoder process. Keep one active so
             // a contact sheet does not multiply large-source downloads and
             // decoder memory by its frame count inside the source-set Sandbox.
-            const rendered: Buffer[] = [];
-            for (const targetFrame of targetFrames) {
-              contactSignal.throwIfAborted();
-              rendered.push(await renderDesignFrame(design, targetFrame, { signal: contactSignal }));
-            }
+            const rendered = await renderDesignFrames(design, targetFrames, { signal: contactSignal });
             ctx.abortSignal?.throwIfAborted();
             const stamp = Date.now();
             const framePaths = targetFrames.map(targetFrame => `${ctx.projectId}/drafts/design-contact-frame${targetFrame}-${stamp}.jpg`);

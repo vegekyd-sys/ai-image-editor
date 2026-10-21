@@ -5,7 +5,7 @@ vi.mock('@/lib/remotion-font-resolver',()=>({resolveRemotionFontManifestUrlForDe
 const state=vi.hoisted(()=>({created:[] as string[],release:undefined as undefined|(()=>void)}));
 vi.mock('@vercel/sandbox',()=>({Sandbox:{create:async()=>{
   const id=String(state.created.length);state.created.push(id);
-  return {status:'running',writeFiles:async()=>undefined,readFileToBuffer:async()=>Buffer.from('jpeg'),
+  return {status:'running',stop:async()=>undefined,writeFiles:async()=>undefined,readFileToBuffer:async()=>Buffer.from('jpeg'),
     runCommand:async({args}:{args:string[]})=>({
       kill:async()=>undefined,
       wait:async()=>{if(id==='0'&&args[0].includes('prefetch'))await new Promise<void>(resolve=>{state.release=resolve;});return {exitCode:0};},

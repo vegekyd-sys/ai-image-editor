@@ -97,6 +97,7 @@ marketing/meta-ads/
 !/scripts/verify-image-billing-preview.mjs
 !/scripts/backfill-annual-subscription-credits.mjs
 !/scripts/audit-liquid-glass-perf.mjs
+!/scripts/audit-sandbox-cost.mjs
 !/scripts/benchmark-google-omni-1-1.mjs
 !/scripts/check-ui-i18n.mjs
 !/scripts/check-video-reference-workflow.mjs
