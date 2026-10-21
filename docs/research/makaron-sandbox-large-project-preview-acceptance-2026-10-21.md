@@ -1,5 +1,7 @@
 # Makaron Sandbox：真实大项目隔离 Preview 验收
 
+后续更新：本文件保留第一轮未通过的历史结果。恢复速度、跨进程缓存与截图持久化的修复及三轮通过证据，见[后续修复验收](makaron-sandbox-preview-recovery-acceptance-2026-10-21.md)。
+
 2026-10-21。独立 worktree：`makaron-sandbox-cost/ai-image-editor`，分支 `codex/makaron-sandbox-cost-20261021`。未合并、未发布生产。
 
 ## 当前结论
