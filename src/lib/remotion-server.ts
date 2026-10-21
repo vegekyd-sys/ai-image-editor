@@ -80,9 +80,9 @@ export function prepareRemotionCodeForSandbox(code: string): string {
 ${normalized}`;
 }
 
-async function createSandboxSession(kind: 'preview' | 'export', signal?: AbortSignal): Promise<SandboxSession> {
+async function createSandboxSession(kind: 'preview' | 'export', signal?: AbortSignal, cachedSnapshotId?: string): Promise<SandboxSession> {
   const { Sandbox } = await import('@vercel/sandbox');
-  const snapshotId = process.env.REMOTION_SNAPSHOT_ID;
+  const snapshotId = cachedSnapshotId || process.env.REMOTION_SNAPSHOT_ID;
   if (!snapshotId) throw new Error('REMOTION_SNAPSHOT_ID not set');
   const defaultVcpus = kind === 'preview' ? 2 : 8;
   const configured = Number((kind === 'preview' && readEnv('REMOTION_PREVIEW_SANDBOX_VCPUS')) || readEnv('REMOTION_SANDBOX_VCPUS') || defaultVcpus);
@@ -109,10 +109,24 @@ const previewSessions = new PreviewSessionCache<SandboxInstance>(
   value => stopSandboxSession({promise:value}),
   work => after(work),
   Math.min(600_000, Math.max(20_000, Number(readEnv('REMOTION_PREVIEW_IDLE_MS')) || 25_000)),
+  SANDBOX_LIFETIME_MS,
+  async (value,key) => {
+    if (!key.startsWith('media:') || readEnv('REMOTION_PREVIEW_DISK_CACHE') === 'off') {
+      await stopSandboxSession({promise:value});
+      return undefined;
+    }
+    const sandbox = await value;
+    const started = Date.now();
+    // Files only: no paid running VM during a user's thinking time. These
+    // owner/source/runtime-scoped cache snapshots expire automatically.
+    const snapshot = await sandbox.snapshot({expiration:15*60_000,signal:AbortSignal.timeout(30_000)});
+    console.log('[remotion-preview-suspended]',JSON.stringify({sandboxId:sandbox.sandboxId,snapshotId:snapshot.snapshotId,sizeBytes:snapshot.sizeBytes,suspendMs:Date.now()-started,expiresAt:snapshot.expiresAt?.toISOString()}));
+    return () => createSandboxSession('preview',undefined,snapshot.snapshotId).then(entry=>entry.promise);
+  },
 );
 
 function previewSessionKey(design: DesignPayload, scope: string): string {
-  return createHash('sha256').update(JSON.stringify([
+  return (collectPreviewMediaSources(design).length ? 'media:' : 'text:') + createHash('sha256').update(JSON.stringify([
     scope, process.env.REMOTION_SNAPSHOT_ID,
     readEnv('REMOTION_PREVIEW_SANDBOX_VCPUS') || readEnv('REMOTION_SANDBOX_VCPUS') || '2',
     collectPreviewMediaSources(design).map(source => source.url),

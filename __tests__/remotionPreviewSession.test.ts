@@ -48,4 +48,18 @@ describe('owner-scoped preview grace period',()=>{
     controller.abort(new Error('cancelled'));expect(await cancelled).toBe('cancelled');expect(calls).toEqual(['first']);
     finish();await Promise.all([first,third]);expect(calls).toEqual(['first','third']);
   });
+  it('resumes the owner-scoped disk snapshot after compute is released',async()=>{
+    const create=vi.fn(async()=>({id:'base'})),resume=vi.fn(async()=>({id:'restored'})),hibernate=vi.fn(async()=>resume);
+    const pool=new PreviewSessionCache(async()=>{},()=>{},25_000,600_000,hibernate);
+    const first=pool.acquire('owner:A:media',create);await pool.release('owner:A:media',first.session,true);
+    await vi.advanceTimersByTimeAsync(25_000);expect(hibernate).toHaveBeenCalledOnce();
+    const next=pool.acquire('owner:A:media',create);expect(await next.session.value).toEqual({id:'restored'});
+    expect(create).toHaveBeenCalledOnce();expect(resume).toHaveBeenCalledOnce();
+  });
+  it('falls back to a fresh runtime if the saved disk snapshot has expired',async()=>{
+    const create=vi.fn(async()=>({id:'base'})),resume=vi.fn(async()=>{throw Error('snapshot expired');});
+    const pool=new PreviewSessionCache<{id:string}>(async()=>{},()=>{},25_000,600_000,async()=>resume);
+    const first=pool.acquire('a',create);await pool.release('a',first.session,true);await vi.advanceTimersByTimeAsync(25_000);
+    const next=pool.acquire('a',create);expect(await next.session.value).toEqual({id:'base'});expect(create).toHaveBeenCalledTimes(2);
+  });
 });
