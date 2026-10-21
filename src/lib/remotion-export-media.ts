@@ -90,7 +90,8 @@ function mediaStore(): ExportMediaStore {
 
 /** One VM per export, serial bounded preparation; large files never pass through the app heap. */
 export async function createExportMediaRunner(signal: AbortSignal): Promise<ExportMediaRunner> {
-  const useSandbox = Boolean(env('VERCEL') || env('MEDIA_SANDBOX_SNAPSHOT_ID')) && env('MEDIA_SANDBOX_EXECUTOR') !== 'local';
+  const useSandbox = (env('MEDIA_SANDBOX_EXECUTOR') === 'vercel' || Boolean(env('VERCEL') || env('MEDIA_SANDBOX_SNAPSHOT_ID')))
+    && env('MEDIA_SANDBOX_EXECUTOR') !== 'local';
   if (!useSandbox) {
     const root = await mkdtemp(path.join(tmpdir(), 'makaron-export-media-'));
     const script = path.join(root, 'prepare.cjs');

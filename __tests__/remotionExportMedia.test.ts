@@ -26,7 +26,7 @@ async function fixture(options: {hevc?: boolean; rotate4k?: boolean; fps?: numbe
     '-c:v',options.hevc?'libx265':'libx264','-preset','ultrafast',
     ...(options.hevc?['-x265-params','pools=1:frame-threads=1:log-level=error']:[]),
     '-threads','2','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart',encoded]);
-  await exec(ffmpeg, ['-v','error','-i',encoded,'-c','copy',...(options.rotate4k?['-metadata:s:v:0','rotate=90']:[]),source]);
+  await exec(ffmpeg, ['-v','error',...(options.rotate4k?['-display_rotation','90']:[]),'-i',encoded,'-c','copy',source]);
   const bytes = await readFile(source);
   const server = createServer((req, res) => {
     const range = req.headers.range?.match(/bytes=(\d+)-(\d*)/);
