@@ -982,6 +982,10 @@ const CHANGELOG: ChangelogEntry[] = [
 ];
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  fasterFrameChecks: {
+    title: 'changelog.fasterFrameChecks.title',
+    items: ['changelog.fasterFrameChecks.item1'],
+  },
   reliable4kExport: {
     title: 'changelog.reliable4kExport.title',
     items: ['changelog.reliable4kExport.item1'],
