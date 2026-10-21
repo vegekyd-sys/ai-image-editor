@@ -32,8 +32,9 @@ export function localizePreviewMedia(design: DesignPayload, sources: PreviewMedi
   const replacements = new Map(sources.map(source => [source.url, source.path]));
   function replace(value: unknown): unknown {
     if (typeof value === 'string') {
-      for (const [url, path] of replacements) value = (value as string).split(url).join(path);
-      return value;
+      // Match complete URL tokens: a prepared URL must not rewrite a different
+      // signed/variant source merely because it shares the same path prefix.
+      return value.replace(URL_PATTERN, url => replacements.get(url) || url);
     }
     if (Array.isArray(value)) return value.map(replace);
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replace(item)]));

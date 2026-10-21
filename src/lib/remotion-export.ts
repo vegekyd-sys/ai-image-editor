@@ -133,6 +133,11 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function exportErrorMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error))
+    .replace(/https?:\/\/[^\s"'<>]+/g, '[URL]')
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -910,7 +915,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
         })
       } catch (err) {
         if (!directOutputDestination) throw err
-        directOutputError = err instanceof Error ? err.message : String(err)
+        directOutputError = exportErrorMessage(err)
         console.warn('[remotion-export] Lambda direct Supabase output failed; retrying with default Lambda output:', directOutputError)
         await admin.from('remotion_export_jobs').update({
           heartbeat_at: nowIso(),
@@ -1120,7 +1125,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
 
     return { job: updated as RemotionExportJob, design: resolvedDesign }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = exportErrorMessage(err)
     await markPublishedSnapshotsFailed(admin, job, message)
     await admin.from('remotion_export_jobs').update({
       status: 'failed',

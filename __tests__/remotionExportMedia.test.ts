@@ -117,4 +117,23 @@ describe('public export pipeline media contract', () => {
       .rejects.toThrow('Export media preparation failed: Failed [URL]');
     expect(b.store.commit).not.toHaveBeenCalled(); expect(b.runner.stop).toHaveBeenCalled();
   });
+  it('does not replace an unprepared URL that shares a prepared URL prefix', async () => {
+    const b = backend();
+    b.runner.prepare.mockResolvedValueOnce(manifest).mockResolvedValueOnce({...manifest,prepared:false});
+    const src='https://example.com/video.mp4';
+    const original={width:1080,height:1920,code:'function Design(){}',props:{first:src,variant:src+'?version=other'}};
+    const result=await prepareRemotionExportMedia(original,{userId:'owner',...b});
+    expect(result.design.props?.first).toContain('compatible.mp4');
+    expect(result.design.props?.variant).toBe(src+'?version=other');
+  });
+  it('shares concurrent preparation but signs each caller separately', async () => {
+    const b=backend(); let release!:()=>void;
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    b.runner.prepare.mockImplementationOnce(async()=>{await gate;return manifest;});
+    const d={width:1080,height:1920,code:'<Video src="https://example.com/concurrent.mp4"/>'};
+    const first=prepareRemotionExportMedia(d,{userId:'owner',...b});
+    const second=prepareRemotionExportMedia(d,{userId:'owner',...b});
+    release(); await Promise.all([first,second]);
+    expect(b.runner.prepare).toHaveBeenCalledTimes(1); expect(b.store.renderUrl).toHaveBeenCalledTimes(2);
+  });
 });
