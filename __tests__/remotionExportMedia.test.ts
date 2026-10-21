@@ -82,7 +82,7 @@ describe('export media preparation runtime', () => {
   },30000);
 });
 
-const manifest = {prepared:true,bytes:100,original:{codec:'hevc',width:3840,height:2160,fps:60,duration:25,audioStreams:1,hdr:false,alpha:false}} satisfies ExportMediaManifest;
+const manifest: ExportMediaManifest = {prepared:true,bytes:100,original:{codec:'hevc',width:3840,height:2160,fps:60,duration:25,audioStreams:1,hdr:false,alpha:false}};
 function backend() {
   const cache = new Map<string,ExportMediaManifest>();
   const store: ExportMediaStore = {
