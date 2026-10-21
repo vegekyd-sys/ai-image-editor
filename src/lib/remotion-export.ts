@@ -19,6 +19,7 @@ import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import type { RemotionLambdaOutputDestination } from '@/lib/remotion-lambda-renderer'
 import { normalizeCompositionAnimation } from '@/lib/composition-duration'
 import { measureAudioLoudness } from '@/lib/ffmpeg-runtime'
+import { EXPORT_MEDIA_RECIPE, prepareRemotionExportMedia } from '@/lib/remotion-export-media'
 import {
   DEFAULT_REMOTION_EXPORT_LEGACY_JOB_SLOTS,
   estimateRemotionExportLambdaSlots,
@@ -270,6 +271,7 @@ function fingerprintDesign(
     : null
   const payload = {
     renderer: 'remotion-export-v6-font-runtime-pinned',
+    exportMediaRecipe: readEnv('REMOTION_EXPORT_PREPARE_MEDIA') === 'false' ? null : EXPORT_MEDIA_RECIPE,
     remotionVersion: REMOTION_VERSION,
     fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION,
     fontRuntimeVersion: REMOTION_FONT_RUNTIME_VERSION,
@@ -863,6 +865,23 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
     let publicUrl: string
     let finalWorkspacePath = workspacePath
     const outputMetadata: Record<string, unknown> = {}
+    // Only the disposable render copy gets compatible sources. The authored design,
+    // published editable snapshot and original 4K media retain their source URLs/trims.
+    const preparedMedia = job.output_type === 'video'
+      ? await prepareRemotionExportMedia(resolvedDesign, {
+          userId: job.user_id,
+          onHeartbeat: async () => {
+            const { error } = await admin.from('remotion_export_jobs').update({heartbeat_at: nowIso()}).eq('id', job.id)
+            if (error) throw new Error(error.message)
+          },
+        })
+      : { design: resolvedDesign, summary: undefined }
+    const renderDesign = preparedMedia.design
+    if (preparedMedia.summary) {
+      outputMetadata.mediaPreparation = preparedMedia.summary
+      job.metadata = { ...(job.metadata || {}), mediaPreparation: preparedMedia.summary }
+      await admin.from('remotion_export_jobs').update({metadata: job.metadata, heartbeat_at: nowIso()}).eq('id', job.id)
+    }
     if (job.output_type === 'video' && readEnv('REMOTION_RENDERER') === 'lambda') {
       const { renderDesignVideoLambdaToUrl } = await import('@/lib/remotion-lambda-renderer')
       const directOutputDestination = job.publish
@@ -873,7 +892,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
       let directOutputError: string | null = null
       let lambdaResult: Awaited<ReturnType<typeof renderDesignVideoLambdaToUrl>>
       try {
-        lambdaResult = await renderDesignVideoLambdaToUrl(resolvedDesign, {
+        lambdaResult = await renderDesignVideoLambdaToUrl(renderDesign, {
           scale: renderTarget.scale,
           onProgress: updateProgress,
           outputDestination: directOutputDestination || undefined,
@@ -891,7 +910,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
           },
         }).eq('id', job.id)
         const retryStart = Date.now()
-        lambdaResult = await renderDesignVideoLambdaToUrl(resolvedDesign, {
+        lambdaResult = await renderDesignVideoLambdaToUrl(renderDesign, {
           scale: renderTarget.scale,
           onProgress: updateProgress,
         })
@@ -997,7 +1016,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
       outputMetadata.lambdaTimings = lambdaResult.timings
     } else {
       const buffer = job.output_type === 'video'
-        ? await renderDesignVideo(resolvedDesign, {
+        ? await renderDesignVideo(renderDesign, {
             scale: renderTarget.scale,
             onProgress: updateProgress,
           })
