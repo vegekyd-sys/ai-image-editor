@@ -5,7 +5,10 @@
  * Always stop it when the operation ends, including failure/cancellation.
  */
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { after } from 'next/server';
+import { PreviewSessionCache } from './remotion-preview-session';
+import { readPreviewMemory, type PreviewRenderMetrics } from './remotion-preview-metrics';
 import { awaitPreviewOperation, runPreviewCommand } from './remotion-preview-command';
 import type { DesignPayload } from '@/types';
 import { hasRemotionAudioSources } from '@/lib/remotion-audio';
@@ -102,6 +105,20 @@ async function stopSandboxSession(entry: SandboxSession): Promise<void> {
   });
 }
 
+const previewSessions = new PreviewSessionCache<SandboxInstance>(
+  value => stopSandboxSession({promise:value}),
+  work => after(work),
+  Math.min(600_000, Math.max(20_000, Number(readEnv('REMOTION_PREVIEW_IDLE_MS')) || 25_000)),
+);
+
+function previewSessionKey(design: DesignPayload, scope: string): string {
+  return createHash('sha256').update(JSON.stringify([
+    scope, process.env.REMOTION_SNAPSHOT_ID,
+    readEnv('REMOTION_PREVIEW_SANDBOX_VCPUS') || readEnv('REMOTION_SANDBOX_VCPUS') || '2',
+    collectPreviewMediaSources(design).map(source => source.url),
+  ])).digest('hex');
+}
+
 // ─── Public API ────────────────────────────────────────────────────────────
 
 /**
@@ -112,7 +129,7 @@ async function stopSandboxSession(entry: SandboxSession): Promise<void> {
 export async function renderDesignFrame(
   design: DesignPayload,
   frame = 0,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; sandboxScope?: string; onMetrics?: (metrics: PreviewRenderMetrics) => void } = {},
 ): Promise<Buffer> {
   return (await renderDesignFrames(design, [frame], options))[0]!;
 }
@@ -120,7 +137,7 @@ export async function renderDesignFrame(
 export async function renderDesignFrames(
   design: DesignPayload,
   frames: number[],
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; sandboxScope?: string; onMetrics?: (metrics: PreviewRenderMetrics) => void } = {},
 ): Promise<Buffer[]> {
   options.signal?.throwIfAborted();
   if (!frames.length) return [];
@@ -149,10 +166,14 @@ export async function renderDesignFrames(
   }), frameSignal);
   // Retry once if Sandbox is gone (410/expired)
   for (let attempt = 0; attempt < 2; attempt++) {
-    const entry = await createSandboxSession('preview', frameSignal);
-    try {
-      const sandbox = await awaitPreviewOperation(entry.promise, frameSignal);
+    const key = options.sandboxScope ? previewSessionKey(design, options.sandboxScope) : undefined;
+    const lease = key ? previewSessions.acquire(key, () => createSandboxSession('preview', frameSignal).then(entry => entry.promise)) : undefined;
+    const entry = lease ? {promise:lease.session.value} : await createSandboxSession('preview', frameSignal);
+    let successful = false;
+    const render = async (sandbox: SandboxInstance): Promise<Buffer[]> => {
+      const prefetchStart = Date.now();
       const renderDesign = await preparePreviewMedia(design, sandbox, AbortSignal.any([frameSignal, AbortSignal.timeout(240_000)]));
+      const metrics: PreviewRenderMetrics = {sandboxId:sandbox.sandboxId,reused:lease?.reused || false,prefetchMs:Date.now()-prefetchStart,frameMs:[],sourceCount:collectPreviewMediaSources(design).length};
       const buffers: Buffer[] = [];
       for (const frame of frames) {
         frameSignal.throwIfAborted();
@@ -202,8 +223,22 @@ export async function renderDesignFrames(
 
         console.log(`✅ [remotion-server] Frame rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s: ${(buffer.length / 1024).toFixed(0)} KB`);
         buffers.push(buffer);
+        metrics.frameMs.push(Date.now()-t0);
+      }
+      if (options.onMetrics || readEnv('REMOTION_PREVIEW_METRICS') === 'true') {
+        metrics.memory = await readPreviewMemory(sandbox).catch(() => undefined);
+        options.onMetrics?.(metrics);
+        console.log('[remotion-preview-metrics]',JSON.stringify(metrics));
       }
       return buffers;
+    };
+    try {
+      const result = lease
+        ? await previewSessions.run(lease.session, render, frameSignal)
+        : await render(await awaitPreviewOperation(entry.promise, frameSignal));
+      successful = true;
+      console.log('[remotion-preview-session]', JSON.stringify({reused:lease?.reused || false, frames:frames.length, scoped:Boolean(key)}));
+      return result;
     } catch (err) {
       frameSignal.throwIfAborted();
       const msg = err instanceof Error ? err.message : String(err);
@@ -213,7 +248,8 @@ export async function renderDesignFrames(
       }
       throw err;
     } finally {
-      await stopSandboxSession(entry);
+      if (lease && key) await previewSessions.release(key, lease.session, successful);
+      else await stopSandboxSession(entry);
     }
   }
   throw new Error('renderDesignFrame: all attempts failed');

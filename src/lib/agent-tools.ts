@@ -3918,7 +3918,7 @@ Returns the rendered image so you can see it with your vision.`,
             // Each call starts a renderer/decoder process. Keep one active so
             // a contact sheet does not multiply large-source downloads and
             // decoder memory by its frame count inside the source-set Sandbox.
-            const rendered = await renderDesignFrames(design, targetFrames, { signal: contactSignal });
+            const rendered = await renderDesignFrames(design, targetFrames, { signal: contactSignal, sandboxScope: `${ctx.userId}:${ctx.projectId}` });
             ctx.abortSignal?.throwIfAborted();
             const stamp = Date.now();
             const framePaths = targetFrames.map(targetFrame => `${ctx.projectId}/drafts/design-contact-frame${targetFrame}-${stamp}.jpg`);
@@ -4081,7 +4081,7 @@ Returns the rendered image so you can see it with your vision.`,
         try {
           // Server-side Sandbox rendering
           const { renderDesignFrame } = await import('./remotion-server');
-          const jpegBuffer = await renderDesignFrame(design, targetFrame, { signal: ctx.abortSignal });
+          const jpegBuffer = await renderDesignFrame(design, targetFrame, { signal: ctx.abortSignal, sandboxScope: `${ctx.userId}:${ctx.projectId}` });
           ctx.abortSignal?.throwIfAborted();
 
           const drafts = (ctx as any).__runCodeDrafts || [];
