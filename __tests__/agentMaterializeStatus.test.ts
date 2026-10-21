@@ -5,6 +5,7 @@ import type { RemotionExportJob } from '@/lib/remotion-export';
 
 const job: RemotionExportJob = { id: 'export-1', project_id: 'p1', user_id: 'u1', output_type: 'video', publish: true, status: 'completed', storage_url: 'https://cdn.example/finished.mp4', completed_at: '2026-10-17T13:30:00Z' };
 const cached = { success: true, jobId: job.id, status: 'queued', queued: true, publishSnapshotId: 'original-snapshot', studioRunPending: true };
+const staleCompleted = { ...cached, status: 'completed', url: job.storage_url, workspacePath: 'p1/old.mp4', completedAt: job.completed_at, statusVerified: true };
 const owner = { userId: 'u1', projectId: 'p1' };
 const lookup = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/remotion-export', () => ({ getRemotionExportJob: lookup, resolveRemotionExportDownloadUrl: async (value: RemotionExportJob) => value.storage_url }));
@@ -36,13 +37,28 @@ describe('materialize export status replay', () => {
   });
 
   it.each([null, { ...job, user_id: 'other' }, { ...job, project_id: 'other' }])('does not expose an unverified job', async (value) => {
-    const result = await refreshMaterializeStatus(cached, owner, async () => value);
-    expect(result).toMatchObject({ success: false, status: 'unknown' });
-    expect(result).not.toHaveProperty('url');
+    expect(await refreshMaterializeStatus(staleCompleted, owner, async () => value)).toEqual({
+      success: false,
+      jobId: job.id,
+      status: 'unknown',
+      error: 'Could not verify this export job in the current project. Do not create a duplicate.',
+    });
   });
 
   it('does not claim queue status when the read fails', async () => {
-    expect(await refreshMaterializeStatus(cached, owner, async () => { throw new Error('DB unavailable'); })).toMatchObject({ success: false, status: 'unknown' });
+    expect(await refreshMaterializeStatus(staleCompleted, owner, async () => { throw new Error('DB unavailable'); })).toEqual({
+      success: false,
+      jobId: job.id,
+      status: 'unknown',
+      error: 'Export status could not be refreshed. Keep the existing job and retry the status check; do not create a duplicate.',
+    });
+  });
+
+  it.each([undefined, null, 42])('leaves cached results without a string job ID untouched (%s)', async (jobId) => {
+    const original = { ...cached, jobId };
+    const readJob = vi.fn();
+    expect(await refreshMaterializeStatus(original, owner, readJob)).toBe(original);
+    expect(readJob).not.toHaveBeenCalled();
   });
 
   it('returns the completed file from the initial tool response too', () => {
