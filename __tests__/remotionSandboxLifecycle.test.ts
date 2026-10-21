@@ -36,7 +36,7 @@ describe('Remotion operation-scoped Sandbox lifecycle', () => {
     await renderDesignFrame(design);
     expect(second.stop).toHaveBeenCalledOnce();
     expect(state.create).toHaveBeenCalledTimes(2);
-    expect(state.create).toHaveBeenCalledWith(expect.objectContaining({resources:{vcpus:2}}));
+    expect(state.create).toHaveBeenCalledWith(expect.objectContaining({resources:{vcpus:4}}));
   });
   it('keeps sequential contact-sheet frames and their source download in one VM', async () => {
     const box=sandbox(); state.create.mockResolvedValue(box);
@@ -91,11 +91,11 @@ describe('Remotion operation-scoped Sandbox lifecycle', () => {
   it('preserves export capacity, stops after reading the MP4, and supports a preview-only override', async () => {
     const box=sandbox(); state.create.mockResolvedValue(box);
     state.renderVideo.mockResolvedValue({sandboxFilePath:'/tmp/test.mp4'});
-    vi.stubEnv('REMOTION_PREVIEW_SANDBOX_VCPUS','4');
+    vi.stubEnv('REMOTION_PREVIEW_SANDBOX_VCPUS','2');
     await renderDesignVideo(design);
     expect(state.create).toHaveBeenLastCalledWith(expect.objectContaining({resources:{vcpus:8}}));
     expect(box.stop).toHaveBeenCalledOnce();
     await renderDesignFrame(design);
-    expect(state.create).toHaveBeenLastCalledWith(expect.objectContaining({resources:{vcpus:4}}));
+    expect(state.create).toHaveBeenLastCalledWith(expect.objectContaining({resources:{vcpus:2}}));
   });
 });

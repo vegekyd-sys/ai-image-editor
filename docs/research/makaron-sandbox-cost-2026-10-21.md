@@ -2,7 +2,7 @@
 
 日期：2026-10-21。基线：`dev@07081d87`。独立分支：`codex/makaron-sandbox-cost-20261021`。
 
-状态：代码与真实 Sandbox 验证均在独立 worktree；未合并、未部署，生产账单尚无实际降幅。
+状态更新：下文保留第一阶段审计和本地实验的历史记录。之后已部署隔离 Preview，并以真实大项目发现 2 核及即时释放的体验回退；当前采用 4 核候选、25 秒释放和磁盘快照，完整结果见 [真实大项目 Preview 验收](makaron-sandbox-large-project-preview-acceptance-2026-10-21.md)。未合并、未发布生产，生产账单尚无实际降幅。
 
 ## 结论
 

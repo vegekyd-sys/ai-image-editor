@@ -1,8 +1,8 @@
 /**
  * Server-side Remotion rendering via Vercel Sandbox.
  * Uses Snapshot for fast startup + font caching.
- * A Sandbox belongs to one render operation (or explicit multi-frame batch).
- * Always stop it when the operation ends, including failure/cancellation.
+ * Scoped previews reuse one VM for a short idle window, then retain only disk.
+ * Unscoped operations, failures and cancellations stop their VM immediately.
  */
 
 import { createHash, randomUUID } from 'node:crypto';
@@ -84,7 +84,8 @@ async function createSandboxSession(kind: 'preview' | 'export', signal?: AbortSi
   const { Sandbox } = await import('@vercel/sandbox');
   const snapshotId = cachedSnapshotId || process.env.REMOTION_SNAPSHOT_ID;
   if (!snapshotId) throw new Error('REMOTION_SNAPSHOT_ID not set');
-  const defaultVcpus = kind === 'preview' ? 2 : 8;
+  // Large-project repeats regressed at 2 CPUs; 4 retained 8-CPU warm latency.
+  const defaultVcpus = kind === 'preview' ? 4 : 8;
   const configured = Number((kind === 'preview' && readEnv('REMOTION_PREVIEW_SANDBOX_VCPUS')) || readEnv('REMOTION_SANDBOX_VCPUS') || defaultVcpus);
   const vcpus = [1, 2, 4, 6, 8].includes(configured) ? configured : defaultVcpus;
   const promise = Sandbox.create({
@@ -136,7 +137,7 @@ const previewSessions = new PreviewSessionCache<SandboxInstance>(
 function previewSessionKey(design: DesignPayload, scope: string): string {
   return (collectPreviewMediaSources(design).length ? 'media:' : 'text:') + createHash('sha256').update(JSON.stringify([
     scope, process.env.REMOTION_SNAPSHOT_ID,
-    readEnv('REMOTION_PREVIEW_SANDBOX_VCPUS') || readEnv('REMOTION_SANDBOX_VCPUS') || '2',
+    readEnv('REMOTION_PREVIEW_SANDBOX_VCPUS') || readEnv('REMOTION_SANDBOX_VCPUS') || '4',
     collectPreviewMediaSources(design).map(source => source.url),
   ])).digest('hex');
 }
@@ -146,7 +147,7 @@ function previewSessionKey(design: DesignPayload, scope: string): string {
 /**
  * Render a single frame of a Remotion design via Vercel Sandbox.
  * Use renderDesignFrames for a contact sheet so sources stay cached until the
- * whole batch is complete. A single-frame call releases its VM immediately.
+ * whole batch is complete. Scoped calls share the short idle window.
  */
 export async function renderDesignFrame(
   design: DesignPayload,
