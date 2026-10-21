@@ -17,12 +17,13 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'deepseekFlashDefault' | 'nativeAudiovisual' | 'marketplaceSkillUpdates' | 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'reliable4kExport' | 'deepseekFlashDefault' | 'nativeAudiovisual' | 'marketplaceSkillUpdates' | 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-10-21', localeKey: 'reliable4kExport' },
   { date: '2026-10-17', localeKey: 'deepseekFlashDefault' },
   { date: '2026-10-14', localeKey: 'nativeAudiovisual' },
   { date: '2026-10-12', localeKey: 'marketplaceSkillUpdates' },
@@ -980,6 +981,10 @@ const CHANGELOG: ChangelogEntry[] = [
 ];
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  reliable4kExport: {
+    title: 'changelog.reliable4kExport.title',
+    items: ['changelog.reliable4kExport.item1'],
+  },
   deepseekFlashDefault: { title: 'changelog.deepseekFlashDefault.title', items: ['changelog.deepseekFlashDefault.item1', 'changelog.deepseekFlashDefault.item2'] },
   nativeAudiovisual: { title: 'changelog.nativeAudiovisual.title', items: ['changelog.nativeAudiovisual.item1'] },
   marketplaceSkillUpdates: { title: 'changelog.marketplaceSkillUpdates.title', items: ['changelog.marketplaceSkillUpdates.item1'] },
