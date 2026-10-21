@@ -272,6 +272,8 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.fasterFrameChecks.title': "Faster frame checks, more reliable screenshots",
+  'changelog.fasterFrameChecks.item1': "Check multiple video frames faster and reuse prepared media on follow-up checks. Screenshot saving now retries temporary network failures.",
   'changelog.reliable4kExport.title': "More reliable exports with 4K footage",
   'changelog.reliable4kExport.item1': "Exports now automatically prepare compatible video copies to reduce failures with 4K footage, while preserving original media and editable projects.",
   'changelog.deepseekFlashDefault.title': 'DeepSeek Flash is now the default creative assistant',

@@ -310,6 +310,8 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.fasterFrameChecks.title': "多影格檢查更快，截圖儲存更可靠",
+  'changelog.fasterFrameChecks.item1': "連續檢查多個影片畫面更快；再次檢查可重用已準備的素材，截圖儲存遇到短暫網路異常會自動重試。",
   'changelog.reliable4kExport.title': "4K 素材匯出更穩定",
   'changelog.reliable4kExport.item1': "匯出前自動準備相容的影片副本，減少 4K 素材造成的匯出失敗；原始素材與可編輯專案完整保留。",
   'changelog.deepseekFlashDefault.title': 'DeepSeek Flash 成為預設創作助手',

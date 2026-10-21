@@ -272,6 +272,8 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.fasterFrameChecks.title': "多帧检查更快，截图保存更可靠",
+  'changelog.fasterFrameChecks.item1': "连续检查多个视频画面更快；再次检查可复用已准备的素材，截图保存遇到短暂网络异常会自动重试。",
   'changelog.reliable4kExport.title': "4K 素材导出更稳定",
   'changelog.reliable4kExport.item1': "导出前自动准备兼容的视频副本，减少 4K 素材导致的导出失败；原始素材与可编辑项目完整保留。",
   'changelog.deepseekFlashDefault.title': 'DeepSeek Flash 成为默认创作助手',
