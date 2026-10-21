@@ -272,6 +272,8 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.reliable4kExport.title': "More reliable exports with 4K footage",
+  'changelog.reliable4kExport.item1': "Exports now automatically prepare compatible video copies to reduce failures with 4K footage, while preserving original media and editable projects.",
   'changelog.deepseekFlashDefault.title': 'DeepSeek Flash is now the default creative assistant',
   'changelog.deepseekFlashDefault.item1': 'Auto now uses the latest DeepSeek Flash to understand reference images and previews and continue creating images, videos, music and editable designs.',
   'changelog.deepseekFlashDefault.item2': 'Choose Luna, Sol or an authorized personal plan from the model menu anytime. Chat billing follows actual input, cached input and output usage.',
