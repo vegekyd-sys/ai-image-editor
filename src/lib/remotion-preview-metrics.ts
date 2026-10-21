@@ -6,6 +6,9 @@ export interface PreviewRenderMetrics {
   prefetchMs: number;
   frameMs: number[];
   sourceCount: number;
+  processId?: string;
+  cacheOrigin?: string;
+  batchMs?: number;
   memory?: Record<string, number | string | null>;
 }
 

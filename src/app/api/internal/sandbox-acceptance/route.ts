@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     const images = await renderDesignFrames(JSON.parse(saved.content),frames,{
       signal:req.signal,
       sandboxScope:`${userId}:${project.id}`,
+      freshSession:body.freshSession===true,
       onMetrics:value=>{metrics=value;},
     });
     return NextResponse.json({elapsedMs:Date.now()-started,metrics,frames,images:images.map(image=>image.toString('base64'))},{headers:{'Cache-Control':'no-store'}});

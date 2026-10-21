@@ -15,6 +15,8 @@ import { hasRemotionAudioSources } from '@/lib/remotion-audio';
 import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver';
 import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization';
 import { collectPreviewMediaSources, localizePreviewMedia, PREVIEW_MEDIA_PREFETCH_SCRIPT } from './remotion-preview-media';
+import { PREVIEW_BATCH_SCRIPT } from './remotion-preview-batch';
+import {readPreviewCheckpoint,writePreviewCheckpoint} from './remotion-preview-checkpoint';
 
 function readEnv(name: string): string | undefined {
   const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim();
@@ -106,7 +108,29 @@ async function stopSandboxSession(entry: SandboxSession): Promise<void> {
   });
 }
 
-const previewSessions = new PreviewSessionCache<SandboxInstance>(
+const previewProcessId=randomUUID();
+const resumedSandboxes=new WeakMap<SandboxInstance,{resume:()=>Promise<SandboxInstance>;origin:string}>();
+const sharedCheckpointsEnabled=()=>readEnv('REMOTION_PREVIEW_SHARED_CACHE')==='true';
+function checkpointResume(snapshotId:string,origin='local-checkpoint'):()=>Promise<SandboxInstance>{
+  const resume=async()=>{
+    const sandbox=await createSandboxSession('preview',undefined,snapshotId).then(entry=>entry.promise);
+    resumedSandboxes.set(sandbox,{resume,origin});
+    return sandbox;
+  };
+  return resume;
+}
+async function createPreviewSandbox(key:string|undefined,signal:AbortSignal):Promise<SandboxInstance>{
+  if(key?.startsWith('media:')&&sharedCheckpointsEnabled()){
+    const cached=await readPreviewCheckpoint(key,signal).catch(()=>undefined);
+    signal.throwIfAborted();
+    if(cached){
+      try{return await checkpointResume(cached.snapshotId,'shared-checkpoint')();}
+      catch{signal.throwIfAborted();console.warn('[preview-cache] expired snapshot; rebuilding');}
+    }
+  }
+  return createSandboxSession('preview',signal).then(entry=>entry.promise);
+}
+function makePreviewSessions(){return new PreviewSessionCache<SandboxInstance>(
   value => stopSandboxSession({promise:value}),
   work => after(work),
   Math.min(600_000, Math.max(20_000, Number(readEnv('REMOTION_PREVIEW_IDLE_MS')) || 25_000)),
@@ -130,13 +154,22 @@ const previewSessions = new PreviewSessionCache<SandboxInstance>(
     // any millisecond duration. One checkpoint is reused for this source set.
     const snapshot = await sandbox.snapshot({expiration:24*60*60_000,signal:AbortSignal.timeout(30_000)});
     console.log('[remotion-preview-suspended]',JSON.stringify({sandboxId:sandbox.sandboxId,snapshotId:snapshot.snapshotId,sizeBytes:snapshot.sizeBytes,suspendMs:Date.now()-started,expiresAt:snapshot.expiresAt?.toISOString()}));
-    return () => createSandboxSession('preview',undefined,snapshot.snapshotId).then(entry=>entry.promise);
+    if(sharedCheckpointsEnabled()){
+      await writePreviewCheckpoint({version:1,key,snapshotId:snapshot.snapshotId,sizeBytes:snapshot.sizeBytes,expiresAt:snapshot.expiresAt?.getTime()||Date.now()+86400_000})
+        .catch(()=>console.warn('[preview-cache] checkpoint could not be shared'));
+    }
+    return checkpointResume(snapshot.snapshotId);
   },
-);
+  // Publish the first source checkpoint immediately after the first batch.
+  // The next Agent request must not wait 25 seconds for a process-local timer.
+  (key,session)=>key.startsWith('media:')&&sharedCheckpointsEnabled()&&!session.resume?0:
+    Math.min(600_000,Math.max(20_000,Number(readEnv('REMOTION_PREVIEW_IDLE_MS'))||25_000)),
+);}
+const previewSessions=makePreviewSessions();
 
 function previewSessionKey(design: DesignPayload, scope: string): string {
   return (collectPreviewMediaSources(design).length ? 'media:' : 'text:') + createHash('sha256').update(JSON.stringify([
-    scope, process.env.REMOTION_SNAPSHOT_ID,
+    'preview-batch-v1',scope, process.env.REMOTION_SNAPSHOT_ID,
     readEnv('REMOTION_PREVIEW_SANDBOX_VCPUS') || readEnv('REMOTION_SANDBOX_VCPUS') || '4',
     collectPreviewMediaSources(design).map(source => source.url),
   ])).digest('hex');
@@ -152,7 +185,7 @@ function previewSessionKey(design: DesignPayload, scope: string): string {
 export async function renderDesignFrame(
   design: DesignPayload,
   frame = 0,
-  options: { signal?: AbortSignal; sandboxScope?: string; onMetrics?: (metrics: PreviewRenderMetrics) => void } = {},
+  options: { signal?: AbortSignal; sandboxScope?: string; onMetrics?: (metrics: PreviewRenderMetrics) => void; freshSession?: boolean } = {},
 ): Promise<Buffer> {
   return (await renderDesignFrames(design, [frame], options))[0]!;
 }
@@ -160,7 +193,7 @@ export async function renderDesignFrame(
 export async function renderDesignFrames(
   design: DesignPayload,
   frames: number[],
-  options: { signal?: AbortSignal; sandboxScope?: string; onMetrics?: (metrics: PreviewRenderMetrics) => void } = {},
+  options: { signal?: AbortSignal; sandboxScope?: string; onMetrics?: (metrics: PreviewRenderMetrics) => void; freshSession?: boolean } = {},
 ): Promise<Buffer[]> {
   options.signal?.throwIfAborted();
   if (!frames.length) return [];
@@ -190,20 +223,17 @@ export async function renderDesignFrames(
   // Retry once if Sandbox is gone (410/expired)
   for (let attempt = 0; attempt < 2; attempt++) {
     const key = options.sandboxScope ? previewSessionKey(design, options.sandboxScope) : undefined;
-    const lease = key ? previewSessions.acquire(key, () => createSandboxSession('preview', frameSignal).then(entry => entry.promise)) : undefined;
+    const pool=options.freshSession?makePreviewSessions():previewSessions;
+    const lease = key ? pool.acquire(key, () => createPreviewSandbox(key,frameSignal)) : undefined;
     const entry = lease ? {promise:lease.session.value} : await createSandboxSession('preview', frameSignal);
     let successful = false;
     const render = async (sandbox: SandboxInstance): Promise<Buffer[]> => {
+      const resumed=resumedSandboxes.get(sandbox);
+      if(lease&&resumed)lease.session.resume=resumed.resume;
       const prefetchStart = Date.now();
       const renderDesign = await preparePreviewMedia(design, sandbox, AbortSignal.any([frameSignal, AbortSignal.timeout(240_000)]));
-      const metrics: PreviewRenderMetrics = {sandboxId:sandbox.sandboxId,reused:lease?.reused || false,prefetchMs:Date.now()-prefetchStart,frameMs:[],sourceCount:collectPreviewMediaSources(design).length};
-      const buffers: Buffer[] = [];
-      for (const frame of frames) {
-        frameSignal.throwIfAborted();
-        const outputFile = `/tmp/still-${frame}-${randomUUID()}.jpeg`;
-        const t0 = Date.now();
-        console.log(`🎨 [remotion-server] Rendering frame ${frame} (${design.width}x${design.height})${attempt > 0 ? ' [retry]' : ''}...`);
-        await runPreviewCommand(sandbox, ['render-still.mjs', JSON.stringify({
+      const metrics: PreviewRenderMetrics = {sandboxId:sandbox.sandboxId,reused:lease?.reused || false,prefetchMs:Date.now()-prefetchStart,frameMs:[],sourceCount:collectPreviewMediaSources(design).length,processId:previewProcessId,cacheOrigin:lease?.reused?'warm':resumed?.origin||'cold'};
+      const makeFrameConfig = (frame:number,outputFile:string) => ({
           serveUrl: '/vercel/sandbox/remotion-bundle',
           compositionId: 'dynamic-design',
           inputProps: {
@@ -238,13 +268,34 @@ export async function renderDesignFrames(
           chromeMode: 'headless-shell',
           browserExecutable: null,
           binariesDirectory: null,
-        })], AbortSignal.any([frameSignal, AbortSignal.timeout(60_000)]));
-
-        options.signal?.throwIfAborted();
+        });
+      const buffers: Buffer[] = [];
+      if(frames.length>1 && readEnv('REMOTION_PREVIEW_BATCH_RENDERER')==='true'){
+        const id=randomUUID();
+        const outputs=frames.map((frame,index)=>`/tmp/batch-${id}-${index}-${frame}.jpeg`);
+        const inputPath=`/tmp/batch-${id}.json`;
+        await awaitPreviewOperation(sandbox.writeFiles([
+          {path:'/vercel/sandbox/makaron-render-frames-v1.mjs',content:Buffer.from(PREVIEW_BATCH_SCRIPT)},
+          {path:inputPath,content:Buffer.from(JSON.stringify({config:makeFrameConfig(0,''),frames:frames.map(frame=>Math.min(frame,durationInFrames-1)),outputs}))},
+        ],{signal:frameSignal}),frameSignal);
+        const started=Date.now();
+        await runPreviewCommand(sandbox,['/vercel/sandbox/makaron-render-frames-v1.mjs',inputPath],frameSignal);
+        metrics.batchMs=Date.now()-started;
+        for(const output of outputs){
+          const buffer=await awaitPreviewOperation(sandbox.readFileToBuffer({path:output},{signal:frameSignal}),frameSignal);
+          if(!buffer)throw new Error('Rendered file not found in Sandbox');
+          buffers.push(buffer);
+        }
+        const timing=await sandbox.readFileToBuffer({path:outputs[0]+'.metrics.json'},{signal:frameSignal}).catch(()=>undefined);
+        try{metrics.frameMs=JSON.parse(timing?.toString()||'{}').frameMs||[];}catch{/* Metrics must not discard captured images. */}
+      }else for (const frame of frames) {
+        frameSignal.throwIfAborted();
+        const outputFile = `/tmp/still-${frame}-${randomUUID()}.jpeg`;
+        const t0 = Date.now();
+        console.log(`🎨 [remotion-server] Rendering frame ${frame} (${design.width}x${design.height})...`);
+        await runPreviewCommand(sandbox, ['render-still.mjs', JSON.stringify(makeFrameConfig(frame,outputFile))], AbortSignal.any([frameSignal, AbortSignal.timeout(60_000)]));
         const buffer = await awaitPreviewOperation(sandbox.readFileToBuffer({ path: outputFile }, {signal:frameSignal}), frameSignal);
         if (!buffer) throw new Error('Rendered file not found in Sandbox');
-
-        console.log(`✅ [remotion-server] Frame rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s: ${(buffer.length / 1024).toFixed(0)} KB`);
         buffers.push(buffer);
         metrics.frameMs.push(Date.now()-t0);
       }
@@ -257,7 +308,7 @@ export async function renderDesignFrames(
     };
     try {
       const result = lease
-        ? await previewSessions.run(lease.session, render, frameSignal)
+        ? await pool.run(lease.session, render, frameSignal)
         : await render(await awaitPreviewOperation(entry.promise, frameSignal));
       successful = true;
       console.log('[remotion-preview-session]', JSON.stringify({reused:lease?.reused || false, frames:frames.length, scoped:Boolean(key)}));
@@ -271,7 +322,7 @@ export async function renderDesignFrames(
       }
       throw err;
     } finally {
-      if (lease && key) await previewSessions.release(key, lease.session, successful);
+      if (lease && key) await pool.release(key, lease.session, successful);
       else await stopSandboxSession(entry);
     }
   }

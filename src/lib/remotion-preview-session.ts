@@ -20,6 +20,7 @@ export class PreviewSessionCache<T> {
     private idleMs = 25_000,
     private lifetimeMs = 10 * 60_000,
     private hibernate?: (value: Promise<T>, key: string, resume?: () => Promise<T>) => Promise<(() => Promise<T>) | undefined>,
+    private idleDelay?: (key: string, session: PreviewSession<T>) => number,
   ) {}
 
   acquire(key: string, create: () => Promise<T>): { session: PreviewSession<T>; reused: boolean } {
@@ -84,7 +85,7 @@ export class PreviewSessionCache<T> {
         } else {
           void this.stop(session.value).catch(() => undefined).finally(resolve);
         }
-      }, this.idleMs);
+      }, this.idleDelay?.(key,session) ?? this.idleMs);
     });
     session.cancelIdle = cancel;
     try {

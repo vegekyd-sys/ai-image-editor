@@ -23,6 +23,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { parseSkillMd, type ParsedSkill } from './skill-registry';
 import builtInSkillManifest from '../generated/built-in-skill-manifest.json';
+import { retryIdempotentStorage } from './idempotent-storage-retry';
 
 
 type SupabaseClient = any;
@@ -498,13 +499,14 @@ async function dbWriteFile(
   }
 
   // Upload to Storage
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await retryIdempotentStorage(() => supabase.storage
     .from('images')
-    .upload(sp, body, { contentType: ct, upsert: true });
+    .upload(sp, body, { contentType: ct, upsert: true }), 'workspace-upload');
 
   if (uploadError) {
-    console.error('[workspace] upload error:', uploadError.message);
-    return { success: false, error: uploadError.message };
+    const message=String((uploadError as {message?:unknown}).message||'Workspace upload failed');
+    console.error('[workspace] upload error:', message);
+    return { success: false, error: message };
   }
 
   // Get public URL
@@ -513,7 +515,7 @@ async function dbWriteFile(
   const updatedAt = new Date().toISOString();
 
   // Upsert index row
-  const { error: dbError } = await supabase.from('workspace_files').upsert({
+  const { error: dbError } = await retryIdempotentStorage(() => supabase.from('workspace_files').upsert({
     user_id: userId,
     path,
     content_type: ct,
@@ -521,11 +523,12 @@ async function dbWriteFile(
     storage_url: publicUrl,
     updated_at: updatedAt,
     ...(marketplaceId ? { marketplace_id: marketplaceId } : {}),
-  }, { onConflict: 'user_id,path' });
+  }, { onConflict: 'user_id,path' }), 'workspace-index');
 
   if (dbError) {
-    console.error('[workspace] db upsert error:', dbError.message);
-    return { success: false, error: dbError.message };
+    const message=String((dbError as {message?:unknown}).message||'Workspace index failed');
+    console.error('[workspace] db upsert error:', message);
+    return { success: false, error: message };
   }
 
   cache.clear();

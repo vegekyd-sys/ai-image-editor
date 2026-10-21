@@ -3929,6 +3929,9 @@ Returns the rendered image so you can see it with your vision.`,
               const writes = await Promise.all(rendered.map((jpegBuffer, index) =>
                 workspace.writeFile(framePaths[index]!, jpegBuffer, ctx.supabase, userId, 'image/jpeg')
               ));
+              if (writes.some(write => !write.success || !write.storageUrl)) {
+                throw new Error('Preview rendered, but frame persistence failed. Preserve this composition; no media regeneration is needed.');
+              }
               writes.forEach((write, index) => {
                 if (!write.storageUrl) return;
                 const storageUrl = toPublicStorageUrl(write.storageUrl);
@@ -3955,6 +3958,9 @@ Returns the rendered image so you can see it with your vision.`,
             let workspaceUrl = '';
             if (ctx.supabase && userId) {
               const write = await workspace.writeFile(contactSheetPath, contactSheet, ctx.supabase, userId, 'image/jpeg');
+              if (!write.success || !write.storageUrl) {
+                throw new Error('Preview rendered, but contact sheet persistence failed. Preserve this composition; no media regeneration is needed.');
+              }
               if (write.storageUrl) {
                 workspaceUrl = toPublicStorageUrl(write.storageUrl);
                 rememberWorkspaceMediaOutputs(ctx, [{
@@ -4024,6 +4030,7 @@ Returns the rendered image so you can see it with your vision.`,
             const wsPath = `${ctx.projectId}/drafts/video-media${targetMediaIndex || 'current'}-t${clampedTimestamp.toFixed(2).replace('.', '-')}-${Date.now()}.jpg`;
             if (ctx.supabase && ctx.userId) {
               const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+              if (!ws.success || !ws.storageUrl) throw new Error('Preview rendered, but screenshot persistence failed. Preserve the source video.');
               if (ws.storageUrl) {
                 wsUrl = toPublicStorageUrl(ws.storageUrl);
                 rememberWorkspaceMediaOutputs(ctx, [{
@@ -4095,6 +4102,7 @@ Returns the rendered image so you can see it with your vision.`,
           const wsPath = `${ctx.projectId}/drafts/design-snap${snapN}-frame${targetFrame}-${Date.now()}.jpg`;
           if (ctx.supabase && ctx.userId) {
             const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
+            if (!ws.success || !ws.storageUrl) throw new Error('Preview rendered, but screenshot persistence failed. Preserve this composition.');
             if (ws.storageUrl) {
               wsUrl = toPublicStorageUrl(ws.storageUrl);
               if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;

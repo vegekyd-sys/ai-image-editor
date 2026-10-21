@@ -13,9 +13,9 @@ function sandbox() {
   return {
     sandboxId: 'test-sandbox',
     stop: vi.fn(async () => undefined),
-    writeFiles: vi.fn(async () => undefined),
-    readFileToBuffer: vi.fn(async () => Buffer.from('jpeg')),
-    runCommand: vi.fn(async () => ({kill:vi.fn(),wait:async()=>({exitCode:0})})),
+    writeFiles: vi.fn(async (_files?: any) => undefined),
+    readFileToBuffer: vi.fn(async (_input?: any) => Buffer.from('jpeg')),
+    runCommand: vi.fn(async (_input?: any) => ({kill:vi.fn(),wait:async()=>({exitCode:0})})),
   };
 }
 beforeEach(() => {
@@ -24,6 +24,8 @@ beforeEach(() => {
   vi.stubEnv('REMOTION_RENDERER','sandbox');
   vi.stubEnv('REMOTION_SANDBOX_VCPUS','');
   vi.stubEnv('REMOTION_PREVIEW_SANDBOX_VCPUS','');
+  vi.stubEnv('REMOTION_PREVIEW_BATCH_RENDERER','');
+  vi.stubEnv('REMOTION_PREVIEW_SHARED_CACHE','');
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -52,6 +54,17 @@ describe('Remotion operation-scoped Sandbox lifecycle', () => {
     const box=sandbox(); state.create.mockResolvedValue(box);
     box.readFileToBuffer.mockRejectedValue(new Error('read failed'));
     await expect(renderDesignFrame(design)).rejects.toThrow('read failed');
+    expect(box.stop).toHaveBeenCalledOnce();
+  });
+  it('captures a sparse batch in one renderer process and preserves requested output order',async()=>{
+    vi.stubEnv('REMOTION_PREVIEW_BATCH_RENDERER','true');
+    const box=sandbox();state.create.mockResolvedValue(box);
+    box.readFileToBuffer.mockImplementation(async({path}:any)=>Buffer.from(path.endsWith('.metrics.json')?'{"frameMs":[1,2,3]}':path));
+    const result=await renderDesignFrames(design,[90,0,30]);
+    expect(box.runCommand).toHaveBeenCalledOnce();
+    expect(box.runCommand.mock.calls[0][0].args[0]).toContain('makaron-render-frames');
+    const input=JSON.parse(box.writeFiles.mock.calls[0][0][1].content.toString());
+    expect(input.frames).toEqual([90,0,30]);expect(result.map(x=>x.toString())).toEqual(input.outputs);
     expect(box.stop).toHaveBeenCalledOnce();
   });
   it('stops a cancelled in-flight frame and returns its cancellation reason', async () => {

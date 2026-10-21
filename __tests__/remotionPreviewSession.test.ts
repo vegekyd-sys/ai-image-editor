@@ -64,4 +64,13 @@ describe('owner-scoped preview grace period',()=>{
     const first=pool.acquire('a',create);await pool.release('a',first.session,true);await vi.advanceTimersByTimeAsync(25_000);
     const next=pool.acquire('a',create);expect(await next.session.value).toEqual({id:'base'});expect(create).toHaveBeenCalledTimes(2);
   });
+  it('publishes the first checkpoint immediately, retaining the 25-second window after restore',async()=>{
+    const resume=vi.fn(async()=>({id:'restored'})),hibernate=vi.fn(async()=>resume);
+    const pool=new PreviewSessionCache(async()=>{},()=>{},25_000,600_000,hibernate,(_key,session)=>session.resume?25_000:0);
+    const first=pool.acquire('owner:A:media',async()=>({id:'initial'}));await pool.release('owner:A:media',first.session,true);
+    await vi.advanceTimersByTimeAsync(1);expect(hibernate).toHaveBeenCalledOnce();
+    const next=pool.acquire('owner:A:media',async()=>({id:'unexpected'}));await next.session.value;
+    await pool.release('owner:A:media',next.session,true);await vi.advanceTimersByTimeAsync(24_999);expect(hibernate).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);expect(hibernate).toHaveBeenCalledTimes(2);
+  });
 });
