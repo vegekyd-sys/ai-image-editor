@@ -272,6 +272,8 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.reliable4kExport.title': "4K 素材导出更稳定",
+  'changelog.reliable4kExport.item1': "导出前自动准备兼容的视频副本，减少 4K 素材导致的导出失败；原始素材与可编辑项目完整保留。",
   'changelog.deepseekFlashDefault.title': 'DeepSeek Flash 成为默认创作助手',
   'changelog.deepseekFlashDefault.item1': 'Auto 现在默认使用新版 DeepSeek Flash，看懂参考图和预览画面，继续完成图片、视频、音乐与可编辑设计创作。',
   'changelog.deepseekFlashDefault.item2': '可随时在模型菜单选择 Luna、Sol 或已授权的个人套餐；对话按实际输入、缓存和输出用量计费。',

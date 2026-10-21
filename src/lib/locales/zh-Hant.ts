@@ -310,6 +310,8 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.reliable4kExport.title': "4K 素材匯出更穩定",
+  'changelog.reliable4kExport.item1': "匯出前自動準備相容的影片副本，減少 4K 素材造成的匯出失敗；原始素材與可編輯專案完整保留。",
   'changelog.deepseekFlashDefault.title': 'DeepSeek Flash 成為預設創作助手',
   'changelog.deepseekFlashDefault.item1': 'Auto 現在預設使用新版 DeepSeek Flash，看懂參考圖和預覽畫面，繼續完成圖片、影片、音樂與可編輯設計創作。',
   'changelog.deepseekFlashDefault.item2': '可隨時在模型選單選擇 Luna、Sol 或已授權的個人方案；對話按實際輸入、快取和輸出用量計費。',

@@ -308,6 +308,8 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.reliable4kExport.title': "4K 素材の書き出しを安定化",
+  'changelog.reliable4kExport.item1': "書き出し前に互換性のある動画コピーを自動で用意し、4K 素材による失敗を軽減。元の素材と編集可能なプロジェクトはそのまま保持されます。",
   'changelog.deepseekFlashDefault.title': '標準の制作アシスタントが DeepSeek Flash に',
   'changelog.deepseekFlashDefault.item1': 'Auto は新版 DeepSeek Flash を標準で使用します。参考画像やプレビューを理解し、画像、動画、音楽、編集可能なデザインの制作を進めます。',
   'changelog.deepseekFlashDefault.item2': 'モデルメニューから Luna、Sol、利用許可済みの個人プランを選べます。会話は実際の入力、キャッシュ、出力の使用量に応じて課金されます。',
