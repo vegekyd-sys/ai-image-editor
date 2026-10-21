@@ -110,16 +110,24 @@ const previewSessions = new PreviewSessionCache<SandboxInstance>(
   work => after(work),
   Math.min(600_000, Math.max(20_000, Number(readEnv('REMOTION_PREVIEW_IDLE_MS')) || 25_000)),
   SANDBOX_LIFETIME_MS,
-  async (value,key) => {
+  async (value,key,cachedResume) => {
     if (!key.startsWith('media:') || readEnv('REMOTION_PREVIEW_DISK_CACHE') === 'off') {
       await stopSandboxSession({promise:value});
       return undefined;
+    }
+    // Sources are immutable for this key. Reuse the existing disk checkpoint
+    // on subsequent suspensions instead of accumulating a new paid snapshot.
+    if (cachedResume) {
+      await stopSandboxSession({promise:value});
+      return cachedResume;
     }
     const sandbox = await value;
     const started = Date.now();
     // Files only: no paid running VM during a user's thinking time. These
     // owner/source/runtime-scoped cache snapshots expire automatically.
-    const snapshot = await sandbox.snapshot({expiration:15*60_000,signal:AbortSignal.timeout(30_000)});
+    // The deployed API enforces a one-day minimum, even though the SDK accepts
+    // any millisecond duration. One checkpoint is reused for this source set.
+    const snapshot = await sandbox.snapshot({expiration:24*60*60_000,signal:AbortSignal.timeout(30_000)});
     console.log('[remotion-preview-suspended]',JSON.stringify({sandboxId:sandbox.sandboxId,snapshotId:snapshot.snapshotId,sizeBytes:snapshot.sizeBytes,suspendMs:Date.now()-started,expiresAt:snapshot.expiresAt?.toISOString()}));
     return () => createSandboxSession('preview',undefined,snapshot.snapshotId).then(entry=>entry.promise);
   },

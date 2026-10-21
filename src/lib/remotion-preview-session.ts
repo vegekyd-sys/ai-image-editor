@@ -8,6 +8,7 @@ export interface PreviewSession<T> {
   retired: boolean;
   tail: Promise<void>;
   cancelIdle?: () => void;
+  resume?: () => Promise<T>;
 }
 
 export class PreviewSessionCache<T> {
@@ -18,7 +19,7 @@ export class PreviewSessionCache<T> {
     private background: (work: Promise<void>) => void,
     private idleMs = 25_000,
     private lifetimeMs = 10 * 60_000,
-    private hibernate?: (value: Promise<T>, key: string) => Promise<(() => Promise<T>) | undefined>,
+    private hibernate?: (value: Promise<T>, key: string, resume?: () => Promise<T>) => Promise<(() => Promise<T>) | undefined>,
   ) {}
 
   acquire(key: string, create: () => Promise<T>): { session: PreviewSession<T>; reused: boolean } {
@@ -33,7 +34,11 @@ export class PreviewSessionCache<T> {
       for (const [oldKey,cached] of this.sleeping) if (cached.expiresAt <= Date.now()) this.sleeping.delete(oldKey);
       const cached = this.sleeping.get(key);
       this.sleeping.delete(key);
-      const value = cached ? cached.resume.then(resume => resume ? resume().catch(create) : create()) : create();
+      const value = cached ? cached.resume.then(async resume => {
+        if (!resume) return create();
+        try { const value = await resume(); session!.resume = resume; return value; }
+        catch { return create(); }
+      }) : create();
       session = {value, users:0, createdAt:Date.now(), retired:false, tail:Promise.resolve()};
       this.entries.set(key, session);
     }
@@ -73,8 +78,8 @@ export class PreviewSessionCache<T> {
         this.entries.delete(key);
         session.retired = true;
         if (this.hibernate) {
-          const resume = this.hibernate(session.value,key).catch(async () => {await this.stop(session.value).catch(()=>undefined);return undefined;});
-          this.sleeping.set(key,{resume,expiresAt:Date.now()+15*60_000});
+          const resume = this.hibernate(session.value,key,session.resume).catch(async () => {await this.stop(session.value).catch(()=>undefined);return undefined;});
+          this.sleeping.set(key,{resume,expiresAt:Date.now()+24*60*60_000});
           void resume.finally(resolve);
         } else {
           void this.stop(session.value).catch(() => undefined).finally(resolve);

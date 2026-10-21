@@ -55,6 +55,8 @@ describe('owner-scoped preview grace period',()=>{
     await vi.advanceTimersByTimeAsync(25_000);expect(hibernate).toHaveBeenCalledOnce();
     const next=pool.acquire('owner:A:media',create);expect(await next.session.value).toEqual({id:'restored'});
     expect(create).toHaveBeenCalledOnce();expect(resume).toHaveBeenCalledOnce();
+    await pool.release('owner:A:media',next.session,true);await vi.advanceTimersByTimeAsync(25_000);
+    expect(hibernate).toHaveBeenLastCalledWith(next.session.value,'owner:A:media',resume);
   });
   it('falls back to a fresh runtime if the saved disk snapshot has expired',async()=>{
     const create=vi.fn(async()=>({id:'base'})),resume=vi.fn(async()=>{throw Error('snapshot expired');});
