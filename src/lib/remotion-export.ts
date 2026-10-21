@@ -849,6 +849,15 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
 
     const updateProgress = async (progress: unknown) => {
       const progressObj = isObject(progress) ? progress : {}
+      const submittedRenderId = typeof progressObj.renderId === 'string' ? progressObj.renderId : undefined
+      if (submittedRenderId && job.metadata?.lambdaRenderId !== submittedRenderId) {
+        job.metadata = {
+          ...(job.metadata || {}),
+          lambdaRenderId: submittedRenderId,
+          lambdaBucketName: typeof progressObj.bucketName === 'string' ? progressObj.bucketName : null,
+        }
+        await admin.from('remotion_export_jobs').update({metadata: job.metadata, heartbeat_at: nowIso()}).eq('id', job.id)
+      }
       const value = typeof progressObj.progress === 'number'
         ? progressObj.progress
         : typeof progressObj.overallProgress === 'number'
@@ -867,6 +876,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
     const outputMetadata: Record<string, unknown> = {}
     // Only the disposable render copy gets compatible sources. The authored design,
     // published editable snapshot and original 4K media retain their source URLs/trims.
+    const preparationStart = Date.now()
     const preparedMedia = job.output_type === 'video'
       ? await prepareRemotionExportMedia(resolvedDesign, {
           userId: job.user_id,
@@ -877,6 +887,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
         })
       : { design: resolvedDesign, summary: undefined }
     const renderDesign = preparedMedia.design
+    stageTimings.prepareMediaMs = Date.now() - preparationStart
     if (preparedMedia.summary) {
       outputMetadata.mediaPreparation = preparedMedia.summary
       job.metadata = { ...(job.metadata || {}), mediaPreparation: preparedMedia.summary }
