@@ -1,4 +1,4 @@
--- Candidate only: apply with the Kling 4 application release, never during an isolated experiment.
+-- Apply with the Kling 4 application release; preserve existing receipt models.
 ALTER TABLE public.video_retake_jobs
   DROP CONSTRAINT video_retake_jobs_model_id_check;
 ALTER TABLE public.video_retake_jobs

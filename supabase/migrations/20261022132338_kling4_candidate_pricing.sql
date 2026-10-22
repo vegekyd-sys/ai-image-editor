@@ -1,4 +1,4 @@
--- Candidate only; do not apply to the shared production/Preview DB as part of tests.
+-- Apply with the authorized Kling 4 release; additive and backward compatible.
 -- EvoLink rate card checked 2026-10-22: https://evolink.ai/kling-4
 -- Flash intentionally has no price row until its own callable contract is verified.
 INSERT INTO public.media_pricing

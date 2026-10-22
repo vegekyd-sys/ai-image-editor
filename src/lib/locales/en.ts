@@ -272,6 +272,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.kling4.title': "Kling 4 is here",
+  'changelog.kling4.item1': "Create 3–30 second videos with Kling 4 using text, images or video references, at 720p or 1080p.",
+  'changelog.kling4.item2': "Retake now defaults to Kling 4: edit a selected interval while preserving the full video duration and original soundtrack.",
   'changelog.videoFramingParity.title': "More consistent video preview and export",
   'changelog.videoFramingParity.item1': "Fixed unexpectedly small portrait footage and incorrect orientation detection. Scaling, cropping and edited positions now match between preview and export, with smoother playback across cuts.",
   'changelog.fasterFrameChecks.title': "Faster frame checks, more reliable screenshots",

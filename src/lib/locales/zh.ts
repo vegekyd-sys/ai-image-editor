@@ -272,6 +272,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.kling4.title': "Kling 4 登陆 Makaron",
+  'changelog.kling4.item1': "用文字、图片或视频参考，通过 Kling 4 生成 3–30 秒视频，支持 720p 与 1080p。",
+  'changelog.kling4.item2': "Retake 现在默认使用 Kling 4：修改选定片段，保留完整视频时长和原始声音。",
   'changelog.videoFramingParity.title': "视频预览与导出画幅更一致",
   'changelog.videoFramingParity.item1': "修复竖屏视频画面意外缩小和横竖屏误判，让预览与导出的缩放、裁剪和编辑位置保持一致，切镜播放更连贯。",
   'changelog.fasterFrameChecks.title': "多帧检查更快，截图保存更可靠",

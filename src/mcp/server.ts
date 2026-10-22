@@ -276,7 +276,7 @@ Tips:
 
   server.tool(
     'makaron_retake_video',
-    'Replace a numeric interval in one video and automatically return the complete video. Original audio and total duration are preserved. Poll makaron_get_video_status with the root taskId; do not submit again to retry delivery. Seconds use the original source timebase.',
+    'Replace a numeric interval in one video and automatically return the complete video. Default Kling 4.0 at 720p, source >=3s, original audio only; choose another supported model explicitly for generated audio. Original audio and total duration are preserved. Poll makaron_get_video_status with the root taskId; do not submit again to retry delivery. Seconds use the original source timebase.',
     {
       video_url: z.string().url(),
       start: z.number().nonnegative(),

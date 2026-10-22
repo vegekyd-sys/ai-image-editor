@@ -50,8 +50,8 @@ guides for a bounded edit, even when its brief asks for multiple views.
    whole video or locate a screenshot first. For an unknown scene, use
    `analyze_video` / `preview_frame` to locate it. Only an unknown screenshot
    location uses `skills/video-edit/references/frame-location.md`.
-2. State the source range briefly. Choose the requested model, otherwise H3 Max;
-   Seedance family requests default to Eco unless native/standard is explicit.
+2. State the source range briefly. Choose the requested model;
+   Retake defaults to Kling 4.0 (`kling-4`) at 720p, requiring a source >=3s and original audio. Explicit model choices win. Generated audio, exact frame controls or shorter sources require a compatible explicitly selected model. Seedance family requests default to Eco unless native/standard is explicit.
    Call `inspect_retake` for that exact source/range/model. Read its actual frame
    evidence and ASR together; do not retranscribe it. If visual inspection fails,
    report it instead of generating blindly. If essential speech evidence is

@@ -308,6 +308,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.kling4.title': "Kling 4 が Makaron に登場",
+  'changelog.kling4.item1': "テキスト、画像、動画を参考に、Kling 4 で 3〜30 秒の動画を生成。720p と 1080p に対応しました。",
+  'changelog.kling4.item2': "Retake の標準モデルが Kling 4 になりました。選択した区間を編集し、動画全体の長さと元の音声を維持します。",
   'changelog.videoFramingParity.title': "プレビューと書き出しの構図を統一",
   'changelog.videoFramingParity.item1': "縦動画が小さく表示される問題と縦横比の判定を修正。拡大縮小、トリミング、編集後の位置をプレビューと書き出しで揃え、カット切り替え時の再生も改善しました。",
   'changelog.fasterFrameChecks.title': "複数フレームの確認を高速化、スクリーンショット保存を改善",

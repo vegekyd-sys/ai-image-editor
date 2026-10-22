@@ -2,7 +2,7 @@ import { normalizeVideoModelId } from './video-model-capabilities'
 
 export const RETAKE_MODELS = ['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max', 'kling-4'] as const
 export type RetakeModel = typeof RETAKE_MODELS[number]
-export const DEFAULT_RETAKE_MODEL: RetakeModel = 'fal-h3-max'
+export const DEFAULT_RETAKE_MODEL: RetakeModel = 'kling-4'
 export interface RetakeRange { start: number; end: number }
 export type RetakeAudioMode = 'original' | 'generated'
 export interface RetakePlan extends RetakeRange {
