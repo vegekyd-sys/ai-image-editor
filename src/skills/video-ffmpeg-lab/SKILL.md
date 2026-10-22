@@ -63,11 +63,11 @@ Current known defaults:
 | Model | Chunk target | Reference duration | Reference size | Notes |
 | --- | ---: | ---: | --- | --- |
 | SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px; aspect ratio 0.4-2.5; frame pixels 409,600-2,086,876 | Default video model, higher quality, feature/reference mode preferred. The lower frame-pixel bound matters: tiny videos must be resized/padded before submission. |
-| Kling | 15s | 10.5s | <=200MB; resolution <=2K; no documented video resolution lower bound | Cheaper option, supports base video edit when capability allows it. |
+| Kling 4.0 | 30s | 30s total, >=3s each | <=200MB each; 720-2160px per side; 24-60fps | Native generation or typed edit; edit preserves source audio. |
 
 If a new model appears, follow its capability/tool error messages instead of inventing a new case. The long-video generation workflow stays the same: probe → segment to accepted duration → generate per segment → assemble generated outputs.
 
-When the user asks to make the run cheaper, prefer Kling only when the requested source duration, reference-video mode, text/audio needs, and tool errors indicate Kling can support it. If Kling cannot handle the requested operation, say so briefly and continue with SeeDance.
+Respect explicit model selection. Compare current model capabilities and quotes before recommending a cheaper route; do not substitute models without authorization.
 
 ## Segment planner pattern
 
@@ -196,8 +196,8 @@ Use these as building blocks inside the segment planner or assembly pattern:
 ## Long-video style transfer through video models
 
 1. Analyze/probe the source video.
-2. Choose model capability: SeeDance is default; Kling is cheaper when it supports the request.
-3. Use the segment planner once to create model-sized chunks: Kling `<=15s`, SeeDance `<=15s`.
+2. Choose the explicitly selected model and its current capability.
+3. Use the segment planner once to create model-sized chunks: Kling 4.0 `<=30s`, SeeDance 2.0 `<=15s`, Seedance 2.5 `<=30s`. Do not split a supported 30s Kling 4.0 request.
 4. Save chunks to workspace and keep the returned manifest in the conversation.
 5. Call `generate_animation` for each chunk with the user's requested model and the same style direction.
 6. Use the assembly pattern to stitch generated chunks.

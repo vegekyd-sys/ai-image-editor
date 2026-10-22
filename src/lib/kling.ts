@@ -1,3 +1,4 @@
+import { RETIRED_KLING_MESSAGE } from './video-model-capabilities'
 import jwt from 'jsonwebtoken'
 
 const KLING_BASE = process.env.KLING_API_BASE || 'https://api-beijing.klingai.com'
@@ -70,61 +71,8 @@ export async function detectAspectRatio(imageUrl: string): Promise<string> {
 }
 
 /** Submit a v3-omni video task. Returns the Kling task ID. */
-export async function createKlingTask(input: KlingTaskInput): Promise<string> {
-  const hasVideo = !!input.videoUrl
-  const referType = input.videoReferType ?? 'base'
-
-  // All images are references — no first_frame. Aspect ratio is always explicit.
-  const body: Record<string, unknown> = {
-    model_name: 'kling-v3-omni',
-    prompt: input.prompt,
-    mode: input.mode ?? 'std',
-    // When video_list is present, sound must be 'off' (keep_original_sound controls video audio)
-    sound: hasVideo ? 'off' : 'on',
-  }
-
-  if (input.images.length > 0) {
-    body.image_list = input.images.map((img) => ({
-      image_url: img.startsWith('data:') ? img.replace(/^data:image\/\w+;base64,/, '') : img,
-    }))
-  }
-
-  // Add video_list for video editing
-  if (hasVideo) {
-    body.video_list = [{
-      video_url: input.videoUrl,
-      refer_type: referType,
-      keep_original_sound: input.keepOriginalSound ? 'yes' : 'no',
-    }]
-  }
-
-  if (input.aspect_ratio) {
-    body.aspect_ratio = input.aspect_ratio
-  }
-  // duration undefined = smart mode (API decides 3-15s)
-  if (input.duration != null) {
-    body.duration = String(input.duration)
-  }
-
-  const res = await fetch(`${KLING_BASE}/v1/videos/omni-video`, {
-    method: 'POST',
-    headers: headers(),
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Kling API error ${res.status}: ${text}`)
-  }
-
-  const json = await res.json()
-  if (json.code !== 0) {
-    throw new Error(`Kling API error: ${json.message || JSON.stringify(json)}`)
-  }
-
-  const taskId = json?.data?.task_id
-  if (!taskId) throw new Error(`Kling: no task_id in response: ${JSON.stringify(json)}`)
-  return taskId
+export async function createKlingTask(_input: KlingTaskInput): Promise<string> {
+  throw new Error(RETIRED_KLING_MESSAGE)
 }
 
 /** Poll a task for status + result. */
@@ -172,37 +120,8 @@ export interface KlingMotionControlInput {
 }
 
 /** Submit a motion-control task. Returns task ID. */
-export async function createKlingMotionControlTask(input: KlingMotionControlInput): Promise<string> {
-  const body = {
-    model_name: 'kling-v3',
-    image_url: input.imageUrl,
-    video_url: input.videoUrl,
-    prompt: input.prompt || '',
-    keep_original_sound: input.keepOriginalSound !== false ? 'yes' : 'no',
-    character_orientation: input.characterOrientation || 'image',
-    mode: 'std',
-  }
-
-  const res = await fetch(`${KLING_BASE}/v1/videos/motion-control`, {
-    method: 'POST',
-    headers: headers(),
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`Kling motion-control error ${res.status}: ${text}`)
-  }
-
-  const json = await res.json()
-  if (json.code !== 0) {
-    throw new Error(`Kling motion-control error: ${json.message || JSON.stringify(json)}`)
-  }
-
-  const taskId = json?.data?.task_id
-  if (!taskId) throw new Error(`Kling motion-control: no task_id: ${JSON.stringify(json)}`)
-  console.log(`[kling/motion-control] Task created: ${taskId}`)
-  return taskId
+export async function createKlingMotionControlTask(_input: KlingMotionControlInput): Promise<string> {
+  throw new Error(RETIRED_KLING_MESSAGE)
 }
 
 /** Poll a motion-control task. */

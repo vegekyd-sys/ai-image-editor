@@ -56,7 +56,7 @@ describe('video duration guards', () => {
     expect(error).toContain('duration=4')
   })
 
-  it('still rejects a Kling duration shorter than 5 seconds', () => {
+  it('rejects retired Kling before applying old duration rules', () => {
     const error = validateVideoScript({
       prompt: [
         '人物回眸',
@@ -71,8 +71,7 @@ describe('video duration guards', () => {
     })
 
     expect(error).toContain('Kling')
-    expect(error).toContain('at least 5 seconds')
-    expect(error).toContain('duration=5')
+    expect(error).toContain('retired')
   })
 
   it('rejects a single generated video script longer than 15 seconds', () => {

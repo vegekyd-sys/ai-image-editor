@@ -38,5 +38,15 @@
     "baselineSha256": "be4334c4b48d9f59abfac85aeaea3fce09b86ef660d0d81b15fd7b40a4287c1b",
     "replacement": "- Describe `write_code_file.content`; before execution say what it produces, then report the result.\n- For NEW CUI video generation, do not submit to the video provider until the user confirms the visible script, unless the same user request explicitly authorizes direct submission without confirmation.\n- Static charts, infographics, posters, and marketing images go to `generate_image` unless the user asks for an editable or animated version.",
     "reason": "Keep coding and static-image rules; clarify that script approval concerns new video generation."
+  },
+  "core-27": {
+    "baselineSha256": "758e186d8be92cf86743abed86256c48e34e0c1f13bbe0fa491970f1fece7616",
+    "replacement": "Hard duration range: a single SeeDance 2.0 script/call must be 4-15s; SeeDance 2.5 must be 4-30s; Kling 4.0 3-30s; Grok generation 1-15s; Google Omni 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, show the segmented plan, and stop for approval. Edit/extend limits are in `prompts/animate.md`.",
+    "reason": "Retire Kling O3 and use the verified Kling 4.0 3-30s output and reference contract; explicit model selection must not be shortened or replaced."
+  },
+  "core-31": {
+    "baselineSha256": "944d597d2a8707774f3ccbb567c3e25b0b184035636921009f06ae132392e420",
+    "replacement": "Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling 4.0 accepts up to 5 MP4/MOV references (exactly one for edit), each >=3s, <=30s total, <=200MB each, 720-2160px per side, 24-60fps. Google Omni and Grok accept one video for typed edit/extend; read `prompts/animate.md` for limits.",
+    "reason": "Retire Kling O3 and use the verified Kling 4.0 3-30s output and reference contract; explicit model selection must not be shortened or replaced."
   }
 }

@@ -1267,6 +1267,24 @@ try {
   }
 
   {
+    const before = requests.length;
+    for (const model of ['kling', 'kling-v3-omni', 'kling-o3']) {
+      const result = await runCli(['video', 'create', '--script', 'Retired request', '--video-model', model, '--image', '/missing-image.png']);
+      assert.equal(result.code, 1);
+      assert.match(result.stderr, /Kling O3 has been retired/);
+    }
+    assert.equal(requests.length, before, 'Retired models must fail before uploads or MCP calls');
+    const result = await expectSuccess(['video', 'create', '--script', 'Shot 1 (30s): A continuous magical transformation', '--duration', '30', '--video-model', 'kling-4', '--video-resolution', '1080p']);
+    const request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.videoModel, 'kling-4');
+    assert.equal(request.body.params.arguments.duration, 30);
+    const afterValid = requests.length;
+    const invalid = await runCli(['video', 'create', '--script', 'Too long', '--duration', '31', '--video-model', 'kling-4']);
+    assert.equal(invalid.code, 1);
+    assert.match(invalid.stderr, /3 to 30/);
+    assert.equal(requests.length, afterValid);
+  }
+  {
     const result = await expectSuccess(['video', 'create', '--script', 'A neon one-person studio wakes at dawn', '--duration', '5', '--video-model', 'seedance-fast']);
     assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
     assert.match(result.stderr, /💳 {2}4 credits used · balance 300/);

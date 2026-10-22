@@ -343,7 +343,7 @@ describe('video model reference limits', () => {
     expect(resolveClosestSupportedAspectRatio('seedance-fast', 1920, 1080)).toBe('16:9')
   })
 
-  it('fails fast before calling Kling with a reference video longer than 10s', async () => {
+  it('rejects retired Kling even with a long reference', async () => {
     const result = await createVideo({
       script: 'Cyberpunk restyle\n\nRestyle <<<media_1>>> with neon cyberpunk lighting.',
       images: [],
@@ -354,12 +354,10 @@ describe('video model reference limits', () => {
     })
 
     expect(result.success).toBe(false)
-    expect(result.message).toContain('Kling reference video duration')
-    expect(result.message).toContain('split')
-    expect(result.message).toContain('FFmpeg')
+    expect(result.message).toContain('Kling O3 has been retired')
   })
 
-  it('allows Kling output duration up to 15s', async () => {
+  it('rejects previously valid Kling O3 requests', async () => {
     const result = await createVideo({
       script: 'Cyberpunk restyle\n\nRestyle <<<media_1>>>.',
       images: [],
@@ -372,7 +370,7 @@ describe('video model reference limits', () => {
 
     expect(result.success).toBe(false)
     expect(result.message).not.toContain('Kling duration must be 10 seconds or less')
-    expect(result.message).toContain('KLING_ACCESS_KEY')
+    expect(result.message).toContain('Kling O3 has been retired')
   })
 
   it('fails fast before calling SeeDance with reference videos below the frame-pixel minimum', async () => {
@@ -645,7 +643,7 @@ describe('video model reference limits', () => {
     expect(supportsNativeTextToVideo('grok')).toBe(true)
   })
 
-  it('does not invent a Kling reference-video lower resolution limit', async () => {
+  it('rejects retired Kling before probing a small reference', async () => {
     const result = await createVideo({
       script: 'Tiny Kling reference\n\nRestyle <<<media_1>>>.',
       images: [],
@@ -658,10 +656,10 @@ describe('video model reference limits', () => {
 
     expect(result.success).toBe(false)
     expect(result.message).not.toContain('reference video size')
-    expect(result.message).toContain('KLING_ACCESS_KEY')
+    expect(result.message).toContain('Kling O3 has been retired')
   })
 
-  it('rejects Kling reference videos above the documented 2K limit', async () => {
+  it('rejects retired Kling before probing a large reference', async () => {
     const result = await createVideo({
       script: 'Large Kling reference\n\nRestyle <<<media_1>>>.',
       images: [],
@@ -673,9 +671,7 @@ describe('video model reference limits', () => {
     })
 
     expect(result.success).toBe(false)
-    expect(result.message).toContain('Kling reference video size')
-    expect(result.message).toContain('outside provider limits')
-    expect(result.message).toContain('<=200MB, resolution <=2K')
+    expect(result.message).toContain('Kling O3 has been retired')
   })
 
   it('allows SeeDance reference durations up to the 15s range before provider submission', async () => {

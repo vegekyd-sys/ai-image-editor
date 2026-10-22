@@ -586,6 +586,7 @@ MODEL_CAPABILITIES['bytedance-video-upscale'] = {
 export function normalizeVideoModelId(model?: string | null): string {
   if (!model) return DEFAULT_MODEL_ID
   const normalized = String(model).trim().toLowerCase()
+  if (['kling-o3', 'kling-o3-video', 'kling-v3-omni', 'kling-3', 'kling-3.0'].includes(normalized)) return 'kling'
   if (['kling4', 'kling-4.0', 'kling 4.0', 'kling 4'].includes(normalized)) return 'kling-4'
   if (['kling4-flash', 'kling-4.0-flash', 'kling 4.0 flash', 'kling 4 flash'].includes(normalized)) return 'kling-4-flash'
   if (normalized === 'seedance-2.5-native') return 'seedance-2.5'
@@ -631,6 +632,12 @@ export function resolveProductVideoModelId(model?: string | null): string {
   return id === 'seedance-2.5' && String(model).trim().toLowerCase() !== 'seedance-2.5-native' ? 'seedance-2.5-eco' : id
 }
 
+export const RETIRED_KLING_MESSAGE = 'Kling O3 has been retired for new generation and editing. Historical videos remain available. Select an available model explicitly; no fallback was submitted.'
+
+export function getVideoModelRetirementError(model?: string | null): string | null {
+  return normalizeVideoModelId(model) === 'kling' ? RETIRED_KLING_MESSAGE : null
+}
+
 export function getDefaultVideoModelId(): string {
   return DEFAULT_MODEL_ID
 }
@@ -656,7 +663,7 @@ export function getVideoModelCapability(model?: string | null): VideoModelCapabi
 }
 
 export function listVideoModelCapabilities(): VideoModelCapability[] {
-  return Object.values(MODEL_CAPABILITIES)
+  return Object.values(MODEL_CAPABILITIES).filter(model => !getVideoModelRetirementError(model.id))
 }
 
 /**
@@ -1072,6 +1079,8 @@ export function validateVideoModelRequest(options: {
 }): string | null {
   const capability = getVideoModelCapability(options.model)
   const normalizedModel = normalizeVideoModelId(options.model)
+  const retirementError = getVideoModelRetirementError(normalizedModel)
+  if (retirementError) return retirementError
   if (normalizedModel === 'kling-4-flash') return 'Kling 4.0 Flash has no verified callable API or price. No task submitted; do not substitute Kling 4.0 or another model.'
   if (normalizedModel === 'kling-4') {
     if (options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 3 || options.outputDuration > 30)) return 'Kling 4.0 output must be an integer from 3 to 30 seconds.'

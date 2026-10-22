@@ -3,7 +3,7 @@
  * Returns null if OK, or an error string to send back to the Agent for retry.
  */
 
-import { getVideoModelCapability, normalizeVideoModelId, validateVideoAspectRatioRequest, validateVideoResolutionRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelRetirementError, RETIRED_KLING_MESSAGE, getVideoModelCapability, normalizeVideoModelId, validateVideoAspectRatioRequest, validateVideoResolutionRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 import { parseTotalDuration } from './kling';
 
 function urlMatch(a: string, b: string): boolean {
@@ -35,13 +35,8 @@ export function validateVideoScript(opts: {
   const availableMediaIndices = opts.availableMediaIndices
     ?? Array.from({ length: imageCount }, (_, index) => index + 1)
 
-  // Motion control: only need video_ref_url, skip image reference checks
-  if (motionControl) {
-    if (!videoRefUrl) {
-      return 'Motion Control requires a reference video. Pass the video URL as video_ref_url.'
-    }
-    return null
-  }
+  const retirementError = getVideoModelRetirementError(model)
+  if (retirementError || motionControl) return retirementError || RETIRED_KLING_MESSAGE
 
   const capability = getVideoModelCapability(model)
   const providerManagedAdaptiveDuration = ['seedance-2.5', 'seedance-2.5-eco'].includes(normalizeVideoModelId(model))

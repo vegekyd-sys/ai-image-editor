@@ -8,6 +8,9 @@ import { bundleAgentPrompt, AGENT_PROMPT_BUNDLES } from '../../src/lib/agent-pro
 async function main() {
  const read=(p:string)=>fs.readFileSync(p,'utf8');
  const baseline=JSON.parse(read('benchmarks/core-prompt/baseline.json'));
+ const klingAmendment=JSON.parse(read('benchmarks/core-prompt/kling-retirement-amendments.json'));
+ assert.ok(klingAmendment.reason.trim());
+ const currentKlingContract=(text:string)=>klingAmendment.replacements.reduce((result:string,[from,to]:[string,string])=>result.replaceAll(from,to),text);
  const core=read('src/lib/prompts/agent.md');
  const video=bundleAgentPrompt('prompts/animate.md',read('src/lib/prompts/animate.md'));
  const coding=bundleAgentPrompt('prompts/agent-coding.md',read('src/lib/prompts/agent-coding.md'));
@@ -29,7 +32,7 @@ async function main() {
  assert.deepEqual(coverage.filter((x:any)=>!x.owner),[], 'Every original core paragraph needs an exact owner');
  // The frozen rollback stays byte-for-byte intact; the active guide gains
  // the verified H3 Max capability and user-selected Seedance 2.5 Eco default.
- const activeVideoDescription=baseline.toolDescriptions.video.replace(
+ const activeVideoDescription=currentKlingContract(baseline.toolDescriptions.video).replace(
   'reference-to-video at 480p/768p (default',
   'reference-to-video at 480p/768p/1080p (default').replace(
   'Use `seedance-2.5` for a non-NSFW single 16-30 second generation',
@@ -69,9 +72,9 @@ async function main() {
  const layeredSystem = await buildSystemPrompt();
  const legacySystem = await buildSystemPrompt(undefined, undefined, undefined, 'legacy');
  const layeredAuthoring = 'Before coding, read `prompts/agent-coding.md` once. Before creating a reusable skill, read `skills/SKILL_README.md` and an existing skill (for example `skills/makaron-mascot/SKILL.md`). Skills must work across projects; describe a style, technique, or character, not one photo.';
- assert.equal(legacySystem, layeredSystem.replace(core, baseline.agent).replace(layeredAuthoring, baseline.workspaceAuthoring));
+ assert.equal(legacySystem, layeredSystem.replace(core, currentKlingContract(baseline.agent)).replace(layeredAuthoring, baseline.workspaceAuthoring));
  const legacyTools = createTools({ ...ctx, corePromptMode: 'legacy' }, runtime);
- assert.equal(legacyTools.generate_animation.description, baseline.toolDescriptions.video);
+ assert.equal(legacyTools.generate_animation.description, currentKlingContract(baseline.toolDescriptions.video));
  assert.equal(legacyTools.run_code.description, baseline.toolDescriptions.coding);
  for (const guide of Object.keys(AGENT_PROMPT_BUNDLES)) {
    const result:any = await legacyTools.read_file.execute!({ path: guide }, {} as any);
