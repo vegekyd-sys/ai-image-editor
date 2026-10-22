@@ -3961,16 +3961,14 @@ Returns the rendered image so you can see it with your vision.`,
               if (!write.success || !write.storageUrl) {
                 throw new Error('Preview rendered, but contact sheet persistence failed. Preserve this composition; no media regeneration is needed.');
               }
-              if (write.storageUrl) {
-                workspaceUrl = toPublicStorageUrl(write.storageUrl);
-                rememberWorkspaceMediaOutputs(ctx, [{
-                  path: contactSheetPath,
-                  storageUrl: workspaceUrl,
-                  contentType: 'image/jpeg',
-                  description: `composition contact sheet for frames ${targetFrames.join(', ')}`,
-                  updatedAt: new Date().toISOString(),
-                }]);
-              }
+              workspaceUrl = toPublicStorageUrl(write.storageUrl);
+              rememberWorkspaceMediaOutputs(ctx, [{
+                path: contactSheetPath,
+                storageUrl: workspaceUrl,
+                contentType: 'image/jpeg',
+                description: `composition contact sheet for frames ${targetFrames.join(', ')}`,
+                updatedAt: new Date().toISOString(),
+              }]);
             }
 
             const drafts = (ctx as any).__runCodeDrafts || [];
@@ -4031,18 +4029,16 @@ Returns the rendered image so you can see it with your vision.`,
             if (ctx.supabase && ctx.userId) {
               const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
               if (!ws.success || !ws.storageUrl) throw new Error('Preview rendered, but screenshot persistence failed. Preserve the source video.');
-              if (ws.storageUrl) {
-                wsUrl = toPublicStorageUrl(ws.storageUrl);
-                rememberWorkspaceMediaOutputs(ctx, [{
-                  path: wsPath,
-                  storageUrl: wsUrl,
-                  contentType: 'image/jpeg',
-                  description: rawVideo.sourceRange
-                    ? `video range frame at ${clampedTimestamp.toFixed(2)}s (source ${sourceTimestamp.toFixed(2)}s)`
-                    : `video frame at ${clampedTimestamp.toFixed(2)}s`,
-                  updatedAt: new Date().toISOString(),
-                }]);
-              }
+              wsUrl = toPublicStorageUrl(ws.storageUrl);
+              rememberWorkspaceMediaOutputs(ctx, [{
+                path: wsPath,
+                storageUrl: wsUrl,
+                contentType: 'image/jpeg',
+                description: rawVideo.sourceRange
+                  ? `video range frame at ${clampedTimestamp.toFixed(2)}s (source ${sourceTimestamp.toFixed(2)}s)`
+                  : `video frame at ${clampedTimestamp.toFixed(2)}s`,
+                updatedAt: new Date().toISOString(),
+              }]);
             }
 
             console.log(`🖼️ [agent] preview_frame: raw video t=${clampedTimestamp.toFixed(2)}s, ${(jpegBuffer.length / 1024).toFixed(0)} KB (ffmpeg)`);
@@ -4103,17 +4099,15 @@ Returns the rendered image so you can see it with your vision.`,
           if (ctx.supabase && ctx.userId) {
             const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
             if (!ws.success || !ws.storageUrl) throw new Error('Preview rendered, but screenshot persistence failed. Preserve this composition.');
-            if (ws.storageUrl) {
-              wsUrl = toPublicStorageUrl(ws.storageUrl);
-              if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;
-              rememberWorkspaceMediaOutputs(ctx, [{
-                path: wsPath,
-                storageUrl: wsUrl,
-                contentType: 'image/jpeg',
-                description: `composition frame ${targetFrame}`,
-                updatedAt: new Date().toISOString(),
-              }]);
-            }
+            wsUrl = toPublicStorageUrl(ws.storageUrl);
+            if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;
+            rememberWorkspaceMediaOutputs(ctx, [{
+              path: wsPath,
+              storageUrl: wsUrl,
+              contentType: 'image/jpeg',
+              description: `composition frame ${targetFrame}`,
+              updatedAt: new Date().toISOString(),
+            }]);
           }
 
           console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB (sandbox)`);
