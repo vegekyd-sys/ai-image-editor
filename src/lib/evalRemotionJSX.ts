@@ -734,7 +734,7 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
       showLastFrame,
     ],
   );
-  const style = containsVideo
+  const style = containsVideo && props.layout !== 'none'
     ? {
         ...props.style,
         ...(isContinuingPastCut ? props.styleWhilePostmounted : {}),

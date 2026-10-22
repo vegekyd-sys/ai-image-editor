@@ -25,10 +25,11 @@ export function withVideoFit(
     const Decoder = useMedia && mediaComponent ? mediaComponent : Component;
     // The explicit component prop owns the fit when both forms were supplied.
     const fit = FITS.has(objectFit) ? objectFit : FITS.has(style?.objectFit) ? style.objectFit : undefined;
+    const { objectFit: _cssFit, ...mediaStyle } = style || {};
     return React.createElement(Decoder, {
       ...rest,
       ...(ref ? { ref } : {}),
-      ...(fit ? { style: { ...style, objectFit: fit } } : { style }),
+      ...(fit ? { style: useMedia ? mediaStyle : { ...style, objectFit: fit } } : { style }),
       ...(useMedia && fit ? { objectFit: fit } : {}),
     });
   });

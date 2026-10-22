@@ -6,8 +6,8 @@
   },
   "src/lib/prompts/remotion-composition.md": {
     "baselineSha256": "92d46c86086893059985e4e5210e150f50fc0d0142fb69c8014a55217447c6c7",
-    "sha256": "dc99a75e61e930aeba73a9a0d551a5aef7623840ce4fd3b08ba40ce6f8e249a2",
-    "reason": "Explicit requested output aspect overrides source aspect; preserve source proportions and repair in Remotion. Regression: compositionTargetAspect.test.ts. 2026-10-14: user-authorized native audiovisual generation before Studio; editable text preserves generated embedded sound. Regression: studioNativeAudio.test.ts and the bounded caption experiment."
+    "sha256": "04ebff8c4aff925996fc81cb77e1b26d9b4754a017a2895327d9ed246cf19747",
+    "reason": "Explicit requested output aspect overrides source aspect; preserve source proportions and repair in Remotion. Regression: compositionTargetAspect.test.ts. 2026-10-14: user-authorized native audiovisual generation before Studio; editable text preserves generated embedded sound. Regression: studioNativeAudio.test.ts and the bounded caption experiment.; 2026-10-22 user-requested portrait framing and preview/export parity fix: verified display dimensions override descriptive guesses, primary footage occupancy and shared video fit contract."
   },
   "src/lib/prompts/animate.md": {
     "baselineSha256": "694bb707e878fdaa1487109fc5c8e059d1cd28b59f7a8109011485d0a4ecf67c",
