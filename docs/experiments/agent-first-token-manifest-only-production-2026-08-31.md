@@ -57,3 +57,68 @@ All durations are milliseconds. Negative deltas are improvements.
 - Before JSON: `/tmp/makaron-production-before-manifest-only.json`, SHA-256 `9ba878da6c4f539101270e86a1bbcf6603f6e58adaaa9d45271c36b6fd83aa09`
 - After JSON: `/tmp/makaron-production-after-manifest-only.json`, SHA-256 `fdf88f1c9a155e8ecd8870578ec6f2003a19c78d8dd609ada28a3174173e5215`
 
+## 2026-10-17 read-only closeout audit
+
+This section reconciles the abandoned August phases and later September work
+against the current repository and Production entry point. No model request,
+benchmark rerun, deployment, environment change, database write, or old patch
+application was performed for this audit.
+
+Observed current state:
+
+- `dev` and `origin/dev` are both `b59cdeeee2805b0169900b6c6fbb3275066b7ce1`.
+- Production alias `https://www.makaron.app` currently resolves to deployment
+  `dpl_4AF7Tyq7dkgn97SDqgji5dqPMkVW`, created 2026-10-14, and `/api/health`
+  reported 12 healthy / 0 unhealthy / 0 unavailable; Azure OpenAI and Codex
+  subscription health were both green.
+- Vercel inspection did not expose a source commit for that deployment. The
+  current Production source SHA and current Production TTFT are therefore not
+  asserted from the deployment timestamp alone.
+- The only live task matching this work is this `提升 Agent 首字速度` thread.
+  No second active TTFT implementation task was found in the current task list.
+- The unrelated deletion of `.claude/skills/browser-test/SKILL.md` already
+  existed in the shared worktree and was left untouched.
+
+### Difference table
+
+| Item | Current result | Evidence and remaining boundary |
+| --- | --- | --- |
+| August manifest-only Skill startup (`f06c8707`) | **Covered; close the old gap** | The commit itself is not an ancestor of current `dev`, but its contract has been retained and extended: generated `src/generated/built-in-skill-manifest.json`, `getSkillManifest()`, `agentSkillStartupContract`, `scripts/check-agent-startup-contract.ts`, `check:agent-startup`, and release/Skill-sync gates are present. Built-in Skill bodies are not parsed on the request path. User Skills use metadata sidecars or bounded frontmatter-only legacy backfill, not full-body eager loading. Do not reapply the old patch. |
+| Fast Lane + Durable (`4733f015`) | **Implemented in current `dev`; later work supersedes the old phase design** | `4733f015` is an ancestor of current `dev`. The current route still declares `inline-first-attempt`, `transport: sse`, `reconnect: event-log`, starts the first durable attempt in the same request, and retains event-log replay/cron recovery contracts. Historical Production acceptance on 2026-09-01 was 6/6 valid with P50 4.871s and P75 6.508s. That is a historical comparison point, not proof of the 2026-10-17 Production latency. |
+| Stable prompt prefix from `75e0d182` | **Still valuable, not implemented** | Current `buildSystemPrompt()` inserts the project-specific `${projectId}/code/` path before the Skill manifest and does not log a stable `cacheablePrefix`; this can truncate cross-project provider prompt-cache reuse. The old commit moved project-scoped text and project memory to a final `Current project` block. |
+| Prompt construction prefetch from `75e0d182` | **Still valuable, not implemented** | Current runner builds prompt context first and only builds the system prompt inside `runMakaronAgent`; there is no `prefetchAgentPrompt` / `promptPrefetch`. Current `buildSystemPrompt()` also awaits manifest, user memory, and project memory serially rather than starting the independent reads together. |
+| Route-gate parallelization from `75e0d182` | **Partially covered, still incomplete** | Current route already parallelizes auth with body parsing and allowlist with Skill launch verification, and preloads runtime imports. Credit checking still completes before project/admission reads start. A new implementation may overlap safe reads, but must not call side-effecting `requireCredits` for a request that authorization/admission will reject. |
+| Fresh current Production performance proof | **Missing** | The latest durable evidence remains the 2026-09-01 Production benchmark. This audit intentionally made no model/API request, so it does not claim that the current October deployment still meets that distribution. |
+| Current-dev A/B for the September candidate | **Missing** | `75e0d182` is not an ancestor of `dev`; its measurements were made on its own September worktree. There is no frozen current-dev baseline/candidate 6x6 comparison, no current project-list and project-page paired gate, and no current reconnect/quality acceptance for those three optimizations. |
+
+### Exact scope worth preserving from the old candidate
+
+If another phase is approved, do not cherry-pick `75e0d182`. Reimplement only
+these semantics on a fresh worktree from current `dev`:
+
+1. Keep the cacheable system-prompt prefix user-stable; append project ID,
+   project paths, project memory, and any other project-scoped state at the end.
+2. Start Skill-manifest and memory reads concurrently, and prefetch the system
+   prompt while `buildPromptContext()` runs; preserve an inline fallback when
+   prefetch fails.
+3. Overlap only read-only route gates. Preserve allowlist, exact provider/model,
+   billing, idempotency, one-run/one-attempt, Fast Lane, event-log replay, and
+   durable recovery. Treat `requireCredits` as side-effecting.
+
+Contract risks that must be explicitly checked: user/project memory placement,
+provider cache-key behavior, rejected-request billing side effects, concurrent
+duplicate reads, and reconnection to the same run without a second model call.
+
+### Minimum next gate
+
+- Freeze the current Production and current-`dev` baseline before changing code.
+- Use fresh empty projects and the same prompt/account/provider/model; retain all
+  failures and outliers and do not rerun samples.
+- Test project-page and project-list entry paths separately, at least six samples
+  per compared provider/path, and compare P50, P75, valid rate, and tail.
+- Verify natural model output, exact provider/model, no hardcoded greeting or
+  Fast Pass, zero unintended tool calls, one run/attempt, message 0→2, and
+  refresh/reconnect to the same durable run.
+- Release only if speed improves without quality/capability regression; otherwise
+  keep the current Production deployment and close the candidate.
+
