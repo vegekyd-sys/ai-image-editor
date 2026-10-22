@@ -47,7 +47,7 @@ export async function probeVideoDimensionsFromUrl(
     // exhausting the same deadline despite transferring only a few bytes.
     const windowBytes = 64 * 1024;
     let windowStart = -1;
-    let window = new Uint8Array();
+    let window: Uint8Array = new Uint8Array();
     async function at(start: number, length: number): Promise<Uint8Array | null> {
       if (start >= windowStart && start + length <= windowStart + window.length) {
         return window.subarray(start - windowStart, start - windowStart + length);
