@@ -782,11 +782,12 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
   // during the incoming scene's wall-clock buffer stall. Keep Freeze mounted
   // throughout so the cut does not recreate the outgoing decoder.
   const continuousContent = !nativeContinuity && containsVideo
-    ? React.createElement(Remotion.Freeze, {
+    ? React.createElement(Remotion.Freeze as React.ComponentType<
+        React.PropsWithChildren<Omit<React.ComponentProps<typeof Remotion.Freeze>, 'children'>>
+      >, {
         frame: Math.max(0, authoredDuration - 1),
         active: isContinuingPastCut,
-        children: readinessContent,
-      })
+      }, readinessContent)
     : readinessContent;
   const content = containsVideo
     ? React.createElement(
