@@ -29,7 +29,7 @@ async function main(){
  });
  await new Promise<void>(resolve=>server.listen(port,'127.0.0.1',resolve));
  await build({entryPoints:['benchmarks/remotion-parity/browser.tsx'],bundle:true,outfile:path.join(out,'harness.js'),platform:'browser',define:{'process.env.NODE_ENV':'"development"'},alias:{'@':path.resolve('src')}});
- fs.writeFileSync(path.join(out,'index.html'),'<!doctype html><meta charset="utf-8"><title>Remotion parity matrix</title><style>body{margin:16px;background:#111;color:#eee;font:14px system-ui}button{margin:3px;padding:7px}h1{font-size:20px}nav{max-width:1100px}img{display:block}</style><div id="root">Loading pinned fonts…</div><script src="/harness.js"></script>');
+ fs.writeFileSync(path.join(out,'index.html'),'<!doctype html><meta charset="utf-8"><title>Remotion parity matrix</title><style>body{margin:16px;background:#111;color:#eee;font:14px system-ui}button{margin:3px;padding:7px}h1{font-size:20px}nav{max-width:1100px}img{display:block}.comparison{display:flex;gap:16px}@media(max-width:900px){.comparison{display:block}.comparison #reference{margin-top:16px}}</style><div id="root">Loading pinned fonts…</div><script src="/harness.js"></script>');
  console.log('BROWSER_HARNESS_READY http://localhost:8521/');
  const serveUrl=await bundle({entryPoint:path.resolve('src/remotion/index.tsx'),outDir:path.join(out,'render-bundle'),onProgress:()=>{}});
  for(const fixture of fixtures){
