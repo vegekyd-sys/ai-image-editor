@@ -178,6 +178,8 @@ export async function POST(
         url: item.url,
         source_url: item.url,
         description: item.description,
+        ...(typeof item.width === 'number' ? { width: item.width } : {}),
+        ...(typeof item.height === 'number' ? { height: item.height } : {}),
         ...(item.sourceRange ? {
           source_range: item.sourceRange,
           start: item.sourceRange.start_sec,

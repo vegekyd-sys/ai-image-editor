@@ -10,7 +10,7 @@ export async function probeVideoDimensionsFromUrl(
 ): Promise<VideoDimensions | null> {
   const maxBytes = 8 * 1024 * 1024;
   let downloaded = 0;
-  const signal = AbortSignal.timeout(15_000);
+  const signal = AbortSignal.timeout(30_000);
   async function read(start: number, length: number): Promise<Uint8Array | null> {
     const response = await fetchImpl(url, {
       headers: { Range: `bytes=${start}-${start + length - 1}` }, signal,

@@ -140,7 +140,7 @@ style: {
 
 画布比例正确不代表主视频足够大。`run_code` 的 render 和 patch 都会检查目标比例；素材与画布同比例时，还会拒绝所有可静态测量视频区域均小于半画布的主画面布局。显式要求小窗/分屏时可用 `video_layout: "inset"`，该角色随 draft 持久化。动态尺寸无法证明时交给 `preview_frame`，静态检查不替代实帧验收，也不自动重写已有作品。
 
-Range 探测使用 64 KiB 窗口合并相邻 box 读取，避免带 ftyp/uuid/free/mdat 的手机文件在 15 秒内耗尽远程往返预算。仍跳过 mdat、限制总字节和总时长；实测这两个项目的 11 个源均能测得正确显示尺寸，单源只需 2–3 次请求。
+Range 探测使用 64 KiB 窗口合并相邻 box 读取，避免带 ftyp/uuid/free/mdat 的手机文件耗尽远程往返预算。仍跳过 mdat、限制总字节和 30 秒总时长；实测这两个项目的 11 个源均能测得正确显示尺寸，单源只需 2–3 次请求。
 
 修改共享运行时时同步提升 `REMOTION_EDITABLE_RUNTIME_VERSION` 与 `public/remotion-runtime.json`，重新构建独立渲染站点后再上线。旧 Lambda bundle 不会自动获得应用源码中的修复，版本门禁会阻止误用旧 bundle。
 
