@@ -30,7 +30,7 @@ describe('Remotion preview playback contract', () => {
     expect(rendererSource).toContain("videoRuntime: source === 'player' ? 'preview' : 'render'")
     expect(evalSource).toContain("export type BrowserVideoRuntime = 'preview' | 'render'")
     expect(evalSource).toContain("const isPreviewRuntime = options.videoRuntime === 'preview'")
-    expect(evalSource).toContain('? PreviewVideo')
+    expect(evalSource).toContain('? CompatiblePreviewVideo')
     expect(evalSource).toContain('createEditableReactRuntime(React, videoComponent)')
     expect(evalSource).toContain('Video: videoComponent')
     expect(evalSource).toContain('OffthreadVideo: videoComponent')
@@ -128,7 +128,7 @@ describe('Remotion preview playback contract', () => {
     const serverSource = read('src/lib/remotion-server.ts')
     const localRendererSource = read('src/lib/remotion-local-renderer.ts')
 
-    expect(sandboxSource).toContain('OffthreadVideo: serverRendering ? serverVideo : MediaVideo')
+    expect(sandboxSource).toContain('OffthreadVideo: serverRendering ? serverVideo : withVideoFit(MediaVideo, true)')
     expect(serverSource).toContain('useOffthreadVideo: true')
     expect(serverSource).toContain("readEnv('REMOTION_RENDERER') === 'local'")
     expect(serverSource).toContain('renderDesignFrameLocal')

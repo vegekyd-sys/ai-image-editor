@@ -1,5 +1,6 @@
-import { withVideoFit } from './remotion-video-fit';
 'use client';
+
+import { withVideoFit } from './remotion-video-fit';
 
 /**
  * Evaluate Agent-generated JSX code as a React component.
