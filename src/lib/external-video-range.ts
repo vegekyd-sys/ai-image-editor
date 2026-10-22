@@ -1,3 +1,4 @@
+import { probeVideoDimensionsFromUrl, type VideoDimensions } from '@/lib/video-dimensions';
 import { prepareExternalImage } from '@/lib/external-image';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VideoMeta, VideoSourceRange } from '@/types';
@@ -21,6 +22,8 @@ export interface PublishedExternalVideoRange {
   /** Persisted Media List understanding/description for later Agent turns. */
   description: string;
   created: boolean;
+  width?: number;
+  height?: number;
 }
 
 function mediaTypeFromBytes(bytes: Uint8Array): ExternalMediaType | undefined {
@@ -131,6 +134,13 @@ export async function publishExternalVideoRanges(options: {
     }
   }
 
+  // Probe once per source, including reused legacy ranges that had no geometry.
+  // Caller-supplied labels/provider orientation are never trusted as dimensions.
+  const dimensions = new Map<string, VideoDimensions | null>();
+  await Promise.all([...new Set(normalized.filter(item => item.type === 'video').map(item => item.source_url))].map(async url => {
+    dimensions.set(url, await probeVideoDimensionsFromUrl(url, options.fetchImpl));
+  }));
+
   const snapshotIds: Array<{ id: string; type: ExternalMediaType; range?: VideoSourceRange; url: string; description: string; created: boolean }> = [];
   for (const item of normalized) {
     if (item.type === 'image') {
@@ -185,6 +195,7 @@ export async function publishExternalVideoRanges(options: {
     if (existing) {
       const refreshedMeta: VideoMeta = {
         ...existing.videoMeta,
+        ...dimensions.get(sourceRange.source_url),
         videoUrl: sourceRange.source_url,
         providerUrl: sourceRange.source_url,
         prompt: label,
@@ -210,6 +221,7 @@ export async function publishExternalVideoRanges(options: {
     const sortResult = await options.supabase.rpc('next_sort_order', { p_project_id: options.projectId });
     if (sortResult.error) throw new Error(`Media List ordering failed: ${sortResult.error.message}`);
     const videoMeta: VideoMeta = {
+      ...dimensions.get(sourceRange.source_url),
       origin: 'external-range',
       taskId: null,
       videoUrl: sourceRange.source_url,
@@ -256,6 +268,7 @@ export async function publishExternalVideoRanges(options: {
       ref: `<<<media_${mediaIndex}>>>`,
       url: item.url,
       type: item.type,
+      ...(item.type === 'video' ? dimensions.get(item.url) : {}),
       ...(item.range ? { sourceRange: item.range } : {}),
       description: item.description,
       created: item.created,

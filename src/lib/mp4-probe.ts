@@ -1,47 +1,56 @@
-/**
- * Parse MP4 container to extract video dimensions from tkhd box.
- * Pure JS, no dependencies. Returns null if parsing fails.
- */
+/** Display dimensions from the video track, including the tkhd transform.
+ * Phone MOV/MP4 files often store landscape pixels plus a 90-degree matrix.
+ * The dimensions supplied to layout must match the decoded, upright picture. */
 export function probeMP4Dimensions(buffer: Uint8Array): { width: number; height: number } | null {
-  try {
-    const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
-    let offset = 0
-
-    while (offset < buffer.length - 8) {
-      const size = view.getUint32(offset)
-      const type = String.fromCharCode(
-        buffer[offset + 4], buffer[offset + 5], buffer[offset + 6], buffer[offset + 7]
-      )
-
-      if (size < 8) break
-
-      if (type === 'moov' || type === 'trak' || type === 'mdia' || type === 'minf' || type === 'stbl') {
-        // Container boxes — recurse into children
-        offset += 8
-        continue
-      }
-
-      if (type === 'tkhd') {
-        // tkhd: width/height are the last 8 bytes (fixed-point 16.16)
-        // v0: 92 bytes total, w/h at offset 84,88 from box start
-        // v1: 104 bytes total, w/h at offset 96,100 from box start
-        const version = buffer[offset + 8]
-        const whOffset = version === 1 ? offset + 96 : offset + 84
-        if (whOffset + 8 <= buffer.length) {
-          const w = view.getUint32(whOffset) >>> 16
-          const h = view.getUint32(whOffset + 4) >>> 16
-          if (w > 0 && h > 0 && w < 10000 && h < 10000) {
-            return { width: w, height: h }
-          }
-        }
-      }
-
-      offset += size
+  const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  type Box = { type: string; body: number; end: number };
+  function boxes(start: number, end: number): Box[] {
+    const result: Box[] = [];
+    for (let offset = start; offset + 8 <= end;) {
+      let size = view.getUint32(offset);
+      const type = String.fromCharCode(...buffer.subarray(offset + 4, offset + 8));
+      let header = 8;
+      if (size === 1) {
+        if (offset + 16 > end) break;
+        size = Number(view.getBigUint64(offset + 8));
+        header = 16;
+      } else if (size === 0) size = end - offset;
+      if (!Number.isSafeInteger(size) || size < header || offset + size > end) break;
+      result.push({ type, body: offset + header, end: offset + size });
+      offset += size;
     }
-    return null
-  } catch {
-    return null
+    return result;
   }
+  try {
+    for (const movie of boxes(0, buffer.length).filter(box => box.type === 'moov')) {
+      for (const track of boxes(movie.body, movie.end).filter(box => box.type === 'trak')) {
+        const children = boxes(track.body, track.end);
+        const mdia = children.find(box => box.type === 'mdia');
+        const handler = mdia && boxes(mdia.body, mdia.end).find(box => box.type === 'hdlr');
+        if (handler) {
+          if (handler.body + 12 > handler.end) continue;
+          if (String.fromCharCode(...buffer.subarray(handler.body + 8, handler.body + 12)) !== 'vide') continue;
+        }
+        const tkhd = children.find(box => box.type === 'tkhd');
+        if (!tkhd) continue;
+        const version = buffer[tkhd.body];
+        if (version !== 0 && version !== 1) continue;
+        const matrix = tkhd.body + (version === 1 ? 52 : 40);
+        const wh = matrix + 36;
+        if (wh + 8 > tkhd.end) continue;
+        const w = view.getUint32(wh) / 65536;
+        const h = view.getUint32(wh + 4) / 65536;
+        const a = view.getInt32(matrix) / 65536;
+        const b = view.getInt32(matrix + 4) / 65536;
+        const c = view.getInt32(matrix + 12) / 65536;
+        const d = view.getInt32(matrix + 16) / 65536;
+        const width = Math.round(Math.abs(a) * w + Math.abs(c) * h);
+        const height = Math.round(Math.abs(b) * w + Math.abs(d) * h);
+        if (width > 0 && height > 0 && width < 100000 && height < 100000) return { width, height };
+      }
+    }
+  } catch { /* Malformed/truncated containers remain unknown. */ }
+  return null;
 }
 
 /** Movie-header duration for MP4/MOV reference billing; unknown is never zero. */

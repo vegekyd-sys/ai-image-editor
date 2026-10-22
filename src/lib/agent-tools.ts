@@ -783,20 +783,8 @@ async function validateCompositionMediaAspect(
 }
 
 async function probeTimelineVideoDimensions(url: string): Promise<{ width: number; height: number } | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const length = Number(res.headers.get('content-length') || 0);
-    if (length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
-
-    const buffer = new Uint8Array(await res.arrayBuffer());
-    if (buffer.length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
-
-    const { probeMP4Dimensions } = await import('./mp4-probe');
-    return probeMP4Dimensions(buffer);
-  } catch {
-    return null;
-  }
+  const { probeVideoDimensionsFromUrl } = await import('./video-dimensions');
+  return probeVideoDimensionsFromUrl(url);
 }
 
 /** Fetch an image source (URL or base64 data URL) into a JPEG Buffer.

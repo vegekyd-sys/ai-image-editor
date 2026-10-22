@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { rotatedMp4 } from './helpers/rotatedMp4Fixture';
+beforeEach(() => vi.stubGlobal('fetch', vi.fn(async () => new Response(rotatedMp4()))));
+afterEach(() => vi.unstubAllGlobals());
 import { detectExternalMediaType, publishExternalVideoRanges } from '@/lib/external-video-range';
 
 function emptyMediaListSupabase() {
@@ -103,11 +106,13 @@ describe('external Media List publishing', () => {
       ref: '<<<media_1>>>',
       description,
       created: false,
+      width: 1080, height: 1920,
     });
     expect(updates).toHaveLength(1);
     expect(updates[0].description).toBe(description);
     expect(updates[0].video_meta).toMatchObject({
       videoUrl: 'https://cdn.example.com/source.mp4?capability=stable',
+      width: 1080, height: 1920,
       prompt: description,
       sourceRange: {
         source_url: 'https://cdn.example.com/source.mp4?capability=stable',
@@ -115,6 +120,22 @@ describe('external Media List publishing', () => {
         end_sec: 18,
       },
     });
+  });
+
+  it('persists measured display size when publishing a new external range', async () => {
+    const db = emptyMediaListSupabase();
+    const [published] = await publishExternalVideoRanges({ supabase: db.client as never,
+      projectId: 'project', userId: 'user', ranges: [{source_url:'https://media.test/portrait',type:'video',start:0,end:3}] });
+    expect(published).toMatchObject({width:1080,height:1920});
+    expect(db.inserted[0].video_meta).toMatchObject({width:1080,height:1920,duration:3});
+  });
+  it('does not invent portrait dimensions when metadata is unavailable', async () => {
+    const db = emptyMediaListSupabase();
+    const [published] = await publishExternalVideoRanges({ supabase: db.client as never,
+      projectId: 'project', userId: 'user', ranges: [{source_url:'https://media.test/unknown',type:'video',start:0,end:3}],
+      fetchImpl: async () => new Response('unavailable',{status:503}) });
+    expect(published.width).toBeUndefined();
+    expect(db.inserted[0].video_meta).not.toHaveProperty('width');
   });
 
   it('publishes a declared Scene image as a normal image snapshot with no fake range', async () => {

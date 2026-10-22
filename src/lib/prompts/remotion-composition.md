@@ -52,6 +52,9 @@ Only when no output aspect or reframe is requested, derive the canvas from the s
 - If the selected videos share a square aspect, use a square canvas such as `width: 1080, height: 1080`.
 - If dimensions are mixed, choose the user's target platform/aspect when stated; otherwise preserve the current composition's aspect when editing, or use `contain` with an intentional background instead of silently cropping into the wrong aspect.
 - Do not describe mixed-aspect decisions as "runtime forced 9:16" just because one referenced source is vertical.
+- Source dimensions describe the upright displayed picture, including phone rotation metadata. If dimensions are unknown, measure them before deciding orientation; do not infer landscape from a filename, description, or coded pixel dimensions.
+- For source-led edits, the footage is the primary visual. A same-aspect 9:16 source should fill the 9:16 canvas (or a similarly proportioned near-full-height area), with captions/branding overlaid. Do not place portrait footage in a short 16:9 strip and surround it with large decorative empty areas. For landscape-to-portrait contain, use the full canvas width so the picture is as large as possible; do not shrink it again inside another inset. Use inset, split-screen or picture-in-picture only when the requested treatment calls for it. Check actual picture occupancy in `preview_frame`, not just the canvas width/height.
+- Set video fit with `<Video objectFit="cover" ... />` (or `contain`), not CSS alone: the media decoder uses the component prop. Legacy CSS is normalized by Makaron across preview/export. The fit never changes the authored wrapper dimensions.
 - Use `objectFit: 'cover'` only after the canvas aspect matches the intended output. `cover` is not a fix for putting 9:16 footage inside a 16:9 canvas.
 
 ## Runtime Contract
