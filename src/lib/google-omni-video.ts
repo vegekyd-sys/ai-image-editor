@@ -1,3 +1,4 @@
+import { VideoProviderRejection } from './video-provider-error'
 import { transcodeVideoBufferToSdrMp4 } from '@/lib/provider-video-reference'
 import type { VideoGenerationOperation, VideoResolution } from '@/lib/video-model-capabilities'
 
@@ -275,7 +276,9 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
 
   if (!res.ok) {
     const error = data.error as { message?: string } | undefined
-    throw new Error(`Google Omni API error ${res.status}: ${error?.message || text.slice(0, 800)}`)
+    const message = `Google Omni API error ${res.status}: ${error?.message || text.slice(0, 800)}`
+    if (res.status >= 400 && res.status < 500 && res.status !== 408) throw new VideoProviderRejection(message)
+    throw new Error(message)
   }
 
   const outputVideo = findOutputVideo(data)

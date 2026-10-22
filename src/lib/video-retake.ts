@@ -224,7 +224,7 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
     if (job.stage === 'saving_patch' && job.patch_url) {
       const bytes = job.model_id === 'google-omni' && !job.patch_url.startsWith('https://cdn.makaron.app/')
         ? Buffer.from(await (await import('./google-omni-video')).fetchGoogleOmniVideoBytes(job.patch_url))
-        : await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', muleAsset: job.model_id.startsWith('wan-3.0'), falAsset: job.model_id === 'fal-h3-max', evolinkAsset: job.model_id.startsWith('seedance-2.5') || job.model_id === 'kling-4' })
+        : await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', xaiAsset: job.model_id === 'grok', muleAsset: job.model_id.startsWith('wan-3.0'), falAsset: job.model_id === 'fal-h3-max', evolinkAsset: job.model_id.startsWith('seedance-2.5') || job.model_id === 'kling-4' })
       const permanentPatch = await store(job, bytes, 'patch')
       await save(job, { patch_url: permanentPatch, stage: 'assembling' }, token)
     }

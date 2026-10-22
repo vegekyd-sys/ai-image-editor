@@ -11,3 +11,9 @@ it('permits the fixed Wan supplier asset host only with the provider-owned flag'
  await expect(readProviderImage('https://attacker.muleusercontent.com/result.mp4',100,{muleAsset:true})).rejects.toThrow('Non-public')
  await expect(readProviderImage('https://mule-router-assets.muleusercontent.com.attacker.com/result.mp4',100,{muleAsset:true})).rejects.toThrow('Non-public')
 })
+
+it('only permits the fixed xAI returned-video host for Grok-owned outputs',async()=>{
+ await expect(readProviderImage('https://vidgen.x.ai/result.mp4',100)).rejects.toThrow('Non-public');
+ expect((await readProviderImage('https://vidgen.x.ai/result.mp4',100,{xaiAsset:true})).toString()).toBe('video');
+ await expect(readProviderImage('https://vidgen.x.ai.attacker.com/result.mp4',100,{xaiAsset:true})).rejects.toThrow('Non-public');
+});

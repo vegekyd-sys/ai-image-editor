@@ -1,3 +1,4 @@
+import { VideoProviderRejection } from '../video-provider-error'
 import { getVideoModelRetirementError, RETIRED_KLING_MESSAGE } from '../video-model-capabilities';
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
 import type { VideoQuoteInput } from '../billing/media-pricing';
@@ -787,6 +788,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         invalidMediaUrls: e.invalidMediaUrls,
       };
     }
+    if (e instanceof VideoProviderRejection) return { success:false, retryable:false, submissionUncertain:false, errorCode:e.code, message:e.message };
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[create_video error]', msg);
     return {
