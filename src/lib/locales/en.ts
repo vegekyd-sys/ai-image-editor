@@ -272,6 +272,8 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.videoFramingParity.title': "More consistent video preview and export",
+  'changelog.videoFramingParity.item1': "Fixed unexpectedly small portrait footage and incorrect orientation detection. Scaling, cropping and edited positions now match between preview and export, with smoother playback across cuts.",
   'changelog.fasterFrameChecks.title': "Faster frame checks, more reliable screenshots",
   'changelog.fasterFrameChecks.item1': "Check multiple video frames faster and reuse prepared media on follow-up checks. Screenshot saving now retries temporary network failures.",
   'changelog.reliable4kExport.title': "More reliable exports with 4K footage",

@@ -308,6 +308,8 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.videoFramingParity.title': "プレビューと書き出しの構図を統一",
+  'changelog.videoFramingParity.item1': "縦動画が小さく表示される問題と縦横比の判定を修正。拡大縮小、トリミング、編集後の位置をプレビューと書き出しで揃え、カット切り替え時の再生も改善しました。",
   'changelog.fasterFrameChecks.title': "複数フレームの確認を高速化、スクリーンショット保存を改善",
   'changelog.fasterFrameChecks.item1': "複数の動画フレームをより速く確認し、次の確認でも準備済みの素材を再利用できます。スクリーンショット保存時の一時的な通信エラーは自動で再試行します。",
   'changelog.reliable4kExport.title': "4K 素材の書き出しを安定化",

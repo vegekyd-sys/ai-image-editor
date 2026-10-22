@@ -272,6 +272,8 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.videoFramingParity.title': "视频预览与导出画幅更一致",
+  'changelog.videoFramingParity.item1': "修复竖屏视频画面意外缩小和横竖屏误判，让预览与导出的缩放、裁剪和编辑位置保持一致，切镜播放更连贯。",
   'changelog.fasterFrameChecks.title': "多帧检查更快，截图保存更可靠",
   'changelog.fasterFrameChecks.item1': "连续检查多个视频画面更快；再次检查可复用已准备的素材，截图保存遇到短暂网络异常会自动重试。",
   'changelog.reliable4kExport.title': "4K 素材导出更稳定",

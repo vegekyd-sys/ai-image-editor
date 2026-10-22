@@ -78,6 +78,28 @@ curl -sS https://www.makaron.app/api/health
 
 Expected: alias resolves, app loads, and `/api/health` reports all critical services healthy or has a known, scoped exception.
 
+## Production, Dev, And Shared Preview Synchronization
+
+Every authorized deployment or runtime configuration change must finish with
+Production, the `dev` deployment, and shared Preview synchronized. Verify the
+production user path first, then deploy the accepted commit to shared dev and
+update shared Preview defaults plus applicable dev branch overrides.
+
+Compare current live configuration, including the media-processing sandbox,
+Remotion preview snapshot, Lambda render site/function/version, and export,
+cache, capacity and encoding settings. Treat the two sandbox snapshot contracts
+separately. Preserve explicit experiment isolation and justified environment
+specific settings; do not copy unrelated credentials or overwrite another
+branch's deployment overrides.
+
+Environment updates do not modify existing deployments. Use a fresh deployment
+when necessary, and verify the actual sandbox package version and a real export
+through each accepted deployment. A redeploy may retain the original deployment's
+environment even after project variables change. Record deployment IDs, tested
+commit, runtime parity, and rollback values. Synchronization is part of release
+completion, not a later follow-up, and does not itself authorize a future
+production release.
+
 ## CLI Publish
 
 Every release must assess CLI and npm parity, including model/provider and API changes that do not directly touch `packages/makaron-cli`. Check whether the shipped capabilities, parameters, help, README, and bundled Skill need an update. If they do, update and publish the CLI in the same release loop; a website deployment does not complete a CLI release. If no package update is needed, record that conclusion in the release result.

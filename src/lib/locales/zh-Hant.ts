@@ -310,6 +310,8 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.videoFramingParity.title': "影片預覽與匯出構圖更一致",
+  'changelog.videoFramingParity.item1': "修正直式影片畫面意外縮小和橫直比例誤判，讓預覽與匯出的縮放、裁切和編輯位置保持一致，鏡頭切換播放更連貫。",
   'changelog.fasterFrameChecks.title': "多影格檢查更快，截圖儲存更可靠",
   'changelog.fasterFrameChecks.item1': "連續檢查多個影片畫面更快；再次檢查可重用已準備的素材，截圖儲存遇到短暫網路異常會自動重試。",
   'changelog.reliable4kExport.title': "4K 素材匯出更穩定",
