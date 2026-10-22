@@ -94,12 +94,12 @@ describe('editable transform ownership', () => {
     expect(html).toContain('<div data-editable="title"><span data-editable="title" style="translate:100px 50px">');
   });
 
-  it('applies inferred trim overrides directly to a video host', () => {
+  it('applies inferred trim overrides directly to a standalone export video host', () => {
     const Component = evalRemotionJSX(`
       function Composition(props) {
         return <Video data-editable="clip" src={props.clip} trimBefore={5} />;
       }
-    `);
+    `, {videoRuntime: 'export'});
     if (!Component) throw new Error('Expected composition to compile');
 
     const wrappedElement = (Component as unknown as (

@@ -697,7 +697,7 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
 
   const authoredDuration = props.durationInFrames;
   const nativeContinuity = React.useContext(PreviewNativeContinuityContext);
-  const canHoldLastFrame = nativeContinuity && containsVideo && Number.isFinite(authoredDuration);
+  const canHoldLastFrame = containsVideo && Number.isFinite(authoredDuration);
   const premountFor = props.premountFor ?? getPreviewPremountFrames({
     authoredDuration,
     fps,
@@ -778,6 +778,15 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
   );
   // PremountedPostmountedSequence forces its active wrapper opacity back to 1,
   // so readiness gating must live inside Sequence rather than in `style` above.
+  // Media Video keeps its decoded canvas mounted at the last authored frame
+  // during the incoming scene's wall-clock buffer stall. Keep Freeze mounted
+  // throughout so the cut does not recreate the outgoing decoder.
+  const continuousContent = !nativeContinuity && containsVideo
+    ? React.createElement(Remotion.Freeze, {
+        frame: Math.max(0, authoredDuration - 1),
+        active: isContinuingPastCut,
+      }, readinessContent)
+    : readinessContent;
   const content = containsVideo
     ? React.createElement(
         props.layout === 'none' ? 'div' : Remotion.AbsoluteFill,
@@ -787,9 +796,9 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
             ? { display: 'contents', visibility: mediaReady ? undefined : 'hidden' }
             : { opacity: mediaReady ? 1 : 0, pointerEvents: mediaReady ? undefined : 'none' },
         },
-        readinessContent,
+        continuousContent,
       )
-    : readinessContent;
+    : continuousContent;
 
   return React.createElement(
     Sequence,
@@ -1023,6 +1032,7 @@ export function evalRemotionJSX(
     const comp = factory(authoredScope, authoredModule, authoredModule.exports, localRequire);
     if (!comp) return null;
     const Wrapped = editableRuntime.wrap(comp, options.editableTransformMode ?? 'proxy');
+    if (!isPreviewRuntime) return Wrapped;
     return function BrowserComposition(props: Record<string, unknown>) {
       return React.createElement(PreviewNativeContinuityContext.Provider,
         { value: preferNativeVideo }, React.createElement(Wrapped, props));

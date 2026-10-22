@@ -21,7 +21,8 @@ async function main(){
  for(const face of manifest.faces){const filename=new URL(face.url,originalManifestUrl).pathname.split('/').pop()!;remoteFonts.set(filename,new URL(face.url,originalManifestUrl).href);face.url=`http://localhost:${port}/fonts/${filename}`;}
  fs.writeFileSync(path.join(out,'fonts.json'),JSON.stringify(manifest));
  const server=http.createServer(async(req,res)=>{
-  const pathname=decodeURIComponent(new URL(req.url!,'http://localhost').pathname);
+  let pathname=decodeURIComponent(new URL(req.url!,'http://localhost').pathname);
+  if(pathname==='/delayed.mp4'){await new Promise(resolve=>setTimeout(resolve,5000));pathname='/source.mp4';}
   if(pathname.startsWith('/fonts/')){const filename=pathname.split('/').pop()!,remote=remoteFonts.get(filename);if(!remote){res.writeHead(404);return res.end();}const file=path.join(out,'fonts',filename);fs.mkdirSync(path.dirname(file),{recursive:true});if(!fs.existsSync(file)){const response=await fetch(remote);if(!response.ok){res.writeHead(response.status);return res.end();}fs.writeFileSync(file,Buffer.from(await response.arrayBuffer()));}}
   const file=path.resolve(out,'.'+(pathname==='/'?'/index.html':pathname));if(!file.startsWith(out+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.writeHead(404);return res.end();}
   const size=fs.statSync(file).size;res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Accept-Ranges','bytes');res.setHeader('Content-Type',file.endsWith('.mp4')?'video/mp4':file.endsWith('.js')?'application/javascript':file.endsWith('.html')?'text/html':file.endsWith('.json')?'application/json':file.endsWith('.woff2')?'font/woff2':'image/png');

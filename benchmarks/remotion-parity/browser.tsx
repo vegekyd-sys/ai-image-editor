@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Player, type PlayerRef } from '@remotion/player';
 import { evalRemotionJSX } from '../../src/lib/evalRemotionJSX';
@@ -17,10 +17,12 @@ async function main(){
  }
  function App(){
    const [id,setId]=useState(fixtures[0].id),[frame,setFrame]=useState(fixtures[0].frame),[pixels,setPixels]=useState('');
+   const [playingFrame,setPlayingFrame]=useState(0);
    const ref=useRef<PlayerRef>(null);const fixture=fixtures.find(f=>f.id===id)!;
    const Component=useMemo(()=>components.get(id)!,[id]);
+   useEffect(()=>{const player=ref.current;if(!player)return;const onFrame=(e:any)=>setPlayingFrame(e.detail.frame);player.addEventListener('frameupdate',onFrame);return()=>player.removeEventListener('frameupdate',onFrame);},[id]);
    const select=(f:typeof fixture)=>{setId(f.id);setFrame(f.frame);};
-   return <><h1>Preview / Export property parity</h1><nav>{fixtures.map(f=><button key={f.id} id={f.id} onClick={()=>select(f)}>{f.id}</button>)}</nav><p id="status">{id} · frame {frame} · ready</p><div className="comparison"><div id="stage" style={{width:600,height:337.5,flexShrink:0}}><Player key={id} ref={ref} component={Component} inputProps={fixture.props} compositionWidth={640} compositionHeight={360} durationInFrames={240} fps={30} initialFrame={fixture.frame} controls={false} acknowledgeRemotionLicense style={{width:600,height:337.5}}/></div><img id="reference" style={{width:600,height:337.5}} src={`/${id}-media.png`} alt="Media export reference"/></div><button id="pixels" onClick={()=>{const canvas=document.querySelector<HTMLCanvasElement>('#stage canvas');const context=canvas?.getContext('2d');setPixels(context?JSON.stringify([[500,80],[550,100],[150,100]].map(([x,y])=>Array.from(context.getImageData(x,y,1,1).data))):'native fallback');}}>Inspect canvas pixels</button><output id="pixel-output">{pixels}</output><button id="seek" onClick={()=>ref.current?.seekTo(fixture.frame)}>Seek test frame</button><button id="play" onClick={()=>ref.current?.play()}>Play</button><button id="pause" onClick={()=>ref.current?.pause()}>Pause</button></>;
+   return <><h1>Preview / Export property parity</h1><nav>{fixtures.map(f=><button key={f.id} id={f.id} onClick={()=>select(f)}>{f.id}</button>)}</nav><p id="status">{id} · frame {frame} · playback {playingFrame} · ready</p><div className="comparison"><div id="stage" style={{width:600,height:337.5,flexShrink:0}}><Player key={id} ref={ref} component={Component} inputProps={fixture.props} compositionWidth={640} compositionHeight={360} durationInFrames={240} fps={30} initialFrame={fixture.frame} controls={false} acknowledgeRemotionLicense style={{width:600,height:337.5}}/></div><img id="reference" style={{width:600,height:337.5}} src={`/${id}-media.png`} alt="Media export reference"/></div><button id="pixels" onClick={()=>{const canvas=document.querySelector<HTMLCanvasElement>('#stage canvas');const context=canvas?.getContext('2d');setPixels(context?JSON.stringify([[500,80],[550,100],[150,100]].map(([x,y])=>Array.from(context.getImageData(x,y,1,1).data))):'native fallback');}}>Inspect canvas pixels</button><output id="pixel-output">{pixels}</output><button id="seek" onClick={()=>ref.current?.seekTo(fixture.frame)}>Seek test frame</button><button id="play" onClick={()=>ref.current?.play()}>Play</button><button id="pause" onClick={()=>ref.current?.pause()}>Pause</button></>;
  }
  createRoot(document.getElementById('root')!).render(<App/>);
 }

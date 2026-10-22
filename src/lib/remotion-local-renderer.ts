@@ -10,6 +10,7 @@ import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
 import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver'
+import { collectPreviewMediaSources, localizePreviewMedia } from '@/lib/remotion-preview-media'
 
 let bundlePromise: Promise<string> | null = null
 let mediaServer: http.Server | null = null
@@ -58,30 +59,12 @@ function prepareRemotionCodeForLocalRenderer(code: string): string {
 ${normalized}`
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
 function videoExtensionForUrl(url: string): string {
   const pathname = (() => {
     try { return new URL(url).pathname } catch { return url }
   })()
   const ext = path.extname(pathname).toLowerCase()
   return ['.mp4', '.mov', '.webm', '.m4v'].includes(ext) ? ext : '.mp4'
-}
-
-function extractVideoUrlsFromText(text: string): string[] {
-  const urls = new Set<string>()
-  const pattern = /https?:\/\/[^\s"'`<>)}\]]+\.(?:mp4|mov|webm|m4v)(?:[^\s"'`<>)}\]]*)?/gi
-  for (const match of text.matchAll(pattern)) urls.add(match[0])
-  return [...urls]
-}
-
-function extractVideoUrlsFromValue(value: unknown): string[] {
-  if (typeof value === 'string') return extractVideoUrlsFromText(value)
-  if (Array.isArray(value)) return value.flatMap(extractVideoUrlsFromValue)
-  if (isObject(value)) return Object.values(value).flatMap(extractVideoUrlsFromValue)
-  return []
 }
 
 function resolveLocalConcurrency(value: number | string | null | undefined): number | string {
@@ -204,48 +187,23 @@ async function ensureMediaServer(root: string, port: number): Promise<void> {
 }
 
 async function localizeVideos(design: DesignPayload, cacheDir: string, port: number): Promise<DesignPayload> {
-  const urls = new Set<string>([
-    ...extractVideoUrlsFromText(design.code),
-    ...extractVideoUrlsFromValue(design.props || {}),
-  ])
-  if (urls.size === 0) return design
-
+  // Share Sandbox/export source discovery, including Scene's extensionless
+  // signed media endpoints. Otherwise local QA bypasses the disk cache and
+  // the browser's 28-second decoder deadline becomes a remote download limit.
+  const sources = collectPreviewMediaSources(design)
+  if (!sources.length) return design
   const t0 = Date.now()
   await ensureMediaServer(cacheDir, port)
-  const replacements = new Map<string, string>()
-  await Promise.all([...urls].map(async (url) => {
+  const localized = await Promise.all(sources.map(async ({url}) => {
     const cached = await downloadToCache(url, cacheDir)
-    replacements.set(url, `http://127.0.0.1:${port}/${encodeURIComponent(safeCacheName(cached))}`)
+    return {url, path: `http://127.0.0.1:${port}/${encodeURIComponent(safeCacheName(cached))}`}
   }))
   console.log(JSON.stringify({
     event: 'remotion_local_media_localized',
-    count: replacements.size,
+    count: localized.length,
     seconds: (Date.now() - t0) / 1000,
   }))
-
-  let code = design.code
-  for (const [from, to] of replacements) {
-    while (code.includes(from)) code = code.replace(from, to)
-  }
-
-  const replaceInValue = (value: unknown): unknown => {
-    if (typeof value === 'string') {
-      let next = value
-      for (const [from, to] of replacements) {
-        while (next.includes(from)) next = next.replace(from, to)
-      }
-      return next
-    }
-    if (Array.isArray(value)) return value.map(replaceInValue)
-    if (isObject(value)) return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, replaceInValue(child)]))
-    return value
-  }
-
-  return {
-    ...design,
-    code,
-    props: replaceInValue(design.props || {}) as Record<string, unknown>,
-  }
+  return localizePreviewMedia(design, localized)
 }
 
 async function getBundleUrl(): Promise<string> {
