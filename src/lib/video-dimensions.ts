@@ -42,9 +42,25 @@ export async function probeVideoDimensionsFromUrl(
   }
   try {
     if (!['http:', 'https:'].includes(new URL(url).protocol)) return null;
+    // Reuse a bounded window for adjacent ftyp/uuid/free headers. A phone
+    // MP4 can otherwise need six remote round trips before its tail moov,
+    // exhausting the same deadline despite transferring only a few bytes.
+    const windowBytes = 64 * 1024;
+    let windowStart = -1;
+    let window = new Uint8Array();
+    async function at(start: number, length: number): Promise<Uint8Array | null> {
+      if (start >= windowStart && start + length <= windowStart + window.length) {
+        return window.subarray(start - windowStart, start - windowStart + length);
+      }
+      windowStart = start;
+      const bytes = await read(start, Math.max(windowBytes, length));
+      if (!bytes) return null;
+      window = bytes;
+      return bytes.subarray(0, length);
+    }
     let offset = 0;
     for (let box = 0; box < 32; box++) {
-      const header = await read(offset, 16);
+      const header = await at(offset, 16);
       if (!header || header.length < 8) return null;
       const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
       let size = view.getUint32(0);
@@ -54,7 +70,7 @@ export async function probeVideoDimensionsFromUrl(
       if (!Number.isSafeInteger(size) || size < headerSize) return null;
       if (type === 'moov') {
         if (size + downloaded > maxBytes) return null;
-        const movie = await read(offset, size);
+        const movie = await at(offset, size);
         return movie?.length === size ? probeMP4Dimensions(movie) : null;
       }
       offset += size;

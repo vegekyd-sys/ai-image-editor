@@ -29,7 +29,18 @@ describe('displayed video dimensions', () => {
       return new Response(new Uint8Array(bytes),{status:206,headers:{'content-range':`bytes ${a}-${start+bytes.length-1}/5000001000`}});
     });
     expect(await probeVideoDimensionsFromUrl('https://media.test/movie',fetch as typeof globalThis.fetch)).toEqual({width:1080,height:1920});
-    expect(fetch.mock.calls.map(call=>call[1].headers.Range)).toEqual(['bytes=0-15','bytes=5000000000-5000000015',`bytes=5000000000-${5000000000+movie.length-1}`]);
+    expect(fetch.mock.calls.map(call=>call[1].headers.Range)).toEqual(['bytes=0-65535','bytes=5000000000-5000065535']);
+  });
+  it('reads adjacent phone headers and a tail movie in three bounded round trips', async () => {
+    const file=Buffer.concat([box('ftyp',Buffer.alloc(20)),box('uuid',Buffer.alloc(140)),box('free',Buffer.alloc(130872)),box('mdat',Buffer.alloc(200000)),rotatedMp4()]);
+    const fetch=vi.fn(async (_url: any, init: any) => {
+      const [,a,b]=/bytes=(\d+)-(\d+)/.exec(init.headers.Range)!;
+      const start=Number(a), bytes=file.subarray(start,Number(b)+1);
+      return new Response(new Uint8Array(bytes),{status:206,headers:{'content-range':`bytes ${start}-${start+bytes.length-1}/${file.length}`}});
+    });
+    expect(await probeVideoDimensionsFromUrl('https://media.test/phone',fetch as typeof globalThis.fetch)).toEqual({width:1080,height:1920});
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls.every(call=>Number(call[1].headers.Range.split('-')[1])-Number(call[1].headers.Range.split('=')[1].split('-')[0])<65536)).toBe(true);
   });
   it('supports a small server that ignores Range, without guessing on failure', async () => {
     const fetch=vi.fn(async()=>new Response(new Uint8Array(rotatedMp4())));
