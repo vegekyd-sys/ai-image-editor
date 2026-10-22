@@ -739,3 +739,7 @@ The legacy `openai` image-model parameter now resolves to GPT Image 2.5 Flare.
 `chat --stream` follows the original durable run when its live connection ends before completion. It does not submit another generation; already printed reply text is not replayed.
 
 Wan Retake (`wan-3.0` / `wan-3.0-prime`) rebuilds the selected interval using cropped video references and automatic assembly; it is reference-guided generation, with no native endpoint locks. Kling remains the default pending matched-case acceptance.
+
+Native Retake alternatives: `--model grok` uses xAI video editing (selection <=8.5s, source >=1s, at most 720p, no extra image references); `--model google-omni` uses native Google editing (selection <=10s, source >=3s); `--model minimax-h3` uses reference-guided rebuilding (source >=2s). These routes do not support exact final/middle/corrected-frame locks. MiniMax provider availability depends on its account balance; the October 23 real probe was rejected with HTTP 402 and produced no video.
+
+Five matched native-edit cases found no universal quality/cost/speed winner: Grok was cheaper and faster but failed lettering and camera-change requests; Omni corrected lettering and kept book color better, but applied the product effect to the wrong object. Keep Kling as the API default, choose alternatives explicitly, and verify the actual requested object, action and joins. See `docs/research/retake-native-model-benchmark-2026-10-23.md` in the source repository for scope and evidence.

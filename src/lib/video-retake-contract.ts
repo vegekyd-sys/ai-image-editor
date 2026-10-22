@@ -21,7 +21,7 @@ export interface RetakePlan extends RetakeRange {
 export function resolveRetakeModel(model?: string | null): RetakeModel {
   const id = model && model !== 'auto' ? normalizeVideoModelId(model) : DEFAULT_RETAKE_MODEL
   if (!RETAKE_MODELS.includes(id as RetakeModel)) {
-    throw new Error('Retake supports Seedance 2.5 Eco, Seedance 2.5, FAL H3 Max, Kling 4.0 Wan 3.0 Standard/Prime, Grok, Google Omni and MiniMax H3. H3 Turbo does not accept source video. Choose a supported model explicitly.')
+    throw new Error('Retake supports Seedance 2.5 Eco, Seedance 2.5, FAL H3 Max, Kling 4.0, Wan 3.0 Standard/Prime, Grok, Google Omni and MiniMax H3. H3 Turbo does not accept source video. Choose a supported model explicitly.')
   }
   return id as RetakeModel
 }

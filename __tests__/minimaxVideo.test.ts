@@ -158,6 +158,33 @@ describe('MiniMax H3 video adapter', () => {
     })
   })
 
+  it.each([400, 401, 402, 403, 422, 429])('marks explicit submission HTTP %s rejection as safe to refund', async (status) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'request rejected' }), { status })))
+    const { createVideo } = await import('@/lib/skills/create-video')
+    await expect(createVideo({ script: 'Edit the source', images: [], videoModel: 'minimax-h3', duration: 4 })).resolves.toMatchObject({
+      success: false, errorCode: 'PROVIDER_REJECTED', submissionUncertain: false,
+    })
+  })
+
+  it.each([408, 500, 504])('keeps HTTP %s submission uncertainty to prevent duplicate spending', async (status) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('upstream unavailable', { status })))
+    const { createVideo } = await import('@/lib/skills/create-video')
+    await expect(createVideo({ script: 'Edit the source', images: [], videoModel: 'minimax-h3', duration: 4 })).resolves.toMatchObject({
+      success: false, submissionUncertain: true,
+    })
+  })
+
+  it('does not submit when the MiniMax key is missing', async () => {
+    vi.stubEnv('MINIMAX_API_KEY', '')
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const { createVideo } = await import('@/lib/skills/create-video')
+    await expect(createVideo({ script: 'Edit the source', images: [], videoModel: 'minimax-h3', duration: 4 })).resolves.toMatchObject({
+      success: false, errorCode: 'PROVIDER_REJECTED', submissionUncertain: false,
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('normalizes query states and strips the Makaron task prefix', async () => {
     const fetchMock = vi.fn(async (url: string | URL | Request) => {
       expect(String(url)).toBe('https://api.minimaxi.com/v2/query/video_generation/424010985738629')
