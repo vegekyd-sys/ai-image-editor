@@ -1,3 +1,4 @@
+import { withVideoFit } from './remotion-video-fit';
 'use client';
 
 /**
@@ -900,6 +901,10 @@ export function pickRemotionComponentName(code: string): string {
  * Tries Sucrase first (bundled, instant). Falls back to Babel CDN if Sucrase fails.
  */
 
+const CompatibleMediaVideo = withVideoFit(Video, true);
+const CompatiblePreviewVideo = withVideoFit(PreviewVideo, false);
+const CompatibleHtml5Video = withVideoFit(Remotion.Html5Video, false);
+
 export function evalRemotionJSX(
   code: string,
   options: {
@@ -935,14 +940,15 @@ export function evalRemotionJSX(
     // Poster/frame/export paths keep @remotion/media because web-renderer requires it.
     const isPreviewRuntime = options.videoRuntime === 'preview';
     const videoComponent = isPreviewRuntime
-      ? PreviewVideo
-      : Video;
+      ? CompatiblePreviewVideo
+      : CompatibleMediaVideo;
     const editableRuntime = createEditableReactRuntime(React, videoComponent);
     const authoredScope = {
       ...REMOTION_SCOPE,
       React: editableRuntime.React,
       Video: videoComponent,
       OffthreadVideo: videoComponent,
+      Html5Video: CompatibleHtml5Video,
       Sequence: isPreviewRuntime ? PreviewSequence : AutoPremountSequence,
     };
     const editableId = (editableRuntime.React as typeof React & {
@@ -953,6 +959,7 @@ export function evalRemotionJSX(
       Audio,
       Video: videoComponent,
       OffthreadVideo: videoComponent,
+      Html5Video: CompatibleHtml5Video,
     };
     const pathsNamespace = { ...RemotionPaths };
     const noiseNamespace = { ...RemotionNoise };

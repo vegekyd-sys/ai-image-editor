@@ -4,7 +4,7 @@ import { editableRuntimeClassName } from './scene-registry';
 export type EditableTransformMode = 'proxy' | 'registry';
 
 export const REMOTION_EDITABLE_RUNTIME_VERSION =
-  'remotion-editable-runtime-r4-caption-style-preserving';
+  'remotion-editable-runtime-r5-video-fit-parity';
 
 type ReactRuntime = typeof React;
 

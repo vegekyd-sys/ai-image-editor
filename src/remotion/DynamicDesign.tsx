@@ -1,3 +1,4 @@
+import { withVideoFit } from '../lib/remotion-video-fit';
 /**
  * DynamicDesign — a Remotion composition that compiles and renders Agent-generated JSX code.
  * Used by both browser-side Player and server-side Sandbox (renderStillOnVercel).
@@ -36,8 +37,8 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(prop
 });
 
 function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean): Record<string, unknown> {
-  const serverVideo = Remotion.OffthreadVideo || MediaVideo;
-  const nativeVideo = Remotion.Video || MediaVideo;
+  const serverVideo = withVideoFit(Remotion.OffthreadVideo || MediaVideo, !Remotion.OffthreadVideo);
+  const nativeVideo = withVideoFit(Remotion.Video || MediaVideo, !Remotion.Video);
   const serverRendering = useOffthreadVideo || useNativeVideo;
   const scope: Record<string, unknown> = {
     React, useState, useEffect, useCallback, useMemo, useRef,
@@ -48,12 +49,13 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
     // @remotion/media keeps browser/web-renderer preview behavior; server export can opt into
     // Remotion-native Video so the renderer can collect source-video audio assets.
     Audio: MediaAudio,
-    Video: useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : MediaVideo,
+    Video: useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : withVideoFit(MediaVideo, true),
+    Html5Video: withVideoFit(Remotion.Html5Video, false),
     // An explicit <OffthreadVideo> must remain meaningful in server preview/export.
     // Previously it was silently aliased back to @remotion/media whenever only
     // useNativeVideo was set, so an Agent "compatibility" patch changed the
     // component name without changing the decoder at all.
-    OffthreadVideo: serverRendering ? serverVideo : MediaVideo,
+    OffthreadVideo: serverRendering ? serverVideo : withVideoFit(MediaVideo, true),
     // Override: Sequence with auto premountFor
     Sequence: AutoPremountSequence,
   };
