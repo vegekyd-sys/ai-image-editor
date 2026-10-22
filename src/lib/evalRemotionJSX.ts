@@ -602,7 +602,7 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
       // A cache must replace the live paint. Painting both at authored opacity
       // 0.5 yields 0.75 and doubles shadows/filters during the handoff.
       style: showCachedFrame ? { ...style, opacity: 0 } : style,
-      'data-makaron-preview-cache-source': showCachedFrame ? 'true' : undefined,
+      ...(showCachedFrame ? { 'data-makaron-preview-cache-source': 'true' } : {}),
       trimBefore,
       ref: setVideoRef,
       onCanPlay: handleCanPlay,
