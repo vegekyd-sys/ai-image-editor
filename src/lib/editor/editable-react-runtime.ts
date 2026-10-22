@@ -4,7 +4,7 @@ import { editableRuntimeClassName } from './scene-registry';
 export type EditableTransformMode = 'proxy' | 'registry';
 
 export const REMOTION_EDITABLE_RUNTIME_VERSION =
-  'remotion-editable-runtime-r5-video-fit-parity';
+  'remotion-editable-runtime-r6-media-parity';
 
 type ReactRuntime = typeof React;
 
@@ -96,7 +96,9 @@ export function renderTextLineBreaks(
 export function createEditableReactRuntime(
   react: ReactRuntime,
   videoComponent: React.ElementType,
+  additionalVideoComponents: React.ElementType[] = [],
 ): EditableReactRuntime {
+  const videoComponents = new Set([videoComponent, ...additionalVideoComponents]);
   let currentProps: Record<string, unknown> = {};
   let currentTransformMode: EditableTransformMode = 'proxy';
   const originalCreateElement = react.createElement;
@@ -162,7 +164,7 @@ export function createEditableReactRuntime(
   ): React.ReactNode => {
     if (!react.isValidElement(node)) return node;
 
-    if (node.type === videoComponent) {
+    if (videoComponents.has(node.type as React.ElementType)) {
       return react.cloneElement(node, {
         ...(trim.trimBefore !== undefined ? { trimBefore: trim.trimBefore } : {}),
         ...(trim.trimAfter !== undefined ? { trimAfter: trim.trimAfter } : {}),
@@ -326,7 +328,7 @@ export function createEditableReactRuntime(
       }
 
       if (ownsTransform && (trimBefore !== undefined || trimAfter !== undefined)) {
-        if (type === videoComponent) {
+        if (videoComponents.has(type)) {
           nextProps = {
             ...nextProps,
             ...(trimBefore !== undefined ? { trimBefore } : {}),
@@ -339,7 +341,7 @@ export function createEditableReactRuntime(
         }
       }
 
-      if (type === videoComponent) {
+      if (videoComponents.has(type)) {
         const existingClassName = typeof nextProps.className === 'string'
           ? nextProps.className.trim()
           : '';

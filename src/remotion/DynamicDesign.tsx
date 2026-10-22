@@ -1,3 +1,4 @@
+import { withMediaTrim } from '../lib/remotion-media-props';
 import { withVideoFit } from '../lib/remotion-video-fit';
 /**
  * DynamicDesign — a Remotion composition that compiles and renders Agent-generated JSX code.
@@ -37,8 +38,8 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(prop
 });
 
 function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean): Record<string, unknown> {
-  const serverVideo = withVideoFit(Remotion.OffthreadVideo || MediaVideo, !Remotion.OffthreadVideo);
-  const nativeVideo = withVideoFit(Remotion.Video || MediaVideo, !Remotion.Video);
+  const serverVideo = withVideoFit(Remotion.OffthreadVideo || MediaVideo, !Remotion.OffthreadVideo, MediaVideo);
+  const nativeVideo = withVideoFit(Remotion.Video || MediaVideo, !Remotion.Video, MediaVideo);
   const serverRendering = useOffthreadVideo || useNativeVideo;
   const scope: Record<string, unknown> = {
     React, useState, useEffect, useCallback, useMemo, useRef,
@@ -48,9 +49,10 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
     ...RemotionNoise,
     // @remotion/media keeps browser/web-renderer preview behavior; server export can opt into
     // Remotion-native Video so the renderer can collect source-video audio assets.
-    Audio: MediaAudio,
+    Audio: withMediaTrim(MediaAudio),
+    Html5Audio: withMediaTrim(Remotion.Html5Audio),
     Video: useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : withVideoFit(MediaVideo, true),
-    Html5Video: withVideoFit(Remotion.Html5Video, false),
+    Html5Video: withVideoFit(Remotion.Html5Video, false, MediaVideo),
     // An explicit <OffthreadVideo> must remain meaningful in server preview/export.
     // Previously it was silently aliased back to @remotion/media whenever only
     // useNativeVideo was set, so an Agent "compatibility" patch changed the
@@ -98,6 +100,7 @@ export function compileDynamicDesignComponent(
     const editableRuntime = createEditableReactRuntime(
       React,
       scope.Video as React.ElementType,
+      [scope.OffthreadVideo, scope.Html5Video].filter(Boolean) as React.ElementType[],
     );
     const authoredScope = {
       ...scope,

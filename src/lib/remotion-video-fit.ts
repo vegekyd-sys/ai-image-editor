@@ -1,4 +1,5 @@
 import React from 'react';
+import { normalizeMediaTrimProps, requiresMediaDecoder } from './remotion-media-props';
 
 const FITS = new Set(['contain', 'cover', 'fill', 'none', 'scale-down']);
 
@@ -8,18 +9,21 @@ const FITS = new Set(['contain', 'cover', 'fill', 'none', 'scale-down']);
 export function withVideoFit(
   Component: React.ElementType,
   usesObjectFitProp: boolean,
+  mediaComponent?: React.ElementType,
 ): React.ComponentType<any> {
   return React.forwardRef(function VideoWithAuthoredFit(
     props: Record<string, any>, ref: React.ForwardedRef<any>,
   ) {
-    const { objectFit, style, ...rest } = props;
+    const { objectFit, style, ...rest } = normalizeMediaTrimProps(props);
+    const useMedia = usesObjectFitProp || Boolean(mediaComponent && requiresMediaDecoder(props));
+    const Decoder = useMedia && mediaComponent ? mediaComponent : Component;
     // The explicit component prop owns the fit when both forms were supplied.
     const fit = FITS.has(objectFit) ? objectFit : FITS.has(style?.objectFit) ? style.objectFit : undefined;
-    return React.createElement(Component, {
+    return React.createElement(Decoder, {
       ...rest,
       ...(ref ? { ref } : {}),
       ...(fit ? { style: { ...style, objectFit: fit } } : { style }),
-      ...(usesObjectFitProp && fit ? { objectFit: fit } : {}),
+      ...(useMedia && fit ? { objectFit: fit } : {}),
     });
   });
 }

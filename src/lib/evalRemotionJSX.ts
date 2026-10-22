@@ -1,6 +1,8 @@
 'use client';
 
 import { withVideoFit } from './remotion-video-fit';
+import { withMediaTrim } from './remotion-media-props';
+import { previewCacheStyle, type PreviewCacheBox } from './remotion-preview-cache-style';
 
 /**
  * Evaluate Agent-generated JSX code as a React component.
@@ -84,8 +86,8 @@ function isPreviewMediaVisuallyActive(media: HTMLVideoElement): boolean {
     if (
       element.hidden ||
       style.display === 'none' ||
-      style.visibility === 'hidden' ||
-      (!isReadinessGate && Number.parseFloat(style.opacity || '1') <= 0.001)
+      (!isReadinessGate && style.visibility === 'hidden') ||
+      (!isReadinessGate && element.dataset.makaronPreviewCacheSource !== 'true' && Number.parseFloat(style.opacity || '1') <= 0.001)
     ) {
       return false;
     }
@@ -190,6 +192,7 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   const safariBufferMutedStateRef = React.useRef<boolean | null>(null);
   const markReadyRef = React.useRef<(video: HTMLVideoElement) => void>(() => undefined);
   const [hasCachedFrame, setHasCachedFrame] = React.useState(false);
+  const [cacheBox, setCacheBox] = React.useState<PreviewCacheBox | null>(null);
   const [sourcePhase, setSourcePhase] = React.useState<PreviewVideoSourcePhase>('direct');
   const safari = React.useMemo(() => isSafariWebKit(), []);
   const { delayPlayback } = Remotion.useBufferState();
@@ -372,9 +375,19 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     if (canvas.height !== height) canvas.height = height;
 
     try {
-      const context = canvas.getContext('2d', { alpha: false });
+      const context = canvas.getContext('2d');
       if (!context) return;
+      context.clearRect(0, 0, width, height);
       context.drawImage(video, 0, 0, width, height);
+      const computed = window.getComputedStyle(video);
+      const nextBox: PreviewCacheBox = {
+        left: video.offsetLeft, top: video.offsetTop,
+        width: computed.width, height: computed.height,
+        position: computed.position === 'fixed' ? 'fixed' : 'absolute',
+      };
+      setCacheBox(previous => previous && Object.keys(nextBox).every(key =>
+        previous[key as keyof PreviewCacheBox] === nextBox[key as keyof PreviewCacheBox]
+      ) ? previous : nextBox);
       if (!cachedFrameReady.current) {
         cachedFrameReady.current = true;
         setHasCachedFrame(true);
@@ -566,6 +579,7 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     unblockSafariPlayback,
   ]);
 
+  const showCachedFrame = Boolean(readiness?.showLastFrame && hasCachedFrame && cacheBox);
   return React.createElement(
     React.Fragment,
     null,
@@ -585,7 +599,10 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
       preload: preload ?? 'auto',
       src: previewSrc,
       startFrom,
-      style,
+      // A cache must replace the live paint. Painting both at authored opacity
+      // 0.5 yields 0.75 and doubles shadows/filters during the handoff.
+      style: showCachedFrame ? { ...style, opacity: 0 } : style,
+      'data-makaron-preview-cache-source': showCachedFrame ? 'true' : undefined,
       trimBefore,
       ref: setVideoRef,
       onCanPlay: handleCanPlay,
@@ -602,21 +619,7 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
       'aria-hidden': true,
       className,
       ref: frameCanvasRef,
-      style: {
-        ...style,
-        // The authored scene is commonly a flex column. A second 100%-height
-        // flex item would shrink the live video and expose a duplicate strip at
-        // the bottom of the frame. Overlay the cache instead so it occupies
-        // exactly the same visual layer without participating in layout.
-        position: 'absolute',
-        inset: 0,
-        display: readiness?.showLastFrame && hasCachedFrame
-          ? (style?.display ?? 'block')
-          : 'none',
-        width: style?.width ?? '100%',
-        height: style?.height ?? '100%',
-        pointerEvents: 'none',
-      },
+      style: previewCacheStyle(style, cacheBox, showCachedFrame),
     }),
   );
 });
@@ -753,13 +756,12 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
   // so readiness gating must live inside Sequence rather than in `style` above.
   const content = containsVideo
     ? React.createElement(
-        Remotion.AbsoluteFill,
+        props.layout === 'none' ? 'div' : Remotion.AbsoluteFill,
         {
           className: 'makaron-preview-readiness-gate',
-          style: {
-            opacity: mediaReady ? 1 : 0,
-            pointerEvents: mediaReady ? undefined : 'none',
-          },
+          style: props.layout === 'none'
+            ? { display: 'contents', visibility: mediaReady ? undefined : 'hidden' }
+            : { opacity: mediaReady ? 1 : 0, pointerEvents: mediaReady ? undefined : 'none' },
         },
         readinessContent,
       )
@@ -902,9 +904,11 @@ export function pickRemotionComponentName(code: string): string {
  * Tries Sucrase first (bundled, instant). Falls back to Babel CDN if Sucrase fails.
  */
 
+const CompatibleAudio = withMediaTrim(Audio);
+const CompatibleHtml5Audio = withMediaTrim(Remotion.Html5Audio);
 const CompatibleMediaVideo = withVideoFit(Video, true);
-const CompatiblePreviewVideo = withVideoFit(PreviewVideo, false);
-const CompatibleHtml5Video = withVideoFit(Remotion.Html5Video, false);
+const CompatiblePreviewVideo = withVideoFit(PreviewVideo, false, Video);
+const CompatibleHtml5Video = withVideoFit(Remotion.Html5Video, false, Video);
 
 export function evalRemotionJSX(
   code: string,
@@ -943,10 +947,12 @@ export function evalRemotionJSX(
     const videoComponent = isPreviewRuntime
       ? CompatiblePreviewVideo
       : CompatibleMediaVideo;
-    const editableRuntime = createEditableReactRuntime(React, videoComponent);
+    const editableRuntime = createEditableReactRuntime(React, videoComponent, [CompatibleHtml5Video]);
     const authoredScope = {
       ...REMOTION_SCOPE,
       React: editableRuntime.React,
+      Audio: CompatibleAudio,
+      Html5Audio: CompatibleHtml5Audio,
       Video: videoComponent,
       OffthreadVideo: videoComponent,
       Html5Video: CompatibleHtml5Video,
@@ -957,7 +963,7 @@ export function evalRemotionJSX(
     }).__makaronEditableId;
     const remotionNamespace = { ...Remotion, ...authoredScope };
     const mediaNamespace = {
-      Audio,
+      Audio: CompatibleAudio,
       Video: videoComponent,
       OffthreadVideo: videoComponent,
       Html5Video: CompatibleHtml5Video,
