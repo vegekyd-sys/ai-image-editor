@@ -39,14 +39,14 @@ describe('Retake speech evidence and audiovisual clocks', () => {
     if (!('selectedSpeech' in evidence)) throw new Error('Missing speech evidence')
     expect(evidence.selectedSpeech[0]).toMatchObject({ sourceStart: 11, sourceEnd: 12, outputStart: 0 })
   })
-  it('clamps crossing words only in output and keeps their real measured source times', () => {
+  it.each([{model:'kling-4',outputEnd:3},{model:'fal-h3-max',outputEnd:5}])('clamps crossing words to the $model output while keeping measured source times', ({model,outputEnd}) => {
     const evidence = retakeAudioEvidence({ transcript: transcript([{ ...utterance('crossing sentence', 17500, 21500),
       words: [{ text: 'crossing', startMs: 17500, endMs: 18500 }, { text: 'sentence', startMs: 20500, endMs: 21500 }],
-    }]) }, planRetake({ start: 18, end: 21 }, 30))
+    }]) }, planRetake({ start: 18, end: 21 }, 30, model))
     if (!('selectedSpeech' in evidence)) throw new Error('Missing speech evidence')
     expect(evidence.selectedSpeech[0].crossesSelectionBoundary).toBe(true)
     expect(evidence.selectedSpeech[0].words[0]).toMatchObject({ sourceStart: 17.5, outputStart: 0 })
-    expect(evidence.selectedSpeech[0].words[1]).toMatchObject({ sourceEnd: 21.5, outputEnd: 5 })
+    expect(evidence.selectedSpeech[0].words[1]).toMatchObject({ sourceEnd: 21.5, outputEnd })
     expect(evidence.adjacentSpeech).toHaveLength(2)
   })
   it('returns adjacent audio evidence even when the edit consumes the full crop budget', () => {
