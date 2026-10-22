@@ -148,7 +148,7 @@ describe('agent media scenario matrix', () => {
     expect(animate).toContain('Treat `seedance-fast` and standard `seedance` as separate models')
     expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px')
     expect(ffmpegSkill).toContain('Default video model, higher quality')
-    expect(ffmpegSkill).toContain('| Kling | 15s | 10.5s | <=200MB; resolution <=2K')
+    expect(ffmpegSkill).toContain('| Kling 4.0 | 30s | 30s total, >=3s each | <=200MB each; 720-2160px per side')
     expect(ffmpegSkill).toContain('Cheaper option, supports base video edit')
     expect(ffmpegSkill).toContain('call `transcribe_audio` before `run_code`')
     expect(ffmpegSkill).not.toContain('Cheaper/default')
@@ -443,14 +443,14 @@ describe('video script harness old and new scenarios', () => {
     })).toContain('base mode')
   })
 
-  it('new Kling motion-control scenario accepts video_ref_url without media markers', () => {
+  it('retired Kling motion-control rejects video_ref_url before submission', () => {
     expect(validateVideoScript({
       prompt: 'Motion transfer',
       imageCount: 1,
       videoRefUrl: 'https://cdn.example.com/motion.mp4',
       motionControl: true,
       model: 'kling',
-    })).toBeNull()
+    })).toContain('retired')
   })
 
   it('new Grok video scenario supports one or more feature references', () => {

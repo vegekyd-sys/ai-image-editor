@@ -140,6 +140,7 @@
     {
       "id": "core-27",
       "text": "Hard duration range: a single SeeDance 2.0 script/call must be 4-15s; SeeDance 2.5 must be 4-30s; Kling 5-15s; Grok generation 1-15s; Google Omni 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, show the segmented plan, and stop for approval. Edit/extend limits are in `prompts/animate.md`.",
+      "amendment": "Retire Kling O3 and use the verified Kling 4.0 3-30s output and reference contract; explicit model selection must not be shortened or replaced.",
       "owner": "video"
     },
     {
@@ -160,6 +161,7 @@
     {
       "id": "core-31",
       "text": "Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K. Google Omni and Grok accept one video for typed edit/extend; read `prompts/animate.md` for limits.",
+      "amendment": "Retire Kling O3 and use the verified Kling 4.0 3-30s output and reference contract; explicit model selection must not be shortened or replaced.",
       "owner": "video"
     },
     {
