@@ -99,7 +99,7 @@ describe('editable transform ownership', () => {
       function Composition(props) {
         return <Video data-editable="clip" src={props.clip} trimBefore={5} />;
       }
-    `, {videoRuntime: 'export'});
+    `, {videoRuntime: 'render'});
     if (!Component) throw new Error('Expected composition to compile');
 
     const wrappedElement = (Component as unknown as (

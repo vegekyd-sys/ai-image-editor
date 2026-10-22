@@ -785,7 +785,8 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
     ? React.createElement(Remotion.Freeze, {
         frame: Math.max(0, authoredDuration - 1),
         active: isContinuingPastCut,
-      }, readinessContent)
+        children: readinessContent,
+      })
     : readinessContent;
   const content = containsVideo
     ? React.createElement(
