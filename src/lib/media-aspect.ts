@@ -47,6 +47,7 @@ export function formatVideoMediaSpec(meta: MediaMetaLike | undefined): string {
   if (status && status !== 'completed') parts.push(status);
   if (duration) parts.push(duration);
   if (width && height) parts.push(`${Math.round(width)}x${Math.round(height)}`);
+  else parts.push('dimensions unknown; measure before choosing orientation');
   if (aspect) parts.push(aspect);
 
   return parts.join(', ');

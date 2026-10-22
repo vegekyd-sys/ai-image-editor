@@ -43,7 +43,7 @@ export function validatePrimaryVideoFraming(code: string, width: number, height:
         const name = path.node.openingElement.name;
         if (name.type !== 'JSXIdentifier' || !['Video', 'OffthreadVideo', 'Html5Video', 'video'].includes(name.name)) return;
         const chain: NodePath<JSXElement>[] = [path];
-        for (let p = path.parentPath; p; p = p.parentPath) if (p.isJSXElement()) chain.unshift(p);
+        for (let p: NodePath | null = path.parentPath; p; p = p.parentPath) if (p.isJSXElement()) chain.unshift(p);
         let w: number | undefined = width, h: number | undefined = height;
         for (const element of chain) {
           const opening = element.node.openingElement;

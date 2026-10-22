@@ -130,3 +130,14 @@ style: {
 正式站用 registry 新取回的 CLI 0.16.0 对原 @15 执行真实 `materialize --profile source --publish`，完成 job `cf2466f8-551d-4adc-8300-44e2cece00db`，发布为原项目 **@18**。共享 Preview 另有独立 job `80c1ca78-3dcf-4167-aaf7-d0e08be7d970`，不发布到时间线。两者任务记录均确认调用 `remotion-render-4-0-527-mem10240mb-disk5120mb-900sec`，完整 MP4 为 1920×1080、30fps、1800 帧，保留 AAC 音轨。实际正式站播放器和两份 MP4 的 19/24 秒横条消失，24.3 秒转场正常；正式站另抽查 1/12/36/48/58 秒。旧 @16/@17 仍保留，原 @15 未修改。
 
 合并后的 dev 全量 2332 tests 和仅修复生产版本全量 2181 tests 分别通过（两组有重叠），TypeScript、CLI 测试、lint 与生产/Preview 云端构建、服务器 trace 检查通过；两边健康检查各 12 healthy / 0 unhealthy。本次 CLI API 合同未变，npm `latest` 保持 0.16.0；registry tarball SHA-1 为 `7139cd7c44acf96c19c18a8af6f82f8c6aae8d1f`，7 个打包文件与已接受生产 CLI 逐字节一致，真实 materialize 验收通过，无需新发包。
+
+
+## 视频比例与主画面占比
+
+视频 fit 在共享 `src/lib/remotion-video-fit.ts` 适配：组件级 `objectFit` 优先，其次兼容旧的 `style.objectFit`。`@remotion/media` 读取组件参数，原生 Video 读取 CSS；两种路径必须传递相同语义。适配覆盖 Player、web-renderer、DynamicDesign 及显式 OffthreadVideo/Html5Video。无 fit 时保留解码器默认值，不自动裁剪。
+
+素材宽高必须是显示尺寸。`mp4-probe.ts` 按视频 track 的 tkhd matrix 计算旋转后的宽高；外部 range 导入用有超时和字节上限的 Range 探测读取 moov，跳过 mdat，并将真实尺寸写入 video_meta 和工具结果。无法测量时保持 unknown，不能回填一个猜测的 9:16。
+
+画布比例正确不代表主视频足够大。`run_code` 的 render 和 patch 都会检查目标比例；素材与画布同比例时，还会拒绝所有可静态测量视频区域均小于半画布的主画面布局。显式要求小窗/分屏时可用 `video_layout: "inset"`，该角色随 draft 持久化。动态尺寸无法证明时交给 `preview_frame`，静态检查不替代实帧验收，也不自动重写已有作品。
+
+修改共享运行时时同步提升 `REMOTION_EDITABLE_RUNTIME_VERSION` 与 `public/remotion-runtime.json`，重新构建独立渲染站点后再上线。旧 Lambda bundle 不会自动获得应用源码中的修复，版本门禁会阻止误用旧 bundle。
