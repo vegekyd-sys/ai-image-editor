@@ -644,6 +644,10 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
 const PreviewMediaVideo = React.forwardRef(function PreviewMediaVideo(props: any, ref: React.ForwardedRef<any>) {
   const readiness = React.useContext(PreviewMediaReadinessContext);
   const { onVideoFrame, src, trimBefore, trimAfter, ...rest } = props;
+  // WebCodecs fetches media bytes and needs CORS. Protected/external sources
+  // use the same authenticated proxy contract as native preview; eligible CDN
+  // sources stay direct. Explicit requestInit owns its original destination.
+  const previewSrc = React.useMemo(() => props.requestInit ? src : getPreviewMediaProxySource(src), [src, props.requestInit]);
   const pendingRef = React.useRef(readiness?.markPending);
   pendingRef.current = readiness?.markPending;
   React.useEffect(() => { pendingRef.current?.(); }, [src, trimBefore, trimAfter]);
@@ -651,7 +655,7 @@ const PreviewMediaVideo = React.forwardRef(function PreviewMediaVideo(props: any
     readiness?.markReady();
     onVideoFrame?.(...args);
   }, [onVideoFrame, readiness?.markReady]);
-  return React.createElement(Video, { ...rest, src, trimBefore, trimAfter, ref, onVideoFrame: onFrame });
+  return React.createElement(Video, { ...rest, src: previewSrc, trimBefore, trimAfter, ref, onVideoFrame: onFrame });
 });
 
 // Interactive preview only: a media scene stays transparent until its native

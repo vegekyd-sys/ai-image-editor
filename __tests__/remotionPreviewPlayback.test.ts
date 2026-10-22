@@ -49,6 +49,7 @@ describe('Remotion preview playback contract', () => {
     expect(evalSource).toContain('(containsVideo && (props.from ?? 0) > 0)')
     expect(evalSource).toContain('authoredDuration + continuityFrames')
     expect(evalSource).toContain('preferNativeVideo ? CompatiblePreviewVideo : CompatibleMediaPreviewVideo')
+    expect(evalSource).toContain('props.requestInit ? src : getPreviewMediaProxySource(src)')
     expect(evalSource).toContain('nativeContinuity && containsVideo && Number.isFinite(authoredDuration)')
     expect(evalSource).toContain('Math.max(2, Math.round(fps / 10))')
     expect(evalSource).toContain('getPreviewPremountFrames({')
