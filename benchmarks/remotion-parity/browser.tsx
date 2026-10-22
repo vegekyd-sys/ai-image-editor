@@ -11,7 +11,7 @@ async function main(){
  for(const fixture of fixtures){
    const prepared=prepareRemotionFontCode({...fixture,manifest});
    await loadPreparedRemotionFonts({manifest,prepared,text:JSON.stringify(fixture)});
-   const Component=evalRemotionJSX(prepared.code,{videoRuntime:'preview'});
+   const Component=evalRemotionJSX(prepared.code,{videoRuntime:'preview',preferNativeVideo:fixture.preferNativeVideo});
    if(!Component)throw new Error('Could not compile '+fixture.id);
    components.set(fixture.id,Component);
  }

@@ -47,6 +47,7 @@ type PreviewMediaReadiness = {
   showLastFrame: boolean;
 };
 
+const PreviewNativeContinuityContext = React.createContext(true);
 const PreviewMediaReadinessContext = React.createContext<PreviewMediaReadiness | null>(null);
 
 function isSafariWebKit(): boolean {
@@ -638,6 +639,21 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
   return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps * 3, ref });
 });
 
+// Media preview uses the same WebCodecs/color/effects pipeline as export. Its
+// onVideoFrame signals that the requested frame has actually been painted.
+const PreviewMediaVideo = React.forwardRef(function PreviewMediaVideo(props: any, ref: React.ForwardedRef<any>) {
+  const readiness = React.useContext(PreviewMediaReadinessContext);
+  const { onVideoFrame, src, trimBefore, trimAfter, ...rest } = props;
+  const pendingRef = React.useRef(readiness?.markPending);
+  pendingRef.current = readiness?.markPending;
+  React.useEffect(() => { pendingRef.current?.(); }, [src, trimBefore, trimAfter]);
+  const onFrame = React.useCallback((...args: any[]) => {
+    readiness?.markReady();
+    onVideoFrame?.(...args);
+  }, [onVideoFrame, readiness?.markReady]);
+  return React.createElement(Video, { ...rest, src, trimBefore, trimAfter, ref, onVideoFrame: onFrame });
+});
+
 // Interactive preview only: a media scene stays transparent until its native
 // video has decoded the correct range-local frame. Just before a cut, PreviewVideo
 // caches the last real source-range frame into a canvas. The preceding Sequence
@@ -676,7 +692,8 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
   }, [parentReadiness]);
 
   const authoredDuration = props.durationInFrames;
-  const canHoldLastFrame = containsVideo && Number.isFinite(authoredDuration);
+  const nativeContinuity = React.useContext(PreviewNativeContinuityContext);
+  const canHoldLastFrame = nativeContinuity && containsVideo && Number.isFinite(authoredDuration);
   const premountFor = props.premountFor ?? getPreviewPremountFrames({
     authoredDuration,
     fps,
@@ -910,6 +927,7 @@ export function pickRemotionComponentName(code: string): string {
 const CompatibleAudio = withMediaTrim(Audio);
 const CompatibleHtml5Audio = withMediaTrim(Remotion.Html5Audio);
 const CompatibleMediaVideo = withVideoFit(Video, true);
+const CompatibleMediaPreviewVideo = withVideoFit(PreviewMediaVideo, true);
 const CompatiblePreviewVideo = withVideoFit(PreviewVideo, false, Video);
 const CompatibleHtml5Video = withVideoFit(Remotion.Html5Video, false, Video);
 
@@ -918,6 +936,8 @@ export function evalRemotionJSX(
   options: {
     editableTransformMode?: EditableTransformMode;
     videoRuntime?: BrowserVideoRuntime;
+    /** QA/unsupported-browser fallback; production prefers the export decoder. */
+    preferNativeVideo?: boolean;
   } = {},
 ): React.ComponentType<any> | null {
   try {
@@ -940,15 +960,13 @@ export function evalRemotionJSX(
     // Prefer the primary composition function. Agent code often declares helper
     // components first (Caption, Badge, etc.) and the real composition last.
     const fnName = pickRemotionComponentName(src);
-    // Interactive Player previews should use the browser's native media pipeline.
-    // @remotion/media's canvas/WebCodecs implementation is deterministic for
-    // client-side rendering, but a newly-active trimmed clip can expose an empty
-    // canvas while its seek finishes. Html5Video can premount and buffer the real
-    // media element through HTTP Range requests before the cut becomes visible.
-    // Poster/frame/export paths keep @remotion/media because web-renderer requires it.
+    // Share media decoding with export wherever WebCodecs is supported. Native
+    // fallback retains the bounded continuity path for unsupported browsers.
     const isPreviewRuntime = options.videoRuntime === 'preview';
+    const preferNativeVideo = options.preferNativeVideo
+      ?? typeof (globalThis as { VideoDecoder?: unknown }).VideoDecoder === 'undefined';
     const videoComponent = isPreviewRuntime
-      ? CompatiblePreviewVideo
+      ? preferNativeVideo ? CompatiblePreviewVideo : CompatibleMediaPreviewVideo
       : CompatibleMediaVideo;
     const editableRuntime = createEditableReactRuntime(React, videoComponent, [CompatibleHtml5Video]);
     const authoredScope = {
@@ -999,9 +1017,12 @@ export function evalRemotionJSX(
       buildRemotionEvaluatorBody(compiled, fnName),
     );
     const comp = factory(authoredScope, authoredModule, authoredModule.exports, localRequire);
-    return comp
-      ? editableRuntime.wrap(comp, options.editableTransformMode ?? 'proxy')
-      : null;
+    if (!comp) return null;
+    const Wrapped = editableRuntime.wrap(comp, options.editableTransformMode ?? 'proxy');
+    return function BrowserComposition(props: Record<string, unknown>) {
+      return React.createElement(PreviewNativeContinuityContext.Provider,
+        { value: preferNativeVideo }, React.createElement(Wrapped, props));
+    };
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
