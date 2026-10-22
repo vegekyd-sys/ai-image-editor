@@ -1,3 +1,4 @@
+import { validatePrimaryVideoFraming } from './composition-video-framing';
 import { isFalImage25 } from './models/types';
 import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
@@ -694,6 +695,7 @@ async function validateCompositionMediaAspect(
   ctx: AgentContext,
   result: { code: string; props?: Record<string, unknown>; width?: number; height?: number },
   targetAspectRatio?: string,
+  videoLayout?: 'primary' | 'inset',
 ): Promise<string | null> {
   const outputWidth = Number(result.width || 1080);
   const outputHeight = Number(result.height || 1350);
@@ -708,8 +710,7 @@ async function validateCompositionMediaAspect(
     if (!Number.isFinite(targetRatio) || targetRatio <= 0) {
       return 'Invalid target_aspect_ratio. Use a positive width:height ratio such as "9:16".';
     }
-    if (Math.abs((outputWidth / outputHeight) / targetRatio - 1) <= 0.01) return null;
-    return `Composition rejected: returned canvas ${Math.round(outputWidth)}x${Math.round(outputHeight)} does not match the requested target_aspect_ratio ${targetAspectRatio}. Keep the requested target, preserve source pixels with proportional scaling and contain/background (crop only when authorized), and repair the saved composition; do not switch to Node/FFmpeg.`;
+    if (Math.abs((outputWidth / outputHeight) / targetRatio - 1) > 0.01) return `Composition rejected: returned canvas ${Math.round(outputWidth)}x${Math.round(outputHeight)} does not match the requested target_aspect_ratio ${targetAspectRatio}. Keep the requested target, preserve source pixels with proportional scaling and contain/background (crop only when authorized), and repair the saved composition; do not switch to Node/FFmpeg.`;
   }
   if (!ctx.supabase || !ctx.projectId) return null;
 
@@ -764,7 +765,10 @@ async function validateCompositionMediaAspect(
     // Only hard-reject when selected videos clearly share one aspect. Mixed-ratio
     // timelines may intentionally use a platform canvas with contain/background.
     if ((maxRatio - minRatio) / sourceRatio > 0.03) return null;
-    if (Math.abs(outputRatio / sourceRatio - 1) <= 0.05) return null;
+    if (Math.abs(outputRatio / sourceRatio - 1) <= 0.05) {
+      return videoLayout === 'inset' ? null : validatePrimaryVideoFraming(result.code, outputWidth, outputHeight);
+    }
+    if (targetAspectRatio !== undefined) return null;
 
     const first = matched[0];
     const sourceAspect = formatAspectRatio(first.width, first.height) || `${first.width}:${first.height}`;
@@ -4776,6 +4780,7 @@ function createRunCodeTool(
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
         media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
+        video_layout: z.enum(['primary', 'inset']).optional().describe('Composition video role. Default primary: source footage is the main visual and should fill or nearly fill a matching-aspect canvas. Use inset only when the user explicitly requests inset footage, split-screen or picture-in-picture. This does not authorize cropping or change the output aspect.'),
         target_aspect_ratio: z.string().regex(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/).refine(value => {
           const [width, height] = value.split(':').map(Number);
           return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 && Number.isFinite(width / height);
@@ -4784,7 +4789,7 @@ function createRunCodeTool(
       }).refine(value => Boolean(value.code || value.code_path || value.composition?.code || value.composition_parts), {
         message: 'Provide executable code, a code_path, a direct composition payload, or durable composition parts.',
       }),
-      execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime, target_aspect_ratio }) => {
+      execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime, target_aspect_ratio, video_layout }) => {
         let executableCode = code || '';
         if (code_path) {
           if (!ctx.supabase || !ctx.userId) {
@@ -5132,6 +5137,11 @@ function createRunCodeTool(
 
             const harnessError = validateDesign(patched);
             if (harnessError) return { type: 'text' as const, content: harnessError };
+            const aspectError = await validateCompositionMediaAspect(ctx, patched,
+              target_aspect_ratio ?? `${patched.width}:${patched.height}`, video_layout ?? patched.videoLayout);
+            if (aspectError) return { type: 'text' as const, content: aspectError };
+            if (video_layout) patched.videoLayout = video_layout;
+
 
             if (!ctx.supabase || !ctx.userId) {
               return { type: 'text' as const, content: 'Patch passed validation but cannot be safely autosaved because workspace access is unavailable.' };
@@ -5202,7 +5212,7 @@ function createRunCodeTool(
               props: resolvedProps,
               width: result.width,
               height: result.height,
-            }, target_aspect_ratio);
+            }, target_aspect_ratio, video_layout);
             if (aspectError) {
               return { type: 'text' as const, content: aspectError };
             }
@@ -5225,6 +5235,7 @@ function createRunCodeTool(
               props: resolvedProps,
               animation,
               description: autoDesc,
+              ...(video_layout ? { videoLayout: video_layout } : {}),
               ...(normalizedEditables.length > 0
                 ? { editables: normalizedEditables }
                 : {}),

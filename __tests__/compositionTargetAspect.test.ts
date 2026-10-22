@@ -1,3 +1,5 @@
+import { mergePatchProps } from '@/lib/patch-props';
+import { validatePrimaryVideoFraming } from '@/lib/composition-video-framing';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
@@ -33,7 +35,7 @@ function harness(dimensions = [[1280, 720], [1280, 720]]) {
     snapshotImages: rows.map(r => r.video_meta.videoUrl), generatedImages: [] };
   const scope = vm.createContext({ z, Buffer, console: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
     tool: (value: unknown) => value, ctx, formatAspectRatio, validateDesign,
-    normalizeCompositionAnimation, resolveMediaMarkersInString, resolveMediaMarkersInValue,
+    mergePatchProps, validatePrimaryVideoFraming, normalizeCompositionAnimation, resolveMediaMarkersInString, resolveMediaMarkersInValue,
     refreshSnapshotUrls: vi.fn(), getStudioRunCheckpoint: async () => null,
     studioCompositionPromiseError: () => null, persistCompositionDraft: persist,
   });
@@ -77,6 +79,24 @@ describe('requested composition canvas', () => {
   it('retains mixed-source flexibility without an explicit target', async () => {
     const {tool,payload}=harness([[1280,720],[720,1280]]);
     expect((await tool.execute(tool.inputSchema.parse(payload(1080,1080)))).content).toContain('Composition ready');
+  });
+  it('rejects a same-aspect canvas with all primary footage squeezed into a landscape strip', async () => {
+    const {tool,payload,persist}=harness([[1080,1920]]);
+    const request=payload(1080,1920,'9:16');
+    request.composition.code = `const W=1080; function Plate({src}) {return <div style={{width:W,height:608}}><Video src={src} data-editable-ignore style={{width:'100%',height:'100%',objectFit:'cover'}} /></div>;} function Composition(props){return <Plate src={props.clip}/>;}`;
+    expect((await tool.execute(tool.inputSchema.parse(request))).content).toContain('every primary video box');
+    expect(persist).not.toHaveBeenCalled();
+    const accepted=await tool.execute(tool.inputSchema.parse({...request,video_layout:'inset'}));
+    expect(accepted.content).toContain('Composition ready');
+    expect(persist).toHaveBeenCalledWith(expect.objectContaining({design:expect.objectContaining({videoLayout:'inset'})}));
+  });
+  it('checks explicit targets on patches and preserves the saved inset treatment', async () => {
+    const {tool,payload,persist}=harness([[1080,1920]]);
+    await tool.execute(tool.inputSchema.parse({...payload(1080,1920),video_layout:'inset'}));
+    persist.mockClear();
+    expect((await tool.execute({runtime:'composition',code:'return {type:"patch",props:{clip:"https://media.test/0.mp4"}}',target_aspect_ratio:'16:9'})).content).toContain('does not match the requested');
+    expect(persist).not.toHaveBeenCalled();
+    expect((await tool.execute({runtime:'composition',code:'return {type:"patch",props:{clip:"https://media.test/0.mp4"}}'})).content).toContain('Patched');
   });
   it.each(['0:16','9:0','-9:16','9:16junk','Infinity:1'])('rejects invalid target %s in the tool schema', target => {
     const {tool,payload}=harness();

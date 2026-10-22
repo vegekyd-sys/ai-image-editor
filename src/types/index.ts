@@ -11,6 +11,8 @@ export interface EditableField {
 }
 
 export interface DesignPayload {
+  /** Explicit inset treatment; otherwise source-led compositions use primary footage. */
+  videoLayout?: 'primary' | 'inset';
   code: string;
   width: number;
   height: number;
