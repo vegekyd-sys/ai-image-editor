@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { mergePatchProps } from '@/lib/patch-props';
 import { validatePrimaryVideoFraming } from '@/lib/composition-video-framing';
 import { readFileSync } from 'node:fs';
@@ -35,6 +36,7 @@ function harness(dimensions = [[1280, 720], [1280, 720]]) {
     snapshotImages: rows.map(r => r.video_meta.videoUrl), generatedImages: [] };
   const scope = vm.createContext({ z, Buffer, console: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
     tool: (value: unknown) => value, ctx, formatAspectRatio, validateDesign,
+    require: createRequire(import.meta.url), sharp: {}, setTimeout, clearTimeout,
     mergePatchProps, validatePrimaryVideoFraming, normalizeCompositionAnimation, resolveMediaMarkersInString, resolveMediaMarkersInValue,
     refreshSnapshotUrls: vi.fn(), getStudioRunCheckpoint: async () => null,
     studioCompositionPromiseError: () => null, persistCompositionDraft: persist,
