@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { withVideoFit } from '@/lib/remotion-video-fit';
+import { isMakaronVideoComponent, withVideoFit } from '@/lib/remotion-video-fit';
 import { compileDynamicDesignComponent } from '@/remotion/DynamicDesign';
 
 // Reproduce the installed @remotion/media behavior: its canvas ignores CSS fit
@@ -13,6 +13,11 @@ const Media = withVideoFit(MediaDecoder, true);
 const Native = withVideoFit('video', false);
 
 describe('authored video fit across decoders', () => {
+  it('keeps wrapped video recognizable to Player readiness and trim discovery', () => {
+    expect(isMakaronVideoComponent(Media)).toBe(true);
+    expect(isMakaronVideoComponent(Native)).toBe(true);
+    expect(isMakaronVideoComponent(() => null)).toBe(false);
+  });
   it.each(['cover', 'contain', 'fill', 'none', 'scale-down'])('preserves legacy CSS %s in the media decoder', fit => {
     const Component = compileDynamicDesignComponent(`function Composition(props) {
       return <Video src={props.src} data-editable-ignore style={{width:1080,height:608,objectFit:'${fit}'}} />;

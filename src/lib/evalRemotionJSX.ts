@@ -1,6 +1,6 @@
 'use client';
 
-import { withVideoFit } from './remotion-video-fit';
+import { withVideoFit, isMakaronVideoComponent } from './remotion-video-fit';
 import { withMediaTrim } from './remotion-media-props';
 import { previewCacheStyle, type PreviewCacheBox } from './remotion-preview-cache-style';
 
@@ -97,6 +97,7 @@ function isPreviewMediaVisuallyActive(media: HTMLVideoElement): boolean {
 }
 
 function componentSourceContainsVideo(type: unknown): boolean {
+  if (isMakaronVideoComponent(type)) return true;
   if ((typeof type !== 'function' && typeof type !== 'object') || type === null) return false;
 
   const key = type as object;

@@ -1,6 +1,12 @@
 import React from 'react';
 import { normalizeMediaTrimProps, requiresMediaDecoder } from './remotion-media-props';
 
+const VIDEO_IDENTITY = Symbol.for('makaron.remotion.video');
+export function isMakaronVideoComponent(component: unknown): boolean {
+  return Boolean(component && (typeof component === 'object' || typeof component === 'function')
+    && (component as Record<symbol, unknown>)[VIDEO_IDENTITY]);
+}
+
 const FITS = new Set(['contain', 'cover', 'fill', 'none', 'scale-down']);
 
 /** @remotion/media draws into a canvas and overrides CSS objectFit with its
@@ -11,7 +17,7 @@ export function withVideoFit(
   usesObjectFitProp: boolean,
   mediaComponent?: React.ElementType,
 ): React.ComponentType<any> {
-  return React.forwardRef(function VideoWithAuthoredFit(
+  const Wrapped = React.forwardRef(function VideoWithAuthoredFit(
     props: Record<string, any>, ref: React.ForwardedRef<any>,
   ) {
     const { objectFit, style, ...rest } = normalizeMediaTrimProps(props);
@@ -26,4 +32,6 @@ export function withVideoFit(
       ...(useMedia && fit ? { objectFit: fit } : {}),
     });
   });
+  Object.defineProperty(Wrapped, VIDEO_IDENTITY, { value: true });
+  return Wrapped;
 }
