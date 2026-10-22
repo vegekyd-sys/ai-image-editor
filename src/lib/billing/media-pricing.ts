@@ -99,11 +99,13 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
     nonNegative(price.video_reference_usd_per_second, 'video reference rate')
     if (price.video_reference_usd_per_second === 0) throw new PricingUnavailableError('Video reference rate must be positive.')
   }
-  const hasSeedanceVideoReference = price.model_id === 'seedance-2.5'
+  const hasVideoReferenceTariff = ['seedance-2.5', 'kling-4'].includes(price.model_id)
     && referenceVideoDurationSec > 0 && price.video_reference_usd_per_second != null
   // Keep the original input duration in the quote for auditing/settlement.
-  const supplierCostUsd = hasSeedanceVideoReference
-    ? (Math.max(referenceVideoDurationSec, durationSec) + durationSec) * price.video_reference_usd_per_second! * multiplier
+  const billableSourceSeconds = price.model_id === 'kling-4' && price.operation === 'edit'
+    ? Math.ceil(referenceVideoDurationSec) : referenceVideoDurationSec
+  const supplierCostUsd = hasVideoReferenceTariff
+    ? (Math.max(billableSourceSeconds, durationSec) + durationSec) * price.video_reference_usd_per_second! * multiplier
     : (
     durationSec * price.output_usd_per_second
     + Math.max(0, imageCount - price.free_image_references) * price.input_usd_per_image

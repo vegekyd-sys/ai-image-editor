@@ -270,6 +270,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const provider = normalizeVideoModelId(videoModel);
   const isWan30 = provider === 'wan-3.0' || provider === 'wan-3.0-prime';
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
+  if (provider === 'kling-4' && motionControl) return { success: false, message: 'Kling 4.0 does not expose motion control through this adapter. No fallback submitted.' };
+  if (provider === 'kling-4' && videoOperation === 'edit' && (generateAudio === true || keepOriginalSound === false)) return { success: false, message: 'Kling 4.0 video edit preserves source audio; generated replacement audio is not supported.' };
   const capability = getVideoModelCapability(provider);
   const providerVideoUrls = [...(videoUrl ? [videoUrl] : []), ...(videoUrls || [])].filter(Boolean);
   const modelError = validateVideoModelRequest({
@@ -454,7 +456,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     // Resolve duration: explicit user choice > video edit source duration > parsed script > smart mode.
     // This prevents accidental 5s edits, while still allowing requests like "turn this 10s video into 8s".
-    let resolvedDuration = resolveVideoOutputDuration({
+    const klingAutoDuration = provider === 'kling-4' && videoOperation === 'edit' && duration == null;
+    let resolvedDuration = klingAutoDuration ? undefined : resolveVideoOutputDuration({
       requestedDuration: duration,
       referenceVideoDuration,
       model: provider,
@@ -475,9 +478,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       const sourceSeconds = durations?.reduce<number>((sum, value) => sum + (value ?? 0), 0) ?? 0;
       const retainsSource = route.provider === 'fal-sync' || (videoOperation === 'edit' && (provider === 'grok' || provider === 'seedance-2.5'));
       const adaptiveSourceDuration = provider === 'seedance-2.5' && providerVideoUrls.length > 0 && resolvedDuration === -1;
-      const billsSourceDuration = retainsSource || adaptiveSourceDuration;
+      const billsSourceDuration = retainsSource || adaptiveSourceDuration || klingAutoDuration;
       if (billsSourceDuration && !sourceSeconds) return { success: false, message: 'A measured source duration is required for video editing.' };
-      if ((resolvedDuration == null || resolvedDuration === -1) && !adaptiveSourceDuration) {
+      if ((resolvedDuration == null || resolvedDuration === -1) && !adaptiveSourceDuration && !klingAutoDuration) {
         resolvedDuration = retainsSource ? sourceSeconds : Math.min(5, capability.maxOutputDuration);
       }
       billingUsage = {
@@ -536,10 +539,25 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       };
     }
 
+    if (provider === 'kling-4') {
+      try {
+        (await import('../kling4')).buildKling4Payload({ prompt: finalPrompt, images: filteredImages, videos: providerVideoUrls,
+          duration: resolvedDuration, resolution: route.resolution as '720p' | '1080p', aspectRatio: providerAspectRatio,
+          operation: videoOperation as 'generate' | 'edit' });
+      } catch (error) { return { success: false, submissionUncertain: false, message: error instanceof Error ? error.message : 'Invalid Kling 4.0 request.' }; }
+    }
     // H3 validates the actual first-frame bytes before reserving credits.
     if (billingUsage && route.provider !== 'fal-h3-max') await input.onBeforeProviderSubmit!(billingUsage);
 
-    if (route.provider === 'fal-sync') {
+    if (route.provider === 'evolink-kling4') {
+      const { createKling4Task } = await import('../kling4');
+      taskId = await createKling4Task({ prompt: finalPrompt, images: filteredImages, videos: providerVideoUrls,
+        duration: resolvedDuration, resolution: route.resolution as '720p' | '1080p',
+        aspectRatio: providerAspectRatio, operation: videoOperation as 'generate' | 'edit' });
+      return { success: true, taskId, videoModel: provider,
+        providerModel: resolveVideoProviderModel({ model: provider, imageReferenceCount: filteredImages.length, hasVideoReference, operation: videoOperation }),
+        message: `Kling 4.0 submitted. Poll task ${taskId}; no fallback was used.` };
+    } else if (route.provider === 'fal-sync') {
       if (filteredImages.length > 0) {
         return { success: false, message: 'Sync Lipsync v3 accepts one source video and one replacement audio file, not image references.' };
       }

@@ -272,6 +272,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.kling4.title': "Kling 4 登陆 Makaron",
+  'changelog.kling4.item1': "用文字、图片或视频参考，通过 Kling 4 生成 3–30 秒视频，支持 720p 与 1080p。",
+  'changelog.kling4.item2': "Retake 现在默认使用 Kling 4：修改选定片段，保留完整视频时长和原始声音。",
   'changelog.videoFramingParity.title': "视频预览与导出画幅更一致",
   'changelog.videoFramingParity.item1': "修复竖屏视频画面意外缩小和横竖屏误判，让预览与导出的缩放、裁剪和编辑位置保持一致，切镜播放更连贯。",
   'changelog.fasterFrameChecks.title': "多帧检查更快，截图保存更可靠",
@@ -736,6 +739,10 @@ const zh = {
   'model.wan27Image.name': 'Wan 2.7 Image',
   'model.wan27Image.desc': '快速生图与多图编辑，人脸细节可能变化。',
   'model.openai.desc': '文字渲染和创意生成能力突出。',
+  'model.kling4.name': 'Kling 4.0',
+  'model.kling4.desc': '文生与图/视频参考，3–30 秒；视频编辑保留原声。',
+  'model.kling4Flash.name': 'Kling 4.0 Flash',
+  'model.kling4Flash.desc': 'API 尚未验证，暂不可用，不会替换为其他模型。',
   'model.kling.name': 'Kling O3',
   'model.kling.desc': '4K 高规格输出，速度快，内置音效。',
   'model.seedanceFast.name': 'SeeDance 2.0 Fast',

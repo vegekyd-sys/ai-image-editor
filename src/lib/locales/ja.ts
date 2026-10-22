@@ -308,6 +308,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.kling4.title': "Kling 4 が Makaron に登場",
+  'changelog.kling4.item1': "テキスト、画像、動画を参考に、Kling 4 で 3〜30 秒の動画を生成。720p と 1080p に対応しました。",
+  'changelog.kling4.item2': "Retake の標準モデルが Kling 4 になりました。選択した区間を編集し、動画全体の長さと元の音声を維持します。",
   'changelog.videoFramingParity.title': "プレビューと書き出しの構図を統一",
   'changelog.videoFramingParity.item1': "縦動画が小さく表示される問題と縦横比の判定を修正。拡大縮小、トリミング、編集後の位置をプレビューと書き出しで揃え、カット切り替え時の再生も改善しました。",
   'changelog.fasterFrameChecks.title': "複数フレームの確認を高速化、スクリーンショット保存を改善",
@@ -960,6 +963,10 @@ const ja = {
   'model.wan27Image.name': 'Wan 2.7 Image',
   'model.wan27Image.desc': '高速な画像生成と複数画像の編集。顔の細部が変わる場合があります。',
   'model.openai.desc': '文字の描画とクリエイティブ生成に優れています。',
+  'model.kling4.name': 'Kling 4.0',
+  'model.kling4.desc': 'テキスト・画像/動画参照、3〜30秒。動画編集では元の音声を保持。',
+  'model.kling4Flash.name': 'Kling 4.0 Flash',
+  'model.kling4Flash.desc': 'API未確認のため利用不可。他モデルへの置き換えは行いません。',
   'model.kling.name': 'Kling O3',
   'model.kling.desc': '高速な4K高品質出力。サウンドも内蔵しています。',
   'model.seedanceFast.name': 'SeeDance 2.0 Fast',

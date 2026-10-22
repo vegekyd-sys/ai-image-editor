@@ -4,6 +4,10 @@ import type { TranslationDictionary } from './index';
 const zhHant = {
 
   ...zh,
+  'model.kling4.name': 'Kling 4.0',
+  'model.kling4.desc': '文字生成與圖/影片參考，3–30 秒；影片編輯保留原聲。',
+  'model.kling4Flash.name': 'Kling 4.0 Flash',
+  'model.kling4Flash.desc': 'API 尚未驗證，暫不可用，不會替換為其他模型。',
   "mjLab.back": "返回 Makaron",
   "mjLab.eyebrow": "本機試用 · Midjourney V8.2",
   "image.candidates": "候選圖",
@@ -310,6 +314,9 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.kling4.title': "Kling 4 登陸 Makaron",
+  'changelog.kling4.item1': "使用文字、圖片或影片參考，透過 Kling 4 生成 3–30 秒影片，支援 720p 與 1080p。",
+  'changelog.kling4.item2': "Retake 現在預設使用 Kling 4：修改選定片段，保留完整影片長度與原始聲音。",
   'changelog.videoFramingParity.title': "影片預覽與匯出構圖更一致",
   'changelog.videoFramingParity.item1': "修正直式影片畫面意外縮小和橫直比例誤判，讓預覽與匯出的縮放、裁切和編輯位置保持一致，鏡頭切換播放更連貫。",
   'changelog.fasterFrameChecks.title': "多影格檢查更快，截圖儲存更可靠",

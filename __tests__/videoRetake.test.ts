@@ -12,9 +12,9 @@ import { createRequire } from 'node:module';
 import { extractVideoFrame } from '@/lib/video-frame';
 
 describe('Retake interval contract', () => {
-  it('uses H3 Max by default and keeps explicitly selected editing models', () => {
-    expect(resolveRetakeModel()).toBe('fal-h3-max');
-    expect(resolveRetakeModel('auto')).toBe('fal-h3-max');
+  it('uses Kling 4 by default and keeps explicitly selected editing models', () => {
+    expect(resolveRetakeModel()).toBe('kling-4');
+    expect(resolveRetakeModel('auto')).toBe('kling-4');
     expect(resolveRetakeModel('seedance-2.5')).toBe('seedance-2.5');
     expect(resolveRetakeModel('seedance-2.5-eco')).toBe('seedance-2.5-eco');
     expect(planRetake({start:12.3,end:26},30.14,'seedance-2.5-eco')).toMatchObject({contextStart:12.3,contextEnd:26,generationDuration:13.7});
@@ -78,7 +78,7 @@ describe('Retake interval contract', () => {
       run(['-f','lavfi','-i','color=red:s=320x240:r=24:d=0.041667','-f','lavfi','-i','color=green:s=320x240:r=24:d=5',
         '-f','lavfi','-i','color=blue:s=320x240:r=24:d=0.041667','-filter_complex','[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]','-map','[v]','-c:v','libx264',patch]);
       const { writeFileSync } = await import('node:fs');
-      const result = await assembleRetake(readFileSync(src),readFileSync(patch),planRetake({start:2,end:3},6));
+      const result = await assembleRetake(readFileSync(src),readFileSync(patch),planRetake({start:2,end:3},6,'fal-h3-max'));
       writeFileSync(final,result.bytes);
       const pixel = (frame: number) => [...run(['-i',final,'-vf',`select=eq(n\\,${frame}),scale=1:1`,'-frames:v','1','-pix_fmt','rgb24','-f','rawvideo','pipe:1'])];
       expect(pixel(48)[0]).toBeGreaterThan(200);

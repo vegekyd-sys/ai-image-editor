@@ -272,6 +272,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.kling4.title': "Kling 4 is here",
+  'changelog.kling4.item1': "Create 3–30 second videos with Kling 4 using text, images or video references, at 720p or 1080p.",
+  'changelog.kling4.item2': "Retake now defaults to Kling 4: edit a selected interval while preserving the full video duration and original soundtrack.",
   'changelog.videoFramingParity.title': "More consistent video preview and export",
   'changelog.videoFramingParity.item1': "Fixed unexpectedly small portrait footage and incorrect orientation detection. Scaling, cropping and edited positions now match between preview and export, with smoother playback across cuts.",
   'changelog.fasterFrameChecks.title': "Faster frame checks, more reliable screenshots",
@@ -736,6 +739,10 @@ const en = {
   'model.wan27Image.name': 'Wan 2.7 Image',
   'model.wan27Image.desc': 'Fast generation and multi-image editing. Faces may change.',
   'model.openai.desc': 'Superior text rendering and creative generation.',
+  'model.kling4.name': 'Kling 4.0',
+  'model.kling4.desc': 'Text or image/video references, 3–30s; video editing preserves source audio.',
+  'model.kling4Flash.name': 'Kling 4.0 Flash',
+  'model.kling4Flash.desc': 'API not verified. Unavailable; no substitute model will be used.',
   'model.kling.name': 'Kling O3',
   'model.kling.desc': 'Premium 4K output, fast, with built-in sound.',
   'model.seedanceFast.name': 'SeeDance 2.0 Fast',

@@ -1,5 +1,5 @@
 {
-  "routingFingerprint": "4d862a9de8492b3552ee639cd9a2f0864fedf95c180183288186a8679eb3d56c",
+  "routingFingerprint": "f96ac818f1be27a60349fe8881a4cdc0581b4c880c3af314b64b8a37a931c431",
   "catalogRevision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
   "kind": "controlled-live-natural-language-routing",
   "model": "gpt-6-luna",
@@ -36,22 +36,22 @@
           "executed": true
         }
       ],
-      "text": "我会先只读取长视频导演、人物锚点和分段分镜这三项内部 Skill，以确定适用流程；本轮不查看两张参考图，也不生成或写入任何素材。适用 Skill：\n\n- **long-video-director**：负责把 60 秒短片拆成可审阅的阶段，管理故事方向、段落衔接、导演节拍与逐段制作审批。\n- **long-video-anchor**：为人物甲、人物乙建立可复用的人物锚点，并按故事需要规划场景或道具锚点，以维持跨段一致性。\n- **long-video-storyboard**：在锚点和导演节拍确认后，为每段制作独立分镜；通常每段至少 6 格。\n\n**简短制作计划：**按默认节奏规划为 4 段、每段约 15 秒；先提出 2–3 个故事方向，再依次确认锚点清单、人物锚点、段落与衔接、导演节拍，最后制作并审阅逐段分镜。画幅比例待后续确定。本轮未查看参考图，也未生成任何素材；正式生成会留待相应阶段确认后进行。",
+      "text": "我会先读取长视频导演、人物锚点和分镜规划这三项内部 Skill；本轮仅据此给出技能选择与简短计划，不分析素材，也不启动任何生成或项目操作。**适用 Skill：**以 `long-video-director` 为主流程，搭配 `anchor` 制作人物／场景／道具锚点，并用 `storyboard` 为每段制作分镜。60 秒内容通常规划为 4 段、每段约 15 秒，适合分段生成并通过锚点与段间衔接保持一致。\n\n**简短计划：**先提出 2–3 个故事方向供选择；再规划素材与锚点、分段大纲和衔接、导演节拍板；获得确认后制作并检查锚点与逐段分镜，最后才进入脚本和视频生成。本轮未查看两张参考图，也未生成或写入任何内容。",
       "usage": {
-        "inputTokens": 105352,
+        "inputTokens": 105953,
         "inputTokenDetails": {
           "noCacheTokens": 12,
-          "cacheReadTokens": 76735,
-          "cacheWriteTokens": 28605
+          "cacheReadTokens": 100792,
+          "cacheWriteTokens": 5149
         },
-        "outputTokens": 745,
+        "outputTokens": 971,
         "outputTokenDetails": {
-          "textTokens": 367,
-          "reasoningTokens": 378
+          "textTokens": 307,
+          "reasoningTokens": 664
         },
-        "totalTokens": 106097
+        "totalTokens": 106924
       },
-      "durationMs": 19863
+      "durationMs": 27672
     },
     {
       "id": "natural-reference-replication",
@@ -73,22 +73,22 @@
           "executed": true
         }
       ],
-      "text": "我会先读取与“按参考片复刻并替换人物”最匹配的内部视频编辑 Skill；本轮只做技能选择与制作计划，不分析素材或启动生成。已确定这是“复刻结构、替换内容”的 replication 路线；我再读取该路线的协议文件，以便计划遵循其要求。本轮仍不检查视频或图片素材。**适用 Skill：`video-edit` 的 replication 路线。**参考片负责镜头结构，人物参考图负责替换人物；这比保留原片像素的 source-edit 更符合“复刻并换人”的要求。\n\n**简短计划（本轮未执行）：**后续先梳理 12 秒原片的镜头顺序、时长、构图、运镜、动作与节拍，再以替换人物图制作新版本，并逐项核对结构与人物一致性。当前未提供独立品牌标识或文案素材，因此计划暂不擅自改动品牌元素。本轮未分析或生成任何媒体。",
+      "text": "我会先读取负责“按参考视频复刻并替换人物”的内部 Skill；本轮只依据素材元信息规划，不查看媒体内容，也不启动生成。适用的是 `video-edit` 的 replication 路径：原片作为镜头结构权威，参考图用于替换人物。我会继续读取该路径的具体协议；按你的限制，只读 Skill 文件，不分析素材或生成内容。**适用 Skill：`video-edit` → `replication`。** 原片需作为镜头顺序、时长、构图、运镜、动作与节拍的结构依据，参考图则用于替换人物，因此属于复刻而非保留原片像素的局部编辑。\n\n**简短计划：** 后续先完整检查并测量 12 秒原片，建立镜头与人物映射；再以原片和替换人物参考图进行一次整体复刻，并核对镜头结构与人物替换效果。本轮按要求仅完成 Skill 选择与规划，未分析媒体或启动生成。",
       "usage": {
-        "inputTokens": 75476,
+        "inputTokens": 75854,
         "inputTokenDetails": {
           "noCacheTokens": 9,
-          "cacheReadTokens": 72181,
-          "cacheWriteTokens": 3286
+          "cacheReadTokens": 72796,
+          "cacheWriteTokens": 3049
         },
-        "outputTokens": 1636,
+        "outputTokens": 1279,
         "outputTokenDetails": {
-          "textTokens": 305,
-          "reasoningTokens": 1331
+          "textTokens": 303,
+          "reasoningTokens": 976
         },
-        "totalTokens": 77112
+        "totalTokens": 77133
       },
-      "durationMs": 29835
+      "durationMs": 26642
     },
     {
       "id": "natural-product-explainer",
@@ -105,22 +105,22 @@
           "executed": true
         }
       ],
-      "text": "我会先读取最匹配的「explainer-video」Skill，确认它的适用流程；本轮只给出选择理由和简短制作计划，不会生成或处理媒体。**适用 Skill：explainer-video（产品讲解视频）**  \n它适合用简明画面、中文旁白和同步字幕，向新用户解释产品的用途与工作流程。由于尚未提供具体产品信息，计划先按通用新手引导结构安排：\n\n- **0–4秒：** 点出产品能解决的问题  \n- **4–12秒：** 展示用户如何开始使用  \n- **12–23秒：** 用简单流程图解说明产品如何工作  \n- **23–30秒：** 总结关键步骤与上手要点  \n\n本轮仅完成 Skill 选择与计划；未分析或生成任何媒体。",
+      "text": "我会先读取最匹配的 Explainer Video 内部 Skill，仅据此给出适用理由和简短制作计划；本轮不会生成或改动任何媒体。**适用 Skill：Explainer Video（产品讲解视频）**——适合面向新用户，用简明旁白、字幕和动态示意讲清产品机制。\n\n**30 秒计划：**0–4 秒点出用户需求；4–10 秒介绍产品及使用起点；10–22 秒按步骤演示它如何工作；22–27 秒说明带来的好处；27–30 秒回顾并收尾。旁白与中文字幕同步，画面围绕产品流程展开。要把机制讲准确，下一步需要产品名称和核心工作方式。",
       "usage": {
-        "inputTokens": 52642,
+        "inputTokens": 52975,
         "inputTokenDetails": {
           "noCacheTokens": 6,
-          "cacheReadTokens": 46677,
-          "cacheWriteTokens": 5959
+          "cacheReadTokens": 47122,
+          "cacheWriteTokens": 5847
         },
-        "outputTokens": 432,
+        "outputTokens": 698,
         "outputTokenDetails": {
-          "textTokens": 228,
-          "reasoningTokens": 204
+          "textTokens": 205,
+          "reasoningTokens": 493
         },
-        "totalTokens": 53074
+        "totalTokens": 53673
       },
-      "durationMs": 15313
+      "durationMs": 19307
     }
   ]
 }

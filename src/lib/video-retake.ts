@@ -93,6 +93,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     if (input.retake.audioMode && !['original','generated'].includes(input.retake.audioMode)) throw new Error('Choose original or generated audio for local editing.')
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
+    if (model === 'kling-4' && (input.retake.audioMode === 'generated' || input.retake.endFrame)) throw new Error('Kling 4.0 Retake preserves source audio and does not accept an exact final-frame control.');
     const corrected = input.retake.correctedBoundaries
     if (corrected && (model !== 'fal-h3-max' || input.retake.editMode !== 'modify' || input.retake.endFrame || input.videoResolution === '1080p'
       || !/^https?:\/\//.test(corrected.startUrl) || !/^https?:\/\//.test(corrected.endUrl))) throw new Error('Corrected boundary controls require checked hosted images, H3 native modify mode, and no competing final asset.')
@@ -170,7 +171,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       aspectRatio, ...(plan.audioMode === 'generated' ? {generateAudio:true, keepOriginalSound:false} : {}),
       referenceVideoDuration: useVideoReference ? plan.contextEnd - plan.contextStart : undefined, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
-      videoOperation: model.startsWith('seedance-2.5') ? 'edit' : 'generate', videoReferType: 'feature',
+      videoOperation: model.startsWith('seedance-2.5') || model === 'kling-4' ? 'edit' : 'generate', videoReferType: 'feature',
       onBeforeProviderSubmit: beforeSubmit })
     if (!result.success || !result.taskId) {
       // A preflight failure never posted. Once posted, an unclassified missing
@@ -218,7 +219,7 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
       }
     }
     if (job.stage === 'saving_patch' && job.patch_url) {
-      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', falAsset: !job.model_id.startsWith('seedance-2.5'), evolinkAsset: job.model_id.startsWith('seedance-2.5') })
+      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', falAsset: job.model_id === 'fal-h3-max', evolinkAsset: job.model_id.startsWith('seedance-2.5') || job.model_id === 'kling-4' })
       const permanentPatch = await store(job, bytes, 'patch')
       await save(job, { patch_url: permanentPatch, stage: 'assembling' }, token)
     }
