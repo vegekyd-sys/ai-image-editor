@@ -141,3 +141,15 @@ style: {
 画布比例正确不代表主视频足够大。`run_code` 的 render 和 patch 都会检查目标比例；素材与画布同比例时，还会拒绝所有可静态测量视频区域均小于半画布的主画面布局。显式要求小窗/分屏时可用 `video_layout: "inset"`，该角色随 draft 持久化。动态尺寸无法证明时交给 `preview_frame`，静态检查不替代实帧验收，也不自动重写已有作品。
 
 修改共享运行时时同步提升 `REMOTION_EDITABLE_RUNTIME_VERSION` 与 `public/remotion-runtime.json`，重新构建独立渲染站点后再上线。旧 Lambda bundle 不会自动获得应用源码中的修复，版本门禁会阻止误用旧 bundle。
+
+
+### 媒体与布局一致性审计（2026-10-22）
+
+- 支持 WebCodecs 的 Player 与导出共用媒体解码器；不支持时保留原生 Video 回退。媒体 effects、音高、非首音轨和带自定义请求参数的视频使用媒体解码器，避免原生路径静默丢参。
+- Video/OffthreadVideo/Html5Video 与 Audio 的 `startFrom/endAt` 统一映射到 `trimBefore/trimAfter`，显式现代参数（包括 0）优先。GUI 裁剪与可编辑位移/缩放识别所有视频别名。
+- 原生回退尾帧缓存使用视频实际布局框，保留 objectPosition、clipPath、滤镜、透明度、边框、transform/transformOrigin；缓存替代实时画面，防止透明度与阴影叠加。画布保留 alpha；`Sequence layout="none"` 不额外产生布局盒或传入非法 style。
+- 适配后的 Video 保留显式媒体身份，缓冲、裁剪时长与尾帧发现不依赖包装组件的函数名。暂停定位在目标帧内部作 100 微秒校准，避免原生时间舍入落到前一帧；持续播放不偏移。
+
+可重复验收入口：`benchmarks/remotion-parity/render.ts`。它生成带明确 BT.709 元数据的合成测试源、真实 Player 页面，以及媒体/离线解码器的同帧 PNG；通过内置浏览器逐项检查 cover/contain、objectPosition、变换、滤镜/裁剪/透明度、legacy trim/倍速、GUI 裁剪、尾帧、无布局 Sequence 与字幕。未声明色彩空间的素材不能用来声称跨浏览器原始 RGB 恒等；实际片验收还需检查其色彩元数据及连续播放。测试页保留原生回退案例。
+
+本次应用与渲染站点必须使用同一候选版本，独立站点地址通过单次部署或验收进程环境传入，不能拿旧渲染站点验收新应用。普通客户端默认不改变生产配置。

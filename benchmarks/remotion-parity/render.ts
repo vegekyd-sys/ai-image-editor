@@ -14,7 +14,7 @@ config({path:path.resolve('../ai-image-editor/.env.local'),quiet:true});
 const out=path.resolve(process.env.PARITY_OUTPUT_DIR || '/tmp/makaron-expanded-parity');fs.mkdirSync(out,{recursive:true});
 const port=8521;
 async function main(){
- if(!fs.existsSync(path.join(out,'source.mp4')))execFileSync(ffmpegPath!,['-loglevel','error','-y','-f','lavfi','-i','testsrc2=size=640x360:rate=30:duration=8','-c:v','libx264','-pix_fmt','yuv420p','-crf','16','-movflags','+faststart',path.join(out,'source.mp4')]);
+ if(!fs.existsSync(path.join(out,'source.mp4')))execFileSync(ffmpegPath!,['-loglevel','error','-y','-f','lavfi','-i','testsrc2=size=640x360:rate=30:duration=8','-c:v','libx264','-pix_fmt','yuv420p','-crf','16','-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-color_range','tv','-movflags','+faststart',path.join(out,'source.mp4')]);
  const originalManifestUrl=await resolveRemotionFontManifestUrlForDesign({code:fixtures.map(f=>f.code).join('\n')});
  const manifest=await (await fetch(originalManifestUrl)).json();
  const remoteFonts=new Map<string,string>();
