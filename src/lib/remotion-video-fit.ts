@@ -8,7 +8,7 @@ const FITS = new Set(['contain', 'cover', 'fill', 'none', 'scale-down']);
 export function withVideoFit(
   Component: React.ElementType,
   usesObjectFitProp: boolean,
-): React.ElementType {
+): React.ComponentType<any> {
   return React.forwardRef(function VideoWithAuthoredFit(
     props: Record<string, any>, ref: React.ForwardedRef<any>,
   ) {

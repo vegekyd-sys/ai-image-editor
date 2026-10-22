@@ -22,22 +22,22 @@ describe('displayed video dimensions', () => {
     expect(probeMP4Dimensions(Buffer.concat([header,movie.subarray(8)]))).toEqual({width:1080,height:1920});
   });
   it('skips a huge mdat without downloading it, then reads the tail moov', async () => {
-    const movie=rotatedMp4(), media=Buffer.alloc(16);media.writeUInt32BE(1);media.write('mdat',4);media.writeBigUInt64BE(5000000000n,8);
+    const movie=rotatedMp4(), media=Buffer.alloc(16);media.writeUInt32BE(1);media.write('mdat',4);media.writeBigUInt64BE(BigInt(5000000000),8);
     const fetch=vi.fn(async (_url: any, init: any) => {
       const [,a,b]=/bytes=(\d+)-(\d+)/.exec(init.headers.Range)!;
       const start=Number(a), end=Number(b), bytes=start===0?media:movie.subarray(0,end-start+1);
-      return new Response(bytes,{status:206,headers:{'content-range':`bytes ${a}-${start+bytes.length-1}/5000001000`}});
+      return new Response(new Uint8Array(bytes),{status:206,headers:{'content-range':`bytes ${a}-${start+bytes.length-1}/5000001000`}});
     });
     expect(await probeVideoDimensionsFromUrl('https://media.test/movie',fetch as typeof globalThis.fetch)).toEqual({width:1080,height:1920});
     expect(fetch.mock.calls.map(call=>call[1].headers.Range)).toEqual(['bytes=0-15','bytes=5000000000-5000000015',`bytes=5000000000-${5000000000+movie.length-1}`]);
   });
   it('supports a small server that ignores Range, without guessing on failure', async () => {
-    const fetch=vi.fn(async()=>new Response(rotatedMp4()));
+    const fetch=vi.fn(async()=>new Response(new Uint8Array(rotatedMp4())));
     expect(await probeVideoDimensionsFromUrl('https://media.test/movie',fetch)).toEqual({width:1080,height:1920});
     expect(await probeVideoDimensionsFromUrl('file:///secret',fetch)).toBeNull();
     expect(await probeVideoDimensionsFromUrl('https://media.test/movie',async()=>new Response('invalid'))).toBeNull();
   });
   it('rejects a lying Content-Range rather than reading the wrong offset', async () => {
-    expect(await probeVideoDimensionsFromUrl('https://media.test/movie',async()=>new Response(rotatedMp4(),{status:206,headers:{'content-range':'bytes 20-35/1000'}}))).toBeNull();
+    expect(await probeVideoDimensionsFromUrl('https://media.test/movie',async()=>new Response(new Uint8Array(rotatedMp4()),{status:206,headers:{'content-range':'bytes 20-35/1000'}}))).toBeNull();
   });
 });

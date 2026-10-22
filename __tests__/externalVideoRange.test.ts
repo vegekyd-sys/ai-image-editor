@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { rotatedMp4 } from './helpers/rotatedMp4Fixture';
-beforeEach(() => vi.stubGlobal('fetch', vi.fn(async () => new Response(rotatedMp4()))));
+beforeEach(() => vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(rotatedMp4())))));
 afterEach(() => vi.unstubAllGlobals());
 import { detectExternalMediaType, publishExternalVideoRanges } from '@/lib/external-video-range';
 
