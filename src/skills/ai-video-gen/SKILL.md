@@ -46,3 +46,7 @@ not invoke OpenMontage Python tools, HyperFrames, or unexposed provider APIs.
 ## Completion
 
 Return a submitted or completed video with the selected model, duration, references, and next action made explicit.
+
+## Kling 4.0 candidate
+
+Opt in with `kling-4`: native text/reference generation, integer 3–30s at 720p/1080p; max 10 images / 5 videos, no audio references. Video inputs each >=3s, total <=30s. Typed edit requires exactly one video and preserves its audio/canvas. Keyframe I2V and extend are not exposed. Retake supports original audio only and requires the candidate receipt migration. `kling-4-flash` has no verified callable API; report unavailable without substitution.

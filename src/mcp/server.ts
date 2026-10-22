@@ -325,6 +325,7 @@ Models:
 - grok — one Makaron selector with split xAI routing: Grok Imagine Video 1.5 for text generation (up to 1080p) or feature/reference generation (1-7 images or preset voices, up to 720p, native audio), and Grok Imagine Video for one-video edit/extend (up to 720p)
 - google-omni — Gemini Omni 1.1 Flash via Google, fast text/image/video generation, editing, and forward extension, 360p/720p/upscaled 1080p/4k, up to 6 image references without a video reference, one video reference for edit/extend, native generated audio, no uploaded audio references
 - minimax-h3 — MiniMax H3 direct API, native text-to-video plus up to 9 image / 3 video / 3 audio references, 4-15s, public 768p/2K, default 768P
+- kling-4 — Kling 4.0 via EvoLink: text or image/video references, integer 3–30s, 720p/1080p; editing preserves source audio. kling-4-flash is unavailable pending a verified API; never substitute.
 - fal-h3-max (default) — FAL H3 Max, native T2V or image/video/audio R2V, integer 5–15s, 480p/768p/1080p default 768p. Up to 9 images + 3 videos + 3 audios, 12 total. Video/audio each 2–15s and modality total <=15s. Use generate plus feature references for video modifications.
 - minimax-h3-max — fal H3 Turbo faster-than-real-time route, native text-to-video or exactly one start-image image-to-video, exactly 5/10/15s, 480p/768p, default native 768p; no reference video/audio yet
 - sync-lipsync-v3 — exact replacement-audio lip sync; requires exactly one source video and one audio URL, preserves source framing and the supplied audio
@@ -343,7 +344,7 @@ Style: Cinematic, warm golden light.`,
       referenceVideoDuration: z.number().positive().optional().describe('Known source-video duration in seconds. Pass this for Grok edit/extend so duration validation and input-video billing match the actual source.'),
       duration: z.number().optional().describe('Duration in seconds. fal H3 Max accepts integer 5-15s; fal H3 Turbo accepts exactly 5/10/15s. Both default to 5s. Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok reference-to-video supports fixed provider ratios.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native', 'wan-3.0', 'wan-3.0-prime', 'kling', 'grok', 'google-omni', 'minimax-h3', 'minimax-h3-max', 'fal-h3-max', 'sync-lipsync-v3']).optional().describe('Video model. Default fal-h3-max supports image/video/audio reference-to-video at 768p. Wan exposes wan-3.0 and wan-3.0-prime; minimax-h3-max is the near-real-time T2V/single-image I2V route and does not accept reference video or audio.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native', 'wan-3.0', 'wan-3.0-prime', 'kling', 'kling-4', 'kling-4-flash', 'grok', 'google-omni', 'minimax-h3', 'minimax-h3-max', 'fal-h3-max', 'sync-lipsync-v3']).optional().describe('Video model. Default fal-h3-max supports image/video/audio reference-to-video at 768p. Wan exposes wan-3.0 and wan-3.0-prime; minimax-h3-max is the near-real-time T2V/single-image I2V route and does not accept reference video or audio.'),
       videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Shared output-resolution control for every video model. fal H3 Turbo supports 480p/768p and defaults to native 768p; MiniMax H3 supports 768p/2k; other capabilities follow the selected model.'),
       operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require videoUrls. Grok and Omni extend forward only.'),
       extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction. Omit or use forward for Gemini Omni.'),
@@ -434,7 +435,7 @@ Example: Edit a video to add cinematic color grading:
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
       duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok edit retains a source up to 8.7s and Grok extend adds 2-10s to a 2-15s source; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native', 'kling', 'grok', 'google-omni', 'minimax-h3', 'fal-h3-max']).optional().describe('Video model. Seedance 2.5, Grok, and Google Omni use dedicated typed edit routes; MiniMax H3 supports feature/reference video.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native', 'kling', 'kling-4', 'kling-4-flash', 'grok', 'google-omni', 'minimax-h3', 'fal-h3-max']).optional().describe('Video model. Seedance 2.5, Grok, and Google Omni use dedicated typed edit routes; MiniMax H3 supports feature/reference video.'),
       videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Grok edit retains the source shape up to 720p. Use auto to follow the selected model default; Gemini Omni 1.1 supports 360p/720p/1080p/4k, and MiniMax H3 supports 768p/2k.'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Provider-native source-sound toggle. Use only when the selected route explicitly supports it, currently Kling; otherwise describe the desired sound naturally in editPrompt.'),
@@ -458,8 +459,8 @@ Example: Edit a video to add cinematic color grading:
           videoResolution: params.videoResolution,
           videoUrl: params.videoUrl,
           videoReferType: resolvedReferType,
-          keepOriginalSound: params.keepOriginalSound ?? false,
-          videoOperation: resolvedModel === 'seedance-2.5' || resolvedModel === 'grok' || resolvedModel === 'google-omni' ? 'edit' : 'generate',
+          keepOriginalSound: params.keepOriginalSound ?? (resolvedModel === 'kling-4'),
+          videoOperation: resolvedModel === 'seedance-2.5' || resolvedModel === 'kling-4' || resolvedModel === 'grok' || resolvedModel === 'google-omni' ? 'edit' : 'generate',
           userId: options?.userId,
           onBeforeGrokApiFallback: options?.onBeforeGrokApiFallback
             ? () => options.onBeforeGrokApiFallback!('makaron_edit_video', params.videoModel)
@@ -473,7 +474,7 @@ Example: Edit a video to add cinematic color grading:
             videoModel: resolvedModel,
             videoResolution: params.videoResolution,
             referenceVideoDurationSec: resolvedModel === 'minimax-h3' ? (params.duration ?? 10) : undefined,
-            videoOperation: resolvedModel === 'seedance-2.5' || resolvedModel === 'grok' || resolvedModel === 'google-omni' ? 'edit' : 'generate',
+            videoOperation: resolvedModel === 'seedance-2.5' || resolvedModel === 'kling-4' || resolvedModel === 'grok' || resolvedModel === 'google-omni' ? 'edit' : 'generate',
             provider: result.provider,
           });
         }

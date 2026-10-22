@@ -2113,7 +2113,7 @@ Commands:
 
   edit [--image <file>] "prompt"     Image edit, text-to-image, or transparent PNG
   analyze --video <file|url>         Analyze video content
-  video script|create|retake|status  H3 Max, Wan, Seedance, Grok, lip-sync; interval retake
+  video script|create|retake|status  H3 Max, Wan, Seedance, Grok, lip-sync, Kling 4; interval retake
   music create|status                Music generation
 
   admin                              Admin commands (skills, credits, upload, set-admin)
@@ -2266,7 +2266,7 @@ Not sure which built-in skill to use? Start with:
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
     else if (subtopic === 'create') printVideoCreateHelp();
-    else if (subtopic === 'retake') console.log('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]');
+    else if (subtopic === 'retake') console.log('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max|kling-4] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else printVideoHelp();
   } else if (topic === 'music') {
@@ -3178,12 +3178,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if ((flag === '--model' || flag === '--video-model') && args[i + 1]) params.model = args[++i];
       else if (flag === '--project' && args[i + 1]) params.project_id = args[++i];
       else if (flag === '--request-id' && args[i + 1]) params.request_id = args[++i];
-      else { console.error('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]'); process.exit(1); }
+      else { console.error('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max|kling-4] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]'); process.exit(1); }
     }
     if (!params.video_url || !params.prompt || !Number.isFinite(params.start) || !Number.isFinite(params.end)
       || params.start < 0 || params.end - params.start < .1 || params.end - params.start > 15
       || (params.audio_mode && !['original','generated'].includes(params.audio_mode))
-      || !['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max'].includes(params.model)) {
+      || !['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max', 'kling-4'].includes(params.model)) {
       console.error('Retake needs one video, a prompt, a valid 0.1–15 second interval, and a supported model.'); process.exit(1);
     }
     if (!isHttpUrl(params.video_url)) {
@@ -3259,7 +3259,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const isGrok = selectedVideoModel === 'grok';
     const isGoogleOmni = selectedVideoModel === 'google-omni';
     const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
-    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
+    const supportsNativeTextToVideo = selectedVideoModel === 'kling-4' || selectedVideoModel === 'kling-4-flash' || isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
     if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
       console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|minimax-h3|minimax-h3-max]');
       process.exit(1);

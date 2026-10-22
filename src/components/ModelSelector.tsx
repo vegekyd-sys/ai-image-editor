@@ -310,6 +310,7 @@ function ResolutionChips({
 }
 
 function VideoModelRow({
+  disabled = false,
   modelId,
   name,
   desc,
@@ -321,6 +322,7 @@ function VideoModelRow({
   selectedVideoResolution,
   onResolutionSelect,
 }: {
+  disabled?: boolean;
   modelId: string;
   name: string;
   desc: string;
@@ -345,6 +347,7 @@ function VideoModelRow({
     >
       <button
         onClick={onSelect}
+        disabled={disabled}
         data-model-id={modelId}
         aria-pressed={selected}
         style={{
@@ -920,6 +923,7 @@ export default function ModelSelector({
                     <VideoModelRow
                       key={model.id}
                       modelId={model.id}
+                      disabled={model.unavailable}
                       name={t(model.nameKey as Parameters<typeof t>[0])}
                       desc={t(model.descKey as Parameters<typeof t>[0])}
                       badge={model.speedLabelKey ? t(model.speedLabelKey) : model.speedLabel}

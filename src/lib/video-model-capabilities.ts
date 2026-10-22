@@ -32,7 +32,7 @@ export interface VideoModelCapability {
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
-  provider?: 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-h3-max' | 'fal-sync' | 'piapi'
+  provider?: 'evolink-kling4' | 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-h3-max' | 'fal-sync' | 'piapi'
   providerModel?: string
 }
 
@@ -79,6 +79,17 @@ export const DEFAULT_VIDEO_REPLICATION_MODEL_ID = 'wan-3.0-prime'
 export const DEFAULT_VIDEO_REPLICATION_RESOLUTION: VideoResolution = '720p'
 
 const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
+  'kling-4': {
+    id: 'kling-4', label: 'Kling 4.0', minOutputDuration: 3, maxOutputDuration: 30,
+    maxReferenceVideoDuration: 30, supportsVideoReference: true, supportsBaseVideoEdit: true,
+    referenceVideoSize: { maxFileSizeMb: 200, minWidth: 720, minHeight: 720, maxWidth: 2160, maxHeight: 2160, description: 'MP4/MOV, 720–2160px per side, 24–60fps, 3–30s total, <=200MB per clip' },
+    defaultImageWorkflow: 'reference-to-video', longVideoChunkSeconds: 30,
+    maxImageReferences: 10, maxVideoReferences: 5, maxAudioReferences: 0, maxTotalReferences: 15,
+    supportedResolutions: ['720p', '1080p'], defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '21:9'],
+    estimatedCostPerSecondUsd: .157, estimatedCostPerSecondUsdByResolution: { '720p': .157, '1080p': .235 },
+    provider: 'evolink-kling4', providerModel: 'kling-v4-reference-to-video',
+  },
   kling: {
     id: 'kling',
     label: 'Kling',
@@ -575,6 +586,8 @@ MODEL_CAPABILITIES['bytedance-video-upscale'] = {
 export function normalizeVideoModelId(model?: string | null): string {
   if (!model) return DEFAULT_MODEL_ID
   const normalized = String(model).trim().toLowerCase()
+  if (['kling4', 'kling-4.0', 'kling 4.0', 'kling 4'].includes(normalized)) return 'kling-4'
+  if (['kling4-flash', 'kling-4.0-flash', 'kling 4.0 flash', 'kling 4 flash'].includes(normalized)) return 'kling-4-flash'
   if (normalized === 'seedance-2.5-native') return 'seedance-2.5'
   if (['fal-h3-max', 'fal h3 max'].includes(normalized)) return 'fal-h3-max'
   if (['fal h3 turbo'].includes(normalized)) return 'minimax-h3-max'
@@ -759,7 +772,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
   const id = normalizeVideoModelId(model)
-  return getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'minimax-h3-max' || id === 'fal-h3-max' || id === 'google-omni' || id === 'grok'
+  return id === 'kling-4' || getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'minimax-h3-max' || id === 'fal-h3-max' || id === 'google-omni' || id === 'grok'
 }
 
 export function resolveVideoProviderModel(options: {
@@ -784,6 +797,8 @@ export function resolveVideoProviderModel(options: {
     if (options.operation === 'edit' || options.operation === 'extend') return 'grok-imagine-video'
     return 'grok-imagine-video-1.5'
   }
+
+  if (route.model === 'kling-4') return options.operation === 'edit' ? 'kling-v4-video-edit' : hasReferenceMedia ? 'kling-v4-reference-to-video' : 'kling-v4-text-to-video'
 
   if (route.model === 'fal-h3-max') return hasReferenceMedia ? 'minimax/h3-max/reference-to-video' : 'minimax/h3-max/text-to-video'
 
@@ -915,6 +930,9 @@ export function estimateVideoProviderCostUsd(options: {
   // $0.01/s. Generation/reference modes use the 1.5 resolution table above.
   const perSecond = isGrokVideoInput ? 0.07 : route.estimatedCostPerSecondUsd
   if (perSecond == null) return undefined
+  if (normalizedModel === 'kling-4' && (options.operation === 'edit' || (options.referenceVideoDurationSec ?? 0) > 0)) {
+    return (options.durationSec + Math.max(options.durationSec, options.referenceVideoDurationSec ?? 0)) * (route.resolution === '1080p' ? .141 : .094)
+  }
   if (normalizedModel === 'seedance-2.5' && (options.referenceVideoDurationSec ?? 0) > 0) {
     const referenceRate = route.resolution === '480p' ? 0.084 : 0.180
     const billableInput = Math.max(options.referenceVideoDurationSec ?? 0, options.durationSec)
@@ -1053,6 +1071,12 @@ export function validateVideoModelRequest(options: {
 }): string | null {
   const capability = getVideoModelCapability(options.model)
   const normalizedModel = normalizeVideoModelId(options.model)
+  if (normalizedModel === 'kling-4-flash') return 'Kling 4.0 Flash has no verified callable API or price. No task submitted; do not substitute Kling 4.0 or another model.'
+  if (normalizedModel === 'kling-4') {
+    if (options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 3 || options.outputDuration > 30)) return 'Kling 4.0 output must be an integer from 3 to 30 seconds.'
+    if (options.operation === 'edit' && (options.videoReferenceCount ?? 0) !== 1) return 'Kling 4.0 editing requires exactly one source video.'
+    if (options.referenceVideoMetas?.some(meta => (meta.durationSec ?? 0) < 3)) return 'Kling 4.0 reference videos must each be at least 3 seconds.'
+  }
   const resolutionError = validateVideoResolutionRequest({
     model: options.model,
     resolution: options.resolution,
