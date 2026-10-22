@@ -57,6 +57,8 @@ describe('Kling 4.0 candidate contract', () => {
     expect(calculateMediaQuote(price,{durationSec:5,referenceVideoDurationSec:8}).supplierCostUsd).toBeCloseTo(1.222)
     expect(estimateVideoProviderCostUsd({model:'kling-4',durationSec:5,referenceVideoDurationSec:8})).toBeCloseTo(1.222)
     expect(calculateMediaQuote(price,{durationSec:5,imageCount:1}).supplierCostUsd).toBeCloseTo(.785)
+    expect(calculateMediaQuote({...price,operation:'edit'},{durationSec:3.95,referenceVideoDurationSec:3.95}).supplierCostUsd).toBeCloseTo(7.95*.094)
+    expect(estimateVideoProviderCostUsd({model:'kling-4',operation:'edit',durationSec:3.95,referenceVideoDurationSec:3.95})).toBeCloseTo(7.95*.094)
   })
   it('binds timeline source indices to Kling native video references', () => {
     expect(bindRetakeReferences({prompt:'Edit <<<media_7>>> with <<<media_3>>>',model:'kling-4',sourceIndex:7,referenceIndices:[3]})).toBe('Edit <<<video_1>>> with <<<image_1>>>')

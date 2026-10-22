@@ -931,7 +931,8 @@ export function estimateVideoProviderCostUsd(options: {
   const perSecond = isGrokVideoInput ? 0.07 : route.estimatedCostPerSecondUsd
   if (perSecond == null) return undefined
   if (normalizedModel === 'kling-4' && (options.operation === 'edit' || (options.referenceVideoDurationSec ?? 0) > 0)) {
-    return (options.durationSec + Math.max(options.durationSec, options.referenceVideoDurationSec ?? 0)) * (route.resolution === '1080p' ? .141 : .094)
+    const sourceSeconds = options.operation === 'edit' ? Math.ceil(options.referenceVideoDurationSec ?? 0) : options.referenceVideoDurationSec ?? 0
+    return (options.durationSec + Math.max(options.durationSec, sourceSeconds)) * (route.resolution === '1080p' ? .141 : .094)
   }
   if (normalizedModel === 'seedance-2.5' && (options.referenceVideoDurationSec ?? 0) > 0) {
     const referenceRate = route.resolution === '480p' ? 0.084 : 0.180
