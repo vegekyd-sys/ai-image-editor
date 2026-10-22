@@ -976,7 +976,7 @@ export function evalRemotionJSX(
       Html5Audio: CompatibleHtml5Audio,
       Video: videoComponent,
       OffthreadVideo: videoComponent,
-      Html5Video: CompatibleHtml5Video,
+      Html5Video: videoComponent,
       Sequence: isPreviewRuntime ? PreviewSequence : AutoPremountSequence,
     };
     const editableId = (editableRuntime.React as typeof React & {
@@ -987,7 +987,7 @@ export function evalRemotionJSX(
       Audio: CompatibleAudio,
       Video: videoComponent,
       OffthreadVideo: videoComponent,
-      Html5Video: CompatibleHtml5Video,
+      Html5Video: videoComponent,
     };
     const pathsNamespace = { ...RemotionPaths };
     const noiseNamespace = { ...RemotionNoise };

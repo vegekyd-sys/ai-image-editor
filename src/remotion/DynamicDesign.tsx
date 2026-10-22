@@ -41,6 +41,8 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
   const serverVideo = withVideoFit(Remotion.OffthreadVideo || MediaVideo, !Remotion.OffthreadVideo, MediaVideo);
   const nativeVideo = withVideoFit(Remotion.Video || MediaVideo, !Remotion.Video, MediaVideo);
   const serverRendering = useOffthreadVideo || useNativeVideo;
+  const mediaVideo = withVideoFit(MediaVideo, true);
+  const preferredVideo = useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : mediaVideo;
   const scope: Record<string, unknown> = {
     React, useState, useEffect, useCallback, useMemo, useRef,
     THREE,
@@ -51,8 +53,8 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
     // Remotion-native Video so the renderer can collect source-video audio assets.
     Audio: withMediaTrim(MediaAudio),
     Html5Audio: withMediaTrim(Remotion.Html5Audio),
-    Video: useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : withVideoFit(MediaVideo, true),
-    Html5Video: withVideoFit(Remotion.Html5Video, false, MediaVideo),
+    Video: preferredVideo,
+    Html5Video: preferredVideo,
     // An explicit <OffthreadVideo> must remain meaningful in server preview/export.
     // Previously it was silently aliased back to @remotion/media whenever only
     // useNativeVideo was set, so an Agent "compatibility" patch changed the
