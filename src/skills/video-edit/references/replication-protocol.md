@@ -38,9 +38,8 @@ not pixel identity or a vague "similar feeling".
    this exception does not change the default for ordinary video generation.
    Preserve an explicit provider or cost/resolution request. Otherwise choose A
    = deterministic re-edit of supplied replacements, B = per-shot generation,
-   or C = hybrid; prefer A, then C, then B. Kling Motion Control is only for
-   supported single-person continuous action, not a general multi-person or
-   multi-shot route.
+   or C = hybrid; prefer A, then C, then B. Legacy Kling Motion Control is retired and unavailable;
+   choose a supported reference-video route for action transfer.
 5. **Gate generation.** For structured work, prove one representative 4-5
    second shot before a batch. For a direct short clip, one complete attempt is
    the representative proof. Allow one evidence-driven correction; more paid

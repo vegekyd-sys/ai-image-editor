@@ -2006,7 +2006,7 @@ Inputs:
 
 Generation options:
   --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5,
-                            wan-3.0, wan-3.0-prime, kling, kling-4, grok, google-omni,
+                            wan-3.0, wan-3.0-prime, kling-4, grok, google-omni,
                             minimax-h3, minimax-h3-max, fal-h3-max, or sync-lipsync-v3.
   --duration <seconds>      Output duration supported by the selected model.
   --video-resolution <res> auto, 480p, 720p, 768p, 1080p, 2k, or 4k.
@@ -3261,6 +3261,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const isGrok = selectedVideoModel === 'grok';
     const isGoogleOmni = selectedVideoModel === 'google-omni';
     const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
+    if (['kling', 'kling-o3', 'kling-o3-video', 'kling-v3-omni', 'kling-3', 'kling-3.0'].includes(selectedVideoModel)) { console.error('Kling O3 has been retired. Historical videos remain available. Select an available model explicitly; no task submitted.'); process.exit(1); }
     const isKling4 = selectedVideoModel === 'kling-4';
     const supportsNativeTextToVideo = selectedVideoModel === 'kling-4' || selectedVideoModel === 'kling-4-flash' || isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
     if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {

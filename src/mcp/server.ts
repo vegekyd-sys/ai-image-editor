@@ -309,7 +309,7 @@ IMPORTANT:
 - EvoLink Seedance reference images must be JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB each. Input errors distinguish too_small, too_large, invalid_aspect_ratio, unsupported_format, and unreadable. NON_RETRYABLE means the same URL must not be resubmitted; prepare a new compliant URL or replace the source first.
 - When images are provided, script should use <<<media_N>>> format (from makaron_write_video_script output). Text-to-video scripts should not invent media markers.
 - Video timing depends on the selected model: fal H3 Turbo and fal H3 Max usually finish in tens of seconds; Max with video references may take around 1-2 minutes. Queue and saving time can vary; other providers may take 3-5 minutes; Grok is optimized for substantially faster generation; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll and measure the actual elapsed time.
-- Duration: omit for smart mode. fal H3 Max supports integer 5-15s; fal H3 Turbo supports exactly 5/10/15s. Both default to 5s. Seedance 2.5 supports 4-30s; Wan 3.0 supports 2-30s; SeeDance 2.0 and MiniMax H3 support 4-15s; Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
+- Duration: omit for smart mode. fal H3 Max supports integer 5-15s; fal H3 Turbo supports exactly 5/10/15s. Both default to 5s. Seedance 2.5 supports 4-30s; Wan 3.0 supports 2-30s; SeeDance 2.0 and MiniMax H3 support 4-15s; Kling 4.0 supports integer 3-30s in one call; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
 - Resolution: omit or use "auto" for the selected model default. wan-3.0 and wan-3.0-prime expose 480p/720p/1080p/2k/4k; 2k/4k automatically use the matching FlashVSR/Pro endpoint. fal-h3-max supports 480p/768p/1080p, default 768p; 1080p uses latent refinement from 768p. minimax-h3-max uses the Turbo route and supports only 480p/768p; minimax-h3 supports 768p/2k and defaults to 768p. Gemini Omni supports 360p/720p/1080p/4k; Seedance 2.5 supports 480p/720p; Grok text-to-video supports 480p/720p/1080p and caps image/voice references at 720p.
 - Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references, plus dedicated edit/extend modes. Gemini Omni accepts one timeline/external video and can extend it forward for 3-10 seconds (10 seconds by default).
 
@@ -321,7 +321,6 @@ Models:
 - seedance-2.5 — Seedance 2.5 via Evolink, 4-30s, multimodal references, native audio, edit and extend
 - wan-3.0 — Wan 3.0 via MuleRouter, 2-30s, 480p/720p/1080p/2k/4k, native audio, up to 10 image + 5 video + 5 audio feature references; 2k/4k use FlashVSR automatically
 - wan-3.0-prime — Wan 3.0 Prime fast tier via MuleRouter with the same duration, resolutions, and reference limits; 2k/4k use Prime FlashVSR automatically
-- kling — Kling v3-omni, supports 720p/1080p/4k
 - grok — one Makaron selector with split xAI routing: Grok Imagine Video 1.5 for text generation (up to 1080p) or feature/reference generation (1-7 images or preset voices, up to 720p, native audio), and Grok Imagine Video for one-video edit/extend (up to 720p)
 - google-omni — Gemini Omni 1.1 Flash via Google, fast text/image/video generation, editing, and forward extension, 360p/720p/upscaled 1080p/4k, up to 6 image references without a video reference, one video reference for edit/extend, native generated audio, no uploaded audio references
 - minimax-h3 — MiniMax H3 direct API, native text-to-video plus up to 9 image / 3 video / 3 audio references, 4-15s, public 768p/2K, default 768P
@@ -342,9 +341,9 @@ Style: Cinematic, warm golden light.`,
       audioUrls: z.array(z.string().url()).max(10).optional().describe('Public reference audio URLs. Sync Lipsync v3 requires exactly one replacement track; Seedance 2.5 accepts up to 10.'),
       referenceVoiceIds: z.array(z.string()).max(3).optional().describe('Grok Imagine Video 1.5 preset voice ids (up to 3), such as eve or leo. These are provider voice names, not uploaded audio URLs.'),
       referenceVideoDuration: z.number().positive().optional().describe('Known source-video duration in seconds. Pass this for Grok edit/extend so duration validation and input-video billing match the actual source.'),
-      duration: z.number().optional().describe('Duration in seconds. fal H3 Max accepts integer 5-15s; fal H3 Turbo accepts exactly 5/10/15s. Both default to 5s. Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s.'),
+      duration: z.number().optional().describe('Duration in seconds. fal H3 Max accepts integer 5-15s; fal H3 Turbo accepts exactly 5/10/15s. Both default to 5s. Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s; Kling 4.0 accepts integer 3-30s.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok reference-to-video supports fixed provider ratios.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native', 'wan-3.0', 'wan-3.0-prime', 'kling', 'kling-4', 'kling-4-flash', 'grok', 'google-omni', 'minimax-h3', 'minimax-h3-max', 'fal-h3-max', 'sync-lipsync-v3']).optional().describe('Video model. Default fal-h3-max supports image/video/audio reference-to-video at 768p. Wan exposes wan-3.0 and wan-3.0-prime; minimax-h3-max is the near-real-time T2V/single-image I2V route and does not accept reference video or audio.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native', 'wan-3.0', 'wan-3.0-prime', 'kling-4', 'kling-4-flash', 'grok', 'google-omni', 'minimax-h3', 'minimax-h3-max', 'fal-h3-max', 'sync-lipsync-v3']).optional().describe('Video model. Default fal-h3-max supports image/video/audio reference-to-video at 768p. Wan exposes wan-3.0 and wan-3.0-prime; minimax-h3-max is the near-real-time T2V/single-image I2V route and does not accept reference video or audio.'),
       videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Shared output-resolution control for every video model. fal H3 Turbo supports 480p/768p and defaults to native 768p; MiniMax H3 supports 768p/2k; other capabilities follow the selected model.'),
       operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require videoUrls. Grok and Omni extend forward only.'),
       extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction. Omit or use forward for Gemini Omni.'),
@@ -415,30 +414,30 @@ Style: Cinematic, warm golden light.`,
     'makaron_edit_video',
     `Edit an existing video using AI video-to-video/reference-video generation. Returns a taskId for polling.
 
-Kling supports base/direct video editing. SeeDance supports video-reference editing for short clips.
+Kling 4.0 supports direct video editing for a 3-30s source, preserving its audio and canvas. SeeDance supports video-reference editing for short clips.
 
 IMPORTANT:
-- videoUrl must be a publicly accessible URL (MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤200MB, ≤1080p / 2,086,876 pixels)
+- videoUrl must be publicly accessible and meet the selected model limits. Kling 4.0: MP4/MOV, 3-30s, <=200MB, 720-2160px per side, 24-60fps.
 - SeeDance video editing requires target ≤15s and ≤1080p input video, matching the normal frontend upload flow.
 - When referType is "base": the video is the starting point for editing. Images serve as additional references only (no first_frame).
 - When referType is "feature": the video provides style/motion reference. Images define the actual content.
-- For videoModel "seedance-fast", "seedance-mini", or "seedance", use referType "feature" (default for SeeDance). Base/direct edit is Kling-only.
+- For videoModel "seedance-fast", "seedance-mini", or "seedance", use referType "feature" (default for SeeDance). For Kling 4.0, base maps to its typed edit route.
 - images (if any) must be publicly accessible URLs
 - Video timing depends on the selected model: fal H3 Turbo and fal H3 Max usually finish in tens of seconds; Max with video references may take around 1-2 minutes. Queue and saving time can vary; other providers may take 3-5 minutes; Grok is optimized for substantially faster generation; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll and measure actual elapsed time.
 
 Example: Edit a video to add cinematic color grading:
   videoUrl: "https://...", editPrompt: "Apply warm cinematic color grading with film grain", videoModel: "seedance-fast"`,
     {
-      videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤1080p, ≤200MB)'),
+      videoUrl: z.string().url().describe('Public source video URL. Kling 4.0: MP4/MOV, 3-30s, <=200MB, 720-2160px per side, 24-60fps; other limits depend on selected model.'),
       editPrompt: z.string().describe('Editing instructions describing what to change'),
       billingRequestId: z.string().uuid().optional().describe('Optional stable request UUID; reuse only for an identical submission retry.'),
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
-      duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok edit retains a source up to 8.7s and Grok extend adds 2-10s to a 2-15s source; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
+      duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling 4.0 supports integer 3-30s in one call; Grok edit retains a source up to 8.7s and Grok extend adds 2-10s to a 2-15s source; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native', 'kling', 'kling-4', 'kling-4-flash', 'grok', 'google-omni', 'minimax-h3', 'fal-h3-max']).optional().describe('Video model. Seedance 2.5, Grok, and Google Omni use dedicated typed edit routes; MiniMax H3 supports feature/reference video.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native', 'kling-4', 'kling-4-flash', 'grok', 'google-omni', 'minimax-h3', 'fal-h3-max']).optional().describe('Video model. Seedance 2.5, Grok, and Google Omni use dedicated typed edit routes; MiniMax H3 supports feature/reference video.'),
       videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Grok edit retains the source shape up to 720p. Use auto to follow the selected model default; Gemini Omni 1.1 supports 360p/720p/1080p/4k, and MiniMax H3 supports 768p/2k.'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
-      keepOriginalSound: z.boolean().optional().describe('Provider-native source-sound toggle. Use only when the selected route explicitly supports it, currently Kling; otherwise describe the desired sound naturally in editPrompt.'),
+      keepOriginalSound: z.boolean().optional().describe('Provider-native source-sound toggle. Use only when the selected route explicitly supports it, Kling 4.0 edit always retains source audio; otherwise describe the desired sound naturally in editPrompt.'),
     },
     async (params) => {
       try {

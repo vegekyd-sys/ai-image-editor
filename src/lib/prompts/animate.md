@@ -143,7 +143,7 @@ Rules:
 - **Wan 3.0 combined budget**: all reference-video duration plus requested output duration must be <=30s. Since Wan output duration is a whole number of seconds, use `floor(30 - referenceDuration)` as the maximum output; for a 5.04s reference, submit at most `duration: 24`.
 - **SeeDance 2.0 video size limit**: .mp4/.mov, <=50MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. If the source is too small, resize/pad it before generation; do not submit tiny reference videos directly.
 - **Seedance 2.5 video size/duration limit**: .mp4/.mov, <=200MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, frame pixels width*height between 409,600 and 8,295,044, and 4-30s per video with all video references totaling <=30s. A normal encoded 30s file may contain up to 0.5s of container/tail-frame metadata tolerance; treat it as 30s rather than asking the user to split it. For full-source reference repainting, omit `duration` or use `-1`; Makaron follows the source duration automatically.
-- **Kling video size limit**: one .mp4/.mov reference video, <=200MB, resolution <=2K. Kling docs do not state a video resolution lower bound.
+- **Kling 4.0 video size limit**: each MP4/MOV >=3s, total <=30s, <=200MB each, 720-2160px per side, 24-60fps; up to 5 references for generation, exactly one for editing.
 - Can combine images + videos in the same prompt
 - Describe requested sound in the prompt and leave native audio enabled unless
   the user asks for silence. `keep_original_sound` is only a provider-native
@@ -155,17 +155,6 @@ Prompt examples:
 - Motion reference: `<<<media_2>>>模仿<<<media_1>>>的表情和动作` (media_1 is video)
 - Remix: `Based on <<<media_3>>>, <<<media_1>>> performs the same dance in a neon studio.`
 - Combine: `Put <<<media_2>>> (photo person) into the scene of <<<media_1>>> (video)`
-
-### Motion Control Mode
-Precise action transfer — the person in the photo performs the exact movements from the reference video. Best for dance, expression mimicry, pose transfer.
-- Pass `motion_control: true`; set `keep_original_sound: true` only when the
-  user explicitly asks to retain the reference sound
-- For timeline videos: reference the video with `<<<media_N>>>` in script (auto-routed)
-- For external videos: pass `video_ref_url`
-- No detailed prompt needed — just a short title as story_prompt
-- Duration is determined by reference video length (not configurable)
-- Kling only
-- `character_orientation`: "image" (match photo orientation, ≤10s video) or "video" (match video orientation, ≤30s)
 
 ## Bringing Photos to Life (图片动起来)
 
@@ -277,7 +266,7 @@ Shot 2 (3s): Close-up, ...
 
 - **Provider-wide image contract**: Treat every video-generation image as a feature reference by default, including a request with exactly one image. Never infer image-to-video or first-frame mode from image count. The sole current exception is explicitly selected `minimax-h3-max`, whose capability contract maps one selected image to image-to-video because it does not yet support reference-to-video.
 
-- **Kling**: Supports dialogue with voice synthesis, real human faces, video editing (base mode). Reference video size: one .mp4/.mov, <=200MB, resolution <=2K; no documented video resolution lower bound. Use `Shot N (Xs):` format or continuous prose.
+- **Kling 4.0** (`kling-4`): native text/image/video reference generation, integer 3-30s in a single call, 720p/1080p. Supports native dialogue and typed video editing preserving source audio. Explicit 30s requests must not be shortened, split or switched due to older Kling limits. O3 is retired; its 5-15s constraints do not apply to Kling 4.0. Reference limits are above. Use `Shot N (Xs):` format or continuous prose.
 - **SeeDance**: Best visual quality. Supports real human faces and reference video. Reference video size: .mp4/.mov, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876.
 - **SeeDance Mini**: Lower-cost Seedance route for drafts and multi-size tests. Supports 480p/720p, real human faces, image/video/audio references, and the same reference-video size limits as SeeDance.
 - **Wan 3.0 / Wan 3.0 Prime**: MuleRouter generation routes for explicitly selected 2-30s text/image/multimodal videos. Both accept the shared `video_resolution` field at 480p/720p/1080p/2K/4K. Use `<<<media_N>>>` and `<<<audio_N>>>`; Makaron translates them to Wan's `Image N`, `Video N`, and `Audio N` provider markers. Supports up to 10 images, 5 videos, and 5 audio files (20 total). It is reference generation, not direct video edit/extend, and has no Makaron content-filter switch.
@@ -295,7 +284,7 @@ Shot 2 (3s): Close-up, ...
 - Describe the requested sound naturally in `story_prompt` and leave native
   audio enabled unless the user explicitly asks for silence. Use
   `keep_original_sound` only for a provider route that explicitly supports that
-  switch, currently Kling video reference and Motion Control; it is not a
+  switch, currently Kling 4.0 edit (original audio only); it is not a
   cross-provider preservation policy.
 - Your prompt describes the desired result; the reference video provides motion/timing
 - You can combine `<<<media_N>>>` (photos) + `video_ref_url` (external video)
@@ -305,12 +294,6 @@ When a skill provides a reference video in workspace assets:
 2. Pass as `video_ref_url` + `video_ref_type: "feature"`
 
 ## Showcases
-
-### Motion control — precise action transfer (motion_control=true, video_ref_url, keep_original_sound=true):
-搞怪表情挑战
-
-<<<media_1>>>
-
 
 ### Video editing — imitate motion/expression from timeline video:
 搞怪表情模仿

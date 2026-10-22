@@ -33,7 +33,6 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'wan-3.0-prime', nameKey: 'model.wan30Prime.name', descKey: 'model.wan30Prime.desc', category: 'video', speedLabelKey: 'model.wan30Prime.badge' },
   { id: 'kling-4', nameKey: 'model.kling4.name', descKey: 'model.kling4.desc', category: 'video', speedLabel: '720p · 1080p' },
   { id: 'kling-4-flash', nameKey: 'model.kling4Flash.name', descKey: 'model.kling4Flash.desc', category: 'video', unavailable: true },
-  { id: 'kling', nameKey: 'model.kling.name', descKey: 'model.kling.desc', category: 'video', speedLabel: '4K' },
   { id: 'grok', nameKey: 'model.grok.name', descKey: 'model.grok.desc', category: 'video', speedLabel: '30-40s' },
   { id: 'google-omni', nameKey: 'model.googleOmni.name', descKey: 'model.googleOmni.desc', category: 'video', speedLabel: '360p · 4K' },
   { id: 'minimax-h3', nameKey: 'model.minimaxH3.name', descKey: 'model.minimaxH3.desc', category: 'video', speedLabel: '768P · 2K' },

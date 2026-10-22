@@ -1,3 +1,4 @@
+import { getVideoModelRetirementError, RETIRED_KLING_MESSAGE } from '../video-model-capabilities';
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
 import type { VideoQuoteInput } from '../billing/media-pricing';
 import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoImageWorkflow, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
@@ -11,9 +12,9 @@ export interface CreateVideoInput {
   h3RetakeBoundaryFrames?: { startUrl: string; endUrl: string; lockEndpoints?: boolean; middle?: {imageUrl:string;time:number} };
   script: string;
   images: string[];          // public URLs only (no base64)
-  duration?: number;         // 3, 5, 7, 10, or 15 seconds. Omit for smart mode
+  duration?: number;         // Seconds within the selected model limits. Omit for smart mode
   aspectRatio?: VideoAspectRatioInput;
-  videoModel?: string;       // video provider/model id, e.g. 'kling' or 'seedance'
+  videoModel?: string;       // video provider/model id, e.g. 'kling-4' or 'seedance'
   videoResolution?: VideoResolutionInput;
   // Video reference / edit / extend
   videoUrl?: string;                    // Reference video URL (explicit from agent)
@@ -24,7 +25,7 @@ export interface CreateVideoInput {
   referenceVideoDuration?: number;       // Timeline video duration; output should match when editing video
   referenceVideoMetas?: VideoReferenceMeta[];
   keepOriginalSound?: boolean;          // default: false
-  // Motion Control (Kling only)
+  // Legacy input retained only to reject stale clients before submission.
   motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
   characterOrientation?: 'image' | 'video';  // default: 'image'
   videoOperation?: VideoGenerationOperation; // Typed edit/extend for providers that expose it
@@ -257,13 +258,15 @@ function prepareWan30References(options: {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
+  const retirementError = getVideoModelRetirementError(input.videoModel);
+  if (retirementError || input.motionControl) return { success: false, retryable: false, message: retirementError || RETIRED_KLING_MESSAGE };
   if (input.retake) return (await import('../video-retake')).createVideoRetake(input);
   const selected = normalizeVideoModelId(input.videoModel);
   if (selected === 'seedance-2.5-eco' || selected === 'bytedance-video-upscale') {
     const { createVideoPipeline } = await import('../video-upscale-pipeline');
     return createVideoPipeline(input);
   }
-  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', imageWorkflow, previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, videoOperation = 'generate', imageWorkflow, previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length || !!previousInteractionId;
   const hasAudioReference = !!audioUrls?.length;
   const hasVoiceReference = !!referenceVoiceIds?.length;
@@ -356,31 +359,6 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   }
 
   try {
-    // Motion Control: separate path — single image + video, no image references needed
-    if (motionControl) {
-      if (!videoUrl) {
-        return { success: false, message: 'Motion Control requires a reference video (videoUrl).' };
-      }
-      const firstImage = images[0];
-      if (!firstImage?.startsWith('http')) {
-        return { success: false, message: 'Motion Control requires the first image to be a publicly accessible URL. It may still be uploading — wait and retry.' };
-      }
-      const { createKlingMotionControlTask } = await import('../kling');
-      const taskId = await createKlingMotionControlTask({
-        imageUrl: firstImage,
-        videoUrl,
-        prompt: script,
-        keepOriginalSound: keepOriginalSound !== false,
-        characterOrientation: characterOrientation || 'image',
-      });
-      console.log(`✅ [create_video] Motion Control task created: mc-${taskId}`);
-      return {
-        success: true,
-        taskId: `mc-${taskId}`,
-        message: `Motion Control video task created. Task ID: mc-${taskId}. Duration matches reference video. Use makaron_get_video_status to poll.`,
-      };
-    }
-
     // Filter to only referenced images and remap indices (preserves index alignment)
     // Preserve the historical seven-image baseline while allowing providers
     // such as MiniMax H3 and Seedance 2.5 to expose larger documented limits.
@@ -770,24 +748,6 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         version: '3.0',
       });
       console.log(`✅ [create_video] PiAPI task created: ${taskId}`);
-    } else if (route.provider === 'kling') {
-      const { createKlingTask, detectAspectRatio } = await import('../kling');
-      const ratioSourceImage = filteredImages[0] || images[0];
-      const resolvedRatio = providerAspectRatio || (ratioSourceImage ? await detectAspectRatio(ratioSourceImage) : undefined);
-      // Auto-routed videos: use first as feature reference if no explicit videoUrl
-      const effectiveVideoUrl = videoUrl || (videoUrls?.length ? videoUrls[0] : undefined);
-      const effectiveVideoReferType = videoUrl ? videoReferType : (effectiveVideoUrl ? 'feature' : undefined);
-      taskId = await createKlingTask({
-        prompt: finalPrompt,
-        images: filteredImages,
-        mode: route.providerMode,
-        duration: resolvedDuration,
-        aspect_ratio: resolvedRatio,
-        videoUrl: effectiveVideoUrl,
-        videoReferType: effectiveVideoReferType,
-        keepOriginalSound,
-      });
-      console.log(`✅ [create_video] Kling task created: ${taskId}`);
     } else {
       return {
         success: false,
