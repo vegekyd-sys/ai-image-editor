@@ -3,6 +3,7 @@
 import { withVideoFit, isMakaronVideoComponent } from './remotion-video-fit';
 import { withMediaTrim } from './remotion-media-props';
 import { previewCacheStyle, type PreviewCacheBox } from './remotion-preview-cache-style';
+import { alignPausedPreviewFrame } from './remotion-preview-seek';
 
 /**
  * Evaluate Agent-generated JSX code as a React component.
@@ -492,6 +493,7 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   }, [blockSafariPlayback, expectedTime, fps, markReady, minimumRevealTime, onPlaying, unblockSafariPlayback]);
 
   const handleSeeked = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
+    if (alignPausedPreviewFrame(event.currentTarget, expectedTime, fps)) return;
     markReady(event.currentTarget);
     if (
       reportedReady.current &&
@@ -500,7 +502,7 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
       unblockSafariPlayback();
     }
     onSeeked?.(event);
-  }, [markReady, onSeeked, unblockSafariPlayback]);
+  }, [expectedTime, fps, markReady, onSeeked, unblockSafariPlayback]);
 
   const handleProgress = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
     markReady(event.currentTarget);

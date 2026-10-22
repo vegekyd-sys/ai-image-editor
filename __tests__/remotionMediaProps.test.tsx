@@ -1,3 +1,4 @@
+import { alignPausedPreviewFrame } from '@/lib/remotion-preview-seek';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -11,6 +12,16 @@ function Decoder(props: any) {
 }
 
 describe('shared media contract', () => {
+  it('stabilizes paused native seeks just inside the requested source frame', () => {
+    const video={paused:true,duration:8,currentTime:3.766666} as HTMLVideoElement;
+    expect(alignPausedPreviewFrame(video,113/30,30)).toBe(true);
+    expect(video.currentTime).toBeGreaterThan(113/30);
+    expect(alignPausedPreviewFrame(video,113/30,30)).toBe(false);
+    Object.assign(video,{paused:false,currentTime:3.766666});
+    expect(alignPausedPreviewFrame(video,113/30,30)).toBe(false);
+    Object.assign(video,{paused:true,currentTime:7.999999});
+    alignPausedPreviewFrame(video,8,30);expect(video.currentTime).toBeLessThan(8);
+  });
   it('normalizes video and audio legacy trims while modern GUI overrides win, including zero', () => {
     expect(normalizeMediaTrimProps({startFrom:30,endAt:90,trimBefore:0,trimAfter:60})).toEqual({trimBefore:0,trimAfter:60});
     for (const Component of [withMediaTrim(Decoder), withVideoFit(Decoder,true), withVideoFit(Decoder,false)]) {
