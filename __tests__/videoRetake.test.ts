@@ -32,6 +32,12 @@ describe('Retake interval contract', () => {
     expect(() => planRetake({ start: 0, end: 2 }, 1, 'seedance-2.5')).toThrow();
     expect(() => planRetake({ start: 0, end: 2 }, 10, 'minimax-h3-max')).toThrow(/Turbo/);
   });
+  it.each(['wan-3.0','wan-3.0-prime'])('plans reference-guided Wan rebuilding without altering the selection: %s',model=>{
+    const plan=planRetake({start:2,end:4},5.184,model);
+    expect(plan).toMatchObject({start:2,end:4,model,generationDuration:2,contextStart:2,contextEnd:4,patchOffset:0});
+    expect(planRetake({start:0,end:.5},1.5,model).generationDuration).toBe(2);
+    expect(()=>planRetake({start:0,end:.2},.5,model)).toThrow('one second');
+  });
   it('passes the inspected Agent instruction unchanged without creative overrides', () => {
     const instruction = '0–1s: continue the visible landing. CUT. 1–2s: wheel close-up. CUT. 2–3s: high angle.';
     expect(retakePrompt(instruction)).toBe(instruction);

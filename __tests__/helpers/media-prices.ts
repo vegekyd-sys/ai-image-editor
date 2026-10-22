@@ -29,6 +29,7 @@ export function seededMediaPrices(): MediaPrice[] {
       const [id, kind, model_id, resolution, operation, output_usd_per_second, video_reference_usd_per_second] = JSON.parse(`[${line.slice(1, line.lastIndexOf(')')).replaceAll("'", '"')}]`)
       return { id, kind, model_id, resolution, operation, output_usd_per_second, video_reference_usd_per_second, input_usd_per_second: 0, input_usd_per_image: 0, free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true, updated_at: '2026-10-22T00:00:00Z' }
     })
+  for (const price of additions) if(price.id === 'video:fal-h3-max:1080p:generate') price.input_tokens_per_video_second=7459.2
   return [...existing, ...additions, ...kling4, ...upscale, { ...upscale[0], id: 'video:bytedance-video-upscale:720p:generate', resolution: '720p', output_usd_per_second: .0072 }, { ...existing.find(p => p.id === 'video:seedance-2.5:480p:generate')!, id: 'video:seedance-2.5-eco:480p:generate', model_id: 'seedance-2.5-eco' }]
 }
 

@@ -955,10 +955,10 @@ export function estimateVideoProviderCostUsd(options: {
     : capability.estimatedInputCostUsdPerVideoSecondByResolution?.[route.resolution]
     ?? capability.estimatedInputCostUsdPerVideoSecond
     ?? 0
-  // Live fal billing 2026-09-08: 1080p refinement charged output only for video references.
+  // Rechecked 2026-10-23: 1080p reference videos are billed like 768p.
   // Keep image/audio token rates from the published rate card.
   const referenceTokens = normalizedModel === 'fal-h3-max'
-    ? Math.max(0, (options.referenceImagePixels ?? 0) / 1024 + (options.referenceVideoDurationSec ?? 0) * (route.resolution === '1080p' ? 0 : route.resolution === '480p' ? 2886 : 7459.2) + (options.referenceAudioDurationSec ?? 0) * 80 - 4096)
+    ? Math.max(0, (options.referenceImagePixels ?? 0) / 1024 + (options.referenceVideoDurationSec ?? 0) * (route.resolution === '480p' ? 2886 : 7459.2) + (options.referenceAudioDurationSec ?? 0) * 80 - 4096)
     : 0
   const standardCost = options.durationSec * perSecond
     + referenceTokens * 0.02 / 1000

@@ -50,7 +50,7 @@ describe('FAL H3 Max product integration', () => {
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({resolution:'1080p'}))
     expect(reserve).toHaveBeenCalledWith(expect.objectContaining({resolution:'1080p',referenceVideoDurationSec:5.184}))
     const price=seededMediaPrices().find(row=>row.id==='video:fal-h3-max:1080p:generate')!
-    expect(calculateMediaQuote(price,{durationSec:5,referenceVideoDurationSec:5.184}).credits).toBe(160)
+    expect(calculateMediaQuote(price,{durationSec:5,referenceVideoDurationSec:5.184}).credits).toBe(299)
     expect(validateVideoModelRequest({model:'minimax-h3-max',resolution:'1080p',outputDuration:5})).toContain('does not support')
   })
   it('does not submit when the final measured quote cannot be reserved', async () => {

@@ -737,3 +737,5 @@ FAL video models: **fal H3 Turbo** uses `minimax-h3-max` for single-start-frame 
 The legacy `openai` image-model parameter now resolves to GPT Image 2.5 Flare.
 
 `chat --stream` follows the original durable run when its live connection ends before completion. It does not submit another generation; already printed reply text is not replayed.
+
+Wan Retake (`wan-3.0` / `wan-3.0-prime`) rebuilds the selected interval using cropped video references and automatic assembly; it is reference-guided generation, with no native endpoint locks. Kling remains the default pending matched-case acceptance.
