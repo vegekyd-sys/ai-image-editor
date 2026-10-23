@@ -985,6 +985,10 @@ const CHANGELOG: ChangelogEntry[] = [
 ];
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  retakeChoices: {
+    title: 'changelog.retakeChoices.title',
+    items: ['changelog.retakeChoices.item1', 'changelog.retakeChoices.item2'],
+  },
   kling4: {
     title: 'changelog.kling4.title',
     items: ['changelog.kling4.item1', 'changelog.kling4.item2'],
