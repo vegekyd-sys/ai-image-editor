@@ -314,6 +314,9 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.retakeChoices.title': "Retake 更多選擇，預設仍是 Kling 4",
+  'changelog.retakeChoices.item1': "局部重拍可手動選擇更多影片模型；未指定模型時繼續使用 Kling 4。",
+  'changelog.retakeChoices.item2': "已生成的影片在連線中斷後可繼續恢復交付，減少重複生成。",
   'changelog.kling4.title': "Kling 4 登陸 Makaron",
   'changelog.kling4.item1': "使用文字、圖片或影片參考，透過 Kling 4 生成 3–30 秒影片，支援 720p 與 1080p。",
   'changelog.kling4.item2': "Retake 現在預設使用 Kling 4：修改選定片段，保留完整影片長度與原始聲音。",

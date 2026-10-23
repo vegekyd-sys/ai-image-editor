@@ -272,6 +272,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.retakeChoices.title': "More Retake choices, still Kling 4 by default",
+  'changelog.retakeChoices.item1': "Choose from more video models for a local retake. Kling 4 remains the default when no model is specified.",
+  'changelog.retakeChoices.item2': "Resume delivery of an already generated video after a connection interruption, reducing duplicate generation.",
   'changelog.kling4.title': "Kling 4 is here",
   'changelog.kling4.item1': "Create 3–30 second videos with Kling 4 using text, images or video references, at 720p or 1080p.",
   'changelog.kling4.item2': "Retake now defaults to Kling 4: edit a selected interval while preserving the full video duration and original soundtrack.",

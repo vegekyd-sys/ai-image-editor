@@ -308,6 +308,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.retakeChoices.title': "Retake の選択肢を拡充、標準は引き続き Kling 4",
+  'changelog.retakeChoices.item1': "部分的な撮り直しで選べる動画モデルが増えました。モデルを指定しない場合は、引き続き Kling 4 を使用します。",
+  'changelog.retakeChoices.item2': "接続が切れても生成済み動画の受け取りを再開でき、重複生成を減らせます。",
   'changelog.kling4.title': "Kling 4 が Makaron に登場",
   'changelog.kling4.item1': "テキスト、画像、動画を参考に、Kling 4 で 3〜30 秒の動画を生成。720p と 1080p に対応しました。",
   'changelog.kling4.item2': "Retake の標準モデルが Kling 4 になりました。選択した区間を編集し、動画全体の長さと元の音声を維持します。",

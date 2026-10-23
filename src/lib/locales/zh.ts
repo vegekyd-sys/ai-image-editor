@@ -272,6 +272,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.retakeChoices.title': "Retake 更多选择，默认仍是 Kling 4",
+  'changelog.retakeChoices.item1': "局部重拍可手动选择更多视频模型；不指定模型时继续使用 Kling 4。",
+  'changelog.retakeChoices.item2': "已生成的视频在连接中断后可继续恢复交付，减少重复生成。",
   'changelog.kling4.title': "Kling 4 登陆 Makaron",
   'changelog.kling4.item1': "用文字、图片或视频参考，通过 Kling 4 生成 3–30 秒视频，支持 720p 与 1080p。",
   'changelog.kling4.item2': "Retake 现在默认使用 Kling 4：修改选定片段，保留完整视频时长和原始声音。",
