@@ -4,6 +4,7 @@
  * Images are feature references; keyframe/I2V is not exposed by this adapter.
  */
 import { EvolinkSubmissionError } from './evolink'
+import { resolveVideoProviderModel } from './video-model-capabilities'
 
 export interface Kling4Input {
   prompt: string
@@ -27,7 +28,10 @@ export function buildKling4Payload(input: Kling4Input): Record<string, unknown> 
   if (!['720p', '1080p'].includes(quality)) throw new Error('Kling 4.0 supports 720p and 1080p.')
   const aspect = input.aspectRatio && input.aspectRatio !== 'auto' ? input.aspectRatio : '16:9'
   if (!edit && !['16:9', '9:16', '1:1', '21:9'].includes(aspect)) throw new Error('Unsupported Kling 4.0 aspect ratio.')
-  const model = edit ? 'kling-v4-video-edit' : input.images.length || videos.length ? 'kling-v4-reference-to-video' : 'kling-v4-text-to-video'
+  const model = resolveVideoProviderModel({
+    model: 'kling-4', resolution: quality, operation: input.operation,
+    imageReferenceCount: input.images.length, hasVideoReference: videos.length > 0,
+  })
   const prompt = input.prompt.trim().replace(/<<<media_(\d+)>>>/gi, '<<<image_$1>>>')
   for (const match of prompt.matchAll(/<<<(image|video)_(\d+)>>>/gi)) {
     const count = match[1].toLowerCase() === 'image' ? input.images.length : videos.length
