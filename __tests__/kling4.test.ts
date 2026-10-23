@@ -4,7 +4,7 @@ import { listVideoModelCapabilities } from '../src/lib/video-model-capabilities'
 import { validateVideoScript } from '../src/lib/video-harness'
 import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildKling4Payload, createKling4Task } from '../src/lib/kling4'
+import { buildKling4Payload, createKling4Task, type Kling4Input } from '../src/lib/kling4'
 import { normalizeVideoModelId, resolveVideoProviderModel, validateVideoModelRequest, estimateVideoProviderCostUsd } from '../src/lib/video-model-capabilities'
 import { createVideo } from '../src/lib/skills/create-video'
 import { bindRetakeReferences } from '../src/lib/video-retake-references'
@@ -13,6 +13,37 @@ import { calculateMediaQuote, type MediaPrice } from '../src/lib/billing/media-p
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 describe('Kling 4.0 candidate contract', () => {
+  describe.each(['720p', '1080p'] as const)('%s provider payload', resolution => {
+    const image = 'https://example.org/reference.png'
+    const video = 'https://example.org/source.mp4'
+    it.each([
+      { images: [], videos: [], operation: undefined, model: 'kling-v4-text-to-video' },
+      { images: [image], videos: [], operation: undefined, model: 'kling-v4-reference-to-video' },
+      { images: [], videos: [video], operation: 'generate', model: 'kling-v4-reference-to-video' },
+      { images: [image], videos: [video], operation: 'generate', model: 'kling-v4-reference-to-video' },
+      { images: [], videos: [video], operation: 'edit', model: 'kling-v4-video-edit' },
+      { images: [image], videos: [video], operation: 'edit', model: 'kling-v4-video-edit' },
+    ])('preserves the complete $model request ($images / $videos)', ({ images, videos, operation, model }) => {
+      const edit = operation === 'edit'
+      expect(buildKling4Payload({ prompt: '  Preserve motion  ', images, videos, resolution, operation: operation as Kling4Input['operation'] })).toEqual({
+        model, prompt: 'Preserve motion', duration: edit ? 'auto' : 5, quality: resolution,
+        ...(!edit ? { aspect_ratio: '16:9' } : {}),
+        ...(images.length ? { image_urls: images } : {}),
+        ...(videos.length ? { video_urls: videos } : {}),
+      })
+    })
+  })
+  it.each([
+    { input: { prompt: '', images: [], duration: 2 }, message: 'Kling 4.0 prompt must contain 1–2500 characters.' },
+    { input: { prompt: 'hello', images: ['file:///private.png'] }, message: 'Kling 4.0 requires accessible HTTP(S) media URLs.' },
+    { input: { prompt: 'hello', images: [], operation: 'edit' }, message: 'Kling 4.0 accepts 10 images and 5 reference videos; editing requires exactly one video.' },
+    { input: { prompt: '<<<video_2>>>', images: [], videos: ['https://example.org/source.mp4'] }, message: 'Kling 4.0 prompt references a missing input.' },
+  ])('preserves validation errors before submission ($message)', async ({ input, message }) => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    await expect(createKling4Task(input as Kling4Input)).rejects.toThrow(message)
+    expect(fetch).not.toHaveBeenCalled()
+  })
   it('keeps single images as feature references and maps exact provider routes', () => {
     expect(buildKling4Payload({ prompt: 'Use <<<media_1>>>', images: ['https://example.org/mascot.png'] })).toEqual({model:'kling-v4-reference-to-video',prompt:'Use <<<image_1>>>',image_urls:['https://example.org/mascot.png'],duration:5,quality:'720p',aspect_ratio:'16:9'})
     expect(resolveVideoProviderModel({ model:'kling-4',imageReferenceCount:0 })).toBe('kling-v4-text-to-video')
@@ -47,7 +78,7 @@ describe('Kling 4.0 candidate contract', () => {
     })
     vi.stubGlobal('fetch',fetch)
     const result=await createVideo({script:'Recolor <<<video_1>>>; keep motion.',images:[],videoUrl:'https://example.org/source.mp4',videoModel:'kling-4',videoOperation:'edit',referenceVideoMetas:[{durationSec:3.95,width:1280,height:720,fileSizeBytes:1000}],onBeforeProviderSubmit:reserve})
-    expect(result.success).toBe(true)
+    expect(result).toMatchObject({success:true,providerModel:'kling-v4-video-edit'})
     expect(reserve).toHaveBeenCalledWith(expect.objectContaining({model:'kling-4',durationSec:3.95,referenceVideoDurationSec:3.95,operation:'edit'}))
     expect(fetch).toHaveBeenCalledTimes(1)
   })
@@ -102,7 +133,7 @@ describe('Kling O3 retirement and 30-second boundary', () => {
     const script=reference?'Shot 1 (30s): <<<media_1>>> transforms in one continuous take.':'Shot 1 (30s): One continuous magical transformation.'
     expect(validateVideoScript({prompt:script,imageCount:reference?1:0,model:'kling-4',duration:30})).toBeNull()
     const result=await createVideo({script,images:reference?['https://example.org/hero.png']:[],duration:30,videoModel:'kling-4',videoResolution:'1080p',onBeforeProviderSubmit:reserve})
-    expect(result.success).toBe(true);expect(fetch).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({success:true,providerModel:reference?'kling-v4-reference-to-video':'kling-v4-text-to-video'});expect(fetch).toHaveBeenCalledTimes(1)
     expect(reserve).toHaveBeenCalledWith(expect.objectContaining({durationSec:30,model:'kling-4'}))
   })
   it.each([2,30.5,31])('rejects unsupported duration %s without reservation or submission',async duration=>{
