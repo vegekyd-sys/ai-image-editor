@@ -4,6 +4,8 @@
 
 Add explicit `grok`, `google-omni` and `minimax-h3` Retake routes alongside Seedance, FAL H3 Max, Kling and Wan Standard/Prime. Grok and Omni have completed real product-path edits; native MiniMax is integrated but its account rejected generation with HTTP 402. Keep Kling 4 as the default. This batch provides no universal quality/cost/speed winner and does not justify a blanket switch to Grok.
 
+Final user decision on 2026-10-23: Omni is unsuitable as the default; retain **Kling 4 as the single Retake default**. Alternative routes remain explicit choices. Do not introduce automatic model switching or continue the Omni default/splitting proposal.
+
 For the tested short edits, Omni preserved book color and corrected lettering better than Grok. Grok was cheaper and faster, but left the spelling error untouched, failed the requested skateboard camera and changed an unrelated ribbon color. Omni also failed the product's intended target. Neither is a dependable replacement for inspecting the actual output.
 
 This extends [the Wan/H3 verification](wan3-retake-h3-billing-2026-10-23.md). Code is in an independent candidate worktree/PR; production application code and npm remain on their existing releases. The additive shared database model constraint is applied and registered as migration `20261022182633`.
@@ -71,3 +73,24 @@ Ten primary native outputs preserve the exact original compressed AAC hashes, vi
 [Omni lettering output](https://cdn.makaron.app/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/5c00154e-d1d5-4fc1-ac8f-54aab8472f4b/videos/retake-743a65df-389e-4cfa-8b98-82da7a32b0ba-final-8265e4796d6f.mp4) · [Grok lettering output](https://cdn.makaron.app/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/5c00154e-d1d5-4fc1-ac8f-54aab8472f4b/videos/retake-48cd140b-7db0-4428-b04a-78305225fe67-final-d2c15351c217.mp4)
 
 Validation before candidate publication: 2,658 unit/component tests passed (one skipped), TypeScript passed, MiniMax rejection-specific tests passed, CLI smoke passed, Skill synchronization passed, and the controlled live routing preflight passed 3/3 with zero media operations. CLI 0.17.7 is prepared as a candidate and has not been published to npm.
+
+## Historical-session regression and final default decision
+
+Recovered the historical session titled `【已上线】局部编辑功能` and replayed its source material, selected intervals and editing objectives through the real Retake backend with Omni fixed explicitly. This isolates the model, rather than replaying the complete Agent conversation. Historical accepted outputs include earlier retries and generated image controls, so this is not a controlled first-attempt win-rate comparison.
+
+| Historical objective | Omni outcome | End-to-end time | Supplier quote estimate |
+|---|---|---:|---:|
+| Remove the girl's white outline, 10–15.1s | Provider safety rejection; 132 app credits refunded; no prompt retry | No delivered output | Refunded |
+| Skateboard multi-camera sequence, 17.5–24.5s | New coverage and underside view appear, but landing precedes another airborne phase | 111s | $0.768 |
+| Replace the entire shot with an underside/wheel close-up, 18–21s | Main shot-replacement objective achieved; no forced full-body return inside the selection | 88s | $0.329 |
+| New English speech, 10–15.1s | ASR exactly matches "V connects to Slack. Let's get to work." Mouth movement responds in dense samples; precise audiovisual synchronization remains unconfirmed | 96s | $0.658 |
+| Bookstore camera change, 1–4s | New side/rear coverage in the opening, then conservative frontal coverage | 77s | $0.329 |
+| Original 13s edit, split into two sequential Omni-only 6.5s edits | Both complete, but the 16.5s extreme-close-up/wide-view join fails continuity | 221s combined | $1.536 combined |
+
+Six completed paid generations total **$3.619781 in supplier quote estimates and 726 app credits**; no pending reservations. The outline rejection is refunded. A separate 13s single-call preflight rejects before charging, confirming Omni's 10s limit. Whole-video character replacement remains ordinary video editing and was not forced through Retake.
+
+Compared with the historical recorded quotes, Omni's replacement/speech cases are approximately 53%/26% cheaper than Eco; the 7s multi-camera case is approximately 37% more expensive than historical H3. Reference/control inputs and historical polling differ, so this does not establish a universal price or speed ranking.
+
+All six delivered full videos preserve the source canvas, fps, frame count and video duration and decode fully. Original-audio cases preserve the exact compressed AAC hash. For generated speech, the pre-selection audio correlation is 0.999929. Four short cases have minimum outside-selection frame SSIM above 0.9967 after re-encoding. An automated static reviewer incorrectly called the mouth frozen; dense samples show opening/closing, so that claim is superseded. This batch did not complete manual continuous playback/listening acceptance or browser interaction QA.
+
+Evidence is retained under ignored `artifacts/omni-default-regression/`; the curated parallel playback report is `artifacts/retake-model-benchmark/omni-regression/`. The failed same-model split is an experiment, not a shipped capability. These findings support the user's final decision to keep `kling-4` unchanged.
