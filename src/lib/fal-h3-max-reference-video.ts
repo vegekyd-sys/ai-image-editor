@@ -115,10 +115,10 @@ export function estimateH3MaxReferenceCost(input: {
 }) {
   const values = [input.duration, input.videoSeconds, input.audioSeconds, ...input.images.flatMap(image => [image.width, image.height])]
   if (values.some(value => !Number.isFinite(value) || value < 0) || input.duration <= 0 || input.images.some(image => image.width <= 0 || image.height <= 0)) throw new Error('Cost estimate requires measured positive dimensions and nonnegative durations.')
-  // Live fal billing 2026-09-08: 1080p refinement charged output only for video references.
+  // Rechecked 2026-10-23: 1080p now charges the same reference-video tokens as 768p.
   // Keep image/audio token rates from the published rate card.
   const referenceTokens = input.images.reduce((sum, image) => sum + image.width * image.height / 1024, 0)
-    + input.videoSeconds * (input.resolution === '1080p' ? 0 : input.resolution === '480p' ? 2886 : 37296 / 5)
+    + input.videoSeconds * (input.resolution === '480p' ? 2886 : 37296 / 5)
     + input.audioSeconds * 80
   const outputUsd = input.duration * (input.resolution === '480p' ? 0.05 : input.resolution === '1080p' ? 0.16 : 0.08)
   const referenceUsd = Math.max(0, referenceTokens - 4096) * 0.02 / 1000

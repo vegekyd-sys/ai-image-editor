@@ -93,6 +93,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     if (input.retake.audioMode && !['original','generated'].includes(input.retake.audioMode)) throw new Error('Choose original or generated audio for local editing.')
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
+    if ((model.startsWith('wan-3.0') || ['grok','google-omni','minimax-h3'].includes(model)) && input.retake.endFrame) throw new Error('This Retake model has no exact final-frame control. Choose a compatible model explicitly.');
     if (model === 'kling-4' && (input.retake.audioMode === 'generated' || input.retake.endFrame)) throw new Error('Kling 4.0 Retake preserves source audio and does not accept an exact final-frame control.');
     const corrected = input.retake.correctedBoundaries
     if (corrected && (model !== 'fal-h3-max' || input.retake.editMode !== 'modify' || input.retake.endFrame || input.videoResolution === '1080p'
@@ -101,6 +102,8 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     if(input.retake.endFrame && (!/^https?:\/\//.test(input.retake.endFrame.imageUrl) || (model==='fal-h3-max' && input.videoResolution==='1080p'))) throw new Error('An explicit final image requires a ready hosted image; H3 uses native 480p/768p.')
     if (!input.script.trim()) throw new Error('Describe what to change in the selected interval.')
     const referenceImages = input.images.filter(Boolean)
+    if (model === 'grok' && referenceImages.length) throw new Error('Grok video editing cannot accept extra image references. Use only the source video or explicitly choose another model.')
+    if (model === 'grok' && input.videoResolution && !['auto','480p','720p'].includes(input.videoResolution)) throw new Error('Grok Retake video editing is limited to 720p. Select 720p or another model explicitly.')
     if (referenceImages.length > 6 || referenceImages.some(url => !/^https?:\/\//.test(url))) throw new Error('Retake supports up to six hosted image references.')
     if (input.videoUrls?.length || input.audioUrls?.length || input.motionControl) throw new Error('Retake accepts one source video and image references; extra videos/audio/motion control require another workflow.')
     if (input.retake.middleFrame && (model !== 'fal-h3-max' || input.videoResolution === '1080p' || !Number.isFinite(input.retake.middleFrame.time) || input.retake.middleFrame.time <= 0 || input.retake.middleFrame.time >= Math.max(5,Math.ceil(input.retake.end-input.retake.start))-1/24)) throw new Error('Retake middle-frame control requires H3 native 480p/768p and a time strictly inside its output.');
@@ -129,7 +132,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     if (Math.round(plan.end * meta.fps!) <= Math.round(plan.start * meta.fps!)) throw new Error('Retake interval must include at least one source frame.')
     const now = new Date().toISOString()
     job = { id, user_id: input.userId, project_id: input.projectId ?? null, fingerprint, stage: 'preparing', source_url: input.videoUrl,
-      instruction: input.script, model_id: model, resolution: input.videoResolution && input.videoResolution !== 'auto' ? input.videoResolution : model === 'fal-h3-max' ? '768p' : '720p',
+      instruction: input.script, model_id: model, resolution: input.videoResolution && input.videoResolution !== 'auto' ? input.videoResolution : (model === 'fal-h3-max' || model === 'minimax-h3') ? '768p' : '720p',
       plan, source_meta: { fps: meta.fps, width: meta.width, height: meta.height, aspectRatio, duration: meta.duration, audioCodec: meta.audioCodec, frameCount: meta.frameCount, ...(referenceImages.length ? {referenceImages} : {}),...(input.retake.endFrame ? {endFrameUrl:input.retake.endFrame.imageUrl} : {}), ...(input.retake.cameraChange ? {cameraChange:true} : {}), ...(input.retake.boundaryMode ? {boundaryMode:input.retake.boundaryMode} : {}), ...(input.retake.editMode ? {editMode:input.retake.editMode} : {}) },
       timings: {}, created_at: now, updated_at: now }
     const { error: insertError } = await admin.from(TABLE).insert(job)
@@ -171,7 +174,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       aspectRatio, ...(plan.audioMode === 'generated' ? {generateAudio:true, keepOriginalSound:false} : {}),
       referenceVideoDuration: useVideoReference ? plan.contextEnd - plan.contextStart : undefined, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
-      videoOperation: model.startsWith('seedance-2.5') || model === 'kling-4' ? 'edit' : 'generate', videoReferType: 'feature',
+      videoOperation: model.startsWith('seedance-2.5') || ['kling-4','grok','google-omni'].includes(model) ? 'edit' : 'generate', videoReferType: 'feature',
       onBeforeProviderSubmit: beforeSubmit })
     if (!result.success || !result.taskId) {
       // A preflight failure never posted. Once posted, an unclassified missing
@@ -180,7 +183,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       await save(job, { stage: uncertain ? 'submission_uncertain' : 'failed', error: result.message })
       return { ...result, submissionUncertain: uncertain, taskId: uncertain ? PREFIX + id : undefined }
     }
-    await save(job, { provider_task_id: result.taskId, stage: 'generating', timings: { ...job.timings, submittedMs: performance.now() - started } })
+    await save(job, { provider_task_id: result.taskId, ...(result.videoUrl && result.status === 'completed' ? {patch_url:result.videoUrl,stage:'saving_patch'} : {stage:'generating'}), timings: { ...job.timings, submittedMs: performance.now() - started } })
     await publish(job)
     return { success: true, taskId: PREFIX + id, videoModel: model, snapshotId: input.projectId ? id : undefined,
       status: 'processing', sourceDuration: meta.duration!, retryable: false, message: `Retake submitted for ${plan.start}-${plan.end}s. Poll this task through generation and automatic full-video assembly. No merge confirmation is needed.` }
@@ -219,7 +222,9 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
       }
     }
     if (job.stage === 'saving_patch' && job.patch_url) {
-      const bytes = await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', falAsset: job.model_id === 'fal-h3-max', evolinkAsset: job.model_id.startsWith('seedance-2.5') || job.model_id === 'kling-4' })
+      const bytes = job.model_id === 'google-omni' && !job.patch_url.startsWith('https://cdn.makaron.app/')
+        ? Buffer.from(await (await import('./google-omni-video')).fetchGoogleOmniVideoBytes(job.patch_url))
+        : await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', xaiAsset: job.model_id === 'grok', muleAsset: job.model_id.startsWith('wan-3.0'), falAsset: job.model_id === 'fal-h3-max', evolinkAsset: job.model_id.startsWith('seedance-2.5') || job.model_id === 'kling-4' })
       const permanentPatch = await store(job, bytes, 'patch')
       await save(job, { patch_url: permanentPatch, stage: 'assembling' }, token)
     }

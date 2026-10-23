@@ -1,3 +1,4 @@
+import { VideoProviderRejection } from './video-provider-error'
 const MINIMAX_BASE_URL = process.env.MINIMAX_API_BASE || 'https://api.minimaxi.com'
 const MINIMAX_MODEL = 'MiniMax-H3'
 const TASK_PREFIX = 'minimax-h3-'
@@ -31,7 +32,7 @@ export interface MinimaxVideoTaskResult {
 
 function getApiKey(): string {
   const key = process.env.MINIMAX_API_KEY?.trim()
-  if (!key) throw new Error('MINIMAX_API_KEY not configured')
+  if (!key) throw new VideoProviderRejection('MINIMAX_API_KEY not configured; no provider task submitted')
   return key
 }
 
@@ -68,7 +69,7 @@ function extractApiError(data: unknown, fallback: string): string {
   return typeof record.message === 'string' ? record.message : fallback
 }
 
-async function readJson(response: Response): Promise<Record<string, unknown>> {
+async function readJson(response: Response, submission = false): Promise<Record<string, unknown>> {
   const text = await response.text()
   let data: Record<string, unknown> = {}
   try {
@@ -78,7 +79,9 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
     // Keep the provider's HTTP status useful even if an upstream proxy returns HTML.
   }
   if (!response.ok) {
-    throw new Error(`MiniMax video API error ${response.status}: ${extractApiError(data, text.slice(0, 500) || response.statusText)}`)
+    const message = `MiniMax video API error ${response.status}: ${extractApiError(data, text.slice(0, 500) || response.statusText)}`
+    if (submission && response.status >= 400 && response.status < 500 && response.status !== 408) throw new VideoProviderRejection(message)
+    throw new Error(message)
   }
   return data
 }
@@ -119,7 +122,7 @@ export async function createMinimaxVideoTask(input: MinimaxVideoTaskInput): Prom
     headers: headers(),
     body: JSON.stringify(payload),
   })
-  const data = await readJson(response)
+  const data = await readJson(response, true)
   const taskId = data.task_id
   if (typeof taskId !== 'string' || !taskId) {
     throw new Error(`MiniMax video API did not return task_id: ${JSON.stringify(data)}`)

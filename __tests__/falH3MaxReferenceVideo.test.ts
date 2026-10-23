@@ -43,16 +43,16 @@ describe('H3 Max reference adapter',()=>{
     expect(()=>build({prompt:'p',images:[image],videos:[{url:'v',durationSec:1}]})).toThrow('2-15')
     expect(()=>build({prompt:'p',images:[image],audios:Array(2).fill({url:'a',durationSec:8})})).toThrow('total at most 15')
   })
-  it('matches official reference-token pricing example and pools the allowance once',()=>{
+  it('keeps the conservative duration estimate and pools the reference allowance once',()=>{
     const result=quote({duration:5,resolution:'768p',images:Array(2).fill({width:1024,height:1024}),videoSeconds:5,audioSeconds:0})
     expect(result.referenceTokens).toBe(39344)
     expect(result.totalUsd).toBeCloseTo(1.10496)
     expect(result.estimatedCreditsAt2x).toBe(221)
     expect(quote({duration:5,resolution:'768p',images:[{width:2048,height:2048}],videoSeconds:0,audioSeconds:3}).referenceUsd).toBeCloseTo(0.0048)
   })
-  it('submits 1080p refinement with video references and matches live output billing', () => {
+  it('charges 1080p reference videos like 768p under the current tariff', () => {
     expect(build({prompt:'<<<video_1>>>', images:[], videos:[{url:'v', durationSec:5.184}], resolution:'1080p'})).toMatchObject({resolution:'1080P', reference_video_urls:['v']})
-    expect(quote({duration:5, resolution:'1080p', images:[], videoSeconds:5.184, audioSeconds:0})).toMatchObject({outputUsd:0.8, totalUsd:0.8, estimatedCreditsAt2x:160})
+    const low=quote({duration:5,resolution:'768p',images:[],videoSeconds:5.184,audioSeconds:0}); const high=quote({duration:5,resolution:'1080p',images:[],videoSeconds:5.184,audioSeconds:0}); expect(high.referenceUsd).toBeCloseTo(low.referenceUsd); expect(high.referenceUsd).toBeGreaterThan(0); expect(high.totalUsd).toBeCloseTo(low.totalUsd+0.4)
   })
   it('rejects audio data URIs before they become unsupported .bin files at fal',()=>{
     expect(()=>build({prompt:'p',images:[image],audios:[{url:'data:audio/wav;base64,AA==',durationSec:3}]})).toThrow('HTTPS file URL')
