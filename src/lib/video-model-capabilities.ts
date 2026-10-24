@@ -1,3 +1,5 @@
+import { estimateH3MaxReferenceInput } from './h3-max-reference-estimate'
+
 export interface VideoModelCapability {
   id: string
   label: string
@@ -955,13 +957,16 @@ export function estimateVideoProviderCostUsd(options: {
     : capability.estimatedInputCostUsdPerVideoSecondByResolution?.[route.resolution]
     ?? capability.estimatedInputCostUsdPerVideoSecond
     ?? 0
-  // Rechecked 2026-10-23: 1080p reference videos are billed like 768p.
-  // Keep image/audio token rates from the published rate card.
-  const referenceTokens = normalizedModel === 'fal-h3-max'
-    ? Math.max(0, (options.referenceImagePixels ?? 0) / 1024 + (options.referenceVideoDurationSec ?? 0) * (route.resolution === '480p' ? 2886 : 7459.2) + (options.referenceAudioDurationSec ?? 0) * 80 - 4096)
+  const referenceUsd = normalizedModel === 'fal-h3-max'
+    ? estimateH3MaxReferenceInput({
+      imageTokens: (options.referenceImagePixels ?? 0) / 1024,
+      videoSeconds: options.referenceVideoDurationSec ?? 0,
+      audioSeconds: options.referenceAudioDurationSec ?? 0,
+      resolution: route.resolution,
+    }).referenceUsd
     : 0
   const standardCost = options.durationSec * perSecond
-    + referenceTokens * 0.02 / 1000
+    + referenceUsd
     + billableImages * (capability.estimatedInputCostUsdPerImage ?? 0)
     + Math.max(0, options.referenceVideoDurationSec ?? 0) * inputVideoPerSecond
   return normalizeVideoModelId(options.model) === 'seedance-2.5' && options.contentFilter === false
