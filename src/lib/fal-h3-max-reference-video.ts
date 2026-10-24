@@ -2,6 +2,7 @@
  * Contract checked 2026-10-08: https://fal.ai/models/minimax/h3-max/reference-to-video/api
  */
 import { validateProviderImages } from './provider-image-preflight'
+import { estimateH3MaxReferenceInput } from './h3-max-reference-estimate'
 
 export const H3_MAX_REFERENCE_ENDPOINT = 'minimax/h3-max/reference-to-video'
 export type H3MaxReferenceResolution = '480p' | '768p' | '1080p'
@@ -115,12 +116,10 @@ export function estimateH3MaxReferenceCost(input: {
 }) {
   const values = [input.duration, input.videoSeconds, input.audioSeconds, ...input.images.flatMap(image => [image.width, image.height])]
   if (values.some(value => !Number.isFinite(value) || value < 0) || input.duration <= 0 || input.images.some(image => image.width <= 0 || image.height <= 0)) throw new Error('Cost estimate requires measured positive dimensions and nonnegative durations.')
-  // Rechecked 2026-10-23: 1080p now charges the same reference-video tokens as 768p.
-  // Keep image/audio token rates from the published rate card.
-  const referenceTokens = input.images.reduce((sum, image) => sum + image.width * image.height / 1024, 0)
-    + input.videoSeconds * (input.resolution === '480p' ? 2886 : 37296 / 5)
-    + input.audioSeconds * 80
+  const { referenceTokens, referenceUsd } = estimateH3MaxReferenceInput({
+    imageTokens: input.images.reduce((sum, image) => sum + image.width * image.height / 1024, 0),
+    videoSeconds: input.videoSeconds, audioSeconds: input.audioSeconds, resolution: input.resolution,
+  })
   const outputUsd = input.duration * (input.resolution === '480p' ? 0.05 : input.resolution === '1080p' ? 0.16 : 0.08)
-  const referenceUsd = Math.max(0, referenceTokens - 4096) * 0.02 / 1000
   return { outputUsd, referenceTokens, referenceUsd, totalUsd: outputUsd + referenceUsd, estimatedCreditsAt2x: Math.ceil((outputUsd + referenceUsd) * 200 - 1e-9) }
 }
