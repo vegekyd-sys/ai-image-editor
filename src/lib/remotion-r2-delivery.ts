@@ -46,7 +46,11 @@ export async function signNativeR2Url(source: string, metadata: Metadata, now = 
 export async function nativeR2Ready(url: string, metadata: Metadata, fetcher: typeof fetch, signal: AbortSignal): Promise<boolean> {
   const response = await fetcher(url, {headers: {Range: 'bytes=0-0', Accept: '*/*', 'Accept-Encoding': 'identity'}, cache: 'no-store', redirect: 'error', signal});
   try {
+    // Seven-day lifecycle expiry must not remove an object during its six-hour
+    // render capability. Leave a full day of margin; old copies use origin.
+    const uploaded = Date.parse(response.headers.get('last-modified') || '');
     return response.status === 206 && response.headers.get('content-range') === `bytes 0-0/${metadata.size}`
+      && Number.isFinite(uploaded) && uploaded <= Date.now() + 60_000 && Date.now() - uploaded < 6 * 24 * 3600_000
       && response.headers.get('content-length') === '1'
       && response.headers.get('content-type')?.split(';')[0] === metadata.type.split(';')[0]
       && response.headers.get('x-amz-meta-makaron-source-etag') === metadata.etag

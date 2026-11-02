@@ -17,6 +17,8 @@ For that later candidate, the 15.23-second 1080×1920 project produced:
 
 All eight direct Lambda outputs matched in decoded frames and audio. A complete 29,147,721-byte Range read from the private R2 replica matched the source SHA-256 `9287e40a08104cb324fb6091f9124606fb7ccee2610d4f31a87bca9f933de765`. The full API median regressed by approximately 28%, so this candidate is **not accepted for production migration**. Cold and warm runtime variation exists in both modes; the outliers must not be removed to claim a speed gain.
 
+Subsequent complete decoding of the eight full API outputs found four identical baseline results, three matching Cloudflare results, and one Cloudflare result with different frame and PCM hashes. The divergent sample is retained in the private acceptance receipts. Its cause is unresolved. This is an additional quality rejection; matching source bytes and a passing direct-render comparison do not establish full API quality acceptance.
+
 The source-map implementation keeps authored code, props, visible URL text and font input unchanged. The first extra-wrapper experiments experienced frame-extraction timeouts and were rejected. The current optional runtime applies source mapping within existing media wrappers, with a stable serialized map and unchanged decoder/encoding/concurrency settings. The ordinary application contract remains compatible with the candidate site when overrides are absent.
 
 ## Native delivery candidate
@@ -24,6 +26,8 @@ The source-map implementation keeps authored code, props, visible URL text and f
 The next candidate prepares native R2 S3-compatible temporary GET URLs instead of proxying media bodies through a Worker. It is disabled without separate read-only cache credentials and has **not** been validated against live native R2 access or production exports.
 
 The fixed scope is the private `makaron-render-media-cache` bucket. A read key must not access Scene or other buckets. Native URLs expire within six hours and contain no secret access key. Before selecting a native URL, an authenticated one-byte GET checks the stored source-version proof and complete size. Unready sources retain Supabase; copies never own current-export latency. The existing Worker can asynchronously warm the separate `v1/native/` namespace.
+
+Native readiness also rejects copies older than six days, leaving a full day of margin before the seven-day cache lifecycle can remove the object. This avoids issuing a six-hour URL just before predictable object expiry. Prepared native/Worker URL counts are recorded separately from early probe counts; these are diagnostic counts, not a billing meter.
 
 The required credential action has been presented for explicit confirmation. No new R2 read credential has been created. Candidate code and local tests can proceed independently; native cloud requests and deployment activation must wait for that confirmation.
 

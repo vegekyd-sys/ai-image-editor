@@ -914,7 +914,12 @@ async function executeRemotionExportJob(job: RemotionExportJob, options: {mediaD
       const deliveryStart = Date.now()
       const plan = await delivery
       mediaSources = plan.sources(renderDesign)
-      outputMetadata.mediaDelivery = plan.summary
+      const preparedTargets = Object.values(mediaSources).map(value => new URL(value))
+      outputMetadata.mediaDelivery = {
+        ...plan.summary,
+        preparedNativeUrls: preparedTargets.filter(value => value.hostname.endsWith('.r2.cloudflarestorage.com')).length,
+        preparedWorkerUrls: preparedTargets.filter(value => value.searchParams.has('__mk_render')).length,
+      }
       stageTimings.mediaDeliveryWaitMs = Date.now() - deliveryStart
     }
     if (preparedMedia.summary) {

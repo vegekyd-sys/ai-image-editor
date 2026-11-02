@@ -58,13 +58,27 @@ async function main() {
     console.log(JSON.stringify({stage: 'source-verified', bytes: baseline.bytes, cache: copied.cache}));
   }
   const plan = await resolveRemotionMediaDelivery(prepared.design, {userId, origin, budgetMs: 5000,
-    fetch: (async input => {
+    fetch: (async (input, init) => {
       const probe = versionProbes.get(String(input));
-      if (!probe) throw new Error('Only regionally verified versions are allowed');
+      if (!probe) {
+        const host = new URL(String(input)).hostname;
+        if (host === 'media-cache.makaron.app' || host === '83bc48856cd8ab6d436b3ed49d825c6f.r2.cloudflarestorage.com') return fetch(input, init);
+        throw new Error('Only regionally verified versions or the fixed delivery endpoints are allowed');
+      }
       return new Response(new Uint8Array([0]), {status: probe.status, headers: probe.headers});
     }) as typeof fetch});
   if (!plan.summary.enabled || plan.summary.versioned < 1) throw new Error('Versioned render gateway is not configured/ready');
   const mediaSources = plan.sources(prepared.design);
+  const nativeProofs = [];
+  if (plan.summary.mode === 'r2-native') {
+    for (const [index, url] of urls.entries()) {
+      const target = mediaSources[url];
+      if (!target || !new URL(target).hostname.endsWith('.r2.cloudflarestorage.com')) throw new Error('Native delivery was not selected for every bounded source');
+      const copy = await verifier.verify(target);
+      if (copy.sha256 !== sources[index].sha256 || copy.bytes !== sources[index].bytes) throw new Error('Native R2 source bytes differ');
+      nativeProofs.push({sha256: copy.sha256, bytes: copy.bytes});
+    }
+  }
   await writeFile(path.join(output, 'sources.json'), JSON.stringify({preparation: prepared.summary, sources}, null, 2));
   if (process.env.MAKARON_ACCEPTANCE_PREPARE_ONLY === 'true') {
     await writeFile(path.join(output, 'prepared.private.json'), JSON.stringify(prepared.design), {mode: 0o600});
@@ -100,7 +114,7 @@ async function main() {
     const qualityEqual = new Set(results.map(r => r.videoHash)).size === 1 && new Set(results.map(r => r.audioHash)).size === 1;
     await writeFile(path.join(output, 'results.json'), JSON.stringify({preparation: prepared.summary, sources,
       sourceVersionProbes: [...versionProbes.values()].map(p => ({status: p.status, elapsedMs: p.elapsedMs})),
-      delivery: plan.summary, priming, qualityEqual, results}, null, 2));
+      delivery: plan.summary, nativeProofs, priming, qualityEqual, results}, null, 2));
     console.log(JSON.stringify({round: index + 1, mode, wallMs, rendererMs: rendered.renderSeconds * 1000, qualityEqual}));
     if (!qualityEqual) throw new Error('Decoded output differs; stop before promotion');
   }

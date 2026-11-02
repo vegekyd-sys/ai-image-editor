@@ -11,9 +11,10 @@ const design: DesignPayload = {code: `<Audio src="${source}"/>`, props: {voice: 
 const originalResponse = () => new Response(new Uint8Array([0]), {status: 206, headers: {
   'content-range': 'bytes 0-0/16', 'content-length': '1', 'content-type': 'audio/wav', etag: metadata.etag, 'cache-control': 'public, max-age=3600',
 }});
-const nativeResponse = (etag = metadata.etag) => new Response(new Uint8Array([0]), {status: 206, headers: {
+const nativeResponse = (etag = metadata.etag, ageMs = 0) => new Response(new Uint8Array([0]), {status: 206, headers: {
   'content-range': 'bytes 0-0/16', 'content-length': '1', 'content-type': 'audio/wav',
   'x-amz-meta-makaron-source-etag': etag, 'x-amz-meta-makaron-source-size': '16',
+  'last-modified': new Date(Date.now() - ageMs).toUTCString(),
 }});
 
 describe('private native R2 render delivery', () => {
@@ -48,6 +49,8 @@ describe('private native R2 render delivery', () => {
       expect(await nativeR2Ready('https://example.test/object', metadata,
         (async () => nativeResponse(etag)) as typeof fetch, new AbortController().signal)).toBe(etag === metadata.etag);
     }
+    expect(await nativeR2Ready('https://example.test/object', metadata,
+      (async () => nativeResponse(metadata.etag, 6.5 * 24 * 3600_000)) as typeof fetch, new AbortController().signal)).toBe(false);
   });
   it('uses a ready native object and warms asynchronously without waiting for the copy response', async () => {
     const target = `https://${REMOTION_R2_ACCOUNT}.r2.cloudflarestorage.com/${REMOTION_R2_BUCKET}/object`;

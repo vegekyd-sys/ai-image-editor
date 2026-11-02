@@ -388,7 +388,10 @@ function fillFromOrigin(fetchAnonymous, bucket, key, metadata, bodyKey, cache, c
         return;
       }
       const storedHeaders = new Headers(metadata.headers);
-      if (key.startsWith('v1/native/')) storedHeaders.set('cache-control', 'private, max-age=3600, no-transform');
+      if (key.startsWith('v1/native/')) {
+        storedHeaders.set('cache-control', 'private, max-age=3600, no-transform');
+        storedHeaders.delete('last-modified'); storedHeaders.delete('etag');
+      }
       await bucket.put(key, full.body, { httpMetadata: storedHeaders, customMetadata: {
         'makaron-source-etag': metadata.etag, 'makaron-source-size': String(metadata.size),
       } });

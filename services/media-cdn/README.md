@@ -46,7 +46,7 @@ Transport overrides are supplied separately as `mediaSources` to the Lambda comp
 
 ## Native R2 candidate (not enabled)
 
-The range-proxy candidate passed byte/frame/PCM checks but failed the full API speed gate. `REMOTION_MEDIA_DELIVERY_MODE=r2-native` instead prepares scoped S3-compatible GET URLs for the fixed private render cache. It requires separate `REMOTION_R2_READ_ACCESS_KEY_ID` / `REMOTION_R2_READ_SECRET_ACCESS_KEY` credentials scoped read-only to `makaron-render-media-cache`; Scene credentials are not reused. No such credential has been created by this candidate.
+The range-proxy candidate passed direct byte/frame/PCM comparisons, but full API testing failed the speed gate and found one divergent video/audio output among eight replays. `REMOTION_MEDIA_DELIVERY_MODE=r2-native` instead prepares scoped S3-compatible GET URLs for the fixed private render cache. It requires separate `REMOTION_R2_READ_ACCESS_KEY_ID` / `REMOTION_R2_READ_SECRET_ACCESS_KEY` credentials scoped read-only to `makaron-render-media-cache`; Scene credentials are not reused. No such credential has been created by this candidate.
 
 An authenticated native one-byte GET must confirm the full size and stored source ETag/size proof before the temporary URL is used. The check overlaps existing job preparation; missing, unverified or late copies retain the original Supabase source. A separate HMAC-authenticated one-byte warm request can start a background copy in the `v1/native/` namespace without delaying the current export. Read credentials stay in the application server; frame workers receive only a six-hour, single-object GET URL. Custom or credentialed media requests retain their original source.
 
