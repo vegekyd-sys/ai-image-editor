@@ -253,10 +253,18 @@ export function createHandler({
         headers.set('content-range', `bytes ${range.offset}-${range.offset + range.length - 1}/${metadata.size}`);
         headers.set('content-length', String(range.length));
       }
-      const response = await fetchAnonymous('GET', range ? {
+      const bodyHeaders = range ? {
         range: `bytes=${range.offset}-${range.offset + range.length - 1}`,
         [pinned ? 'if-match' : 'if-range']: metadata.etag,
-      } : pinned ? {'if-match': metadata.etag} : {});
+      } : pinned ? {'if-match': metadata.etag} : {};
+      let response = await fetchAnonymous('GET', bodyHeaders);
+      // A transient upstream gateway failure must not immediately abort a whole
+      // multi-worker export. Retry once, before exposing any body, retaining the
+      // exact range and version condition. Successful reads have no extra work.
+      if ([502, 503, 504].includes(response.status)) {
+        await response.body?.cancel();
+        response = await fetchAnonymous('GET', bodyHeaders);
+      }
       const expectedStatus = range ? 206 : 200;
       const expectedLength = range?.length ?? metadata.size;
       // A file can be overwritten between HEAD and GET. Deliver the actual

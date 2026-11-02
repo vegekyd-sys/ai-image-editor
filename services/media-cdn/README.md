@@ -18,6 +18,8 @@ Supabase can return `private, no-cache` for HEAD while an anonymous GET is publi
 
 Full cold requests stream directly from origin and independently attempt one R2 fill. Ready edge requests use cached original bytes. A cold edge streams the original Supabase path while R2 warms asynchronously; regional R2 latency never owns the client response. Native streams preserve response length and avoid JavaScript processing per chunk. Single ranges, suffix ranges, If-Range, If-Match, conditional GET and HEAD are supported. Optional cache failures fall back to origin.
 
+Foreground origin reads retry once on HTTP 502/503/504 before exposing a body, preserving the requested range and version condition. Persistent failures are returned without filling the cache. Successful requests do not add a retry or delay.
+
 ## Cost and runtime limits
 
 A successful cold fill costs one additional complete origin read; a small Range can trigger that fill. A distributed conditional lease suppresses concurrent fills for 90 seconds. Therefore savings depend on reuse within retention, not just on moving the hostname. Failure/expiry can require another copy. Seven-day retention reduces daily recopying at the cost of more R2 storage.
@@ -41,7 +43,7 @@ All frame workers reuse the same validated version. HMAC is verified before any 
 
 Ordinary playback/download metadata revalidates within 60 seconds. Versioned edge bodies can live for a day; current metadata chooses the matching version. Browser freshness follows the original policy up to one hour. Source CSP and nosniff protections are retained.
 
-The temporary Preview-only `/api/internal/remotion-delivery-acceptance` operator harness is gated by a separate secret and explicit Preview-only enable flag. It creates unpublished, uniquely marked export jobs and uses the real queue/renderer/publishing pipeline. Remove this route before production promotion. Keep `REMOTION_EXPORT_SOURCE_CACHE` off: the earlier S3 candidate is not part of this Cloudflare rollout.
+Full API acceptance used a separate-secret, Preview-only operator harness on an isolated deployment. It created unpublished, uniquely marked export jobs through the real queue/renderer pipeline. The harness and its internal mode override were removed before production promotion. Keep `REMOTION_EXPORT_SOURCE_CACHE` off: the earlier S3 candidate is not part of this Cloudflare rollout.
 
 ## Rollback
 

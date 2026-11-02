@@ -9,7 +9,7 @@ function renderQuery(metadata, bypass = false) {
   const sig = createHmac('sha256', signingSecret).update('https://origin.test/storage/v1/object/public/images/test.mp4\n' + payload).digest('base64url');
   return '?__mk_render=' + payload + '.' + sig;
 }
-function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', headPolicy, cookie, ignoreRange = false } = {}) {
+function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', headPolicy, cookie, ignoreRange = false, gatewayFailures = 0 } = {}) {
   let data = new TextEncoder().encode('0123456789abcdef'), etag = '"v1"';
   let missing = false;
   const calls = [], objects = new Map(), locks = new Map(), edges = new Map(), tasks = [];
@@ -21,6 +21,7 @@ function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', headPoli
     calls.push({ method: req.method, range: req.headers.get('range'), url: req.url, ifMatch: req.headers.get('if-match') });
     if (missing) return new Response('gone', { status: 404 });
     if (req.headers.has('if-match') && req.headers.get('if-match') !== etag) return new Response('changed', {status: 412});
+    if (req.headers.has('if-match') && gatewayFailures-- > 0) return new Response('gateway unavailable', {status: 502});
     if (req.method === 'HEAD') return new Response(null, { headers: {...headers(), ...(headPolicy ? {'cache-control': headPolicy} : {})} });
     const range = parseRange(req.headers.get('range'), data.length);
     if (!ignoreRange && range && typeof range !== 'string') return new Response(data.slice(range.offset, range.offset + range.length), {
@@ -88,6 +89,21 @@ test('a verified render version skips every origin metadata probe and shares the
   assert.equal(ready.headers.get('x-makaron-cache'), 'HIT');
   assert.equal(f.calls.filter(c => c.range === 'bytes=0-0' || c.method === 'HEAD').length, 0);
   assert.equal(f.calls.filter(c => c.url.includes('__mk_render')).length, 0);
+});
+test('a transient origin gateway failure retries the same pinned range before exposing bytes', async () => {
+  const f = fixture({gatewayFailures: 1});
+  const query = renderQuery({etag: '"v1"', size: 16, type: 'video/mp4', freshness: 3600});
+  const response = await f.request({headers: {range: 'bytes=4-7'}}, '/storage/v1/object/public/images/test.mp4' + query);
+  assert.equal(response.status, 206); assert.equal(await response.text(), '4567');
+  assert.deepEqual(f.calls.slice(0, 2).map(c => [c.range, c.ifMatch]), [['bytes=4-7', '"v1"'], ['bytes=4-7', '"v1"']]);
+  await f.settle();
+});
+test('persistent gateway errors stop after one retry and cannot fill the cache', async () => {
+  const f = fixture({gatewayFailures: 10});
+  const query = renderQuery({etag: '"v1"', size: 16, type: 'video/mp4', freshness: 3600});
+  const response = await f.request({}, '/storage/v1/object/public/images/test.mp4' + query);
+  assert.equal(response.status, 502); assert.equal(await response.text(), 'gateway unavailable');
+  await f.settle(); assert.equal(f.calls.length, 2); assert.equal(f.objects.size, 0); assert.equal(f.edges.size, 0);
 });
 test('a signed origin fallback bypasses R2 and all version probes', async () => {
   const f = fixture(); f.bucket.head = () => {throw new Error('must not inspect replicas');};
