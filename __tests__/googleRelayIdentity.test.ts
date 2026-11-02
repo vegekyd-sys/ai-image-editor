@@ -18,6 +18,11 @@ describe('short-lived Cloud IAM identities',()=>{
   expect(f.mock.calls[1][1].headers.authorization).toBe('Bearer ephemeral-access');
   expect(JSON.parse(f.mock.calls[1][1].body)).toEqual({audience:'https://private-worker.a.run.app',includeEmail:true});
  });
+ it('accepts the current service-number/region Cloud Run URL format',async()=>{
+  vi.stubEnv('GEMINI_RELAY_CLOUD_URL','https://private-worker-123.asia-east1.run.app');
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValueOnce(Response.json({access_token:'ephemeral'})).mockResolvedValueOnce(Response.json({token:'identity'})));
+  expect(await getGeminiCloudIdentity(AbortSignal.timeout(5000))).toBe('identity');
+ });
  it('never asks IAM for a token after federation rejects the request',async()=>{
   const f=vi.fn().mockResolvedValue(Response.json({error:'denied'},{status:403}));vi.stubGlobal('fetch',f);
   await expect(getGeminiCloudIdentity(AbortSignal.timeout(5000))).rejects.toThrow('exchange unavailable');expect(f).toHaveBeenCalledOnce();

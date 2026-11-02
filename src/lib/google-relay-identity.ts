@@ -6,7 +6,7 @@ export async function getGeminiCloudIdentity(signal: AbortSignal): Promise<strin
   const provider = process.env.GEMINI_RELAY_WIF_PROVIDER?.trim();
   const account = process.env.GEMINI_RELAY_SERVICE_ACCOUNT?.trim();
   if (!audience || !provider || !account
-      || !/^https:\/\/[a-z0-9-]+\.a\.run\.app$/.test(audience)
+      || !/^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.run\.app$/.test(audience)
       || !/^\/\/iam.googleapis.com\/projects\/\d+\/locations\/global\/workloadIdentityPools\/[\w-]+\/providers\/[\w-]+$/.test(provider)
       || !/^[\w-]+@[\w-]+\.iam\.gserviceaccount\.com$/.test(account)) {
     throw new Error('Google cloud identity is not configured');
