@@ -138,7 +138,7 @@ describe('Remotion preview playback contract', () => {
     const localRendererSource = read('src/lib/remotion-local-renderer.ts')
 
     expect(sandboxSource).toContain('OffthreadVideo: serverRendering ? serverVideo : mediaVideo')
-    expect(sandboxSource).toContain('withMediaSource(withVideoFit(MediaVideo, true), sources)')
+    expect(sandboxSource).toContain('withVideoFit(MediaVideo, true, undefined, sources)')
     expect(serverSource).toContain('useOffthreadVideo: true')
     expect(serverSource).toContain("readEnv('REMOTION_RENDERER') === 'local'")
     expect(serverSource).toContain('renderDesignFrameLocal')

@@ -16,6 +16,7 @@ export function withVideoFit(
   Component: React.ElementType,
   usesObjectFitProp: boolean,
   mediaComponent?: React.ElementType,
+  sources?: Record<string, string>,
 ): React.ComponentType<any> {
   const Wrapped = React.forwardRef(function VideoWithAuthoredFit(
     props: Record<string, any>, ref: React.ForwardedRef<any>,
@@ -28,6 +29,7 @@ export function withVideoFit(
     const { objectFit: _cssFit, ...mediaStyle } = style || {};
     return React.createElement(Decoder, {
       ...rest,
+      ...(typeof rest.src === 'string' && sources && Object.hasOwn(sources, rest.src) ? {src: sources[rest.src]} : {}),
       ...(ref ? { ref } : {}),
       ...(fit ? { style: useMedia ? mediaStyle : { ...style, objectFit: fit } } : { style }),
       ...(useMedia && fit ? { objectFit: fit } : {}),

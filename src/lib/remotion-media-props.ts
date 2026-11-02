@@ -13,9 +13,11 @@ export function normalizeMediaTrimProps(props: Record<string, any>): Record<stri
   };
 }
 
-export function withMediaTrim(Component: React.ElementType): React.ComponentType<any> {
+export function withMediaTrim(Component: React.ElementType, sources?: Record<string, string>): React.ComponentType<any> {
   return React.forwardRef(function MediaWithNormalizedTrim(props: Record<string, any>, ref: React.ForwardedRef<any>) {
-    return React.createElement(Component, { ...normalizeMediaTrimProps(props), ...(ref ? { ref } : {}) });
+    return React.createElement(Component, { ...normalizeMediaTrimProps(props),
+      ...(typeof props.src === 'string' && sources && Object.hasOwn(sources, props.src) ? {src: sources[props.src]} : {}),
+      ...(ref ? { ref } : {}) });
   });
 }
 

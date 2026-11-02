@@ -60,19 +60,19 @@ describe('render-only version capabilities', () => {
     const plan = await resolveRemotionMediaDelivery(design, {userId: 'owner', origin, secret,
       readySignal: Promise.resolve(), fetch: (() => new Promise(() => {})) as typeof fetch});
     expect(plan.summary.versioned).toBe(0);
-    expect((await payload(plan.sources(design)[url]))?.bypass).toBe(true);
+    expect(plan.sources(design)[url]).toBe(url.replace('cdn.makaron.app', 'sdyrtztrjgmmpnirswxt.supabase.co'));
   });
   it('does not prefetch another owner and bypasses unsafe source metadata', async () => {
     for (const policy of ['private', 'no-store']) {
       const plan = await resolveRemotionMediaDelivery(design, {userId: 'owner', origin, secret,
         fetch: (async () => {const r = readyResponse(); r.headers.set('cache-control', policy); return r;}) as typeof fetch});
       expect(plan.summary.versioned).toBe(0);
-      expect((await payload(plan.sources(design)[url]))?.bypass).toBe(true);
+      expect(plan.sources(design)[url]).toBe(url.replace('cdn.makaron.app', 'sdyrtztrjgmmpnirswxt.supabase.co'));
     }
     const plan = await resolveRemotionMediaDelivery(design, {userId: 'different-owner', origin, secret,
       fetch: (() => {throw new Error('must not fetch');}) as typeof fetch});
     expect(plan.summary.eligible).toBe(0);
-    expect((await payload(plan.sources(design)[url]))?.bypass).toBe(true);
+    expect(plan.sources(design)[url]).toBe(url.replace('cdn.makaron.app', 'sdyrtztrjgmmpnirswxt.supabase.co'));
   });
   it('is off without the isolated configuration and preserves private/provider URLs', async () => {
     const off = await resolveRemotionMediaDelivery(design, {userId: 'owner', origin, secret: 'short'});

@@ -16,6 +16,10 @@
     {
       "binding": "MEDIA_CACHE",
       "bucket_name": "makaron-public-media-cache"
+    },
+    {
+      "binding": "RENDER_CACHE",
+      "bucket_name": "makaron-render-media-cache"
     }
   ],
   "observability": {

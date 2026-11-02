@@ -115,7 +115,11 @@ export async function resolveRemotionMediaDelivery(design: Pick<DesignPayload, '
   return {summary, sources: value => {
     const sources: Record<string, string> = Object.create(null);
     mapDesignMedia(value, url => {
-      if (eligible(url)) sources[url] = signRenderMediaUrl(url, origin, secret, versions.get(url), options.now);
+      if (eligible(url)) {
+        const version = versions.get(url);
+        const original = new URL(url); original.hostname = new URL(ORIGINAL).hostname;
+        sources[url] = version ? signRenderMediaUrl(url, origin, secret, version, options.now) : original.href;
+      }
       return url;
     });
     return sources;

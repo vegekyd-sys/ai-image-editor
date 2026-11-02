@@ -9,7 +9,7 @@ function renderQuery(metadata, bypass = false) {
   const sig = createHmac('sha256', signingSecret).update('https://origin.test/storage/v1/object/public/images/test.mp4\n' + payload).digest('base64url');
   return '?__mk_render=' + payload + '.' + sig;
 }
-function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', headPolicy, cookie, ignoreRange = false, gatewayFailures = 0 } = {}) {
+function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', headPolicy, cookie, ignoreRange = false, gatewayFailures = 0, renderReplica = false } = {}) {
   let data = new TextEncoder().encode('0123456789abcdef'), etag = '"v1"';
   let missing = false;
   const calls = [], objects = new Map(), locks = new Map(), edges = new Map(), tasks = [];
@@ -45,7 +45,7 @@ function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', headPoli
     async head(key) { return objects.has(key) ? {} : null; },
     async get(key, options) {
       if (key.startsWith('v1/locks/')) { const lock = locks.get(key); return lock ? { etag: lock.etag, json: async () => JSON.parse(lock.body) } : null; }
-      const bytes = objects.get(key); if (!bytes) return null; const range = options?.range; return { body: new Response(range ? bytes.slice(range.offset, range.offset + range.length) : bytes).body };
+      const bytes = objects.get(key); if (!bytes) return null; const range = options?.range; return {size: bytes.length, ...(range ? {range} : {}), body: new Response(range ? bytes.slice(range.offset, range.offset + range.length) : bytes).body };
     },
     async put(key, stream, options) {
       if (typeof stream === 'string') {
@@ -63,7 +63,7 @@ function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', headPoli
     change() { data = new TextEncoder().encode('fedcba9876543210'); etag = '"v2"'; for (const key of edges.keys()) if (key.endsWith('/metadata')) edges.delete(key); },
     remove() { missing = true; for (const key of edges.keys()) if (key.endsWith('/metadata')) edges.delete(key); },
     async request(options = {}, path = '/storage/v1/object/public/images/test.mp4') {
-      return handle(new Request('https://candidate.test' + path, options), { ORIGIN_HOST: 'origin.test', CDN_HOST: 'cdn.test', MEDIA_CACHE: bucket, MEASURE_CACHE: '0', MEASURE_ORIGIN: '0', RENDER_SIGNING_SECRET: signingSecret }, { waitUntil(p) { tasks.push(p); } });
+      return handle(new Request('https://candidate.test' + path, options), { ORIGIN_HOST: 'origin.test', CDN_HOST: 'cdn.test', MEDIA_CACHE: bucket, ...(renderReplica ? {RENDER_CACHE: bucket, RENDER_REPLICA: '1'} : {}), MEASURE_CACHE: '0', MEASURE_ORIGIN: '0', RENDER_SIGNING_SECRET: signingSecret }, { waitUntil(p) { tasks.push(p); } });
     },
     async settle() { while (tasks.length) await Promise.all(tasks.splice(0)); },
   };
@@ -89,6 +89,32 @@ test('a verified render version skips every origin metadata probe and shares the
   assert.equal(ready.headers.get('x-makaron-cache'), 'HIT');
   assert.equal(f.calls.filter(c => c.range === 'bytes=0-0' || c.method === 'HEAD').length, 0);
   assert.equal(f.calls.filter(c => c.url.includes('__mk_render')).length, 0);
+});
+test('render replicas serve exact native ranges without depending on edge body caching', async () => {
+  const f = fixture({renderReplica: true});
+  const query = renderQuery({etag: '"v1"', size: 16, type: 'video/mp4', freshness: 3600});
+  const path = '/storage/v1/object/public/images/test.mp4' + query;
+  assert.equal(await (await f.request({}, path)).text(), '0123456789abcdef'); await f.settle();
+  const reads = f.calls.length;
+  const response = await f.request({headers: {range: 'bytes=4-7'}}, path);
+  assert.equal(response.status, 206); assert.equal(response.headers.get('content-range'), 'bytes 4-7/16');
+  assert.equal(response.headers.get('x-makaron-cache'), 'R2'); assert.equal(await response.text(), '4567');
+  assert.equal(f.calls.length, reads); assert.equal(f.edges.size, 0);
+});
+test('a stuck render replica lookup returns to origin within the bounded lookup budget', async () => {
+  const f = fixture({renderReplica: true}); let release;
+  f.bucket.get = () => new Promise(resolve => {release = resolve;});
+  const query = renderQuery({etag: '"v1"', size: 16, type: 'video/mp4', freshness: 3600});
+  const start = Date.now(); const response = await f.request({}, '/storage/v1/object/public/images/test.mp4' + query);
+  assert.equal(await response.text(), '0123456789abcdef'); assert.ok(Date.now() - start < 500);
+  release(null); await f.settle();
+});
+test('a replica with an incorrect full size cannot replace the original media', async () => {
+  const f = fixture({renderReplica: true});
+  f.bucket.get = async () => ({size: 3, body: new Response('bad').body});
+  const query = renderQuery({etag: '"v1"', size: 16, type: 'video/mp4', freshness: 3600});
+  assert.equal(await (await f.request({}, '/storage/v1/object/public/images/test.mp4' + query)).text(), '0123456789abcdef');
+  await f.settle();
 });
 test('a transient origin gateway failure retries the same pinned range before exposing bytes', async () => {
   const f = fixture({gatewayFailures: 1});

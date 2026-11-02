@@ -245,19 +245,30 @@ export function createHandler({
         return new Response(null, { status: 416, headers });
       }
       const version = await digest(`${metadata.etag}\n${metadata.size}`);
-      const r2Key = `${VERSION}/${id}/${version}`;
+      const renderReplica = Boolean(pinned?.metadata && env.RENDER_REPLICA === '1' && env.RENDER_CACHE);
+      const r2Key = `${VERSION}/${renderReplica ? 'render/' : ''}${id}/${version}`;
       const bodyKey = new Request(`${cacheBase}/body/${version}`);
-      const rangedKey = new Request(bodyKey, {
-        headers: range ? { range: `bytes=${range.offset}-${range.offset + range.length - 1}` } : {},
-      });
-      const cached = await cache.match(rangedKey);
-      if (cached) {
-        if (env.MEASURE_ORIGIN === '1') console.log(JSON.stringify({event: 'media-edge', key: id.slice(0, 16), cache: 'HIT', elapsedMs: Date.now() - requestStart, range: request.headers.get('range')}));
-        return withStatus(cached, 'HIT', metadata.freshness, headers);
-      }
       if (range) {
         headers.set('content-range', `bytes ${range.offset}-${range.offset + range.length - 1}/${metadata.size}`);
         headers.set('content-length', String(range.length));
+      }
+      if (renderReplica) {
+        const object = await boundedReplicaRead(env.RENDER_CACHE, r2Key, range, ctx);
+        if (object?.body && object.size === metadata.size
+          && (!range || (object.range?.offset === range.offset && object.range?.length === range.length))) {
+          headers.set('x-makaron-cache', 'R2');
+          if (env.MEASURE_ORIGIN === '1') console.log(JSON.stringify({event: 'media-edge', key: id.slice(0, 16), cache: 'R2', elapsedMs: Date.now() - requestStart, range: request.headers.get('range')}));
+          return new Response(object.body, {status: range ? 206 : 200, headers});
+        }
+        await object?.body?.cancel();
+      }
+      const rangedKey = new Request(bodyKey, {
+        headers: range ? { range: `bytes=${range.offset}-${range.offset + range.length - 1}` } : {},
+      });
+      const cached = renderReplica ? null : await cache.match(rangedKey);
+      if (cached) {
+        if (env.MEASURE_ORIGIN === '1') console.log(JSON.stringify({event: 'media-edge', key: id.slice(0, 16), cache: 'HIT', elapsedMs: Date.now() - requestStart, range: request.headers.get('range')}));
+        return withStatus(cached, 'HIT', metadata.freshness, headers);
       }
       const bodyHeaders = range ? {
         range: `bytes=${range.offset}-${range.offset + range.length - 1}`,
@@ -286,7 +297,9 @@ export function createHandler({
       headers.set('x-makaron-cache', 'MISS');
       // A cold edge keeps the existing origin path. R2 lookup and transfer are
       // background-only: their regional latency cannot block a render/download.
-      if (metadata.size <= MAX_EDGE_OBJECT) warmReplica(fetchAnonymous, env.MEDIA_CACHE, r2Key, metadata, bodyKey, cache, ctx, ttl, env.MEASURE_ORIGIN === '1');
+      if (metadata.size <= MAX_EDGE_OBJECT) warmReplica(fetchAnonymous, renderReplica ? env.RENDER_CACHE : env.MEDIA_CACHE, r2Key, metadata, bodyKey, cache, ctx, ttl, env.MEASURE_ORIGIN === '1', !renderReplica);
+      // Preserve the native upstream stream on a cold render replica read.
+      if (renderReplica) return response;
       if (range) {
         return new Response(response.body, { status: 206, headers });
       }
@@ -302,12 +315,21 @@ export function createHandler({
   };
 }
 
-function warmReplica(fetchAnonymous, bucket, key, metadata, bodyKey, cache, ctx, ttl, measure) {
+async function boundedReplicaRead(bucket, key, range, ctx) {
+  let timer;
+  const read = bucket.get(key, range ? {range} : {}).catch(error => {logFailure('render replica read', error); return null;});
+  const object = await Promise.race([read, new Promise(resolve => {timer = setTimeout(() => resolve(null), 100);})]);
+  clearTimeout(timer);
+  if (!object) ctx.waitUntil(read.then(late => late?.body?.cancel()).catch(error => logFailure('render replica cancel', error)));
+  return object;
+}
+
+function warmReplica(fetchAnonymous, bucket, key, metadata, bodyKey, cache, ctx, ttl, measure, primeEdge = true) {
   const pendingKey = `replica:${key}`;
   if (pendingFills.has(pendingKey) || pendingFills.size >= 1000) return;
   const promise = (async () => {
-    if (await bucket.head(key)) await warmEdge(bucket, key, bodyKey, metadata, cache, ctx, ttl);
-    else fillFromOrigin(fetchAnonymous, bucket, key, metadata, bodyKey, cache, ctx, ttl, measure);
+    if (await bucket.head(key)) {if (primeEdge) await warmEdge(bucket, key, bodyKey, metadata, cache, ctx, ttl);}
+    else fillFromOrigin(fetchAnonymous, bucket, key, metadata, bodyKey, cache, ctx, ttl, measure, primeEdge);
   })().catch(error => logFailure('replica warm', error)).finally(() => pendingFills.delete(pendingKey));
   pendingFills.set(pendingKey, promise);
   ctx.waitUntil(promise);
@@ -348,7 +370,7 @@ export async function acquireFillLock(bucket, key) {
   return acquired ? lockKey : null;
 }
 
-function fillFromOrigin(fetchAnonymous, bucket, key, metadata, bodyKey, cache, ctx, ttl, measure = false) {
+function fillFromOrigin(fetchAnonymous, bucket, key, metadata, bodyKey, cache, ctx, ttl, measure = false, primeEdge = true) {
   if (pendingFills.has(key)) return;
   const promise = (async () => {
     const lockKey = await acquireFillLock(bucket, key);
@@ -366,7 +388,7 @@ function fillFromOrigin(fetchAnonymous, bucket, key, metadata, bodyKey, cache, c
       if (measure) console.log(JSON.stringify({ event: 'media-replica', key: key.split('/')[1].slice(0, 16), completedBytes: metadata.size }));
       // Narration fills are small enough to prime the edge in the same bounded
       // background operation. Large files warm on a subsequent request.
-      if (metadata.size <= 16 * 1024 ** 2) await warmEdge(bucket, key, bodyKey, metadata, cache, ctx, ttl);
+      if (primeEdge && metadata.size <= 16 * 1024 ** 2) await warmEdge(bucket, key, bodyKey, metadata, cache, ctx, ttl);
       // Keep the fill within the background lifetime. A subsequent R2 hit can
       // populate the edge independently; chaining both here can exceed 30s.
     }

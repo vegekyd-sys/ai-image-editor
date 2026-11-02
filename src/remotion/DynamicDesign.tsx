@@ -1,6 +1,6 @@
 import { withMediaTrim } from '../lib/remotion-media-props';
 import { withVideoFit } from '../lib/remotion-video-fit';
-import { useMediaSources, withMediaSource } from '../lib/remotion-media-sources';
+import { useMediaSources } from '../lib/remotion-media-sources';
 /**
  * DynamicDesign — a Remotion composition that compiles and renders Agent-generated JSX code.
  * Used by both browser-side Player and server-side Sandbox (renderStillOnVercel).
@@ -39,10 +39,10 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(prop
 });
 
 function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean, sources?: Record<string, string>): Record<string, unknown> {
-  const serverVideo = withMediaSource(withVideoFit(Remotion.OffthreadVideo || MediaVideo, !Remotion.OffthreadVideo, MediaVideo), sources);
-  const nativeVideo = withMediaSource(withVideoFit(Remotion.Video || MediaVideo, !Remotion.Video, MediaVideo), sources);
+  const serverVideo = withVideoFit(Remotion.OffthreadVideo || MediaVideo, !Remotion.OffthreadVideo, MediaVideo, sources);
+  const nativeVideo = withVideoFit(Remotion.Video || MediaVideo, !Remotion.Video, MediaVideo, sources);
   const serverRendering = useOffthreadVideo || useNativeVideo;
-  const mediaVideo = withMediaSource(withVideoFit(MediaVideo, true), sources);
+  const mediaVideo = withVideoFit(MediaVideo, true, undefined, sources);
   const preferredVideo = useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : mediaVideo;
   const scope: Record<string, unknown> = {
     React, useState, useEffect, useCallback, useMemo, useRef,
@@ -52,8 +52,8 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
     ...RemotionNoise,
     // @remotion/media keeps browser/web-renderer preview behavior; server export can opt into
     // Remotion-native Video so the renderer can collect source-video audio assets.
-    Audio: withMediaSource(withMediaTrim(MediaAudio), sources),
-    Html5Audio: withMediaSource(withMediaTrim(Remotion.Html5Audio), sources),
+    Audio: withMediaTrim(MediaAudio, sources),
+    Html5Audio: withMediaTrim(Remotion.Html5Audio, sources),
     Video: preferredVideo,
     Html5Video: preferredVideo,
     // An explicit <OffthreadVideo> must remain meaningful in server preview/export.
