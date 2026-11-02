@@ -29,11 +29,14 @@ export async function verifyRenderToken(token, origin, secret, now = Date.now())
     if (!await crypto.subtle.verify('HMAC', await signingKey, decode(signature), new TextEncoder().encode(canonical.href + '\n' + payload))) return null;
     const value = JSON.parse(new TextDecoder().decode(decode(payload)));
     if (value.v !== 1 || !Number.isSafeInteger(value.expires) || value.expires <= now || value.expires > now + 6 * 3600_000 + 60_000) return null;
+    if (value.delivery !== undefined && value.delivery !== 'native') return null;
+    if (value.delivery && value.bypass) return null;
     if (value.bypass === true && !value.metadata) return value;
     const m = value.metadata;
     if (value.bypass || !m || !/^"[^"\r\n]{1,128}"$/.test(m.etag || '')
       || !Number.isSafeInteger(m.size) || m.size <= 0 || m.size > MAX_EDGE_OBJECT
       || typeof m.type !== 'string' || !/^(audio|video)\//i.test(m.type) || m.type.length > 128 || /[\r\n]/.test(m.type)
+      || !Number.isInteger(m.freshness) || m.freshness < 0 || m.freshness > 3600
       || (m.modified && (typeof m.modified !== 'string' || m.modified.length > 128 || !Number.isFinite(Date.parse(m.modified))))) return null;
     return value;
   } catch {return null;}
@@ -166,7 +169,7 @@ export function createHandler({
     try {
       if (pinned?.metadata) {
         const m = pinned.metadata;
-        const freshness = Math.min(3600, Math.floor((pinned.expires - Date.now()) / 1000));
+        const freshness = Math.min(m.freshness, Math.floor((pinned.expires - Date.now()) / 1000));
         metadata = {size: m.size, etag: m.etag, freshness, headers: {
           'content-length': String(m.size), 'content-type': m.type, etag: m.etag, 'accept-ranges': 'bytes',
           ...(m.modified ? {'last-modified': m.modified} : {}),
@@ -246,7 +249,7 @@ export function createHandler({
       }
       const version = await digest(`${metadata.etag}\n${metadata.size}`);
       const renderReplica = Boolean(pinned?.metadata && env.RENDER_REPLICA === '1' && env.RENDER_CACHE);
-      const r2Key = `${VERSION}/${renderReplica ? 'render/' : ''}${id}/${version}`;
+      const r2Key = `${VERSION}/${renderReplica ? pinned.delivery === 'native' ? 'native/' : 'render/' : ''}${id}/${version}`;
       const bodyKey = new Request(`${cacheBase}/body/${version}`);
       if (range) {
         headers.set('content-range', `bytes ${range.offset}-${range.offset + range.length - 1}/${metadata.size}`);
@@ -384,7 +387,11 @@ function fillFromOrigin(fetchAnonymous, bucket, key, metadata, bodyKey, cache, c
         await full.body?.cancel();
         return;
       }
-      await bucket.put(key, full.body, { httpMetadata: new Headers(metadata.headers) });
+      const storedHeaders = new Headers(metadata.headers);
+      if (key.startsWith('v1/native/')) storedHeaders.set('cache-control', 'private, max-age=3600, no-transform');
+      await bucket.put(key, full.body, { httpMetadata: storedHeaders, customMetadata: {
+        'makaron-source-etag': metadata.etag, 'makaron-source-size': String(metadata.size),
+      } });
       if (measure) console.log(JSON.stringify({ event: 'media-replica', key: key.split('/')[1].slice(0, 16), completedBytes: metadata.size }));
       // Narration fills are small enough to prime the edge in the same bounded
       // background operation. Large files warm on a subsequent request.

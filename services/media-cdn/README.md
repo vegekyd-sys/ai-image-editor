@@ -44,9 +44,17 @@ All frame workers reuse the same validated version. HMAC is verified before any 
 
 Transport overrides are supplied separately as `mediaSources` to the Lambda composition and applied only to the actual audio/video component `src`. Authored code, props, visible URL text, editable identities and font-selection input retain the canonical source. The optional runtime contract is `mediaSourcesVersion: 1`; old applications can use the new site without overrides, while a render with overrides requires that marker. Candidate site promotion is independent of both sandbox snapshot contracts.
 
+## Native R2 candidate (not enabled)
+
+The range-proxy candidate passed byte/frame/PCM checks but failed the full API speed gate. `REMOTION_MEDIA_DELIVERY_MODE=r2-native` instead prepares scoped S3-compatible GET URLs for the fixed private render cache. It requires separate `REMOTION_R2_READ_ACCESS_KEY_ID` / `REMOTION_R2_READ_SECRET_ACCESS_KEY` credentials scoped read-only to `makaron-render-media-cache`; Scene credentials are not reused. No such credential has been created by this candidate.
+
+An authenticated native one-byte GET must confirm the full size and stored source ETag/size proof before the temporary URL is used. The check overlaps existing job preparation; missing, unverified or late copies retain the original Supabase source. A separate HMAC-authenticated one-byte warm request can start a background copy in the `v1/native/` namespace without delaying the current export. Read credentials stay in the application server; frame workers receive only a six-hour, single-object GET URL. Custom or credentialed media requests retain their original source.
+
+The native candidate requires credential approval, private-bucket CORS configuration, complete source-byte validation, actual browser playback/seek, and fresh real-project Lambda/full API comparisons before promotion. Local signer tests are not cloud performance acceptance. See `docs/ops/cloudflare-remotion-delivery-acceptance.md` in the repository for the current gate result.
+
 Ordinary playback/download metadata revalidates within 60 seconds. Versioned edge bodies can live for a day; current metadata chooses the matching version. Browser freshness follows the original policy up to one hour. Source CSP and nosniff protections are retained.
 
-Full API acceptance used a separate-secret, Preview-only operator harness on an isolated deployment. It created unpublished, uniquely marked export jobs through the real queue/renderer pipeline. The harness and its internal mode override were removed before production promotion. Keep `REMOTION_EXPORT_SOURCE_CACHE` off: the earlier S3 candidate is not part of this Cloudflare rollout.
+Full API acceptance uses a separate-secret, Preview-only operator harness on isolated deployments. It creates unpublished, uniquely marked export jobs through the real queue/renderer pipeline. Remove the harness and its internal mode override before any production promotion. Keep `REMOTION_EXPORT_SOURCE_CACHE` off: the earlier S3 candidate is not part of this Cloudflare rollout.
 
 ## Rollback
 

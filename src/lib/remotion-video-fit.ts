@@ -1,5 +1,5 @@
 import React from 'react';
-import { normalizeMediaTrimProps, requiresMediaDecoder } from './remotion-media-props';
+import { allowsMediaSourceOverride, normalizeMediaTrimProps, requiresMediaDecoder } from './remotion-media-props';
 
 const VIDEO_IDENTITY = Symbol.for('makaron.remotion.video');
 export function isMakaronVideoComponent(component: unknown): boolean {
@@ -29,7 +29,7 @@ export function withVideoFit(
     const { objectFit: _cssFit, ...mediaStyle } = style || {};
     return React.createElement(Decoder, {
       ...rest,
-      ...(typeof rest.src === 'string' && sources && Object.hasOwn(sources, rest.src) ? {src: sources[rest.src]} : {}),
+      ...(typeof rest.src === 'string' && sources && allowsMediaSourceOverride(props) && Object.hasOwn(sources, rest.src) ? {src: sources[rest.src]} : {}),
       ...(ref ? { ref } : {}),
       ...(fit ? { style: useMedia ? mediaStyle : { ...style, objectFit: fit } } : { style }),
       ...(useMedia && fit ? { objectFit: fit } : {}),

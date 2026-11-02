@@ -1,15 +1,17 @@
 import {createHmac} from 'node:crypto';
 import type {DesignPayload} from '@/types';
 import {mapDesignMedia, mediaDeliveryUrl} from './media-delivery';
+import {nativeR2Credentials, nativeR2Ready, signNativeR2Url} from './remotion-r2-delivery';
 
 const ORIGINAL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
 const TOKEN = '__mk_render';
 const RAW_MEDIA = /\/object\/public\/images\/.+\.(?:wav|mp3|m4a|aac|ogg|mp4|mov|webm|m4v)$/i;
-interface Metadata {etag: string; size: number; type: string; freshness: number; modified?: string}
-interface Options {origin?: string; secret?: string; userId: string; budgetMs?: number; fetch?: typeof fetch; now?: number; readySignal?: Promise<unknown>}
+export interface Metadata {etag: string; size: number; type: string; freshness: number; modified?: string}
+interface Options {origin?: string; secret?: string; userId: string; budgetMs?: number; fetch?: typeof fetch; now?: number; readySignal?: Promise<unknown>;
+  mode?: 'worker' | 'r2-native'; nativeSigner?: typeof signNativeR2Url}
 export interface RenderDeliveryPlan {
   sources(design: DesignPayload): Record<string, string>;
-  summary: {enabled: boolean; eligible: number; versioned: number; bypassed: number; lookupMs: number};
+  summary: {enabled: boolean; eligible: number; versioned: number; bypassed: number; lookupMs: number; mode: 'worker' | 'r2-native'};
 }
 interface PendingDelivery {promise: Promise<RenderDeliveryPlan>; release(): void; createdAt: number}
 const pendingDeliveries = new Map<string, PendingDelivery>();
@@ -46,7 +48,7 @@ function eligible(url: string): boolean {
 }
 
 /** Signs only a temporary render copy; the token never enters saved compositions. */
-export function signRenderMediaUrl(url: string, origin: string, secret: string, metadata?: Metadata, now = Date.now()): string {
+export function signRenderMediaUrl(url: string, origin: string, secret: string, metadata?: Metadata, now = Date.now(), delivery?: 'native'): string {
   if (!eligible(url) || secret.length < 32 || !['https://cdn.makaron.app', 'https://media-cache.makaron.app'].includes(origin)) return url;
   const target = mediaDeliveryUrl(url, origin);
   if (target === url && new URL(origin).origin !== new URL(url).origin) return url;
@@ -54,7 +56,7 @@ export function signRenderMediaUrl(url: string, origin: string, secret: string, 
   canonical.hash = ''; canonical.search = canonical.searchParams.toString();
   // Stable within the hour so renderer/browser HTTP caches can be reused.
   const expires = Math.floor(now / 3600_000) * 3600_000 + 6 * 3600_000;
-  const payload = Buffer.from(JSON.stringify({v: 1, expires, ...(metadata ? {metadata} : {bypass: true})})).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({v: 1, expires, ...(delivery ? {delivery} : {}), ...(metadata ? {metadata} : {bypass: true})})).toString('base64url');
   const signature = createHmac('sha256', secret).update(canonical.href + '\n' + payload).digest('base64url');
   const output = new URL(target); output.searchParams.set(TOKEN, payload + '.' + signature);
   return output.href;
@@ -62,7 +64,7 @@ export function signRenderMediaUrl(url: string, origin: string, secret: string, 
 
 async function metadata(url: string, fetcher: typeof fetch, signal: AbortSignal): Promise<Metadata | null> {
   const source = new URL(url); source.hostname = new URL(ORIGINAL).hostname; source.hash = '';
-  const response = await fetcher(source.href, {headers: {Range: 'bytes=0-0', Accept: '*/*', 'Accept-Encoding': 'identity'}, redirect: 'error', signal});
+  const response = await fetcher(source.href, {headers: {Range: 'bytes=0-0', Accept: '*/*', 'Accept-Encoding': 'identity'}, cache: 'no-store', redirect: 'error', signal});
   try {
     const full = /^bytes 0-0\/(\d+)$/.exec(response.headers.get('content-range') || '');
     const size = Number(full?.[1]);
@@ -84,8 +86,10 @@ async function metadata(url: string, fetcher: typeof fetch, signal: AbortSignal)
 export async function resolveRemotionMediaDelivery(design: Pick<DesignPayload, 'code' | 'props'>, options: Options): Promise<RenderDeliveryPlan> {
   const origin = options.origin || process.env.REMOTION_MEDIA_DELIVERY_ORIGIN;
   const secret = options.secret || process.env.REMOTION_MEDIA_DELIVERY_SECRET;
-  const summary = {enabled: false, eligible: 0, versioned: 0, bypassed: 0, lookupMs: 0};
-  if (!origin || !secret || secret.length < 32 || !['https://cdn.makaron.app', 'https://media-cache.makaron.app'].includes(origin)) {
+  const mode = options.mode || (process.env.REMOTION_MEDIA_DELIVERY_MODE === 'r2-native' ? 'r2-native' : 'worker');
+  const summary = {enabled: false, eligible: 0, versioned: 0, bypassed: 0, lookupMs: 0, mode};
+  if (!origin || !secret || secret.length < 32 || !['https://cdn.makaron.app', 'https://media-cache.makaron.app'].includes(origin)
+    || (mode === 'r2-native' && !options.nativeSigner && !nativeR2Credentials())) {
     return {summary, sources: () => ({})};
   }
   summary.enabled = true;
@@ -97,6 +101,7 @@ export async function resolveRemotionMediaDelivery(design: Pick<DesignPayload, '
   }).slice(0, 64);
   summary.eligible = candidates.length;
   const versions = new Map<string, Metadata>();
+  const nativeSources = new Map<string, string>();
   const start = Date.now(); const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<void>(resolve => {timer = setTimeout(() => {controller.abort(); resolve();}, options.budgetMs ?? (options.readySignal ? 2000 : 75));});
@@ -106,19 +111,32 @@ export async function resolveRemotionMediaDelivery(design: Pick<DesignPayload, '
       const url = candidates[cursor++];
       try {
         const value = await metadata(url, options.fetch || fetch, controller.signal);
-        if (value && !controller.signal.aborted) versions.set(url, value);
+        if (value && !controller.signal.aborted) {
+          versions.set(url, value);
+          if (mode === 'r2-native') {
+            const fetcher = options.fetch || fetch;
+            const warm = signRenderMediaUrl(url, origin, secret, value, options.now, 'native');
+            // Start the disposable copy independently. Neither copy completion
+            // nor a failed warm request owns the current export's latency.
+            void fetcher(warm, {headers: {Range: 'bytes=0-0', Accept: '*/*'}, cache: 'no-store', signal: AbortSignal.timeout(2000)})
+              .then(response => response.body?.cancel()).catch(() => {});
+            const signed = await (options.nativeSigner || signNativeR2Url)(url, value, options.now);
+            if (signed && await nativeR2Ready(signed, value, fetcher, controller.signal) && !controller.signal.aborted) nativeSources.set(url, signed);
+          }
+        }
       } catch { /* A slow/unavailable source retains the existing origin path. */ }
     }
   }));
   await Promise.race([work, deadline, ...(options.readySignal ? [options.readySignal] : [])]); clearTimeout(timer); controller.abort();
-  summary.lookupMs = Date.now() - start; summary.versioned = versions.size; summary.bypassed = urls.size - versions.size;
+  summary.lookupMs = Date.now() - start; summary.versioned = mode === 'r2-native' ? nativeSources.size : versions.size; summary.bypassed = urls.size - summary.versioned;
   return {summary, sources: value => {
     const sources: Record<string, string> = Object.create(null);
     mapDesignMedia(value, url => {
       if (eligible(url)) {
         const version = versions.get(url);
         const original = new URL(url); original.hostname = new URL(ORIGINAL).hostname;
-        sources[url] = version ? signRenderMediaUrl(url, origin, secret, version, options.now) : original.href;
+        sources[url] = mode === 'r2-native' ? nativeSources.get(url) || original.href
+          : version ? signRenderMediaUrl(url, origin, secret, version, options.now) : original.href;
       }
       return url;
     });

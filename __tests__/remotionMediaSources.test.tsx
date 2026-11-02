@@ -48,4 +48,11 @@ describe('media source transport overrides', () => {
     expect(renderToStaticMarkup(<Audio src="original.wav" startFrom={45} volume={0.7}/>)).toContain('src="delivery.wav" data-trim="45" data-volume="0.7"');
     expect(renderToStaticMarkup(<Audio src="other.wav"/>)).toContain('src="other.wav"');
   });
+  it('retains the original source for custom or credentialed media requests', () => {
+    const Decoder = (props: {src?: string}) => <video src={props.src}/>;
+    const Video = withVideoFit(Decoder, true, undefined, {'original.mp4': 'delivery.mp4'});
+    for (const props of [{requestInit: {headers: {authorization: 'Bearer test'}}}, {credentials: 'include'}, {crossOrigin: 'use-credentials'}]) {
+      expect(renderToStaticMarkup(<Video src="original.mp4" {...props}/>)).toContain('src="original.mp4"');
+    }
+  });
 });

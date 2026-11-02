@@ -4,15 +4,15 @@ import {createHmac} from 'node:crypto';
 import { createHandler, parseRange, acquireFillLock } from '../src/worker.mjs';
 
 const signingSecret = 'unit-test-signing-secret-at-least-32-bytes';
-function renderQuery(metadata, bypass = false) {
-  const payload = Buffer.from(JSON.stringify({v: 1, expires: Date.now() + 3600_000, ...(bypass ? {bypass: true} : {metadata})})).toString('base64url');
+function renderQuery(metadata, bypass = false, delivery) {
+  const payload = Buffer.from(JSON.stringify({v: 1, expires: Date.now() + 3600_000, ...(delivery ? {delivery} : {}), ...(bypass ? {bypass: true} : {metadata})})).toString('base64url');
   const sig = createHmac('sha256', signingSecret).update('https://origin.test/storage/v1/object/public/images/test.mp4\n' + payload).digest('base64url');
   return '?__mk_render=' + payload + '.' + sig;
 }
 function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', headPolicy, cookie, ignoreRange = false, gatewayFailures = 0, renderReplica = false } = {}) {
   let data = new TextEncoder().encode('0123456789abcdef'), etag = '"v1"';
   let missing = false;
-  const calls = [], objects = new Map(), locks = new Map(), edges = new Map(), tasks = [];
+  const calls = [], objects = new Map(), objectMetadata = new Map(), locks = new Map(), edges = new Map(), tasks = [];
   let generation = 0;
   const headers = () => ({ ...(cookie ? { 'set-cookie': cookie } : {}), 'content-type': type, 'content-length': String(data.length), etag, 'cache-control': policy,
     'content-security-policy': "default-src 'none'; sandbox", 'x-content-type-options': 'nosniff', 'last-modified': 'Mon, 19 Oct 2026 00:00:00 GMT' });
@@ -54,12 +54,12 @@ function fixture({ type = 'video/mp4', policy = 'public, max-age=3600', headPoli
         if (options?.onlyIf?.etagMatches && options.onlyIf.etagMatches !== previous?.etag) return null;
         const etag = String(++generation); locks.set(key, { body: stream, etag }); return { etag };
       }
-      objects.set(key, new Uint8Array(await new Response(stream).arrayBuffer())); return {};
+      objects.set(key, new Uint8Array(await new Response(stream).arrayBuffer())); objectMetadata.set(key, options?.customMetadata); return {};
     },
   };
   const handle = createHandler({ fetchOrigin, edgeCache: () => cache,  });
   return {
-    calls, objects, edges, bucket,
+    calls, objects, objectMetadata, edges, bucket,
     change() { data = new TextEncoder().encode('fedcba9876543210'); etag = '"v2"'; for (const key of edges.keys()) if (key.endsWith('/metadata')) edges.delete(key); },
     remove() { missing = true; for (const key of edges.keys()) if (key.endsWith('/metadata')) edges.delete(key); },
     async request(options = {}, path = '/storage/v1/object/public/images/test.mp4') {
@@ -100,6 +100,21 @@ test('render replicas serve exact native ranges without depending on edge body c
   assert.equal(response.status, 206); assert.equal(response.headers.get('content-range'), 'bytes 4-7/16');
   assert.equal(response.headers.get('x-makaron-cache'), 'R2'); assert.equal(await response.text(), '4567');
   assert.equal(f.calls.length, reads); assert.equal(f.edges.size, 0);
+});
+test('native warm capabilities publish a separate key namespace and source-version proof', async () => {
+  const f = fixture({renderReplica: true});
+  const query = renderQuery({etag: '"v1"', size: 16, type: 'video/mp4', freshness: 3600}, false, 'native');
+  const path = '/storage/v1/object/public/images/test.mp4' + query;
+  assert.equal(await (await f.request({}, path)).text(), '0123456789abcdef'); await f.settle();
+  const key = [...f.objects.keys()][0]; assert.match(key, /^v1\/native\/[a-f0-9]{64}\/[a-f0-9]{64}$/);
+  assert.deepEqual(f.objectMetadata.get(key), {'makaron-source-etag': '"v1"', 'makaron-source-size': '16'});
+  assert.equal((await f.request({headers: {range: 'bytes=0-0'}}, path)).headers.get('x-makaron-cache'), 'R2');
+});
+test('verified versions retain origin no-cache browser freshness', async () => {
+  const f = fixture();
+  const query = renderQuery({etag: '"v1"', size: 16, type: 'video/mp4', freshness: 0});
+  const response = await f.request({}, '/storage/v1/object/public/images/test.mp4' + query);
+  assert.match(response.headers.get('cache-control'), /max-age=0/); await response.text(); await f.settle();
 });
 test('a stuck render replica lookup returns to origin within the bounded lookup budget', async () => {
   const f = fixture({renderReplica: true}); let release;
