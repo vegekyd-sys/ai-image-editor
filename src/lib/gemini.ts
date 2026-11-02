@@ -1663,12 +1663,19 @@ export async function analyzeVideoContentWithUsage(
   question?: string,
   userId?: string,
 ) {
-  const { analyzeVideoWithProvider } = await import('./video-analysis');
-  const result = await analyzeVideoWithProvider(videoUrl, question);
+  const { analyzeVideoWithRouting } = await import('./gemini-video-subscription');
+  const result = await analyzeVideoWithRouting(videoUrl, question, userId);
   if (userId) {
-    const { deductByTokens } = await import('./billing/credits');
+    const { deductByTokens, recordSubscriptionUsage } = await import('./billing/credits');
     const usage = result.usage;
-    await deductByTokens(
+    if (result.provider === 'gemini-subscription') {
+      // This describes Makaron credits, not a claim about the subscription's
+      // purchase price or Cloud Run / storage charges.
+      await recordSubscriptionUsage(userId, 'gemini-subscription', 'analyze_video', result.usedModel, {
+        inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+        cacheReadTokens: usage.cacheReadTokens, durationMs: result.elapsedMs,
+      }).catch(() => console.error('[billing] analyze_video subscription usage logging failed'));
+    } else await deductByTokens(
       userId, 'analyze_video', usage.modelId,
       usage.inputTokens - usage.cacheReadTokens, usage.outputTokens,
       result.elapsedMs, undefined,

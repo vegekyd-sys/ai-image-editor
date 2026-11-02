@@ -21,6 +21,15 @@ function setup(mode = 'static') {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('video analysis provider contract', () => {
+  it('uses the dedicated video key and distinguishes the returned model from the pricing alias', async () => {
+    const fetchMock = setup();
+    vi.stubEnv('VIDEO_ANALYSIS_GOOGLE_API_KEY', 'dedicated-video-private-key');
+    fetchMock.mockResolvedValue(Response.json({ ...success, modelVersion: 'gemini-3.8-flash-rolling' }));
+    const result = await analyzeVideoWithProvider('https://generativelanguage.googleapis.com/v1beta/files/existing');
+    expect(fetchMock.mock.calls[0][1].headers['x-goog-api-key']).toBe('dedicated-video-private-key');
+    expect(result).toMatchObject({ requestedModel: 'gemini-3.8-flash', reportedModel: 'gemini-3.8-flash-rolling', usedModel: 'gemini-3.8-flash-rolling', provider: 'google-api' });
+    expect(result.usage.modelId).toBe('gemini-3.8-flash');
+  });
   it('supplies real fractional duration to analysis instead of trusting summary timestamps', async () => {
     const fetchMock = setup();
     fetchMock.mockResolvedValueOnce(new Response(mp4Fixture()))

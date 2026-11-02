@@ -17,10 +17,16 @@ export interface VideoAnalysisUsage {
 export interface VideoAnalysisResult {
   analysis: string;
   usedModel: string;
+  requestedModel: string;
+  /** Kept separate from the request alias; absence is not proof of model identity. */
+  reportedModel?: string;
+  provider: 'google-api' | 'gemini-subscription';
+  billing: 'api' | 'subscription-allowance';
+  fallbackReason?: string;
   processing: VideoProcessing;
   thinking: 'low';
   elapsedMs: number;
-  transport: 'url' | 'inline' | 'file';
+  transport: 'url' | 'inline' | 'file' | 'cloud-url';
   processingCalls: number;
   usage: VideoAnalysisUsage;
   sourceDurationSeconds?: number;
@@ -49,11 +55,11 @@ export function normalizeVideoUsage(
 }
 
 export async function analyzeVideoWithProvider(
-  videoUrl: string, question?: string,
+  videoUrl: string, question?: string, options?: { signal?: AbortSignal },
 ): Promise<VideoAnalysisResult> {
   const source = new URL(videoUrl);
   if (!['http:', 'https:'].includes(source.protocol)) throw new Error('Video analysis requires an HTTP(S) URL.');
-  const key = process.env.GOOGLE_API_KEY;
+  const key = process.env.VIDEO_ANALYSIS_GOOGLE_API_KEY?.trim() || process.env.GOOGLE_API_KEY;
   if (!key) throw new Error('GOOGLE_API_KEY is not configured.');
   const model = process.env.VIDEO_ANALYSIS_MODEL?.trim() || VIDEO_ANALYSIS_MODEL;
   const configuredMode = process.env.VIDEO_ANALYSIS_PROCESSING || 'static';
@@ -62,7 +68,9 @@ export async function analyzeVideoWithProvider(
   const prompt = question || 'Describe this video in detail: scenes, actions, pacing, visual style, audio/dialogue if any.';
   const mimeType = /\.mov$/i.test(source.pathname) ? 'video/quicktime' : /\.webm$/i.test(source.pathname) ? 'video/webm' : 'video/mp4';
   const startedAt = Date.now();
-  const signal = AbortSignal.timeout(120_000); // includes bounded download and inference
+  const signal = options?.signal
+    ? AbortSignal.any([options.signal, AbortSignal.timeout(120_000)])
+    : AbortSignal.timeout(120_000); // includes bounded download and inference
   let sourceDurationSeconds: number | undefined;
 
   async function run(data?: string, uploadedUri?: string) {
@@ -176,7 +184,12 @@ export async function analyzeVideoWithProvider(
   const rawUsage = processing === 'agentic' ? result.usage : result.usageMetadata;
   if (!rawUsage) throw new Error('Video analysis returned no usage metadata.');
   const usage = normalizeVideoUsage(rawUsage, model, processing);
+  const reportedModel = typeof result.modelVersion === 'string' ? result.modelVersion : undefined;
   const elapsedMs = Date.now() - startedAt;
   console.info(`[video-analysis] model=${model} processing=${processing} thinking=low transport=${transport} durationMs=${elapsedMs} input=${usage.inputTokens} output=${usage.outputTokens} cache=${usage.cacheReadTokens} processingCalls=${processingCalls}`);
-  return { analysis, usedModel: model, processing, thinking: 'low', elapsedMs, transport, processingCalls, usage, sourceDurationSeconds };
+  return {
+    analysis, usedModel: reportedModel || model, requestedModel: model, reportedModel,
+    provider: 'google-api', billing: 'api', processing, thinking: 'low', elapsedMs,
+    transport, processingCalls, usage, sourceDurationSeconds,
+  };
 }

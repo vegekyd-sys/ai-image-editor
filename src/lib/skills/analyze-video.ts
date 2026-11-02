@@ -12,6 +12,10 @@ export interface AnalyzeVideoResult {
   message: string;
   analysis?: string;
   usedModel?: string;
+  requestedModel?: string;
+  reportedModel?: string;
+  provider?: VideoAnalysisResult['provider'];
+  fallbackReason?: string;
   usage?: VideoAnalysisResult['usage'];
   processing?: VideoAnalysisResult['processing'];
   sourceDurationSeconds?: number;
@@ -34,6 +38,10 @@ export async function analyzeVideo(input: AnalyzeVideoInput): Promise<AnalyzeVid
       message: `Video analysis completed. (model: ${result.usedModel}; processing: ${result.processing}; thinking: ${result.thinking})`,
       analysis: result.analysis,
       usedModel: result.usedModel,
+      requestedModel: result.requestedModel,
+      reportedModel: result.reportedModel,
+      provider: result.provider,
+      fallbackReason: result.fallbackReason,
       usage: result.usage,
       processing: result.processing,
       sourceDurationSeconds: result.sourceDurationSeconds,
