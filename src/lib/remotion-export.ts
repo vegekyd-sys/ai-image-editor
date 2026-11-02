@@ -15,6 +15,7 @@ import {
 } from '@/lib/remotion-server'
 import { resolveVideoUrlsInCode } from '@/lib/video-url-resolver'
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
+import { beginQueuedMediaDelivery, resolveRemotionMediaDelivery, takeQueuedMediaDelivery } from '@/lib/remotion-media-delivery'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import type { RemotionLambdaOutputDestination } from '@/lib/remotion-lambda-renderer'
 import { normalizeCompositionAnimation } from '@/lib/composition-duration'
@@ -508,6 +509,9 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
   }
   if (!fingerprintSource) throw new Error('Could not load Remotion composition for export')
   const fingerprint = fingerprintDesign(fingerprintSource, outputType, renderProfile)
+  if (outputType === 'video' && readEnv('REMOTION_RENDERER') === 'lambda') {
+    beginQueuedMediaDelivery(fingerprintSource, input.userId, input.projectId, fingerprint)
+  }
 
   const { data: reusableRows, error: reusableError } = await admin
     .from('remotion_export_jobs')
@@ -830,14 +834,22 @@ async function publishExportedVideo(
   return snapshotId
 }
 
-async function executeRemotionExportJob(job: RemotionExportJob): Promise<RemotionExportResult> {
+async function executeRemotionExportJob(job: RemotionExportJob, options: {mediaDelivery?: boolean} = {}): Promise<RemotionExportResult> {
   const admin = getSupabaseAdmin()
   const startedAt = job.started_at ? Date.parse(job.started_at) || Date.now() : Date.now()
   const stageTimings: Record<string, number> = {}
 
   try {
     const loadStart = Date.now()
+    const queuedDelivery = takeQueuedMediaDelivery(job.user_id, job.project_id,
+      typeof job.metadata?.fingerprint === 'string' ? job.metadata.fingerprint : undefined)
     const { design, designPath } = await loadJobDesign(job, admin)
+    let releaseDelivery: () => void = () => {}
+    const deliveryReady = new Promise<void>(resolve => {releaseDelivery = resolve})
+    if (options.mediaDelivery === false) queuedDelivery?.release()
+    const delivery = options.mediaDelivery !== false && job.output_type === 'video' && readEnv('REMOTION_RENDERER') === 'lambda'
+      ? queuedDelivery?.promise || resolveRemotionMediaDelivery(design, {userId: job.user_id, readySignal: deliveryReady})
+      : null
     const resolvedDesign = await normalizeDesignForServer(design, job.project_id, admin)
     stageTimings.resolveDesignMs = Date.now() - loadStart
     // Jobs queued before the source-resolution default may have no profile metadata.
@@ -891,8 +903,19 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
           },
         })
       : { design: resolvedDesign, summary: undefined }
-    const renderDesign = preparedMedia.design
     stageTimings.prepareMediaMs = Date.now() - preparationStart
+    let renderDesign = preparedMedia.design
+    // Use only versions resolved during existing work. Unready sources receive
+    // an origin capability, so no replica or version lookup can delay export.
+    releaseDelivery()
+    queuedDelivery?.release()
+    if (delivery) {
+      const deliveryStart = Date.now()
+      const plan = await delivery
+      renderDesign = plan.apply(renderDesign)
+      outputMetadata.mediaDelivery = plan.summary
+      stageTimings.mediaDeliveryWaitMs = Date.now() - deliveryStart
+    }
     if (preparedMedia.summary) {
       outputMetadata.mediaPreparation = preparedMedia.summary
       job.metadata = { ...(job.metadata || {}), mediaPreparation: preparedMedia.summary }
@@ -1138,7 +1161,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
   }
 }
 
-export async function runRemotionExportJob(jobId: string): Promise<RemotionExportResult> {
+export async function runRemotionExportJob(jobId: string, options: {mediaDelivery?: boolean} = {}): Promise<RemotionExportResult> {
   const claimed = await claimRemotionExportJob(jobId)
   if (!claimed) {
     const current = await getRemotionExportJob(jobId)
@@ -1158,7 +1181,7 @@ export async function runRemotionExportJob(jobId: string): Promise<RemotionExpor
     const { design } = await loadJobDesign(claimed, admin)
     return { job: claimed, design }
   }
-  return executeRemotionExportJob(claimed)
+  return executeRemotionExportJob(claimed, options)
 }
 
 /**

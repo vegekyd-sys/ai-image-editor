@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "makaron-media-delivery",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-11-02",
+  "account_id": "83bc48856cd8ab6d436b3ed49d825c6f",
+  "workers_dev": true,
+  // Deploy and verify workers.dev before attaching the production routes.
+  "vars": {
+    "ORIGIN_HOST": "sdyrtztrjgmmpnirswxt.supabase.co",
+    "CDN_HOST": "media-cache.makaron.app",
+    "FRESHNESS_SECONDS": "60",
+    "MEASURE_ORIGIN": "0"
+  },
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_CACHE",
+      "bucket_name": "makaron-public-media-cache"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "head_sampling_rate": 0.01,
+    "logs": {"enabled": true, "invocation_logs": false, "head_sampling_rate": 0.01}
+  }
+}
