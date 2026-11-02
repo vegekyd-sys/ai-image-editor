@@ -1,6 +1,6 @@
 import { withMediaTrim } from '../lib/remotion-media-props';
 import { withVideoFit } from '../lib/remotion-video-fit';
-import { withMediaSource } from '../lib/remotion-media-sources';
+import { useMediaSources, withMediaSource } from '../lib/remotion-media-sources';
 /**
  * DynamicDesign — a Remotion composition that compiles and renders Agent-generated JSX code.
  * Used by both browser-side Player and server-side Sandbox (renderStillOnVercel).
@@ -189,10 +189,10 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
     ),
     [designProps],
   );
+  const sources = useMediaSources(mediaSources);
   const remotionScope = useMemo(
-    () => createRemotionScope(useOffthreadVideo === true, useNativeVideo === true,
-      mediaSources && typeof mediaSources === 'object' ? mediaSources as Record<string, string> : undefined),
-    [useNativeVideo, useOffthreadVideo, mediaSources],
+    () => createRemotionScope(useOffthreadVideo === true, useNativeVideo === true, sources),
+    [useNativeVideo, useOffthreadVideo, sources],
   );
   const substitutions = useMemo(
     () => (typeof fontSubstitutions === 'object' && fontSubstitutions !== null

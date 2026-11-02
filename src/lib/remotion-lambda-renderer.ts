@@ -572,7 +572,7 @@ export async function renderDesignVideoLambdaToUrl(
         inputProps: {
           code: preparedCode,
           designProps: normalizeRemotionTextValue(design.props || {}),
-          ...(options.mediaSources && Object.keys(options.mediaSources).length ? {mediaSources: options.mediaSources} : {}),
+          ...(options.mediaSources && Object.keys(options.mediaSources).length ? {mediaSources: JSON.stringify(options.mediaSources)} : {}),
           fps,
           durationInFrames,
           width: design.width || 1080,

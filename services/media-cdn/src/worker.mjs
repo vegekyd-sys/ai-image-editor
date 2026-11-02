@@ -117,6 +117,7 @@ export function createHandler({
   edgeCache = () => caches.default,
 } = {}) {
   return async function handle(request, env, ctx) {
+    const requestStart = Date.now();
     env = { ORIGIN_HOST: 'sdyrtztrjgmmpnirswxt.supabase.co', CDN_HOST: 'cdn.makaron.app', FRESHNESS_SECONDS: '60', MEASURE_ORIGIN: '1', ...env };
     const url = new URL(request.url);
     const origin = new URL(url);
@@ -148,6 +149,7 @@ export function createHandler({
     const metadataKey = new Request(`${cacheBase}/metadata`);
     const anonymousHeaders = { accept, 'accept-encoding': 'identity' };
     const fetchAnonymous = async (method, headers = {}) => {
+      const originStart = Date.now();
       const response = await fetchOrigin(origin, {
         method, headers: { ...anonymousHeaders, ...headers },
         redirect: 'manual', cf: { cacheTtl: 0, cacheEverything: false },
@@ -156,6 +158,7 @@ export function createHandler({
         event: 'media-origin', key: id.slice(0, 16), method, status: response.status,
         responseBytes: method === 'HEAD' ? 0 : Number(response.headers.get('content-length')) || 0,
         range: Boolean(headers.range),
+        elapsedMs: Date.now() - originStart,
       }));
       return response;
     };
@@ -248,7 +251,10 @@ export function createHandler({
         headers: range ? { range: `bytes=${range.offset}-${range.offset + range.length - 1}` } : {},
       });
       const cached = await cache.match(rangedKey);
-      if (cached) return withStatus(cached, 'HIT', metadata.freshness, headers);
+      if (cached) {
+        if (env.MEASURE_ORIGIN === '1') console.log(JSON.stringify({event: 'media-edge', key: id.slice(0, 16), cache: 'HIT', elapsedMs: Date.now() - requestStart, range: request.headers.get('range')}));
+        return withStatus(cached, 'HIT', metadata.freshness, headers);
+      }
       if (range) {
         headers.set('content-range', `bytes ${range.offset}-${range.offset + range.length - 1}/${metadata.size}`);
         headers.set('content-length', String(range.length));

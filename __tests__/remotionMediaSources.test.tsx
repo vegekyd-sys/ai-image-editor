@@ -1,10 +1,30 @@
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
+import {render} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
-import {withMediaSource} from '../src/lib/remotion-media-sources';
+import {useMediaSources, withMediaSource} from '../src/lib/remotion-media-sources';
 import {compileDynamicDesignComponent} from '../src/remotion/DynamicDesign';
 
 describe('media source transport overrides', () => {
+  it('keeps the decoder mounted when Remotion deserializes equal source maps on successive frames', () => {
+    let mounts = 0;
+    function Decoder(props: {src?: string}) {
+      React.useEffect(() => {mounts++;}, []);
+      return <video src={props.src}/>;
+    }
+    function Frame({input}: {input: unknown}) {
+      const sources = useMediaSources(input);
+      const Video = React.useMemo(() => withMediaSource(Decoder, sources), [sources]);
+      return <Video src="original.mp4"/>;
+    }
+    const input = { 'original.mp4': 'delivery.mp4' };
+    const view = render(<Frame input={input}/>);
+    view.rerender(<Frame input={{...input}}/>);
+    view.rerender(<Frame input={JSON.stringify(input)}/>);
+    expect(mounts).toBe(1);
+    expect(view.container.querySelector('video')?.getAttribute('src')).toBe('delivery.mp4');
+    view.unmount();
+  });
   it('routes a media src without changing authored visible text, source props or trims', () => {
     const url = 'https://cdn.makaron.app/storage/v1/object/public/images/owner/clip.mp4';
     const destination = 'https://media-cache.makaron.app/clip.mp4?__mk_render=scoped';
