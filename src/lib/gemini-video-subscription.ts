@@ -73,6 +73,7 @@ export async function geminiRelayRequest(cfg: RelayConfig, path: string, signal:
     method, redirect: 'error', signal,
     headers: {
       'content-type': 'application/json',
+      ...(!payload && path.startsWith(`${JOBS}/`) ? { 'x-makaron-wait-ms': '1000' } : {}),
       'x-scene-relay-owner-id': cfg.owner,
       'x-scene-relay-timestamp': timestamp,
       'x-scene-relay-request-id': requestId,
@@ -204,6 +205,8 @@ function resultFromReceipt(result: Json, payload: Json, elapsedMs: number): Vide
     subscriptionConsumedCredits: result.consumed_credits as number | null,
     processing: 'static', thinking: 'low', elapsedMs, transport: 'cloud-url', processingCalls: 0,
     usage: normalizeVideoUsage(usage, result.model, 'static'),
+    timingsMs: Object.fromEntries(Object.entries(object(result.timings_ms)).filter(([,value]) =>
+      typeof value === 'number' && Number.isFinite(value) && value >= 0)) as Record<string, number>,
     ...(typeof duration === 'number' && Number.isFinite(duration) && duration > 0 ? { sourceDurationSeconds: duration } : {}),
   };
 }
@@ -211,7 +214,9 @@ function resultFromReceipt(result: Json, payload: Json, elapsedMs: number): Vide
 async function subscription(cfg: RelayConfig, videoUrl: string | undefined, question: string | undefined,
   userId: string, signal: AbortSignal, started: number, operation = CAPABILITY,
   images?: UnderstandingImage[]): Promise<VideoAnalysisResult> {
+  const preflightStart = Date.now();
   await geminiRelayPreflight(cfg, signal, operation);
+  const preflightMs = Date.now()-preflightStart;
   let cloudIdentity: string;
   try { cloudIdentity = await getGeminiCloudIdentity(signal); }
   catch { throw new GeminiVideoRelayError('cloud_identity_unavailable', true); }
@@ -223,7 +228,11 @@ async function subscription(cfg: RelayConfig, videoUrl: string | undefined, ques
     question: question || 'Describe this video in detail: scenes, actions, pacing, visual style, audio/dialogue if any.',
     processing: 'static', thinking: 'low', timeout_ms: Math.max(1000, 120_000 - (Date.now() - started) - 1000),
   };
+  const identityMs = Date.now()-preflightStart-preflightMs;
   const path = `${JOBS}/${payload.job_id}`;
+  const admissionStart = Date.now();
+  let admissionMs = 0;
+  let polls = 0;
   try {
     const ack = await geminiRelayRequest(cfg, JOBS, AbortSignal.any([signal, AbortSignal.timeout(5000)]), payload);
     if (ack.job_id !== payload.job_id || ack.state !== 'ACCEPTED') {
@@ -233,17 +242,27 @@ async function subscription(cfg: RelayConfig, videoUrl: string | undefined, ques
     if (error instanceof GeminiVideoRelayError && error.safeToFallback) throw error;
     // Lost/malformed acknowledgement: poll this exact job, never POST twice.
   }
+  admissionMs = Date.now()-admissionStart;
   while (!signal.aborted) {
     try {
+      polls++;
       const job = await geminiRelayRequest(cfg, path, AbortSignal.any([signal, AbortSignal.timeout(5000)]));
       if (job.job_id !== payload.job_id) throw new GeminiVideoRelayError('unverified_relay_receipt');
-      if (job.state === 'SUCCEEDED') return resultFromReceipt(object(job.result), payload, Date.now() - started);
+      if (job.state === 'SUCCEEDED') {
+        const result = resultFromReceipt(object(job.result), payload, Date.now() - started);
+        result.timingsMs = {...result.timingsMs, preflight:preflightMs, identity:identityMs,
+          admission:admissionMs, authorization:preflightStart-started, polls};
+        return result;
+      }
       if (job.state === 'FAILED') {
         const reason = typeof job.error === 'string' && SAFE_REJECTIONS.has(job.error)
           ? job.error : 'relay_terminal_failure';
         throw new GeminiVideoRelayError(reason, job.generator_submissions === 0 && SAFE_REJECTIONS.has(reason));
       }
       if (!['ACCEPTED', 'RUNNING'].includes(String(job.state))) throw new GeminiVideoRelayError('unverified_relay_receipt');
+      // New servers wait for a bounded interval and notify on completion.
+      // Older servers keep the existing 500ms retry delay.
+      if (job.poll_after_ms === 0) continue;
     } catch (error) {
       if (error instanceof GeminiVideoRelayError && error.reason !== 'relay_unknown_outcome') throw error;
       // Transport failure: only recover the known receipt while the budget remains.
@@ -303,6 +322,7 @@ function logRoute(result: VideoAnalysisResult): void {
     actualModel: result.reportedModel ?? null, transport: result.transport,
     googlePaidCreditStatus: result.subscriptionPaidCreditStatus ?? null,
     googleConsumedCredits: result.subscriptionConsumedCredits ?? null,
+    timingsMs: result.timingsMs,
     elapsedMs: result.elapsedMs, fallbackReason: result.fallbackReason ?? null,
     credential: result.provider === 'google-api'
       ? (process.env.VIDEO_ANALYSIS_GOOGLE_API_KEY?.trim() ? 'video-dedicated' : 'app-google') : 'subscription',

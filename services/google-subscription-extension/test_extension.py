@@ -45,6 +45,20 @@ class Tests(unittest.TestCase):
         altered={**self.payload,'question':'different'}
         with self.assertRaises(Rejection): self.relay.enqueue('owner',altered)
         self.assertEqual(len(self.calls),1)
+    def test_waiting_receipt_wakes_on_completion_and_keeps_one_generation(self):
+        release=threading.Event();started=threading.Event();original=self.relay.cloud_call
+        def cloud(payload,digest):
+            started.set();release.wait(3)
+            return original(payload,digest)
+        self.relay.cloud_call=cloud
+        self.relay.enqueue('owner',dict(self.payload));self.assertTrue(started.wait(1))
+        pending=self.relay.job('owner',self.payload['job_id'],wait_ms=1)
+        self.assertEqual(pending['state'],'RUNNING');self.assertEqual(pending['poll_after_ms'],0)
+        result=[]
+        reader=threading.Thread(target=lambda:result.append(self.relay.job('owner',self.payload['job_id'],wait_ms=1000)))
+        reader.start();release.set();reader.join(2)
+        self.assertFalse(reader.is_alive());self.assertEqual(result[0]['state'],'SUCCEEDED')
+        self.assertEqual(len(self.calls),1)
     def test_owner_and_member_boundaries(self):
         with self.assertRaises(Rejection):self.relay.enqueue('scene-other',self.payload)
         with self.assertRaises(Rejection):self.relay.enqueue('owner',{**self.payload,'user_id':'not-listed-admin'})

@@ -34,6 +34,7 @@ export interface VideoAnalysisResult {
   processingCalls: number;
   usage: VideoAnalysisUsage;
   sourceDurationSeconds?: number;
+  timingsMs?: Record<string, number>;
 }
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';

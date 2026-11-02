@@ -41,6 +41,7 @@ class MakaronRelay:
         self.cloud_call = cloud_call or self._cloud_call
         self.authorize_user = authorize_user or self._authorize_user
         self.slots = threading.BoundedSemaphore(2)
+        self.completed = threading.Condition()
         with self.db() as db:
             db.execute('CREATE TABLE IF NOT EXISTS members (id TEXT PRIMARY KEY)')
             db.execute('''CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, owner TEXT NOT NULL,
@@ -150,6 +151,7 @@ class MakaronRelay:
 
     def execute(self, payload, digest):
         job_id = payload['job_id']
+        started = time.monotonic()
         try:
             # Revocations apply to a queued job as well as a new admission.
             if payload.get('user_id') not in self.members()['userIds'] or not self.authorize_user(payload,digest):
@@ -157,15 +159,21 @@ class MakaronRelay:
                     db.execute("UPDATE jobs SET state='FAILED',error='unauthorized',submissions=0 WHERE id=?",(job_id,))
                 return
             self.host.safety()
+            authorize_ms = round((time.monotonic()-started)*1000)
             # Conservatively mark possibly-submitted before sending Cloud POST.
             with self.db() as db:
                 db.execute('UPDATE jobs SET submissions=1 WHERE id=?', (job_id,))
+            cloud_start = time.monotonic()
             value = self.cloud_call(payload, digest)
             if (value.get('job_id') != job_id or value.get('request_sha256') != digest
                     or value.get('owner_id') != self.owner):
                 raise Rejection('unverified_relay_receipt', submissions=1)
             with self.db() as db:
                 if value.get('state') == 'SUCCEEDED':
+                    value['result']['timings_ms'] = {
+                        **value.get('timings_ms',{}), 'execute_authorization':authorize_ms,
+                        'cloud_roundtrip':round((time.monotonic()-cloud_start)*1000),
+                        'relay_execute':round((time.monotonic()-started)*1000)}
                     db.execute("UPDATE jobs SET state='SUCCEEDED',result=?,submissions=1 WHERE id=?",
                                (json.dumps(value['result'], allow_nan=False),job_id))
                 elif value.get('state') == 'FAILED' and type(value.get('generator_submissions')) is int:
@@ -179,13 +187,20 @@ class MakaronRelay:
         finally:
             payload.clear()
             self.slots.release()
+            with self.completed: self.completed.notify_all()
 
-    def job(self, owner, job_id):
-        with self.db() as db:
-            row = db.execute('SELECT state,submissions,result,error FROM jobs WHERE id=? AND owner=?', (job_id,owner)).fetchone()
-        if not row:
-            raise Rejection('job_not_found',404,1)
+    def job(self, owner, job_id, wait_ms=0):
+        wait_ms = min(1000,max(0,wait_ms))
+        deadline = time.monotonic()+wait_ms/1000
+        with self.completed:
+            while True:
+                with self.db() as db:
+                    row = db.execute('SELECT state,submissions,result,error FROM jobs WHERE id=? AND owner=?', (job_id,owner)).fetchone()
+                if not row: raise Rejection('job_not_found',404,1)
+                if row[0] != 'RUNNING' or time.monotonic() >= deadline: break
+                self.completed.wait(deadline-time.monotonic())
         return {'job_id':job_id,'state':row[0],'generator_submissions':row[1],
+                **({'poll_after_ms':0} if wait_ms else {}),
                 **({'result':json.loads(row[2])} if row[0]=='SUCCEEDED' else {'error':row[3]} if row[0]=='FAILED' else {})}
 
     def _authorize_user(self, payload, digest):
@@ -259,7 +274,8 @@ def mount_handler(base_handler, host, extension):
                 elif self.path.endswith('/v1/makaron-video-jobs') and self.command == 'POST':
                     value = extension.enqueue(owner,json.loads(raw))
                 elif '/v1/makaron-video-jobs/' in self.path and self.command == 'GET':
-                    value = extension.job(owner,self.path.rsplit('/',1)[-1])
+                    value = extension.job(owner,self.path.rsplit('/',1)[-1],
+                        wait_ms=int(self.headers.get('x-makaron-wait-ms','0')))
                 else: raise Rejection('not_found',404)
                 self.respond(202 if value.get('state') == 'ACCEPTED' else 200,value)
             except Rejection as exc:

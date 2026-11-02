@@ -130,3 +130,12 @@ first-party smoke does not establish long-video/OCR/dialogue quality, latency
 percentiles or production acceptance. Keep the flag off until those gates,
 real chat/MCP/admin ledger checks, role revocation and rollback checks pass.
 Publish and CLI parity follow the normal release checklist after authorization.
+
+Latency diagnostics are available as numeric `timingsMs` on verified results and
+route audit logs. They include Cloud admission/download/probe/generation,
+execution authorization and the Cloud roundtrip. They contain no prompts,
+source URLs, identity tokens or user IDs. Receipt waiting is bounded to 1s and
+only changes delivery, not durable admission or generation semantics. MP4/MOV
+header inspection avoids launching ffprobe when complete container metadata is
+available; other inputs retain the existing probe. Cloud IAM identity reuse is
+bounded to five minutes and its actual expiry, independent of caller role checks.

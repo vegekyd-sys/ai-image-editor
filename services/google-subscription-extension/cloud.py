@@ -21,6 +21,7 @@ from google.auth.transport.requests import Request as AuthRequest
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from media_probe import probe_mp4
 from makaron_relay import MODEL, ACCOUNT_MODEL, MAX_BYTES, OPS, canonical
 
 BASE = 'https://daily-cloudcode-pa.googleapis.com/v1internal:generateContent'
@@ -133,7 +134,7 @@ def verified_result(raw,body,source):
 
 
 def execute(body,value,client):
-    started=time.monotonic();key=PREFIX+body['job_id']+'.json'
+    started=time.monotonic();timings=value.setdefault('timings_ms',{});key=PREFIX+body['job_id']+'.json'
     try:
         deadline=started+body['timeout_ms']/1000
         parts=[{'inlineData':image} for image in body.get('images',[])]
@@ -142,6 +143,7 @@ def execute(body,value,client):
         if body.get('source_url'):
             with tempfile.TemporaryDirectory(prefix='makaron-understand-') as temporary:
                 path=Path(temporary)/'source';digest=hashlib.sha256();size=0
+                fetching=time.monotonic()
                 with httpx.Client(timeout=min(45,body['timeout_ms']/1000),trust_env=False,follow_redirects=False) as fetch:
                     with fetch.stream('GET',source_url(body['source_url'])) as response:
                         response.raise_for_status()
@@ -154,33 +156,48 @@ def execute(body,value,client):
                                 if size>MAX_BYTES: raise ValueError('video_source_unsupported')
                                 digest.update(chunk);output.write(chunk)
                 if not size: raise ValueError('video_source_unsupported')
-                probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration:stream=codec_type','-of','json',str(path)],
-                                     capture_output=True,check=True,timeout=min(10,max(1,deadline-time.monotonic())))
-                metadata=json.loads(probe.stdout);duration=float(metadata['format']['duration'])
+                timings['source_fetch']=round((time.monotonic()-fetching)*1000)
+                probing=time.monotonic()
+                original_bytes=path.read_bytes()
+                header=probe_mp4(original_bytes)
+                if header:
+                    duration=header['duration_seconds'];has_audio=header['has_audio']
+                else:
+                    probe=subprocess.run(['ffprobe','-v','error','-show_entries','format=duration:stream=codec_type','-of','json',str(path)],
+                                         capture_output=True,check=True,timeout=min(10,max(1,deadline-time.monotonic())))
+                    metadata=json.loads(probe.stdout);duration=float(metadata['format']['duration'])
+                    has_audio=any(s.get('codec_type')=='audio' for s in metadata['streams'])
                 if not math.isfinite(duration) or duration<=0: raise ValueError('video_source_unsupported')
-                has_audio=any(s.get('codec_type')=='audio' for s in metadata['streams'])
+                timings['probe']=round((time.monotonic()-probing)*1000)
                 source={'prepared':False,'source_bytes':size,'input_bytes':size,'source_sha256':digest.hexdigest(),
                         'input_sha256':digest.hexdigest(),'duration_seconds':duration,'has_audio':has_audio}
-                parts.append({'inlineData':{'mimeType':mime,'data':base64.b64encode(path.read_bytes()).decode()}})
+                parts.append({'inlineData':{'mimeType':mime,'data':base64.b64encode(original_bytes).decode()}})
         parts.append({'text':analysis_prompt(body['question'],duration,has_audio)})
         request={'contents':[{'role':'user','parts':parts}],
                  'generationConfig':{'thinkingConfig':{'thinkingLevel':'LOW'}}}
         if deadline-time.monotonic()<1: raise ValueError('video_source_unsupported')
         value.update(state='GENERATING',generator_submissions=1)
+        committing=time.monotonic()
         write(client,key,value)  # Durable admission before the only generation.
+        timings['generation_receipt_write']=round((time.monotonic()-committing)*1000)
+        generation=time.monotonic()
         with httpx.Client(timeout=deadline-time.monotonic(),trust_env=False,follow_redirects=False) as native:
             response=native.post(BASE,json={'project':body['project'],'model':ACCOUNT_MODEL,'userAgent':'antigravity',
                                 'requestId':body['job_id'],'request':request},
                                 headers={'Authorization':'Bearer '+body['access_token'],'User-Agent':'antigravity/cli/1.3.3'})
             # Even a provider rejection follows a submission; do not auto-replay.
             if response.status_code!=200 or len(response.content)>2000000: raise ValueError('relay_terminal_failure')
+            timings['generation']=round((time.monotonic()-generation)*1000)
             result=verified_result(response.json(),body,source)
         value.update(state='SUCCEEDED',result=result)
     except Exception:
         value.update(state='FAILED',error='relay_terminal_failure' if value['generator_submissions'] else 'video_source_unsupported')
     finally:
         value['elapsed_ms']=round((time.monotonic()-started)*1000)
-        try: write(client,key,value)
+        try:
+            committing=time.monotonic()
+            write(client,key,value)
+            timings['final_receipt_write']=round((time.monotonic()-committing)*1000)
         except Exception: pass # Prior admission blocks any duplicate inference.
         body.clear();client.close();SLOTS.release()
 
@@ -204,23 +221,33 @@ async def generate(request:Request):
     if not SLOTS.acquire(blocking=False): raise HTTPException(409,'relay_busy')
     client=None
     try:
+        admission=time.monotonic()
         client=storage()
+        credential_ms=round((time.monotonic()-admission)*1000)
         value={'job_id':body['job_id'],'owner_id':OWNER,'request_sha256':body['request_sha256'],
-               'state':'ACCEPTED','generator_submissions':0}
+               'state':'ACCEPTED','generator_submissions':0,'timings_ms':{'credential':credential_ms}}
         key=PREFIX+body['job_id']+'.json'
         if not write(client,key,value,initial=True):
             previous=read(client,key)
             if previous.get('request_sha256')!=body['request_sha256'] or previous.get('owner_id')!=OWNER:
                 raise HTTPException(409,'job_identity_conflict')
             client.close();SLOTS.release();return previous
-        worker=threading.Thread(target=execute,args=(body,value,client),daemon=True);worker.start()
+        value['timings_ms']['cloud_admission']=round((time.monotonic()-admission)*1000)
+        loop=asyncio.get_running_loop()
+        finished=asyncio.Event()
+        def run():
+            try: execute(body,value,client)
+            finally:
+                try: loop.call_soon_threadsafe(finished.set)
+                except RuntimeError: pass  # Receipt remains durable after disconnect.
+        worker=threading.Thread(target=run,daemon=True);worker.start()
     except Exception:
         if client: client.close()
         SLOTS.release();raise
     async def stream():
         yield json.dumps({'state':'ACCEPTED'})+'\n'
-        while worker.is_alive():
-            await asyncio.sleep(1)
-            yield json.dumps({'state':'WAITING'})+'\n'
+        while not finished.is_set():
+            try: await asyncio.wait_for(finished.wait(),timeout=5)
+            except asyncio.TimeoutError: yield json.dumps({'state':'WAITING'})+'\n'
         yield json.dumps(value,ensure_ascii=False)+'\n'
     return StreamingResponse(stream(),media_type='application/x-ndjson')

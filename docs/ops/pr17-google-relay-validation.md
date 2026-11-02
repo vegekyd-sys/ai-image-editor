@@ -56,3 +56,39 @@ shared-service deployment review, long input/OCR/dialogue quality, concurrency a
 cold/warm latency, real application chat, quota exhaustion/recovery and rollback.
 Keep the release flag off until those gates pass. API fallback remains normally
 billed; image generation, Tips, embeddings and CLI/npm releases are unchanged.
+
+## Latency follow-up
+
+The same public cloud-house MP4 and user question were run in three alternating
+subscription/API pairs before and after the transport changes. These are small
+operator-Mac samples, not production percentiles or deterministic model outputs.
+
+| Route | Before, seconds | After, seconds | Before / after median |
+| --- | --- | --- | --- |
+| Subscription | 13.760, 12.781, 10.498 | 11.509, 9.824, 12.230 | 12.781s / 11.509s |
+| API | 10.775, 8.522, 9.601 | 8.330, 7.155, 10.046 | 9.601s / 8.330s |
+
+Cloud step measurements found a 2,113ms first-run ffprobe invocation and
+129–131ms warm probes. The bounded MP4/MOV atom reader reduced that step to
+2–4ms in the candidate. It validates the complete movie and every track handler;
+unknown/malformed containers use ffprobe. No video bytes are changed. Its movie
+header duration now follows the API path (the three fixtures differ from
+ffprobe's stream duration by only 0.333ms); audio-track presence agrees with
+ffprobe for all three fixtures.
+
+The Cloud stream now emits the durable terminal receipt as soon as its worker
+finishes, keeping a 5s heartbeat for ongoing work. The V receipt endpoint supports
+a bounded completion wait; the application skips its old 500ms sleep only when
+the server confirms support. Older servers retain the original polling behavior.
+Unknown outcomes still poll the same job and never resubmit. Authorization is
+still fresh at admission and execution; no caller role or quota is cached.
+
+The application also reuses a valid audience/account-bound Cloud IAM identity
+for at most five minutes, refreshing at least 60s before JWT expiry. This avoids
+repeating STS/IAM exchanges on warm requests. The live benchmark used an
+operator IAM token, so it **does not measure the Vercel identity-cache benefit**.
+
+Native generation still took about 7–9s in the optimized samples. Output lengths
+and upstream load varied; the roughly 1.3s median reduction alone does not prove
+a stable 10% improvement. The same-round API remained faster. These changes do
+not justify enabling production or claiming subscription/API speed parity.

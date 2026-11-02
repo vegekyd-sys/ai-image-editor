@@ -290,3 +290,19 @@ describe('Google membership and honest paid-credit metadata', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 });
+
+it('uses bounded receipt waits without adding the legacy polling sleep or another POST', async () => {
+  const timer=vi.spyOn(globalThis,'setTimeout');
+  let payload:Record<string,unknown>={};let reads=0;
+  const f=vi.fn(async(url:URL,init:RequestInit)=>{
+    if(String(url).endsWith('/v1/status'))return Response.json(status());
+    if(init.method==='POST'){payload=JSON.parse(String(init.body));return Response.json({state:'ACCEPTED',job_id:payload.job_id});}
+    expect(init.headers).toMatchObject({'x-makaron-wait-ms':'1000'});
+    if(++reads<3)return Response.json({job_id:payload.job_id,state:'RUNNING',poll_after_ms:0});
+    return Response.json({job_id:payload.job_id,state:'SUCCEEDED',result:receipt(payload)});
+  });vi.stubGlobal('fetch',f);
+  expect((await analyzeVideoWithRouting(media,'Q','admin')).provider).toBe('gemini-subscription');
+  expect(timer.mock.calls.filter(call=>call[1]===500)).toHaveLength(0);
+  expect(f.mock.calls.filter(call=>call[1].method==='POST')).toHaveLength(1);
+  timer.mockRestore();
+});

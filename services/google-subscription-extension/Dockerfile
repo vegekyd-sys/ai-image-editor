@@ -3,5 +3,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -r
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY cloud.py makaron_relay.py ./
+COPY cloud.py makaron_relay.py media_probe.py ./
 CMD ["sh", "-c", "exec uvicorn cloud:app --host 0.0.0.0 --port ${PORT:-8080} --no-access-log"]
