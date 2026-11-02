@@ -29,6 +29,7 @@ SLOTS = threading.BoundedSemaphore(2)
 BUCKET = os.environ['SCENE_GEMINI_GCS_BUCKET']
 PREFIX = os.environ['MAKARON_RECEIPT_PREFIX'].strip('/') + '/'
 OWNER = os.environ['MAKARON_GEMINI_OWNER_ID']
+ACCOUNT_PROJECT = os.environ['MAKARON_ACCOUNT_PROJECT']
 STORAGE_HOST = os.environ['MAKARON_STORAGE_HOST']
 
 
@@ -57,7 +58,7 @@ def validate(body):
             or not isinstance(body.get('question'),str) or not 0 < len(body['question']) <= 150000
             or not isinstance(body.get('request_sha256'),str) or len(body['request_sha256']) != 64
             or not isinstance(body.get('access_token'),str) or not 20 < len(body['access_token']) < 4096
-            or not isinstance(body.get('project'),str) or not body['project']):
+            or body.get('project') != ACCOUNT_PROJECT):
         raise HTTPException(400,'video_request_rejected')
     needs_video = body['operation'] in {'makaron_video_analysis','makaron_frame_locate'}
     if needs_video != bool(body.get('source_url')): raise HTTPException(400,'video_source_unsupported')

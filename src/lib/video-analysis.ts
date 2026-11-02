@@ -23,6 +23,10 @@ export interface VideoAnalysisResult {
   provider: 'google-api' | 'gemini-subscription';
   billing: 'api' | 'subscription-allowance';
   fallbackReason?: string;
+  /** Actual Makaron debit performed by the shared analyzer, never an estimate. */
+  creditsCharged?: number;
+  subscriptionPaidCreditStatus?: 'not_reported' | 'reported_zero';
+  subscriptionConsumedCredits?: number | null;
   processing: VideoProcessing;
   thinking: 'low';
   elapsedMs: number;

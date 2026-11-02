@@ -200,6 +200,8 @@ function resultFromReceipt(result: Json, payload: Json, elapsedMs: number): Vide
   return {
     analysis: result.analysis, usedModel: result.model, reportedModel: result.model,
     requestedModel: VIDEO_ANALYSIS_MODEL, provider: 'gemini-subscription', billing: 'subscription-allowance',
+    subscriptionPaidCreditStatus: result.paid_credit_status as 'not_reported' | 'reported_zero',
+    subscriptionConsumedCredits: result.consumed_credits as number | null,
     processing: 'static', thinking: 'low', elapsedMs, transport: 'cloud-url', processingCalls: 0,
     usage: normalizeVideoUsage(usage, result.model, 'static'),
     ...(typeof duration === 'number' && Number.isFinite(duration) && duration > 0 ? { sourceDurationSeconds: duration } : {}),
@@ -299,6 +301,8 @@ function logRoute(result: VideoAnalysisResult): void {
     application: 'makaron', operation: 'analyze_video', modality: 'video',
     provider: result.provider, billing: result.billing, requestedModel: result.requestedModel,
     actualModel: result.reportedModel ?? null, transport: result.transport,
+    googlePaidCreditStatus: result.subscriptionPaidCreditStatus ?? null,
+    googleConsumedCredits: result.subscriptionConsumedCredits ?? null,
     elapsedMs: result.elapsedMs, fallbackReason: result.fallbackReason ?? null,
     credential: result.provider === 'google-api'
       ? (process.env.VIDEO_ANALYSIS_GOOGLE_API_KEY?.trim() ? 'video-dedicated' : 'app-google') : 'subscription',

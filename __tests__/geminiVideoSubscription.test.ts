@@ -279,7 +279,7 @@ describe('Google membership and honest paid-credit metadata', () => {
   });
   it('accepts explicitly unreported paid-credit telemetry only with an allowance-only account receipt', async () => {
     liveMock(r => { r.consumed_credits = null as unknown as number; r.paid_credit_status = 'not_reported'; });
-    expect((await analyzeVideoWithRouting(media, 'Q', 'admin')).provider).toBe('gemini-subscription');
+    expect(await analyzeVideoWithRouting(media, 'Q', 'admin')).toMatchObject({provider:'gemini-subscription',subscriptionPaidCreditStatus:'not_reported',subscriptionConsumedCredits:null});
     liveMock(r => { r.allowance_only = false; });
     await expect(analyzeVideoWithRouting(media,'Q','admin')).rejects.toThrow('unverified_relay_receipt');
   });

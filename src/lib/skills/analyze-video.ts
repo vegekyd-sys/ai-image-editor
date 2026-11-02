@@ -16,6 +16,9 @@ export interface AnalyzeVideoResult {
   reportedModel?: string;
   provider?: VideoAnalysisResult['provider'];
   fallbackReason?: string;
+  creditsCharged?: number;
+  subscriptionPaidCreditStatus?: VideoAnalysisResult['subscriptionPaidCreditStatus'];
+  subscriptionConsumedCredits?: number | null;
   usage?: VideoAnalysisResult['usage'];
   processing?: VideoAnalysisResult['processing'];
   sourceDurationSeconds?: number;
@@ -42,6 +45,9 @@ export async function analyzeVideo(input: AnalyzeVideoInput): Promise<AnalyzeVid
       reportedModel: result.reportedModel,
       provider: result.provider,
       fallbackReason: result.fallbackReason,
+      creditsCharged: result.creditsCharged,
+      subscriptionPaidCreditStatus: result.subscriptionPaidCreditStatus,
+      subscriptionConsumedCredits: result.subscriptionConsumedCredits,
       usage: result.usage,
       processing: result.processing,
       sourceDurationSeconds: result.sourceDurationSeconds,

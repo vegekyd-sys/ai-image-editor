@@ -86,7 +86,8 @@ source directory), `MAKARON_GEMINI_CLOUD_URL`, `MAKARON_GEMINI_OWNER_ID`,
 `SCENE_GEMINI_STATE` and loopback port; do not mutate shared owner lists or state.
 
 Cloud: `SCENE_GEMINI_GCS_BUCKET`, `MAKARON_RECEIPT_PREFIX`,
-`MAKARON_GEMINI_OWNER_ID`, `MAKARON_STORAGE_HOST`. Require IAM authentication;
+`MAKARON_GEMINI_OWNER_ID`, `MAKARON_STORAGE_HOST`, `MAKARON_ACCOUNT_PROJECT`
+(the fixed account project verified by native readiness). Require IAM authentication;
 never allow unauthenticated access. The Dockerfile installs ffprobe.
 
 ## Identity and credits
@@ -97,7 +98,9 @@ native models are `gemini-3.8-flash` / `gemini-3.8-flash-n` under selector
 
 Native LOW was observed to omit `consumedCredits`. The receipt represents that
 as `paid_credit_status=not_reported`, `consumed_credits=null`, never as verified
-zero. Explicit numeric zero is `reported_zero`; any nonzero or invalid value is
+zero. These fields propagate into structured analysis results and audit logs;
+the existing ledger still records Makaron credits, not unreported Google spend.
+Explicit numeric zero is `reported_zero`; any nonzero or invalid value is
 rejected. Allowance-only transport requires the existing account tier, fresh
 quota and disabled G1 paid-credit settings. Subscription success costs **zero
 Makaron credits**, with ordinary usage attribution. That does not prove Google
@@ -105,7 +108,8 @@ paid-credit consumption was zero or remove subscription/Cloud costs.
 
 API billing counts prompt + tool prompt as input and candidates + thoughts as
 output, splitting cached input once. All helper ledger writes are awaited. No
-flat one-credit charge was introduced. At live rates of $0.75 input / $3.75
+flat one-credit charge was introduced. MCP reports the actual shared analyzer
+debit in `X-Credits-Charged` without billing it a second time. At live rates of $0.75 input / $3.75
 output per million, 2× markup and $0.01 per credit, the observed 712 input +107
 output costs $0.00093525 before markup, or 0.18705 credits, rounded up to **1**.
 10,000 input +1,000 output rounds to **3**, not one.

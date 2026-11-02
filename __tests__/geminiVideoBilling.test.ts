@@ -15,7 +15,8 @@ describe('video billing uses the verified route', () => {
     mocks.deduct.mockResolvedValue({ charged: 1, remaining: 10 });
     mocks.subscription.mockResolvedValue(undefined);
     const { analyzeVideoContentWithUsage } = await import('@/lib/gemini');
-    await analyzeVideoContentWithUsage('https://example.com/video.mp4', 'Question', 'admin');
+    const result = await analyzeVideoContentWithUsage('https://example.com/video.mp4', 'Question', 'admin');
+    expect(result.creditsCharged).toBe(provider === 'gemini-subscription' ? 0 : 1);
     expect(mocks.route).toHaveBeenCalledWith('https://example.com/video.mp4', 'Question', 'admin');
     if (provider === 'gemini-subscription') {
       expect(mocks.deduct).not.toHaveBeenCalled();

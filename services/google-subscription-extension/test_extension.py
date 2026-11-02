@@ -9,7 +9,7 @@ import unittest
 from uuid import uuid4
 
 from makaron_relay import MakaronRelay, Rejection, canonical
-os.environ.update(SCENE_GEMINI_GCS_BUCKET='test-bucket',MAKARON_GEMINI_OWNER_ID='owner',MAKARON_STORAGE_HOST='example.supabase.co',MAKARON_RECEIPT_PREFIX='scene-index/gcs/makaron-test-receipts')
+os.environ.update(SCENE_GEMINI_GCS_BUCKET='test-bucket',MAKARON_GEMINI_OWNER_ID='owner',MAKARON_STORAGE_HOST='example.supabase.co',MAKARON_ACCOUNT_PROJECT='project',MAKARON_RECEIPT_PREFIX='scene-index/gcs/makaron-test-receipts')
 from cloud import source_url, verified_result, analysis_prompt, validate
 
 
@@ -94,6 +94,17 @@ class Tests(unittest.TestCase):
             with self.subTest(url=url):
                 with self.assertRaises(ValueError):source_url(url)
         self.assertEqual(source_url(self.payload['source_url']),self.payload['source_url'])
+    def test_candidate_launcher_rejects_production_state_before_constructing_host(self):
+        import subprocess,sys
+        root=Path(self.directory.name)
+        (root/'server.py').write_text("from pathlib import Path\nclass Relay:\n def __init__(self): Path("+repr(str(root/'mutated'))+").touch()\ndef handler(host):return None\n")
+        (root/'state-link').symlink_to('/srv/vlab/scene-gemini-relay/state',target_is_directory=True)
+        for state in ['/srv/vlab/scene-gemini-relay/state',str(root/'state-link')]:
+            env={**os.environ,'SCENE_GEMINI_APP':str(root),'SCENE_GEMINI_STATE':state}
+            result=subprocess.run([sys.executable,str(Path(__file__).with_name('relay_entry.py'))],env=env,capture_output=True)
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn(b'Candidate entry refuses',result.stderr)
+            self.assertFalse((root/'mutated').exists())
     def test_cloud_input_validation(self):
         body={k:v for k,v in self.payload.items() if k!='cloud_identity_token'}
         body.update(owner_id='owner',access_token='t'*32,project='project',request_sha256='a'*64)

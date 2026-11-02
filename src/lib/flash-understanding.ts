@@ -47,6 +47,8 @@ export async function generateFlashUnderstanding(input: {
   }
   console.info('[flash-understanding-route]', JSON.stringify({ operation: input.operation,
     provider: result.provider, requestedModel: result.requestedModel, actualModel: result.reportedModel ?? null,
+    googlePaidCreditStatus: result.subscriptionPaidCreditStatus ?? null,
+    googleConsumedCredits: result.subscriptionConsumedCredits ?? null,
     elapsedMs: result.elapsedMs, ...result.usage }));
   return result.analysis;
 }

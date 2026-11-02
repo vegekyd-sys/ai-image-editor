@@ -1631,16 +1631,20 @@ export async function analyzeVideoContentWithUsage(
     if (result.provider === 'gemini-subscription') {
       // This describes Makaron credits, not a claim about the subscription's
       // purchase price or Cloud Run / storage charges.
+      result.creditsCharged = 0;
       await recordSubscriptionUsage(userId, 'gemini-subscription', 'analyze_video', result.usedModel, {
         inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
         cacheReadTokens: usage.cacheReadTokens, durationMs: result.elapsedMs,
       }).catch(() => console.error('[billing] analyze_video subscription usage logging failed'));
-    } else await deductByTokens(
+    } else {
+      const debit = await deductByTokens(
       userId, 'analyze_video', usage.modelId,
       usage.inputTokens - usage.cacheReadTokens, usage.outputTokens,
       result.elapsedMs, undefined,
       { cacheRead: usage.cacheReadTokens, cacheWrite: 0 },
-    ).catch(error => console.error('[billing] analyze_video deduct error:', error));
+      ).catch(error => console.error('[billing] analyze_video deduct error:', error));
+      if (debit) result.creditsCharged = debit.charged;
+    }
   }
   return result;
 }
