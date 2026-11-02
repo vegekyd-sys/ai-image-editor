@@ -28,7 +28,7 @@ jobs:
       - run: npx tsc --noEmit
       - run: npx vitest run __tests__/createProjectUpload.test.ts
       - name: Video subscription routing and accounting
-        run: npx vitest run __tests__/geminiVideoSubscription.test.ts __tests__/geminiVideoBilling.test.ts __tests__/videoAnalysis.test.ts __tests__/billingAttribution.test.ts __tests__/billing.test.ts __tests__/flashUnderstanding.test.ts __tests__/googleRelayAuthorization.test.ts __tests__/personalSubscriptionAdmin.test.ts __tests__/personalSubscriptionAdminRoute.test.ts __tests__/personalSubscriptionAdminUi.test.tsx __tests__/agentNativeVision.test.ts
+        run: npx vitest run __tests__/geminiVideoSubscription.test.ts __tests__/geminiVideoBilling.test.ts __tests__/videoAnalysis.test.ts __tests__/billingAttribution.test.ts __tests__/billing.test.ts __tests__/flashUnderstanding.test.ts __tests__/googleRelayAuthorization.test.ts __tests__/googleRelayIdentity.test.ts __tests__/personalSubscriptionAdmin.test.ts __tests__/personalSubscriptionAdminRoute.test.ts __tests__/personalSubscriptionAdminUi.test.tsx __tests__/agentNativeVision.test.ts
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

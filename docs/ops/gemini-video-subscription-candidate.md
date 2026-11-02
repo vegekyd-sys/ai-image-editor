@@ -65,7 +65,9 @@ API keys to V. V forwards its existing account OAuth only to the fixed private
 Cloud URL; both workers clear it after execution and omit it from receipts/logs.
 V sees image helper data, but no video bytes. Cloud receipts contain results and
 hashes, not OAuth, source URLs or prompts. Use a dedicated receipt prefix with
-reviewed retention; no automatic job-ID deletion/replay is implemented.
+reviewed retention; place it inside the service account’s already authorized
+object prefix (for example `scene-index/gcs/makaron-subscription-receipts/`),
+without widening bucket IAM. No automatic job-ID deletion/replay is implemented.
 
 ## Private settings
 

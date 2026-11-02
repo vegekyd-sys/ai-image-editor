@@ -9,7 +9,7 @@ import unittest
 from uuid import uuid4
 
 from makaron_relay import MakaronRelay, Rejection, canonical
-os.environ.update(SCENE_GEMINI_GCS_BUCKET='test-bucket',MAKARON_GEMINI_OWNER_ID='owner',MAKARON_STORAGE_HOST='example.supabase.co')
+os.environ.update(SCENE_GEMINI_GCS_BUCKET='test-bucket',MAKARON_GEMINI_OWNER_ID='owner',MAKARON_STORAGE_HOST='example.supabase.co',MAKARON_RECEIPT_PREFIX='scene-index/gcs/makaron-test-receipts')
 from cloud import source_url, verified_result, analysis_prompt, validate
 
 

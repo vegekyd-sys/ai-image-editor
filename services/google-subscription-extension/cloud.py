@@ -27,7 +27,7 @@ BASE = 'https://daily-cloudcode-pa.googleapis.com/v1internal:generateContent'
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 SLOTS = threading.BoundedSemaphore(2)
 BUCKET = os.environ['SCENE_GEMINI_GCS_BUCKET']
-PREFIX = os.environ.get('MAKARON_RECEIPT_PREFIX','makaron-subscription-receipts').strip('/') + '/'
+PREFIX = os.environ['MAKARON_RECEIPT_PREFIX'].strip('/') + '/'
 OWNER = os.environ['MAKARON_GEMINI_OWNER_ID']
 STORAGE_HOST = os.environ['MAKARON_STORAGE_HOST']
 
@@ -98,7 +98,7 @@ def read(client,key):
 
 
 def analysis_prompt(question,duration,has_audio):
-    prefix = (f'Measured container duration: {duration:g} seconds. Inspect the complete timeline through its final frame; '
+    prefix = (f'Measured container duration: {duration:.15g} seconds. Inspect the complete timeline through its final frame; '
               'do not infer duration from sampled timestamps. Compare opening and ending framing before calling a camera static.\n\n') if duration else ''
     if has_audio is False:
         prefix += 'The source container has no audio track. Do not invent music, speech, or sound effects.\n\n'
