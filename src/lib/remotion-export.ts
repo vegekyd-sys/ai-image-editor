@@ -834,7 +834,7 @@ async function publishExportedVideo(
   return snapshotId
 }
 
-async function executeRemotionExportJob(job: RemotionExportJob): Promise<RemotionExportResult> {
+async function executeRemotionExportJob(job: RemotionExportJob, options: {mediaDelivery?: boolean} = {}): Promise<RemotionExportResult> {
   const admin = getSupabaseAdmin()
   const startedAt = job.started_at ? Date.parse(job.started_at) || Date.now() : Date.now()
   const stageTimings: Record<string, number> = {}
@@ -846,7 +846,8 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
     const { design, designPath } = await loadJobDesign(job, admin)
     let releaseDelivery: () => void = () => {}
     const deliveryReady = new Promise<void>(resolve => {releaseDelivery = resolve})
-    const delivery = job.output_type === 'video' && readEnv('REMOTION_RENDERER') === 'lambda'
+    if (options.mediaDelivery === false) queuedDelivery?.release()
+    const delivery = options.mediaDelivery !== false && job.output_type === 'video' && readEnv('REMOTION_RENDERER') === 'lambda'
       ? queuedDelivery?.promise || resolveRemotionMediaDelivery(design, {userId: job.user_id, readySignal: deliveryReady})
       : null
     const resolvedDesign = await normalizeDesignForServer(design, job.project_id, admin)
@@ -1163,7 +1164,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
   }
 }
 
-export async function runRemotionExportJob(jobId: string): Promise<RemotionExportResult> {
+export async function runRemotionExportJob(jobId: string, options: {mediaDelivery?: boolean} = {}): Promise<RemotionExportResult> {
   const claimed = await claimRemotionExportJob(jobId)
   if (!claimed) {
     const current = await getRemotionExportJob(jobId)
@@ -1183,7 +1184,7 @@ export async function runRemotionExportJob(jobId: string): Promise<RemotionExpor
     const { design } = await loadJobDesign(claimed, admin)
     return { job: claimed, design }
   }
-  return executeRemotionExportJob(claimed)
+  return executeRemotionExportJob(claimed, options)
 }
 
 /**
