@@ -3,7 +3,9 @@ import { createHash, createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { analyzeVideoWithRouting, canonicalVideoRelayJson, videoRelaySignature } from '@/lib/gemini-video-subscription';
 
-const mocks = vi.hoisted(() => ({ admin: vi.fn(), api: vi.fn() }));
+const mocks = vi.hoisted(() => ({ admin: vi.fn(), api: vi.fn(), members: vi.fn(), identity: vi.fn() }));
+vi.mock('@/lib/codex-subscription-allowlist', () => ({ getDynamicCodexSubscriptionAllowedUserIds: mocks.members }));
+vi.mock('@/lib/google-relay-identity', () => ({ getGeminiCloudIdentity: mocks.identity }));
 vi.mock('@/lib/admin', () => ({ isAdmin: mocks.admin }));
 vi.mock('@/lib/video-analysis', async importOriginal => ({
   ...await importOriginal<typeof import('@/lib/video-analysis')>(), analyzeVideoWithProvider: mocks.api,
@@ -28,7 +30,7 @@ function receipt(payload: Record<string, unknown>) {
   return {
     request_sha256: createHash('sha256').update(canonicalVideoRelayJson(payload)).digest('hex'),
     requested_model: 'gemini-3.8-flash', model: 'gemini-3.8-flash-n', account_model: 'gemini-3.8-flash-medium',
-    transport: 'antigravity-native-account', billing: 'subscription-allowance', consumed_credits: 0,
+    transport: 'antigravity-native-account', billing: 'subscription-allowance', consumed_credits: 0, allowance_only: true, paid_credit_status: 'reported_zero',
     finish_reason: 'STOP', processing: 'static', thinking: 'low', generator_submissions: 1,
     media_on_v: false, analysis: 'At 4 seconds the blue circle moves right.',
     source: {
@@ -63,6 +65,8 @@ beforeEach(() => {
   vi.stubEnv('VIDEO_ANALYSIS_MODEL', '');
   vi.stubEnv('VIDEO_ANALYSIS_PROCESSING', 'static');
   mocks.admin.mockResolvedValue(true);
+  mocks.members.mockResolvedValue(['admin']);
+  mocks.identity.mockResolvedValue('mock-iam-identity-token-32-characters');
   mocks.api.mockImplementation(async () => ({
     analysis: 'API result', usedModel: 'gemini-3.8-flash', requestedModel: 'gemini-3.8-flash',
     reportedModel: 'gemini-3.8-flash', provider: 'google-api', billing: 'api',
@@ -264,4 +268,25 @@ it('signs canonical UTF-8 JSON using the deployed Scene HMAC algorithm', () => {
     'POST', '/v1/makaron-video-jobs', '123', 'request-id', 'owner', createHash('sha256').update(body).digest('hex'),
   ].join('\n')).digest('hex');
   expect(videoRelaySignature({ method: 'POST', path: '/v1/makaron-video-jobs', timestamp: '123', requestId: 'request-id', owner: 'owner', body, secret })).toBe(expected);
+});
+
+describe('Google membership and honest paid-credit metadata', () => {
+  it('requires a listed administrator, rather than automatically allowing all admins', async () => {
+    mocks.members.mockResolvedValue(['someone-else']);
+    const fetch = liveMock();
+    expect((await analyzeVideoWithRouting(media, 'Q', 'admin')).provider).toBe('google-api');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('accepts explicitly unreported paid-credit telemetry only with an allowance-only account receipt', async () => {
+    liveMock(r => { r.consumed_credits = null as unknown as number; r.paid_credit_status = 'not_reported'; });
+    expect((await analyzeVideoWithRouting(media, 'Q', 'admin')).provider).toBe('gemini-subscription');
+    liveMock(r => { r.allowance_only = false; });
+    await expect(analyzeVideoWithRouting(media,'Q','admin')).rejects.toThrow('unverified_relay_receipt');
+  });
+  it('falls back before job submission if Cloud IAM cannot be minted', async () => {
+    mocks.identity.mockRejectedValueOnce(new Error('WIF rejected'));
+    const fetch = liveMock();
+    expect((await analyzeVideoWithRouting(media, 'Q', 'admin')).fallbackReason).toBe('cloud_identity_unavailable');
+    expect(fetch).toHaveBeenCalledOnce();
+  });
 });

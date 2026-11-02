@@ -1,5 +1,7 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { isAdmin } from './admin';
+import { getDynamicCodexSubscriptionAllowedUserIds } from './codex-subscription-allowlist';
+import { getGeminiCloudIdentity } from './google-relay-identity';
 import {
   analyzeVideoWithProvider, normalizeVideoUsage, VIDEO_ANALYSIS_MODEL,
   type VideoAnalysisResult,
@@ -23,10 +25,10 @@ export class GeminiVideoRelayError extends Error {
   }
 }
 
-interface RelayConfig { url: URL; secret: string; owner: string }
+export interface RelayConfig { url: URL; secret: string; owner: string }
 type Json = Record<string, unknown>;
 
-function config(): RelayConfig | undefined {
+export function geminiRelayConfig(): RelayConfig | undefined {
   const raw = process.env.GEMINI_VIDEO_RELAY_URL?.trim();
   const secret = process.env.GEMINI_VIDEO_RELAY_SECRET?.trim();
   const owner = process.env.GEMINI_VIDEO_RELAY_OWNER_ID?.trim();
@@ -59,7 +61,7 @@ export function videoRelaySignature(input: {
   ].join('\n')).digest('hex');
 }
 
-async function request(cfg: RelayConfig, path: string, signal: AbortSignal, payload?: Json): Promise<Json> {
+export async function geminiRelayRequest(cfg: RelayConfig, path: string, signal: AbortSignal, payload?: Json): Promise<Json> {
   const url = new URL(cfg.url);
   url.pathname = url.pathname.replace(/\/$/, '') + path;
   const method = payload ? 'POST' : 'GET';
@@ -128,11 +130,12 @@ function eligibleSource(videoUrl: string): boolean {
   } catch { return false; }
 }
 
-async function boundedAdminCheck(userId: string): Promise<boolean> {
+export async function boundedGeminiMemberCheck(userId: string): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      isAdmin(userId),
+      Promise.all([isAdmin(userId), getDynamicCodexSubscriptionAllowedUserIds(undefined, { strict: true })])
+        .then(([admin, members]) => admin && members.includes(userId)),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error('Admin check timed out')), 1500);
       }),
@@ -140,16 +143,16 @@ async function boundedAdminCheck(userId: string): Promise<boolean> {
   } finally { if (timer) clearTimeout(timer); }
 }
 
-async function preflight(cfg: RelayConfig, signal: AbortSignal): Promise<void> {
+export async function geminiRelayPreflight(cfg: RelayConfig, signal: AbortSignal, operation = CAPABILITY): Promise<void> {
   let status: Json;
   try {
-    status = await request(cfg, '/v1/status', AbortSignal.any([signal, AbortSignal.timeout(2000)]));
+    status = await geminiRelayRequest(cfg, '/v1/status', AbortSignal.any([signal, AbortSignal.timeout(2000)]));
   } catch {
     // No inference was submitted by this read-only call.
     throw new GeminiVideoRelayError('relay_preflight_unavailable', true);
   }
   const recipe = object(status.makaron_video_analysis);
-  if (!Array.isArray(status.capabilities) || !status.capabilities.includes(CAPABILITY)
+  if (!Array.isArray(status.capabilities) || !status.capabilities.includes(operation)
       || recipe.version !== 1 || recipe.model !== VIDEO_ANALYSIS_MODEL
       || recipe.processing !== 'static' || recipe.thinking !== 'low'
       || recipe.output !== 'text' || recipe.input !== 'cloud-source-url'
@@ -175,18 +178,19 @@ function resultFromReceipt(result: Json, payload: Json, elapsedMs: number): Vide
   const source = object(result.source);
   const usage = object(result.usage);
   const digest = createHash('sha256').update(canonicalVideoRelayJson(payload)).digest('hex');
+  const needsVideo = Boolean(payload.source_url);
   if (result.request_sha256 !== digest || result.requested_model !== VIDEO_ANALYSIS_MODEL
       || typeof result.model !== 'string' || !MODELS.has(result.model)
       || result.account_model !== 'gemini-3.8-flash-medium'
       || result.transport !== 'antigravity-native-account' || result.billing !== 'subscription-allowance'
-      || result.consumed_credits !== 0 || result.finish_reason !== 'STOP'
+      || !validAllowanceReceipt(result) || result.finish_reason !== 'STOP'
       || result.processing !== 'static' || result.thinking !== 'low'
       || result.generator_submissions !== 1 || result.media_on_v !== false
       || typeof result.analysis !== 'string' || !result.analysis.trim()
-      || source.prepared !== false || !Number.isSafeInteger(source.source_bytes)
-      || Number(source.source_bytes) <= 0 || Number(source.source_bytes) > MAX_BYTES
-      || source.input_bytes !== source.source_bytes || !/^[a-f0-9]{64}$/.test(String(source.source_sha256))
-      || source.input_sha256 !== source.source_sha256
+      || needsVideo && (source.prepared !== false || !Number.isSafeInteger(source.source_bytes)
+        || Number(source.source_bytes) <= 0 || Number(source.source_bytes) > MAX_BYTES
+        || source.input_bytes !== source.source_bytes || !/^[a-f0-9]{64}$/.test(String(source.source_sha256))
+        || source.input_sha256 !== source.source_sha256)
       || !['promptTokenCount', 'candidatesTokenCount'].every(key =>
         typeof usage[key] === 'number' && Number.isSafeInteger(usage[key]) && Number(usage[key]) >= 0)
       || Object.values(usage).some(value => typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)) {
@@ -202,18 +206,24 @@ function resultFromReceipt(result: Json, payload: Json, elapsedMs: number): Vide
   };
 }
 
-async function subscription(cfg: RelayConfig, videoUrl: string, question: string | undefined,
-  userId: string, signal: AbortSignal, started: number): Promise<VideoAnalysisResult> {
-  await preflight(cfg, signal);
+async function subscription(cfg: RelayConfig, videoUrl: string | undefined, question: string | undefined,
+  userId: string, signal: AbortSignal, started: number, operation = CAPABILITY,
+  images?: UnderstandingImage[]): Promise<VideoAnalysisResult> {
+  await geminiRelayPreflight(cfg, signal, operation);
+  let cloudIdentity: string;
+  try { cloudIdentity = await getGeminiCloudIdentity(signal); }
+  catch { throw new GeminiVideoRelayError('cloud_identity_unavailable', true); }
   const payload: Json = {
-    operation: CAPABILITY, job_id: randomUUID(), model: VIDEO_ANALYSIS_MODEL,
-    user_id: userId, source_url: videoUrl, max_source_bytes: MAX_BYTES,
+    cloud_identity_token: cloudIdentity,
+    operation, job_id: randomUUID(), model: VIDEO_ANALYSIS_MODEL,
+    user_id: userId, ...(videoUrl ? { source_url: videoUrl } : {}), max_source_bytes: MAX_BYTES,
+    ...(images ? { images } : {}),
     question: question || 'Describe this video in detail: scenes, actions, pacing, visual style, audio/dialogue if any.',
     processing: 'static', thinking: 'low', timeout_ms: Math.max(1000, 120_000 - (Date.now() - started) - 1000),
   };
   const path = `${JOBS}/${payload.job_id}`;
   try {
-    const ack = await request(cfg, JOBS, AbortSignal.any([signal, AbortSignal.timeout(5000)]), payload);
+    const ack = await geminiRelayRequest(cfg, JOBS, AbortSignal.any([signal, AbortSignal.timeout(5000)]), payload);
     if (ack.job_id !== payload.job_id || ack.state !== 'ACCEPTED') {
       throw new GeminiVideoRelayError('invalid_relay_response');
     }
@@ -223,7 +233,7 @@ async function subscription(cfg: RelayConfig, videoUrl: string, question: string
   }
   while (!signal.aborted) {
     try {
-      const job = await request(cfg, path, AbortSignal.any([signal, AbortSignal.timeout(5000)]));
+      const job = await geminiRelayRequest(cfg, path, AbortSignal.any([signal, AbortSignal.timeout(5000)]));
       if (job.job_id !== payload.job_id) throw new GeminiVideoRelayError('unverified_relay_receipt');
       if (job.state === 'SUCCEEDED') return resultFromReceipt(object(job.result), payload, Date.now() - started);
       if (job.state === 'FAILED') {
@@ -246,18 +256,18 @@ async function subscription(cfg: RelayConfig, videoUrl: string, question: string
   throw new GeminiVideoRelayError('relay_unknown_outcome');
 }
 
-/** Only a fresh server-owned admin flag grants access; shared plan membership does not. */
+/** Admission requires BOTH the shared roster and a fresh administrator role. */
 export async function analyzeVideoWithRouting(videoUrl: string, question?: string, userId?: string): Promise<VideoAnalysisResult> {
   const started = Date.now();
   const signal = AbortSignal.timeout(120_000);
   let fallbackReason: string | undefined;
   if (process.env.GEMINI_VIDEO_RELAY_ENABLED === 'true' && userId) {
-    const cfg = config();
+    const cfg = geminiRelayConfig();
     const model = process.env.VIDEO_ANALYSIS_MODEL?.trim() || VIDEO_ANALYSIS_MODEL;
     const processing = process.env.VIDEO_ANALYSIS_PROCESSING || 'static';
     let admin = false;
     if (cfg) {
-      try { admin = await boundedAdminCheck(userId); }
+      try { admin = await boundedGeminiMemberCheck(userId); }
       catch { fallbackReason = 'admin_check_unavailable'; }
     }
     if (!cfg) fallbackReason = 'relay_not_configured';
@@ -294,4 +304,51 @@ function logRoute(result: VideoAnalysisResult): void {
       ? (process.env.VIDEO_ANALYSIS_GOOGLE_API_KEY?.trim() ? 'video-dedicated' : 'app-google') : 'subscription',
     ...result.usage,
   }));
+}
+
+/** Missing paid-credit telemetry stays explicitly unknown. The native transport
+ * must verify an allowance-only account and disabled paid-credit settings. */
+export function validAllowanceReceipt(result: Json): boolean {
+  return result.allowance_only === true
+    && (result.paid_credit_status === 'not_reported' && result.consumed_credits === null
+      || result.paid_credit_status === 'reported_zero' && result.consumed_credits === 0);
+}
+
+export async function readGeminiSubscriptionRelayAllowlist(_owner: string): Promise<string[]> {
+  const cfg = geminiRelayConfig();
+  if (!cfg) throw new Error('Google relay is not configured');
+  const result = await geminiRelayRequest(cfg, '/v1/makaron-allowlist', AbortSignal.timeout(10000));
+  if (!Array.isArray(result.userIds) || !result.userIds.every(id => typeof id === 'string')) throw new Error('Invalid Google roster');
+  return result.userIds as string[];
+}
+
+export async function syncGeminiSubscriptionRelayAllowlist(userIds: string[], _owner: string): Promise<void> {
+  const cfg = geminiRelayConfig();
+  if (!cfg) throw new Error('Google relay is not configured');
+  await geminiRelayRequest(cfg, '/v1/makaron-allowlist', AbortSignal.timeout(10000), { userIds });
+}
+
+export interface UnderstandingImage { mimeType: string; data: string }
+export type UnderstandingOperation = 'makaron_image_analysis' | 'makaron_frame_verify' | 'makaron_frame_locate';
+
+/** The auxiliary bridge is used only when an explicit helper needs it. Native
+ * vision-capable Agents still receive images through their existing transport. */
+export async function tryGeminiUnderstandingSubscription(input: {
+  operation: UnderstandingOperation; images: UnderstandingImage[]; question: string;
+  userId?: string; videoUrl?: string;
+}): Promise<VideoAnalysisResult | undefined> {
+  if (process.env.GEMINI_VIDEO_RELAY_ENABLED !== 'true' || !input.userId) return;
+  const cfg = geminiRelayConfig();
+  if (!cfg) return;
+  try { if (!await boundedGeminiMemberCheck(input.userId)) return; }
+  catch { return; }
+  if (input.videoUrl && !eligibleSource(input.videoUrl)) return;
+  const started = Date.now();
+  try {
+    return await subscription(cfg, input.videoUrl, input.question, input.userId,
+      AbortSignal.timeout(120000), started, input.operation, input.images);
+  } catch (error) {
+    if (error instanceof GeminiVideoRelayError && error.safeToFallback) return;
+    throw error;
+  }
 }

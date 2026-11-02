@@ -168,7 +168,7 @@ export default function AdminPage() {
   const [codexAllowlist, setCodexAllowlist] = useState<CodexAllowlistUser[]>([])
   const [codexEmail, setCodexEmail] = useState('')
   const [codexSaving, setCodexSaving] = useState(false)
-  const [planSync, setPlanSync] = useState<Record<'codex' | 'grok', 'synced' | 'pending' | 'unavailable' | 'checking'>>({ codex: 'checking', grok: 'checking' })
+  const [planSync, setPlanSync] = useState<Record<'codex' | 'grok' | 'gemini', 'synced' | 'pending' | 'unavailable' | 'checking' | 'disabled'>>({ codex: 'checking', grok: 'checking', gemini: 'checking' })
   const [codexMessage, setCodexMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [pricing, setPricing] = useState<CreditPricing[]>([])
   const [editingPricing, setEditingPricing] = useState<Record<string, { credits?: string; supplier_cost?: string }>>({})
@@ -204,9 +204,9 @@ export default function AdminPage() {
       if (!res.ok) throw new Error('allowlist unavailable')
       const data = await res.json()
       if (Array.isArray(data.users)) setCodexAllowlist(data.users)
-      setPlanSync(data.providers || { codex: 'unavailable', grok: 'unavailable' })
+      setPlanSync(data.providers || { codex: 'unavailable', grok: 'unavailable', gemini: 'unavailable' })
     } catch {
-      setPlanSync({ codex: 'unavailable', grok: 'unavailable' })
+      setPlanSync({ codex: 'unavailable', grok: 'unavailable', gemini: 'unavailable' })
       setCodexMessage({ type: 'error', text: t('admin.personalAllowlist.loadFailed') })
     }
   }, [t])
@@ -293,7 +293,7 @@ export default function AdminPage() {
       const data = await res.json()
       if (res.ok && Array.isArray(data.users)) {
         setCodexAllowlist(data.users)
-        setPlanSync(data.providers || { codex: 'unavailable', grok: 'unavailable' })
+        setPlanSync(data.providers || { codex: 'unavailable', grok: 'unavailable', gemini: 'unavailable' })
         if (method === 'POST') setCodexEmail('')
         setCodexMessage({ type: 'success', text: t(`admin.personalAllowlist.${success}`) })
       } else {
@@ -397,7 +397,7 @@ export default function AdminPage() {
               {t('admin.personalAllowlist.desc')}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="personal-plan-sync">
-              {(['codex', 'grok'] as const).map(provider => (
+              {(['codex', 'grok', 'gemini'] as const).map(provider => (
                 <span key={provider} className={`rounded-full border px-2.5 py-1 text-xs ${planSync[provider] === 'synced' ? 'border-emerald-400/20 text-emerald-300' : 'border-amber-400/20 text-amber-200'}`}>
                   {t(`admin.personalAllowlist.${provider}Status`, t(`admin.personalAllowlist.${planSync[provider]}`))}
                 </span>

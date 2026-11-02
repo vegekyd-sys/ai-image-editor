@@ -1,192 +1,126 @@
-# Administrator video subscription candidate
+# Google Relay understanding candidate (PR17)
 
-This is a disabled client candidate, not a working production Relay integration.
-The existing Scene service advertises `video_analysis`, which accepts a different
-JSON / temperature / frame-rate recipe. It does **not** implement the capability
-or endpoints below. Upgrading Scene's model alias alone does not satisfy this
-contract. Do not enable this client against that service.
+Implemented in an isolated worktree; disabled in the application until the shared
+service extension, configuration and quality gates are accepted. This is not a
+production activation receipt.
 
-## Application behavior
+## Routes and access
 
-- `GEMINI_VIDEO_RELAY_ENABLED` defaults to off. When off, no role lookup or Relay
-  request is added. All callers keep the existing API input, model override,
-  processing mode, size limit and billing behavior.
-- When enabled, only a fresh `user_profiles.is_admin = true` can grant access.
-  Shared personal-plan membership, owner environment variables and request-supplied
-  metadata cannot grant administrator status. Role lookup is bounded to 1.5s;
-  lookup errors/timeouts keep the API path.
-- Only static processing with requested `gemini-3.8-flash` is eligible. Explicit
-  model overrides and agentic requests keep the original API path.
-- Eligible sources are HTTPS object URLs at the configured Supabase hostname or
-  `cdn.makaron.app`, plus the published `/home-hero/*.mp4|webm` first-party fixtures.
-  Other inputs, including YouTube and existing Google Files, keep the API path.
-- Relay preflight is bounded to 2s. A missing capability, mismatched recipe,
-  stale quota or exhausted allowance falls back **before** any job submission.
-- Job submission happens once. A lost acknowledgement recovers by GET of that
-  exact job ID. Unknown outcomes, unverifiable receipts and content rejection
-  fail closed; they never resubmit or use another provider. A confirmed terminal
-  pre-generation failure can use the API only with a recognized safe error code
-  and `generator_submissions = 0`.
-- Preflight, polling, download and inference share the existing 120s analysis
-  budget. This intentionally does not extend the product's time or size limits.
+`GEMINI_VIDEO_RELAY_ENABLED=true` opts in. A caller must be authenticated, present
+in the existing personal-plan roster, **and currently an administrator**. Codex
+and Grok access rules remain separate. The same administrator page synchronizes
+all enabled plan rosters, takes actual remote snapshots before writing, and
+compensates attempted writes on failure. A disabled Google plan cannot block
+existing Codex/Grok management. Google appears as disabled, pending, synced or
+unconfirmed independently. Never equate a synchronized roster with available
+subscription quota.
 
-## Private configuration
+Eligible understanding operations are `analyze_video`, the text-only Agent image
+bridge (`analyze_image`, upload/Retake inspection, design preview), frame location
+and frame verification. The three legacy `gemini-3-flash-preview` helpers now use
+`gemini-3.8-flash` with LOW thinking. Vision-capable Agents keep their existing
+native image transport. Image generation, Tips and embeddings are unchanged.
 
-No credentials belong in this document, `.env.example` values, test snapshots or
-client bundles.
+Video routing preserves static processing, the 38.5 MB ceiling, original source
+bytes, full timeline and audio. The cloud worker downloads only first-party hero
+fixtures and configured Supabase/CDN object paths over HTTPS without redirects.
+YouTube, existing Google Files, arbitrary hosts, explicit custom model and
+agentic mode stay on the existing API path. The API and Cloud recipes share the
+measured-duration and camera-framing instruction. Verified containers with no
+audio track explicitly instruct the model not to invent sound.
 
-| Variable | Meaning |
-| --- | --- |
-| `GEMINI_VIDEO_RELAY_ENABLED` | Explicit `true` after service and quality acceptance |
-| `GEMINI_VIDEO_RELAY_URL` | HTTPS service base; HTTP is allowed only for loopback tests |
-| `GEMINI_VIDEO_RELAY_SECRET` | HMAC secret, at least 32 characters |
-| `GEMINI_VIDEO_RELAY_OWNER_ID` | Existing verified service owner identity; not caller role authorization |
-| `VIDEO_ANALYSIS_GOOGLE_API_KEY` | Optional video-specific fallback key; otherwise `GOOGLE_API_KEY` |
+## Shared service composition
 
-The service-owner signature authenticates the trusted Makaron application. The
-application separately checks the authenticated caller's current administrator
-role. The extension must remain isolated from Scene membership management and
-must not expand any existing Relay allowlist. Never publish the shared secret
-or give it to browser/CLI clients.
+`services/google-subscription-extension/` is an executable add-on, not a copy of
+Scene's canonical server. `relay_entry.py` composes its existing `Relay` and
+handler, preserving Scene owners, authorization, quota, safety, OAuth and native
+account readiness. Makaron gets a separate SQLite roster and job journal. Its
+control endpoints cannot edit Scene membership. Only the configured existing
+service owner can access them. The Cloud worker can run as a private sibling
+service or its `/makaron` routes can be mounted after shared-service review.
+Neither entrypoint replaces a deployed Scene service automatically.
 
-API results now keep `requestedModel` and provider-reported `reportedModel`
-separate. An absent reported identity is not treated as proof of actual identity.
-API token pricing continues to use the requested rate-table alias. A verified
-subscription result records actual model plus `:gemini-subscription` in
-`usage_logs`, with zero **Makaron credits** and existing run/project/source
-attribution. That is not a claim that a paid subscription, Cloud Run or storage
-costs nothing. Structured server logs include the application, operation,
-modality, route, requested/reported models, token categories and fallback reason;
-they omit prompts, source URLs, credentials and user IDs.
+At both admission and execution the Relay calls the fixed trusted Makaron
+`/api/internal/google-relay-authorize` endpoint. HMAC binds timestamp, user,
+job UUID and request hash. The endpoint reads current roster and administrator
+role; it returns no roster or personal details. The signature expires after 30s.
+This read-only authorization may be repeated; it cannot authorize another job.
+No Supabase credential is sent to V. The callback must target an accepted
+Makaron deployment, never a URL supplied in a job.
 
-## Proposed independent service extension (not implemented by this PR)
+One POST admits one durable owner + UUID + canonical payload hash. Persist before
+submission, poll the same ID after a lost acknowledgement, and retain tombstones
+across restart. A conflicting reuse is rejected. Cloud GCS receipt creation uses
+`ifGenerationMatch=0`; it commits GENERATING before its only Google request.
+Unknown outcomes, content rejection and unverifiable results do not automatically
+replay or fall back to API. Only a recognized explicit rejection with verified
+`generator_submissions=0` can fall back. Cloud admission failures without that
+receipt remain conservative unknown outcomes.
 
-Keep this capability separate from Scene's JSON recipe. A service must advertise
-the following in its signed `/v1/status` response before Makaron submits anything:
+The service receives short-lived IAM identity from Makaron's Vercel OIDC → Google
+STS → IAM generateIdToken flow. Federation must trust only the intended Makaron
+project/environment; configure `run.invoker` and token-creator permissions for the
+specific service account. Never copy long-lived Google service-account keys or
+API keys to V. V forwards its existing account OAuth only to the fixed private
+Cloud URL; both workers clear it after execution and omit it from receipts/logs.
+V sees image helper data, but no video bytes. Cloud receipts contain results and
+hashes, not OAuth, source URLs or prompts. Use a dedicated receipt prefix with
+reviewed retention; no automatic job-ID deletion/replay is implemented.
 
-```json
-{
-  "capabilities": ["makaron_video_analysis"],
-  "makaron_video_analysis": {
-    "version": 1,
-    "model": "gemini-3.8-flash",
-    "processing": "static",
-    "thinking": "low",
-    "input": "cloud-source-url",
-    "output": "text",
-    "source_unmodified": true,
-    "max_source_bytes": 38500000
-  }
-}
-```
+## Private settings
 
-The response also needs `available = true`, a fresh `quota.checked_at` (seconds),
-and exactly the `gemini-weekly` and `gemini-5h` buckets with positive remaining
-fractions and future reset times. The service must recheck allowance at admission
-instead of trusting client preflight.
+No values, user IDs or credentials belong in this public repository.
 
-`POST /v1/makaron-video-jobs` receives canonical UTF-8 JSON containing:
+Application: `GEMINI_VIDEO_RELAY_ENABLED`, `GEMINI_VIDEO_RELAY_URL`,
+`GEMINI_VIDEO_RELAY_SECRET`, `GEMINI_VIDEO_RELAY_OWNER_ID`,
+`GEMINI_RELAY_CLOUD_URL`, `GEMINI_RELAY_WIF_PROVIDER` (full `//iam.googleapis.com/…`
+provider audience), `GEMINI_RELAY_SERVICE_ACCOUNT`.
+`VIDEO_ANALYSIS_GOOGLE_API_KEY` optionally isolates API fallback; otherwise use
+`GOOGLE_API_KEY`.
 
-```text
-operation = makaron_video_analysis
-job_id = client-generated UUID
-model = gemini-3.8-flash
-user_id = server-authenticated current administrator (attribution only)
-source_url = authorized HTTPS media reference
-max_source_bytes = 38500000
-question = original user question, or existing default description prompt
-processing = static
-thinking = low
-timeout_ms = remaining analysis budget
-```
+Relay entry: existing Scene settings plus `SCENE_GEMINI_APP` (reviewed canonical
+source directory), `MAKARON_GEMINI_CLOUD_URL`, `MAKARON_GEMINI_OWNER_ID`,
+`MAKARON_AUTHORIZATION_URL`. For an isolated candidate use its own
+`SCENE_GEMINI_STATE` and loopback port; do not mutate shared owner lists or state.
 
-Reuse the existing `x-scene-relay-*` HMAC headers and seconds timestamp. Sign:
+Cloud: `SCENE_GEMINI_GCS_BUCKET`, `MAKARON_RECEIPT_PREFIX`,
+`MAKARON_GEMINI_OWNER_ID`, `MAKARON_STORAGE_HOST`. Require IAM authentication;
+never allow unauthenticated access. The Dockerfile installs ffprobe.
 
-```text
-METHOD + newline + actual pathname + newline + timestamp + newline
-+ request UUID + newline + verified service owner + newline + SHA256(body)
-```
+## Identity and credits
 
-Canonical JSON sorts object keys recursively, emits UTF-8 without ASCII escaping,
-and uses compact separators. Admission returns `{state: "ACCEPTED", job_id}`;
-GET `/v1/makaron-video-jobs/{job_id}` must enforce the same owner and return an
-explicit state and job ID. Persist admission **before** any provider submission.
-Bind reuse to both owner and full request digest; never execute a conflicting
-reuse of an ID. A failed job/GET must include `generator_submissions` so an unknown
-result cannot masquerade as a safe pre-generation failure.
+Requested API alias, actual model and account selector are distinct. Accepted
+native models are `gemini-3.8-flash` / `gemini-3.8-flash-n` under selector
+`gemini-3.8-flash-medium`; accepting both is not a parity claim.
 
-The Cloud worker must:
+Native LOW was observed to omit `consumedCredits`. The receipt represents that
+as `paid_credit_status=not_reported`, `consumed_credits=null`, never as verified
+zero. Explicit numeric zero is `reported_zero`; any nonzero or invalid value is
+rejected. Allowance-only transport requires the existing account tier, fresh
+quota and disabled G1 paid-credit settings. Subscription success costs **zero
+Makaron credits**, with ordinary usage attribution. That does not prove Google
+paid-credit consumption was zero or remove subscription/Cloud costs.
 
-1. Authenticate private cloud transport using existing reviewed Google identity
-   plumbing. Validate trusted source hosts, object paths, redirects and size
-   before downloading. Do not enable arbitrary URL fetching or proxy access.
-2. Download complete original bytes in Google Cloud. V receives metadata only.
-   Preserve the original dimensions, timeline and audio. Do not reuse Scene's
-   large-file transcode, fps=4, temperature=.1 or forced JSON settings.
-3. Measure container duration, prepend exactly the same measured-duration and
-   opening/ending-framing instruction as `video-analysis.ts`, and submit the
-   unmodified user question. Apply the existing static/LOW configuration without
-   new temperature, schema, frame sampling or output truncation overrides.
-4. Validate model, STOP, nonempty non-thinking text, usage and raw billing
-   evidence. Never convert a missing billing field into a verified zero. Content
-   blocking, unknown outcome or paid-credit consumption must fail closed.
-5. Persist a receipt bound to the canonical client payload. It must contain:
+API billing counts prompt + tool prompt as input and candidates + thoughts as
+output, splitting cached input once. All helper ledger writes are awaited. No
+flat one-credit charge was introduced. At live rates of $0.75 input / $3.75
+output per million, 2× markup and $0.01 per credit, the observed 712 input +107
+output costs $0.00093525 before markup, or 0.18705 credits, rounded up to **1**.
+10,000 input +1,000 output rounds to **3**, not one.
 
-```text
-request_sha256, requested_model, model, account_model
-transport = antigravity-native-account
-billing = subscription-allowance
-consumed_credits = verified numeric zero
-finish_reason = STOP
-processing = static; thinking = low
-generator_submissions = 1; media_on_v = false
-analysis = complete free text
-usage = nonnegative integer Google token categories
-source = {prepared: false, source_bytes, input_bytes,
-          source_sha256, input_sha256, duration_seconds}
-```
+## Verification and rollout
 
-The client requires source/input byte counts and SHA256 values to agree. It only
-admits actual identities `gemini-3.8-flash` or `gemini-3.8-flash-n` under the
-observed account selector `gemini-3.8-flash-medium`. These are explicit identities,
-not proof that the API and subscription backends have identical behavior.
-
-The extension needs its own service review and deployment, durable receipt
-retention/recovery, source authorization, authenticated Cloud transport and
-quota validation. None is replaced by the client mocks in this PR.
-
-## Validation and release gates
-
-Local regression covers ordinary/anonymous/administrator behavior, disabled
-configuration, stale quota, incompatible Scene capability, unsafe URLs, explicit
-recipe overrides, signatures, wrong/billed/truncated/transformed receipts,
-content rejection, late role results, lost acknowledgements, unknown jobs and
-zero-credit subscription versus normal API accounting with run attribution.
-
-The explicit paid smoke script uses three already-published first-party videos:
+Run targeted Vitest coverage from App CI, then Python tests:
 
 ```sh
-node --env-file=/private/path/to/credentials.env --import tsx \
-  scripts/check-gemini-video-relay.ts --run-api --compare-current
+python -m pip install -r services/google-subscription-extension/requirements.txt
+python -m unittest discover -s services/google-subscription-extension -p 'test_*.py'
 ```
 
-It requires an existing administrator in `GEMINI_VIDEO_RELAY_TEST_USER_ID`, writes
-local evidence, and does not write product balances or usage rows. Without
-`--run-api` it makes no model requests. `provider=google-api` after preflight is
-an API fallback result, never a successful Relay comparison.
-
-Before rollout, compare repeated direct-API and **real subscription** runs on the
-same original videos and prompts, including long input, OCR, timeline/camera
-changes, dialogue and verified silent input. Check silence explicitly: the
-current API smoke can invent background music on silent fixtures. Freeze source
-hashes and compare factual quality, p50/p95, cold/warm paths, concurrency,
-subscription allowance and every fallback class. Local Mac latency is not
-production Vercel latency. A few short API-only samples establish neither
-non-regression nor savings.
-
-Verify real `chat → analyze_video`, standalone MCP/CLI and administrator ledger
-rows before enabling. Check ordinary-user behavior and rollback by disabling the
-feature. Follow the normal release/CLI parity workflow only after the service
-extension and these gates pass. This PR does not change production variables,
-deploy the Relay, rotate/revoke shared keys, publish CLI, change image models or
-change embeddings.
+The opt-in smoke script calls published hero videos only and writes private local
+results, without touching product balances. Real comparisons must identify
+`provider=gemini-subscription`; an API fallback is not a Relay result. Short
+first-party smoke does not establish long-video/OCR/dialogue quality, latency
+percentiles or production acceptance. Keep the flag off until those gates,
+real chat/MCP/admin ledger checks, role revocation and rollback checks pass.
+Publish and CLI parity follow the normal release checklist after authorization.

@@ -1,6 +1,7 @@
 import {
   getDynamicCodexSubscriptionAllowedUserIds,
   getCodexSubscriptionEligibleUserIds,
+  getGeminiSubscriptionEligibleUserIds,
   getPersonalSubscriptionOwnerUserIds,
   normalizeCodexSubscriptionUserIds,
   saveDynamicCodexSubscriptionAllowedUserIds,
@@ -8,9 +9,13 @@ import {
 import { readCodexSubscriptionRelayAllowlist, syncCodexSubscriptionRelayAllowlist } from './codex-subscription';
 import { getGrokSubscriptionOwnerUserId, readGrokSubscriptionRelayAllowlist, syncGrokSubscriptionRelayAllowlist } from './grok-subscription';
 
-export type PersonalPlanSyncStatus = 'synced' | 'pending' | 'unavailable';
+import { geminiRelayConfig, readGeminiSubscriptionRelayAllowlist, syncGeminiSubscriptionRelayAllowlist } from './gemini-video-subscription';
+
+export type PersonalPlanProvider = 'codex' | 'grok' | 'gemini';
+export type PersonalPlanSyncStatus = 'synced' | 'pending' | 'unavailable' | 'disabled';
 
 function relayControls() {
+  const google = geminiRelayConfig();
   return [
     {
       id: 'codex' as const,
@@ -25,6 +30,10 @@ function relayControls() {
       read: readGrokSubscriptionRelayAllowlist,
       write: syncGrokSubscriptionRelayAllowlist,
     },
+    ...(process.env.GEMINI_VIDEO_RELAY_ENABLED === 'true' ? [{
+      id: 'gemini' as const, owner: google?.owner,
+      read: readGeminiSubscriptionRelayAllowlist, write: syncGeminiSubscriptionRelayAllowlist,
+    }] : []),
   ];
 }
 
@@ -34,7 +43,7 @@ function sameMembers(a: string[], b: string[]): boolean {
   return left.size === right.size && [...left].every(id => right.has(id));
 }
 
-export async function getPersonalPlanSyncStatus(userIds: string[]): Promise<Record<'codex' | 'grok', PersonalPlanSyncStatus>> {
+export async function getPersonalPlanSyncStatus(userIds: string[]): Promise<Record<PersonalPlanProvider, PersonalPlanSyncStatus>> {
   let codexIds: string[];
   try {
     codexIds = await getCodexSubscriptionEligibleUserIds(userIds);
@@ -46,12 +55,14 @@ export async function getPersonalPlanSyncStatus(userIds: string[]): Promise<Reco
       if (relay.id === 'codex' && codexIds.length === 0) throw new Error('admin roster unavailable');
       if (!relay.owner) throw new Error('owner not configured');
       const remote = await relay.read(relay.owner);
-      return [relay.id, sameMembers(remote, relay.id === 'codex' ? codexIds : userIds) ? 'synced' : 'pending'] as const;
+      const expected = relay.id === 'codex' ? codexIds
+        : relay.id === 'gemini' ? await getGeminiSubscriptionEligibleUserIds(userIds) : userIds;
+      return [relay.id, sameMembers(remote, expected) ? 'synced' : 'pending'] as const;
     } catch {
       return [relay.id, 'unavailable'] as const;
     }
   }));
-  return Object.fromEntries(statuses) as Record<'codex' | 'grok', PersonalPlanSyncStatus>;
+  return { gemini: 'disabled', ...Object.fromEntries(statuses) } as Record<PersonalPlanProvider, PersonalPlanSyncStatus>;
 }
 
 // Serialize edits within an instance; compute mutations from fresh state inside
@@ -65,9 +76,11 @@ export function updatePersonalSubscriptionAllowlist(
     const previous = await getDynamicCodexSubscriptionAllowedUserIds(undefined, { strict: true });
     const next = normalizeCodexSubscriptionUserIds([...mutate(previous), ...getPersonalSubscriptionOwnerUserIds()]);
     const codexNext = await getCodexSubscriptionEligibleUserIds(next);
+    const geminiNext = process.env.GEMINI_VIDEO_RELAY_ENABLED === 'true'
+      ? await getGeminiSubscriptionEligibleUserIds(next) : [];
     if (next.length > 100 || codexNext.length > 100) throw new Error('Personal subscription allowlist is limited to 100 accounts');
     const relays = relayControls();
-    // Read BOTH actual lists before any write. Grok may still contain a legacy
+    // Read all actual lists before any write. Grok may still contain a legacy
     // subset; rolling it back to the DB list would accidentally grant access.
     const snapshots = await Promise.all(relays.map(async relay => {
       if (!relay.owner) throw new Error(`${relay.id} owner is not configured`);
@@ -77,7 +90,7 @@ export function updatePersonalSubscriptionAllowlist(
     try {
       for (const [index, relay] of relays.entries()) {
         attempted.push(index); // also roll back a timed-out, possibly-applied write
-        await relay.write(relay.id === 'codex' ? codexNext : next, relay.owner!);
+        await relay.write(relay.id === 'codex' ? codexNext : relay.id === 'gemini' ? geminiNext : next, relay.owner!);
       }
       await saveDynamicCodexSubscriptionAllowedUserIds(next);
       return next;
@@ -105,12 +118,18 @@ export function syncCodexAdminAllowlist(): Promise<void> {
       || process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim();
     if (!owner) throw new Error('Codex owner is not configured');
     const snapshot = await readCodexSubscriptionRelayAllowlist(owner);
-    if (sameMembers(snapshot, eligible)) return;
+    const google = relayControls().find(relay => relay.id === 'gemini');
+    const googleEligible = google ? await getGeminiSubscriptionEligibleUserIds(shared) : [];
+    if (google && !google.owner) throw new Error('Google owner is not configured');
+    const googleSnapshot = google ? await google.read(google.owner!) : undefined;
     try {
-      await syncCodexSubscriptionRelayAllowlist(eligible, owner);
+      if (!sameMembers(snapshot, eligible)) await syncCodexSubscriptionRelayAllowlist(eligible, owner);
+      if (google && !sameMembers(googleSnapshot!, googleEligible)) await google.write(googleEligible, google.owner!);
     } catch (error) {
       try {
-        await syncCodexSubscriptionRelayAllowlist(snapshot, owner);
+        const results = await Promise.allSettled([syncCodexSubscriptionRelayAllowlist(snapshot, owner),
+          ...(google ? [google.write(googleSnapshot!, google.owner!)] : [])]);
+        if (results.some(result => result.status === 'rejected')) throw new Error('rollback failed');
       } catch {
         throw new Error('CODEX_ADMIN_SYNC_INCOMPLETE: relay rollback failed; retry synchronization');
       }
