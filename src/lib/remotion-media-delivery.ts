@@ -8,7 +8,7 @@ const RAW_MEDIA = /\/object\/public\/images\/.+\.(?:wav|mp3|m4a|aac|ogg|mp4|mov|
 interface Metadata {etag: string; size: number; type: string; freshness: number; modified?: string}
 interface Options {origin?: string; secret?: string; userId: string; budgetMs?: number; fetch?: typeof fetch; now?: number; readySignal?: Promise<unknown>}
 export interface RenderDeliveryPlan {
-  apply(design: DesignPayload): DesignPayload;
+  sources(design: DesignPayload): Record<string, string>;
   summary: {enabled: boolean; eligible: number; versioned: number; bypassed: number; lookupMs: number};
 }
 interface PendingDelivery {promise: Promise<RenderDeliveryPlan>; release(): void; createdAt: number}
@@ -86,7 +86,7 @@ export async function resolveRemotionMediaDelivery(design: Pick<DesignPayload, '
   const secret = options.secret || process.env.REMOTION_MEDIA_DELIVERY_SECRET;
   const summary = {enabled: false, eligible: 0, versioned: 0, bypassed: 0, lookupMs: 0};
   if (!origin || !secret || secret.length < 32 || !['https://cdn.makaron.app', 'https://media-cache.makaron.app'].includes(origin)) {
-    return {summary, apply: value => value};
+    return {summary, sources: () => ({})};
   }
   summary.enabled = true;
   const urls = new Set<string>();
@@ -112,6 +112,12 @@ export async function resolveRemotionMediaDelivery(design: Pick<DesignPayload, '
   }));
   await Promise.race([work, deadline, ...(options.readySignal ? [options.readySignal] : [])]); clearTimeout(timer); controller.abort();
   summary.lookupMs = Date.now() - start; summary.versioned = versions.size; summary.bypassed = urls.size - versions.size;
-  return {summary, apply: value => mapDesignMedia(value, url => eligible(url)
-    ? signRenderMediaUrl(url, origin, secret, versions.get(url), options.now) : url)};
+  return {summary, sources: value => {
+    const sources: Record<string, string> = Object.create(null);
+    mapDesignMedia(value, url => {
+      if (eligible(url)) sources[url] = signRenderMediaUrl(url, origin, secret, versions.get(url), options.now);
+      return url;
+    });
+    return sources;
+  }};
 }

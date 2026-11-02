@@ -1,5 +1,6 @@
 import { withMediaTrim } from '../lib/remotion-media-props';
 import { withVideoFit } from '../lib/remotion-video-fit';
+import { withMediaSource } from '../lib/remotion-media-sources';
 /**
  * DynamicDesign — a Remotion composition that compiles and renders Agent-generated JSX code.
  * Used by both browser-side Player and server-side Sandbox (renderStillOnVercel).
@@ -37,11 +38,11 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(prop
   return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps, ref });
 });
 
-function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean): Record<string, unknown> {
-  const serverVideo = withVideoFit(Remotion.OffthreadVideo || MediaVideo, !Remotion.OffthreadVideo, MediaVideo);
-  const nativeVideo = withVideoFit(Remotion.Video || MediaVideo, !Remotion.Video, MediaVideo);
+function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean, sources?: Record<string, string>): Record<string, unknown> {
+  const serverVideo = withMediaSource(withVideoFit(Remotion.OffthreadVideo || MediaVideo, !Remotion.OffthreadVideo, MediaVideo), sources);
+  const nativeVideo = withMediaSource(withVideoFit(Remotion.Video || MediaVideo, !Remotion.Video, MediaVideo), sources);
   const serverRendering = useOffthreadVideo || useNativeVideo;
-  const mediaVideo = withVideoFit(MediaVideo, true);
+  const mediaVideo = withMediaSource(withVideoFit(MediaVideo, true), sources);
   const preferredVideo = useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : mediaVideo;
   const scope: Record<string, unknown> = {
     React, useState, useEffect, useCallback, useMemo, useRef,
@@ -51,15 +52,15 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
     ...RemotionNoise,
     // @remotion/media keeps browser/web-renderer preview behavior; server export can opt into
     // Remotion-native Video so the renderer can collect source-video audio assets.
-    Audio: withMediaTrim(MediaAudio),
-    Html5Audio: withMediaTrim(Remotion.Html5Audio),
+    Audio: withMediaSource(withMediaTrim(MediaAudio), sources),
+    Html5Audio: withMediaSource(withMediaTrim(Remotion.Html5Audio), sources),
     Video: preferredVideo,
     Html5Video: preferredVideo,
     // An explicit <OffthreadVideo> must remain meaningful in server preview/export.
     // Previously it was silently aliased back to @remotion/media whenever only
     // useNativeVideo was set, so an Agent "compatibility" patch changed the
     // component name without changing the decoder at all.
-    OffthreadVideo: serverRendering ? serverVideo : withVideoFit(MediaVideo, true),
+    OffthreadVideo: serverRendering ? serverVideo : mediaVideo,
     // Override: Sequence with auto premountFor
     Sequence: AutoPremountSequence,
   };
@@ -174,6 +175,7 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
   fontTelemetryId,
   useOffthreadVideo,
   useNativeVideo,
+  mediaSources,
 }) => {
   const currentFrame = useCurrentFrame();
   const initialFrameRef = useRef(currentFrame);
@@ -188,8 +190,9 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
     [designProps],
   );
   const remotionScope = useMemo(
-    () => createRemotionScope(useOffthreadVideo === true, useNativeVideo === true),
-    [useNativeVideo, useOffthreadVideo],
+    () => createRemotionScope(useOffthreadVideo === true, useNativeVideo === true,
+      mediaSources && typeof mediaSources === 'object' ? mediaSources as Record<string, string> : undefined),
+    [useNativeVideo, useOffthreadVideo, mediaSources],
   );
   const substitutions = useMemo(
     () => (typeof fontSubstitutions === 'object' && fontSubstitutions !== null

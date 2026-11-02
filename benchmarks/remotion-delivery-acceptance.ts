@@ -3,7 +3,7 @@ import {readFile, writeFile, mkdir} from 'node:fs/promises';
 import path from 'node:path';
 import dotenv from 'dotenv';
 import type {DesignPayload} from '../src/types';
-import {mediaDeliveryUrl, routeDesignMedia} from '../src/lib/media-delivery';
+import {mediaDeliveryUrl} from '../src/lib/media-delivery';
 import {localizePreviewMedia} from '../src/lib/remotion-preview-media';
 import {resolveRemotionMediaDelivery} from '../src/lib/remotion-media-delivery';
 import {createDeliveryVerifier} from './remotion-delivery-verifier';
@@ -26,7 +26,6 @@ async function main() {
   const prepared = await prepareRemotionExportMedia(design, {userId});
   console.log(JSON.stringify({stage: 'prepared', summary: prepared.summary}));
   const origin = 'https://media-cache.makaron.app';
-  let routed = routeDesignMedia(prepared.design, origin);
   const found = new Set<string>();
   function collect(value: unknown): void {
     if (typeof value === 'string') for (const match of value.matchAll(/https?:\/\/[^\s"'`<>)}\]]+/g)) found.add(match[0]);
@@ -65,7 +64,7 @@ async function main() {
       return new Response(new Uint8Array([0]), {status: probe.status, headers: probe.headers});
     }) as typeof fetch});
   if (!plan.summary.enabled || plan.summary.versioned < 1) throw new Error('Versioned render gateway is not configured/ready');
-  routed = plan.apply(prepared.design);
+  const mediaSources = plan.sources(prepared.design);
   await writeFile(path.join(output, 'sources.json'), JSON.stringify({preparation: prepared.summary, sources}, null, 2));
   if (process.env.MAKARON_ACCEPTANCE_PREPARE_ONLY === 'true') {
     await writeFile(path.join(output, 'prepared.private.json'), JSON.stringify(prepared.design), {mode: 0o600});
@@ -78,8 +77,8 @@ async function main() {
     const variant = new URL(url); variant.searchParams.set('download', `acceptance-${Date.now()}`);
     return {url, path: variant.href};
   }));
-  for (const renderInput of [coldDesign, plan.apply(coldDesign)]) {
-    const r = await renderDesignVideoLambdaToUrl(renderInput);
+  for (const mode of ['baseline', 'cloudflare']) {
+    const r = await renderDesignVideoLambdaToUrl(coldDesign, mode === 'cloudflare' ? {mediaSources: plan.sources(coldDesign)} : {});
     const decoded = await verifier.verify(r.url, true);
     priming.push({rendererMs: r.renderSeconds * 1000, cost: r.progress.costs, videoHash: decoded.videoHash, audioHash: decoded.audioHash});
     console.log(JSON.stringify({stage: 'prime', round: priming.length, rendererMs: r.renderSeconds * 1000}));
@@ -89,7 +88,7 @@ async function main() {
   const rounds = process.argv.includes('--extended') ? [...order, ...order] : order;
   for (const [index, mode] of rounds.entries()) {
     const start = Date.now();
-    const rendered = await renderDesignVideoLambdaToUrl(mode === 'baseline' ? prepared.design : routed);
+    const rendered = await renderDesignVideoLambdaToUrl(prepared.design, mode === 'cloudflare' ? {mediaSources} : {});
     const wallMs = Date.now() - start;
     console.log(JSON.stringify({stage: 'render-completed', round: index + 1, mode, wallMs}));
     const file = path.join(output, `${index + 1}-${mode}.mp4`);

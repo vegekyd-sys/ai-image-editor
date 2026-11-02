@@ -41,6 +41,8 @@ No CLI/API command or product UI contract changes. The optional `REMOTION_MEDIA_
 
 All frame workers reuse the same validated version. HMAC is verified before any edge hit, is bound to the canonical source URL and version, and expires within six hours. Tokens are stable within an hour for browser reuse. Tokens are removed before origin requests and never enter saved compositions; cloud account credentials never reach frame workers. Private/provider URLs remain unchanged. Capabilities assert a public media version; they do not make public source objects private. Query-string logging is redacted.
 
+Transport overrides are supplied separately as `mediaSources` to the Lambda composition and applied only to the actual audio/video component `src`. Authored code, props, visible URL text, editable identities and font-selection input retain the canonical source. The optional runtime contract is `mediaSourcesVersion: 1`; old applications can use the new site without overrides, while a render with overrides requires that marker. Candidate site promotion is independent of both sandbox snapshot contracts.
+
 Ordinary playback/download metadata revalidates within 60 seconds. Versioned edge bodies can live for a day; current metadata chooses the matching version. Browser freshness follows the original policy up to one hour. Source CSP and nosniff protections are retained.
 
 Full API acceptance used a separate-secret, Preview-only operator harness on an isolated deployment. It created unpublished, uniquely marked export jobs through the real queue/renderer pipeline. The harness and its internal mode override were removed before production promotion. Keep `REMOTION_EXPORT_SOURCE_CACHE` off: the earlier S3 candidate is not part of this Cloudflare rollout.

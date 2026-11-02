@@ -157,6 +157,7 @@ const runtimeMarkerCache = new Map<string, Promise<void>>()
 export function assertRemotionRuntimeMarker(
   marker: unknown,
   serveUrl: string,
+  requireMediaSources = false,
 ): void {
   const value = marker && typeof marker === 'object'
     ? marker as Record<string, unknown>
@@ -164,18 +165,21 @@ export function assertRemotionRuntimeMarker(
   if (value.runtimeVersion !== REMOTION_FONT_RUNTIME_VERSION
     || value.fontCatalogVersion !== REMOTION_FONT_CATALOG_VERSION
     || value.editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION
-    || value.remotionVersion !== REMOTION_VERSION) {
+    || value.remotionVersion !== REMOTION_VERSION
+    || (requireMediaSources && value.mediaSourcesVersion !== 1)) {
     throw new Error(
       `Remotion render site version mismatch: ${serveUrl}. `
       + `Expected ${REMOTION_FONT_RUNTIME_VERSION}/${REMOTION_FONT_CATALOG_VERSION}`
-      + `/${REMOTION_EDITABLE_RUNTIME_VERSION}/Remotion ${REMOTION_VERSION}.`,
+      + `/${REMOTION_EDITABLE_RUNTIME_VERSION}/Remotion ${REMOTION_VERSION}`
+      + (requireMediaSources ? '/mediaSourcesVersion 1.' : '.'),
     )
   }
 }
 
-async function assertPinnedRemotionRuntime(serveUrl: string): Promise<void> {
+async function assertPinnedRemotionRuntime(serveUrl: string, requireMediaSources = false): Promise<void> {
   const markerUrl = new URL('public/remotion-runtime.json', serveUrl).href
-  let pending = runtimeMarkerCache.get(markerUrl)
+  const cacheKey = markerUrl + (requireMediaSources ? '#media-sources-v1' : '')
+  let pending = runtimeMarkerCache.get(cacheKey)
   if (!pending) {
     pending = (async () => {
       const response = await fetch(markerUrl, { cache: 'no-store' })
@@ -185,14 +189,14 @@ async function assertPinnedRemotionRuntime(serveUrl: string): Promise<void> {
           + 'Deploy the current Remotion runtime and update REMOTION_LAMBDA_SERVE_URL.',
         )
       }
-      assertRemotionRuntimeMarker(await response.json(), serveUrl)
+      assertRemotionRuntimeMarker(await response.json(), serveUrl, requireMediaSources)
     })()
-    runtimeMarkerCache.set(markerUrl, pending)
+    runtimeMarkerCache.set(cacheKey, pending)
   }
   try {
     await pending
   } catch (error) {
-    runtimeMarkerCache.delete(markerUrl)
+    runtimeMarkerCache.delete(cacheKey)
     throw error
   }
 }
@@ -506,13 +510,14 @@ export async function renderDesignVideoLambdaToUrl(
     onProgress?: (progress: unknown) => void | Promise<void>
     scale?: number
     outputDestination?: RemotionLambdaOutputDestination
+    mediaSources?: Record<string, string>
   } = {},
 ): Promise<RemotionLambdaUrlResult> {
   const region = readEnv('REMOTION_LAMBDA_REGION') || readEnv('AWS_REGION') || 'us-east-1'
   const functionName = lambdaEnv('REMOTION_LAMBDA_FUNCTION_NAME')
   const rendererFunctionName = readEnv('REMOTION_LAMBDA_RENDERER_FUNCTION_NAME')
   const serveUrl = lambdaEnv('REMOTION_LAMBDA_SERVE_URL')
-  await assertPinnedRemotionRuntime(serveUrl)
+  await assertPinnedRemotionRuntime(serveUrl, Boolean(options.mediaSources && Object.keys(options.mediaSources).length))
   const fps = design.animation?.fps || 30
   const dur = design.animation?.durationInSeconds || 1 / fps
   const durationInFrames = Math.max(1, Math.round(fps * dur))
@@ -567,6 +572,7 @@ export async function renderDesignVideoLambdaToUrl(
         inputProps: {
           code: preparedCode,
           designProps: normalizeRemotionTextValue(design.props || {}),
+          ...(options.mediaSources && Object.keys(options.mediaSources).length ? {mediaSources: options.mediaSources} : {}),
           fps,
           durationInFrames,
           width: design.width || 1080,

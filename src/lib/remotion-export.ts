@@ -903,7 +903,8 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
         })
       : { design: resolvedDesign, summary: undefined }
     stageTimings.prepareMediaMs = Date.now() - preparationStart
-    let renderDesign = preparedMedia.design
+    const renderDesign = preparedMedia.design
+    let mediaSources: Record<string, string> | undefined
     // Use only versions resolved during existing work. Unready sources receive
     // an origin capability, so no replica or version lookup can delay export.
     releaseDelivery()
@@ -911,7 +912,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
     if (delivery) {
       const deliveryStart = Date.now()
       const plan = await delivery
-      renderDesign = plan.apply(renderDesign)
+      mediaSources = plan.sources(renderDesign)
       outputMetadata.mediaDelivery = plan.summary
       stageTimings.mediaDeliveryWaitMs = Date.now() - deliveryStart
     }
@@ -931,6 +932,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
       let lambdaResult: Awaited<ReturnType<typeof renderDesignVideoLambdaToUrl>>
       try {
         lambdaResult = await renderDesignVideoLambdaToUrl(renderDesign, {
+          mediaSources,
           scale: renderTarget.scale,
           onProgress: updateProgress,
           outputDestination: directOutputDestination || undefined,
@@ -949,6 +951,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
         }).eq('id', job.id)
         const retryStart = Date.now()
         lambdaResult = await renderDesignVideoLambdaToUrl(renderDesign, {
+          mediaSources,
           scale: renderTarget.scale,
           onProgress: updateProgress,
         })

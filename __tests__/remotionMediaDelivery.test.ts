@@ -53,31 +53,30 @@ describe('render-only version capabilities', () => {
     const plan = await planPromise;
     expect(plan.summary.versioned).toBe(1);
     expect(calls).toEqual([url.replace('cdn.makaron.app', 'sdyrtztrjgmmpnirswxt.supabase.co')]);
-    const routed = plan.apply(design);
-    expect((await payload(routed.props!.voice as string))?.metadata.etag).toBe('"v1"');
-    expect(routed.code).toContain('trimBefore={45} volume={0.7}'); expect(design.props!.voice).toBe(url);
+    expect((await payload(plan.sources(design)[url]))?.metadata.etag).toBe('"v1"');
+    expect(design.code).toContain(`src="${url}" trimBefore={45} volume={0.7}`); expect(design.props!.voice).toBe(url);
   });
   it('never waits for unfinished probes when existing preparation is ready', async () => {
     const plan = await resolveRemotionMediaDelivery(design, {userId: 'owner', origin, secret,
       readySignal: Promise.resolve(), fetch: (() => new Promise(() => {})) as typeof fetch});
     expect(plan.summary.versioned).toBe(0);
-    expect((await payload(plan.apply(design).props!.voice as string))?.bypass).toBe(true);
+    expect((await payload(plan.sources(design)[url]))?.bypass).toBe(true);
   });
   it('does not prefetch another owner and bypasses unsafe source metadata', async () => {
     for (const policy of ['private', 'no-store']) {
       const plan = await resolveRemotionMediaDelivery(design, {userId: 'owner', origin, secret,
         fetch: (async () => {const r = readyResponse(); r.headers.set('cache-control', policy); return r;}) as typeof fetch});
       expect(plan.summary.versioned).toBe(0);
-      expect((await payload(plan.apply(design).props!.voice as string))?.bypass).toBe(true);
+      expect((await payload(plan.sources(design)[url]))?.bypass).toBe(true);
     }
     const plan = await resolveRemotionMediaDelivery(design, {userId: 'different-owner', origin, secret,
       fetch: (() => {throw new Error('must not fetch');}) as typeof fetch});
     expect(plan.summary.eligible).toBe(0);
-    expect((await payload(plan.apply(design).props!.voice as string))?.bypass).toBe(true);
+    expect((await payload(plan.sources(design)[url]))?.bypass).toBe(true);
   });
   it('is off without the isolated configuration and preserves private/provider URLs', async () => {
     const off = await resolveRemotionMediaDelivery(design, {userId: 'owner', origin, secret: 'short'});
-    expect(off.apply(design)).toBe(design);
+    expect(off.sources(design)).toEqual({});
     expect(signRenderMediaUrl(url + '?token=private', origin, secret, meta)).toBe(url + '?token=private');
     expect(signRenderMediaUrl('https://provider.test/private.wav', origin, secret, meta)).toBe('https://provider.test/private.wav');
   });
