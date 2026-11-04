@@ -272,6 +272,8 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.cliLargeUploads.title': "CLI 支持更大视频上传",
+  'changelog.cliLargeUploads.item1': "通过 CLI 上传最大 500MB 的视频用于项目编辑或分析，无需再先压缩到 50MB。",
   'changelog.retakeChoices.title': "Retake 更多选择，默认仍是 Kling 4",
   'changelog.retakeChoices.item1': "局部重拍可手动选择更多视频模型；不指定模型时继续使用 Kling 4。",
   'changelog.retakeChoices.item2': "已生成的视频在连接中断后可继续恢复交付，减少重复生成。",

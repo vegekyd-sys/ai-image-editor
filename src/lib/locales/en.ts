@@ -272,6 +272,8 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.cliLargeUploads.title': "Upload larger videos from the CLI",
+  'changelog.cliLargeUploads.item1': "Upload videos up to 500MB for project editing or analysis, with no need to compress them to 50MB first.",
   'changelog.retakeChoices.title': "More Retake choices, still Kling 4 by default",
   'changelog.retakeChoices.item1': "Choose from more video models for a local retake. Kling 4 remains the default when no model is specified.",
   'changelog.retakeChoices.item2': "Resume delivery of an already generated video after a connection interruption, reducing duplicate generation.",
