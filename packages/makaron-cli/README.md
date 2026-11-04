@@ -317,7 +317,7 @@ npx makaron-cli chat --project <id> --video party.mp4 --image kid.jpg -b "make t
 npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "splice these into one seamless video"
 ```
 
-Video files are uploaded via signed URL. CLI local video uploads support `.mp4`, `.mov`, or `.webm`, max 50MB, max 900s (15 minutes) with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits.
+Video files are uploaded via signed URL. CLI local video uploads support `.mp4`, `.mov`, or `.webm`, max 500MB, max 900s (15 minutes) with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The CLI uploads files over 6MB directly to Storage in 6MB resumable chunks without loading the entire file into memory and rejects videos above those limits. Local `makaron analyze --video` uploads also support max 500MB; analysis provider limits still apply.
 For a new presenter or product video, ask for picture, speech, lip sync and music together in one `chat` brief. Seedance 2.5 defaults to Eco. Native subtitles can be included; for precise or editable captions, Makaron keeps the native soundtrack and adds text through a lightweight composition, without a Studio production recipe or another voice generation. Review the completed MP4 for speech, caption spelling and synchronization.
 
 The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling 4.0 supports direct edit for a 3-30s source.

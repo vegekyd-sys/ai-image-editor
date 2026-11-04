@@ -52,12 +52,13 @@ const CHAT_AGENT_MODELS = [
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_FJFN2YYaWaQjABUKLqxQcA_fhxPLFDY';
 
-const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 50;
+const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 500;
 const MAX_VIDEO_UPLOAD_FILE_SIZE = MAX_VIDEO_UPLOAD_FILE_SIZE_MB * 1024 * 1024;
 const MAX_VIDEO_UPLOAD_DURATION = 900;
 const MAX_VIDEO_UPLOAD_DURATION_TOLERANCE = 1;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE = 0.5;
+const MAX_VIDEO_PROVIDER_REFERENCE_FILE_SIZE = 50 * 1024 * 1024;
 const MIN_AUDIO_REFERENCE_DURATION = 2;
 const MAX_AUDIO_REFERENCE_DURATION = 15;
 const MAX_AUDIO_REFERENCE_DURATION_TOLERANCE = 0.5;
@@ -522,6 +523,10 @@ Options:
   --json                    Output structured JSON (includes per-run "usage" credits).
   --stream                  Live SSE; follows the same run after handoff.
   --help, -h                Show this help.
+
+Local video uploads: MP4/MOV/WebM, max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB,
+max ${MAX_VIDEO_UPLOAD_DURATION}s (15 minutes, with 1s metadata tolerance), <=1080p.
+Direct video model reference limits remain provider-specific.
 
 Agent LLM defaults to auto, following the server-configured Agent model.
 When that default is a GPT model, eligible accounts can use the Codex plan.
@@ -1596,10 +1601,96 @@ function readImageAsDataUrl(filePath) {
   return `data:${v.mime};base64,${buf.toString('base64')}`;
 }
 
+async function uploadFileResumable(uploadUrl, token, storagePath, filePath, contentType) {
+  const chunkSize = 6 * 1024 * 1024;
+  const size = fs.statSync(filePath).size;
+  const bucket = new URL(uploadUrl).pathname.match(/\/object\/upload\/sign\/([^/]+)\//)?.[1];
+  if (!bucket || !storagePath) {
+    process.stderr.write('⚠️ Missing resumable upload metadata. Update the Makaron service and retry.\n');
+    return null;
+  }
+  const headers = { 'Tus-Resumable': '1.0.0', 'x-signature': token, apikey: SUPABASE_ANON_KEY };
+  const metadata = Object.entries({ bucketName: decodeURIComponent(bucket), objectName: storagePath, contentType, cacheControl: '3600' })
+    .map(([key, value]) => `${key} ${Buffer.from(value).toString('base64')}`).join(',');
+  let file;
+  try {
+    const created = await fetch(new URL('/storage/v1/upload/resumable/sign', uploadUrl), {
+      method: 'POST',
+      headers: { ...headers, 'Upload-Length': String(size), 'Upload-Metadata': metadata },
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!created.ok || !created.headers.get('location')) {
+      process.stderr.write(`⚠️ Failed to start resumable upload (HTTP ${created.status}).\n`);
+      return null;
+    }
+    const location = new URL(created.headers.get('location'), uploadUrl);
+    const offsetFrom = response => {
+      const raw = response.headers.get('upload-offset');
+      const value = raw === null ? NaN : Number(raw);
+      return Number.isSafeInteger(value) && value >= 0 && value <= size ? value : null;
+    };
+    let offset = 0;
+    let retries = 0;
+    let progress = 0;
+    file = await fs.promises.open(filePath, 'r');
+    const buffer = Buffer.alloc(chunkSize);
+    while (offset < size) {
+      const length = Math.min(chunkSize, size - offset);
+      let read = 0;
+      while (read < length) {
+        const { bytesRead } = await file.read(buffer, read, length - read, offset + read);
+        if (!bytesRead) throw new Error('Unexpected end of upload file');
+        read += bytesRead;
+      }
+      let response;
+      try {
+        response = await fetch(location, {
+          method: 'PATCH',
+          headers: { ...headers, 'Upload-Offset': String(offset), 'Content-Type': 'application/offset+octet-stream' },
+          body: buffer.subarray(0, length),
+          signal: AbortSignal.timeout(60_000),
+        });
+      } catch {
+        // A lost response may still mean the chunk committed. HEAD reconciles it.
+      }
+      const next = response?.ok ? offsetFrom(response) : null;
+      if (next === offset + length) {
+        offset = next;
+        retries = 0;
+      } else {
+        if (response && !response.ok && response.status < 500 && ![408, 409, 429].includes(response.status)) {
+          process.stderr.write(`⚠️ Failed to upload file (HTTP ${response.status}).\n`);
+          return null;
+        }
+        if (++retries > 3) throw new Error('Resumable upload retries exhausted');
+        await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+        const head = await fetch(location, { method: 'HEAD', headers, signal: AbortSignal.timeout(60_000) }).catch(() => null);
+        const committed = head?.ok ? offsetFrom(head) : null;
+        if (committed !== null) {
+          if (committed < offset || committed > offset + length) throw new Error('Invalid resumable upload offset');
+          if (committed > offset) { offset = committed; retries = 0; }
+        }
+        continue;
+      }
+      const percent = Math.floor(offset / size * 10) * 10;
+      if (percent > progress) {
+        progress = percent;
+        process.stderr.write(`📤 Upload ${percent}%\n`);
+      }
+    }
+    return true;
+  } catch {
+    process.stderr.write('⚠️ Resumable upload failed. Retry the upload.\n');
+    return null;
+  } finally {
+    await file?.close();
+  }
+}
+
 /**
  * Upload a local file via signed URL (works for both images and videos).
  * 1. POST /api/storage/upload-url → get signed URL + public URL
- * 2. PUT file directly to Supabase Storage (no Vercel body limit)
+ * 2. Upload directly to Storage; files over 6MB use signed TUS chunks.
  * Returns public URL on success, null on failure.
  */
 async function uploadFileViaSignedUrl(baseUrl, headers, projectId, filePath, contentType, options = {}) {
@@ -1614,23 +1705,33 @@ async function uploadFileViaSignedUrl(baseUrl, headers, projectId, filePath, con
     process.stderr.write(`⚠️ Failed to get upload URL: ${await urlRes.text()}\n`);
     return null;
   }
-  const { uploadUrl, token, publicUrl } = await urlRes.json();
+  const { uploadUrl, token, publicUrl, path: storagePath } = await urlRes.json();
+
+  if (fs.statSync(filePath).size > 6 * 1024 * 1024) {
+    return await uploadFileResumable(uploadUrl, token, storagePath, filePath, contentType) ? publicUrl : null;
+  }
 
   // Step 2: PUT file directly to Supabase Storage
-  const buf = fs.readFileSync(filePath);
-  const putRes = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': contentType,
-      'Authorization': `Bearer ${token}`,
-    },
-    body: buf,
-  });
-  if (!putRes.ok) {
-    process.stderr.write(`⚠️ Failed to upload file: ${await putRes.text()}\n`);
-    return null;
+  const file = fs.createReadStream(filePath);
+  try {
+    const putRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': String(fs.statSync(filePath).size),
+        'Authorization': `Bearer ${token}`,
+      },
+      body: file,
+      duplex: 'half',
+    });
+    if (!putRes.ok) {
+      process.stderr.write(`⚠️ Failed to upload file: ${await putRes.text()}\n`);
+      return null;
+    }
+    return publicUrl;
+  } finally {
+    file.destroy();
   }
-  return publicUrl;
 }
 
 async function uploadImageFilesViaSignedUrl(baseUrl, headers, projectId, imagePaths) {
@@ -1888,7 +1989,7 @@ function validateVideoFileForAnalysis(videoPath) {
     return { ok: false, error: `Video file is empty: ${videoPath}` };
   }
   if (stat.size > MAX_VIDEO_UPLOAD_FILE_SIZE) {
-    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB). The CLI uploads directly to Storage; use the frontend to transcode larger videos first.` };
+    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB). Compress or split the video before uploading.` };
   }
   const ext = path.extname(videoPath).slice(1).toLowerCase();
   if (!['mp4', 'mov', 'webm'].includes(ext)) {
@@ -2264,7 +2365,7 @@ Not sure which built-in skill to use? Start with:
   } else if (topic === 'edit') {
     printEditHelp();
   } else if (topic === 'analyze') {
-    console.log('Usage: makaron analyze --video <file|url> ["question"]');
+    console.log(`Usage: makaron analyze --video <file|url> ["question"]\nLocal video uploads: MP4/MOV/WebM, max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB. Analysis provider limits apply.`);
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
     else if (subtopic === 'create') printVideoCreateHelp();
@@ -2648,7 +2749,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   }
 
   if (chatVideos.length > 0) {
-    // Upload local files via signed URL (no size limit, works with API key auth)
+    // Stream prevalidated local files via signed URL (works with API key auth).
     const uploadedVideoUrls = [...prevalidatedVideoUrlList];
     const uploadedVideoMetas = prevalidatedVideoUrlList.map(() => null);
     if (prevalidatedVideoUrlList.length) {
@@ -3324,7 +3425,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         maxDuration: providerMaxDuration,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
         maxFramePixels: providerMaxPixels,
-        maxFileSize: isWan30 ? MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE : isSeedance25 || isSyncLipsync || isKling4 ? 200 * 1024 * 1024 : MAX_VIDEO_UPLOAD_FILE_SIZE,
+        maxFileSize: isWan30 ? MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE : isSeedance25 || isSyncLipsync || isKling4 ? 200 * 1024 * 1024 : MAX_VIDEO_PROVIDER_REFERENCE_FILE_SIZE,
         ...(isKling4 ? {
           allowedExtensions: ['mp4', 'mov'], minSide: 720, maxSide: 2160,
         } : isGrok ? {

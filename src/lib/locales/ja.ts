@@ -308,6 +308,8 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.cliLargeUploads.title': "CLI からより大きな動画をアップロード",
+  'changelog.cliLargeUploads.item1': "プロジェクト編集や解析用に最大 500MB の動画を CLI からアップロードできます。事前に 50MB まで圧縮する必要はありません。",
   'changelog.retakeChoices.title': "Retake の選択肢を拡充、標準は引き続き Kling 4",
   'changelog.retakeChoices.item1': "部分的な撮り直しで選べる動画モデルが増えました。モデルを指定しない場合は、引き続き Kling 4 を使用します。",
   'changelog.retakeChoices.item2': "接続が切れても生成済み動画の受け取りを再開でき、重複生成を減らせます。",
