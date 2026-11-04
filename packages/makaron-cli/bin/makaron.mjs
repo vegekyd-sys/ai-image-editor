@@ -1601,10 +1601,96 @@ function readImageAsDataUrl(filePath) {
   return `data:${v.mime};base64,${buf.toString('base64')}`;
 }
 
+async function uploadFileResumable(uploadUrl, token, storagePath, filePath, contentType) {
+  const chunkSize = 6 * 1024 * 1024;
+  const size = fs.statSync(filePath).size;
+  const bucket = new URL(uploadUrl).pathname.match(/\/object\/upload\/sign\/([^/]+)\//)?.[1];
+  if (!bucket || !storagePath) {
+    process.stderr.write('⚠️ Missing resumable upload metadata. Update the Makaron service and retry.\n');
+    return null;
+  }
+  const headers = { 'Tus-Resumable': '1.0.0', 'x-signature': token, apikey: SUPABASE_ANON_KEY };
+  const metadata = Object.entries({ bucketName: decodeURIComponent(bucket), objectName: storagePath, contentType, cacheControl: '3600' })
+    .map(([key, value]) => `${key} ${Buffer.from(value).toString('base64')}`).join(',');
+  let file;
+  try {
+    const created = await fetch(new URL('/storage/v1/upload/resumable/sign', uploadUrl), {
+      method: 'POST',
+      headers: { ...headers, 'Upload-Length': String(size), 'Upload-Metadata': metadata },
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (!created.ok || !created.headers.get('location')) {
+      process.stderr.write(`⚠️ Failed to start resumable upload (HTTP ${created.status}).\n`);
+      return null;
+    }
+    const location = new URL(created.headers.get('location'), uploadUrl);
+    const offsetFrom = response => {
+      const raw = response.headers.get('upload-offset');
+      const value = raw === null ? NaN : Number(raw);
+      return Number.isSafeInteger(value) && value >= 0 && value <= size ? value : null;
+    };
+    let offset = 0;
+    let retries = 0;
+    let progress = 0;
+    file = await fs.promises.open(filePath, 'r');
+    const buffer = Buffer.alloc(chunkSize);
+    while (offset < size) {
+      const length = Math.min(chunkSize, size - offset);
+      let read = 0;
+      while (read < length) {
+        const { bytesRead } = await file.read(buffer, read, length - read, offset + read);
+        if (!bytesRead) throw new Error('Unexpected end of upload file');
+        read += bytesRead;
+      }
+      let response;
+      try {
+        response = await fetch(location, {
+          method: 'PATCH',
+          headers: { ...headers, 'Upload-Offset': String(offset), 'Content-Type': 'application/offset+octet-stream' },
+          body: buffer.subarray(0, length),
+          signal: AbortSignal.timeout(60_000),
+        });
+      } catch {
+        // A lost response may still mean the chunk committed. HEAD reconciles it.
+      }
+      const next = response?.ok ? offsetFrom(response) : null;
+      if (next === offset + length) {
+        offset = next;
+        retries = 0;
+      } else {
+        if (response && !response.ok && response.status < 500 && ![408, 409, 429].includes(response.status)) {
+          process.stderr.write(`⚠️ Failed to upload file (HTTP ${response.status}).\n`);
+          return null;
+        }
+        if (++retries > 3) throw new Error('Resumable upload retries exhausted');
+        await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+        const head = await fetch(location, { method: 'HEAD', headers, signal: AbortSignal.timeout(60_000) }).catch(() => null);
+        const committed = head?.ok ? offsetFrom(head) : null;
+        if (committed !== null) {
+          if (committed < offset || committed > offset + length) throw new Error('Invalid resumable upload offset');
+          if (committed > offset) { offset = committed; retries = 0; }
+        }
+        continue;
+      }
+      const percent = Math.floor(offset / size * 10) * 10;
+      if (percent > progress) {
+        progress = percent;
+        process.stderr.write(`📤 Upload ${percent}%\n`);
+      }
+    }
+    return true;
+  } catch {
+    process.stderr.write('⚠️ Resumable upload failed. Retry the upload.\n');
+    return null;
+  } finally {
+    await file?.close();
+  }
+}
+
 /**
  * Upload a local file via signed URL (works for both images and videos).
  * 1. POST /api/storage/upload-url → get signed URL + public URL
- * 2. PUT file directly to Supabase Storage (no Vercel body limit)
+ * 2. Upload directly to Storage; files over 6MB use signed TUS chunks.
  * Returns public URL on success, null on failure.
  */
 async function uploadFileViaSignedUrl(baseUrl, headers, projectId, filePath, contentType, options = {}) {
@@ -1619,7 +1705,11 @@ async function uploadFileViaSignedUrl(baseUrl, headers, projectId, filePath, con
     process.stderr.write(`⚠️ Failed to get upload URL: ${await urlRes.text()}\n`);
     return null;
   }
-  const { uploadUrl, token, publicUrl } = await urlRes.json();
+  const { uploadUrl, token, publicUrl, path: storagePath } = await urlRes.json();
+
+  if (fs.statSync(filePath).size > 6 * 1024 * 1024) {
+    return await uploadFileResumable(uploadUrl, token, storagePath, filePath, contentType) ? publicUrl : null;
+  }
 
   // Step 2: PUT file directly to Supabase Storage
   const file = fs.createReadStream(filePath);

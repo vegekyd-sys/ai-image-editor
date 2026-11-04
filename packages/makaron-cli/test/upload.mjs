@@ -24,11 +24,69 @@ chmodSync(probe, 0o755);
 const requests = [];
 const uploads = [];
 let rejectUpload = false;
+let failAfterCommit = true;
+let invalidOffset = false;
+let headChecks = 0;
+const sessions = new Map();
 const server = http.createServer(async (req, res) => {
   const send = (status, body) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(body));
   };
+  if (req.url === '/storage/v1/upload/resumable/sign' && req.method === 'POST') {
+    assert.equal(req.headers['x-signature'], 'test-signed-token');
+    assert.equal(req.headers['tus-resumable'], '1.0.0');
+    const metadata = Object.fromEntries(req.headers['upload-metadata'].split(',').map(entry => {
+      const [key, value] = entry.split(' ');
+      return [key, Buffer.from(value, 'base64').toString()];
+    }));
+    assert.equal(metadata.bucketName, 'images');
+    assert.equal(metadata.objectName, 'fixtures/video');
+    const location = `/tus/${sessions.size}`;
+    sessions.set(location, { bytes: 0, size: Number(req.headers['upload-length']), contentType: metadata.contentType });
+    res.writeHead(201, { Location: location, 'Upload-Offset': '0' });
+    res.end();
+    return;
+  }
+  if (req.url.startsWith('/tus/')) {
+    const session = sessions.get(req.url);
+    assert.ok(session);
+    assert.equal(req.headers['x-signature'], 'test-signed-token');
+    if (req.method === 'HEAD') {
+      headChecks++;
+      res.writeHead(200, { 'Upload-Offset': String(session.bytes + (invalidOffset ? 6 * 1024 * 1024 : 0)) });
+      res.end();
+      return;
+    }
+    assert.equal(req.method, 'PATCH');
+    assert.equal(Number(req.headers['upload-offset']), session.bytes);
+    assert.equal(req.headers['content-type'], 'application/offset+octet-stream');
+    if (rejectUpload) {
+      req.resume();
+      send(413, { error: 'Storage size limit' });
+      return;
+    }
+    let chunkBytes = 0;
+    for await (const chunk of req) {
+      session.firstByte ??= chunk[0];
+      session.lastByte = chunk.at(-1);
+      session.bytes += chunk.length;
+      chunkBytes += chunk.length;
+    }
+    assert.ok(chunkBytes <= 6 * 1024 * 1024, 'Every request must fit the CDN limit');
+    if (session.bytes < session.size) assert.equal(chunkBytes, 6 * 1024 * 1024);
+    if (session.bytes === session.size) {
+      uploads.push({ bytes: session.bytes, firstByte: session.firstByte, lastByte: session.lastByte, contentType: session.contentType });
+    }
+    if (failAfterCommit) {
+      failAfterCommit = false;
+      send(500, { error: 'Response lost after commit' });
+    } else {
+      res.writeHead(204, { 'Upload-Offset': String(session.bytes) });
+      res.end();
+    }
+    return;
+  }
   if (req.method === 'PUT' && req.url === '/upload') {
     assert.equal(req.headers.authorization, 'Bearer test-signed-token');
     if (rejectUpload) {
@@ -55,7 +113,7 @@ const server = http.createServer(async (req, res) => {
   const body = raw ? JSON.parse(raw) : null;
   requests.push({ url: req.url, body });
   if (req.url === '/api/storage/upload-url') {
-    send(200, { uploadUrl: `${baseUrl}/upload`, token: 'test-signed-token', publicUrl: 'https://cdn.example/uploaded.mp4' });
+    send(200, { uploadUrl: `${baseUrl}/storage/v1/object/upload/sign/images/fixtures/video`, path: 'fixtures/video', token: 'test-signed-token', publicUrl: 'https://cdn.example/uploaded.mp4' });
   } else if (req.url === '/api/projects/create') {
     send(200, { projectId: 'test-project', snapshots: [{ type: 'video', snapshotId: 'test-snapshot' }] });
   } else if (req.url === '/api/agent/run') {
@@ -113,6 +171,7 @@ try {
   assert.match(analysis.stdout, /Video analyzed/);
   assert.deepEqual(uploads.at(-1), { bytes: 60 * mb, firstByte: 0x12, lastByte: 0x34, contentType: 'video/mp4' });
   assert.equal(requests.at(-1).body.params.arguments.videoUrl, 'https://cdn.example/uploaded.mp4');
+  assert.equal(headChecks, 1, 'A committed chunk must be recovered through HEAD without sending it twice');
 
   const atLimit = video('500mb.mov', 500 * mb);
   const chat = await runCli(['chat', '--project', 'test-project', '--video', atLimit, '-b', 'Edit this clip']);
@@ -144,15 +203,24 @@ try {
   const before = requests.length;
   const failed = await runCli(['chat', '--project', 'test-project', '--video', aboveOldLimit, '-b', 'Edit']);
   assert.notEqual(failed.code, 0);
-  assert.match(failed.stderr, /Failed to upload file.*Storage size limit/);
+  assert.match(failed.stderr, /Failed to upload file.*HTTP 413/);
   assert.deepEqual(requests.slice(before).map(request => request.url), ['/api/storage/upload-url']);
+
+  rejectUpload = false;
+  failAfterCommit = true;
+  invalidOffset = true;
+  const invalidBefore = requests.length;
+  const invalid = await runCli(['chat', '--project', 'test-project', '--video', aboveOldLimit, '-b', 'Edit']);
+  assert.notEqual(invalid.code, 0);
+  assert.match(invalid.stderr, /Resumable upload failed/);
+  assert.deepEqual(requests.slice(invalidBefore).map(request => request.url), ['/api/storage/upload-url']);
 
   for (const command of ['chat', 'analyze']) {
     const help = await runCli([command, '--help']);
     assert.equal(help.code, 0);
     assert.match(help.stdout, /max 500MB/);
   }
-  console.log('CLI upload tests passed: 60MB analysis, 500MB streamed chat, size/provider/metadata limits, storage rejection, help.');
+  console.log('CLI upload tests passed: 60MB analysis, 500MB chunked chat, chunk recovery, invalid offsets, size/provider/metadata limits, storage rejection, help.');
 } finally {
   server.closeAllConnections();
   await new Promise(resolve => server.close(resolve));
