@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Makaron 剪辑时间线 V2 — 设计稿</title>
+<style>
+  :root {
+    --bg: #000; --surface: #0a0a0a; --surface2: #141414;
+    --fuchsia: #d946ef; --fuchsia-l: #e879f9; --cyan: 34,211,238;
+    --line: rgba(255,255,255,.08); --text2: #a1a1aa;
+    --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "Geist", -apple-system, "PingFang SC", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #050507; color: #fff; font-family: var(--sans); padding: 32px; }
+  h1 { font-size: 18px; font-weight: 600; letter-spacing: .01em; }
+  .sub { color: var(--text2); font-size: 12px; margin-top: 6px; }
+  .row { display: flex; gap: 40px; align-items: flex-start; margin-top: 28px; flex-wrap: wrap; }
+  .label { font-size: 11px; color: rgba(255,255,255,.4); letter-spacing: .14em; text-transform: uppercase; margin-bottom: 10px; }
+
+  /* ---------- shared glass ---------- */
+  .glass {
+    position: relative; overflow: hidden;
+    border: .5px solid rgba(255,255,255,.12);
+    background:
+      radial-gradient(circle at 18% 0%, rgba(255,255,255,.08), transparent 34%),
+      linear-gradient(145deg, rgba(14,14,18,.86), rgba(0,0,0,.78));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 -18px 50px rgba(0,0,0,.42);
+    backdrop-filter: blur(22px) saturate(1.35); -webkit-backdrop-filter: blur(22px) saturate(1.35);
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+    border-radius: 999px; font-size: 12px; color: rgba(255,255,255,.82);
+    border: .5px solid rgba(255,255,255,.12);
+    background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.02));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+    white-space: nowrap;
+  }
+  .pill.ai { color: #fff; border-color: rgba(217,70,239,.55);
+    background: linear-gradient(180deg, rgba(217,70,239,.32), rgba(217,70,239,.12));
+    box-shadow: 0 0 14px rgba(217,70,239,.35), inset 0 1px 0 rgba(255,255,255,.14); }
+  .icon-btn { width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center;
+    color: rgba(255,255,255,.6); font-size: 13px; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- desktop frame ---------- */
+  .desktop { width: 1120px; border-radius: 18px; background: var(--bg); border: 1px solid #1a1a1a; overflow: hidden; }
+  .topbar { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px;
+    border-bottom: 1px solid var(--line); font-size: 13px; color: rgba(255,255,255,.7); }
+  .topbar b { color: #fff; font-weight: 600; }
+  .stage { height: 330px; display: grid; place-items: center; position: relative;
+    background: radial-gradient(ellipse at 50% 40%, #16101c 0%, #000 70%); }
+  .canvas16 { width: 512px; height: 288px; border-radius: 6px; position: relative; overflow: hidden;
+    background: linear-gradient(160deg, #1f2a44 0%, #3b1d4a 55%, #c2410c 120%); box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .canvas16 .t { position: absolute; left: 36px; bottom: 44px; font-size: 34px; font-weight: 800; letter-spacing: -.02em; }
+  .canvas16 .s { position: absolute; left: 38px; bottom: 26px; font-size: 13px; color: rgba(255,255,255,.75); }
+  .editable-box { position: absolute; left: 28px; bottom: 82px; width: 260px; height: 50px;
+    border: 1.5px dashed var(--fuchsia-l); border-radius: 4px; }
+  .editable-tag { position: absolute; left: 28px; bottom: 134px; font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    background: var(--fuchsia); color: #fff; }
+
+  .dock { margin: 0 12px 12px; border-radius: 18px; }
+  .transport { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px;
+    border-bottom: 1px solid rgba(255,255,255,.06); }
+  .play { width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center; font-size: 11px;
+    background: rgba(255,255,255,.92); color: #000; }
+  .tc { font-size: 12px; color: rgba(255,255,255,.85); margin-left: 10px; }
+  .tc span { color: rgba(255,255,255,.35); }
+  .seg { display: flex; padding: 3px; border-radius: 999px; background: rgba(0,0,0,.35); border: .5px solid rgba(255,255,255,.08); }
+  .seg div { padding: 5px 14px; border-radius: 999px; font-size: 12px; color: rgba(255,255,255,.5); }
+  .seg .on { background: rgba(255,255,255,.12); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+  .zoom { display: flex; align-items: center; gap: 8px; color: rgba(255,255,255,.45); font-size: 12px; }
+  .zoom .bar { width: 80px; height: 3px; border-radius: 3px; background: rgba(255,255,255,.12); position: relative; }
+  .zoom .bar::after { content: ""; position: absolute; left: 34px; top: -4px; width: 11px; height: 11px; border-radius: 99px; background: #fff; }
+
+  .tl { display: flex; position: relative; }
+  .heads { width: 92px; flex-shrink: 0; border-right: 1px solid rgba(255,255,255,.06); }
+  .head { display: flex; align-items: center; gap: 6px; padding: 0 12px; font-size: 11px; color: rgba(255,255,255,.5); }
+  .head i { width: 6px; height: 6px; border-radius: 2px; display: inline-block; }
+  .lanes { flex: 1; position: relative; overflow: hidden; }
+  .ruler { height: 26px; position: relative; border-bottom: 1px solid rgba(255,255,255,.05); }
+  .tick { position: absolute; bottom: 0; width: 1px; height: 6px; background: rgba(255,255,255,.18); }
+  .tick.major { height: 10px; background: rgba(255,255,255,.32); }
+  .tick em { position: absolute; bottom: 12px; left: 3px; font-style: normal; font-size: 9px; color: rgba(255,255,255,.35); font-family: var(--mono); }
+  .lane { position: relative; border-bottom: 1px solid rgba(255,255,255,.04); }
+
+  .clip { position: absolute; top: 5px; bottom: 5px; border-radius: 7px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.14); }
+  .story .clip { background-size: cover; }
+  .clip .film { position: absolute; inset: 0; display: flex; }
+  .clip .film b { flex: 1; border-right: 1px solid rgba(0,0,0,.35); }
+  .clip .shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,5,14,.05) 30%, rgba(5,5,14,.85)); }
+  .clip .meta { position: absolute; left: 7px; right: 7px; bottom: 4px; display: flex; justify-content: space-between;
+    font-size: 10px; font-weight: 600; }
+  .clip .meta .d { font-family: var(--mono); font-weight: 500; color: rgba(255,255,255,.6); font-size: 9px; }
+  .clip.sel { border: 1.5px solid var(--fuchsia-l); box-shadow: 0 0 0 1px rgba(217,70,239,.35), 0 0 18px rgba(217,70,239,.45); z-index: 3; }
+  .handle { position: absolute; top: 6px; bottom: 6px; width: 5px; border-radius: 4px; background: var(--fuchsia-l);
+    box-shadow: 0 0 8px rgba(232,121,249,.9); z-index: 4; }
+  .bubble { position: absolute; top: -26px; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-family: var(--mono);
+    background: var(--fuchsia); color: #fff; z-index: 6; box-shadow: 0 6px 16px rgba(217,70,239,.45); }
+  .ai-sweep { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 20%, rgba(232,121,249,.55) 50%, transparent 80%);
+    animation: sweep 2.4s ease-in-out infinite; mix-blend-mode: screen; }
+  @keyframes sweep { 0% { transform: translateX(-100%);} 60%,100% { transform: translateX(100%);} }
+  .ai-badge { position: absolute; top: 4px; right: 5px; font-size: 9px; padding: 1px 5px; border-radius: 99px;
+    background: rgba(0,0,0,.55); color: var(--fuchsia-l); border: .5px solid rgba(232,121,249,.5); }
+
+  .trans { position: absolute; top: 50%; width: 16px; height: 16px; transform: translate(-50%,-50%) rotate(45deg);
+    border-radius: 4px; background: #111; border: 1px solid rgba(255,255,255,.35); z-index: 5;
+    box-shadow: 0 0 0 3px #000; }
+  .trans.on { background: var(--fuchsia); border-color: #fff; }
+  .add { position: absolute; top: 9px; bottom: 9px; width: 34px; border-radius: 7px; border: 1px dashed rgba(255,255,255,.2);
+    display: grid; place-items: center; color: rgba(255,255,255,.45); font-size: 16px; }
+
+  .text .clip { border-radius: 999px; background: linear-gradient(180deg, rgba(167,139,250,.32), rgba(167,139,250,.14));
+    border-color: rgba(196,181,253,.4); display: flex; align-items: center; padding: 0 10px; font-size: 10px; font-weight: 600; top: 7px; bottom: 7px; }
+  .audio .clip { background: linear-gradient(180deg, rgba(var(--cyan),.18), rgba(var(--cyan),.06)); border-color: rgba(var(--cyan),.38); }
+  .wave { position: absolute; inset: 4px 6px 4px 6px; display: flex; align-items: center; gap: 2px; }
+  .wave b { flex: 1; background: rgba(var(--cyan),.75); border-radius: 2px; }
+  .audio .clip .nm { position: absolute; left: 8px; top: 3px; font-size: 9px; color: rgba(165,243,252,.9); font-weight: 600; }
+  .link { position: absolute; width: 1px; border-left: 1px dashed rgba(232,121,249,.55); z-index: 2; }
+
+  .ph { position: absolute; top: 0; bottom: 0; width: 1px; background: #fff; z-index: 8; box-shadow: 0 0 6px rgba(255,255,255,.6); }
+  .ph::before { content: ""; position: absolute; top: 2px; left: -6px; width: 13px; height: 13px; border-radius: 99px;
+    background: var(--fuchsia); border: 2px solid #fff; box-shadow: 0 0 10px rgba(217,70,239,.9); }
+  .snap { position: absolute; top: 26px; bottom: 0; width: 1px; background: rgba(250,204,21,.8); z-index: 7; }
+
+  .more { padding: 6px 12px 8px 104px; display: flex; gap: 8px; }
+  .more .pill { height: 24px; font-size: 11px; color: rgba(255,255,255,.5); border-style: dashed; background: transparent; }
+  .actions { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid rgba(255,255,255,.06); align-items: center; }
+  .actions .ctx { font-size: 11px; color: rgba(255,255,255,.45); margin-right: 6px; }
+
+  /* ---------- phone ---------- */
+  .phone { width: 390px; height: 844px; border-radius: 52px; background: #000; border: 10px solid #1b1b1d; position: relative; overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+  .island { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 120px; height: 34px; border-radius: 20px; background: #000; z-index: 20; }
+  .p-top { height: 92px; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 18px 12px; font-size: 13px; color: rgba(255,255,255,.75); }
+  .p-stage { height: 380px; display: grid; place-items: center; }
+  .canvas916 { width: 214px; height: 380px; border-radius: 8px; position: relative; overflow: hidden;
+    background: linear-gradient(170deg, #0f3b3a 0%, #1c1440 50%, #7e1d5f 110%); }
+  .canvas916 .t { position: absolute; left: 18px; right: 18px; bottom: 70px; font-size: 26px; font-weight: 800; line-height: 1.05; }
+  .p-dock { position: absolute; left: 8px; right: 8px; bottom: 26px; border-radius: 26px; }
+  .p-trans { height: 46px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; }
+  .p-tl { position: relative; height: 150px; overflow: hidden; }
+  .p-ph { position: absolute; left: 50%; top: 0; bottom: 0; width: 1.5px; background: #fff; z-index: 9; box-shadow: 0 0 8px rgba(255,255,255,.6); }
+  .p-ph::before { content: ""; position: absolute; top: -2px; left: -5px; width: 11px; height: 11px; border-radius: 99px; background: var(--fuchsia); border: 2px solid #fff; }
+  .p-lane { position: absolute; left: 0; right: 0; }
+  .p-actions { display: flex; gap: 7px; padding: 10px 12px 14px; overflow: hidden; }
+  .p-actions .pill { height: 34px; font-size: 12px; padding: 0 13px; }
+
+  .notes { max-width: 1120px; margin-top: 30px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .note { border-radius: 14px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); font-size: 12px; line-height: 1.6; color: rgba(255,255,255,.7); }
+  .note h3 { font-size: 12px; color: #fff; margin-bottom: 6px; font-weight: 600; }
+  .note code { font-family: var(--mono); font-size: 11px; color: var(--fuchsia-l); }
+</style>
+</head>
+<body>
+  <h1>Makaron 剪辑时间线 V2 · 设计稿</h1>
+  <div class="sub">静态示意，非实现。用的是现有 token：黑底、fuchsia 选中、cyan 音频、liquid glass dock、Geist / Geist Mono。对应方案：docs/video-timeline-v2-plan.md §6</div>
+
+  <div class="row">
+    <div>
+      <div class="label">桌面 · 时间线模式 · 正在拖动片段 2 的右手柄</div>
+      <div class="desktop">
+        <div class="topbar"><span>← <b>海边旅行 Vlog</b></span><span class="mono" style="color:rgba(255,255,255,.4)">已保存 · rev 12</span><span class="pill" style="height:26px">导出 MP4</span></div>
+        <div class="stage">
+          <div class="canvas16">
+            <div class="editable-tag">标题</div>
+            <div class="editable-box"></div>
+            <div class="t">夏天，去看海</div>
+            <div class="s">Day 1 · 青岛</div>
+          </div>
+        </div>
+
+        <div class="dock glass">
+          <div class="transport">
+            <div style="display:flex;align-items:center">
+              <div class="play">▶</div>
+              <div class="tc mono">00:04.12 <span>/ 00:18.00</span></div>
+            </div>
+            <div class="seg"><div class="on">时间线</div><div>元素</div></div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="icon-btn">⤺</div><div class="icon-btn">⤻</div>
+              <div class="zoom">−<div class="bar"></div>+</div>
+            </div>
+          </div>
+
+          <div class="tl">
+            <div class="heads">
+              <div class="head" style="height:26px"></div>
+              <div class="head" style="height:62px;color:#fff"><i style="background:var(--fuchsia)"></i>故事</div>
+              <div class="head" style="height:34px"><i style="background:#a78bfa"></i>文字</div>
+              <div class="head" style="height:44px"><i style="background:rgb(var(--cyan))"></i>音频</div>
+            </div>
+            <div class="lanes">
+              <div class="ruler" id="ruler"></div>
+
+              <div class="lane story" style="height:62px">
+                <div class="clip" style="left:8px;width:170px">
+                  <div class="film"><b style="background:#2b3a5c"></b><b style="background:#33456a"></b><b style="background:#3c4f78"></b><b style="background:#465a84"></b></div>
+                  <div class="shade"></div><div class="meta"><span>开场 · 标题</span><span class="d">3.0s</span></div>
+                </div>
+                <div class="trans" style="left:180px"></div>
+                <div class="clip sel" style="left:182px;width:236px">
+                  <div class="film"><b style="background:#0e5560"></b><b style="background:#127080"></b><b style="background:#1a8494"></b><b style="background:#2096a3"></b><b style="background:#25a7b0"></b></div>
+                  <div class="shade"></div><div class="meta"><span>海边 · 素材视频</span><span class="d">4.2s</span></div>
+                </div>
+                <div class="handle" style="left:179px"></div>
+                <div class="handle" style="left:415px"></div>
+                <div class="bubble" style="left:384px;top:2px">4.2s</div>
+                <div class="trans on" style="left:420px"></div>
+                <div class="clip" style="left:422px;width:200px">
+                  <div class="film"><b style="background:#5b2448"></b><b style="background:#6e2a55"></b><b style="background:#7f3060"></b><b style="background:#8f356a"></b></div>
+                  <div class="shade"></div><div class="ai-sweep"></div><div class="ai-badge">✦ AI 刚改</div>
+                  <div class="meta"><span>日落 · 生成镜头</span><span class="d">3.5s</span></div>
+                </div>
+                <div class="trans" style="left:624px"></div>
+                <div class="clip" style="left:626px;width:300px">
+                  <div class="film"><b style="background:#3d2a14"></b><b style="background:#4f3518"></b><b style="background:#62401c"></b><b style="background:#734b20"></b><b style="background:#835524"></b></div>
+                  <div class="shade"></div><div class="meta"><span>结尾 · 片尾卡</span><span class="d">5.3s</span></div>
+                </div>
+                <div class="add" style="left:934px">＋</div>
+              </div>
+
+              <div class="lane text" style="height:34px">
+                <div class="link" style="left:26px;top:-62px;height:66px"></div>
+                <div class="clip" style="left:26px;width:132px">T 夏天，去看海</div>
+                <div class="clip" style="left:640px;width:150px">T 下次见 👋</div>
+              </div>
+
+              <div class="lane audio" style="height:44px">
+                <div class="clip" style="left:8px;width:918px">
+                  <span class="nm">♪ 配乐 · Summer Breeze（铺满）</span>
+                  <div class="wave" id="wave" style="top:14px"></div>
+                </div>
+              </div>
+
+              <div class="snap" style="left:415px"></div>
+              <div class="ph" style="left:262px"></div>
+            </div>
+          </div>
+          <div class="more"><span class="pill">＋ 字幕</span><span class="pill">＋ 画中画</span><span class="pill">＋ 音效</span></div>
+          <div class="actions">
+            <span class="ctx">已选：海边 · 素材视频</span>
+            <span class="pill">✂ 分割</span><span class="pill">⏱ 时长</span><span class="pill">1.0× 速度</span>
+            <span class="pill">⇄ 替换</span><span class="pill">◆ 转场</span><span class="pill">🗑 删除</span>
+            <span style="flex:1"></span><span class="pill ai">✦ 让 Agent 改</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="label">iPhone · 紧凑模式 · 播放头固定居中</div>
+      <div class="phone">
+        <div class="island"></div>
+        <div class="p-top"><span>‹ 返回</span><b style="color:#fff">海边旅行 Vlog</b><span class="pill" style="height:28px;font-size:12px">导出</span></div>
+        <div class="p-stage"><div class="canvas916"><div class="t">夏天，<br>去看海</div></div></div>
+        <div class="p-dock glass">
+          <div class="p-trans">
+            <div style="display:flex;align-items:center"><div class="play">▶</div><div class="tc mono">00:04.12 <span>/ 18.00</span></div></div>
+            <div class="seg"><div class="on">时间线</div><div>元素</div></div>
+          </div>
+          <div class="p-tl">
+            <div class="p-lane story" style="top:10px;height:56px">
+              <div class="clip" style="left:-60px;width:120px"><div class="film"><b style="background:#2b3a5c"></b><b style="background:#3c4f78"></b></div><div class="shade"></div><div class="meta"><span>开场</span><span class="d">3.0s</span></div></div>
+              <div class="trans" style="left:62px"></div>
+              <div class="clip sel" style="left:64px;width:168px"><div class="film"><b style="background:#0e5560"></b><b style="background:#1a8494"></b><b style="background:#25a7b0"></b></div><div class="shade"></div><div class="meta"><span>海边</span><span class="d">4.2s</span></div></div>
+              <div class="handle" style="left:60px;width:6px"></div><div class="handle" style="left:229px;width:6px"></div>
+              <div class="trans on" style="left:236px"></div>
+              <div class="clip" style="left:238px;width:150px"><div class="film"><b style="background:#5b2448"></b><b style="background:#7f3060"></b></div><div class="shade"></div><div class="meta"><span>日落</span><span class="d">3.5s</span></div></div>
+            </div>
+            <div class="p-lane text" style="top:72px;height:30px">
+              <div class="clip" style="left:-40px;width:110px">T 夏天，去看海</div>
+            </div>
+            <div class="p-lane audio" style="top:106px;height:36px">
+              <div class="clip" style="left:-80px;width:520px"><div class="wave" id="wave2" style="top:8px"></div></div>
+            </div>
+            <div class="p-ph"></div>
+          </div>
+          <div class="p-actions">
+            <span class="pill">✂ 分割</span><span class="pill">⏱ 时长</span><span class="pill">1.0×</span><span class="pill ai">✦ Agent</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><h3>故事轨（磁吸）</h3>poster filmstrip；clip 首尾相接，拉长/删除自动让位。◆ 是转场芯片（fuchsia = 已设置）。黄色竖线 = 吸附线。对应 <code>layout: 'magnetic'</code>。</div>
+    <div class="note"><h3>叠加轨（渐进展开）</h3>文字胶囊（violet）、音频波形（cyan）。虚线 = 文字吸附在“开场”片段上，开场变长它会跟着走，对应 <code>placement: attached</code>。配乐 <code>to-end</code> 铺满。</div>
+    <div class="note"><h3>Agent 改动可见</h3>Agent 的事务提交后，对应 clip 有 fuchsia 光扫过并标“✦ AI 刚改”；“让 Agent 改”把选中 clip 带进 CUI。用户与 Agent 共享 revision，不会互相覆盖。</div>
+  </div>
+
+<script>
+  const r = document.getElementById('ruler');
+  for (let i = 0; i <= 92; i++) {
+    const t = document.createElement('div');
+    t.className = 'tick' + (i % 5 === 0 ? ' major' : '');
+    t.style.left = (8 + i * 10.06) + 'px';
+    if (i % 10 === 0) t.innerHTML = `<em>${String(Math.floor(i/5)).padStart(2,'0')}s</em>`;
+    r.appendChild(t);
+  }
+  for (const [id, n] of [['wave', 160], ['wave2', 90]]) {
+    const w = document.getElementById(id);
+    for (let i = 0; i < n; i++) {
+      const b = document.createElement('b');
+      const h = 18 + 70 * Math.abs(Math.sin(i * 0.37) * Math.cos(i * 0.11)) + (i % 7) * 2;
+      b.style.height = Math.min(100, h) + '%';
+      w.appendChild(b);
+    }
+  }
+</script>
+</body>
+</html>
