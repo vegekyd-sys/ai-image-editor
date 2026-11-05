@@ -32,7 +32,7 @@ User billing is unchanged (same token rates / supplier cost × markup).
 | frame_duration_ms | 3000 accepted (reference caps encoded delay 655,350) | schema 20–2000 |
 | Transparent GIF | works | not verified |
 | Reasoning control | `complexity` (`reasoning_effort` unknown) | `reasoning_effort` |
-| Quality tiers | auto/low/medium/high/xhigh/max (xhigh 2.5×, max 5.6× output tokens vs high-ish) | we expose auto–high |
+| Quality tiers | auto/low/medium/high/xhigh/max (1024² output tokens: low 824, xhigh 3122, max 7024) | we expose auto–high |
 | References | `/images/edits` JSON `images:[{image_url}]`; GIF inputs rejected | `image_urls` |
 | SVG | needs `svg.model` (text model traces; extra `svg_usage` tokens), generation only | works today (was 422 earlier) |
 | Speed, same prompts | JPEG 6.4s · GIF 13.2s · SVG 29.0s · ref GIF 16.8s | 22.6s · 26.0s · 48.8s · 22.8s |
