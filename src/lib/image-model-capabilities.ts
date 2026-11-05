@@ -42,6 +42,14 @@ const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
     ...FLARE, id: 'gpt-image-2.5-sunburst', label: 'GPT Image 2.5 Sunburst', autoPriority: undefined,
     notes: FLARE.notes.replace('Primary image model,', 'Explicit Sunburst only,'),
   },
+  'gpt-image-2.6-flare': {
+    ...FLARE, id: 'gpt-image-2.6-flare', label: 'GPT Image 2.6 Flare', autoPriority: undefined,
+    notes: 'Explicit optional GPT Image 2.6 Flare via fal. Static PNG generation/editing only; low quality and low reasoning. Up to 16 ordered inputs, native 1K/2K/4K within the same 1:3–3:1, 3840-edge and 8294400-pixel limits. GIF, SVG and markup overlays are not exposed by this adapter. No automatic fallback or default change.',
+  },
+  'gpt-image-2.6-sunburst': {
+    ...FLARE, id: 'gpt-image-2.6-sunburst', label: 'GPT Image 2.6 Sunburst', autoPriority: undefined,
+    notes: 'Explicit optional GPT Image 2.6 Sunburst via fal. Static PNG generation/editing only; low quality and low reasoning. Up to 16 ordered inputs, native 1K/2K/4K within the same 1:3–3:1, 3840-edge and 8294400-pixel limits. GIF, SVG and markup overlays are not exposed by this adapter. No automatic fallback or default change.',
+  },
   'gemini-2.1': {
     id: 'gemini-2.1', label: 'Nano Banana 2.1', autoPriority: 2, maxInputImages: 14,
     aspectRatio: { kind: 'enum', values: PANORAMIC_RATIOS }, resolutions: ['1K', '2K', '4K'],

@@ -1,0 +1,2 @@
+[agent-prompt] mode=layered system base=8781 workspace=9551 memory=0 cacheablePrefix=18332 total=18332 chars (~5238 tokens)
+{"model":"gpt-6-luna","tools":23,"systemChars":18332,"caseCount":3,"live":false}

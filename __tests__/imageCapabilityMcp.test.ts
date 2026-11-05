@@ -52,6 +52,8 @@ beforeEach(() => {
 describe('R16–R19: MCP HTTP → shared image Skill → selected provider → billing', () => {
   it.each([
     [{}, 'gpt-image-2.5-flare', 5],
+    [{ model: 'gpt-image-2.6-flare' }, 'gpt-image-2.6-flare', 5],
+    [{ model: 'gpt-image-2.6-sunburst', background: 'transparent' }, 'gpt-image-2.6-sunburst', 5],
     [{ aspectRatio: '8:1' }, 'gemini-2.1', 7],
     [{ imageResolution: '4K' }, 'gpt-image-2.5-flare', 5],
     [{ imageResolution: '4K', aspectRatio: '1:1' }, 'gemini-2.1', 16],

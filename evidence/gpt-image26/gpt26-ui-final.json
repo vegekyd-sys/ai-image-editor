@@ -1,0 +1,50 @@
+{
+  "scope": "Actual ModelSelector/LocaleProvider component harness, IAB primary; automated Playwright repeated four locales plus mobile; not complete Editor/media persistence acceptance",
+  "results": [
+    {
+      "locale": "zh",
+      "w": 1100,
+      "h": 760,
+      "chosen": "Selected: gpt-image-2.6-sunburst",
+      "auto": "false",
+      "errors": [],
+      "screenshot": "/Users/tianyicai/Documents/Codex/makaron-model-radar/runs/20261105T010617Z/selector-zh.png"
+    },
+    {
+      "locale": "zh-Hant",
+      "w": 1100,
+      "h": 760,
+      "chosen": "Selected: gpt-image-2.6-sunburst",
+      "auto": "false",
+      "errors": [],
+      "screenshot": "/Users/tianyicai/Documents/Codex/makaron-model-radar/runs/20261105T010617Z/selector-zh-Hant.png"
+    },
+    {
+      "locale": "ja",
+      "w": 1100,
+      "h": 760,
+      "chosen": "Selected: gpt-image-2.6-sunburst",
+      "auto": "false",
+      "errors": [],
+      "screenshot": "/Users/tianyicai/Documents/Codex/makaron-model-radar/runs/20261105T010617Z/selector-ja.png"
+    },
+    {
+      "locale": "en",
+      "w": 1100,
+      "h": 760,
+      "chosen": "Selected: gpt-image-2.6-sunburst",
+      "auto": "false",
+      "errors": [],
+      "screenshot": "/Users/tianyicai/Documents/Codex/makaron-model-radar/runs/20261105T010617Z/selector-en.png"
+    },
+    {
+      "locale": "zh",
+      "w": 430,
+      "h": 932,
+      "chosen": "Selected: gpt-image-2.6-sunburst",
+      "auto": "false",
+      "errors": [],
+      "screenshot": "/Users/tianyicai/Documents/Codex/makaron-model-radar/runs/20261105T010617Z/selector-zh-mobile.png"
+    }
+  ]
+}

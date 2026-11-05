@@ -18,6 +18,8 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'mj-v8.2', nameKey: 'model.midjourney.name', descKey: 'model.midjourney.desc', category: 'image', speedLabel: '4 / 24' },
   { id: 'gpt-image-2.5-flare', nameKey: 'model.image25Flare.name', descKey: 'model.image25Flare.desc', category: 'image' },
   { id: 'gpt-image-2.5-sunburst', nameKey: 'model.image25Sunburst.name', descKey: 'model.image25Sunburst.desc', category: 'image' },
+  { id: 'gpt-image-2.6-flare', nameKey: 'model.image26Flare.name', descKey: 'model.image26Flare.desc', category: 'image' },
+  { id: 'gpt-image-2.6-sunburst', nameKey: 'model.image26Sunburst.name', descKey: 'model.image26Sunburst.desc', category: 'image' },
   { id: 'wan2.7-image', nameKey: 'model.wan27Image.name', descKey: 'model.wan27Image.desc', category: 'image', speedLabel: '~10s' },
   { id: 'gemini-2.1', nameKey: 'model.gemini21.name', descKey: 'model.gemini21.desc', category: 'image', speedLabel: '1K · 4K' },
   { id: 'gemini', nameKey: 'model.gemini.name', descKey: 'model.gemini.desc', category: 'image', speedLabel: '~15s' },

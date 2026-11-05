@@ -10,6 +10,10 @@ describe('Image 2.5 pricing', () => {
     state.rows.push({ model_id: 'gpt-image-2.5-flare', markup: 2 });
     expect(await getTokenRate('gpt-image-2.5-flare')).toMatchObject({ markup: 2 });
     expect(await getTokenRate('gpt-image-2.5-sunburst')).toBeNull();
+    for (const model of ['gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'openai/gpt-image-2.6-flare']) expect(await getTokenRate(model)).toBeNull();
+    state.rows.push({ model_id: 'gpt-image-2.6-flare', markup: 2 });
+    expect(await getTokenRate('gpt-image-2.6-flare')).toMatchObject({ model_id: 'gpt-image-2.6-flare' });
+    expect(await getTokenRate('gpt-image-2.6-sunburst')).toBeNull();
     expect(providerCostToCredits(0.0063, 2)).toBe(2);
     expect(providerCostToCredits(0.0145, 2)).toBe(3);
   });

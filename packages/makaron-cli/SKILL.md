@@ -284,7 +284,7 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 npx makaron-cli edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image|mj-v8.2`, `--skill enhance|creative|wild|captions`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output routes strictly to GPT Image 2.5 Flare and fails instead of returning an opaque fallback. Wan 2.7 Image is an explicit fast ~1K route; do not automatically retry failures/timeouts, and do not promise exact face preservation.
+Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2.6-flare|gpt-image-2.6-sunburst|wan2.7-image|mj-v8.2`, `--skill enhance|creative|wild|captions`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output routes strictly to GPT Image 2.5 Flare and fails instead of returning an opaque fallback. Wan 2.7 Image is an explicit fast ~1K route; do not automatically retry failures/timeouts, and do not promise exact face preservation.
 
 Midjourney V8.2 (`mj-v8.2`) accepts natural-language briefs and prepares the English prompt automatically. Fast returns up to 4 images, Draft up to 24 smaller drafts, and HD regenerates up to 4 higher-resolution images. Every returned image is saved; `--out scene.png` produces `scene-1.png`, `scene-2.png`, etc. A single result keeps the requested filename. Provider filtering can reduce the batch size.
 
@@ -465,6 +465,8 @@ send_message "All done!"
 - `edit`/`video`/`music` are fallback tools for when `chat` is unavailable or you need raw model access without project context.
 
 FAL video models: **fal H3 Turbo** uses `minimax-h3-max` for single-start-frame I2V/T2V. **FAL H3 Max** uses the new selector `fal-h3-max`: native T2V or image/video/audio reference-to-video, default 768p, optional 480p, integer 5–15s; at most 9 images / 3 videos / 3 audios / 12 total. Reference video/audio each 2–15s and each modality totals at most 15s. Source-video modifications use generation with feature references, not typed edit/extend. Reference input tokens are billed in addition to output video; query current pricing.
+
+GPT Image 2.6 Flare and Sunburst are explicit optional fal routes (`gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`). This adapter returns one static PNG at low quality and low reasoning; GIF, SVG and markup overlays are not exposed. Auto stays on GPT Image 2.5 Flare. Exact active pricing rows are required before submission.
 
 The legacy `openai` image-model parameter now resolves to GPT Image 2.5 Flare.
 

@@ -7,6 +7,14 @@ import { getImageModels } from '@/lib/model-registry';
 
 afterEach(cleanup);
 describe('Image 2.5 model selector', () => {
+  it('offers optional 2.6 without changing Auto', async () => {
+    const changed = vi.fn();
+    render(<LocaleProvider><ModelSelector preferredModel="auto" onModelChange={changed} /></LocaleProvider>);
+    expect(changed).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('model-selector'));
+    fireEvent.click(await screen.findByText('GPT Image 2.6 Sunburst'));
+    expect(changed).toHaveBeenCalledWith('gpt-image-2.6-sunburst');
+  });
   it('shows Flare for legacy selections without offering the retired Image 2 option', () => {
     render(<LocaleProvider><ModelSelector preferredModel="openai" onModelChange={vi.fn()} /></LocaleProvider>);
     expect(screen.getByTestId('model-selector').getAttribute('aria-label')).toContain('GPT Image 2.5 Flare');

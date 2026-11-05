@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { z } from 'zod';
 import { describe, expect, it, vi } from 'vitest';
-import { IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, type ModelId } from '@/lib/models/types';
+import { IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, type ModelId } from '@/lib/models/types';
 import { formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration, resolveImageModelChain as resolveModelChain } from '@/lib/image-model-capabilities';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from '@/lib/video-retake-contract';
 import { normalizeGenerateImageMediaIndex } from '@/lib/generate-image-input';
@@ -29,7 +29,7 @@ function setup(provider = 'azure') {
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
   const ctx = { preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined, isNsfw: false };
   const context = vm.createContext({
-    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalImage25, resolveImageModel, resolveModelChain, getTokenRate,
+    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, resolveModelChain, getTokenRate,
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration,
     validateImageIndex: (images: string[], index: number) => images[index - 1] ? { idx: index - 1 } : { error: 'Invalid media index' }, getToolPrice, isBillingEnabled,
     resolveToolName,
@@ -169,6 +169,29 @@ describe('App Agent Image 2.5 billing', () => {
   });
 });
 
+
+describe('optional Image 2.6 Agent billing', () => {
+  it.each(['gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'] as const)('blocks %s before spending when its own pricing is absent', async model => {
+    const { tool, ctx, getTokenRate, editImage } = setup();
+    ctx.preferredModel = model;
+    getTokenRate.mockResolvedValue(null);
+    expect(await tool.execute({ editPrompt: 'A mug' })).toMatchObject({ success: false, error: 'pricing_unavailable' });
+    expect(getTokenRate).toHaveBeenCalledWith(model);
+    expect(editImage).not.toHaveBeenCalled();
+  });
+  it.each(['gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'] as const)('settles %s provider cost once before publishing', async model => {
+    const { tool, ctx, getTokenRate, editImage, deductByTokens, deductCredits, requireCredits } = setup();
+    ctx.preferredModel = model;
+    getTokenRate.mockResolvedValue({ model_id: model, markup: 2, is_active: true });
+    editImage.mockResolvedValue({ success: true, image: 'data:image/png;base64,YQ==', usedModel: model, provider: 'fal', usage: { modelId: model, inputTokens: 0, outputTokens: 0, providerCostUsd: 0.0123 } });
+    expect((await tool.execute({ editPrompt: 'A mug', background: 'transparent' })).success).toBe(true);
+    expect(requireCredits).toHaveBeenCalledWith('test-user', 5);
+    expect(editImage.mock.calls[0][0].preferredModel).toBe(model);
+    expect(deductByTokens).toHaveBeenCalledExactlyOnceWith('test-user', 'generate_image', model, 0, 0, undefined, undefined, undefined, 0.0123);
+    expect(deductCredits).not.toHaveBeenCalled();
+    expect(ctx.generatedImages).toHaveLength(1);
+  });
+});
 
 describe('Nano Banana 2.1 Agent execution and billing', () => {
   it('rejects missing catalog pricing before generation', async () => {

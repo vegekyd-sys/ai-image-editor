@@ -1,5 +1,5 @@
 import { validatePrimaryVideoFraming } from './composition-video-framing';
-import { isFalImage25 } from './models/types';
+import { isFalGptImage } from './models/types';
 import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
 import { after } from 'next/server';
@@ -1480,12 +1480,12 @@ function createGenerateImageTool(
             const outputCost = imagePlan.request.imageResolution === '4K' ? 0.0756 : imagePlan.request.imageResolution === '2K' ? 0.0504 : 0.0336;
             requiredCredits = Math.ceil((outputCost + imageInputCount * 1120 * 1.5 / 1_000_000) * rate.markup / 0.01);
           }
-          if (isFalImage25(billingModel)) {
+          if (isFalGptImage(billingModel)) {
             const rate = await getTokenRate(billingModel);
-            if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'GPT Image 2.5 pricing is not configured.', error: 'pricing_unavailable' };
+            if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Selected GPT Image pricing is not configured.', error: 'pricing_unavailable' };
             requiredCredits = 5;
           }
-          if (billingModel && billingModel !== 'gemini-2.1' && billingModel !== 'mj-v8.2' && !isFalImage25(billingModel)) {
+          if (billingModel && billingModel !== 'gemini-2.1' && billingModel !== 'mj-v8.2' && !isFalGptImage(billingModel)) {
             const toolName = resolveToolName('edit_image', billingModel, imageInputCount);
             const price = await getToolPrice(toolName);
             if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {

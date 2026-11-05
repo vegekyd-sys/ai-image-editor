@@ -2061,7 +2061,7 @@ Usage:
 Options:
   --image <file|url>        Base image to edit. Omit for text-to-image.
   --ref <file|url>          Additional reference image. Repeatable; model-specific limit (Nano Banana 2.1: 14 total inputs).
-  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.5-flare, gpt-image-2.5-sunburst, wan2.7-image, or mj-v8.2. Legacy qwen maps to qwen-spicy.
+  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.5-flare, gpt-image-2.5-sunburst, gpt-image-2.6-flare, gpt-image-2.6-sunburst, wan2.7-image, or mj-v8.2. Legacy qwen maps to qwen-spicy.
   --skill <id>              enhance, creative, wild, or captions.
   --image-resolution <id>  1K, 2K, or 4K; Auto chooses Nano Banana 2.1.
   --nsfw                  Route NSFW directly to Qwen Spicy.
@@ -2079,6 +2079,7 @@ Options:
   --help, -h                Show this help.
 
 Notes:
+  GPT Image 2.6 choices return static PNG only, at low quality and low reasoning.
   MJ options require --image-model mj-v8.2; Draft + HD is invalid. Describe the scene
   naturally; the server prepares the English prompt. MJ is generation, not precise editing.
   Model selection is optional. Transparent output routes strictly to GPT Image 2.5 Flare

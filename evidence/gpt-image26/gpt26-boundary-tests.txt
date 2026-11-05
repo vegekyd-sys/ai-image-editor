@@ -1,0 +1,362 @@
+
+ RUN  v4.1.4 /Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > keeps the app selection over tool choice and charges once before publishing
+🎯 [generate_image] skill="none" refs=0 editPrompt="A mug."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > does not call the image backend when preflight fails
+🎯 [generate_image] skill="none" refs=0 editPrompt="A mug."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > does not bill an unsuccessful result even if a model id is present
+🎯 [generate_image] skill="none" refs=0 editPrompt="A mug."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > rejects missing Wan pricing before contacting the provider
+🎯 [generate_image] skill="none" refs=0 editPrompt="A mug."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > awaits the debit and does not swallow an accounting failure
+🎯 [generate_image] skill="none" refs=0 editPrompt="A mug."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > awaits Gemini token accounting once before publishing a multi-image result
+🎯 [generate_image] skill="none" refs=0 editPrompt="Both cups together."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > does not swallow a Gemini accounting failure
+🎯 [generate_image] skill="none" refs=0 editPrompt="Both cups."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Qwen Spicy operation pricing > quotes and charges 'generate_image_qwen-spicy' for +0 inputs
+🎯 [generate_image] skill="none" refs=0 editPrompt="Edit."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Qwen Spicy operation pricing > quotes and charges 'edit_image_qwen-spicy' for 1 inputs
+🎯 [generate_image] skill="none" refs=0 editPrompt="Edit."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Qwen Spicy operation pricing > quotes and charges 'edit_image_qwen-spicy-2' for 2 inputs
+🎯 [generate_image] skill="none" refs=1 editPrompt="Edit."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Qwen Spicy operation pricing > quotes and charges 'edit_image_qwen-spicy-3' for 3 inputs
+🎯 [generate_image] skill="none" refs=2 editPrompt="Edit."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Image 2.5 billing > checks Flare pricing for a legacy Image 2 selection even on a subscription agent
+🎯 [generate_image] skill="none" refs=0 editPrompt="Product image"
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Image 2.5 billing > rejects missing exact pricing before a paid call
+🎯 [generate_image] skill="none" refs=0 editPrompt="A mug."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Image 2.5 billing > passes exact provider cost into the ledger before publishing
+🎯 [generate_image] skill="none" refs=0 editPrompt="Cup"
+
+stdout | __tests__/wanImageAgentBilling.test.ts > Nano Banana 2.1 Agent execution and billing > passes resolution and awaits actual supplier-cost accounting before publishing
+🎯 [generate_image] skill="none" refs=0 editPrompt="Product"
+
+stdout | __tests__/wanImageAgentBilling.test.ts > preflights native Flare 2K in Auto
+🎯 [generate_image] skill="none" refs=0 editPrompt="A forest scene"
+
+stdout | __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R01/R17: Auto quotes Flare and delivers once
+🎯 [generate_image] skill="none" refs=0 editPrompt="A portrait."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R02/R17: original 8:1 banner Auto request quotes Nano before generation
+🎯 [generate_image] skill="none" refs=0 editPrompt="用参考图里的 V 生成一张超宽横幅，比例严格 8:1。"
+
+stdout | __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R14/R06: Agent NSFW flag overrides app preference and stays active
+🎯 [generate_image] skill="none" refs=0 editPrompt="Sensitive artwork."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R13/R14/R17: incompatible Flare preference quotes Nano and continues generation
+🎯 [generate_image] skill="none" refs=0 editPrompt="Banner."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R15: media index zero remains text-to-image, uploaded and timeline references are counted
+🎯 [generate_image] skill="none" refs=0 editPrompt="Draw."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > Midjourney Agent batch billing and timeline > publishes all four candidates after one awaited batch-cost debit
+🎯 [generate_image] skill="none" refs=0 editPrompt="秋天的一只咖啡杯"
+
+ ❯ __tests__/wanImageAgentBilling.test.ts (25 tests | 22 failed) 1037ms
+     × keeps the app selection over tool choice and charges once before publishing 6ms
+     × does not call the image backend when preflight fails 1ms
+     × does not bill an unsuccessful result even if a model id is present 1ms
+     × rejects missing Wan pricing before contacting the provider 1ms
+     × awaits the debit and does not swallow an accounting failure 3ms
+     × awaits Gemini token accounting once before publishing a multi-image result 1004ms
+     × does not swallow a Gemini accounting failure 4ms
+     × quotes and charges 'generate_image_qwen-spicy' for +0 inputs 2ms
+     × quotes and charges 'edit_image_qwen-spicy' for 1 inputs 1ms
+     × quotes and charges 'edit_image_qwen-spicy-2' for 2 inputs 1ms
+     × quotes and charges 'edit_image_qwen-spicy-3' for 3 inputs 1ms
+     × checks Flare pricing for a legacy Image 2 selection even on a subscription agent 1ms
+     × rejects missing exact pricing before a paid call 1ms
+     × passes exact provider cost into the ledger before publishing 1ms
+     × passes resolution and awaits actual supplier-cost accounting before publishing 1ms
+   × preflights native Flare 2K in Auto 1ms
+     × R01/R17: Auto quotes Flare and delivers once 1ms
+     × R02/R17: original 8:1 banner Auto request quotes Nano before generation 1ms
+     × R14/R06: Agent NSFW flag overrides app preference and stays active 1ms
+     × R13/R14/R17: incompatible Flare preference quotes Nano and continues generation 2ms
+     × R15: media index zero remains text-to-image, uploaded and timeline references are counted 1ms
+     × publishes all four candidates after one awaited batch-cost debit 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 22 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > keeps the app selection over tool choice and charges once before publishing
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:49:20
+     47|   it('keeps the app selection over tool choice and charges once before…
+     48|     const { tool, ctx, editImage, requireCredits, deductCredits } = se…
+     49|     const result = await tool.execute({ editPrompt: 'A mug.', model: '…
+       |                    ^
+     50|     expect(result.success).toBe(true);
+     51|     expect(editImage.mock.calls[0][0].preferredModel).toBe('wan2.7-ima…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > does not call the image backend when preflight fails
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:62:12
+     60|     const { tool, editImage, requireCredits, deductCredits } = setup();
+     61|     requireCredits.mockResolvedValue({ ok: false, balance: 5 });
+     62|     expect(await tool.execute({ editPrompt: 'A mug.' })).toMatchObject…
+       |            ^
+     63|     expect(editImage).not.toHaveBeenCalled();
+     64|     expect(deductCredits).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > does not bill an unsuccessful result even if a model id is present
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:70:13
+     68|     const { tool, editImage, deductCredits } = setup();
+     69|     editImage.mockResolvedValue({ success: false, usedModel: 'wan2.7-i…
+     70|     expect((await tool.execute({ editPrompt: 'A mug.' })).success).toB…
+       |             ^
+     71|     expect(deductCredits).not.toHaveBeenCalled();
+     72|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > rejects missing Wan pricing before contacting the provider
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:77:12
+     75|     const { tool, editImage, getToolPrice, deductCredits } = setup();
+     76|     getToolPrice.mockResolvedValue(null);
+     77|     expect(await tool.execute({ editPrompt: 'A mug.' })).toMatchObject…
+       |            ^
+     78|     expect(editImage).not.toHaveBeenCalled();
+     79|     expect(deductCredits).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > awaits the debit and does not swallow an accounting failure
+AssertionError: expected [Function] to throw error including 'Ledger unavailable' but got 'isFalGptImage is not defined'
+
+Expected: "Ledger unavailable"
+Received: "isFalGptImage is not defined"
+
+ ❯ __tests__/wanImageAgentBilling.test.ts:95:57
+     93|     const { tool, ctx, deductCredits } = setup();
+     94|     deductCredits.mockRejectedValue(new Error('Ledger unavailable'));
+     95|     await expect(tool.execute({ editPrompt: 'A mug.' })).rejects.toThr…
+       |                                                         ^
+     96|     expect(ctx.generatedImages).toHaveLength(0);
+     97|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > awaits Gemini token accounting once before publishing a multi-image result
+AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times
+ ❯ __tests__/wanImageAgentBilling.test.ts:106:51
+    104|     deductByTokens.mockImplementation(() => new Promise(resolve => { r…
+    105|     const pending = tool.execute({ editPrompt: 'Both cups together.' }…
+    106|     await vi.waitFor(() => expect(deductByTokens).toHaveBeenCalledTime…
+       |                                                   ^
+    107|     expect(ctx.generatedImages).toHaveLength(0);
+    108|     release();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Wan execution and billing > does not swallow a Gemini accounting failure
+AssertionError: expected [Function] to throw error including 'Ledger unavailable' but got 'isFalGptImage is not defined'
+
+Expected: "Ledger unavailable"
+Received: "isFalGptImage is not defined"
+
+ ❯ __tests__/wanImageAgentBilling.test.ts:121:61
+    119|       usage: { modelId: 'google/gemini-3.1-flash-image-preview', input…
+    120|     deductByTokens.mockRejectedValue(new Error('Ledger unavailable'));
+    121|     await expect(tool.execute({ editPrompt: 'Both cups.' })).rejects.t…
+       |                                                             ^
+    122|     expect(ctx.generatedImages).toHaveLength(0);
+    123|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Qwen Spicy operation pricing > quotes and charges 'generate_image_qwen-spicy' for +0 inputs
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Qwen Spicy operation pricing > quotes and charges 'edit_image_qwen-spicy' for 1 inputs
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Qwen Spicy operation pricing > quotes and charges 'edit_image_qwen-spicy-2' for 2 inputs
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Qwen Spicy operation pricing > quotes and charges 'edit_image_qwen-spicy-3' for 3 inputs
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:139:13
+    137|     getToolPrice.mockImplementation(async (name: string) => name === t…
+    138|     editImage.mockResolvedValue({ success: true, image: 'data:image/jp…
+    139|     expect((await tool.execute({ editPrompt: 'Edit.' })).success).toBe…
+       |             ^
+    140|     expect(getToolPrice).toHaveBeenCalledWith(toolName);
+    141|     expect(requireCredits).toHaveBeenCalledWith('test-user', credits);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Image 2.5 billing > checks Flare pricing for a legacy Image 2 selection even on a subscription agent
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:151:12
+    149|     ctx.preferredModel = 'openai';
+    150|     getTokenRate.mockResolvedValue(null);
+    151|     expect(await tool.execute({ editPrompt: 'Product image' })).toMatc…
+       |            ^
+    152|     expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    153|     expect(editImage).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Image 2.5 billing > rejects missing exact pricing before a paid call
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:159:12
+    157|     ctx.preferredModel = 'gpt-image-2.5-flare';
+    158|     getTokenRate.mockResolvedValue(null);
+    159|     expect(await tool.execute({ editPrompt: 'A mug.' })).toMatchObject…
+       |            ^
+    160|     expect(editImage).not.toHaveBeenCalled();
+    161|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Image 2.5 billing > passes exact provider cost into the ledger before publishing
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:166:13
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > Nano Banana 2.1 Agent execution and billing > passes resolution and awaits actual supplier-cost accounting before publishing
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:187:13
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > preflights native Flare 2K in Auto
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:201:3
+    199|   ctx.preferredModel=undefined;
+    200|   getTokenRate.mockResolvedValue({model_id:'gpt-image-2.5-flare',marku…
+    201|   await tool.execute({editPrompt:'A forest scene',imageResolution:'2K'…
+       |   ^
+    202|   expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    203|   expect(requireCredits).toHaveBeenCalledWith('test-user',5);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R01/R17: Auto quotes Flare and delivers once
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:213:13
+    211|     ctx.preferredModel = undefined;
+    212|     editImage.mockResolvedValue({ success: true, image: 'image', usedM…
+    213|     expect((await tool.execute({ editPrompt: 'A portrait.' })).success…
+       |             ^
+    214|     expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    215|     expect(requireCredits).toHaveBeenCalledWith('test-user', 5);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R02/R17: original 8:1 banner Auto request quotes Nano before generation
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:223:5
+    221|     ctx.snapshotImages = ['source-V'];
+    222|     getTokenRate.mockResolvedValue({ model_id: 'google/gemini-nano-ban…
+    223|     await tool.execute({ editPrompt: '用参考图里的 V 生成一张超宽横幅，比例严格 8:1。', as…
+       |     ^
+    224|     expect(getTokenRate).toHaveBeenCalledWith('google/gemini-nano-bana…
+    225|     expect(editImage).toHaveBeenCalledWith(expect.objectContaining({ a…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R14/R06: Agent NSFW flag overrides app preference and stays active
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:231:5
+    229|     const { tool, ctx, getToolPrice, editImage } = setup();
+    230|     ctx.preferredModel = 'gpt-image-2.5-flare';
+    231|     await tool.execute({ editPrompt: 'Sensitive artwork.', isNsfw: tru…
+       |     ^
+    232|     expect(ctx.isNsfw).toBe(true);
+    233|     expect(getToolPrice).toHaveBeenCalledWith('generate_image_qwen-spi…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R13/R14/R17: incompatible Flare preference quotes Nano and continues generation
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:242:20
+    240|     ctx.preferredModel = 'gpt-image-2.5-flare';
+    241|     getTokenRate.mockResolvedValue({ model_id: 'google/gemini-nano-ban…
+    242|     const result = await tool.execute({ editPrompt: 'Banner.', model: …
+       |                    ^
+    243|     expect(result.success).toBe(true);
+    244|     expect(editImage).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R15: media index zero remains text-to-image, uploaded and timeline references are counted
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:252:5
+    250|     const { tool, ctx, editImage, getTokenRate } = setup();
+    251|     ctx.preferredModel = undefined;
+    252|     await tool.execute({ editPrompt: 'Draw.', media_index: 0 });
+       |     ^
+    253|     expect(editImage.mock.calls[0][1].currentImage).toBeUndefined();
+    254|     ctx.preferredModel = 'gemini-2.1';
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/22]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > Midjourney Agent batch billing and timeline > publishes all four candidates after one awaited batch-cost debit
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ __tests__/wanImageAgentBilling.test.ts:274:20
+    272|     editImage.mockResolvedValue({ success: true, image: images[0], ima…
+    273|       usage: { modelId: 'mj-v8.2', inputTokens: 100, outputTokens: 60,…
+    274|     const result = await tool.execute({ editPrompt: '秋天的一只咖啡杯' });
+       |                    ^
+    275|     expect(requireCredits).toHaveBeenCalledWith('test-user', 18);
+    276|     expect(deductByTokens).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/22]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+ReferenceError: isFalGptImage is not defined
+ ❯ Object.execute evalmachine.<anonymous>:107:17
+ ❯ processTicksAndRejections node:internal/process/task_queues:105:5
+
+This error originated in "__tests__/wanImageAgentBilling.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "awaits Gemini token accounting once before publishing a multi-image result". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  1 failed | 9 passed (10)
+      Tests  22 failed | 190 passed (212)
+     Errors  1 error
+   Start at  09:35:34
+   Duration  1.65s (transform 1.22s, setup 0ms, import 2.53s, tests 1.45s, environment 876ms)

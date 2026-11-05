@@ -1,4 +1,4 @@
-import { isFalImage25 } from '@/lib/models/types';
+import { isFalGptImage } from '@/lib/models/types';
 import { getTokenRate } from '@/lib/billing/token-rates';
 import { createMakaronMcpServer } from '@/mcp/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
@@ -89,9 +89,9 @@ async function handleMcp(req: Request): Promise<Response> {
         const check = await requireCredits(auth.userId!, credits);
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
-      if (toolName === 'makaron_edit_image' && isFalImage25(model)) {
+      if (toolName === 'makaron_edit_image' && isFalGptImage(model)) {
         const rate = await getTokenRate(model);
-        if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'GPT Image 2.5 pricing is not configured.' };
+        if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Selected GPT Image pricing is not configured.' };
       }
       // Video is atomically reserved after resolving provider inputs.
       if (toolName === 'makaron_create_video' || toolName === 'makaron_edit_video' || toolName === 'makaron_upscale_video') {

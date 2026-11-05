@@ -1,5 +1,5 @@
 /** Models offered to new Agent and MCP requests. */
-export const IMAGE_MODEL_IDS = ['gemini', 'gemini-2.1', 'gemini-lite', 'qwen-spicy', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'wan2.7-image', 'mj-v8.2'] as const;
+export const IMAGE_MODEL_IDS = ['gemini', 'gemini-2.1', 'gemini-lite', 'qwen-spicy', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'wan2.7-image', 'mj-v8.2'] as const;
 /** Accept the old Qwen ID at API/tool boundaries; it is normalized before routing and billing. */
 export const IMAGE_MODEL_INPUT_IDS = [...IMAGE_MODEL_IDS, 'openai', 'qwen'] as const;
 /** Keep old IDs at the input boundary so existing clients get a capability-aware migration. */
@@ -60,4 +60,11 @@ export const FAL_IMAGE25_IDS = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst']
 export type FalImage25Id = typeof FAL_IMAGE25_IDS[number];
 export function isFalImage25(model?: string | null): model is FalImage25Id {
   return FAL_IMAGE25_IDS.some(id => id === model);
+}
+
+export const FAL_IMAGE26_IDS = ['gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'] as const;
+export type FalImage26Id = typeof FAL_IMAGE26_IDS[number];
+export type FalGptImageId = FalImage25Id | FalImage26Id;
+export function isFalGptImage(model?: string | null): model is FalGptImageId {
+  return isFalImage25(model) || FAL_IMAGE26_IDS.some(id => id === model);
 }

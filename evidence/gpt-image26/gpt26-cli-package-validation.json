@@ -1,0 +1,25 @@
+{
+  "version": "0.17.9",
+  "tarball": "/tmp/makaron-gpt26-ui/makaron-cli-0.17.9.tgz",
+  "sha256": "79e44c991d59789aad6bd6c972c9f0dbfccd7cc38c048c5d5995db584572798e",
+  "files_compared": [
+    "package.json",
+    ".codex-plugin/plugin.json",
+    ".claude-plugin/plugin.json",
+    "bin/makaron.mjs",
+    "README.md",
+    "skills/makaron/SKILL.md"
+  ],
+  "source_metadata_versions": {
+    "package.json": "0.17.9",
+    ".codex-plugin/plugin.json": "0.17.9",
+    ".claude-plugin/plugin.json": "0.17.9",
+    "evals/agent-discovery.json": "0.17.9"
+  },
+  "eval_manifest_in_tarball": false,
+  "fresh_local_tarball_install_passed": true,
+  "registry_install_verified": false,
+  "published": false,
+  "media_operations": 0,
+  "all_six_files_fresh_local_install_match": true
+}

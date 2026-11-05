@@ -122,8 +122,8 @@ Generation timing varies; report actual completion. No automatic retry or model 
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
       model: z.string().nullish().describe('Explicit image model preference; otherwise omit for Auto. Unknown IDs use Auto, Flare first. See the generated Image Model Capability table.'),
       isNsfw: z.boolean().nullish().describe('Caller/Agent-assessed NSFW input; routes directly to Qwen Spicy.'),
-      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5 supports up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
-      imageResolution: z.string().nullish().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.5 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
+      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5/2.6 support up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
+      imageResolution: z.string().nullish().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.5/2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
       midjourney: z.object({
         speed: z.enum(['fast', 'draft']).optional(), quality: z.enum(['standard', 'hd']).optional(),
         styleReferences: z.array(z.string()).max(20).optional(), styleWeight: z.number().int().min(0).max(1000).optional(),

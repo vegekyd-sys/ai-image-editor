@@ -1,0 +1,33 @@
+
+> ai-image-editor@0.1.0 check:skill-sync
+> npm run check:agent-startup && npm run check:agent-discovery && node --import tsx scripts/check-skill-routing-evidence.ts
+
+
+> ai-image-editor@0.1.0 check:agent-startup
+> tsx scripts/check-agent-startup-contract.ts
+
+Agent startup contract passed: manifest-only Skill loading, no duplicate full Skill reads.
+
+> ai-image-editor@0.1.0 check:agent-discovery
+> node scripts/build-agent-discovery.mjs --check
+
+External Skill directory: 9 entries, revision f3fbcf20c5b2.
+Checked 1 public Makaron Agent Skills.
+/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/scripts/lib/skill-routing-evidence.ts:8
+  const fail = (why: string): never => { throw new Error(`Routing evidence ${why}; run the authorized routing-only preflight before release`); };
+                                               ^
+
+
+Error: Routing evidence is stale; run the authorized routing-only preflight before release
+    at fail (/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/scripts/lib/skill-routing-evidence.ts:8:48)
+    at checkRoutingEvidence (/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/scripts/lib/skill-routing-evidence.ts:9:109)
+    at <anonymous> (/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/scripts/check-skill-routing-evidence.ts:2:16)
+    at Object.<anonymous> (/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/scripts/check-skill-routing-evidence.ts:3:133)
+    at Module._compile (node:internal/modules/cjs/loader:1734:14)
+    at Object.transformer (/Users/tianyicai/ai-image-editor/node_modules/tsx/dist/register-BOkp8V6j.cjs:9:3176)
+    at Module.load (node:internal/modules/cjs/loader:1469:32)
+    at Module._load (node:internal/modules/cjs/loader:1286:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+
+Node.js v24.1.0
