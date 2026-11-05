@@ -308,6 +308,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.fasterMediaDelivery.title': "画像と動画の読み込みが高速に",
+  'changelog.fasterMediaDelivery.item1': "プロジェクト内の画像と動画をグローバルなエッジキャッシュから配信するようになり、表示・シーク・ダウンロードがより速くなりました。",
+  'changelog.fasterMediaDelivery.item2': "同じ素材を繰り返し再生・書き出ししても毎回オリジンに取りに行かず、より安定して動作します。",
   'changelog.gptImage26.title': "GPT Image 2.6 と GIF アニメーション",
   'changelog.gptImage26.item1': "既定の画像モデルが GPT Image 2.6 Flare に更新され、精細な制作向けに Sunburst も選べます。モデル選択では隣り合って表示されます。",
   'changelog.gptImage26.item2': "画質と推論レベルを指定できます。既定は低画質・高推論です。2.5 の選択肢は対応する 2.6 モデルに置き換わり、過去の作品も引き続き閲覧できます。",

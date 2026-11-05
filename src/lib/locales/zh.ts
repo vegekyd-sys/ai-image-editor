@@ -272,6 +272,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.fasterMediaDelivery.title': "图片和视频加载更快",
+  'changelog.fasterMediaDelivery.item1': "作品里的图片和视频改由全球边缘缓存分发，打开、拖动进度条和下载都更快。",
+  'changelog.fasterMediaDelivery.item2': "同一份素材反复播放或导出时不再重复回源，体验更稳定。",
   'changelog.gptImage26.title': "GPT Image 2.6 与 GIF 动画",
   'changelog.gptImage26.item1': "默认图片模型升级为 GPT Image 2.6 Flare，Sunburst 提供精细创作选项；两款模型在选择器中相邻展示。",
   'changelog.gptImage26.item2': "可指定画质与推理档位，默认使用低画质、高推理；原 2.5 选项由对应的 2.6 模型接替，已有作品仍可查看。",

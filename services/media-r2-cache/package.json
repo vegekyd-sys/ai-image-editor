@@ -1,0 +1,13 @@
+{
+  "name": "makaron-media-r2-cache",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "deploy:test": "wrangler deploy --env test",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.151.2"
+  }
+}

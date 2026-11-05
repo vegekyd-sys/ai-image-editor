@@ -1,0 +1,37 @@
+{
+  // Pull-through R2 cache for public media on cdn.makaron.app.
+  // Production routes are attached only after the test hostname passes acceptance.
+  "name": "makaron-media-r2-cache",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-11-01",
+  "account_id": "83bc48856cd8ab6d436b3ed49d825c6f",
+  "workers_dev": false,
+  "vars": {
+    "ORIGIN_HOST": "sdyrtztrjgmmpnirswxt.supabase.co",
+    "EDGE_TTL_SECONDS": "60",
+    "REVALIDATE_SECONDS": "600",
+    "R2C_DISABLED": "0",
+    "CF_ZONE_ID": "f8509107c309261487e0bcfbcf72d704"
+  },
+  "r2_buckets": [{ "binding": "MEDIA_R2", "bucket_name": "makaron-cdn-media" }],
+  "observability": { "enabled": true, "head_sampling_rate": 0.05 },
+  // Production: attached to the existing proxied hostname (live since 2026-11-05).
+  "routes": [
+    { "pattern": "cdn.makaron.app/storage/v1/object/public/*", "zone_name": "makaron.app" },
+    { "pattern": "cdn.makaron.app/__r2c/*", "zone_name": "makaron.app" }
+  ],
+  "env": {
+    "test": {
+      "name": "makaron-media-r2-cache-test",
+      "routes": [{ "pattern": "cdn-r2-test.makaron.app", "custom_domain": true }],
+      "vars": {
+        "ORIGIN_HOST": "sdyrtztrjgmmpnirswxt.supabase.co",
+        "EDGE_TTL_SECONDS": "60",
+        "REVALIDATE_SECONDS": "600",
+        "R2C_DISABLED": "0",
+    "CF_ZONE_ID": "f8509107c309261487e0bcfbcf72d704"
+      },
+      "r2_buckets": [{ "binding": "MEDIA_R2", "bucket_name": "makaron-cdn-media" }]
+    }
+  }
+}
