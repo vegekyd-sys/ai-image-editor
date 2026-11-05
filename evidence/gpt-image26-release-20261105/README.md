@@ -44,3 +44,9 @@ Created through installed `makaron-cli@0.17.9` CLI `chat`, project https://www.m
 Video receipts: `promo-native-media.json`, `promo-final-media.json`, `promo-native-review.txt`, `promo-final-contact-sheet.png`, and the submission proof. Production authentication and generated-media originals remain separate from this public evidence directory.
 
 Final IAB playback reached the end of 15.072s. Browser MP4 download matches the final file exactly; SHA256 `51a1dbd7cc025ee6bc9892f105cbc7953b12b6030589034a074767b7689e34b1`.
+
+## GIF headline emphasis revision
+
+User requested a larger, more perceptible “一句话变 GIF”. Follow-up CLI chat run `1066189f-8882-4671-aa06-3253b752ca67` rebuilt captions from clean native media_3, retaining prior captioned files for comparison. The main caption moved to the bottom blank region y≈1492–1757; visible Chinese headline ≈112px and cyan GIF ≈144px, compared with the prior 56px nominal text. Its window increased from 3–7s to 3–8.2s, with a 0.2s synchronized pop-in and a restrained cyan emphasis line/pulse. Other captions and closing card remain unchanged.
+
+Final remains 1080×1920, 24fps, 15.072s; original native audio SHA256 matches. Pixel contact sheet, mobile-sized browser playback and exact-byte browser download passed. No image/video/music/voice generation calls; this revision used 6 Agent credits. Latest file is `outputs/gpt26-release-20261105/promo/makaron-image26-launch-15s-gif-emphasis.mp4`; player http://127.0.0.1:3057 now serves this version. SHA256 `05cdbc4ea833372ab3a369367c8d5987a12c6556277684b82325e2f4c252eb8c`.
