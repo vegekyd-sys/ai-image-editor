@@ -10,7 +10,7 @@ const complete: MidjourneyTask = { model: 'mj-v8.2', taskId: 'task-accepted', st
 
 describe('Midjourney capability boundaries and full batches', () => {
   it('keeps MJ explicit and leaves ordinary Auto unchanged', () => {
-    expect(planImageGeneration({ prompt: 'scene' }).model).toBe('gpt-image-2.5-flare');
+    expect(planImageGeneration({ prompt: 'scene' }).model).toBe('gpt-image-2.6-flare');
     expect(planImageGeneration({ prompt: 'scene', model: 'mj-v8.2' }).model).toBe('mj-v8.2');
   });
   it.each([

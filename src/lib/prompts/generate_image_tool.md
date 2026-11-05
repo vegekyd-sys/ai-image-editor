@@ -1,6 +1,6 @@
 Edit or generate an image.
 
-Model choice, NSFW routing and conflicting output preferences follow the generated Image Model Capability table below.
+Model, NSFW routing and output conflicts follow the generated Image Model Capability table below.
 
 Call `read_file('prompts/image.md')` for complex edits, references, restoration, or layout work.
 
@@ -23,6 +23,6 @@ Edit Mode prompt shape for ordinary in-place edits:
 
 For cutout, read `prompts/cutout.md` once; do not append ordinary composition/scene-layout preservation.
 
-Midjourney (`mj-v8.2`) is for NEW creative scenes, not precise source editing. Pass the user's original natural-language brief: the adapter prepares a concise scene prompt. Omit `media_index`. Fast returns all 4 candidates; `midjourney.speed=draft` returns all 24 small drafts; `midjourney.quality=hd` regenerates 4 HD candidates and may change composition. For a new scene guided by an existing look, pass `style_reference_media_indices`; this transfers palette/material/light, not identity. Keep all returned candidates available, let the user choose, then use an edit-capable model for exact refinement or typography. Do not re-submit a failed/unknown paid task.
+Midjourney (`mj-v8.2`) is for NEW creative scenes, not precise source editing. Pass the original natural-language brief; the adapter prepares the scene prompt. Omit `media_index`. Fast returns all 4 candidates; `midjourney.speed=draft` returns all 24 small drafts; `midjourney.quality=hd` regenerates 4 HD candidates and may change composition. For a new scene guided by an existing look, pass `style_reference_media_indices`; this transfers palette/material/light, not identity. Keep every candidate for user choice; use an edit-capable model for exact refinement or typography. Do not re-submit a failed/unknown paid task.
 
-For newly generated or reference-guided GIF art/memes, use this tool with `outputFormat: "gif"`. The `animated-gif` skill is for assembling supplied existing frames or exact timing/export, not the default new-art path. On a provider error, preserve its request ID and parameter details; do not declare the whole format unavailable or switch to sprite sheets/another workflow without explaining the limitation.
+For new or reference-guided GIF art/memes, use `outputFormat: "gif"`. `animated-gif` only assembles existing frames or controls exact timing/export. Preserve provider request IDs and parameter errors; do not infer format-wide failure or switch workflows without explaining why.
