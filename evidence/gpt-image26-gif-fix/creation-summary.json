@@ -7,5 +7,8 @@
   "estimated_supplier_cost_rounding_upper_bound_usd": 0.635,
   "pricing_method": "Observed runtime model credits, verified markup 2 and $0.01/credit; rounding upper bound, not invoice. Includes rejected visual first take and eight-frame regression; excludes unrelated user project calls.",
   "prior_session_estimate_usd": 2.29115704,
-  "routing_preflight_text_cost_not_in_this_bound": true
+  "routing_preflight_text_cost_not_in_this_bound": true,
+  "routing_preflight_estimate_usd": 0.019452492,
+  "estimated_batch_usd": 0.654452492,
+  "estimated_session_usd": 2.9456095319999998
 }
