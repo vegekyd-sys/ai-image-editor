@@ -1,6 +1,6 @@
 # OpenAI direct provider: acceptance (2026-11-05, local, branch claude/openai-provider)
 
-The owner's OpenAI API key (about $200/month) is used first for GPT Agent models and GPT Image 2.6,
+The owner's OpenAI API key (about $100/month) is used first for GPT Agent models and GPT Image 2.6,
 then the existing suppliers take over. The key lives only in `.env.local` / Vercel env, never in docs or memory.
 
 ## Routing
@@ -10,7 +10,7 @@ then the existing suppliers take over. The key lives only in `.env.local` / Verc
 | GPT Image 2.6 Flare / Sunburst | **OpenAI direct (budget left)** → fal |
 | deepseek-flash (prod default Agent), grok, other image models | unchanged |
 
-Budget: `OPENAI_MONTHLY_BUDGET_USD` (default 200) minus `OPENAI_BUDGET_RESERVE_USD` (default 5), per UTC month,
+Budget: `OPENAI_MONTHLY_BUDGET_USD` (default 100) minus `OPENAI_BUDGET_RESERVE_USD` (default 5), per UTC month,
 from the `openai_direct_spend` ledger (OpenAI gives this key no usage API: `api.usage.read` missing).
 A quota refusal (`insufficient_quota` etc.) marks the month exhausted. Kill switch: `OPENAI_DIRECT_ENABLED=false`.
 User billing is unchanged (same token rates / supplier cost × markup).

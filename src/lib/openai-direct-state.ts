@@ -38,7 +38,7 @@ function nonNegative(value: string | undefined, fallback: number): number {
 
 /** Monthly budget and the reserve kept for in-flight runs and price drift. */
 export function getOpenAIDirectBudget(): { budgetUsd: number; reserveUsd: number; limitUsd: number } {
-  const budgetUsd = nonNegative(process.env.OPENAI_MONTHLY_BUDGET_USD, 200);
+  const budgetUsd = nonNegative(process.env.OPENAI_MONTHLY_BUDGET_USD, 100);
   const reserveUsd = Math.min(budgetUsd, nonNegative(process.env.OPENAI_BUDGET_RESERVE_USD, 5));
   return { budgetUsd, reserveUsd, limitUsd: Math.max(0, budgetUsd - reserveUsd) };
 }

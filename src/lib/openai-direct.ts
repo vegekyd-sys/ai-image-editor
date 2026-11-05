@@ -1,5 +1,5 @@
 /**
- * Owner-funded OpenAI API key (monthly prepaid budget, ~$200).
+ * Owner-funded OpenAI API key (monthly prepaid budget, ~$100).
  *
  * GPT Agent models and GPT Image 2.6 use this key first while the current UTC
  * month is under budget, then fall back to the existing providers (Azure /
