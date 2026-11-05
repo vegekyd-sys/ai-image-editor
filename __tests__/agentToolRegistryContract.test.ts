@@ -78,6 +78,8 @@ describe('Agent tool registry contract', () => {
     expect(extractSet(source, 'DURABLE_INPUT_GUARDED_TOOLS')).toEqual([
       'studio_run',
       'publish_draft',
+      'create_timeline',
+      'edit_timeline',
       'write_file',
       'write_code_file',
       'run_code',
