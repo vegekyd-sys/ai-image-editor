@@ -48,3 +48,7 @@ app-store-assets/
 
 # Local campaign records and media never belong to the deployed application.
 marketing/**
+
+# Regression fixtures and provider receipts are local review evidence, not app assets.
+evidence/
+testcases/

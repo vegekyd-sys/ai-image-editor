@@ -1,0 +1,295 @@
+{
+  "version": 1,
+  "source_session": {
+    "id": "01a0839a-5924-7620-beb6-fb0e59b5e837",
+    "title": "验证 Nano Banana Lite 图生图",
+    "main_acceptance_turn": "01a08a72-2a6c-7d53-80c2-365bbe5663d7",
+    "date": "2026-09-10"
+  },
+  "purpose": "GPT Image migration regression, frozen public fixtures and original prompts",
+  "fixtures": {
+    "coca-cola-source.png": {
+      "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871",
+      "bytes": 3031462,
+      "provenance": "original source URL fetched again; old byte hash unavailable"
+    },
+    "portrait-source.jpg": {
+      "sha256": "09f9772b274a9ffe982ba2e1bc13e1ae03719d34f8e3344f4e75fe80581b86a4",
+      "bytes": 219181,
+      "provenance": "original source URL fetched again; old byte hash unavailable"
+    },
+    "advertisement-source.jpg": {
+      "sha256": "c987f405772ebc8761116e64f0548a0a8f2a84232777412714b961a4e5972861",
+      "bytes": 424790,
+      "provenance": "original session view_image capture; original disk file unavailable, may be resized"
+    }
+  },
+  "source_urls": {
+    "coca-cola-source.png": "https://www.coca-cola.com/content/dam/onexp/mk/al/brands/coca-cola/bic_ccr_canslk_330ml.png",
+    "portrait-source.jpg": "https://images.unsplash.com/photo-1626253684668-329e173d1c90?w=1200&q=90&fit=max"
+  },
+  "methodology": [
+    "Current paired runs use the same frozen bytes and prompts for both explicit fal versions.",
+    "Historical Agent cases used Agent-expanded tool prompts; new strict direct pair is not a replay of those hidden expansions. Three real chat cases are measured separately.",
+    "One sample per case/version; descriptive measurements, no SLA/statistical conclusion.",
+    "No automatic retry or fallback for paid POSTs; journal accepted task IDs and resume read-only."
+  ],
+  "cases": [
+    {
+      "id": "agent-product",
+      "label": "自然语言可乐广告",
+      "image": "coca-cola-source.png",
+      "prompt": "给这罐可口可乐做一张夏日冰爽产品广告图，保留包装与品牌标识，画面上只写「冰爽一刻」。只需要一张静态成图。",
+      "historical": {
+        "image_seconds": 24.9,
+        "image_cost_usd": 0.0133,
+        "quality_pass": true,
+        "path": "makaron chat"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": null
+      },
+      "original_prompt_source": "original session user prompt",
+      "source_capture": "agent-product.jpg"
+    },
+    {
+      "id": "agent-infographic",
+      "label": "中文咖啡信息图",
+      "prompt": "做一张中文信息图，标题「手冲咖啡四步法」，内容只有这四步：1 准备滤纸与咖啡粉；2 温水润湿滤纸；3 分段注水；4 享用咖啡。用清晰的步骤编号和示意图，只要一张静态图片。",
+      "historical": {
+        "image_seconds": 18.3,
+        "image_cost_usd": 0.0052,
+        "quality_pass": true,
+        "path": "makaron chat"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": null
+      },
+      "original_prompt_source": "original session user prompt",
+      "source_capture": "agent-infographic.jpg"
+    },
+    {
+      "id": "ecommerce",
+      "label": "可口可乐电商详情页",
+      "image": "coca-cola-source.png",
+      "aspect": "3:2",
+      "prompt": "给这罐可口可乐设计一张中文电商详情页图片，保留品牌和包装，突出冰爽饮用场景，信息只使用包装上可见的内容，不编造营养、配料或健康功效。",
+      "historical": {
+        "image_seconds": 33.1,
+        "image_cost_usd": 0.0126,
+        "quality_pass": true,
+        "path": "editImage"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": null
+      },
+      "original_prompt_source": "original run-matrix.ts",
+      "source_capture": "ecommerce.jpg"
+    },
+    {
+      "id": "poster",
+      "label": "中英文字海报",
+      "aspect": "3:2",
+      "prompt": "设计一张当代摄影展海报。标题「城市之间」，英文副标题「BETWEEN CITIES」，日期「2026.10.01—10.07」，地点「上海 · 光影艺术空间」。这些文字须完整清晰，其他设计由你决定。",
+      "historical": {
+        "image_seconds": 29.3,
+        "image_cost_usd": 0.0044,
+        "quality_pass": true,
+        "path": "editImage"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": null
+      },
+      "original_prompt_source": "original run-matrix.ts",
+      "source_capture": "poster.jpg"
+    },
+    {
+      "id": "app-ui",
+      "label": "App UI 静态概念图",
+      "aspect": "9:16",
+      "prompt": "做一张旅行记账 App 的中文首页 UI 静态概念图，展示东京旅行、本次预算 ¥8,000、已花费 ¥2,450，以及餐饮、交通、住宿三类支出。只生成一张图片，不写代码。",
+      "historical": {
+        "image_seconds": 30,
+        "image_cost_usd": 0.0037,
+        "quality_pass": true,
+        "path": "editImage"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": null
+      },
+      "original_prompt_source": "original run-matrix.ts",
+      "source_capture": "app-ui.jpg"
+    },
+    {
+      "id": "web-ui",
+      "label": "网站首页静态概念图",
+      "aspect": "16:9",
+      "prompt": "设计一张独立咖啡品牌「山间」的网站首页静态概念图，包含品牌介绍、三款咖啡豆和订阅入口。文案用中文，只生成图片。",
+      "historical": {
+        "image_seconds": 22.8,
+        "image_cost_usd": 0.0036,
+        "quality_pass": true,
+        "path": "editImage"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": null
+      },
+      "original_prompt_source": "original run-matrix.ts",
+      "source_capture": "web-ui.jpg"
+    },
+    {
+      "id": "illustration",
+      "label": "原创动漫插画",
+      "aspect": "3:2",
+      "prompt": "画一张原创动画风格插画：一位成年咖啡师在雨后的街角咖啡店门前给路人递咖啡，温暖治愈，人物穿完整的衬衫和围裙。",
+      "historical": {
+        "image_seconds": 16.7,
+        "image_cost_usd": 0.0044,
+        "quality_pass": true,
+        "path": "editImage"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": null
+      },
+      "original_prompt_source": "original run-matrix.ts",
+      "source_capture": "illustration.jpg"
+    },
+    {
+      "id": "storyboard",
+      "label": "导演分镜图",
+      "aspect": "9:16",
+      "image": "coca-cola-source.png",
+      "prompt": "为可口可乐夏日产品广告的 S1 段画一张竖版导演分镜图，6 个镜头，2 列 3 行。保持参考罐身和品牌。镜头依次是冰块特写、可乐罐上的冷凝水、拉环开启、倒入杯中、杯壁气泡、产品英雄镜头。每格标签使用 S1-P1 至 S1-P6，并写 2s、景别和运镜。写实广告摄影，除此之外不加标题。",
+      "historical": {
+        "image_seconds": 26.3,
+        "image_cost_usd": 0.0122,
+        "quality_pass": true,
+        "path": "editImage"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": null
+      },
+      "original_prompt_source": "original run-matrix.ts",
+      "source_capture": "storyboard.jpg"
+    },
+    {
+      "id": "face-preserve",
+      "label": "普通人像保真编辑",
+      "aspect": "3:4",
+      "image": "portrait-source.jpg",
+      "prompt": "Preserve this person’s exact facial identity, face shape, eyes, nose, mouth, hair, pose and clothing. Change only the background to a softly blurred city street in daylight. Do not beautify, reshape or retouch the face. No added text or logos.",
+      "historical": {
+        "image_seconds": 22.3,
+        "image_cost_usd": 0.017,
+        "quality_pass": true,
+        "path": "editImage"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": null
+      },
+      "original_prompt_source": "original run-matrix.ts",
+      "source_capture": "face-preserve.jpg"
+    },
+    {
+      "id": "multi-reference",
+      "label": "人物＋品牌产品双参考",
+      "aspect": "3:2",
+      "image": "portrait-source.jpg",
+      "refs": [
+        "coca-cola-source.png"
+      ],
+      "prompt": "用图1的人物与图2的可口可乐产品，设计一张自然的夏日生活方式产品照片：人物坐在露天咖啡店，可乐罐放在桌面上。保留人物面容、衬衫和产品包装，不添加任何宣传文字。",
+      "historical": {
+        "image_seconds": 24.3,
+        "image_cost_usd": 0.0252,
+        "quality_pass": true,
+        "path": "editImage"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": null
+      },
+      "original_prompt_source": "original run-matrix.ts",
+      "source_capture": "multi-reference.jpg"
+    },
+    {
+      "id": "cutout",
+      "label": "商品抠图与原画布",
+      "image": "coca-cola-source.png",
+      "background": "transparent",
+      "prompt": "Pixel-faithful foreground extraction, not a redesign or regeneration. Keep only the complete Coca-Cola can. Preserve the exact can shape, red packaging, Coca-Cola logo, all original can lettering, silver rims and condensation details. Remove the scene, ice, water splashes, floor and advertising headline outside the can. Do not beautify, retouch, restyle, alter geometry, or invent hidden details. Return a real transparent PNG with clean natural edges and no halo, shadow, border, text, or background. Preserve the original lettering printed on the can.",
+      "historical": {
+        "image_seconds": 21.2,
+        "image_cost_usd": 0.014,
+        "quality_pass": true,
+        "path": "editImage"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": "真实 alpha 与视觉无光晕分别判断"
+      },
+      "original_prompt_source": "original run-matrix.ts",
+      "source_capture": "cutout.png"
+    },
+    {
+      "id": "agent-cutout",
+      "label": "复杂广告透明抠图",
+      "image": "advertisement-source.jpg",
+      "background": "transparent",
+      "prompt": "把刚生成的广告图里的可乐罐抠出来，保留罐身包装文字和水珠，去掉冰块、水花、背景以及罐子外面的「冰爽一刻」，输出透明底 PNG，保持这张广告图的画布尺寸。",
+      "historical": {
+        "image_seconds": 21.7,
+        "image_cost_usd": 0.0141,
+        "quality_pass": false,
+        "path": "makaron chat"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": "真实 alpha 与视觉无光晕分别判断"
+      },
+      "original_prompt_source": "original session user prompt",
+      "source_capture": "agent-cutout.png"
+    },
+    {
+      "id": "sticker",
+      "label": "透明底文生图",
+      "background": "transparent",
+      "aspect": "1:1",
+      "prompt": "A friendly orange robot mascot waving, full body, a simple rounded silhouette with generous transparent padding. Return a real transparent PNG. No floor, horizon, environmental shadow, border, text, checkerboard or scenic background.",
+      "historical": {
+        "image_seconds": 19.3,
+        "image_cost_usd": 0.0062,
+        "quality_pass": false,
+        "path": "editImage"
+      },
+      "expected": {
+        "model": "explicit target, no fallback",
+        "visual": "文字/构图按 prompt，参考图保真，不增加未要求内容",
+        "transparent": "真实 alpha 与视觉无光晕分别判断"
+      },
+      "original_prompt_source": "original run-matrix.ts",
+      "source_capture": "sticker.png"
+    }
+  ]
+}
