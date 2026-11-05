@@ -17,12 +17,13 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'fasterMediaDelivery' | 'gptImage26' | 'cliLargeUploads' | 'retakeChoices' | 'kling4' | 'videoFramingParity' | 'fasterFrameChecks' | 'reliable4kExport' | 'deepseekFlashDefault' | 'nativeAudiovisual' | 'marketplaceSkillUpdates' | 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'gifStickers' | 'fasterMediaDelivery' | 'gptImage26' | 'cliLargeUploads' | 'retakeChoices' | 'kling4' | 'videoFramingParity' | 'fasterFrameChecks' | 'reliable4kExport' | 'deepseekFlashDefault' | 'nativeAudiovisual' | 'marketplaceSkillUpdates' | 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-11-05', localeKey: 'gifStickers' },
   { date: '2026-11-05', localeKey: 'fasterMediaDelivery' },
   { date: '2026-11-05', localeKey: 'gptImage26' },
   { date: '2026-11-04', localeKey: 'cliLargeUploads' },
@@ -991,6 +992,10 @@ const LOCALIZED_CHANGELOG_KEYS = {
   fasterMediaDelivery: {
     title: 'changelog.fasterMediaDelivery.title',
     items: ['changelog.fasterMediaDelivery.item1', 'changelog.fasterMediaDelivery.item2'],
+  },
+  gifStickers: {
+    title: 'changelog.gifStickers.title',
+    items: ['changelog.gifStickers.item1', 'changelog.gifStickers.item2'],
   },
   gptImage26: {
     title: 'changelog.gptImage26.title',

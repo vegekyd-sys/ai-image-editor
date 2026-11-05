@@ -738,10 +738,11 @@ GPT Image 2.6 Flare is the default image route; Sunburst is an explicit alternat
 
 For new GIF artwork, mascot loops, and animated memes, **GPT Image 2.6 Flare is the go-to model**. Start with `makaron chat`; the Agent uses native image generation. Keep `animated-gif` for assembling existing frames or explicitly requested timing/export controls.
 
-`--output-format png|jpeg|webp|gif|svg` preserves the original format. GIF supports generation/editing and `--frame-count` / `--frame-duration-ms`; all frames share the pixel budget and native sheet, with at most 960px per frame edge even for fewer frames (default 9 frames, 200 ms, 960 square). Per-frame 2K/4K is rejected before submission. SVG is experimental: live provider acceptance still returns 422. Its transport supports **text-to-image only**, with one output and no source/reference images; do not promise a working SVG generation route. Unsafe or external SVG content is rejected. CLI saves real GIF/SVG bytes with matching extensions, even if `--out` requested a different extension. No silent rasterization, fallback model or automatic paid retry.
+`--output-format png|jpeg|webp|gif|svg` preserves the original format. GIF supports generation/editing with `--frame-count` (2–16) / `--frame-duration-ms` / `--gif-size sticker|full`. Frames share one native sheet: full-size square frames are 960px up to 9 frames, 816px for 10–12 and 720px for 13–16 (default 9 frames, 200 ms). `--gif-size sticker` uses ~512px frames for chat stickers and memes at about half the cost. Per-frame 2K/4K is rejected before submission. SVG is experimental: live provider acceptance still returns 422. Its transport supports **text-to-image only**, with one output and no source/reference images; do not promise a working SVG generation route. Unsafe or external SVG content is rejected. CLI saves real GIF/SVG bytes with matching extensions, even if `--out` requested a different extension. No silent rasterization, fallback model or automatic paid retry.
 
 ```sh
 makaron edit --output-format gif --quality medium --frame-count 9 --frame-duration-ms 160 --out spark.gif "A looping purple spark tracing a cyan circle"
+makaron edit --output-format gif --gif-size sticker --frame-count 12 --frame-duration-ms 120 --background opaque --out nope.gif "Chat sticker: a cat wags its finger 'no', smug smile, caption 不行"
 makaron chat --image mascot.png "Use GPT Image 2.6 Flare to make a looping GIF of this mascot waving; return the original GIF."
 ```
 
