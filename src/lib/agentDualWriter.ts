@@ -152,6 +152,8 @@ export class AgentDualWriter {
           );
         }
 
+        if (!imageUrl) throw new Error('Generated image could not be stored. No completed snapshot was published; retain the original result and do not regenerate automatically.');
+
         // Write snapshots table
         if (imageUrl && !prePublishedSnapshotId) {
           const sortOrder = await this.nextSortOrder();

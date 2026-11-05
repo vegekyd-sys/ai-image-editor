@@ -129,7 +129,7 @@ export function createFalImage25Backend(model: FalGptImageId): ModelBackend {
         requestId = task.request_id;
         // Live accepted receipts return the family root, not the full endpoint in the OpenAPI example.
         const acceptedUrl = new URL(task.response_url ?? `https://queue.fal.run/openai/gpt-image-${image26 ? '2.6' : '2.5'}/requests/${requestId}`);
-        if (acceptedUrl.protocol !== 'https:' || acceptedUrl.hostname !== 'queue.fal.run' || acceptedUrl.username || acceptedUrl.password || acceptedUrl.search || !acceptedUrl.pathname.endsWith(`/requests/${requestId}`)) throw new Error('Unexpected accepted result URL.');
+        if (acceptedUrl.protocol !== 'https:' || acceptedUrl.hostname !== 'queue.fal.run' || acceptedUrl.username || acceptedUrl.password || acceptedUrl.search || ![`/openai/gpt-image-${image26 ? '2.6' : '2.5'}/requests/${requestId}`, `/${endpoint}/requests/${requestId}`].includes(acceptedUrl.pathname)) throw new Error('Unexpected accepted result URL.');
         const resultUrl = acceptedUrl.href;
         const signal = AbortSignal.timeout(600000);
         stage = 'status';

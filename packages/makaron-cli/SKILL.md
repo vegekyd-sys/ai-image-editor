@@ -274,17 +274,17 @@ npx makaron-cli edit --image photo.jpg "add cinematic warm lighting"
 npx makaron-cli edit "a cyberpunk cityscape at night"
 
 # With model/skill/reference
-npx makaron-cli edit --image photo.jpg --image-model gpt-image-2.5-flare --skill captions "add title"
+npx makaron-cli edit --image photo.jpg --image-model gpt-image-2.6-flare --skill captions "add title"
 npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 
 # Output to file
 npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 
-# Strict transparent output through GPT Image 2.5 Flare
-npx makaron-cli edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
+# Strict transparent output through GPT Image 2.6 Flare
+npx makaron-cli edit --image-model gpt-image-2.6-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2.6-flare|gpt-image-2.6-sunburst|wan2.7-image|mj-v8.2`, `--skill enhance|creative|wild|captions`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output routes strictly to GPT Image 2.5 Flare and fails instead of returning an opaque fallback. Wan 2.7 Image is an explicit fast ~1K route; do not automatically retry failures/timeouts, and do not promise exact face preservation.
+Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.6-flare|gpt-image-2.6-sunburst|wan2.7-image|mj-v8.2`, `--skill enhance|creative|wild|captions`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output routes strictly to GPT Image 2.6 Flare and fails instead of returning an opaque fallback. Wan 2.7 Image is an explicit fast ~1K route; do not automatically retry failures/timeouts, and do not promise exact face preservation.
 
 Midjourney V8.2 (`mj-v8.2`) accepts natural-language briefs and prepares the English prompt automatically. Fast returns up to 4 images, Draft up to 24 smaller drafts, and HD regenerates up to 4 higher-resolution images. Every returned image is saved; `--out scene.png` produces `scene-1.png`, `scene-2.png`, etc. A single result keeps the requested filename. Provider filtering can reduce the batch size.
 
@@ -466,8 +466,8 @@ send_message "All done!"
 
 FAL video models: **fal H3 Turbo** uses `minimax-h3-max` for single-start-frame I2V/T2V. **FAL H3 Max** uses the new selector `fal-h3-max`: native T2V or image/video/audio reference-to-video, default 768p, optional 480p, integer 5–15s; at most 9 images / 3 videos / 3 audios / 12 total. Reference video/audio each 2–15s and each modality totals at most 15s. Source-video modifications use generation with feature references, not typed edit/extend. Reference input tokens are billed in addition to output video; query current pricing.
 
-GPT Image 2.6 Flare and Sunburst are explicit optional fal routes (`gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`). This adapter returns one static PNG at low quality and low reasoning; GIF, SVG and markup overlays are not exposed. Auto stays on GPT Image 2.5 Flare. Exact active pricing rows are required before submission.
+GPT Image 2.6 Flare is the default; Sunburst is optional. `--quality auto|low|medium|high` and `--image-reasoning low|medium|high` are independent (defaults low quality, high reasoning). `--output-format png|jpeg|webp|gif|svg` preserves originals. GIF supports generation/editing; `--frame-count` and `--frame-duration-ms` share the request pixel budget. SVG is text-to-image only, no source/references; report a provider failure honestly, never flatten or replace. Exact active 2.6 pricing is required; final cost uses actual fal units. Legacy 2.5 IDs migrate to 2.6; historical media is unchanged. Administrator Codex Subscription Agents use the same image tool; image API cost is separate from Agent subscription usage.
 
-The legacy `openai` image-model parameter now resolves to GPT Image 2.5 Flare.
+The legacy `openai` image-model parameter now resolves to GPT Image 2.6 Flare.
 
 Wan Retake (`wan-3.0` / `wan-3.0-prime`) rebuilds the selected interval using cropped video references and automatic assembly; it is reference-guided generation, with no native endpoint locks. Kling 4 remains the single default; choose alternatives explicitly.

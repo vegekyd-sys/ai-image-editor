@@ -43,7 +43,7 @@ export async function preserveGptImageOutput(buffer: Buffer, format: ImageOutput
   if (format !== 'gif' && frames > 1) throw new Error('Unexpected animated output');
   if (!metadata.width || !metadata.height || metadata.width > 3840 || (metadata.pageHeight ?? metadata.height) > 3840) throw new Error('Invalid output dimensions');
   await input.clone().raw().toBuffer();
-  if (background === 'transparent' && format !== 'svg') {
+  if (background === 'transparent') {
     if (!metadata.hasAlpha) throw new Error('Requested transparent image has no alpha');
     const stats = await input.clone().stats();
     if (!stats.channels.at(-1) || stats.channels.at(-1)!.min === 255) throw new Error('Requested transparent image is opaque');

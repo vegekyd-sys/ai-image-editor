@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 
 const cliPath = new URL('../bin/makaron.mjs', import.meta.url);
@@ -271,6 +271,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    if (body?.params?.name === 'makaron_edit_image' && ['gif','svg'].includes(body.params.arguments.outputFormat)) {
+      const format = body.params.arguments.outputFormat;
+      const mimeType = format === 'svg' ? 'image/svg+xml' : 'image/gif';
+      sendJson(200, { jsonrpc: '2.0', id: body.id, result: { content: [{ type: 'image', mimeType, data: Buffer.from(format === 'svg' ? '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>' : 'GIF89a-format-transport-fixture').toString('base64') }] } });
+      return;
+    }
     if (body?.params?.name === 'makaron_edit_image' && body.params.arguments.model === 'mj-v8.2') {
       const prompt = body.params.arguments.editPrompt;
       const count = prompt === 'partial-mj' ? 3 : 4;
@@ -1183,6 +1189,19 @@ try {
     assert.equal(runRequest?.body?.projectId, 'project-existing-1');
     assert.equal(runRequest?.body?.prompt, 'use this reference');
   }
+
+  for (const format of ['gif', 'svg']) {
+    const out = path.join(tmpHome, `format-${format}.png`);
+    await expectSuccess(['edit', '--image-model', 'gpt-image-2.6-flare', '--quality', 'medium', '--image-reasoning', 'high', '--output-format', format, '--out', out, 'format transport fixture']);
+    const request = requests.filter(r => r.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.imageQuality, 'medium');
+    assert.equal(request.body.params.arguments.imageReasoningEffort, 'high');
+    assert.equal(request.body.params.arguments.outputFormat, format);
+    const saved = readFileSync(path.join(tmpHome, `format-${format}.${format}`), 'utf8');
+    assert.ok(format === 'svg' ? saved.startsWith('<svg') : saved.startsWith('GIF89a'));
+    assert.ok(!existsSync(out));
+  }
+  for (const flags of [['--quality','max'],['--image-reasoning','xhigh'],['--frame-count','1'],['--frame-duration-ms','25']]) { const count=requests.length;await expectFailure(['edit', ...flags, 'invalid image controls']);assert.equal(requests.length,count); }
 
   {
     const out = path.join(tmpHome, 'mj-batch.jpg');
