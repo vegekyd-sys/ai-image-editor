@@ -1,6 +1,6 @@
 # Makaron 视频时间线 V2：方案、设计与实现记录
 
-> 状态：M0–M4 已实现并在本地真实项目验收，2026-11-06 03:25 CST。合并与上线见 §8。
+> 状态：已上线生产（2026-11-06，dev @ 70209385）。M0–M4 已实现并验收，文档更新于 2026-11-06 03:25 CST。合并与上线见 §8。
 > 分支：`claude/video-timeline-v2`（基于 `origin/dev` 0df70536）。
 > 代码：`src/lib/timeline/`（协议、reducer、运行时、服务端、Agent 工具）、`src/components/timeline/`（Dock、画布层、编辑 hook、胶片抽帧）。第二轮 UI 原型路由已删除，以真实编辑器为准。
 
@@ -384,3 +384,12 @@ Prompt 层面只写意图和一条重要的节奏规则：**一个用户可感�
 - Agent 组件（`component` clip + propsSchema）未做；精心设计的动效仍走 run_code 经典合成。
 - 两次写入同一时间线文件之间没有存储层 CAS（读-改-写），极端并发下后写覆盖先写；客户端会在下一次响应或冲突时重新同步。
 - CLI：时间线工具在服务端 Agent 内可用，`makaron chat` 不需要改包；本次不发布 npm（发布前按 release checklist 复核）。
+
+### 8.5 发布记录（2026-11-06 03:50 CST）
+
+- 门禁：独立 runner（`--path /Users/tianyicai/ai-image-editor-runner-timeline`，默认 runner 有他人 9 月未提交改动，未动）跑 `runner:test` 全量通过（skill-sync、tsc、vitest 387 文件、CLI 测试、webpack build + 运行时打包检查）。合并 origin/dev 后重跑外部 Skill 路由预检 3/3、门禁再次全过。
+- Preview：`runner:preview` 独立部署（未占用 `git-dev` alias），首页 200、`/api/health` 全部 healthy、新时间线 API 已部署（未登录 401）。未在 Preview 登录测试账号。
+- Production：dev 快进到 70209385 并推送，`npm run release:prod` 门禁全过后部署，`www.makaron.app` 已切换，`/api/health` 13/13 healthy。
+- 生产真实导出：同一时间线视频经生产 `/api/remotion/export`（Lambda）导出 9 秒 720×1280 带音轨，4.5 秒帧与本地 Lambda 导出一致。
+- 未改任何 Vercel 环境变量、Lambda 站点或 Snapshot 配置。CLI / npm：时间线工具在服务端 Agent 内生效，`makaron chat` 无需改包，本次不发 npm。
+- 环境提醒：本地 `.env.local` 的 `REMOTION_LAMBDA_SERVE_URL` 仍指向 10-09 旧站点，本地导出会失败（生产不受影响）；如需本地导出，改到 `makaron-media-transport-20261103-v4` 或更新站点。
