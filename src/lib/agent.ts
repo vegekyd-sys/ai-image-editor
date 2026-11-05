@@ -1,3 +1,4 @@
+import { isOpenAIDirectFallbackError, isOpenAIQuotaExhausted, markOpenAIDirectExhausted, refreshOpenAIDirectBudget } from './openai-direct';
 import { streamText } from 'ai';
 import { initializeAgentSnapshotUrls } from './agent-media-index';
 import type { ModelMessage } from 'ai';
@@ -14,6 +15,7 @@ import { normalizeAgentErrorMessage } from './agent-error';
 import { compositionPartsPrefix } from './composition-parts';
 import {
   resolveCodexSubscriptionFallbackProvider,
+  resolveOpenAIDirectFallbackProvider,
   type AgentModelProvider,
   type AgentModelPreference,
 } from './agent-models';
@@ -322,6 +324,7 @@ export async function* runMakaronAgent(
   const prefetchedMode = prefetch ? await prefetch.corePromptMode.catch(() => null) : null;
   const corePromptMode = prefetchedMode ?? await getCorePromptMode();
   perf?.mark('core_prompt_mode', { mode: corePromptMode, prefetched: prefetchedMode !== null });
+  if (!options?.agentProvider) await refreshOpenAIDirectBudget();
   const runtime = createAgentModelRuntime(
     options?.agentModel,
     projectId,
@@ -1474,7 +1477,8 @@ export async function* runMakaronAgent(
         ? describeModelStreamError(streamError)
         : assessment.detail;
       const canFallbackFromSubscription = (runtime.spec.provider === 'codex-subscription'
-        || runtime.spec.provider === 'grok-subscription')
+        || runtime.spec.provider === 'grok-subscription'
+        || runtime.spec.provider === 'openai')
         && !options?.execution
         && !firstContentAt
         && !attemptDeliveredArtifact
@@ -1482,13 +1486,20 @@ export async function* runMakaronAgent(
         && (
           (runtime.spec.provider === 'codex-subscription'
             ? isCodexSubscriptionTerminalFailure(subscriptionFailureDetail)
+            : runtime.spec.provider === 'openai'
+            ? isOpenAIDirectFallbackError(subscriptionFailureDetail)
             : isGrokSubscriptionTerminalFailure(subscriptionFailureDetail))
           || isRetryableProviderOutage(subscriptionFailureDetail)
         );
       if (canFallbackFromSubscription) {
         const subscriptionProvider = runtime.spec.provider;
+        if (subscriptionProvider === 'openai' && isOpenAIQuotaExhausted(subscriptionFailureDetail)) {
+          await markOpenAIDirectExhausted(String(subscriptionFailureDetail));
+        }
         const fallbackProvider = subscriptionProvider === 'codex-subscription'
           ? resolveCodexSubscriptionFallbackProvider()
+          : subscriptionProvider === 'openai'
+          ? resolveOpenAIDirectFallbackProvider()
           : 'openrouter';
         const hasFallbackCredential = fallbackProvider === 'azure-openai'
           ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())

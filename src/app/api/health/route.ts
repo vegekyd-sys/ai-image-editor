@@ -1,3 +1,4 @@
+import { getOpenAIDirectApiKey, getOpenAIDirectBudget, isOpenAIDirectAvailable, isOpenAIDirectConfigured, refreshOpenAIDirectBudget } from '@/lib/openai-direct'
 import { NextResponse } from 'next/server'
 import {
   assertRequiredGPT56Models,
@@ -168,6 +169,28 @@ async function checkAzureOpenAI(): Promise<ServiceResult> {
   }, 5000)
 }
 
+async function checkOpenAIDirect(): Promise<ServiceResult & { budget?: Record<string, unknown> }> {
+  const apiKey = getOpenAIDirectApiKey()
+  if (!apiKey || !isOpenAIDirectConfigured()) return unavailable('OPENAI_API_KEY not set or OPENAI_DIRECT_ENABLED=false')
+  const [result, state] = await Promise.all([
+    checkWithTimeout('openai_direct', async () => {
+      const res = await fetch('https://api.openai.com/v1/models/gpt-image-2.6-flare', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    }, 5000),
+    refreshOpenAIDirectBudget(),
+  ])
+  const { budgetUsd, limitUsd } = getOpenAIDirectBudget()
+  // Budget detail only; spend amounts are the owner's supplier cost, not user data.
+  return {
+    ...result,
+    budget: state
+      ? { month: state.month, spentUsd: Math.round(state.spentUsd * 100) / 100, budgetUsd, limitUsd, exhausted: state.exhausted, routing: isOpenAIDirectAvailable() ? 'openai-first' : 'fallback' }
+      : { budgetUsd, routing: 'fallback', ledger: 'unavailable' },
+  }
+}
+
 async function checkCodexSubscription(): Promise<ServiceResult> {
   const ownerUserId = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim()
   if (!ownerUserId) {
@@ -206,6 +229,7 @@ export async function GET() {
     azureOpenai,
     codexSubscription,
     huggingface,
+    openaiDirect,
   ] = await Promise.all([
     checkSupabaseDB(),
     checkSupabaseAuth(),
@@ -219,6 +243,7 @@ export async function GET() {
     checkAzureOpenAI(),
     checkCodexSubscription(),
     checkHuggingFace(),
+    checkOpenAIDirect(),
   ])
 
   const services = {
@@ -234,6 +259,7 @@ export async function GET() {
     azure_openai: azureOpenai,
     codex_subscription: codexSubscription,
     huggingface,
+    openai_direct: openaiDirect,
   }
 
   const entries = Object.values(services)

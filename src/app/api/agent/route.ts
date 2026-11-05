@@ -1,3 +1,4 @@
+import { refreshOpenAIDirectBudget } from '@/lib/openai-direct';
 import { NextRequest } from 'next/server';
 import type { ModelMessage } from 'ai';
 import { authenticateRequest } from '@/lib/api-auth';
@@ -117,6 +118,7 @@ export async function POST(req: NextRequest) {
       skillLaunchContextPromise,
     ]);
     const activeRun = await activeRunPromise;
+    await refreshOpenAIDirectBudget();
     const resolvedAgentModel = resolveAgentModelSpecForUser(
       requestedAgentModel,
       process.env.AGENT_MODEL,

@@ -19,6 +19,7 @@ import {
 } from './azure-openai-responses';
 import { createCodexSubscriptionResponsesModel } from './codex-subscription';
 import { createGrokSubscriptionFetch } from './grok-subscription';
+import { createOpenAIDirectFetch, getOpenAIDirectApiKey, OPENAI_API_BASE_URL } from './openai-direct';
 
 export interface AgentModelRuntime {
   spec: AgentModelSpec;
@@ -43,11 +44,13 @@ export function createAgentModelRuntime(
   userId?: string,
   codexSubscriptionAllowed?: boolean,
 ): AgentModelRuntime {
+  // An explicit provider (route decision or fallback) is honoured as-is; only
+  // the env default goes through the direct-OpenAI-first budget rule.
   const spec = resolveAgentModelSpecForUser(
     preference,
     process.env.AGENT_MODEL,
     userId,
-    configuredGPT56Provider ?? process.env.GPT56_AGENT_PROVIDER,
+    configuredGPT56Provider,
     codexSubscriptionAllowed,
   );
 
@@ -57,6 +60,23 @@ export function createAgentModelRuntime(
       spec,
       model: createAzureOpenAIResponsesModel(spec.providerModelId),
       promptCacheKey,
+      normalizeMessages: normalizeToolCallInputs,
+    };
+  }
+
+  if (spec.provider === 'openai') {
+    const apiKey = getOpenAIDirectApiKey();
+    if (!apiKey) throw new Error('OPENAI_DIRECT_UNAVAILABLE: OPENAI_API_KEY is required for the direct OpenAI provider');
+    const openaiDirect = createOpenAI({
+      name: 'openai',
+      baseURL: OPENAI_API_BASE_URL,
+      apiKey,
+      fetch: createOpenAIDirectFetch(),
+    });
+    return {
+      spec,
+      model: openaiDirect.responses(spec.providerModelId),
+      promptCacheKey: createAzureAgentPromptCacheKey(spec.id, projectId),
       normalizeMessages: normalizeToolCallInputs,
     };
   }
@@ -179,6 +199,39 @@ export function getAgentProviderOptions(
     };
   }
 
+  if (runtime.spec.provider === 'openai') {
+    const allowedEfforts = new Set<AgentReasoningEffort>([
+      ...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
+      'low', 'medium', 'high', 'xhigh',
+    ]);
+    const configuredEffort = (process.env.OPENAI_AGENT_REASONING_EFFORT || process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT)
+      ?.trim()
+      .toLowerCase() as AgentReasoningEffort | undefined;
+    const reasoningEffort = runtime.spec.id === 'gpt-6-luna'
+      ? 'high'
+      : (configuredEffort && allowedEfforts.has(configuredEffort)
+        ? configuredEffort
+        : runtime.spec.defaultReasoningEffort);
+    return {
+      openai: {
+        ...(runtime.spec.id.startsWith('gpt-6') ? { forceReasoning: true } : {}),
+        parallelToolCalls: false,
+        maxToolCalls: resolveAzureOpenAIWebSearchMaxCalls(),
+        store: false,
+        promptCacheKey: runtime.promptCacheKey,
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+        ...(options?.compactAtTokens
+          ? {
+              contextManagement: [{
+                type: 'compaction',
+                compactThreshold: options.compactAtTokens,
+              }],
+            }
+          : {}),
+      },
+    };
+  }
+
   if (runtime.spec.provider === 'codex-subscription') {
     const allowedEfforts = new Set<AgentReasoningEffort>([
       ...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
@@ -258,7 +311,7 @@ export function resolveAzureOpenAIWebSearchMaxCalls(
 }
 
 export function getAgentProviderTools(runtime: AgentModelRuntime): Record<string, any> {
-  if (!['azure-openai', 'codex-subscription'].includes(runtime.spec.provider) || !isAgentWebSearchEnabled()) {
+  if (!['azure-openai', 'openai', 'codex-subscription'].includes(runtime.spec.provider) || !isAgentWebSearchEnabled()) {
     return {};
   }
   return {

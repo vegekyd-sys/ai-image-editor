@@ -1,3 +1,4 @@
+import { refreshOpenAIDirectBudget } from '@/lib/openai-direct';
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
@@ -65,8 +66,9 @@ export async function GET(req: NextRequest) {
     isDynamicCodexSubscriptionUserAllowed(userId),
     isGrokSubscriptionAllowedUser(userId),
   ]);
+  await refreshOpenAIDirectBudget();
   const defaultModel = resolveAgentModelSpecForUser(
-    'auto', process.env.AGENT_MODEL, userId, process.env.GPT56_AGENT_PROVIDER, codexAvailable,
+    'auto', process.env.AGENT_MODEL, userId, undefined, codexAvailable,
   );
   const defaultProvider = defaultModel.provider;
   const defaultModelId = defaultModel.id;

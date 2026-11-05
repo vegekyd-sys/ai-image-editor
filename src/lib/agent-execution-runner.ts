@@ -1,3 +1,4 @@
+import { refreshOpenAIDirectBudget } from './openai-direct';
 import { canRunAgentExecution, resolveAgentExecutionWorkerOrigin } from './agent-execution-origin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { prefetchAgentPrompt, runMakaronAgent, type AgentStreamEvent } from './agent';
@@ -12,6 +13,7 @@ import {
   resolveAgentModelSpec,
   resolveAgentModelSpecForUser,
   resolveCodexSubscriptionFallbackProvider,
+  resolveOpenAIDirectFallbackProvider,
   type AgentModelPreference,
 } from './agent-models';
 import {
@@ -31,6 +33,7 @@ import {
   shouldFailoverCodexSubscriptionToApi,
   shouldFailoverGrokSubscriptionToApi,
   shouldFailoverAzureGPT56ToOpenRouter,
+  shouldFailoverOpenAIDirectToApi,
   normalizeExecutionSnapshot,
   shouldScheduleNextAttempt,
   type DurableExecutionSnapshot,
@@ -502,6 +505,7 @@ export async function runAgentExecutionAttempt(
     const codexSubscriptionAllowed = typeof request.codexSubscriptionAllowed === 'boolean'
       ? request.codexSubscriptionAllowed
       : await isDynamicCodexSubscriptionUserAllowed(run.user_id, admin);
+    await refreshOpenAIDirectBudget();
     const requestedModel = resolveAgentModelSpecForUser(
       request.requestedAgentModel,
       process.env.AGENT_MODEL,
@@ -592,6 +596,8 @@ export async function runAgentExecutionAttempt(
     });
     const failoverProvider = requestedModel.provider === 'codex-subscription'
       ? resolveCodexSubscriptionFallbackProvider()
+      : requestedModel.provider === 'openai'
+      ? resolveOpenAIDirectFallbackProvider()
       : 'openrouter';
     const hasFailoverCredential = failoverProvider === 'azure-openai'
       ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
@@ -621,6 +627,14 @@ export async function runAgentExecutionAttempt(
           retryableFailureCount: requestedProviderFailureCount,
           latestFailureDetail,
         })
+      : requestedModel.provider === 'openai'
+      ? shouldFailoverOpenAIDirectToApi({
+          requestedProvider: requestedModel.provider,
+          hasApiFallback: hasFailoverCredential,
+          previousProviderFailover,
+          retryableFailureCount: requestedProviderFailureCount,
+          latestFailureDetail,
+        })
       : shouldFailoverAzureGPT56ToOpenRouter({
           requestedProvider: requestedModel.provider,
           hasOpenRouterKey: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
@@ -628,6 +642,7 @@ export async function runAgentExecutionAttempt(
           retryableFailureCount: requestedProviderFailureCount,
         });
     const providerRetry = (requestedModel.provider === 'azure-openai'
+      || requestedModel.provider === 'openai'
       || requestedModel.provider === 'codex-subscription'
       || requestedModel.provider === 'grok-subscription')
       && !providerFailover
