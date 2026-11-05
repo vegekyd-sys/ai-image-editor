@@ -1,0 +1,62 @@
+{
+  "currency": "USD",
+  "falReportedSuccessfulCostUsd": 1.3026,
+  "benchmarkFalReportedUsd": 1.1043,
+  "productFalReportedUsd": 0.1983,
+  "routingAgentEstimates": [
+    {
+      "file": "routing-live.log",
+      "cases": 3,
+      "estimateUsd": 0.0072419200000000015
+    },
+    {
+      "file": "routing-live-final.log",
+      "cases": 3,
+      "estimateUsd": 0.00795911
+    }
+  ],
+  "ordinaryAgentEstimateUsd": 0.00105601,
+  "estimatedCombinedUsd": 1.31885704,
+  "subscriptionAgentApiChargeUsd": 0,
+  "subscriptionPlanConsumed": true,
+  "invoiceNotQueried": true,
+  "rejectedWithoutBillingHeader": [
+    {
+      "id": "26-flare-low-max",
+      "httpStatus": 422,
+      "costUsd": null
+    },
+    {
+      "id": "26-flare-low-xhigh",
+      "httpStatus": 422,
+      "costUsd": null
+    },
+    {
+      "id": "26-flare-medium-max",
+      "httpStatus": 422,
+      "costUsd": null
+    },
+    {
+      "id": "26-flare-medium-xhigh",
+      "httpStatus": 422,
+      "costUsd": null
+    },
+    {
+      "id": "26-flare-svg",
+      "httpStatus": 422,
+      "costUsd": null
+    },
+    {
+      "id": "26-flare-svg-minimal",
+      "httpStatus": 422,
+      "costUsd": null
+    },
+    {
+      "id": "26-sunburst-svg",
+      "httpStatus": 422,
+      "costUsd": null
+    }
+  ],
+  "unresolvedOptionalRemoteNativeCodexProbe": "No HTTP receipt (ECONNRESET); no resubmission. It is not evidence of a native subscription image API.",
+  "scope": "Combined existing target $5/cap $10; no balance query, new plan, recharge or paid POST retry."
+}

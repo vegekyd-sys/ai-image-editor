@@ -1,0 +1,77 @@
+ __tests__/agentPromptPolicy.test.ts                |   2 +-
+ __tests__/editImageReferences.test.ts              |   6 +-
+ __tests__/falImage25Pricing.test.ts                |   4 +
+ __tests__/falImage25Routing.test.ts                |  22 +-
+ __tests__/falImage25Selector.test.tsx              |  20 +-
+ __tests__/falImage26.test.ts                       |  81 +++++
+ __tests__/gptImageFormats.test.ts                  |  52 +++
+ __tests__/imageCapabilityMcp.test.ts               |  16 +-
+ __tests__/imageModelCapabilities.test.ts           |  38 +--
+ __tests__/modelRouterTransparency.test.ts          |  20 +-
+ __tests__/vastRetirementRouting.test.ts            |   6 +-
+ __tests__/wanImageAgentBilling.test.ts             |  58 +++-
+ __tests__/wanImageRouting.test.ts                  |   6 +-
+ benchmarks/external-skill-routing/accepted.json    |  80 +++--
+ evidence/gpt-image26/README.md                     |  48 +++
+ .../gpt-image26/gpt26-boundary-tests-final.txt     |   8 +
+ evidence/gpt-image26/gpt26-boundary-tests.txt      | 362 +++++++++++++++++++++
+ evidence/gpt-image26/gpt26-cli-help.txt            |  36 ++
+ .../gpt-image26/gpt26-cli-package-validation.json  |  25 ++
+ evidence/gpt-image26/gpt26-cli-test.txt            |   9 +
+ evidence/gpt-image26/gpt26-eslint-entrypoints.txt  |   5 +
+ evidence/gpt-image26/gpt26-eslint.txt              |   0
+ evidence/gpt-image26/gpt26-i18n-check.txt          |   5 +
+ evidence/gpt-image26/gpt26-routing-dry.txt         |   2 +
+ evidence/gpt-image26/gpt26-skill-build-final.txt   |  14 +
+ evidence/gpt-image26/gpt26-skill-check-final.txt   |  33 ++
+ evidence/gpt-image26/gpt26-tsc-final.txt           |   0
+ evidence/gpt-image26/gpt26-ui-final.json           |  50 +++
+ evidence/gpt-image26/gpt26-unit-tests.txt          |   8 +
+ evidence/gpt-image26/makaron-cli-0.17.9.tgz        | Bin 0 -> 78971 bytes
+ evidence/gpt-image26/selector-en.png               | Bin 0 -> 95487 bytes
+ evidence/gpt-image26/selector-ja.png               | Bin 0 -> 94263 bytes
+ evidence/gpt-image26/selector-zh-Hant.png          | Bin 0 -> 96501 bytes
+ evidence/gpt-image26/selector-zh-mobile.png        | Bin 0 -> 91462 bytes
+ evidence/gpt-image26/selector-zh.png               | Bin 0 -> 96902 bytes
+ evidence/gpt-image26/ui-harness-source.tsx.txt     |   1 +
+ package-lock.json                                  |   4 +-
+ package.json                                       |   3 +-
+ packages/makaron-cli/.claude-plugin/plugin.json    |   2 +-
+ packages/makaron-cli/.codex-plugin/plugin.json     |   2 +-
+ packages/makaron-cli/README.md                     |  19 +-
+ packages/makaron-cli/SKILL.md                      |  12 +-
+ packages/makaron-cli/bin/makaron.mjs               |  32 +-
+ packages/makaron-cli/evals/agent-discovery.json    |   2 +-
+ packages/makaron-cli/package.json                  |   2 +-
+ packages/makaron-cli/skills/makaron/SKILL.md       |  10 +-
+ packages/makaron-cli/test/smoke.mjs                |  21 +-
+ public/.well-known/agent-skills/index.json         |   2 +-
+ public/.well-known/agent-skills/makaron/SKILL.md   |  10 +-
+ public/skill.md                                    |  10 +-
+ src/app/api/mcp/route.ts                           |  10 +-
+ src/app/api/preview/route.ts                       |   6 +-
+ src/components/ImagePromptCard.tsx                 |   2 +-
+ src/lib/agent-tools.ts                             |  27 +-
+ src/lib/agentDualWriter.ts                         |   2 +
+ src/lib/billing/token-rates.ts                     |   2 +-
+ src/lib/editor/download.ts                         |  12 +-
+ src/lib/image-model-capabilities.ts                |  37 ++-
+ src/lib/locales/en.ts                              |   4 +
+ src/lib/locales/ja.ts                              |   4 +
+ src/lib/locales/zh-Hant.ts                         |   4 +
+ src/lib/locales/zh.ts                              |   4 +
+ src/lib/model-registry.ts                          |   4 +-
+ src/lib/models/fal-image25.ts                      |  72 ++--
+ src/lib/models/gpt-image-output.ts                 |  53 +++
+ src/lib/models/gpt-image-quote.ts                  |  11 +
+ src/lib/models/index.ts                            |   7 +-
+ src/lib/models/types.ts                            |  21 +-
+ src/lib/prompts/image.md                           |   2 +-
+ src/lib/skills/edit-image.ts                       |   5 +-
+ src/lib/supabase/storage.ts                        |  16 +-
+ src/mcp/server.ts                                  |  35 +-
+ src/skills/long-video-storyboard/SKILL.md          |   2 +-
+ src/types/index.ts                                 |   5 +
+ ...0261105012652_gpt_image26_candidate_pricing.sql |  32 ++
+ .../20261105022651_gpt_image26_media_formats.sql   |   7 +
+ 76 files changed, 1289 insertions(+), 245 deletions(-)

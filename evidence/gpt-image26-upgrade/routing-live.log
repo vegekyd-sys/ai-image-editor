@@ -1,0 +1,12 @@
+
+> ai-image-editor@0.1.0 test:skill-routing
+> node --import tsx --require ./md-loader.cjs benchmarks/external-skill-routing/preflight.ts --live --env /Users/tianyicai/ai-image-editor/.env.local
+
+[agent-prompt] mode=layered system base=8781 workspace=9551 memory=0 cacheablePrefix=18332 total=18332 chars (~5238 tokens)
+{"case":"natural-long-narrative","state":"started"}
+{"case":"natural-long-narrative","selected":true,"stoppedBeforeProduction":true,"passed":true,"readFiles":["skills/long-video-director/SKILL.md"],"blockedCalls":[],"usage":{"inputTokens":50759,"inputTokenDetails":{"noCacheTokens":6,"cacheReadTokens":24043,"cacheWriteTokens":26710},"outputTokens":1275,"outputTokenDetails":{"textTokens":239,"reasoningTokens":1036},"totalTokens":52034},"durationMs":41014}
+{"case":"natural-reference-replication","state":"started"}
+{"case":"natural-reference-replication","selected":true,"stoppedBeforeProduction":true,"passed":true,"readFiles":["skills/video-edit/SKILL.md","skills/video-edit/references/replication-protocol.md","skills/video-edit/references/shot-blueprint.md","skills/video-edit/references/direct-reference-route.md","skills/video-edit/references/similarity-qa.md"],"blockedCalls":[],"usage":{"inputTokens":136730,"inputTokenDetails":{"noCacheTokens":15,"cacheReadTokens":130214,"cacheWriteTokens":6501},"outputTokens":821,"outputTokenDetails":{"textTokens":274,"reasoningTokens":547},"totalTokens":137551},"durationMs":47642}
+{"case":"natural-product-explainer","state":"started"}
+{"case":"natural-product-explainer","selected":true,"stoppedBeforeProduction":true,"passed":true,"readFiles":["skills/explainer-video/SKILL.md"],"blockedCalls":[],"usage":{"inputTokens":53853,"inputTokenDetails":{"noCacheTokens":6,"cacheReadTokens":47885,"cacheWriteTokens":5962},"outputTokens":505,"outputTokenDetails":{"textTokens":224,"reasoningTokens":281},"totalTokens":54358},"durationMs":20757}
+{"passed":3,"total":3,"mediaOperationsExecuted":0,"report":"/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/benchmarks/external-skill-routing/accepted.json"}

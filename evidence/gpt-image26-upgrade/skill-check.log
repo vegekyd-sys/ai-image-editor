@@ -1,0 +1,28 @@
+
+> ai-image-editor@0.1.0 check:skill-sync
+> npm run check:agent-startup && npm run check:agent-discovery && node --import tsx scripts/check-skill-routing-evidence.ts
+
+
+> ai-image-editor@0.1.0 check:agent-startup
+> tsx scripts/check-agent-startup-contract.ts
+
+Agent startup contract passed: manifest-only Skill loading, no duplicate full Skill reads.
+
+> ai-image-editor@0.1.0 check:agent-discovery
+> node scripts/build-agent-discovery.mjs --check
+
+External Skill directory: 9 entries, revision f3fbcf20c5b2.
+file:///Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/scripts/build-agent-discovery.mjs:61
+      throw new Error(`${path.relative(root, target)} is stale; run npm run build:agent-discovery`)
+            ^
+
+Error: public/.well-known/agent-skills/makaron is stale; run npm run build:agent-discovery
+    at ensureDirectory (file:///Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/scripts/build-agent-discovery.mjs:61:13)
+    at file:///Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/scripts/build-agent-discovery.mjs:82:3
+    at Array.map (<anonymous>)
+    at file:///Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/scripts/build-agent-discovery.mjs:71:27
+    at ModuleJob.run (node:internal/modules/esm/module_job:327:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:663:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:99:5)
+
+Node.js v24.1.0

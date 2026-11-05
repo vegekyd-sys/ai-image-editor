@@ -1,0 +1,16 @@
+fixture applied 20260413000000_billing_token_rates.sql
+fixture applied 20260428000000_token_rates_cache.sql
+fixture applied 20260919000000_usage_logs_run_attribution.sql
+fixture migration failed 20260601000000_agent_tool_history.sql
+file:///private/tmp/gpt26-prepare-fixture.mjs:5
+ try{sql(fs.readFileSync('supabase/migrations/'+f,'utf8'));console.log('fixture applied',f);}catch(e){console.log('fixture migration failed',f);throw new Error(e.stderr?.toString().slice(0,800));}
+                                                                                                                                                      ^
+
+Error: ERROR:  relation "agent_runs" does not exist
+
+    at file:///private/tmp/gpt26-prepare-fixture.mjs:5:151
+    at ModuleJob.run (node:internal/modules/esm/module_job:327:25)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:663:26)
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:99:5)
+
+Node.js v24.1.0

@@ -1,0 +1,91 @@
+{
+  "at": "2026-11-05T02:51:06.749Z",
+  "codeCommit": "b1dcd2fdaa9b7966f697aca2214cb965bfcd56b6",
+  "worktree": "/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor",
+  "branch": "codex/gpt-image26-candidate",
+  "validation": {
+    "code_ready": true,
+    "png_generation_edit": true,
+    "quality_reasoning_compared": true,
+    "gif_generation_edit": true,
+    "gif_cli_gui_save_reopen": true,
+    "svg_gui_cli_transport_fixture": true,
+    "svg_real_generation": false,
+    "ordinary_agent_default_live_verified": true,
+    "administrator_codex_subscription_live_verified_on_isolated_mirror": true,
+    "overall_live_verified": false,
+    "ready_for_review": false,
+    "reviewable_partial_result": true,
+    "merged": false,
+    "deployed": false,
+    "npm_published": false
+  },
+  "blocked": [
+    "fal real SVG generation: Flare, Sunburst and minimal request each returned terminal 422; no output fabricated.",
+    "Production Codex relay connection reset remains a rollout check; isolated exact relay source with existing local subscription succeeded without API fallback."
+  ],
+  "successfulBenchmarkImages": 27,
+  "rejectedBenchmarkRequests": 7,
+  "costs": {
+    "currency": "USD",
+    "falReportedSuccessfulCostUsd": 1.3026,
+    "benchmarkFalReportedUsd": 1.1043,
+    "productFalReportedUsd": 0.1983,
+    "routingAgentEstimates": [
+      {
+        "file": "routing-live.log",
+        "cases": 3,
+        "estimateUsd": 0.0072419200000000015
+      },
+      {
+        "file": "routing-live-final.log",
+        "cases": 3,
+        "estimateUsd": 0.00795911
+      }
+    ],
+    "ordinaryAgentEstimateUsd": 0.00105601,
+    "estimatedCombinedUsd": 1.31885704,
+    "subscriptionAgentApiChargeUsd": 0,
+    "subscriptionPlanConsumed": true,
+    "invoiceNotQueried": true,
+    "rejectedWithoutBillingHeader": [
+      {
+        "id": "26-flare-low-max",
+        "httpStatus": 422,
+        "costUsd": null
+      },
+      {
+        "id": "26-flare-low-xhigh",
+        "httpStatus": 422,
+        "costUsd": null
+      },
+      {
+        "id": "26-flare-medium-max",
+        "httpStatus": 422,
+        "costUsd": null
+      },
+      {
+        "id": "26-flare-medium-xhigh",
+        "httpStatus": 422,
+        "costUsd": null
+      },
+      {
+        "id": "26-flare-svg",
+        "httpStatus": 422,
+        "costUsd": null
+      },
+      {
+        "id": "26-flare-svg-minimal",
+        "httpStatus": 422,
+        "costUsd": null
+      },
+      {
+        "id": "26-sunburst-svg",
+        "httpStatus": 422,
+        "costUsd": null
+      }
+    ],
+    "unresolvedOptionalRemoteNativeCodexProbe": "No HTTP receipt (ECONNRESET); no resubmission. It is not evidence of a native subscription image API.",
+    "scope": "Combined existing target $5/cap $10; no balance query, new plan, recharge or paid POST retry."
+  }
+}

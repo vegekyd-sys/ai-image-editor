@@ -1,0 +1,6 @@
+
+/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/src/lib/agent-tools.ts
+  2361:19  warning  'locale' is defined but never used. Allowed unused args must match /^_/u  @typescript-eslint/no-unused-vars
+
+✖ 1 problem (0 errors, 1 warning)
+

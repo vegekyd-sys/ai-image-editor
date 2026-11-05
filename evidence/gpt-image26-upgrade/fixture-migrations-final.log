@@ -1,0 +1,6 @@
+fixture applied 20260601000000_agent_tool_history.sql
+fixture applied 20260712000000_durable_agent_executions.sql
+fixture applied 20260712010000_agent_context_project_scope.sql
+fixture applied 20260722000000_agent_run_inputs.sql
+fixture applied 20260905190237_isolate_agent_execution_origins.sql
+Dedicated local fixture and candidate pricing ready; no shared database used.

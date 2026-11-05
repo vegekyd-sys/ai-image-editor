@@ -1,0 +1,17 @@
+
+> ai-image-editor@0.1.0 test:cli
+> npm --prefix packages/makaron-cli test
+
+
+> makaron-cli@0.17.9 test
+> node test/smoke.mjs && node test/upload.mjs
+
+file:///Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/packages/makaron-cli/test/smoke.mjs:1200
+    const saved = fs.readFileSync(path.join(tmpHome, `format-${format}.${format}`), 'utf8');
+                  ^
+
+ReferenceError: fs is not defined
+    at file:///Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/packages/makaron-cli/test/smoke.mjs:1200:19
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+
+Node.js v24.1.0

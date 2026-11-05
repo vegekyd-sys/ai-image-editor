@@ -1,0 +1,12 @@
+
+> ai-image-editor@0.1.0 test:skill-routing
+> node --import tsx --require ./md-loader.cjs benchmarks/external-skill-routing/preflight.ts --live --env /Users/tianyicai/ai-image-editor/.env.local
+
+[agent-prompt] mode=layered system base=8781 workspace=9551 memory=0 cacheablePrefix=18332 total=18332 chars (~5238 tokens)
+{"case":"natural-long-narrative","state":"started"}
+{"case":"natural-long-narrative","selected":true,"stoppedBeforeProduction":true,"passed":true,"readFiles":["skills/long-video-director/SKILL.md","skills/long-video-anchor/SKILL.md","skills/long-video-storyboard/SKILL.md"],"blockedCalls":[],"usage":{"inputTokens":107940,"inputTokenDetails":{"noCacheTokens":12,"cacheReadTokens":78675,"cacheWriteTokens":29253},"outputTokens":1088,"outputTokenDetails":{"textTokens":382,"reasoningTokens":706},"totalTokens":109028},"durationMs":42023}
+{"case":"natural-reference-replication","state":"started"}
+{"case":"natural-reference-replication","selected":true,"stoppedBeforeProduction":true,"passed":true,"readFiles":["skills/video-edit/SKILL.md","skills/video-edit/references/replication-protocol.md","skills/video-edit/references/shot-blueprint.md","skills/video-edit/references/direct-reference-route.md","skills/video-edit/references/similarity-qa.md"],"blockedCalls":[],"usage":{"inputTokens":136851,"inputTokenDetails":{"noCacheTokens":15,"cacheReadTokens":130413,"cacheWriteTokens":6423},"outputTokens":743,"outputTokenDetails":{"textTokens":245,"reasoningTokens":498},"totalTokens":137594},"durationMs":73616}
+{"case":"natural-product-explainer","state":"started"}
+{"case":"natural-product-explainer","selected":true,"stoppedBeforeProduction":true,"passed":true,"readFiles":["skills/explainer-video/SKILL.md"],"blockedCalls":[],"usage":{"inputTokens":53968,"inputTokenDetails":{"noCacheTokens":6,"cacheReadTokens":47993,"cacheWriteTokens":5969},"outputTokens":610,"outputTokenDetails":{"textTokens":227,"reasoningTokens":383},"totalTokens":54578},"durationMs":17181}
+{"passed":3,"total":3,"mediaOperationsExecuted":0,"report":"/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/benchmarks/external-skill-routing/accepted.json"}

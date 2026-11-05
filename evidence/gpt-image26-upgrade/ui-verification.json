@@ -1,0 +1,26 @@
+{
+  "scope": "Actual Editor, local Supabase storage/project reload and browser Save. Optional analysis/tips stubbed only for deterministic replay; no generated media bytes mocked.",
+  "cases": [
+    {
+      "format": "gif",
+      "sourcePath": "/storage/v1/object/public/images/b0b9d2d7-8416-49a4-bfbe-bd9702fa79ef/0cfae913-4a6a-406e-9567-53e885eafa42/snapshot-19e6e316-3a1b-4131-b5e6-0b40923cfb40.gif",
+      "width": 960,
+      "height": 960,
+      "filename": "makaron-gpt-image-2-6-原格式验收-1.gif",
+      "originalBytesEqual": true,
+      "sha256": "91b440511cdb908b02974177de0ea60d0da4c90e0dd3c7425a1ff55e4041f1c9"
+    },
+    {
+      "format": "svg",
+      "sourcePath": "/storage/v1/object/public/images/b0b9d2d7-8416-49a4-bfbe-bd9702fa79ef/0cfae913-4a6a-406e-9567-53e885eafa42/snapshot-8dddad12-c18d-4ff6-8214-bd187e3cbf59.svg",
+      "width": 832,
+      "height": 832,
+      "filename": "makaron-gpt-image-2-6-原格式验收-2.svg",
+      "originalBytesEqual": true,
+      "sha256": "c7e994e66534c1c7d63911eaeb5da5951a0eb75e114aa6ddeeb8748bcb97b8ad"
+    }
+  ],
+  "pageErrors": [],
+  "gifVisibleFramesDiffer": true,
+  "reopenedGif": true
+}

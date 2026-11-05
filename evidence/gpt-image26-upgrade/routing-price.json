@@ -1,0 +1,7 @@
+{
+  "model": "gpt-6-luna",
+  "input_per_1m": 0.1,
+  "output_per_1m": 0.5,
+  "cache_read_per_1m": 0.01,
+  "source": "existing configured token rate (estimate, not actual supplier invoice)"
+}

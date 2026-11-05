@@ -1,0 +1,14 @@
+
+> ai-image-editor@0.1.0 build:skill-sync
+> npm run build:agent-startup-manifest && npm run build:agent-discovery
+
+
+> ai-image-editor@0.1.0 build:agent-startup-manifest
+> tsx scripts/check-agent-startup-contract.ts --write
+
+
+> ai-image-editor@0.1.0 build:agent-discovery
+> node scripts/build-agent-discovery.mjs
+
+External Skill directory: 9 entries, revision f3fbcf20c5b2.
+Built 1 public Makaron Agent Skills.

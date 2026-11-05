@@ -1,0 +1,43 @@
+
+ RUN  v4.1.4 /Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor
+
+stdout | __tests__/wanImageAgentBilling.test.ts > preflights native Flare 2K in Auto
+🎯 [generate_image] skill="none" refs=0 editPrompt="A forest scene"
+
+ ❯ __tests__/wanImageAgentBilling.test.ts (29 tests | 1 failed) 84ms
+   × preflights native Flare 2K in Auto 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > preflights native Flare 2K in Auto
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'test-user', 6 ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+    "test-user",
+-   6,
++   24,
+  ]
+
+
+Number of calls: 1
+
+ ❯ __tests__/wanImageAgentBilling.test.ts:227:26
+    225|   await tool.execute({editPrompt:'A forest scene',imageResolution:'2K'…
+    226|   expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.6-flare');
+    227|   expect(requireCredits).toHaveBeenCalledWith('test-user',6);
+       |                          ^
+    228|   expect(editImage).toHaveBeenCalledWith(expect.objectContaining({pref…
+    229| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 7 passed (8)
+      Tests  1 failed | 158 passed (159)
+   Start at  10:17:35
+   Duration  643ms (transform 706ms, setup 0ms, import 1.71s, tests 291ms, environment 880ms)
+

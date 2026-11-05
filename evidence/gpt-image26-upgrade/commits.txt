@@ -1,0 +1,4 @@
+b1dcd2fd fix: retain accepted image task within server request budget
+85cbe9c1 fix: validate original image storage and complete CLI format contracts
+f4ec9867 feat: upgrade image defaults and preserve GPT Image 2.6 GIF and SVG
+15442840 feat: add optional GPT Image 2.6 static image candidate

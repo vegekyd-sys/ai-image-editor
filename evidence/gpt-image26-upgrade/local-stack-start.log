@@ -1,0 +1,166 @@
+WARN: auth.email.enable_signup is deprecated and will be removed in v4, use auth.email.enabled instead.
+WARN: auth.sms.enable_signup is deprecated and will be removed in v4, use auth.sms.enabled instead.
+v1.31.3: Pulling from supabase/mailpit
+v16.5: Pulling from supabase/postgrest
+17.11.0.011: Pulling from supabase/postgres
+v1.88.0: Pulling from supabase/storage-api
+ba82bb605409: Pulling fs layer
+a6df0247a010: Pulling fs layer
+f757220bf24a: Pulling fs layer
+d3531b7a4f21: Pulling fs layer
+8b17a9be89d1: Pulling fs layer
+17f92a634820: Pulling fs layer
+f2a40710246b: Pulling fs layer
+7354e3ef7403: Pulling fs layer
+f619468d158f: Pulling fs layer
+68a23a9813b8: Pulling fs layer
+b2be12bb438c: Pulling fs layer
+e3db6afd6921: Pulling fs layer
+fbbd422a47d9: Pulling fs layer
+b72627fc29b6: Pulling fs layer
+a9986cd6f37d: Pulling fs layer
+315cf9d73187: Pulling fs layer
+b9cb61e18109: Pulling fs layer
+44136fa355b3: Already exists
+41879233f832: Download complete
+68a23a9813b8: Download complete
+8b17a9be89d1: Download complete
+ba82bb605409: Download complete
+ba82bb605409: Pull complete
+Digest: sha256:1347d7552b88f17832912c06afbf7c43209af6eeeb60834b04aae12c9bd9d5cc
+Status: Downloaded newer image for public.ecr.aws/supabase/postgrest:v16.5
+public.ecr.aws/supabase/postgrest:v16.5
+e3db6afd6921: Download complete
+7354e3ef7403: Download complete
+f619468d158f: Download complete
+a6df0247a010: Download complete
+f757220bf24a: Download complete
+315cf9d73187: Download complete
+a9986cd6f37d: Download complete
+d3531b7a4f21: Download complete
+a9986cd6f37d: Pull complete
+5de40c385639: Pulling fs layer
+197a036d7c64: Pulling fs layer
+9d660c85963f: Pulling fs layer
+db0a8b18acc2: Pulling fs layer
+7df55d7a1f53: Pulling fs layer
+ddb8167f7c9e: Pulling fs layer
+31fc147d3f01: Pulling fs layer
+bb4750d7bc79: Pulling fs layer
+776db791fc97: Pulling fs layer
+6eba7ae4cfac: Pulling fs layer
+8d077b317cca: Pulling fs layer
+ae33918c2dd4: Pulling fs layer
+98f364128bfd: Pulling fs layer
+446f2192b419: Pulling fs layer
+d0a154579499: Pulling fs layer
+4b8e08c82606: Pulling fs layer
+97ecbb9d262c: Pulling fs layer
+7a5d0aa4df4c: Pulling fs layer
+20ec430c812b: Pulling fs layer
+392ae15f5999: Pulling fs layer
+4e834e330f84: Pulling fs layer
+87177d695213: Pulling fs layer
+ddc533c0b654: Pulling fs layer
+6a79a0a3327a: Pulling fs layer
+e30d65284c7d: Pulling fs layer
+3bdcfe701df3: Pulling fs layer
+b34e3551897a: Pulling fs layer
+9ce099f0fa36: Pulling fs layer
+44136fa355b3: Already exists
+44136fa355b3: Already exists
+d3531b7a4f21: Pull complete
+db0a8b18acc2: Download complete
+b72627fc29b6: Download complete
+093de7b6f33e: Download complete
+b9cb61e18109: Download complete
+315cf9d73187: Pull complete
+b9cb61e18109: Pull complete
+Digest: sha256:ed9b00c609e77e99c79b93f1178255ebc271868920f2c69a8d166bd5634ed10d
+Status: Downloaded newer image for public.ecr.aws/supabase/mailpit:v1.31.3
+adcc188b44df: Download complete
+public.ecr.aws/supabase/mailpit:v1.31.3
+ae33918c2dd4: Download complete
+6eba7ae4cfac: Download complete
+20ec430c812b: Download complete
+b34e3551897a: Download complete
+5de40c385639: Download complete
+98f364128bfd: Download complete
+4b8e08c82606: Download complete
+bb4750d7bc79: Download complete
+392ae15f5999: Download complete
+d0a154579499: Download complete
+446f2192b419: Download complete
+97ecbb9d262c: Download complete
+e30d65284c7d: Download complete
+776db791fc97: Download complete
+6a79a0a3327a: Download complete
+3bdcfe701df3: Download complete
+9ce099f0fa36: Download complete
+ddc533c0b654: Download complete
+31fc147d3f01: Download complete
+7a5d0aa4df4c: Download complete
+8d077b317cca: Download complete
+4e834e330f84: Download complete
+7df55d7a1f53: Download complete
+87177d695213: Download complete
+9d660c85963f: Download complete
+197a036d7c64: Download complete
+197a036d7c64: Pull complete
+9d660c85963f: Pull complete
+db0a8b18acc2: Pull complete
+b2be12bb438c: Download complete
+fbbd422a47d9: Download complete
+17f92a634820: Download complete
+a6df0247a010: Pull complete
+17f92a634820: Pull complete
+f2a40710246b: Download complete
+f2a40710246b: Pull complete
+68a23a9813b8: Pull complete
+7354e3ef7403: Pull complete
+f619468d158f: Pull complete
+b2be12bb438c: Pull complete
+e3db6afd6921: Pull complete
+fbbd422a47d9: Pull complete
+b72627fc29b6: Pull complete
+8b17a9be89d1: Pull complete
+f757220bf24a: Pull complete
+Digest: sha256:dd4a100612635a8eb0d64387ddc38769fb30eb3ddd9b411d0fe3121e1cb223b3
+Status: Downloaded newer image for public.ecr.aws/supabase/storage-api:v1.88.0
+public.ecr.aws/supabase/storage-api:v1.88.0
+ddb8167f7c9e: Download complete
+ddb8167f7c9e: Pull complete
+7a5d0aa4df4c: Pull complete
+87177d695213: Pull complete
+97ecbb9d262c: Pull complete
+7df55d7a1f53: Pull complete
+6eba7ae4cfac: Pull complete
+20ec430c812b: Pull complete
+b34e3551897a: Pull complete
+4b8e08c82606: Pull complete
+bb4750d7bc79: Pull complete
+d0a154579499: Pull complete
+446f2192b419: Pull complete
+e30d65284c7d: Pull complete
+776db791fc97: Pull complete
+6a79a0a3327a: Pull complete
+3bdcfe701df3: Pull complete
+9ce099f0fa36: Pull complete
+ddc533c0b654: Pull complete
+31fc147d3f01: Pull complete
+8d077b317cca: Pull complete
+4e834e330f84: Pull complete
+ae33918c2dd4: Pull complete
+5de40c385639: Pull complete
+98f364128bfd: Pull complete
+392ae15f5999: Pull complete
+Digest: sha256:7bd84e6a1d5322c7b864b9751873a0ac50f48df3f20a776e88114eadb2948fc0
+Status: Downloaded newer image for public.ecr.aws/supabase/postgres:17.11.0.011
+public.ecr.aws/supabase/postgres:17.11.0.011
+Starting database...
+Initialising schema...
+Seeding globals from roles.sql...
+Applying migration 00000000000001_ios_subscription_e2e.sql...
+Seeding data from supabase/seeds/seed.sql...
+Creating Storage bucket: images
+[Local development credentials omitted]

@@ -1,0 +1,61 @@
+{
+  "at": "2026-11-05T01:56:15.007Z",
+  "prices": [
+    {
+      "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+      "status": 200,
+      "unit_price": 1,
+      "unit": "units",
+      "currency": "USD"
+    },
+    {
+      "endpoint": "openai/gpt-image-2.5/flare/edit",
+      "status": 200,
+      "unit_price": 1,
+      "unit": "units",
+      "currency": "USD"
+    },
+    {
+      "endpoint": "openai/gpt-image-2.5/sunburst/text-to-image",
+      "status": 200,
+      "unit_price": 1,
+      "unit": "units",
+      "currency": "USD"
+    },
+    {
+      "endpoint": "openai/gpt-image-2.5/sunburst/edit",
+      "status": 200,
+      "unit_price": 1,
+      "unit": "units",
+      "currency": "USD"
+    },
+    {
+      "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+      "status": 200,
+      "unit_price": 1,
+      "unit": "units",
+      "currency": "USD"
+    },
+    {
+      "endpoint": "openai/gpt-image-2.6/flare/edit",
+      "status": 200,
+      "unit_price": 1,
+      "unit": "units",
+      "currency": "USD"
+    },
+    {
+      "endpoint": "openai/gpt-image-2.6/sunburst/text-to-image",
+      "status": 200,
+      "unit_price": 1,
+      "unit": "units",
+      "currency": "USD"
+    },
+    {
+      "endpoint": "openai/gpt-image-2.6/sunburst/edit",
+      "status": 200,
+      "unit_price": 1,
+      "unit": "units",
+      "currency": "USD"
+    }
+  ]
+}

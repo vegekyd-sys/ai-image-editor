@@ -1,0 +1,62 @@
+{
+  "sample": {
+    "id": "26-sunburst-svg",
+    "version": "2.6",
+    "variant": "sunburst",
+    "quality": "medium",
+    "reasoning": "high",
+    "kind": "vector",
+    "format": "svg"
+  },
+  "endpoint": "openai/gpt-image-2.6/sunburst/text-to-image",
+  "stage": "rejected",
+  "started_at": "2026-11-05T02:20:13.467Z",
+  "started_ms": 1793845213467,
+  "request": {
+    "prompt": "Create a clean editable SVG vector logo: a purple rounded cloud with three cyan diamond sparks orbiting its upper right. Cream background, crisp simple geometric paths, no raster embedded image, no text.",
+    "image_size": {
+      "width": 1024,
+      "height": 1024
+    },
+    "quality": "medium",
+    "reasoning_effort": "high",
+    "background": "opaque",
+    "output_format": "svg",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "submission_count": 1,
+  "request_id": "01a1a981-bcd3-7562-9fa6-38008e8a9b46",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a981-bcd3-7562-9fa6-38008e8a9b46",
+  "accepted_ms": 1793845214405,
+  "completed_ms": 1793845216433,
+  "http_status": 422,
+  "error": {
+    "detail": [
+      {
+        "loc": [
+          "body",
+          "prompt"
+        ],
+        "msg": "Invalid request",
+        "type": "invalid_request",
+        "url": "https://docs.fal.ai/errors#invalid_request",
+        "input": {
+          "prompt": "Create a clean editable SVG vector logo: a purple rounded cloud with three cyan diamond sparks orbiting its upper right. Cream background, crisp simple geometric paths, no raster embedded image, no text.",
+          "num_images": 1,
+          "output_format": "svg",
+          "quality": "medium",
+          "background": "opaque",
+          "output_compression": null,
+          "image_size": {
+            "width": 1024,
+            "height": 1024
+          },
+          "openai_api_key": null,
+          "provider_options": null
+        }
+      }
+    ]
+  },
+  "cost_usd": null
+}

@@ -1,0 +1,37 @@
+{
+  "status": "completed",
+  "httpStatus": 200,
+  "eventTypes": [
+    "heartbeat",
+    "status",
+    "heartbeat",
+    "content",
+    "content",
+    "status",
+    "tool_call",
+    "status",
+    "tool_result",
+    "heartbeat",
+    "new_turn",
+    "status",
+    "status",
+    "tool_call",
+    "heartbeat",
+    "status",
+    "tool_result",
+    "image",
+    "heartbeat",
+    "new_turn",
+    "status",
+    "content",
+    "content",
+    "done"
+  ],
+  "resultKeys": [
+    "images",
+    "designs",
+    "videos",
+    "music",
+    "text"
+  ]
+}

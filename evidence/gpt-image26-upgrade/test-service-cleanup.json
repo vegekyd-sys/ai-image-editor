@@ -1,0 +1,12 @@
+{
+  "stoppedOwnedPorts": [
+    3051,
+    25994,
+    3047
+  ],
+  "comparisonGalleryPort3048Retained": true,
+  "runtimeCodeCommit": "b1dcd2fdaa9b7966f697aca2214cb965bfcd56b6",
+  "temporaryAuthBootstrapRemoved": true,
+  "productionServicesTouched": false,
+  "databaseDataNotDeleted": true
+}

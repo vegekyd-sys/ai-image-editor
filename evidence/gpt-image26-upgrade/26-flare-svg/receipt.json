@@ -1,0 +1,63 @@
+{
+  "sample": {
+    "id": "26-flare-svg",
+    "version": "2.6",
+    "variant": "flare",
+    "quality": "medium",
+    "reasoning": "high",
+    "kind": "vector",
+    "format": "svg"
+  },
+  "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+  "stage": "rejected",
+  "started_at": "2026-11-05T02:19:17.016Z",
+  "started_ms": 1793845157016,
+  "request": {
+    "prompt": "Create a clean editable SVG vector logo: a purple rounded cloud with three cyan diamond sparks orbiting its upper right. Cream background, crisp simple geometric paths, no raster embedded image, no text.",
+    "image_size": {
+      "width": 1024,
+      "height": 1024
+    },
+    "quality": "medium",
+    "reasoning_effort": "high",
+    "background": "opaque",
+    "output_format": "svg",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "submission_count": 1,
+  "request_id": "01a1a980-e098-79e1-9206-dac431d3b096",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a980-e098-79e1-9206-dac431d3b096",
+  "accepted_ms": 1793845158048,
+  "in_progress_ms": 1793845158362,
+  "completed_ms": 1793845160707,
+  "http_status": 422,
+  "error": {
+    "detail": [
+      {
+        "loc": [
+          "body",
+          "prompt"
+        ],
+        "msg": "Invalid request",
+        "type": "invalid_request",
+        "url": "https://docs.fal.ai/errors#invalid_request",
+        "input": {
+          "prompt": "Create a clean editable SVG vector logo: a purple rounded cloud with three cyan diamond sparks orbiting its upper right. Cream background, crisp simple geometric paths, no raster embedded image, no text.",
+          "num_images": 1,
+          "output_format": "svg",
+          "quality": "medium",
+          "background": "opaque",
+          "output_compression": null,
+          "image_size": {
+            "width": 1024,
+            "height": 1024
+          },
+          "openai_api_key": null,
+          "provider_options": null
+        }
+      }
+    ]
+  },
+  "cost_usd": null
+}

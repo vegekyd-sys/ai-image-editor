@@ -1,0 +1,9 @@
+
+ RUN  v4.1.4 /Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor
+
+
+ Test Files  15 passed (15)
+      Tests  222 passed (222)
+   Start at  10:33:44
+   Duration  3.08s (transform 2.68s, setup 0ms, import 5.61s, tests 2.77s, environment 5.10s)
+

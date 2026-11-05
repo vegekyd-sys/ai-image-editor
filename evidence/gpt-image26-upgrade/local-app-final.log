@@ -1,0 +1,48 @@
+▲ Next.js 16.1.6 (webpack)
+- Local:         http://127.0.0.1:3051
+- Network:       http://127.0.0.1:3051
+- Environments: .env.local
+
+✓ Starting...
+✓ Ready in 1470ms
+ GET /api/e2e/gpt26-login 307 in 1463ms (compile: 1323ms, render: 140ms)
+○ Compiling /projects/[id] ...
+ GET /projects/0cfae913-4a6a-406e-9567-53e885eafa42 200 in 6.5s (compile: 6.1s, proxy.ts: 71ms, render: 344ms)
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+[marketing-events] insert failed: Could not find the table 'public.marketing_events' in the schema cache
+ POST /api/marketing/events 500 in 1778ms (compile: 1718ms, render: 61ms)
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+ GET /api/skills 200 in 1615ms (compile: 1536ms, render: 79ms)
+ GET /api/agent/poll?projectId=0cfae913-4a6a-406e-9567-53e885eafa42 200 in 1597ms (compile: 1515ms, render: 82ms)
+ GET /api/billing/credits 200 in 1632ms (compile: 1536ms, render: 96ms)
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+ GET /api/skills 200 in 119ms (compile: 5ms, render: 114ms)
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+ GET /api/agent/poll?projectId=0cfae913-4a6a-406e-9567-53e885eafa42 200 in 115ms (compile: 1770µs, render: 113ms)
+ GET /api/billing/credits 200 in 134ms (compile: 4ms, render: 130ms)
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+ GET /api/projects/0cfae913-4a6a-406e-9567-53e885eafa42/studio-runs 200 in 2.2s (compile: 2.1s, render: 76ms)
+ GET /api/projects/0cfae913-4a6a-406e-9567-53e885eafa42/studio-runs 200 in 2.2s (compile: 2.1s, render: 79ms)
+ GET /projects/0cfae913-4a6a-406e-9567-53e885eafa42 200 in 584ms (compile: 98ms, proxy.ts: 114ms, render: 372ms)
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+ GET /api/skills 200 in 32ms (compile: 12ms, render: 20ms)
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+ GET /api/agent/poll?projectId=0cfae913-4a6a-406e-9567-53e885eafa42 200 in 36ms (compile: 10ms, render: 26ms)
+ GET /api/projects/0cfae913-4a6a-406e-9567-53e885eafa42/studio-runs 200 in 37ms (compile: 22ms, render: 15ms)
+ GET /api/projects/0cfae913-4a6a-406e-9567-53e885eafa42/studio-runs 200 in 22ms (compile: 6ms, render: 17ms)
+ GET /api/billing/credits 200 in 48ms (compile: 4ms, render: 44ms)
+ GET /api/billing/credits 200 in 49ms (compile: 3ms, render: 46ms)
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+ GET /api/skills 200 in 24ms (compile: 8ms, render: 16ms)
+Using the user object as returned from supabase.auth.getSession() or from some supabase.auth.onAuthStateChange() events could be insecure! This value comes directly from the storage medium (usually cookies on the server) and may not be authentic. Use supabase.auth.getUser() instead which authenticates the data by contacting the Supabase Auth server.
+ GET /api/agent/poll?projectId=0cfae913-4a6a-406e-9567-53e885eafa42 200 in 27ms (compile: 10ms, render: 16ms)
+[marketing-events] insert failed: Could not find the table 'public.marketing_events' in the schema cache
+ POST /api/marketing/events 500 in 30ms (compile: 11ms, render: 19ms)
+[?25h

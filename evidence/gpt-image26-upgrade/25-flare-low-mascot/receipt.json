@@ -1,0 +1,48 @@
+{
+  "sample": {
+    "id": "25-flare-low-mascot",
+    "version": "2.5",
+    "variant": "flare",
+    "quality": "low",
+    "kind": "mascot",
+    "format": "png"
+  },
+  "endpoint": "openai/gpt-image-2.5/flare/edit",
+  "stage": "complete",
+  "started_at": "2026-11-05T02:17:08.304Z",
+  "started_ms": 1793845028305,
+  "request": {
+    "prompt": "Use the Makaron Spark + Pixel Wizard reference sheet for brand identity. Spark is Makaron's creative source and editing signature: magenta/cyan energy that emerges from the product UI and shows transformation. Pixel Wizard is Makaron's small purple bubble-ghost mascot and the mischievous, slightly scared guide/personification of Spark. Pixel Wizard must actively interact with Spark using his whole squishy body, not simply hold a magic wand. Avoid making Spark just a wand glow. The mascot is a sidekick, not the protagonist. Create ONE polished square advertising scene, not a contact sheet. Cream background, central smartphone showing a landscape photo editing interface; a magenta/cyan Spark ribbon emerges from the phone and transforms a gray photo into a colorful forest. Pixel Wizard, 20% of the composition, clings nervously to this ribbon with his whole squishy body; preserve the exact purple translucent ghost shape, pixel face and floppy dark-purple hat from the sheet. Soft studio lighting, integrated shadows, premium 3D material. Heading at top: MAKARON. No other text.",
+    "image_size": {
+      "width": 1024,
+      "height": 1024
+    },
+    "quality": "low",
+    "background": "opaque",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false,
+    "image_urls": [
+      "local-owned-reference:sha256-in-manifest"
+    ]
+  },
+  "submission_count": 1,
+  "request_id": "01a1a97e-f37e-7833-9873-aded60f4d19f",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a97e-f37e-7833-9873-aded60f4d19f",
+  "accepted_ms": 1793845031857,
+  "in_progress_ms": 1793845032785,
+  "completed_ms": 1793845049077,
+  "cost_usd": 0.0194,
+  "result_received_ms": 1793845050070,
+  "provider_metrics": null,
+  "output_sha256": "773dbe761ddd2d19657cad2f9051d72d0bc5487378b6cd6bc26d402a8d92b61b",
+  "output_bytes": 1282883,
+  "content_type": "image/png",
+  "media": {
+    "format": "png",
+    "width": 1024,
+    "height": 1024,
+    "frames": 1
+  },
+  "total_ms": 25594
+}

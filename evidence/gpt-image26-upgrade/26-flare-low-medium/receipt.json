@@ -1,0 +1,47 @@
+{
+  "sample": {
+    "id": "26-flare-low-medium",
+    "version": "2.6",
+    "variant": "flare",
+    "quality": "low",
+    "reasoning": "medium",
+    "kind": "poster",
+    "format": "png"
+  },
+  "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+  "stage": "complete",
+  "started_at": "2026-11-05T02:07:03.111Z",
+  "started_ms": 1793844423111,
+  "request": {
+    "prompt": "生成一张精致的中文创意软件发布海报，正方形。米白底，紫色和青色点缀。标题必须逐字准确：「灵感，一触即发」。副标题：「用 Makaron，把想法变成作品」。中央一个真实感半透明紫色玻璃立方体，立方体左侧恰好三枚小青色球，右侧恰好两枚小粉色球，不能增减。底部三列文字，顺序从左到右：「图片」「视频」「音乐」。右下角小字「2026 · 创作无界」。排版有清楚层级和充足留白，不要多余文字，不要水印。",
+    "image_size": {
+      "width": 1024,
+      "height": 1024
+    },
+    "quality": "low",
+    "reasoning_effort": "medium",
+    "background": "opaque",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "submission_count": 1,
+  "request_id": "01a1a975-adec-7832-bd5f-9f27c90a4ac4",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a975-adec-7832-bd5f-9f27c90a4ac4",
+  "accepted_ms": 1793844424171,
+  "in_progress_ms": 1793844425169,
+  "completed_ms": 1793844432094,
+  "cost_usd": 0.0256,
+  "result_received_ms": 1793844433061,
+  "provider_metrics": null,
+  "output_sha256": "129ada5d9dc6207d5e3e1f519e9744cf7c4f8e0980e4af78ce9f8d325ebfb65e",
+  "output_bytes": 1166634,
+  "content_type": "image/png",
+  "media": {
+    "format": "png",
+    "width": 1024,
+    "height": 1024,
+    "frames": 1
+  },
+  "total_ms": 12564
+}

@@ -1,0 +1,17 @@
+Storage upload error: StorageApiError: mime type image/gif is not supported
+    at <anonymous> (/Users/tianyicai/ai-image-editor/node_modules/@supabase/storage-js/src/lib/common/fetch.ts:67:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  __isStorageError: true,
+  namespace: 'storage',
+  status: 400,
+  statusCode: '415'
+}
+Storage upload error: StorageApiError: mime type image/svg+xml is not supported
+    at <anonymous> (/Users/tianyicai/ai-image-editor/node_modules/@supabase/storage-js/src/lib/common/fetch.ts:67:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  __isStorageError: true,
+  namespace: 'storage',
+  status: 400,
+  statusCode: '415'
+}
+{"stored":[],"usage":[{"tool_name":"makaron_edit_image","model_used":"gpt-image-2.6-flare","credits_charged":30,"source":"cli"}]}

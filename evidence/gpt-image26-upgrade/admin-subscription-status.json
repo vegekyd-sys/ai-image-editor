@@ -1,0 +1,101 @@
+{
+  "status": "completed",
+  "httpStatus": 200,
+  "events": [
+    {
+      "type": "heartbeat"
+    },
+    {
+      "type": "status"
+    },
+    {
+      "type": "content"
+    },
+    {
+      "type": "status"
+    },
+    {
+      "type": "tool_call",
+      "tool": "read_file"
+    },
+    {
+      "type": "status"
+    },
+    {
+      "type": "tool_result",
+      "tool": "read_file"
+    },
+    {
+      "type": "heartbeat"
+    },
+    {
+      "type": "new_turn"
+    },
+    {
+      "type": "status"
+    },
+    {
+      "type": "tool_call",
+      "tool": "read_file"
+    },
+    {
+      "type": "status"
+    },
+    {
+      "type": "tool_result",
+      "tool": "read_file"
+    },
+    {
+      "type": "new_turn"
+    },
+    {
+      "type": "status"
+    },
+    {
+      "type": "status"
+    },
+    {
+      "type": "tool_call",
+      "tool": "generate_image"
+    },
+    {
+      "type": "heartbeat"
+    },
+    {
+      "type": "heartbeat"
+    },
+    {
+      "type": "status"
+    },
+    {
+      "type": "tool_result",
+      "tool": "generate_image"
+    },
+    {
+      "type": "image"
+    },
+    {
+      "type": "new_turn"
+    },
+    {
+      "type": "heartbeat"
+    },
+    {
+      "type": "status"
+    },
+    {
+      "type": "content"
+    },
+    {
+      "type": "content"
+    },
+    {
+      "type": "done"
+    }
+  ],
+  "progress": {
+    "execution_phase": "idle",
+    "delivery_status": "ready",
+    "run_wall_seconds": 42
+  }
+}

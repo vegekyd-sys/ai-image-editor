@@ -1,0 +1,63 @@
+{
+  "sample": {
+    "id": "26-sunburst-gif-mascot",
+    "version": "2.6",
+    "variant": "sunburst",
+    "quality": "medium",
+    "reasoning": "high",
+    "kind": "mascot-animation",
+    "format": "gif"
+  },
+  "endpoint": "openai/gpt-image-2.6/sunburst/edit",
+  "stage": "complete",
+  "started_at": "2026-11-05T02:19:21.056Z",
+  "started_ms": 1793845161056,
+  "request": {
+    "prompt": "Use the Makaron Spark + Pixel Wizard reference sheet for brand identity. Spark is Makaron's creative source and editing signature: magenta/cyan energy that emerges from the product UI and shows transformation. Pixel Wizard is Makaron's small purple bubble-ghost mascot and the mischievous, slightly scared guide/personification of Spark. Pixel Wizard must actively interact with Spark using his whole squishy body, not simply hold a magic wand. Avoid making Spark just a wand glow. The mascot is a sidekick, not the protagonist. Create ONE polished square advertising scene, not a contact sheet. Cream background, central smartphone showing a landscape photo editing interface; a magenta/cyan Spark ribbon emerges from the phone and transforms a gray photo into a colorful forest. Pixel Wizard, 20% of the composition, clings nervously to this ribbon with his whole squishy body; preserve the exact purple translucent ghost shape, pixel face and floppy dark-purple hat from the sheet. Soft studio lighting, integrated shadows, premium 3D material. Heading at top: MAKARON. No other text. Animate the Spark ribbon flowing from the screen; Pixel Wizard wobbles nervously while clinging to it. Fixed camera, seamless loop, no contact sheet.",
+    "image_size": {
+      "width": 832,
+      "height": 832
+    },
+    "quality": "medium",
+    "reasoning_effort": "high",
+    "background": "opaque",
+    "output_format": "gif",
+    "num_images": 1,
+    "sync_mode": false,
+    "frame_count": 9,
+    "frame_duration_ms": 160,
+    "image_urls": [
+      "local-owned-reference:sha256-in-manifest"
+    ]
+  },
+  "submission_count": 1,
+  "request_id": "01a1a980-fa6d-7351-bd84-3896989efbe3",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a980-fa6d-7351-bd84-3896989efbe3",
+  "accepted_ms": 1793845164699,
+  "in_progress_ms": 1793845165740,
+  "completed_ms": 1793845209082,
+  "cost_usd": 0.1312,
+  "result_received_ms": 1793845210075,
+  "provider_metrics": null,
+  "output_sha256": "7db6662973b7837047870d2cabe5aec9986306899184191bbb6d0b7894126c3a",
+  "output_bytes": 1260126,
+  "content_type": "image/gif",
+  "media": {
+    "format": "gif",
+    "width": 832,
+    "height": 832,
+    "frames": 9,
+    "delay_ms": [
+      160,
+      160,
+      160,
+      160,
+      160,
+      160,
+      160,
+      160,
+      160
+    ]
+  },
+  "total_ms": 52405
+}

@@ -1,0 +1,68 @@
+{
+  "path": "makaron chat --project auto → real Azure GPT-6 Luna Agent → common generate_image → fal GPT Image 2.6 Flare → actual image debit → AgentDualWriter → stored PNG",
+  "imageModelNotExplicitlySelectedByUser": true,
+  "images": [
+    {
+      "model": "gpt-image-2.6-flare",
+      "format": "image/png",
+      "sha256": "e6b44ab51984284aa69b0cc9d23ed483b1fac29c84b90a249b7401f94c83c8bd",
+      "dimensions": {
+        "format": "png",
+        "size": 1243903,
+        "width": 1024,
+        "height": 1024,
+        "space": "srgb",
+        "channels": 4,
+        "depth": "uchar",
+        "density": 72,
+        "isProgressive": false,
+        "isPalette": false,
+        "bitsPerSample": 8,
+        "hasProfile": false,
+        "hasAlpha": true,
+        "autoOrient": {
+          "width": 1024,
+          "height": 1024
+        }
+      }
+    }
+  ],
+  "usage": [
+    {
+      "tool_name": "makaron_edit_image",
+      "model_used": "gpt-image-2.6-flare",
+      "credits_charged": 30,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cache_read_tokens": null,
+      "source": "cli"
+    },
+    {
+      "tool_name": "generate_image",
+      "model_used": "gpt-image-2.6-flare",
+      "credits_charged": 6,
+      "input_tokens": null,
+      "output_tokens": null,
+      "cache_read_tokens": null,
+      "source": "cli"
+    },
+    {
+      "tool_name": "agent",
+      "model_used": "gpt-6-luna",
+      "credits_charged": 1,
+      "input_tokens": 9,
+      "output_tokens": 690,
+      "cache_read_tokens": 71011,
+      "source": "cli"
+    }
+  ],
+  "ordinaryAgentEstimatedUsd": 0.00105601,
+  "agentModelInvoiceNotAvailable": true,
+  "requestedImageDefaults": {
+    "quality": "low",
+    "reasoning_effort": "high"
+  },
+  "actualImageCostUsd": 0.0257,
+  "hiddenModelFallbackUsed": false,
+  "estimateSemantics": "Stored usage_logs input_tokens are noncached tokens; cache_read_tokens are separate. Estimate only."
+}

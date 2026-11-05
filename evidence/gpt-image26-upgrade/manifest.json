@@ -1,0 +1,339 @@
+{
+  "created_at": "2026-11-05T02:44:23.998Z",
+  "reference": {
+    "path": "/Users/tianyicai/.codex/skills/makaron-mascot-spark/assets/makaron-spark-pixel-wizard-concepts.png",
+    "sha256": "70074b05c59b9b74040c36485823fb84f8eb73579fc3fc35f87db708e98c9993"
+  },
+  "prompts": {
+    "poster": "生成一张精致的中文创意软件发布海报，正方形。米白底，紫色和青色点缀。标题必须逐字准确：「灵感，一触即发」。副标题：「用 Makaron，把想法变成作品」。中央一个真实感半透明紫色玻璃立方体，立方体左侧恰好三枚小青色球，右侧恰好两枚小粉色球，不能增减。底部三列文字，顺序从左到右：「图片」「视频」「音乐」。右下角小字「2026 · 创作无界」。排版有清楚层级和充足留白，不要多余文字，不要水印。",
+    "mascot": "Use the Makaron Spark + Pixel Wizard reference sheet for brand identity. Spark is Makaron's creative source and editing signature: magenta/cyan energy that emerges from the product UI and shows transformation. Pixel Wizard is Makaron's small purple bubble-ghost mascot and the mischievous, slightly scared guide/personification of Spark. Pixel Wizard must actively interact with Spark using his whole squishy body, not simply hold a magic wand. Avoid making Spark just a wand glow. The mascot is a sidekick, not the protagonist. Create ONE polished square advertising scene, not a contact sheet. Cream background, central smartphone showing a landscape photo editing interface; a magenta/cyan Spark ribbon emerges from the phone and transforms a gray photo into a colorful forest. Pixel Wizard, 20% of the composition, clings nervously to this ribbon with his whole squishy body; preserve the exact purple translucent ghost shape, pixel face and floppy dark-purple hat from the sheet. Soft studio lighting, integrated shadows, premium 3D material. Heading at top: MAKARON. No other text.",
+    "animation": "Create a seamless animated GIF of a purple rounded creative spark that gently pulses and traces a cyan circle on a cream background. Fixed camera, one clean object, smooth visible continuous motion. No text.",
+    "vector": "Create a clean editable SVG vector logo: a purple rounded cloud with three cyan diamond sparks orbiting its upper right. Cream background, crisp simple geometric paths, no raster embedded image, no text."
+  },
+  "estimated_usd": 6.5,
+  "cap_usd": 10,
+  "reserve_for_product_acceptance_usd": 1.5,
+  "comparison_notes": [
+    "2.5 reasoning not exposed by this fal adapter; no reasoning_effort sent.",
+    "Same prompt/canvas/seed availability; no seed field available. One sample per tier is exploratory, not statistical quality/latency proof.",
+    "Provider total includes queue; first observed in-progress and completed times are sampled."
+  ],
+  "specs": [
+    {
+      "id": "25-flare-low",
+      "version": "2.5",
+      "variant": "flare",
+      "quality": "low",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-low-low",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "low",
+      "reasoning": "low",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-low-high",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "low",
+      "reasoning": "high",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-low-medium",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "low",
+      "reasoning": "medium",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-low-xhigh",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "low",
+      "reasoning": "xhigh",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-low-max",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "low",
+      "reasoning": "max",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-medium-low",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "medium",
+      "reasoning": "low",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-medium-medium",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "medium",
+      "reasoning": "medium",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-medium-high",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "medium",
+      "reasoning": "high",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-medium-xhigh",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "medium",
+      "reasoning": "xhigh",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-medium-max",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "medium",
+      "reasoning": "max",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-high-low",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "high",
+      "reasoning": "low",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-high-medium",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "high",
+      "reasoning": "medium",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-high-high",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "high",
+      "reasoning": "high",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-high-xhigh",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "high",
+      "reasoning": "xhigh",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-high-max",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "high",
+      "reasoning": "max",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "25-flare-medium",
+      "version": "2.5",
+      "variant": "flare",
+      "quality": "medium",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "25-flare-high",
+      "version": "2.5",
+      "variant": "flare",
+      "quality": "high",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "25-sunburst-low",
+      "version": "2.5",
+      "variant": "sunburst",
+      "quality": "low",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-sunburst-low-high",
+      "version": "2.6",
+      "variant": "sunburst",
+      "quality": "low",
+      "reasoning": "high",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-sunburst-medium-high",
+      "version": "2.6",
+      "variant": "sunburst",
+      "quality": "medium",
+      "reasoning": "high",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-sunburst-high-high",
+      "version": "2.6",
+      "variant": "sunburst",
+      "quality": "high",
+      "reasoning": "high",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "25-flare-low-mascot",
+      "version": "2.5",
+      "variant": "flare",
+      "quality": "low",
+      "kind": "mascot",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-low-mascot",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "low",
+      "reasoning": "high",
+      "kind": "mascot",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-medium-mascot",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "medium",
+      "reasoning": "high",
+      "kind": "mascot",
+      "format": "png"
+    },
+    {
+      "id": "26-sunburst-medium-mascot",
+      "version": "2.6",
+      "variant": "sunburst",
+      "quality": "medium",
+      "reasoning": "high",
+      "kind": "mascot",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-gif",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "medium",
+      "reasoning": "high",
+      "kind": "animation",
+      "format": "gif"
+    },
+    {
+      "id": "26-flare-svg",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "medium",
+      "reasoning": "high",
+      "kind": "vector",
+      "format": "svg"
+    },
+    {
+      "id": "26-sunburst-gif-mascot",
+      "version": "2.6",
+      "variant": "sunburst",
+      "quality": "medium",
+      "reasoning": "high",
+      "kind": "mascot-animation",
+      "format": "gif"
+    },
+    {
+      "id": "26-sunburst-svg",
+      "version": "2.6",
+      "variant": "sunburst",
+      "quality": "medium",
+      "reasoning": "high",
+      "kind": "vector",
+      "format": "svg"
+    },
+    {
+      "id": "26-flare-svg-minimal",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "low",
+      "kind": "vector-minimal",
+      "format": "svg"
+    },
+    {
+      "id": "25-flare-low-repeat-2",
+      "version": "2.5",
+      "variant": "flare",
+      "quality": "low",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-low-high-repeat-2",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "low",
+      "reasoning": "high",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "25-flare-low-repeat-3",
+      "version": "2.5",
+      "variant": "flare",
+      "quality": "low",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-low-high-repeat-3",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "low",
+      "reasoning": "high",
+      "kind": "poster",
+      "format": "png"
+    },
+    {
+      "id": "26-flare-auto-high",
+      "version": "2.6",
+      "variant": "flare",
+      "quality": "auto",
+      "reasoning": "high",
+      "kind": "poster",
+      "format": "png"
+    }
+  ]
+}

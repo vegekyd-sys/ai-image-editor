@@ -1,0 +1,14 @@
+{
+  "sample": {
+    "id": "26-flare-high-xhigh",
+    "version": "2.6",
+    "variant": "flare",
+    "quality": "high",
+    "reasoning": "xhigh",
+    "kind": "poster",
+    "format": "png"
+  },
+  "stage": "filtered",
+  "reason": "Same exact endpoint rejected xhigh/max at low quality; do not repeat known-unsupported requests",
+  "cost_usd": 0
+}

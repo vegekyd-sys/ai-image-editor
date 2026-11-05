@@ -1,0 +1,5 @@
+import sharp from 'sharp';import fs from 'node:fs';import path from 'node:path';const dir=path.dirname(new URL(import.meta.url).pathname);
+for(const [name,ids] of [['poster-comparison',['25-flare-low','26-flare-low-high','26-flare-medium-high','26-flare-high-high']],['mascot-comparison',['25-flare-low-mascot','26-flare-low-mascot','26-flare-medium-mascot','26-sunburst-medium-mascot']]]){
+ const layers=[];for(let i=0;i<ids.length;i++){const id=ids[i],r=JSON.parse(fs.readFileSync(path.join(dir,id,'receipt.json'))),x=(i%2)*512,y=Math.floor(i/2)*570;layers.push({input:await sharp(path.join(dir,id,'output.png')).resize(512,512).png().toBuffer(),left:x,top:y+58});const label=`<svg width="512" height="58"><rect width="512" height="58" fill="#f4f1eb"/><text x="12" y="22" font-family="Arial" font-size="17" fill="#332747">${id}</text><text x="12" y="46" font-family="Arial" font-size="16" fill="#554966">${(r.total_ms/1000).toFixed(2)}s | $${r.cost_usd.toFixed(4)}</text></svg>`;layers.push({input:Buffer.from(label),left:x,top:y});}
+ await sharp({create:{width:1024,height:1140,channels:3,background:'#f4f1eb'}}).composite(layers).png().toFile(path.join(dir,name+'.png'));
+}

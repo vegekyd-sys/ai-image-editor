@@ -1,0 +1,100 @@
+
+ RUN  v4.1.4 /Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor
+
+stdout | __tests__/falImage26.test.ts > optional GPT Image 2.6 > submits gpt-image-2.6-flare once, polls its exact schema path and retains actual cost
+[gpt-image-2.6-flare] provider=fal request=gpt26-request quality=low reasoning=high format=png costUsd=0.0073 totalMs=5
+
+stdout | __tests__/falImage26.test.ts > optional GPT Image 2.6 > submits gpt-image-2.6-sunburst once, polls its exact schema path and retains actual cost
+[gpt-image-2.6-sunburst] provider=fal request=gpt26-request quality=low reasoning=high format=png costUsd=0.0073 totalMs=4
+
+ ❯ __tests__/falImage26.test.ts (9 tests | 5 failed) 25ms
+     × keeps Auto and old provider selection separate from explicit 2.6 3ms
+     × maps gpt-image-2.6-flare to documented generation and edit contracts 2ms
+     × maps gpt-image-2.6-sunburst to documented generation and edit contracts 0ms
+     × submits gpt-image-2.6-flare once, polls its exact schema path and retains actual cost 9ms
+     × submits gpt-image-2.6-sunburst once, polls its exact schema path and retains actual cost 6ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/falImage26.test.ts > optional GPT Image 2.6 > keeps Auto and old provider selection separate from explicit 2.6
+AssertionError: expected 'gpt-image-2.6-flare' to be 'gpt-image-2.5-flare' // Object.is equality
+
+Expected: "gpt-image-2.5-flare"
+Received: "gpt-image-2.6-flare"
+
+ ❯ __tests__/falImage26.test.ts:12:33
+     10| describe('optional GPT Image 2.6', () => {
+     11|   it('keeps Auto and old provider selection separate from explicit 2.6…
+     12|     expect(DEFAULT_IMAGE_MODEL).toBe('gpt-image-2.5-flare');
+       |                                 ^
+     13|     expect(planImageGeneration({ prompt: 'A product photo' }).model).t…
+     14|     for (const model of FAL_IMAGE26_IDS) {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  __tests__/falImage26.test.ts > optional GPT Image 2.6 > maps gpt-image-2.6-flare to documented generation and edit contracts
+ FAIL  __tests__/falImage26.test.ts > optional GPT Image 2.6 > maps gpt-image-2.6-sunburst to documented generation and edit contracts
+AssertionError: expected { prompt: 'A poster', …(7) } to match object { output_format: 'png', …(4) }
+(3 matching properties omitted from actual)
+
+- Expected
++ Received
+
+@@ -4,7 +4,7 @@
+      "width": 3840,
+    },
+    "num_images": 1,
+    "output_format": "png",
+    "quality": "low",
+-   "reasoning_effort": "low",
++   "reasoning_effort": "high",
+  }
+
+ ❯ __tests__/falImage26.test.ts:27:28
+     25|     const generated = buildFalImage25Request({ prompt: 'A poster', asp…
+     26|     expect(generated.endpoint).toBe(`openai/gpt-image-2.6/${variant}/t…
+     27|     expect(generated.body).toMatchObject({ output_format: 'png', num_i…
+       |                            ^
+     28|     const edited = buildFalImage25Request({ prompt: 'Change only the m…
+     29|     expect(edited.endpoint).toBe(`openai/gpt-image-2.6/${variant}/edit…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  __tests__/falImage26.test.ts > optional GPT Image 2.6 > submits gpt-image-2.6-flare once, polls its exact schema path and retains actual cost
+AssertionError: expected 'https://queue.fal.run/openai/gpt-imag…' to be 'https://queue.fal.run/openai/gpt-imag…' // Object.is equality
+
+Expected: "https://queue.fal.run/openai/gpt-image-2.6/flare/text-to-image/requests/gpt26-request/status"
+Received: "https://queue.fal.run/openai/gpt-image-2.6/requests/gpt26-request/status"
+
+ ❯ __tests__/falImage26.test.ts:54:38
+     52|     const result = await createFalImage25Backend(model).generate({ pro…
+     53|     expect(result.usage).toMatchObject({ modelId: model, provider: 'fa…
+     54|     expect(fetcher.mock.calls[2][0]).toBe(`https://queue.fal.run/${end…
+       |                                      ^
+     55|     expect(fetcher.mock.calls[3][0]).toBe(`https://queue.fal.run/${end…
+     56|     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'P…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  __tests__/falImage26.test.ts > optional GPT Image 2.6 > submits gpt-image-2.6-sunburst once, polls its exact schema path and retains actual cost
+AssertionError: expected 'https://queue.fal.run/openai/gpt-imag…' to be 'https://queue.fal.run/openai/gpt-imag…' // Object.is equality
+
+Expected: "https://queue.fal.run/openai/gpt-image-2.6/sunburst/text-to-image/requests/gpt26-request/status"
+Received: "https://queue.fal.run/openai/gpt-image-2.6/requests/gpt26-request/status"
+
+ ❯ __tests__/falImage26.test.ts:54:38
+     52|     const result = await createFalImage25Backend(model).generate({ pro…
+     53|     expect(result.usage).toMatchObject({ modelId: model, provider: 'fa…
+     54|     expect(fetcher.mock.calls[2][0]).toBe(`https://queue.fal.run/${end…
+       |                                      ^
+     55|     expect(fetcher.mock.calls[3][0]).toBe(`https://queue.fal.run/${end…
+     56|     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'P…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 4 passed (9)
+   Start at  10:10:55
+   Duration  459ms (transform 54ms, setup 0ms, import 171ms, tests 25ms, environment 180ms)
+

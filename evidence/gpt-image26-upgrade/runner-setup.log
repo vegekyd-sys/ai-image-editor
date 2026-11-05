@@ -1,0 +1,5 @@
+Preparing worktree (detached HEAD 15442840)
+HEAD is now at 15442840 feat: add optional GPT Image 2.6 static image candidate
+runner: /Users/tianyicai/.codex/runtimes/gpt26-acceptance
+canonical dev: /Users/tianyicai/ai-image-editor
+dependencies: shared

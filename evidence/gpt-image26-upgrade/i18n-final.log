@@ -1,0 +1,5 @@
+
+> ai-image-editor@0.1.0 check:i18n-ui
+> node scripts/check-ui-i18n.mjs
+
+UI i18n guard passed (653 known fingerprints, no new hard-coded UI text).

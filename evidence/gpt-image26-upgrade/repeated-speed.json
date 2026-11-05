@@ -1,0 +1,32 @@
+{
+  "2.5": {
+    "n": 3,
+    "medianMs": 20876,
+    "rangeMs": [
+      20075,
+      21807
+    ],
+    "costUsd": [
+      0.0067,
+      0.0067,
+      0.0067
+    ],
+    "quality": "low",
+    "reasoning": "not-exposed"
+  },
+  "2.6": {
+    "n": 3,
+    "medianMs": 11780,
+    "rangeMs": [
+      11016,
+      12308
+    ],
+    "costUsd": [
+      0.0256,
+      0.0256,
+      0.0256
+    ],
+    "quality": "low",
+    "reasoning": "high"
+  }
+}

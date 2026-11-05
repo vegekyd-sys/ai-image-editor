@@ -1,0 +1,26 @@
+[
+  {
+    "locale": "zh",
+    "selected": "gpt-image-2.6-flare",
+    "retired25Absent": true,
+    "errors": []
+  },
+  {
+    "locale": "zh-Hant",
+    "selected": "gpt-image-2.6-flare",
+    "retired25Absent": true,
+    "errors": []
+  },
+  {
+    "locale": "ja",
+    "selected": "gpt-image-2.6-flare",
+    "retired25Absent": true,
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "selected": "gpt-image-2.6-flare",
+    "retired25Absent": true,
+    "errors": []
+  }
+]

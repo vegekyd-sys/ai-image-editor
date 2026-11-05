@@ -1,0 +1,30 @@
+{
+  "model": "gpt-6-luna",
+  "instructions": "Create exactly one image with the image_generation tool. Use the specified image model. Do not use another model or an external tool.",
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Create a clean square product poster on a cream background. A red ceramic cup rests on pale limestone. Exact headline: MAKARON. Exact smaller Chinese line: 灵感即刻成真. Three small colored tiles aligned below the cup: magenta, cyan, purple. No other text."
+        }
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "type": "image_generation",
+      "model": "gpt-image-2.6-flare",
+      "quality": "low",
+      "output_format": "png",
+      "size": "1024x1024",
+      "complexity": "high"
+    }
+  ],
+  "tool_choice": {
+    "type": "image_generation"
+  },
+  "stream": true,
+  "store": false
+}

@@ -1,0 +1,23 @@
+npm notice
+npm notice 📦  makaron-cli@0.17.9
+npm notice Tarball Contents
+npm notice 360B .claude-plugin/plugin.json
+npm notice 1.4kB .codex-plugin/plugin.json
+npm notice 46.8kB README.md
+npm notice 185.9kB bin/makaron.mjs
+npm notice 744B package.json
+npm notice 6.5kB skills/makaron/references/internal-workflows.md
+npm notice 1.9kB skills/makaron/references/nsfw.md
+npm notice 6.6kB skills/makaron/references/workflow-catalog.json
+npm notice 41.6kB skills/makaron/SKILL.md
+npm notice Tarball Details
+npm notice name: makaron-cli
+npm notice version: 0.17.9
+npm notice filename: makaron-cli-0.17.9.tgz
+npm notice package size: 79.6 kB
+npm notice unpacked size: 292.0 kB
+npm notice shasum: 14463046f4537528b55ac29690f3d10e00edef90
+npm notice integrity: sha512-Q/AEj1W6nDPAz[...]0YSj2j3r29eKQ==
+npm notice total files: 9
+npm notice
+makaron-cli-0.17.9.tgz

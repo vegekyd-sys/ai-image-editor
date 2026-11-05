@@ -1,0 +1,64 @@
+{
+  "at": "2026-11-05T02:27:13.234Z",
+  "database": "isolated localhost 55451",
+  "project_url": "http://127.0.0.1:3051/projects/d7eb0a11-eb87-4bd8-b777-8ab546ac53f6",
+  "images": [
+    {
+      "format": "gif",
+      "contentType": "image/gif",
+      "bytesEqual": true,
+      "metadata": {
+        "format": "gif",
+        "size": 1237385,
+        "width": 960,
+        "height": 8640,
+        "space": "srgb",
+        "channels": 4,
+        "depth": "uchar",
+        "isProgressive": false,
+        "isPalette": true,
+        "bitsPerSample": 8,
+        "paletteBitDepth": 8,
+        "pages": 9,
+        "pageHeight": 960,
+        "loop": 0,
+        "delay": [
+          160,
+          160,
+          160,
+          160,
+          160,
+          160,
+          160,
+          160,
+          160
+        ],
+        "background": {
+          "r": 156,
+          "g": 74,
+          "b": 252
+        },
+        "hasProfile": false,
+        "hasAlpha": true,
+        "autoOrient": {
+          "width": 960,
+          "height": 8640
+        }
+      }
+    },
+    {
+      "format": "svg",
+      "contentType": "image/svg+xml",
+      "bytesEqual": true,
+      "isVector": true
+    }
+  ],
+  "usage": [
+    {
+      "tool_name": "makaron_edit_image",
+      "model_used": "gpt-image-2.6-flare",
+      "credits_charged": 30,
+      "source": "cli"
+    }
+  ]
+}

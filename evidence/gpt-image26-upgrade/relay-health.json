@@ -1,0 +1,8 @@
+{
+  "at": "2026-11-05T02:11:40.971Z",
+  "curl_exit": 35,
+  "http_status": "000",
+  "network_error": "connection_failed",
+  "node_fetch": "ECONNRESET",
+  "no_probe_resubmitted": true
+}

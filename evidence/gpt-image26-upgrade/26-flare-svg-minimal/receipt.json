@@ -1,0 +1,53 @@
+{
+  "sample": {
+    "id": "26-flare-svg-minimal",
+    "version": "2.6",
+    "variant": "flare",
+    "quality": "low",
+    "kind": "vector-minimal",
+    "format": "svg"
+  },
+  "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+  "stage": "rejected",
+  "started_at": "2026-11-05T02:20:53.835Z",
+  "started_ms": 1793845253835,
+  "request": {
+    "prompt": "Create a clean editable SVG vector logo: a purple rounded cloud with three cyan diamond sparks orbiting its upper right. Cream background, crisp simple geometric paths, no raster embedded image, no text.",
+    "output_format": "svg",
+    "num_images": 1
+  },
+  "submission_count": 1,
+  "request_id": "01a1a982-5abc-7292-87ce-4a496efa1e0d",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a982-5abc-7292-87ce-4a496efa1e0d",
+  "accepted_ms": 1793845254848,
+  "completed_ms": 1793845256623,
+  "http_status": 422,
+  "error": {
+    "detail": [
+      {
+        "loc": [
+          "body",
+          "prompt"
+        ],
+        "msg": "Invalid request",
+        "type": "invalid_request",
+        "url": "https://docs.fal.ai/errors#invalid_request",
+        "input": {
+          "prompt": "Create a clean editable SVG vector logo: a purple rounded cloud with three cyan diamond sparks orbiting its upper right. Cream background, crisp simple geometric paths, no raster embedded image, no text.",
+          "num_images": 1,
+          "output_format": "svg",
+          "quality": "high",
+          "background": "auto",
+          "output_compression": null,
+          "image_size": {
+            "width": 1024,
+            "height": 768
+          },
+          "openai_api_key": null,
+          "provider_options": null
+        }
+      }
+    ]
+  },
+  "cost_usd": null
+}

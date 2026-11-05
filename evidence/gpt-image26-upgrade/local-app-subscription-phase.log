@@ -1,0 +1,134 @@
+▲ Next.js 16.1.6 (webpack)
+- Local:         http://127.0.0.1:3051
+- Network:       http://127.0.0.1:3051
+- Environments: .env.local
+
+✓ Starting...
+✓ Ready in 1541ms
+⚠ ./node_modules/libheif-js/libheif-wasm/libheif-bundle.js
+Critical dependency: require function is used in a way in which dependencies cannot be statically extracted
+
+Import trace for requested module:
+./node_modules/libheif-js/libheif-wasm/libheif-bundle.js
+./node_modules/libheif-js/wasm-bundle.js
+./node_modules/heic-decode/index.js
+./node_modules/heic-convert/index.js
+./src/lib/external-image.ts
+./src/app/api/projects/create/route.ts
+ POST /api/projects/create 200 in 2.1s (compile: 1967ms, render: 96ms)
+⚠ ./node_modules/libheif-js/libheif-wasm/libheif-bundle.js
+Critical dependency: require function is used in a way in which dependencies cannot be statically extracted
+
+Import trace for requested module:
+./node_modules/libheif-js/libheif-wasm/libheif-bundle.js
+./node_modules/libheif-js/wasm-bundle.js
+./node_modules/heic-decode/index.js
+./node_modules/heic-convert/index.js
+./src/lib/external-image.ts
+./src/app/api/projects/create/route.ts
+○ Compiling /api/agent/run ...
+⚠ ./node_modules/libheif-js/libheif-wasm/libheif-bundle.js
+Critical dependency: require function is used in a way in which dependencies cannot be statically extracted
+
+Import trace for requested module:
+./node_modules/libheif-js/libheif-wasm/libheif-bundle.js
+./node_modules/libheif-js/wasm-bundle.js
+./node_modules/heic-decode/index.js
+./node_modules/heic-convert/index.js
+./src/lib/external-image.ts
+./src/app/api/projects/create/route.ts
+[agent-perf] {"traceId":"mw2xtisi-3cbb707c","name":"agent-run-start","event":"mark","point":"start","elapsedMs":0,"route":"/api/agent/run"}
+[agent-perf] {"traceId":"mw2xtisi-3cbb707c","name":"agent-run-start","event":"span_start","point":"request_read","elapsedMs":1}
+[agent-perf] {"traceId":"mw2xtisi-3cbb707c","name":"agent-run-start","event":"span_end","point":"request_read","elapsedMs":51,"authenticated":true,"durationMs":50}
+[agent-perf] {"traceId":"mw2xtisi-3cbb707c","name":"agent-run-start","event":"span_start","point":"admission_preflight","elapsedMs":51,"projectId":"7ba96a49-5c9b-4226-ae20-212bfb5e31b0"}
+[agent-perf] {"traceId":"mw2xtisi-3cbb707c","name":"agent-run-start","event":"span_end","point":"admission_preflight","elapsedMs":76,"projectId":"7ba96a49-5c9b-4226-ae20-212bfb5e31b0","codexSubscriptionAllowed":true,"hasActiveRun":false,"durationMs":25}
+[agent-perf] {"traceId":"mw2xtisi-3cbb707c","name":"agent-run-start","event":"span_start","point":"create_run","elapsedMs":77,"durable":true}
+[agent-perf] {"traceId":"mw2xtisi-3cbb707c","name":"agent-run-start","event":"span_end","point":"create_run","elapsedMs":100,"durable":true,"ok":true,"runId":"f4fc0012-63b7-444e-97ce-b917eae18746","durationMs":23}
+ POST /api/agent/run 200 in 7.2s (compile: 7.0s, render: 130ms)
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"start","elapsedMs":0,"runId":"f4fc0012-63b7-444e-97ce-b917eae18746"}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_start","point":"load_run","elapsedMs":0}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_end","point":"load_run","elapsedMs":21,"found":true,"durationMs":21}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_start","point":"claim_execution","elapsedMs":22}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_end","point":"claim_execution","elapsedMs":41,"ok":true,"durationMs":19}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"interrupt_prior_attempts_skipped","elapsedMs":41,"reason":"first_attempt"}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_start","point":"attempt_setup","elapsedMs":41,"attemptNo":1}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_end","point":"attempt_setup","elapsedMs":50,"attemptNo":1,"activeStudioWorkflowStage":null,"durationMs":9}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_start","point":"writer_ready","elapsedMs":50}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_end","point":"writer_ready","elapsedMs":50,"durationMs":0}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_start","point":"build_prompt_context","elapsedMs":51}
+[core-prompt] configuration unavailable; using legacy
+[agent-prompt] mode=legacy system base=11953 workspace=11113 memory=180 cacheablePrefix=23066 total=23246 chars (~6642 tokens)
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_end","point":"build_prompt_context","elapsedMs":79,"promptChars":127,"historyTurns":0,"mediaCount":0,"durationMs":28}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"model_start","elapsedMs":85,"model":"gpt-6-luna","provider":"codex-subscription"}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"core_prompt_mode","elapsedMs":87,"mode":"legacy","prefetched":true}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"agent_tools_created","elapsedMs":98,"toolCount":22}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_start","point":"build_system_prompt","elapsedMs":98,"projectId":"7ba96a49-5c9b-4226-ae20-212bfb5e31b0","injectedSkillBodies":0,"mode":"normal"}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_end","point":"build_system_prompt","elapsedMs":98,"projectId":"7ba96a49-5c9b-4226-ae20-212bfb5e31b0","injectedSkillBodies":0,"mode":"normal","systemChars":23846,"durationMs":0}
+[agent-prompt] tools count=22 totalDescChars=64499 (~18428 tokens)  top: retake_video=13900 generate_animation=12714 generate_image=8719 run_code=6744 studio_run=3226
+[agent-req] systemChars=23846 toolsChars=64499 userChars=127 images=0 historyTurns=0 mode=normal
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"agent_request_ready","elapsedMs":98,"systemChars":23846,"toolsChars":64499,"userChars":127,"userImages":0,"historyTurns":0,"mode":"normal","agentModel":"gpt-6-luna","provider":"codex-subscription"}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_start","point":"model_stream_init","elapsedMs":98,"projectId":"7ba96a49-5c9b-4226-ae20-212bfb5e31b0","recoveryAttempt":0}
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"span_end","point":"model_stream_init","elapsedMs":102,"projectId":"7ba96a49-5c9b-4226-ae20-212bfb5e31b0","recoveryAttempt":0,"durationMs":4}
+⚠ ./node_modules/libheif-js/libheif-wasm/libheif-bundle.js
+Critical dependency: require function is used in a way in which dependencies cannot be statically extracted
+
+Import trace for requested module:
+./node_modules/libheif-js/libheif-wasm/libheif-bundle.js
+./node_modules/libheif-js/wasm-bundle.js
+./node_modules/heic-decode/index.js
+./node_modules/heic-convert/index.js
+./src/lib/external-image.ts
+./src/app/api/projects/create/route.ts
+⚠ ./node_modules/libheif-js/libheif-wasm/libheif-bundle.js
+Critical dependency: require function is used in a way in which dependencies cannot be statically extracted
+
+Import trace for requested module:
+./node_modules/libheif-js/libheif-wasm/libheif-bundle.js
+./node_modules/libheif-js/wasm-bundle.js
+./node_modules/heic-decode/index.js
+./node_modules/heic-convert/index.js
+./src/lib/external-image.ts
+./src/app/api/projects/create/route.ts
+[agent-ttfb] 3553ms (first reasoning-start)
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"model_first_output","elapsedMs":3651,"eventType":"reasoning-start","ttfbMs":3553}
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true 200 in 1282ms (compile: 1244ms, render: 38ms)
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=0 200 in 71ms (compile: 8ms, render: 64ms)
+[agent-first-text] 7920ms
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"model_first_visible_text","elapsedMs":8018,"firstVisibleTextMs":7920}
+⏱️ [agent] tool-call "read_file" at +7.9s
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"tool_call","elapsedMs":8031,"tool":"read_file","step":0,"sinceAgentStartMs":7933}
+⏱️ [agent] tool-result "read_file" at +8.2s (tool took 0.2s)
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"tool_result","elapsedMs":8265,"tool":"read_file","step":0,"sinceAgentStartMs":8167,"toolDurationMs":234}
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=0 200 in 29ms (compile: 5ms, render: 24ms)
+⏱️ [agent] tool-call "read_file" at +10.4s
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"tool_call","elapsedMs":10492,"tool":"read_file","step":1,"sinceAgentStartMs":10394}
+⏱️ [agent] tool-result "read_file" at +10.5s (tool took 0.1s)
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"tool_result","elapsedMs":10623,"tool":"read_file","step":1,"sinceAgentStartMs":10525,"toolDurationMs":131}
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=6 200 in 33ms (compile: 4ms, render: 28ms)
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=13 200 in 46ms (compile: 5ms, render: 41ms)
+⏱️ [agent] tool-call "generate_image" at +18.2s
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"tool_call","elapsedMs":18266,"tool":"generate_image","step":2,"sinceAgentStartMs":18168}
+🎯 [generate_image] skill="captions" refs=0 editPrompt="Create a square 1:1 PNG illustration on a clean warm ivory background. Arrange o"
+
+🎨 [edit_image] skill=captions hasReference=false model=auto background=default
+editPrompt: Create a square 1:1 PNG illustration on a clean warm ivory background. Arrange one elegant purple translucent glass cup near the center, with exactly three cyan spheres on its left and exactly two pin
+
+📸 Single-image mode
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=13 200 in 32ms (compile: 5ms, render: 27ms)
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=16 200 in 28ms (compile: 5ms, render: 23ms)
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=17 200 in 29ms (compile: 5ms, render: 24ms)
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=17 200 in 42ms (compile: 3ms, render: 39ms)
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=17 200 in 38ms (compile: 5ms, render: 34ms)
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=18 200 in 34ms (compile: 6ms, render: 28ms)
+[gpt-image-2.6-flare] provider=fal request=01a1a993-eee1-7301-89a8-fd3802b25af7 quality=low reasoning=high format=png costUsd=0.0255 totalMs=15962
+✅ [edit_image] done in 17.1s model=gpt-image-2.6-flare provider=fal
+⏱️ [agent] tool-result "generate_image" at +35.4s (tool took 17.2s)
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"tool_result","elapsedMs":35461,"tool":"generate_image","step":2,"sinceAgentStartMs":35363,"toolDurationMs":17196}
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=18 200 in 28ms (compile: 4ms, render: 25ms)
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=21 200 in 25ms (compile: 3ms, render: 22ms)
+⏱️ [agent] DONE total 41.8s (1 images, 4 steps)
+[agent-perf] {"traceId":"mw2xtjbg-0fa685a6","name":"agent-execution-attempt","event":"mark","point":"agent_done","elapsedMs":41908,"totalAgentMs":41810,"imagesSent":1,"stepCount":4}
+[agent-usage] totalInput=155308 (noCache=38444 cacheRead=116864 cacheWrite=0) output=592 hitRate=75.2% model=gpt-6-luna provider=codex-subscription
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true&after=23 200 in 40ms (compile: 3ms, render: 37ms)
+ GET /api/agent/run/f4fc0012-63b7-444e-97ce-b917eae18746?events=true 200 in 41ms (compile: 2ms, render: 39ms)
+[?25h

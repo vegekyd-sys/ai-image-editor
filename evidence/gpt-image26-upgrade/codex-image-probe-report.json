@@ -1,0 +1,10 @@
+{
+  "at": "2026-11-05T01:54:22.242Z",
+  "provider": "codex-subscription",
+  "requested_agent_model": "gpt-6-luna",
+  "requested_image_model": "gpt-image-2.6-flare",
+  "paid_api_cost_usd": 0,
+  "submission_count": 1,
+  "error_type": "TypeError",
+  "outcome": "unknown_after_single_POST_do_not_resubmit"
+}

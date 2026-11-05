@@ -1,0 +1,253 @@
+
+ RUN  v4.1.4 /Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor
+
+stdout | __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {}
+
+🎨 [edit_image] skill=none hasReference=false model=auto background=default
+editPrompt: A red ceramic mug.
+
+📸 Single-image mode
+
+stdout | __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {}
+✅ [edit_image] done in 0.0s model=gpt-image-2.6-flare provider=supplier
+
+stdout | __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"imageResolution":"4K"}
+
+🎨 [edit_image] skill=none hasReference=false model=auto background=default
+editPrompt: A red ceramic mug.
+
+📸 Single-image mode
+
+stdout | __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"imageResolution":"4K"}
+✅ [edit_image] done in 0.0s model=gpt-image-2.6-flare provider=supplier
+
+stdout | __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"imageResolution":"4K","aspectRatio":"1:1","background":"transparent"}
+
+🎨 [edit_image] skill=none hasReference=false model=auto background=transparent
+editPrompt: A red ceramic mug.
+
+📸 Single-image mode
+
+stdout | __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"imageResolution":"4K","aspectRatio":"1:1","background":"transparent"}
+✅ [edit_image] done in 0.0s model=gpt-image-2.6-flare provider=supplier
+
+stdout | __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"model":"unknown-model"}
+
+🎨 [edit_image] skill=none hasReference=false model=unknown-model background=default
+editPrompt: A red ceramic mug.
+
+📸 Single-image mode
+
+stdout | __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"model":"unknown-model"}
+✅ [edit_image] done in 0.0s model=gpt-image-2.6-flare provider=supplier
+
+stdout | __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"imageResolution":"8K"}
+
+🎨 [edit_image] skill=none hasReference=false model=auto background=default
+editPrompt: A red ceramic mug.
+
+📸 Single-image mode
+
+stdout | __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"imageResolution":"8K"}
+✅ [edit_image] done in 0.0s model=gpt-image-2.6-flare provider=supplier
+
+ ❯ __tests__/imageCapabilityMcp.test.ts (17 tests | 5 failed) 73ms
+     × keeps preflight and actual execution aligned for {} 28ms
+     × keeps preflight and actual execution aligned for {"imageResolution":"4K"} 3ms
+     × keeps preflight and actual execution aligned for {"imageResolution":"4K","aspectRatio":"1:1","background":"transparent"} 2ms
+     × keeps preflight and actual execution aligned for {"model":"unknown-model"} 2ms
+     × keeps preflight and actual execution aligned for {"imageResolution":"8K"} 3ms
+stdout | __tests__/wanImageAgentBilling.test.ts > App Agent Image 2.5 billing > checks Flare pricing for a legacy Image 2 selection even on a subscription agent
+🎯 [generate_image] skill="none" refs=0 editPrompt="Product image"
+
+stdout | __tests__/wanImageAgentBilling.test.ts > preflights native Flare 2K in Auto
+🎯 [generate_image] skill="none" refs=0 editPrompt="A forest scene"
+
+stdout | __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R01/R17: Auto quotes Flare and delivers once
+🎯 [generate_image] skill="none" refs=0 editPrompt="A portrait."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R15: media index zero remains text-to-image, uploaded and timeline references are counted
+🎯 [generate_image] skill="none" refs=0 editPrompt="Draw."
+
+stdout | __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R15: media index zero remains text-to-image, uploaded and timeline references are counted
+🎯 [generate_image] skill="none" refs=13 editPrompt="Combine."
+
+ ❯ __tests__/wanImageAgentBilling.test.ts (29 tests | 4 failed) 94ms
+     × checks Flare pricing for a legacy Image 2 selection even on a subscription agent 4ms
+   × preflights native Flare 2K in Auto 3ms
+     × R01/R17: Auto quotes Flare and delivers once 1ms
+     × R15: media index zero remains text-to-image, uploaded and timeline references are counted 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {}
+ FAIL  __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"imageResolution":"4K"}
+AssertionError: expected 'Image generated successfully. (model:…' to contain 'model: gpt-image-2.5-flare'
+
+Expected: "model: gpt-image-2.5-flare"
+Received: "Image generated successfully. (model: gpt-image-2.6-flare)"
+
+ ❯ __tests__/imageCapabilityMcp.test.ts:69:44
+     67|     const { response, payload } = await callImage(args);
+     68|     expect(payload.result.isError).not.toBe(true);
+     69|     expect(payload.result.content[0].text).toContain(`model: ${model}`…
+       |                                            ^
+     70|     expect(state.backend).toHaveBeenCalledExactlyOnceWith(model);
+     71|     expect(state.generate).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"imageResolution":"4K","aspectRatio":"1:1","background":"transparent"}
+AssertionError: expected 'Image generated successfully. Used na…' to contain 'model: gpt-image-2.5-flare'
+
+Expected: "model: gpt-image-2.5-flare"
+Received: "Image generated successfully. Used native 2K to retain the requested canvas and other image requirements within GPT Image 2.6 Flare's pixel limit. (model: gpt-image-2.6-flare)"
+
+ ❯ __tests__/imageCapabilityMcp.test.ts:69:44
+     67|     const { response, payload } = await callImage(args);
+     68|     expect(payload.result.isError).not.toBe(true);
+     69|     expect(payload.result.content[0].text).toContain(`model: ${model}`…
+       |                                            ^
+     70|     expect(state.backend).toHaveBeenCalledExactlyOnceWith(model);
+     71|     expect(state.generate).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"model":"unknown-model"}
+AssertionError: expected 'Image generated successfully. Unrecog…' to contain 'model: gpt-image-2.5-flare'
+
+Expected: "model: gpt-image-2.5-flare"
+Received: "Image generated successfully. Unrecognized or retired image model unknown-model; used capability-aware Auto. (model: gpt-image-2.6-flare)"
+
+ ❯ __tests__/imageCapabilityMcp.test.ts:69:44
+     67|     const { response, payload } = await callImage(args);
+     68|     expect(payload.result.isError).not.toBe(true);
+     69|     expect(payload.result.content[0].text).toContain(`model: ${model}`…
+       |                                            ^
+     70|     expect(state.backend).toHaveBeenCalledExactlyOnceWith(model);
+     71|     expect(state.generate).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  __tests__/imageCapabilityMcp.test.ts > R16–R19: MCP HTTP → shared image Skill → selected provider → billing > keeps preflight and actual execution aligned for {"imageResolution":"8K"}
+AssertionError: expected 'Image generated successfully. Request…' to contain 'model: gpt-image-2.5-flare'
+
+Expected: "model: gpt-image-2.5-flare"
+Received: "Image generated successfully. Requested resolution 8K was left to GPT Image 2.6 Flare's native output. (model: gpt-image-2.6-flare)"
+
+ ❯ __tests__/imageCapabilityMcp.test.ts:69:44
+     67|     const { response, payload } = await callImage(args);
+     68|     expect(payload.result.isError).not.toBe(true);
+     69|     expect(payload.result.content[0].text).toContain(`model: ${model}`…
+       |                                            ^
+     70|     expect(state.backend).toHaveBeenCalledExactlyOnceWith(model);
+     71|     expect(state.generate).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > App Agent Image 2.5 billing > checks Flare pricing for a legacy Image 2 selection even on a subscription agent
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'gpt-image-2.5-flare' ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   "gpt-image-2.5-flare",
++   "gpt-image-2.6-flare",
+  ]
+
+
+Number of calls: 1
+
+ ❯ __tests__/wanImageAgentBilling.test.ts:152:26
+    150|     getTokenRate.mockResolvedValue(null);
+    151|     expect(await tool.execute({ editPrompt: 'Product image' })).toMatc…
+    152|     expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+       |                          ^
+    153|     expect(editImage).not.toHaveBeenCalled();
+    154|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > preflights native Flare 2K in Auto
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'gpt-image-2.5-flare' ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   "gpt-image-2.5-flare",
++   "gpt-image-2.6-flare",
+  ]
+
+
+Number of calls: 1
+
+ ❯ __tests__/wanImageAgentBilling.test.ts:225:24
+    223|   getTokenRate.mockResolvedValue({model_id:'gpt-image-2.5-flare',marku…
+    224|   await tool.execute({editPrompt:'A forest scene',imageResolution:'2K'…
+    225|   expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+       |                        ^
+    226|   expect(requireCredits).toHaveBeenCalledWith('test-user',5);
+    227|   expect(editImage).toHaveBeenCalledWith(expect.objectContaining({pref…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R01/R17: Auto quotes Flare and delivers once
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'gpt-image-2.5-flare' ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   "gpt-image-2.5-flare",
++   "gpt-image-2.6-flare",
+  ]
+
+
+Number of calls: 1
+
+ ❯ __tests__/wanImageAgentBilling.test.ts:237:26
+    235|     editImage.mockResolvedValue({ success: true, image: 'image', usedM…
+    236|     expect((await tool.execute({ editPrompt: 'A portrait.' })).success…
+    237|     expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+       |                          ^
+    238|     expect(requireCredits).toHaveBeenCalledWith('test-user', 5);
+    239|     expect(editImage).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  __tests__/wanImageAgentBilling.test.ts > Image capability Agent integration cases > R15: media index zero remains text-to-image, uploaded and timeline references are counted
+AssertionError: expected "vi.fn()" to be called with arguments: [ 'gpt-image-2.5-flare' ]
+
+Received:
+
+  1st vi.fn() call:
+
+  [
+-   "gpt-image-2.5-flare",
++   "gpt-image-2.6-flare",
+  ]
+
+
+Number of calls: 1
+
+ ❯ __tests__/wanImageAgentBilling.test.ts:283:26
+    281|     const result = await tool.execute({ editPrompt: 'Combine.', media_…
+    282|     expect(result.success).toBe(true);
+    283|     expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+       |                          ^
+    284|     expect(editImage).toHaveBeenCalledTimes(2);
+    285|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+
+ Test Files  2 failed | 5 passed (7)
+      Tests  9 failed | 136 passed (145)
+   Start at  10:13:09
+   Duration  828ms (transform 886ms, setup 0ms, import 2.29s, tests 329ms, environment 1.17s)
+
