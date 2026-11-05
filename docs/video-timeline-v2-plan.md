@@ -1,8 +1,8 @@
-# Makaron 视频时间线 V2：方案与设计（第二版）
+# Makaron 视频时间线 V2：方案、设计与实现记录
 
-> 状态：方案稿，第二轮 UI 评审后更新于 2026-11-06 02:42 CST。未实现、未合并、未上线。
+> 状态：M0–M4 已实现并在本地真实项目验收，2026-11-06 03:25 CST。合并与上线见 §8。
 > 分支：`claude/video-timeline-v2`（基于 `origin/dev` 0df70536）。
-> UI 原型：开发环境打开 `/timeline-v2-prototype`（代码 `src/app/timeline-v2-prototype/`），基于真实 Editor 结构和组件搭建，含 Agent 实时剪辑演示。
+> 代码：`src/lib/timeline/`（协议、reducer、运行时、服务端、Agent 工具）、`src/components/timeline/`（Dock、画布层、编辑 hook、胶片抽帧）。第二轮 UI 原型路由已删除，以真实编辑器为准。
 
 ## 0. 产品决定（已确认）
 
@@ -351,3 +351,36 @@ Prompt 层面只写意图和一条重要的节奏规则：**一个用户可感�
 - **Agent 自由度 vs 结构**：组件逃生舱保证创造力；需要观察 Agent 是否过度依赖 `component` 而不用结构化元素——prompt 里明确“能用结构化元素就用结构化元素，组件只用于样式和特效”。
 - **Realtime 成本与顺序**：tx 按 revision 有序应用，乱序时按 revision 补拉；广播只发 tx，不发整份文档。
 - **共享 Preview 环境**：Lambda runtime 与 Snapshot 变更不能占用共享 `git-dev` alias（AGENTS.md）。
+
+
+## 8. 实现记录（2026-11-06 03:25 CST）
+
+### 8.1 与计划的差异（有意为之）
+
+- **不升级 Remotion、不新建 Lambda composition**。时间线视频 = 一个 design：`code` 是固定的时间线运行时（`src/lib/timeline/runtime-code.ts`，首行 `// makaron-timeline-runtime v1`），`props.timeline` 是 MTP v1 文档。预览（Player）、浏览器导出、Lambda `dynamic-design`、海报截图、字体固定、导出媒体预处理全部沿用现有链路，所以 Preview / Export 一致性直接继承，不碰共享 Lambda 站点。运行时只用两端都有的 scope（Sequence、Video、Audio、Img、AbsoluteFill、interpolate）。以后要用 `<Track>` 时再 bump 运行时版本，旧视频保留各自保存的代码。
+- **实时链路用现有 SSE + agent_events 回放**，没有另开 Supabase Realtime broadcast：`edit_timeline` 产生 `timeline_tx` 事件，DualWriter 写入 `agent_events` 并推 SSE；后台运行 / 重连通过 `useAgentRun` 回放，按 revision 去重。
+- **服务端以工作区 design JSON 为唯一持久副本**：用户编辑走 `POST /api/projects/[id]/snapshots/[snapshotId]/timeline`（同一 reducer、元素级变基、冲突 409 回传最新文档）；旧的 design 保存路由和截海报保存不会把时间线回滚到更低 revision。暂未单独写 `timeline-log` 流水文件（Agent 每步在 agent_events 里有记录）。
+
+### 8.2 已交付范围
+
+- 协议与 reducer：insert / update / remove / split / set_meta，主轨磁吸，反向 op（撤销），pending→成片原地替换，原子事务，按元素变基与冲突。单测 `__tests__/timelineReducer.test.ts`、`timelineRuntime.test.ts`。
+- 编辑器：底部内容槽的 TimelineDock（真实逐帧胶片、空轨隐藏、缩放滚动、手机 192px + 居中播放头）、内联编辑行（文字 / 字幕逐句 / 分割 / 删除）、裁剪手柄、主轨拖动换序、画布选中 / 拖动 / 拉角缩放、撤销（Agent 每步一格）、跟随与 See 恢复、手机键盘上移。
+- Agent：`create_timeline` / `get_timeline` / `edit_timeline`（媒体可用 `<<<media_N>>>`），当前视频为时间线视频时的上下文与路由，`preview_frame({snapshot_id})` 直接可用；两件工具纳入 durable 输入版本守卫。
+- 老视频：原 pills 与浮层编辑器不变，工具行多一句“时间线编辑适用于新视频”。四语言文案齐全。
+
+### 8.3 本地验收证据（测试账号，本地 dev + 共享数据库）
+
+- 真实 Agent（gpt-6-luna / Azure 回退）：一句话“三段素材剪成竖版 + 音乐 + 标题 + 三句字幕” → `create_timeline` 出主轨与音乐，随后两次 `edit_timeline` 依次加标题、字幕，页面实时出现并发光、播放头跟随。
+- 第二轮“字幕改黄色高亮 + 右下角画中画 3–7 秒”：Agent 先读时间线，分两步改；保留了用户刚手改的标题“东京夜游”。运行结束后状态不回退（修复了快照合并回滚的问题）。
+- 用户编辑：改标题、选择、拖画中画、撤销，刷新后保持。
+- 导出：Lambda（`makaron-media-transport-20261103-v4` 站点）9 秒 720×1280 带音轨，1.5 / 4.5 / 7.5 秒抽帧与预览一致（标题、黄色高亮字幕、画中画位置）。
+- 门禁：`tsc` 全量通过；vitest 全量通过；i18n 守卫通过；外部 Skill 路由预检 3/3（未执行媒体操作）。
+- 注意：本地 `.env.local` 里的 `REMOTION_LAMBDA_SERVE_URL` 指向 2026-10-09 的旧站点（没有运行时标记），本地导出会报 site version mismatch；验收时用 worktree 本地 `.env.development.local` 覆盖到 v4 站点，未改共享配置。
+
+### 8.4 已知限制 / 后续
+
+- 生成中的素材：Agent 可以先插 pending clip 再替换，但异步生成完成后**不会自动**回填 pending clip（需要 Agent 在同一运行内或下一轮替换）。自动回填需要接三条视频轮询路径，单独排期。
+- 字幕逐句边界拖动、关键帧、节拍吸附、剪辑过程回放未做（P5）。
+- Agent 组件（`component` clip + propsSchema）未做；精心设计的动效仍走 run_code 经典合成。
+- 两次写入同一时间线文件之间没有存储层 CAS（读-改-写），极端并发下后写覆盖先写；客户端会在下一次响应或冲突时重新同步。
+- CLI：时间线工具在服务端 Agent 内可用，`makaron chat` 不需要改包；本次不发布 npm（发布前按 release checklist 复核）。
