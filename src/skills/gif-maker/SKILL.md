@@ -92,11 +92,14 @@ Rules that made the difference in live tests:
 - **Effects need empty space.** If a prop or effect must read (steam heart, "!", sweat drop), reserve the empty area in a layout line and give it a size ("as wide as her face").
 - **Captions baked in are stable** when the prompt fixes font, colours, outline, position and "exactly the same in every frame". Keep captions short; put them in a band the motion never enters.
 - **One flat background colour, flat lighting.** Gradients, particles everywhere and glow fields flicker and band in 256-colour GIF.
+- OpenAI's own loop rule: give the subject a starting pose to return to, and say whether the camera moves (for stickers: it does not).
+- Text: put the exact wording in quotes, describe position and typography, and add "no other text anywhere". For small, dense or multi-font text use `imageQuality: "medium"`; short bold captions are fine at the default low.
 - Do not write "smooth continuous motion", "rich multi-beat performance", "motion arcs trailing", camera moves, outfit changes, or more than 4 distinct poses.
 
 ## 4. References and identity
 
-- Use the user's photo, mascot sheet or previous approved frame as the reference image (`media_index` / `reference_media_indices`). Restate the identity anchors in text anyway.
+- Use the user's photo, mascot sheet or previous approved frame as the reference image (`media_index` / `reference_media_indices`). Name each input's role in the prompt ("Image 1: character identity", "Image 2: style/background") and restate the identity anchors in text anyway.
+- GIFs are not accepted as inputs. To revise an approved GIF, extract one representative frame as PNG (`run_code` node FFmpeg), pass it as the reference, request **one** change, and repeat everything that must stay the same.
 - A previous approved GIF frame is the best reference for series consistency; keep background colour, caption font and outline identical across the series and change only the action.
 - Turning a real person into a sticker: say the target style (3D Pixar, flat 2D cartoon, chibi) explicitly and keep the face recognisable.
 

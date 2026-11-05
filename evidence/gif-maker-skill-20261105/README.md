@@ -28,3 +28,10 @@ exact caption spec. Examples in `src/skills/gif-maker/SKILL.md`.
 WeChat 240px export via ffmpeg palettegen: 136–295KB.
 
 `before-after-xinkula.png`: top = V production result, bottom = new prompt. GIFs are in gitignored `outputs/gif-maker-skill-20261105/`.
+
+## OpenAI docs cross-check (2026-11-05)
+- Guide says frame_count 2–64; API reference says 2–16 — fal enforces 16 (live). Reference lists GIF on `/images/edits`; edit + references worked live.
+- Official loop advice: starting pose to return to + state camera movement. Official example: 512x512, 9 frames x 200ms, quality high.
+- 512px frames are accepted although below the 655,360 general minimum: 10 frames at 512 = 0.0326 fal units / 19s vs 816 = 0.062 / 31s, quality fine for 240px stickers. Production still always picks the largest sheet size.
+- Text: quote exact wording, give position/typography, ask for no extra text, medium/high quality for small or dense text.
+- GIF does not support streaming, partial images, masks, output_compression, prompt_rewriter; transparent GIF is undocumented.
