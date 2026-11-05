@@ -1067,6 +1067,7 @@ const zhHant = {
   'model.chooseAgent': '選擇 Agent 模型',
   'model.azureApiBadge': 'Azure API',
   'model.openRouterApiBadge': 'OpenRouter API',
+  'model.openaiApiBadge': 'OpenAI API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': '預設 · API 按量計費',
   'model.agentGroup.codex': '個人 Codex 訂閱',

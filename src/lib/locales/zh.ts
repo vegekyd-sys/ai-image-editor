@@ -1096,6 +1096,7 @@ const zh = {
   'model.chooseAgent': '选择 Agent 模型',
   'model.azureApiBadge': 'Azure API',
   'model.openRouterApiBadge': 'OpenRouter API',
+  'model.openaiApiBadge': 'OpenAI API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': '默认 · API 按量计费',
   'model.agentGroup.codex': '个人 Codex 订阅',

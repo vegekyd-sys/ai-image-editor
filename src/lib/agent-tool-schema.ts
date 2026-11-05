@@ -4,7 +4,7 @@ export function preserveOptionalToolFields<T extends Record<string, { strict?: b
   tools: T,
   provider: string,
 ): T {
-  if (provider !== 'azure-openai' && provider !== 'codex-subscription') return tools;
+  if (provider !== 'azure-openai' && provider !== 'openai' && provider !== 'codex-subscription') return tools;
   for (const definition of Object.values(tools)) definition.strict ??= false;
   return tools;
 }

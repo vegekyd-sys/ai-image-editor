@@ -1096,6 +1096,7 @@ const en = {
   'model.chooseAgent': 'Choose agent model',
   'model.azureApiBadge': 'Azure API',
   'model.openRouterApiBadge': 'OpenRouter API',
+  'model.openaiApiBadge': 'OpenAI API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': 'Default · usage based',
   'model.agentGroup.codex': 'Personal Codex plan',

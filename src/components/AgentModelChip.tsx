@@ -90,13 +90,15 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     ? t('model.codexSubscription.suffix')
     : subscriptionUsage.defaultProvider === 'azure-openai'
     ? t('model.azureApiBadge')
+    : subscriptionUsage.defaultProvider === 'openai'
+    ? t('model.openaiApiBadge')
     : subscriptionUsage.defaultProvider === 'openrouter'
     ? t('model.openRouterApiBadge')
     : '';
   const autoLabel = autoModel
     ? `Auto · ${t(autoModel.nameKey as Parameters<typeof t>[0])}${autoProviderSuffix ? ` · ${autoProviderSuffix}` : ''}`
     : 'Auto';
-  const autoUsesOtherApi = Boolean(autoModel && !ownerDefaultsToCodex && subscriptionUsage.defaultProvider !== 'azure-openai');
+  const autoUsesOtherApi = Boolean(autoModel && !ownerDefaultsToCodex && subscriptionUsage.defaultProvider !== 'azure-openai' && subscriptionUsage.defaultProvider !== 'openai');
   const label = isCodexSubscriptionAgentModelPreference(value) && selected
     ? `${t(selected.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`
     : isGrokSubscriptionAgentModelPreference(value) && selected

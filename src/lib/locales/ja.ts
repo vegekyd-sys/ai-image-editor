@@ -1092,6 +1092,7 @@ const ja = {
   'model.chooseAgent': 'Agentモデルを選択',
   'model.azureApiBadge': 'Azure API',
   'model.openRouterApiBadge': 'OpenRouter API',
+  'model.openaiApiBadge': 'OpenAI API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': '既定 · 従量課金',
   'model.agentGroup.codex': '個人Codexプラン',
