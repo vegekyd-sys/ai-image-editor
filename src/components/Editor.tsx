@@ -407,8 +407,16 @@ export default function Editor({
           updated = { ...updated, imageUrl: fresh.imageUrl };
           changed = true;
         }
-        // Merge design/props updates
-        if (fresh.design && (!updated.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(updated.design.props)))) {
+        // Merge design/props updates. Timeline videos only accept a strictly newer
+        // revision: live Agent tx and local edits are ahead of a page-load fetch.
+        const freshTimeline = getTimelineDoc(fresh.design);
+        const liveTimeline = getTimelineDoc(updated.design);
+        if (freshTimeline || liveTimeline) {
+          if (freshTimeline && (!liveTimeline || freshTimeline.revision > liveTimeline.revision)) {
+            updated = { ...updated, design: fresh.design };
+            changed = true;
+          }
+        } else if (fresh.design && (!updated.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(updated.design.props)))) {
           updated = { ...updated, design: fresh.design };
           changed = true;
         }

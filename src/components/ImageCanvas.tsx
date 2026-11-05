@@ -266,6 +266,12 @@ export default function ImageCanvas({
   // Remotion Player custom controls — frame tracked via ref (no re-render during playback)
   const remotionRef = useRef<PlayerRef | null>(null);
   const [remotionPlayer, setRemotionPlayer] = useState<PlayerRef | null>(null);
+  // Timeline videos drive playhead/seek through the design Player; deliver it
+  // whenever either side changes (the Player can mount before the parent knows
+  // the design is a timeline).
+  useEffect(() => {
+    onDesignPlayer?.(remotionPlayer);
+  }, [onDesignPlayer, remotionPlayer]);
   const [remotionPlaying, setRemotionPlaying] = useState(false);
   const remotionFrameRef = useRef(0);
   const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
@@ -1574,14 +1580,13 @@ export default function ImageCanvas({
               snapshotId={designSnapshotId}
               mode={isLongDesign ? 'inline' : 'fill'}
               hideControls
-              posterImage={currentDesign?.animation && !selectedEditableId ? displayImage : undefined}
+              posterImage={currentDesign?.animation && !selectedEditableId && !hideDesignSeekBar ? displayImage : undefined}
               onLoading={setRemotionLoading}
               onError={(err) => console.error('[canvas design]', err)}
               onContainerRef={setDesignContainerEl}
               onContentSize={onDesignContentSize}
               onPlayerRef={(ref) => {
                 remotionRef.current = ref;
-                onDesignPlayer?.(ref);
                 setRemotionPlayer(ref);
                 setRemotionPlaying(ref?.isPlaying() ?? false);
                 if (editableFields?.length) setDesignPlayerRef(ref);
@@ -1596,7 +1601,7 @@ export default function ImageCanvas({
             />
 
             {/* Poster fallback while RemotionRenderer is loading (fetching images/fonts/audio) */}
-            {remotionLoading && displayImage && !selectedEditableId && (
+            {remotionLoading && displayImage && !selectedEditableId && !hideDesignSeekBar && (
               <img
                 src={displayImage}
                 alt="poster"
