@@ -2077,7 +2077,7 @@ Options:
   --quality <tier>          auto, low, medium, high (2.6; default low).
   --image-reasoning <tier>  low, medium, high (2.6; default high).
   --output-format <format> png, jpeg, webp, gif, svg (2.6; default png).
-  --frame-count <n>         GIF frames, default 9; max frame edge 960px.
+  --frame-count <n>         GIF frames 2-16, default 9; 960px frames up to 9, 816px for 10-12, 720px for 13-16.
   --frame-duration-ms <n>  GIF frame delay, default 200; multiples of 10.
   --out <file>              Save images; batches use name-1.ext, name-2.ext, etc.
   --mj-speed <mode>         fast (up to 4 images) or draft (up to 24).
@@ -3229,7 +3229,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         editArgs[key] = value;
       } else {
         const number = Number(value), frames = flag === '--frame-count';
-        if (!Number.isInteger(number) || number < (frames ? 2 : 20) || number > (frames ? 64 : 2000) || (!frames && number % 10)) { console.error(`Invalid ${flag}.`); process.exit(1); }
+        if (!Number.isInteger(number) || number < (frames ? 2 : 20) || number > (frames ? 16 : 2000) || (!frames && number % 10)) { console.error(`Invalid ${flag}.`); process.exit(1); }
         editArgs[frames ? 'frameCount' : 'frameDurationMs'] = number;
       }
     }

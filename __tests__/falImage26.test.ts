@@ -107,3 +107,25 @@ describe('GPT Image 2.6 upgrade', () => {
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });
 });
+
+describe('native GIF sheet grid (live fal validation 2026-11-05)', () => {
+  it.each([[2, 960], [8, 960], [9, 960], [10, 816], [11, 816], [12, 816], [13, 720], [16, 720]])('%i square frames use %ipx', (frames, edge) => {
+    const { body } = buildFalImage25Request({ prompt: 'Sticker', aspectRatio: '1:1', outputFormat: 'gif', frameCount: frames }, FAL_IMAGE26_IDS[0]);
+    expect(body.image_size).toEqual({ width: edge, height: edge });
+  });
+
+  it('keeps non-square sheets inside the provider edge and pixel budget', () => {
+    for (const aspectRatio of ['9:16', '16:9', '3:4', '2:1']) {
+      for (let frames = 2; frames <= 16; frames++) {
+        const size = buildFalImage25Request({ prompt: 'Sticker', aspectRatio, outputFormat: 'gif', frameCount: frames }, FAL_IMAGE26_IDS[0]).body.image_size as { width: number; height: number };
+        expect(size.width % 16 + size.height % 16).toBe(0);
+        const cells = frames <= 8 ? 8 : frames === 9 ? 9 : frames <= 12 ? 12 : 16;
+        expect(size.width * size.height * cells).toBeLessThanOrEqual(8294400);
+      }
+    }
+  });
+
+  it('rejects more than 16 frames before any provider call', () => {
+    expect(() => buildFalImage25Request({ prompt: 'Sticker', outputFormat: 'gif', frameCount: 17 }, FAL_IMAGE26_IDS[0])).toThrow('2–16');
+  });
+});
