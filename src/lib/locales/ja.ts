@@ -308,6 +308,10 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.gptImage26.title': "GPT Image 2.6 と GIF アニメーション",
+  'changelog.gptImage26.item1': "既定の画像モデルが GPT Image 2.6 Flare に更新され、精細な制作向けに Sunburst も選べます。モデル選択では隣り合って表示されます。",
+  'changelog.gptImage26.item2': "画質と推論レベルを指定できます。既定は低画質・高推論です。2.5 の選択肢は対応する 2.6 モデルに置き換わり、過去の作品も引き続き閲覧できます。",
+  'changelog.gptImage26.item3': "指示や参考画像から GIF アニメーションやリアクション画像を作成。エディターで再生・保存・再表示でき、CLI から元の GIF ファイルも取得できます。",
   'changelog.cliLargeUploads.title': "CLI からより大きな動画をアップロード",
   'changelog.cliLargeUploads.item1': "プロジェクト編集や解析用に最大 500MB の動画を CLI からアップロードできます。事前に 50MB まで圧縮する必要はありません。",
   'changelog.retakeChoices.title': "Retake の選択肢を拡充、標準は引き続き Kling 4",
@@ -961,9 +965,9 @@ const ja = {
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '1〜3枚の画像編集に対応する独立モデル。大胆な変化と高解像度出力が特長です。',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',
-  'model.image26Flare.desc': '既定の画像モデル。GIF アニメ対応・SVG は試験中',
+  'model.image26Flare.desc': '既定の画像モデル。GIF アニメ対応',
   'model.image26Sunburst.name': 'GPT Image 2.6 Sunburst',
-  'model.image26Sunburst.desc': '精細な画像生成。GIF アニメ対応・SVG は試験中',
+  'model.image26Sunburst.desc': '精細な画像生成。GIF アニメ対応',
   'model.image25Flare.name': 'GPT Image 2.5 Flare',
   'model.image25Flare.desc': '日常の制作に適した高速生成',
   'model.image25Sunburst.name': 'GPT Image 2.5 Sunburst',

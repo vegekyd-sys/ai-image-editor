@@ -736,11 +736,13 @@ FAL video models: **fal H3 Turbo** uses `minimax-h3-max` for single-start-frame 
 
 GPT Image 2.6 Flare is the default image route; Sunburst is an explicit alternative. The fal adapter defaults to low rendering quality and **high reasoning**, independently selectable with `--quality auto|low|medium|high` and `--image-reasoning low|medium|high`. Legacy 2.5 request IDs migrate to the matching 2.6 variant; historical metadata is unchanged. Administrator Codex Subscription Agents use the same image tool and image API billing.
 
-`--output-format png|jpeg|webp|gif|svg` preserves the original format. GIF supports generation/editing and `--frame-count` / `--frame-duration-ms`; all frames share the pixel budget and native sheet, with at most 960px per frame edge even for fewer frames (default 9 frames, 200 ms, 960 square). Per-frame 2K/4K is rejected before submission. SVG supports **text-to-image only**, with one output and no source/reference images. Unsafe or external SVG content is rejected. CLI saves real GIF/SVG bytes with matching extensions, even if `--out` requested a different extension. No silent rasterization, fallback model or automatic paid retry.
+For new GIF artwork, mascot loops, and animated memes, **GPT Image 2.6 Flare is the go-to model**. Start with `makaron chat`; the Agent uses native image generation. Keep `animated-gif` for assembling existing frames or explicitly requested timing/export controls.
+
+`--output-format png|jpeg|webp|gif|svg` preserves the original format. GIF supports generation/editing and `--frame-count` / `--frame-duration-ms`; all frames share the pixel budget and native sheet, with at most 960px per frame edge even for fewer frames (default 9 frames, 200 ms, 960 square). Per-frame 2K/4K is rejected before submission. SVG is experimental: live provider acceptance still returns 422. Its transport supports **text-to-image only**, with one output and no source/reference images; do not promise a working SVG generation route. Unsafe or external SVG content is rejected. CLI saves real GIF/SVG bytes with matching extensions, even if `--out` requested a different extension. No silent rasterization, fallback model or automatic paid retry.
 
 ```sh
 makaron edit --output-format gif --quality medium --frame-count 9 --frame-duration-ms 160 --out spark.gif "A looping purple spark tracing a cyan circle"
-makaron edit --output-format svg --image-reasoning high --out spark.svg "A simple purple cloud and three cyan diamond sparks, vector paths"
+makaron chat --image mascot.png "Use GPT Image 2.6 Flare to make a looping GIF of this mascot waving; return the original GIF."
 ```
 
 The provider schema also advertises xhigh/max reasoning, but the live 2.6 endpoint rejected both during acceptance. They are not exposed as working Makaron tiers. Exact active 2.6 pricing rows are required before submission; final cost uses that task's fal billable USD units.

@@ -535,12 +535,18 @@ select the personal plan explicitly. Base grok-4.6 selects OpenRouter API;
 grok-4.6-grok-subscription selects the personal SuperGrok plan. Image/video
 model routing stays automatic in chat.
 
+New GIF artwork and animated memes use GPT Image 2.6 Flare by default.
+Use animated-gif only for existing-frame assembly or explicit timing/export controls.
+
 What you can ask:
   Image edit
     makaron chat --project <id> --image photo.jpg "remove the person in the background"
 
   Image generation
     makaron chat --project auto "generate a cinematic poster of a rainy Tokyo alley"
+
+  Animated GIF from a reference
+    makaron chat --project auto --image mascot.png "Use GPT Image 2.6 Flare to make a looping GIF of this mascot waving; return the original GIF."
 
   Video from image or timeline
     makaron chat --project <id> "make this into a 5 second cinematic video"
@@ -2086,8 +2092,11 @@ Options:
 
 Notes:
   GPT Image 2.6 defaults to low rendering quality + high reasoning.
-  PNG/JPEG/WebP, animated GIF and vector SVG are preserved in the returned file.
-  SVG is text-to-image only; GIF frames share the pixel budget. No format substitution.
+  New GIF art and animated memes: use makaron chat with GPT Image 2.6 Flare.
+  animated-gif is for existing-frame assembly or explicit timing/export controls.
+  PNG/JPEG/WebP and animated GIF originals are preserved in the returned file.
+  SVG is experimental (live provider returned 422), text-to-image only.
+  GIF frames share the pixel budget. No format substitution.
   MJ options require --image-model mj-v8.2; Draft + HD is invalid. Describe the scene
   naturally; the server prepares the English prompt. MJ is generation, not precise editing.
   Model selection is optional. Transparent output routes strictly to GPT Image 2.6 Flare

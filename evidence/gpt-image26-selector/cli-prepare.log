@@ -1,0 +1,83 @@
+
+> ai-image-editor@0.1.0 release:cli:prepare
+> node scripts/makaron-cli-release.mjs --prepare --base 44ff92af51c457e16d9ce4162a5bbf7e25321dfc --out outputs/gpt26-selector-review/cli-package
+
+
+> ai-image-editor@0.1.0 check:skill-sync
+> npm run check:agent-startup && npm run check:agent-discovery && node --import tsx scripts/check-skill-routing-evidence.ts
+
+
+> ai-image-editor@0.1.0 check:agent-startup
+> tsx scripts/check-agent-startup-contract.ts
+
+Agent startup contract passed: manifest-only Skill loading, no duplicate full Skill reads.
+
+> ai-image-editor@0.1.0 check:agent-discovery
+> node scripts/build-agent-discovery.mjs --check
+
+External Skill directory: 9 entries, revision f3fbcf20c5b2.
+Checked 1 public Makaron Agent Skills.
+Routing evidence checked: 3/3, media operations 0, current source fingerprint.
+
+> ai-image-editor@0.1.0 test:skill-sync
+> node --import tsx --test scripts/tests/external-skill-sync.test.mjs
+
+✔ the reviewed nine entries preserve the four exclusions (2.114875ms)
+✔ metadata changes invalidate outputs and regeneration preserves manual prose (147.083958ms)
+✔ body-only changes invalidate routing evidence but keep npm catalogue stable (106.957375ms)
+✔ renames, hidden, duplicate and excluded entries fail (109.292375ms)
+✔ malformed generated markers are rejected (0.395875ms)
+✔ routing receipt tampering and source drift fail the gate (127.32525ms)
+✔ macOS Finder metadata does not invalidate source evidence (116.256584ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 698.109667
+
+> ai-image-editor@0.1.0 test:cli
+> npm --prefix packages/makaron-cli test
+
+
+> makaron-cli@0.17.9 test
+> node test/smoke.mjs && node test/upload.mjs
+
+CLI upload tests passed: 60MB analysis, 500MB chunked chat, chunk recovery, invalid offsets, size/provider/metadata limits, storage rejection, help.
+
+> ai-image-editor@0.1.0 lint:agent-docs
+> node scripts/lint-makaron-cli-agent-docs.mjs
+
+Makaron CLI agent docs lint passed (2 files).
+{
+  "kind": "prepared-not-published",
+  "name": "makaron-cli",
+  "version": "0.17.9",
+  "tarball": "/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/outputs/gpt26-selector-review/cli-package/makaron-cli-0.17.9.tgz",
+  "shasum": "6f638069651a4d464ba347d213709bf3a3af4c8e",
+  "files": [
+    "package.json",
+    ".claude-plugin/plugin.json",
+    ".codex-plugin/plugin.json",
+    "skills/makaron/references/workflow-catalog.json",
+    "skills/makaron/references/internal-workflows.md",
+    "skills/makaron/references/nsfw.md",
+    "README.md",
+    "skills/makaron/SKILL.md",
+    "bin/makaron.mjs"
+  ],
+  "catalogRevision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
+  "entries": [
+    "long-video-director",
+    "video-edit",
+    "explainer-video",
+    "cinematic-video",
+    "talking-head",
+    "video-translate",
+    "tiktok-video",
+    "multi-angle-video",
+    "photo-to-video"
+  ]
+}

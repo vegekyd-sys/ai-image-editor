@@ -1,0 +1,42 @@
+[
+  {
+    "locale": "zh",
+    "firstRows": [
+      "GPT Image 2.6 Flare默认图片模型，支持 GIF 动画",
+      "GPT Image 2.6 Sunburst精细图片生成，支持 GIF 动画"
+    ],
+    "chosen": "Selected: gpt-image-2.6-flare",
+    "changelog": true,
+    "errors": []
+  },
+  {
+    "locale": "zh-Hant",
+    "firstRows": [
+      "GPT Image 2.6 Flare預設圖片模型，支援 GIF 動畫",
+      "GPT Image 2.6 Sunburst精細圖片生成，支援 GIF 動畫"
+    ],
+    "chosen": "Selected: gpt-image-2.6-flare",
+    "changelog": true,
+    "errors": []
+  },
+  {
+    "locale": "ja",
+    "firstRows": [
+      "GPT Image 2.6 Flare既定の画像モデル。GIF アニメ対応",
+      "GPT Image 2.6 Sunburst精細な画像生成。GIF アニメ対応"
+    ],
+    "chosen": "Selected: gpt-image-2.6-flare",
+    "changelog": true,
+    "errors": []
+  },
+  {
+    "locale": "en",
+    "firstRows": [
+      "GPT Image 2.6 FlareDefault image model with animated GIF",
+      "GPT Image 2.6 SunburstDetailed image generation with animated GIF"
+    ],
+    "chosen": "Selected: gpt-image-2.6-flare",
+    "changelog": true,
+    "errors": []
+  }
+]

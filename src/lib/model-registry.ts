@@ -8,6 +8,8 @@ export interface ModelInfo {
   nameKey: string;
   descKey: string;
   category: ModelCategory;
+  /** Picker order override; automatic routing keeps its own capability priority. */
+  displayPriority?: number;
   speedLabel?: string;
   unavailable?: boolean;
   speedLabelKey?: TranslationKey;
@@ -17,7 +19,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   // Image
   { id: 'mj-v8.2', nameKey: 'model.midjourney.name', descKey: 'model.midjourney.desc', category: 'image', speedLabel: '4 / 24' },
   { id: 'gpt-image-2.6-flare', nameKey: 'model.image26Flare.name', descKey: 'model.image26Flare.desc', category: 'image' },
-  { id: 'gpt-image-2.6-sunburst', nameKey: 'model.image26Sunburst.name', descKey: 'model.image26Sunburst.desc', category: 'image' },
+  { id: 'gpt-image-2.6-sunburst', nameKey: 'model.image26Sunburst.name', descKey: 'model.image26Sunburst.desc', category: 'image', displayPriority: 1 },
   { id: 'wan2.7-image', nameKey: 'model.wan27Image.name', descKey: 'model.wan27Image.desc', category: 'image', speedLabel: '~10s' },
   { id: 'gemini-2.1', nameKey: 'model.gemini21.name', descKey: 'model.gemini21.desc', category: 'image', speedLabel: '1K · 4K' },
   { id: 'gemini', nameKey: 'model.gemini.name', descKey: 'model.gemini.desc', category: 'image', speedLabel: '~15s' },
@@ -50,7 +52,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
 
 export function getImageModels(): ModelInfo[] {
   return MODEL_REGISTRY.filter(m => m.category === 'image').sort((a, b) =>
-    (getImageModelCapability(a.id).autoPriority ?? 100) - (getImageModelCapability(b.id).autoPriority ?? 100));
+    (a.displayPriority ?? getImageModelCapability(a.id).autoPriority ?? 100) - (b.displayPriority ?? getImageModelCapability(b.id).autoPriority ?? 100));
 }
 
 export function getVideoModels(): ModelInfo[] {

@@ -272,6 +272,10 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.gptImage26.title': "GPT Image 2.6 and Animated GIFs",
+  'changelog.gptImage26.item1': "GPT Image 2.6 Flare is the default image model, with Sunburst available for detailed work. Both appear together in the model picker.",
+  'changelog.gptImage26.item2': "Choose image quality and reasoning effort, with low quality and high reasoning as the defaults. The matching 2.6 models replace the 2.5 options, while existing creations remain accessible.",
+  'changelog.gptImage26.item3': "Create animated GIFs and reaction memes from a prompt or reference image. Play, save, and reopen them in the editor, or retrieve the original GIF files through the CLI.",
   'changelog.cliLargeUploads.title': "Upload larger videos from the CLI",
   'changelog.cliLargeUploads.item1': "Upload videos up to 500MB for project editing or analysis, with no need to compress them to 50MB first.",
   'changelog.retakeChoices.title': "More Retake choices, still Kling 4 by default",
@@ -737,9 +741,9 @@ const en = {
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': 'Independent 1–3 image editor with bold, high-resolution results.',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',
-  'model.image26Flare.desc': 'Default image model with animated GIF; experimental SVG',
+  'model.image26Flare.desc': 'Default image model with animated GIF',
   'model.image26Sunburst.name': 'GPT Image 2.6 Sunburst',
-  'model.image26Sunburst.desc': 'Detailed image generation with animated GIF; experimental SVG',
+  'model.image26Sunburst.desc': 'Detailed image generation with animated GIF',
   'model.image25Flare.name': 'GPT Image 2.5 Flare',
   'model.image25Flare.desc': 'Fast generation for everyday creation',
   'model.image25Sunburst.name': 'GPT Image 2.5 Sunburst',

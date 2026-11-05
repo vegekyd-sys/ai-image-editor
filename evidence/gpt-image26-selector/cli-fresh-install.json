@@ -1,0 +1,13 @@
+{
+  "status": "local-tarball-fresh-install-passed",
+  "version": "0.17.9",
+  "sha1": "6f638069651a4d464ba347d213709bf3a3af4c8e",
+  "filesCompared": 9,
+  "chatGifDefault": true,
+  "editGifFlags": true,
+  "bundledSkillGifDefault": true,
+  "npmLatestObserved": "0.17.8",
+  "published": false,
+  "installedAt": "/var/folders/zw/410d508912qcg2gs3rmtc6nh0000gn/T/makaron-cli-gpt26-dP5Scq",
+  "mediaOperationsExecuted": 0
+}

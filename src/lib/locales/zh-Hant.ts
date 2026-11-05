@@ -314,6 +314,10 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.gptImage26.title': "GPT Image 2.6 與 GIF 動畫",
+  'changelog.gptImage26.item1': "預設圖片模型升級為 GPT Image 2.6 Flare，Sunburst 提供精細創作選項；兩款模型在選擇器中相鄰顯示。",
+  'changelog.gptImage26.item2': "可指定畫質與推理檔位，預設使用低畫質、高推理；原 2.5 選項由對應的 2.6 模型接替，既有作品仍可查看。",
+  'changelog.gptImage26.item3': "用一句話或參考圖製作 GIF 動畫與動態貼圖，在編輯器中播放、儲存和重新開啟，也可透過 CLI 取得原始 GIF 檔案。",
   'changelog.cliLargeUploads.title': "CLI 支援更大影片上傳",
   'changelog.cliLargeUploads.item1': "透過 CLI 上傳最大 500MB 的影片用於專案編輯或分析，無需再先壓縮到 50MB。",
   'changelog.retakeChoices.title': "Retake 更多選擇，預設仍是 Kling 4",
@@ -955,9 +959,9 @@ const zhHant = {
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '獨立的 1–3 圖編輯模型，變化大膽並保留高解析度。',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',
-  'model.image26Flare.desc': '預設圖片模型，GIF 動畫 · SVG 試驗',
+  'model.image26Flare.desc': '預設圖片模型，支援 GIF 動畫',
   'model.image26Sunburst.name': 'GPT Image 2.6 Sunburst',
-  'model.image26Sunburst.desc': '精細圖片生成，GIF 動畫 · SVG 試驗',
+  'model.image26Sunburst.desc': '精細圖片生成，支援 GIF 動畫',
   'model.image25Flare.name': 'GPT Image 2.5 Flare',
   'model.image25Flare.desc': '快速生成，適合日常創作',
   'model.image25Sunburst.name': 'GPT Image 2.5 Sunburst',

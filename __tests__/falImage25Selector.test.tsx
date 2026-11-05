@@ -4,9 +4,17 @@ import ModelSelector from '@/components/ModelSelector';
 import { LocaleProvider } from '@/lib/i18n';
 import { IMAGE_MODEL_IDS } from '@/lib/models/types';
 import { getImageModels } from '@/lib/model-registry';
+import { getImageModelCapability } from '@/lib/image-model-capabilities';
 
 afterEach(cleanup);
-describe('Image 2.5 model selector', () => {
+describe('Image 2.6 model selector', () => {
+  it('keeps Flare and Sunburst adjacent without making Sunburst an automatic route', async () => {
+    render(<LocaleProvider><ModelSelector preferredModel="auto" onModelChange={vi.fn()} /></LocaleProvider>);
+    fireEvent.click(screen.getByTestId('model-selector'));
+    const flare = await screen.findByRole('button', { name: /GPT Image 2.6 Flare/ });
+    expect(flare.nextElementSibling?.getAttribute('data-model-id')).toBe('gpt-image-2.6-sunburst');
+    expect(getImageModelCapability('gpt-image-2.6-sunburst').autoPriority).toBeUndefined();
+  });
   it('offers optional 2.6 without changing Auto', async () => {
     const changed = vi.fn();
     render(<LocaleProvider><ModelSelector preferredModel="auto" onModelChange={changed} /></LocaleProvider>);
