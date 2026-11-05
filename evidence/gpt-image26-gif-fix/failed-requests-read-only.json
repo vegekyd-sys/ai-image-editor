@@ -1,0 +1,118 @@
+{
+  "source_project": "167c6efb-2e07-4f82-8571-f0abedbe788b",
+  "method": "GET original accepted fal request IDs only; no private photos downloaded or reposted",
+  "requests": [
+    {
+      "request_id": "01a1aa76-c334-7043-8a7e-a48b1ee3b152",
+      "frame_count": 6,
+      "frame_duration_ms": 180,
+      "provider_http_status": 422,
+      "detail": [
+        {
+          "loc": [
+            "body",
+            "image_size"
+          ],
+          "type": "value_error",
+          "msg": "No supported sheet fits 6 GIF frames at size '1024x1024'. Invalid size '4096x2048'. The longest edge must be less than or equal to 3840. Invalid size '2048x4096'. The longest edge must be less than or equal to 3840."
+        }
+      ]
+    },
+    {
+      "request_id": "01a1aa76-66cf-7be0-ba76-4f62bd5eae7a",
+      "frame_count": 8,
+      "frame_duration_ms": 150,
+      "provider_http_status": 422,
+      "detail": [
+        {
+          "loc": [
+            "body",
+            "image_size"
+          ],
+          "type": "value_error",
+          "msg": "No supported sheet fits 8 GIF frames at size '1008x1008'. Invalid size '4032x2016'. The longest edge must be less than or equal to 3840. Invalid size '2016x4032'. The longest edge must be less than or equal to 3840."
+        }
+      ]
+    },
+    {
+      "request_id": "01a1aa76-66e5-7e31-a2a1-3794cd0840d3",
+      "frame_count": 8,
+      "frame_duration_ms": 130,
+      "provider_http_status": 422,
+      "detail": [
+        {
+          "loc": [
+            "body",
+            "image_size"
+          ],
+          "type": "value_error",
+          "msg": "No supported sheet fits 8 GIF frames at size '1008x1008'. Invalid size '4032x2016'. The longest edge must be less than or equal to 3840. Invalid size '2016x4032'. The longest edge must be less than or equal to 3840."
+        }
+      ]
+    },
+    {
+      "request_id": "01a1aa76-c370-7372-a956-282411818351",
+      "frame_count": 6,
+      "frame_duration_ms": 180,
+      "provider_http_status": 422,
+      "detail": [
+        {
+          "loc": [
+            "body",
+            "image_size"
+          ],
+          "type": "value_error",
+          "msg": "No supported sheet fits 6 GIF frames at size '1024x1024'. Invalid size '4096x2048'. The longest edge must be less than or equal to 3840. Invalid size '2048x4096'. The longest edge must be less than or equal to 3840."
+        }
+      ]
+    },
+    {
+      "request_id": "01a1aa76-c337-7b41-8cb5-b2cdb485eaeb",
+      "frame_count": 6,
+      "frame_duration_ms": 180,
+      "provider_http_status": 422,
+      "detail": [
+        {
+          "loc": [
+            "body",
+            "image_size"
+          ],
+          "type": "value_error",
+          "msg": "No supported sheet fits 6 GIF frames at size '1024x1024'. Invalid size '4096x2048'. The longest edge must be less than or equal to 3840. Invalid size '2048x4096'. The longest edge must be less than or equal to 3840."
+        }
+      ]
+    },
+    {
+      "request_id": "01a1aa77-0476-7280-9f2f-1b26fcf9a54b",
+      "frame_count": 2,
+      "frame_duration_ms": 300,
+      "provider_http_status": 422,
+      "detail": [
+        {
+          "loc": [
+            "body",
+            "image_size"
+          ],
+          "type": "value_error",
+          "msg": "No supported sheet fits 2 GIF frames at size '1024x1024'. Invalid size '4096x2048'. The longest edge must be less than or equal to 3840. Invalid size '2048x4096'. The longest edge must be less than or equal to 3840."
+        }
+      ]
+    },
+    {
+      "request_id": "01a1aa76-671f-7392-983c-3608d6fad8ad",
+      "frame_count": 8,
+      "frame_duration_ms": 140,
+      "provider_http_status": 422,
+      "detail": [
+        {
+          "loc": [
+            "body",
+            "image_size"
+          ],
+          "type": "value_error",
+          "msg": "No supported sheet fits 8 GIF frames at size '1008x1008'. Invalid size '4032x2016'. The longest edge must be less than or equal to 3840. Invalid size '2016x4032'. The longest edge must be less than or equal to 3840."
+        }
+      ]
+    }
+  ]
+}

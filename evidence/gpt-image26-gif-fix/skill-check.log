@@ -1,0 +1,16 @@
+
+> ai-image-editor@0.1.0 check:skill-sync
+> npm run check:agent-startup && npm run check:agent-discovery && node --import tsx scripts/check-skill-routing-evidence.ts
+
+
+> ai-image-editor@0.1.0 check:agent-startup
+> tsx scripts/check-agent-startup-contract.ts
+
+Agent startup contract passed: manifest-only Skill loading, no duplicate full Skill reads.
+
+> ai-image-editor@0.1.0 check:agent-discovery
+> node scripts/build-agent-discovery.mjs --check
+
+External Skill directory: 9 entries, revision f3fbcf20c5b2.
+Checked 1 public Makaron Agent Skills.
+Routing evidence checked: 3/3, media operations 0, current source fingerprint.

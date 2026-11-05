@@ -1,0 +1,24 @@
+{
+  "path": "makaron CLI chat → GPT Image 2.6 Flare native GIF",
+  "preview": "https://ai-image-editor-cusg0fka8-vegekyd-sys-projects.vercel.app",
+  "source_commit": "860ba4d8",
+  "frames": 6,
+  "width": 960,
+  "height": 960,
+  "delay": [
+    180,
+    180,
+    180,
+    180,
+    180,
+    180
+  ],
+  "loop": 0,
+  "unique_frames": 6,
+  "first_take_visual_failed": true,
+  "one_quality_correction": true,
+  "selected_original_file_sha256": "c731bc07a5f0a962a6a4aca64bf8a4f3bad9d3f4a3164ab87cbd94459439d690",
+  "selected_visual_review": "All six frames inspected: no neighboring panel bleed, title and character inside canvas, story readable. Last colored-card state resets to gray at loop boundary, not a perfect seamless visual loop.",
+  "passed_transport": true,
+  "passed_visual": true
+}

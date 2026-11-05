@@ -1,0 +1,23 @@
+{
+  "case": "Original failed 8-frame/explicit 1K edit combination",
+  "path": "makaron CLI chat → default native image generation → GIF",
+  "preview": "https://ai-image-editor-cusg0fka8-vegekyd-sys-projects.vercel.app",
+  "commit": "860ba4d8",
+  "frames": 8,
+  "width": 960,
+  "height": 960,
+  "delay": [
+    160,
+    160,
+    160,
+    160,
+    160,
+    160,
+    160,
+    160
+  ],
+  "loop": 0,
+  "unique_frames": 8,
+  "sha256": "95211aaff9b059b13fd6923d6baf48fba509de8a3585a51110db360c2b13f325",
+  "passed": true
+}

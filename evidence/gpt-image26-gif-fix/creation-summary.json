@@ -1,0 +1,11 @@
+{
+  "runs": 7,
+  "selected_outputs": 6,
+  "native_image_generations": 8,
+  "credits_net": 127,
+  "image_credits": 97,
+  "estimated_supplier_cost_rounding_upper_bound_usd": 0.635,
+  "pricing_method": "Observed runtime model credits, verified markup 2 and $0.01/credit; rounding upper bound, not invoice. Includes rejected visual first take and eight-frame regression; excludes unrelated user project calls.",
+  "prior_session_estimate_usd": 2.29115704,
+  "routing_preflight_text_cost_not_in_this_bound": true
+}
