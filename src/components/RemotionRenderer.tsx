@@ -6,6 +6,7 @@ import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } fro
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
 import type { DesignPayload } from '@/types';
+import { isTimelineDesign } from '@/lib/timeline/design';
 import {
   prepareAndLoadRemotionFontsWithTiming,
   prepareRemotionFontCodeFromBundledCatalog,
@@ -241,8 +242,9 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
     // Resolve video URLs first (mp4/webm → blob for same-origin access)
     const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
     // Then resolve image URLs in both code literals and editable props.
-    const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
-    allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
+    const { code: resolvedCode, props: imageProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
+    const { props: resolvedProps, blobUrls: timelineBlobUrls } = await resolveTimelinePropMedia(design, imageProps, false);
+    allBlobUrls = [...videoBlobUrls, ...imageBlobUrls, ...timelineBlobUrls];
     const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'poster');
 
     const fps = design.animation?.fps || 30;
@@ -289,8 +291,9 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
   try {
     await preloadBabel().catch(() => {});
     const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
-    const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
-    allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
+    const { code: resolvedCode, props: imageProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
+    const { props: resolvedProps, blobUrls: timelineBlobUrls } = await resolveTimelinePropMedia(design, imageProps, false);
+    allBlobUrls = [...videoBlobUrls, ...imageBlobUrls, ...timelineBlobUrls];
     const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'preview-frame');
 
     const fps = design.animation?.fps || 30;
@@ -722,6 +725,34 @@ export default function RemotionRenderer({
 
 // ─── MP4 Export ──────────────────────────────────────────────────────────────
 
+/** Timeline videos keep their media in props.timeline rather than code literals.
+ *  Give poster/frame/export the same same-origin blob sources code literals get. */
+async function resolveTimelinePropMedia(
+  design: DesignPayload,
+  props: Record<string, unknown>,
+  withAudio: boolean,
+): Promise<{ props: Record<string, unknown>; blobUrls: string[] }> {
+  if (!isTimelineDesign(design) || !props.timeline) return { props, blobUrls: [] };
+  const { code: json } = await resolveVideoUrls(JSON.stringify(props.timeline));
+  const timeline = JSON.parse(json) as { clips?: Record<string, { kind?: string; src?: string }> };
+  const blobUrls: string[] = [];
+  if (withAudio) {
+    await Promise.all(Object.values(timeline.clips || {}).map(async (clip) => {
+      if (clip.kind !== 'audio' || !clip.src || !/^https?:\/\//i.test(clip.src)) return;
+      try {
+        const res = await fetch(`/api/proxy-audio?url=${encodeURIComponent(clip.src)}`);
+        if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
+        const blobUrl = URL.createObjectURL(await res.blob());
+        blobUrls.push(blobUrl);
+        clip.src = blobUrl;
+      } catch (e) {
+        console.warn('[resolveTimelinePropMedia] audio stays remote:', e);
+      }
+    }));
+  }
+  return { props: { ...props, timeline }, blobUrls };
+}
+
 // Session-level cache: video URL → blob URL (avoids re-downloading on timeline switch)
 const videoBlobCache = new Map<string, string>();
 
@@ -826,7 +857,8 @@ export async function exportDesignVideo(
   // Pre-fetch remote video URLs → blob URLs (renderMediaOnWeb requires same-origin)
   const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
   // Pre-fetch remote image URLs → blob URLs (same-origin, native browser handling)
-  const { code: imageResolved, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
+  const { code: imageResolved, props: imageProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
+  const { props: resolvedProps, blobUrls: timelineBlobUrls } = await resolveTimelinePropMedia(design, imageProps, true);
   // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
   const { code: resolvedCode, blobUrls: audioBlobUrls } = await resolveAudioUrls(imageResolved);
   const Component = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'web-export');
@@ -854,6 +886,6 @@ export async function exportDesignVideo(
 
     return result.getBlob();
   } finally {
-    [...videoBlobUrls, ...imageBlobUrls, ...audioBlobUrls].forEach(url => URL.revokeObjectURL(url));
+    [...videoBlobUrls, ...imageBlobUrls, ...audioBlobUrls, ...timelineBlobUrls].forEach(url => URL.revokeObjectURL(url));
   }
 }

@@ -127,10 +127,17 @@ interface ImageCanvasProps {
   onVideoRetakeChange?: (range: VideoRetakeRange) => void;
   videoSeekRequest?: { time: number; token: number };
   /** Called after the current video frame is captured from the playing element. */
+  /** Timeline videos: receive the design Player to drive playhead/seek. */
+  onDesignPlayer?: (player: PlayerRef | null) => void;
+  /** Timeline videos: selection/transform layer rendered over the design Player. */
+  designCanvasOverlay?: React.ReactNode;
+  /** Timeline videos show their own playhead in the dock instead of the seek bar. */
+  hideDesignSeekBar?: boolean;
 }
 
 export default function ImageCanvas({
   projectId,
+  onDesignPlayer, designCanvasOverlay, hideDesignSeekBar,
   designSnapshotId,
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
@@ -1574,6 +1581,7 @@ export default function ImageCanvas({
               onContentSize={onDesignContentSize}
               onPlayerRef={(ref) => {
                 remotionRef.current = ref;
+                onDesignPlayer?.(ref);
                 setRemotionPlayer(ref);
                 setRemotionPlaying(ref?.isPlaying() ?? false);
                 if (editableFields?.length) setDesignPlayerRef(ref);
@@ -1632,7 +1640,7 @@ export default function ImageCanvas({
             )}
 
             {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag */}
-            {currentDesign?.animation && (
+            {currentDesign?.animation && !hideDesignSeekBar && (
               <div
                 data-remotion-seek
                 className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
@@ -1667,6 +1675,7 @@ export default function ImageCanvas({
                 </div>
               </div>
             )}
+            {designCanvasOverlay}
             {/* Edit mode gesture shield div removed — handled by capture-phase on outer container */}
             {/* Editable design overlay */}
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (

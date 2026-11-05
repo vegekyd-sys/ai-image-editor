@@ -15,6 +15,7 @@ export interface AgentStreamCallbacks {
   onAnimationTask?: (taskId: string, prompt: string, imageUrls?: string[], model?: string) => void;
   onVideoSnapshot?: (snapshotId: string, taskId: string, videoMeta: import('@/types').VideoMeta) => void;
   onMusicTask?: (taskId: string) => void;
+  onTimelineTx?: (event: import('@/components/timeline/useTimelineEditor').TimelineTxEvent & { label?: string }) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
   onCaptureFrame?: (frame: number, uploadPath: string, captureId: string) => void;
   onPreviewFrame?: (workspaceUrl: string) => void;
@@ -105,6 +106,7 @@ function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: Agen
     case 'animation_task': callbacks.onAnimationTask?.(data.taskId, data.prompt || '', data.imageUrls, data.model); break;
     case 'video_snapshot': callbacks.onVideoSnapshot?.(data.snapshotId, data.taskId, data.videoMeta); break;
     case 'music_task': callbacks.onMusicTask?.(data.taskId); break;
+    case 'timeline_tx': callbacks.onTimelineTx?.(data as Parameters<NonNullable<AgentStreamCallbacks['onTimelineTx']>>[0]); break;
     case 'image_analyzed': callbacks.onImageAnalyzed?.(data.imageIndex); break;
     case 'preview_frame_captured': callbacks.onPreviewFrame?.(data.workspaceUrl); break;
     case 'nsfw_detected': callbacks.onNsfwDetected?.(); break;
@@ -347,6 +349,9 @@ async function streamAgentAttempt(
           }
           case 'music_task':
             callbacks.onMusicTask?.((event as { taskId: string }).taskId);
+            break;
+          case 'timeline_tx':
+            callbacks.onTimelineTx?.(event as unknown as Parameters<NonNullable<AgentStreamCallbacks['onTimelineTx']>>[0]);
             break;
           case 'image_analyzed':
             callbacks.onImageAnalyzed?.(event.imageIndex);

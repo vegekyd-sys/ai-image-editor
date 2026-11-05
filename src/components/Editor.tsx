@@ -11,6 +11,11 @@ import ImageCanvas from '@/components/ImageCanvas';
 import { getEditorCanvasKey } from '@/lib/editor/canvas-key';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
+import TimelineDock from './timeline/TimelineDock';
+import TimelineCanvasOverlay from './timeline/TimelineCanvasOverlay';
+import { useTimelineEditor } from './timeline/useTimelineEditor';
+import { getTimelineDoc } from '@/lib/timeline/design';
+import { timelineDuration } from '@/lib/timeline/reducer';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
 import CreditPopup from '@/components/CreditPopup';
@@ -325,7 +330,8 @@ export default function Editor({
   const [selectedEditableFieldId, _setSelectedEditableFieldId] = useState<string | null>(null);
   const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
   // Mobile keyboard offset for text editor panel
-  const editorKbInset = useVisualViewportInset(!isDesktop && Boolean(editingDesignFieldId));
+  const [timelineTyping, setTimelineTyping] = useState(false);
+  const editorKbInset = useVisualViewportInset(!isDesktop && (Boolean(editingDesignFieldId) || timelineTyping));
   const [visibleEditableIds, _setVisibleEditableIds] = useState<string[]>([]);
   const handleVisibleEditableFields = useCallback((ids: string[]) => {
     _setVisibleEditableIds(prev => {
@@ -638,6 +644,21 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const isViewingDesign = contentType === 'design';
   const currentDesignEditables = currentDesignSnap?.design?.editables ?? [];
   const currentDesignProps = (currentDesignSnap?.design?.props || {}) as Record<string, unknown>;
+  // Timeline videos: a design whose props carry a timeline doc (MTP v1).
+  const currentTimelineDoc = useMemo(
+    () => (isViewingDesign ? getTimelineDoc(currentDesignSnap?.design) : null),
+    [isViewingDesign, currentDesignSnap?.design],
+  );
+  const timelineTxRef = useRef<((event: import('./timeline/useTimelineEditor').TimelineTxEvent) => void) | null>(null);
+  const timelineEditor = useTimelineEditor({
+    projectId,
+    snapshot: currentDesignSnap,
+    doc: currentTimelineDoc,
+    setSnapshots,
+    isAgentActive,
+    readOnly,
+  });
+  timelineTxRef.current = timelineEditor.applyRemoteTx;
   const editingDesignField = editingDesignFieldId
     ? currentDesignEditables.find(f => f.id === editingDesignFieldId) ?? null
     : null;
@@ -1720,6 +1741,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         setCreditBalance(balance);
         setCreditExhausted(true);
       },
+      onTimelineTx: (event) => timelineTxRef.current?.(event),
       onMusicTaskCreated: (taskId) => {
         setMusicTaskId(taskId);
         musicPollingRef.current = true;
@@ -1839,6 +1861,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
       onCleanup: () => { setIsAgentActive(false); agentDisconnect(); },
       hasBackgroundTaskRef,
+      onTimelineTx: (event) => timelineTxRef.current?.(event),
     });
 
     agentReconnect(reconnectCallbacks);
@@ -3829,6 +3852,22 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 onVisibleEditableFields={handleVisibleEditableFields}
                 onDesignContentSize={handleDesignContentSize}
                 activeTrimFieldId={editingDesignField?.type === 'video' ? editingDesignField.id : null}
+                onDesignPlayer={currentTimelineDoc ? timelineEditor.setPlayer : undefined}
+                hideDesignSeekBar={!!currentTimelineDoc}
+                designCanvasOverlay={currentTimelineDoc ? (
+                  <TimelineCanvasOverlay
+                    doc={currentTimelineDoc}
+                    time={timelineEditor.time}
+                    selectedId={timelineEditor.selectedId}
+                    agentClipId={timelineEditor.followPaused ? null : timelineEditor.agentClipId}
+                    readOnly={readOnly}
+                    onSelect={(id) => { timelineEditor.select(id); if (id) timelineEditor.pause(); }}
+                    onEditText={(id) => { timelineEditor.select(id); timelineEditor.pause(); timelineEditor.focusInput(); }}
+                    onBeginGesture={timelineEditor.beginGesture}
+                    onOp={timelineEditor.dispatch}
+                    onInteract={timelineEditor.userInteracted}
+                  />
+                ) : undefined}
               />
             )}
 
@@ -4093,8 +4132,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
                   snapshotCount={snapshots.length}
-                  notification={creditExhausted ? { text: 'Credits exhausted · Top up' } : pendingNotification}
-                  onSeeNotification={creditExhausted ? () => setCreditPopupOpen(true) : handleSeeNotification}
+                  notification={creditExhausted ? { text: 'Credits exhausted · Top up' } : timelineEditor.followPaused ? { text: t('timeline.followPaused') } : pendingNotification}
+                  onSeeNotification={creditExhausted ? () => setCreditPopupOpen(true) : timelineEditor.followPaused ? timelineEditor.resumeFollow : handleSeeNotification}
                   onAnimate={undefined}
                   hasVideo={hasVideo}
                 />
@@ -4207,6 +4246,30 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       />
                     </DesignEditorFrame>
                   </div>
+                ) : currentTimelineDoc ? (
+                  <div
+                    onFocusCapture={(e) => { if ((e.target as HTMLElement).tagName === 'INPUT') setTimelineTyping(true); }}
+                    onBlurCapture={() => setTimelineTyping(false)}
+                    style={!isDesktop && timelineTyping && editorKbInset > 0 ? { transform: `translateY(-${editorKbInset}px)`, transition: 'transform 0.1s ease-out', position: 'relative', zIndex: 60, background: '#000' } : undefined}
+                  >
+                  <TimelineDock
+                    doc={currentTimelineDoc}
+                    duration={timelineDuration(currentTimelineDoc)}
+                    time={timelineEditor.time}
+                    playing={timelineEditor.playing}
+                    selectedId={timelineEditor.selectedId}
+                    agentClipId={timelineEditor.followPaused ? null : timelineEditor.agentClipId}
+                    isDesktop={isDesktop}
+                    canUndo={timelineEditor.canUndo}
+                    focusToken={timelineEditor.focusToken}
+                    readOnly={readOnly}
+                    onSelect={(id) => { timelineEditor.userInteracted(); timelineEditor.select(id); if (id) timelineEditor.pause(); }}
+                    onSeek={(time) => { timelineEditor.userInteracted(); timelineEditor.pause(); timelineEditor.seek(time); }}
+                    onUndo={timelineEditor.undo}
+                    onBeginGesture={timelineEditor.beginGesture}
+                    onOp={timelineEditor.dispatch}
+                  />
+                  </div>
                 ) : isViewingDesign && currentDesignEditables.length > 0 ? (
                   <DesignEditPanel
                     editables={visibleEditableIds.length > 0
@@ -4218,6 +4281,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     onSelectField={setSelectedEditableFieldId}
                     onStartEdit={(fieldId) => setEditingDesignFieldId(prev => prev === fieldId ? null : fieldId)}
                     isDesktop={isDesktop}
+                    legacyHint={currentDesignSnap?.design?.animation ? t('timeline.legacyHint') : undefined}
                   />
                 ) : (
                   <TipsBar

@@ -1,17 +1,19 @@
 'use client';
 
-// Timeline dock prototype (rev 2). Lives in the Editor bottom-bar slot that
-// DesignEditPanel uses today. Rev 2 changes after review:
-// - real per-frame filmstrips (VideoRetakeTimeline sampling approach)
-// - taller lanes, only non-empty tracks, horizontal scroll + zoom
-// - mobile: fixed centre playhead, scrub by swiping (CapCut convention)
-// - no popup editor: an inline inspector row edits the selected element
+// Timeline dock for timeline videos. Occupies the Editor bottom-bar slot that
+// DesignEditPanel uses for classic compositions. Vocabulary is reused from
+// existing UI: pill gradients, fuchsia selection + trim handles
+// (DesignVideoTrimEditor), liquid icon buttons, VideoRetakeTimeline playhead.
+// Desktop: scroll + zoom, moving playhead. Mobile: fixed centre playhead, swipe
+// to scrub. No popup editor: the bottom row turns into the selected element's
+// inline editor; position/size is edited on the canvas.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { Clip, TimelineDoc, TimelineOp, TrackKind } from './prototype-doc';
-import { clipsOnTrack } from './prototype-doc';
-import { FRAME_STEP, useFilmstrip } from './useFilmstrip';
+import { useLocale } from '@/lib/i18n';
+import { clipsOnTrack, newClipId } from '@/lib/timeline/reducer';
+import type { Clip, TimelineDoc, TimelineOp, TrackKind } from '@/lib/timeline/types';
+import { FRAME_STEP, useVideoFilmstrip } from './useVideoFilmstrip';
 
-/** Mobile slot height for timeline videos (pills/tips keep MOBILE_EDITOR_SLOT_HEIGHT = 120.5). */
+/** Mobile slot height for timeline videos (tips/pills keep MOBILE_EDITOR_SLOT_HEIGHT). */
 export const TIMELINE_SLOT_HEIGHT = 192;
 
 const LANE: Record<'desktop' | 'mobile', Record<TrackKind, number>> = {
@@ -26,8 +28,7 @@ function fmt(t: number) {
   return `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
 }
 
-// ── icons (stroke style matches the editor top bar) ──
-const I = {
+const ICON = {
   undo: <path d="M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />,
   split: <><path d="M12 3v18" /><path d="M7 8 4 12l3 4M17 8l3 4-3 4" /></>,
   trash: <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />,
@@ -64,36 +65,37 @@ function Spinner({ size = 12 }: { size?: number }) {
   );
 }
 
-/** Frame tiles for a video clip, honouring sourceIn so trims show the right frames. */
 function Filmstrip({ clip, pps, height }: { clip: Clip; pps: number; height: number }) {
-  const frames = useFilmstrip(clip.src);
+  const videoSrc = clip.kind === 'video' ? clip.src : undefined;
+  const frames = useVideoFilmstrip(videoSrc);
+  const still = clip.kind === 'image' ? clip.src : clip.kind === 'video' ? clip.poster : undefined;
+  const sourceIn = clip.kind === 'video' ? clip.sourceIn ?? 0 : 0;
   const tileW = Math.max(30, Math.round(height * 9 / 16));
-  const width = clip.duration * pps;
-  const count = Math.max(1, Math.ceil(width / tileW));
+  const count = Math.max(1, Math.ceil((clip.duration * pps) / tileW));
   return (
     <div className="absolute inset-0 flex overflow-hidden">
-      {Array.from({ length: count }, (_, i) => {
-        const t = (clip.sourceIn ?? 0) + (i * tileW + tileW / 2) / pps;
+      {Array.from({ length: Math.min(count, 400) }, (_, i) => {
+        const t = sourceIn + (i * tileW + tileW / 2) / pps;
         const f = frames.length ? frames[Math.min(frames.length - 1, Math.floor(t / FRAME_STEP))] : undefined;
-        const src = f ?? clip.poster;
+        const src = f ?? still;
         return (
-          <div key={i} className="h-full flex-shrink-0" style={{ width: tileW, background: src ? `url(${src}) center / cover` : 'rgba(255,255,255,0.06)', boxShadow: 'inset -1px 0 0 rgba(0,0,0,0.35)' }} />
+          <div key={i} className="h-full flex-shrink-0" style={{ width: tileW, background: src ? `url("${src}") center / cover` : 'rgba(255,255,255,0.06)', boxShadow: 'inset -1px 0 0 rgba(0,0,0,0.35)' }} />
         );
       })}
     </div>
   );
 }
 
+const WAVE = Array.from({ length: 160 }, (_, i) => Math.round((0.2 + Math.abs(Math.sin(i * 0.61 + 3) * Math.cos(i * 0.23)) * 0.8) * 100) / 100);
 function Waveform() {
-  const bars = Array.from({ length: 160 }, (_, i) => Math.round((0.2 + Math.abs(Math.sin(i * 0.61 + 3) * Math.cos(i * 0.23)) * 0.8) * 100) / 100);
   return (
-    <svg className="absolute inset-x-0 w-full" style={{ top: 3, height: 'calc(100% - 6px)' }} preserveAspectRatio="none" viewBox="0 0 160 10">
-      {bars.map((h, i) => <rect key={i} x={i + 0.25} y={5 - h * 5} width={0.5} height={h * 10} rx={0.25} fill="rgba(255,255,255,0.28)" />)}
+    <svg className="absolute inset-x-0 w-full" style={{ top: 3, height: 'calc(100% - 6px)' }} preserveAspectRatio="none" viewBox="0 0 160 10" aria-hidden="true">
+      {WAVE.map((h, i) => <rect key={i} x={i + 0.25} y={5 - h * 5} width={0.5} height={h * 10} rx={0.25} fill="rgba(255,255,255,0.28)" />)}
     </svg>
   );
 }
 
-interface TimelineDockProps {
+export interface TimelineDockProps {
   doc: TimelineDoc;
   duration: number;
   time: number;
@@ -103,29 +105,32 @@ interface TimelineDockProps {
   isDesktop: boolean;
   canUndo: boolean;
   focusToken: number;
+  readOnly?: boolean;
   onSelect: (id: string | null) => void;
   onSeek: (time: number) => void;
   onUndo: () => void;
-  onDragStart: () => void;
+  onBeginGesture: () => void;
   onOp: (op: TimelineOp) => void;
 }
 
 type DragState = { id: string; mode: 'move' | 'trim-l' | 'trim-r'; x0: number; start0: number; dur0: number; in0: number; moved: boolean };
 
 export default function TimelineDock(props: TimelineDockProps) {
-  const { doc, duration, time, playing, selectedId, agentClipId, isDesktop, canUndo, focusToken, onSelect, onSeek, onUndo, onDragStart, onOp } = props;
+  const { doc, duration, time, playing, selectedId, agentClipId, isDesktop, canUndo, focusToken, readOnly, onSelect, onSeek, onUndo, onBeginGesture, onOp } = props;
+  const { t } = useLocale();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const drag = useRef<DragState | null>(null);
   const tap = useRef<number | null>(null);
+  const [mainDragDx, setMainDragDx] = useState<{ id: string; dx: number } | null>(null);
   const [viewW, setViewW] = useState(600);
   const [zoom, setZoom] = useState(1);
   const lanes = LANE[isDesktop ? 'desktop' : 'mobile'];
 
   const contentEnd = Math.max(duration, ...Object.values(doc.clips).map(c => c.start + c.duration));
   const fitPps = (viewW - 32) / Math.max(contentEnd, 1);
-  const pps = isDesktop ? Math.max(64, fitPps) * zoom : 58 * zoom;
-  const pad = isDesktop ? 16 : viewW / 2; // mobile: playhead fixed in the centre
+  const pps = isDesktop ? Math.max(48, fitPps) * zoom : 58 * zoom;
+  const pad = isDesktop ? 16 : viewW / 2;
   const contentW = contentEnd * pps + pad * 2;
 
   useEffect(() => {
@@ -137,7 +142,6 @@ export default function TimelineDock(props: TimelineDockProps) {
     return () => ro.disconnect();
   }, []);
 
-  // Keep the playhead in view (desktop) / under the fixed centre line (mobile).
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el || drag.current) return;
@@ -154,7 +158,7 @@ export default function TimelineDock(props: TimelineDockProps) {
   const onScroll = () => {
     if (isDesktop || playing) return;
     const left = scrollRef.current!.scrollLeft;
-    if (Math.abs(left - time * pps) < 1) return; // our own sync, not a user swipe
+    if (Math.abs(left - time * pps) < 1) return; // our own sync, not a swipe
     onSeek(Math.min(duration, left / pps));
   };
 
@@ -165,37 +169,51 @@ export default function TimelineDock(props: TimelineDockProps) {
 
   const onClipPointerDown = (e: React.PointerEvent, clip: Clip, mode: DragState['mode']) => {
     e.stopPropagation();
-    if (!isDesktop && mode === 'move' && clip.id !== selectedId) { tap.current = e.clientX; return; } // mobile: tap selects on pointerup; swipes still scrub (browser cancels the pointer)
+    if (readOnly || (!isDesktop && mode === 'move' && clip.id !== selectedId)) { tap.current = e.clientX; return; }
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    drag.current = { id: clip.id, mode, x0: e.clientX, start0: clip.start, dur0: clip.duration, in0: clip.sourceIn ?? 0, moved: false };
+    drag.current = { id: clip.id, mode, x0: e.clientX, start0: clip.start, dur0: clip.duration, in0: clip.kind === 'video' || clip.kind === 'audio' ? clip.sourceIn ?? 0 : 0, moved: false };
   };
+
+  const isMain = (clip: Clip) => doc.tracks.find(tr => tr.id === clip.trackId)?.kind === 'main';
+  const r1 = (v: number) => Math.round(v * 100) / 100;
 
   const onClipPointerMove = (e: React.PointerEvent, clip: Clip) => {
     const d = drag.current;
     if (!d || d.id !== clip.id || !e.buttons) return;
     if (!d.moved && Math.abs(e.clientX - d.x0) < 3) return;
-    if (!d.moved) { d.moved = true; onDragStart(); }
+    if (!d.moved) { d.moved = true; onBeginGesture(); }
     const dt = (e.clientX - d.x0) / pps;
-    const isMain = clip.trackId === 't-main';
-    const r = (v: number) => Math.round(v * 10) / 10;
-    if (d.mode === 'move' && !isMain && clip.kind !== 'audio') {
-      onOp({ op: 'update', id: clip.id, patch: { start: Math.max(0, r(d.start0 + dt)) } });
+    const hasSource = clip.kind === 'video' || clip.kind === 'audio';
+    if (d.mode === 'move') {
+      if (isMain(clip)) setMainDragDx({ id: clip.id, dx: e.clientX - d.x0 });
+      else onOp({ op: 'update', id: clip.id, patch: { start: Math.max(0, r1(d.start0 + dt)) } });
     } else if (d.mode === 'trim-r') {
-      onOp({ op: 'update', id: clip.id, patch: { duration: Math.max(0.5, r(d.dur0 + dt)) } });
-      onSeek(clip.start + Math.max(0.5, d.dur0 + dt) - 0.04);
-    } else if (d.mode === 'trim-l') {
-      const delta = Math.min(d.dur0 - 0.5, Math.max(-d.in0, dt));
-      const patch: Partial<Clip> = { duration: r(d.dur0 - delta), sourceIn: Math.max(0, d.in0 + delta) };
-      if (!isMain) patch.start = Math.max(0, d.start0 + delta);
+      let next = Math.max(0.2, d.dur0 + dt);
+      if (clip.kind === 'video' && clip.sourceDuration) next = Math.min(next, clip.sourceDuration - (clip.sourceIn ?? 0));
+      onOp({ op: 'update', id: clip.id, patch: { duration: r1(next) } });
+      onSeek(clip.start + next - 0.04);
+    } else {
+      const delta = Math.min(d.dur0 - 0.2, Math.max(hasSource ? -d.in0 : -d.start0, dt));
+      const patch: Record<string, unknown> = { duration: r1(d.dur0 - delta) };
+      if (hasSource) patch.sourceIn = r1(Math.max(0, d.in0 + delta));
+      if (!isMain(clip)) patch.start = r1(Math.max(0, d.start0 + delta));
       onOp({ op: 'update', id: clip.id, patch });
-      onSeek(isMain ? clip.start : d.start0 + delta);
+      onSeek(isMain(clip) ? clip.start : d.start0 + delta);
     }
   };
 
   const onClipPointerUp = (e: React.PointerEvent, clip: Clip) => {
     const d = drag.current;
     drag.current = null;
-    if (d?.moved) return;
+    if (d?.moved) {
+      if (d.mode === 'move' && isMain(clip) && mainDragDx) {
+        // Drop position decides the new order; the reducer re-packs the main track.
+        const target = d.start0 + mainDragDx.dx / pps;
+        onOp({ op: 'update', id: clip.id, patch: { start: Math.max(0, target + (mainDragDx.dx > 0 ? clip.duration : 0)) } });
+      }
+      setMainDragDx(null);
+      return;
+    }
     if (!d && (tap.current === null || Math.abs(e.clientX - tap.current) > 6)) { tap.current = null; return; }
     tap.current = null;
     onSelect(clip.id);
@@ -203,97 +221,101 @@ export default function TimelineDock(props: TimelineDockProps) {
     if (!inside) onSeek(clip.start + Math.min(0.6, clip.duration / 2));
   };
 
-  const visibleTracks = doc.tracks.filter(t => t.kind === 'main' || clipsOnTrack(doc, t.id).length > 0);
+  const visibleTracks = doc.tracks.filter(tr => !tr.hidden && (tr.kind === 'main' || clipsOnTrack(doc, tr.id).length > 0));
   const selected = selectedId ? doc.clips[selectedId] : null;
   const laneGap = isDesktop ? 6 : 3;
   const radius = isDesktop ? 10 : 7;
+  const labelOf = (clip: Clip) => clip.label || t(`timeline.clip.${clip.kind}` as 'timeline.clip.video');
 
-  // ── inline inspector (replaces the floating DesignEditorFrame) ──
-  const segIndex = selected?.segments?.findIndex(s => time - selected.start >= s.start && time - selected.start < s.end) ?? -1;
-  const seg = selected?.segments && segIndex >= 0 ? selected.segments[segIndex] : selected?.segments?.[0];
+  // ── inline inspector ──
+  const segIndex = selected?.kind === 'caption' ? selected.segments.findIndex(s => time - selected.start >= s.start && time - selected.start < s.end) : -1;
+  const seg = selected?.kind === 'caption' ? (segIndex >= 0 ? selected.segments[segIndex] : selected.segments[0]) : undefined;
   const splitAtPlayhead = () => {
-    if (!selected || selected.kind !== 'video') return;
+    if (!selected || selected.kind === 'pending') return;
     const off = time - selected.start;
-    if (off < 0.3 || off > selected.duration - 0.3) return;
-    onDragStart();
-    onOp({ op: 'update', id: selected.id, patch: { duration: off } });
-    onOp({ op: 'insert', clip: { ...selected, id: `${selected.id}-${Date.now().toString(36)}`, start: selected.start + off, duration: selected.duration - off, sourceIn: (selected.sourceIn ?? 0) + off } });
+    if (off < 0.2 || off > selected.duration - 0.2) return;
+    onBeginGesture();
+    onOp({ op: 'split', id: selected.id, at: time, newId: newClipId(selected.kind[0]) });
   };
-  const remove = () => { if (!selected) return; onDragStart(); onOp({ op: 'remove', id: selected.id }); onSelect(null); };
+  const remove = () => { if (!selected) return; onBeginGesture(); onOp({ op: 'remove', id: selected.id }); onSelect(null); };
   const textInputClass = `flex-1 min-w-0 h-9 rounded-xl px-3 outline-none ${isDesktop ? 'text-[14px]' : 'text-[16px]'}`;
   const textInputStyle: React.CSSProperties = { background: 'rgba(255,255,255,0.06)', border: '0.5px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.92)', caretColor: '#d946ef' };
+  const canSplit = !!selected && selected.kind !== 'pending' && time - selected.start > 0.2 && selected.start + selected.duration - time > 0.2;
 
   let inspector: React.ReactNode;
-  if (!selected) {
+  if (!selected || readOnly) {
     inspector = (
       <>
         <span className="text-[13px] tabular-nums" style={{ color: 'rgba(255,255,255,0.72)' }}>{fmt(time)}</span>
         <span className="text-[13px] tabular-nums" style={{ color: 'rgba(255,255,255,0.3)' }}>/ {fmt(duration)}</span>
         <div className="flex-1" />
-        {isDesktop && <IconButton icon={I.minus} label="缩小" onClick={() => setZoom(z => Math.max(0.5, z / 1.4))} />}
-        {isDesktop && <IconButton icon={I.plus} label="放大" onClick={() => setZoom(z => Math.min(6, z * 1.4))} />}
-        <IconButton icon={I.undo} label="撤销" onClick={onUndo} disabled={!canUndo} />
+        {isDesktop && <IconButton icon={ICON.minus} label={t('timeline.zoomOut')} onClick={() => setZoom(z => Math.max(0.5, z / 1.4))} />}
+        {isDesktop && <IconButton icon={ICON.plus} label={t('timeline.zoomIn')} onClick={() => setZoom(z => Math.min(8, z * 1.4))} />}
+        {!readOnly && <IconButton icon={ICON.undo} label={t('timeline.undo')} onClick={onUndo} disabled={!canUndo} />}
       </>
     );
   } else if (selected.kind === 'text') {
     inspector = (
       <>
-        <input ref={inputRef} aria-label="文字内容" className={textInputClass} style={textInputStyle} value={selected.text ?? ''}
-          onFocus={onDragStart}
+        <input ref={inputRef} aria-label={t('timeline.textInput')} className={textInputClass} style={textInputStyle} value={selected.text}
+          onFocus={onBeginGesture}
           onChange={e => onOp({ op: 'update', id: selected.id, patch: { text: e.target.value } })}
           onKeyDown={e => { if (e.key === 'Enter') onSelect(null); }} />
-        <IconButton icon={I.trash} label="删除" onClick={remove} />
-        <IconButton icon={I.check} label="完成" onClick={() => onSelect(null)} accent />
+        <IconButton icon={ICON.trash} label={t('timeline.delete')} onClick={remove} />
+        <IconButton icon={ICON.check} label={t('timeline.done')} onClick={() => onSelect(null)} accent />
       </>
     );
   } else if (selected.kind === 'caption' && seg) {
     inspector = (
       <>
-        <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: 'rgba(255,255,255,0.38)' }}>{Math.max(0, segIndex) + 1}/{selected.segments!.length}</span>
-        <input ref={inputRef} aria-label="字幕内容" className={textInputClass} style={textInputStyle} value={seg.text}
-          onFocus={onDragStart}
-          onChange={e => onOp({ op: 'update', id: selected.id, patch: { segments: selected.segments!.map(s => s.id === seg.id ? { ...s, text: e.target.value } : s) } })}
+        <span className="text-[11px] tabular-nums flex-shrink-0" style={{ color: 'rgba(255,255,255,0.38)' }}>{t('timeline.captionIndex', String(Math.max(0, segIndex) + 1), String(selected.segments.length))}</span>
+        <input ref={inputRef} aria-label={t('timeline.captionInput')} className={textInputClass} style={textInputStyle} value={seg.text}
+          onFocus={onBeginGesture}
+          onChange={e => onOp({ op: 'update', id: selected.id, patch: { segments: selected.segments.map(s => (s.id === seg.id ? { ...s, text: e.target.value } : s)) } })}
           onKeyDown={e => { if (e.key === 'Enter') onSelect(null); }} />
-        <IconButton icon={I.check} label="完成" onClick={() => onSelect(null)} accent />
+        <IconButton icon={ICON.trash} label={t('timeline.delete')} onClick={remove} />
+        <IconButton icon={ICON.check} label={t('timeline.done')} onClick={() => onSelect(null)} accent />
       </>
     );
   } else {
-    const isPip = !!selected.box;
+    const hasBox = 'box' in selected && !!selected.box;
+    const detail = selected.kind === 'pending'
+      ? t('timeline.generating', String(Math.round((selected.progress ?? 0) * 100)))
+      : hasBox ? t('timeline.dragHint')
+        : (selected.kind === 'video' || selected.kind === 'audio') && selected.sourceIn ? t('timeline.sourceFrom', selected.sourceIn.toFixed(1)) : '';
     inspector = (
       <>
         <div className="min-w-0 flex flex-col leading-tight">
-          <span className="text-[13px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.86)' }}>{selected.label}</span>
+          <span className="text-[13px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.86)' }}>{labelOf(selected)}</span>
           <span className="text-[11px] tabular-nums truncate" style={{ color: 'rgba(255,255,255,0.38)' }}>
-            {selected.kind === 'pending'
-              ? `生成中 ${Math.round((selected.progress ?? 0) * 100)}%`
-              : `${selected.duration.toFixed(1)}s${isPip ? ' · 在画面上拖动、拉角缩放' : selected.kind === 'video' ? ` · 素材从 ${(selected.sourceIn ?? 0).toFixed(1)}s 开始` : ''}`}
+            {`${selected.duration.toFixed(1)}s`}{detail ? ` · ${detail}` : ''}
           </span>
         </div>
         <div className="flex-1" />
-        {selected.kind === 'video' && !isPip && <IconButton icon={I.split} label="在播放头处分割" onClick={splitAtPlayhead} />}
-        <IconButton icon={I.trash} label="删除" onClick={remove} />
-        <IconButton icon={I.check} label="完成" onClick={() => onSelect(null)} accent />
+        {selected.kind !== 'pending' && <IconButton icon={ICON.split} label={t('timeline.split')} onClick={splitAtPlayhead} disabled={!canSplit} />}
+        <IconButton icon={ICON.trash} label={t('timeline.delete')} onClick={remove} />
+        <IconButton icon={ICON.check} label={t('timeline.done')} onClick={() => onSelect(null)} accent />
       </>
     );
   }
 
-  const tracksHeight = (isDesktop ? RULER + 4 : 0) + visibleTracks.reduce((h, t) => h + lanes[t.kind], 0) + laneGap * (visibleTracks.length - 1);
+  const tracksHeight = (isDesktop ? RULER + 4 : 0) + visibleTracks.reduce((h, tr) => h + lanes[tr.kind], 0) + laneGap * (visibleTracks.length - 1);
 
   return (
-    <div data-testid="timeline-dock" className="flex flex-col" style={isDesktop ? undefined : { height: TIMELINE_SLOT_HEIGHT }}>
+    <div data-testid="timeline-dock" role="region" aria-label={t('timeline.aria')} className="flex flex-col" style={isDesktop ? undefined : { height: TIMELINE_SLOT_HEIGHT }}>
       <div className="relative flex-1 min-h-0">
         <div
           ref={scrollRef}
           onScroll={onScroll}
           className="h-full hide-scrollbar overflow-x-auto overflow-y-auto"
           style={{ overscrollBehaviorX: 'contain' }}
-          onWheel={(e) => { if (isDesktop && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setZoom(z => Math.min(6, Math.max(0.5, z * (e.deltaY < 0 ? 1.12 : 0.89)))); } }}
+          onWheel={(e) => { if (isDesktop && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setZoom(z => Math.min(8, Math.max(0.5, z * (e.deltaY < 0 ? 1.12 : 0.89)))); } }}
         >
           <div
             className="relative select-none"
             style={{ width: contentW, height: tracksHeight + 10, paddingTop: isDesktop ? 0 : 6 }}
             onPointerDown={(e) => {
-              if (!isDesktop) return; // mobile scrubs by scrolling
+              if (!isDesktop) return;
               onSelect(null);
               onSeek(timeAt(e.clientX));
               (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -302,8 +324,8 @@ export default function TimelineDock(props: TimelineDockProps) {
           >
             {isDesktop && (
               <div className="relative mb-1" style={{ height: RULER, marginLeft: pad }}>
-                {Array.from({ length: Math.floor(contentEnd) + 1 }, (_, s) => (
-                  <span key={s} className="absolute top-1 text-[10px] leading-none tabular-nums -translate-x-1/2" style={{ left: s * pps, color: 'rgba(255,255,255,0.3)' }}>{s === 0 ? '0' : `${s}s`}</span>
+                {Array.from({ length: Math.floor(contentEnd) + 1 }, (_, s) => (pps >= 40 || s % 5 === 0) && (
+                  <span key={s} className="absolute top-1 text-[10px] leading-none tabular-nums -translate-x-1/2" style={{ left: s * pps, color: 'rgba(255,255,255,0.3)' }}>{`${s}s`}</span>
                 ))}
                 {Array.from({ length: Math.floor(contentEnd * 2) + 1 }, (_, i) => (
                   <div key={`t${i}`} className="absolute bottom-0 w-px" style={{ left: i * pps / 2, height: i % 2 ? 3 : 5, background: 'rgba(255,255,255,0.14)' }} />
@@ -318,10 +340,12 @@ export default function TimelineDock(props: TimelineDockProps) {
                     const isSel = clip.id === selectedId;
                     const isAgent = clip.id === agentClipId;
                     const isPending = clip.kind === 'pending';
-                    const left = clip.start * pps + (track.kind === 'main' ? 1 : 0);
-                    const w = Math.max(8, clip.duration * pps - (track.kind === 'main' ? 2 : 0));
+                    const onMain = track.kind === 'main';
+                    const left = clip.start * pps + (onMain ? 1 : 0);
+                    const w = Math.max(8, clip.duration * pps - (onMain ? 2 : 0));
                     const h = lanes[track.kind];
                     const handleW = isDesktop ? 10 : 14;
+                    const dragging = mainDragDx?.id === clip.id;
                     return (
                       <div
                         key={clip.id}
@@ -329,16 +353,19 @@ export default function TimelineDock(props: TimelineDockProps) {
                         onPointerDown={(e) => onClipPointerDown(e, clip, 'move')}
                         onPointerMove={(e) => onClipPointerMove(e, clip)}
                         onPointerUp={(e) => onClipPointerUp(e, clip)}
+                        onDoubleClick={() => { if (clip.kind === 'text' || clip.kind === 'caption') { onSelect(clip.id); requestAnimationFrame(() => inputRef.current?.focus()); } }}
                         className="absolute top-0 bottom-0 cursor-pointer animate-tip-in"
                         style={{
                           left,
                           width: w,
                           borderRadius: radius,
+                          zIndex: dragging ? 5 : undefined,
+                          transform: dragging ? `translateX(${mainDragDx!.dx}px) scale(1.03)` : undefined,
                           transition: drag.current ? 'none' : 'left 360ms cubic-bezier(.2,.8,.2,1), width 360ms cubic-bezier(.2,.8,.2,1), box-shadow 200ms',
-                          boxShadow: isAgent ? '0 0 0 1px rgba(232,121,249,0.75), 0 0 20px rgba(217,70,239,0.45)' : undefined,
+                          boxShadow: isAgent ? '0 0 0 1px rgba(232,121,249,0.75), 0 0 20px rgba(217,70,239,0.45)' : dragging ? '0 8px 24px rgba(0,0,0,0.5)' : undefined,
                         }}
                       >
-                        {clip.kind === 'caption' && clip.segments ? (
+                        {clip.kind === 'caption' ? (
                           <div className="absolute inset-0">
                             {clip.segments.map(s => {
                               const active = isSel && seg?.id === s.id;
@@ -363,21 +390,21 @@ export default function TimelineDock(props: TimelineDockProps) {
                               ? 'linear-gradient(145deg, rgba(255,255,255,0.07), rgba(12,12,16,0.42))'
                               : 'linear-gradient(145deg, rgba(217,70,239,0.12), rgba(12,12,16,0.46))',
                           }}>
-                            {clip.kind === 'video' && <Filmstrip clip={clip} pps={pps} height={h} />}
-                            {track.kind === 'audio' && <Waveform />}
-                            {isPending && <div className="absolute inset-y-0 left-0" style={{ width: `${(clip.progress ?? 0) * 100}%`, background: 'rgba(217,70,239,0.22)', transition: 'width 120ms linear' }} />}
+                            {(clip.kind === 'video' || clip.kind === 'image') && <Filmstrip clip={clip} pps={pps} height={h} />}
+                            {clip.kind === 'audio' && <Waveform />}
+                            {isPending && <div className="absolute inset-y-0 left-0" style={{ width: `${(clip.progress ?? 0) * 100}%`, background: 'rgba(217,70,239,0.22)', transition: 'width 300ms linear' }} />}
                             <div className={`absolute inset-0 flex items-center min-w-0 ${isDesktop ? 'px-2.5 gap-1.5' : 'px-2 gap-1'}`}>
-                              {isAgent && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#e879f9', animation: 'breathe 1s ease-in-out infinite' }} />}
+                              {isAgent && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#e879f9', animation: 'mkr-timeline-breathe 1s ease-in-out infinite' }} />}
                               {isPending && <Spinner size={isDesktop ? 12 : 10} />}
                               {clip.kind === 'text' && (
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.2" strokeLinecap="round" className="flex-shrink-0">{I.text}</svg>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.2" strokeLinecap="round" className="flex-shrink-0" aria-hidden="true">{ICON.text}</svg>
                               )}
                               {clip.kind === 'text' && <span className={`${isDesktop ? 'text-[12px]' : 'text-[11px]'} font-medium truncate text-white/90`}>{clip.text}</span>}
-                              {isPending && <span className={`${isDesktop ? 'text-[11px]' : 'text-[10px]'} truncate`} style={{ color: 'rgba(255,255,255,0.7)' }}>{clip.label} {Math.round((clip.progress ?? 0) * 100)}%</span>}
-                              {track.kind === 'audio' && isDesktop && <span className="relative text-[10px] truncate px-1.5 rounded" style={{ color: 'rgba(255,255,255,0.6)', background: 'rgba(0,0,0,0.35)' }}>♪ {clip.label}</span>}
+                              {isPending && <span className={`${isDesktop ? 'text-[11px]' : 'text-[10px]'} truncate`} style={{ color: 'rgba(255,255,255,0.7)' }}>{t('timeline.generating', String(Math.round((clip.progress ?? 0) * 100)))}</span>}
+                              {clip.kind === 'audio' && isDesktop && <span className="relative text-[10px] truncate px-1.5 rounded" style={{ color: 'rgba(255,255,255,0.6)', background: 'rgba(0,0,0,0.35)' }}>{labelOf(clip)}</span>}
                             </div>
-                            {clip.kind === 'video' && track.kind === 'main' && w > 44 && (
-                              <span className="absolute right-1.5 bottom-1 text-[9px] tabular-nums px-1 rounded" style={{ color: 'rgba(255,255,255,0.85)', background: 'rgba(0,0,0,0.5)' }}>{clip.duration.toFixed(1)}s</span>
+                            {(clip.kind === 'video' || clip.kind === 'image') && onMain && w > 44 && (
+                              <span className="absolute right-1.5 bottom-1 text-[9px] tabular-nums px-1 rounded" style={{ color: 'rgba(255,255,255,0.85)', background: 'rgba(0,0,0,0.5)' }}>{`${clip.duration.toFixed(1)}s`}</span>
                             )}
                           </div>
                         )}
@@ -385,7 +412,7 @@ export default function TimelineDock(props: TimelineDockProps) {
                         {isSel && (
                           <div className="absolute inset-0 pointer-events-none" style={{ borderRadius: radius, border: '2px solid #d946ef', boxShadow: '0 0 0 1px rgba(0,0,0,0.5), 0 0 18px rgba(217,70,239,0.25)' }} />
                         )}
-                        {isSel && clip.kind !== 'pending' && (['trim-l', 'trim-r'] as const).map(mode => (
+                        {isSel && !readOnly && clip.kind !== 'pending' && (['trim-l', 'trim-r'] as const).map(mode => (
                           <div key={mode}
                             onPointerDown={(e) => onClipPointerDown(e, clip, mode)} onPointerMove={(e) => onClipPointerMove(e, clip)} onPointerUp={(e) => onClipPointerUp(e, clip)}
                             className="absolute top-0 bottom-0 z-20 flex items-center justify-center cursor-ew-resize"

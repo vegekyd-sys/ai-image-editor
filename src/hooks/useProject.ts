@@ -7,6 +7,7 @@ import { uploadImage } from '@/lib/supabase/storage'
 import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { groupWebSearchSourcesByMessage } from '@/lib/web-citations'
+import { isTimelineDesign } from '@/lib/timeline/design'
 import { createPersistedEditableDesign } from '@/lib/editor/editable-persistence'
 import { cacheProjectData, getCachedProjectData } from '@/lib/imageCache'
 import { restoreImageGenerationHistory } from '@/lib/editor/image-generation-history'
@@ -314,7 +315,12 @@ export function useProject(projectId: string, userId: string) {
 
         // Persist design code to workspace if present
         let designPath: string | null = null
-        if (snapshot.design?.code) {
+        const { data: existing } = await supabase.from('snapshots').select('message_id, video_meta, design_path').eq('id', snapshot.id).maybeSingle()
+        if (existing?.design_path && isTimelineDesign(snapshot.design)) {
+          // Timeline videos are written by the timeline service (Agent tx / timeline API);
+          // a poster save must not overwrite newer edits with this in-memory copy.
+          designPath = existing.design_path as string
+        } else if (snapshot.design?.code) {
           designPath = `code/${snapshot.id}.json`
           const designJson = JSON.stringify(createPersistedEditableDesign(snapshot.design))
           const bucket = supabase.storage.from('images')
@@ -324,7 +330,6 @@ export function useProject(projectId: string, userId: string) {
 
         // Upsert snapshot row (upsert handles React StrictMode double-invoke)
         // Don't overwrite message_id if DualWriter already set it (DualWriter's ID matches messages table)
-        const { data: existing } = await supabase.from('snapshots').select('message_id, video_meta').eq('id', snapshot.id).maybeSingle()
         const messageId = existing?.message_id || snapshot.messageId
         const existingVideoMeta = existing?.video_meta as VideoMeta | null | undefined
         const videoMeta = existingVideoMeta?.status === 'completed' && snapshot.videoMeta?.status === 'processing'

@@ -13,6 +13,8 @@ interface DesignEditPanelProps {
   onSelectField: (id: string | null) => void;
   onStartEdit: (fieldId: string) => void;
   isDesktop?: boolean;
+  /** Classic (pre-timeline) videos: quiet note that timeline editing is for new videos. */
+  legacyHint?: string;
 }
 
 export default function DesignEditPanel({
@@ -22,6 +24,7 @@ export default function DesignEditPanel({
   onSelectField,
   onStartEdit,
   isDesktop,
+  legacyHint,
 }: DesignEditPanelProps) {
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const { isDragging } = useHorizontalScroll(!!isDesktop);
@@ -53,6 +56,11 @@ export default function DesignEditPanel({
       <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
         · {editables.length} editable{editables.length !== 1 ? 's' : ''}
       </span>
+      {legacyHint && (
+        <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+          · {legacyHint}
+        </span>
+      )}
     </div>
   );
 

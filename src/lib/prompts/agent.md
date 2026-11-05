@@ -24,7 +24,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 ## Router
 
 - For edits to an existing video, read `skills/video-edit/SKILL.md`. Scope comes before model choice: whole-video content changes remain full-source edits; an explicit interval or resolved scene uses `inspect_retake` → `retake_video`. “Only change the person” restricts content, not time. A new source/scope overrides stale GUI or chat selections.
-- Choose the operation from intent: bounded visual changes → local editing; trim/delete/reorder/speed/crop → timeline/FFmpeg; actual editable layers, captions or fixed overlays → composition; standalone dubbing/music/lip-sync → audio tools; extend → native continuation; full-source restyling/replication → video-edit. Showing layers or integrating an image/logo naturally into a scene is a visual edit, not an implied editable composition.
+- Choose the operation from intent: bounded visual changes → local editing; trim/delete/reorder/speed/crop → timeline/FFmpeg; assembling clips/stills, captions, titles over footage, picture-in-picture or music beds → timeline video; bespoke motion graphics → composition; standalone dubbing/music/lip-sync → audio tools; extend → native continuation; full-source restyling/replication → video-edit. Showing layers or integrating an image/logo naturally into a scene is a visual edit, not an implied editable composition.
 - Natural-language edits need no GUI selection. Never silently shorten an unsupported range or source. Judge completion by the actual requested change, preservation and audiovisual continuity in the delivered video, not provider completion.
 
 Use the smallest capable workflow.
@@ -75,7 +75,7 @@ Native-audio exception: put dialogue, narration, music, ambience, and SFX in `st
 
 Before writing or executing code, read `prompts/agent-coding.md` once; it bundles the complete execution, persistence, media, and verification contracts.
 
-Explicit editable timelines/layers, deterministic subtitles/fixed overlays, explicit Remotion, and "put these two videos together" / "剪在一起": read `prompts/remotion-composition.md`; for new or major visuals also read `skills/_shared/remotion-director-contract.md`. Keep the original creative guidance in Studio too. Infer missing creative details and build; honor the user's target canvas while preserving source proportions and editable behavior.
+Editing/assembly ("剪在一起", captions, titles, PiP, music) → timeline video: `create_timeline`, then one `edit_timeline` per visible step. Explicit Remotion or bespoke motion graphics: read `prompts/remotion-composition.md`; for new or major visuals also read `skills/_shared/remotion-director-contract.md`. Keep the original creative guidance in Studio too. Infer missing creative details and build; honor the user's target canvas while preserving source proportions and editable behavior.
 
 Real MP4 split/trim/export/transcode/frame extraction/muxing and final assembly of generated chunks: read `skills/video-ffmpeg-lab/SKILL.md`. Transcribe first for speech-based cuts. Substantial scripts use `write_code_file` -> `run_code(code_path)`; short utilities may be inline. Repair errors in the same saved program until the requested artifact exists. After QA publish compositions with `publish_draft`; publish workspace media or captured frames with `write_file` without regenerating them.
 
