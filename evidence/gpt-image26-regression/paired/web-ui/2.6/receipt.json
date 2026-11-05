@@ -1,0 +1,43 @@
+{
+  "case_id": "web-ui",
+  "model": "gpt-image-2.6-flare",
+  "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:19:21.516Z",
+  "started_ms": 1793848761516,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.6/flare/text-to-image",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "设计一张独立咖啡品牌「山间」的网站首页静态概念图，包含品牌介绍、三款咖啡豆和订阅入口。文案用中文，只生成图片。",
+    "image_size": {
+      "width": 1360,
+      "height": 768
+    },
+    "quality": "low",
+    "reasoning_effort": "high",
+    "background": "auto",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9b7-e099-78c3-b951-4b0b37ac7ff5",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9b7-e099-78c3-b951-4b0b37ac7ff5",
+  "accepted_ms": 1793848762516,
+  "cost_usd": 0.0142,
+  "provider_result_ms": 10142,
+  "elapsed_ms": 12811,
+  "media": {
+    "format": "png",
+    "width": 1360,
+    "height": 768,
+    "alpha": null
+  },
+  "sha256": "5bbbb2aacefe83fbc2f59b5d26f5f5f14cdab61871e68d5e8b4aa0cd9448bc7f",
+  "bytes": 1561233,
+  "fallback": false
+}

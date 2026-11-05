@@ -1,0 +1,1293 @@
+[
+  {
+    "case_id": "agent-product",
+    "label": "自然语言可乐广告",
+    "2.5": {
+      "case_id": "agent-product",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:16:03.696Z",
+      "started_ms": 1793848563702,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "给这罐可口可乐做一张夏日冰爽产品广告图，保留包装与品牌标识，画面上只写「冰爽一刻」。只需要一张静态成图。",
+        "image_urls": [
+          {
+            "fixture": "coca-cola-source.png",
+            "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+          }
+        ],
+        "image_size": "auto",
+        "quality": "low",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b4-e7d9-7d92-a7d8-5437178f1bf1",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b4-e7d9-7d92-a7d8-5437178f1bf1",
+      "accepted_ms": 1793848567767,
+      "cost_usd": 0.0137,
+      "provider_result_ms": 18752,
+      "elapsed_ms": 21879,
+      "media": {
+        "format": "png",
+        "width": 816,
+        "height": 816,
+        "alpha": null
+      },
+      "sha256": "ec51e0f486abc5a6f8429341ca986d19e622757ef2054848e10f1ae651e0d70e",
+      "bytes": 1197106,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "agent-product",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:16:26.739Z",
+      "started_ms": 1793848586739,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "给这罐可口可乐做一张夏日冰爽产品广告图，保留包装与品牌标识，画面上只写「冰爽一刻」。只需要一张静态成图。",
+        "image_urls": [
+          {
+            "fixture": "coca-cola-source.png",
+            "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+          }
+        ],
+        "image_size": "auto",
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b5-439a-77a2-86ef-0fad3269e334",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9b5-439a-77a2-86ef-0fad3269e334",
+      "accepted_ms": 1793848591264,
+      "cost_usd": 0.0301,
+      "provider_result_ms": 17985,
+      "elapsed_ms": 20629,
+      "media": {
+        "format": "png",
+        "width": 816,
+        "height": 816,
+        "alpha": null
+      },
+      "sha256": "519de5c4814793047cd1a7d1e98fcf514764aa93d981ec2b18d99690d65da32e",
+      "bytes": 1276869,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "agent-infographic",
+    "label": "中文咖啡信息图",
+    "2.5": {
+      "case_id": "agent-infographic",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:17:00.966Z",
+      "started_ms": 1793848620966,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "做一张中文信息图，标题「手冲咖啡四步法」，内容只有这四步：1 准备滤纸与咖啡粉；2 温水润湿滤纸；3 分段注水；4 享用咖啡。用清晰的步骤编号和示意图，只要一张静态图片。",
+        "image_size": "auto",
+        "quality": "low",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b5-bb59-71e3-a80c-b710e9ab96de",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b5-bb59-71e3-a80c-b710e9ab96de",
+      "accepted_ms": 1793848621892,
+      "cost_usd": 0.0073,
+      "provider_result_ms": 17087,
+      "elapsed_ms": 21221,
+      "media": {
+        "format": "png",
+        "width": 1254,
+        "height": 1254,
+        "alpha": null
+      },
+      "sha256": "46bd96bb5d306a5757c0545d145f2b615d9638ff1e9adc8e17ab273191a2b069",
+      "bytes": 1810648,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "agent-infographic",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:16:48.373Z",
+      "started_ms": 1793848608374,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "做一张中文信息图，标题「手冲咖啡四步法」，内容只有这四步：1 准备滤纸与咖啡粉；2 温水润湿滤纸；3 分段注水；4 享用咖啡。用清晰的步骤编号和示意图，只要一张静态图片。",
+        "image_size": "auto",
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b5-8a33-7c53-a21f-a58c6ca867d5",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9b5-8a33-7c53-a21f-a58c6ca867d5",
+      "accepted_ms": 1793848609315,
+      "cost_usd": 0.0293,
+      "provider_result_ms": 9090,
+      "elapsed_ms": 11923,
+      "media": {
+        "format": "png",
+        "width": 1254,
+        "height": 1254,
+        "alpha": null
+      },
+      "sha256": "075aa4734729ce1e13adbfade828d3408765fdecd5cddfa46c1e670a099660d3",
+      "bytes": 2170056,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "ecommerce",
+    "label": "可口可乐电商详情页",
+    "2.5": {
+      "case_id": "ecommerce",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:17:23.174Z",
+      "started_ms": 1793848643175,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "给这罐可口可乐设计一张中文电商详情页图片，保留品牌和包装，突出冰爽饮用场景，信息只使用包装上可见的内容，不编造营养、配料或健康功效。",
+        "image_urls": [
+          {
+            "fixture": "coca-cola-source.png",
+            "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+          }
+        ],
+        "image_size": {
+          "width": 1248,
+          "height": 832
+        },
+        "quality": "low",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b6-1f42-7151-8a67-cb441a12be42",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b6-1f42-7151-8a67-cb441a12be42",
+      "accepted_ms": 1793848647494,
+      "cost_usd": 0.0126,
+      "provider_result_ms": 21527,
+      "elapsed_ms": 24268,
+      "media": {
+        "format": "png",
+        "width": 1248,
+        "height": 832,
+        "alpha": null
+      },
+      "sha256": "1ce37d13ea7665f466f8b3ab9e8a0c82d885f6bb51953de62f9e7b6da9729324",
+      "bytes": 1633997,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "ecommerce",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:17:48.148Z",
+      "started_ms": 1793848668148,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "给这罐可口可乐设计一张中文电商详情页图片，保留品牌和包装，突出冰爽饮用场景，信息只使用包装上可见的内容，不编造营养、配料或健康功效。",
+        "image_urls": [
+          {
+            "fixture": "coca-cola-source.png",
+            "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+          }
+        ],
+        "image_size": {
+          "width": 1248,
+          "height": 832
+        },
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b6-8218-7572-a6ce-5af67da25b77",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9b6-8218-7572-a6ce-5af67da25b77",
+      "accepted_ms": 1793848672858,
+      "cost_usd": 0.0255,
+      "provider_result_ms": 14890,
+      "elapsed_ms": 17942,
+      "media": {
+        "format": "png",
+        "width": 1248,
+        "height": 832,
+        "alpha": null
+      },
+      "sha256": "8512dee690dd40993c80dff467e6ba0322bd227a32243f37efd5c5a9ebf7f6e5",
+      "bytes": 1768801,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "poster",
+    "label": "中英文字海报",
+    "2.5": {
+      "case_id": "poster",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:18:24.024Z",
+      "started_ms": 1793848704024,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "设计一张当代摄影展海报。标题「城市之间」，英文副标题「BETWEEN CITIES」，日期「2026.10.01—10.07」，地点「上海 · 光影艺术空间」。这些文字须完整清晰，其他设计由你决定。",
+        "image_size": {
+          "width": 1248,
+          "height": 832
+        },
+        "quality": "low",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b7-0464-7ab2-ac23-68cee6979adb",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b7-0464-7ab2-ac23-68cee6979adb",
+      "accepted_ms": 1793848706982,
+      "cost_usd": 0.0044,
+      "provider_result_ms": 16462,
+      "elapsed_ms": 20804,
+      "media": {
+        "format": "png",
+        "width": 1248,
+        "height": 832,
+        "alpha": null
+      },
+      "sha256": "dff10306e630a9d430e24b1eb877f2d0b1fe6455099d70dc19819255c77bc8a2",
+      "bytes": 1506440,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "poster",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:18:07.213Z",
+      "started_ms": 1793848687214,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "设计一张当代摄影展海报。标题「城市之间」，英文副标题「BETWEEN CITIES」，日期「2026.10.01—10.07」，地点「上海 · 光影艺术空间」。这些文字须完整清晰，其他设计由你决定。",
+        "image_size": {
+          "width": 1248,
+          "height": 832
+        },
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b6-be52-7a71-87dc-c82460579e8a",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9b6-be52-7a71-87dc-c82460579e8a",
+      "accepted_ms": 1793848688260,
+      "cost_usd": 0.0173,
+      "provider_result_ms": 13046,
+      "elapsed_ms": 16099,
+      "media": {
+        "format": "png",
+        "width": 1248,
+        "height": 832,
+        "alpha": null
+      },
+      "sha256": "260b311ce763bcd41a377b8135e3a29efc8d5e4eb8ae4a89b607ac41bb404543",
+      "bytes": 1682253,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "app-ui",
+    "label": "App UI 静态概念图",
+    "2.5": {
+      "case_id": "app-ui",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:18:45.406Z",
+      "started_ms": 1793848725406,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "做一张旅行记账 App 的中文首页 UI 静态概念图，展示东京旅行、本次预算 ¥8,000、已花费 ¥2,450，以及餐饮、交通、住宿三类支出。只生成一张图片，不写代码。",
+        "image_size": {
+          "width": 768,
+          "height": 1360
+        },
+        "quality": "low",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b7-5368-7623-ad71-2ccf97fa17a7",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b7-5368-7623-ad71-2ccf97fa17a7",
+      "accepted_ms": 1793848726361,
+      "cost_usd": 0.0037,
+      "provider_result_ms": 20514,
+      "elapsed_ms": 23031,
+      "media": {
+        "format": "png",
+        "width": 768,
+        "height": 1360,
+        "alpha": null
+      },
+      "sha256": "bb9e6336da0755d3bb1769e304bf71fe75c38581c2b5eb13ff5471d7ffa8dd25",
+      "bytes": 1050240,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "app-ui",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:19:09.043Z",
+      "started_ms": 1793848749044,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "做一张旅行记账 App 的中文首页 UI 静态概念图，展示东京旅行、本次预算 ¥8,000、已花费 ¥2,450，以及餐饮、交通、住宿三类支出。只生成一张图片，不写代码。",
+        "image_size": {
+          "width": 768,
+          "height": 1360
+        },
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b7-b264-7de0-bbd5-15c3f4475839",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9b7-b264-7de0-bbd5-15c3f4475839",
+      "accepted_ms": 1793848750679,
+      "cost_usd": 0.0142,
+      "provider_result_ms": 9141,
+      "elapsed_ms": 11849,
+      "media": {
+        "format": "png",
+        "width": 768,
+        "height": 1360,
+        "alpha": null
+      },
+      "sha256": "e9191683a41877ed47be9e48a91fc26af6bdcba5ed30b836a0b7f28078a62a09",
+      "bytes": 1083275,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "web-ui",
+    "label": "网站首页静态概念图",
+    "2.5": {
+      "case_id": "web-ui",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:19:35.195Z",
+      "started_ms": 1793848775196,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "设计一张独立咖啡品牌「山间」的网站首页静态概念图，包含品牌介绍、三款咖啡豆和订阅入口。文案用中文，只生成图片。",
+        "image_size": {
+          "width": 1360,
+          "height": 768
+        },
+        "quality": "low",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b8-1c85-7831-bbef-7c4653d76683",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b8-1c85-7831-bbef-7c4653d76683",
+      "accepted_ms": 1793848777846,
+      "cost_usd": 0.0036,
+      "provider_result_ms": 18942,
+      "elapsed_ms": 21580,
+      "media": {
+        "format": "png",
+        "width": 1360,
+        "height": 768,
+        "alpha": null
+      },
+      "sha256": "863950f4dc5e36020bd3640779e130e3da4ee76f64ebc882560edc62087b5248",
+      "bytes": 1367750,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "web-ui",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:19:21.516Z",
+      "started_ms": 1793848761516,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "设计一张独立咖啡品牌「山间」的网站首页静态概念图，包含品牌介绍、三款咖啡豆和订阅入口。文案用中文，只生成图片。",
+        "image_size": {
+          "width": 1360,
+          "height": 768
+        },
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b7-e099-78c3-b951-4b0b37ac7ff5",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9b7-e099-78c3-b951-4b0b37ac7ff5",
+      "accepted_ms": 1793848762516,
+      "cost_usd": 0.0142,
+      "provider_result_ms": 10142,
+      "elapsed_ms": 12811,
+      "media": {
+        "format": "png",
+        "width": 1360,
+        "height": 768,
+        "alpha": null
+      },
+      "sha256": "5bbbb2aacefe83fbc2f59b5d26f5f5f14cdab61871e68d5e8b4aa0cd9448bc7f",
+      "bytes": 1561233,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "illustration",
+    "label": "原创动漫插画",
+    "2.5": {
+      "case_id": "illustration",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:19:58.015Z",
+      "started_ms": 1793848798015,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "画一张原创动画风格插画：一位成年咖啡师在雨后的街角咖啡店门前给路人递咖啡，温暖治愈，人物穿完整的衬衫和围裙。",
+        "image_size": {
+          "width": 1248,
+          "height": 832
+        },
+        "quality": "low",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b8-6f27-7040-8020-d43e784d3077",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b8-6f27-7040-8020-d43e784d3077",
+      "accepted_ms": 1793848799771,
+      "cost_usd": 0.0044,
+      "provider_result_ms": 14467,
+      "elapsed_ms": 17027,
+      "media": {
+        "format": "png",
+        "width": 1248,
+        "height": 832,
+        "alpha": null
+      },
+      "sha256": "a6fd7f7d51b5027604dd939950b18f97ccd76f7e1742e41274b0fff9cdf6e46f",
+      "bytes": 1588815,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "illustration",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:20:16.770Z",
+      "started_ms": 1793848816770,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "画一张原创动画风格插画：一位成年咖啡师在雨后的街角咖啡店门前给路人递咖啡，温暖治愈，人物穿完整的衬衫和围裙。",
+        "image_size": {
+          "width": 1248,
+          "height": 832
+        },
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b8-b870-76a0-941f-969f93c943b4",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9b8-b870-76a0-941f-969f93c943b4",
+      "accepted_ms": 1793848817761,
+      "cost_usd": 0.0172,
+      "provider_result_ms": 11316,
+      "elapsed_ms": 14139,
+      "media": {
+        "format": "png",
+        "width": 1248,
+        "height": 832,
+        "alpha": null
+      },
+      "sha256": "4fe04bb9d95669b7cdb395702b5e9700c214df5f5cba40a783a8968329d2fa29",
+      "bytes": 1521229,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "storyboard",
+    "label": "导演分镜图",
+    "2.5": {
+      "case_id": "storyboard",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:20:54.028Z",
+      "started_ms": 1793848854028,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "为可口可乐夏日产品广告的 S1 段画一张竖版导演分镜图，6 个镜头，2 列 3 行。保持参考罐身和品牌。镜头依次是冰块特写、可乐罐上的冷凝水、拉环开启、倒入杯中、杯壁气泡、产品英雄镜头。每格标签使用 S1-P1 至 S1-P6，并写 2s、景别和运镜。写实广告摄影，除此之外不加标题。",
+        "image_urls": [
+          {
+            "fixture": "coca-cola-source.png",
+            "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+          }
+        ],
+        "image_size": {
+          "width": 768,
+          "height": 1360
+        },
+        "quality": "low",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b9-5c5f-7542-bde8-4438c2955d59",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b9-5c5f-7542-bde8-4438c2955d59",
+      "accepted_ms": 1793848859757,
+      "cost_usd": 0.0122,
+      "provider_result_ms": 24130,
+      "elapsed_ms": 28997,
+      "media": {
+        "format": "png",
+        "width": 768,
+        "height": 1360,
+        "alpha": null
+      },
+      "sha256": "d05db4743c5232b080e38af82d999896e5ffe5b25ae86f6ef4aee659eef1460c",
+      "bytes": 1746181,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "storyboard",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:20:31.611Z",
+      "started_ms": 1793848831611,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "为可口可乐夏日产品广告的 S1 段画一张竖版导演分镜图，6 个镜头，2 列 3 行。保持参考罐身和品牌。镜头依次是冰块特写、可乐罐上的冷凝水、拉环开启、倒入杯中、杯壁气泡、产品英雄镜头。每格标签使用 S1-P1 至 S1-P6，并写 2s、景别和运镜。写实广告摄影，除此之外不加标题。",
+        "image_urls": [
+          {
+            "fixture": "coca-cola-source.png",
+            "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+          }
+        ],
+        "image_size": {
+          "width": 768,
+          "height": 1360
+        },
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b9-0340-7063-8c4a-aa3bddd53076",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9b9-0340-7063-8c4a-aa3bddd53076",
+      "accepted_ms": 1793848836918,
+      "cost_usd": 0.0228,
+      "provider_result_ms": 19232,
+      "elapsed_ms": 21651,
+      "media": {
+        "format": "png",
+        "width": 768,
+        "height": 1360,
+        "alpha": null
+      },
+      "sha256": "04e719b64595912a2ae9919b69d3bbdc570577df3dcedd7f8f0918ee6fab34e9",
+      "bytes": 1859697,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "face-preserve",
+    "label": "普通人像保真编辑",
+    "2.5": {
+      "case_id": "face-preserve",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:21:23.648Z",
+      "started_ms": 1793848883648,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "Preserve this person’s exact facial identity, face shape, eyes, nose, mouth, hair, pose and clothing. Change only the background to a softly blurred city street in daylight. Do not beautify, reshape or retouch the face. No added text or logos.",
+        "image_urls": [
+          {
+            "fixture": "portrait-source.jpg",
+            "sha256": "09f9772b274a9ffe982ba2e1bc13e1ae03719d34f8e3344f4e75fe80581b86a4"
+          }
+        ],
+        "image_size": {
+          "width": 880,
+          "height": 1184
+        },
+        "quality": "low",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9b9-c2ed-7110-93a1-f86ed0a6b88d",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b9-c2ed-7110-93a1-f86ed0a6b88d",
+      "accepted_ms": 1793848885976,
+      "cost_usd": 0.017,
+      "provider_result_ms": 15783,
+      "elapsed_ms": 19293,
+      "media": {
+        "format": "png",
+        "width": 880,
+        "height": 1184,
+        "alpha": null
+      },
+      "sha256": "8856af9e893ca02d9f495aa0870f23c819108da697edc834001cc3ded532cf14",
+      "bytes": 1351187,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "face-preserve",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:21:43.772Z",
+      "started_ms": 1793848903772,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "Preserve this person’s exact facial identity, face shape, eyes, nose, mouth, hair, pose and clothing. Change only the background to a softly blurred city street in daylight. Do not beautify, reshape or retouch the face. No added text or logos.",
+        "image_urls": [
+          {
+            "fixture": "portrait-source.jpg",
+            "sha256": "09f9772b274a9ffe982ba2e1bc13e1ae03719d34f8e3344f4e75fe80581b86a4"
+          }
+        ],
+        "image_size": {
+          "width": 880,
+          "height": 1184
+        },
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9ba-1bff-74a2-988b-96b024d90744",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9ba-1bff-74a2-988b-96b024d90744",
+      "accepted_ms": 1793848908786,
+      "cost_usd": 0.0311,
+      "provider_result_ms": 16184,
+      "elapsed_ms": 18753,
+      "media": {
+        "format": "png",
+        "width": 880,
+        "height": 1184,
+        "alpha": null
+      },
+      "sha256": "aa84589738d4cbd1b2f5241d62f6ed47378d319763a2c5304c7b47931b50606e",
+      "bytes": 1342792,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "multi-reference",
+    "label": "人物＋品牌产品双参考",
+    "2.5": {
+      "case_id": "multi-reference",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:22:21.878Z",
+      "started_ms": 1793848941879,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "Image 1: Base image to edit\nImage 2: Reference image 1\n\n用图1的人物与图2的可口可乐产品，设计一张自然的夏日生活方式产品照片：人物坐在露天咖啡店，可乐罐放在桌面上。保留人物面容、衬衫和产品包装，不添加任何宣传文字。",
+        "image_urls": [
+          {
+            "fixture": "portrait-source.jpg",
+            "sha256": "09f9772b274a9ffe982ba2e1bc13e1ae03719d34f8e3344f4e75fe80581b86a4"
+          },
+          {
+            "fixture": "coca-cola-source.png",
+            "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+          }
+        ],
+        "image_size": {
+          "width": 1248,
+          "height": 832
+        },
+        "quality": "low",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9ba-b1bf-7a91-a692-1fedb35f5114",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9ba-b1bf-7a91-a692-1fedb35f5114",
+      "accepted_ms": 1793848947148,
+      "cost_usd": 0.025,
+      "provider_result_ms": 21101,
+      "elapsed_ms": 27755,
+      "media": {
+        "format": "png",
+        "width": 1248,
+        "height": 832,
+        "alpha": null
+      },
+      "sha256": "a1bf44ce5a709efc62d7f3c9c11923ca48e857aee95fdfd38420521aca838e76",
+      "bytes": 1575827,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "multi-reference",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:22:03.323Z",
+      "started_ms": 1793848923323,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "Image 1: Base image to edit\nImage 2: Reference image 1\n\n用图1的人物与图2的可口可乐产品，设计一张自然的夏日生活方式产品照片：人物坐在露天咖啡店，可乐罐放在桌面上。保留人物面容、衬衫和产品包装，不添加任何宣传文字。",
+        "image_urls": [
+          {
+            "fixture": "portrait-source.jpg",
+            "sha256": "09f9772b274a9ffe982ba2e1bc13e1ae03719d34f8e3344f4e75fe80581b86a4"
+          },
+          {
+            "fixture": "coca-cola-source.png",
+            "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+          }
+        ],
+        "image_size": {
+          "width": 1248,
+          "height": 832
+        },
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "auto",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9ba-64e9-71b1-91b3-5ae5050b2271",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9ba-64e9-71b1-91b3-5ae5050b2271",
+      "accepted_ms": 1793848929168,
+      "cost_usd": 0.0378,
+      "provider_result_ms": 15089,
+      "elapsed_ms": 17954,
+      "media": {
+        "format": "png",
+        "width": 1248,
+        "height": 832,
+        "alpha": null
+      },
+      "sha256": "f144d36760ef39a4f68068652a05737e41fab4dc0f2d362388ef4e7cb41a4d1a",
+      "bytes": 1548359,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "cutout",
+    "label": "商品抠图与原画布",
+    "2.5": {
+      "case_id": "cutout",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:22:50.264Z",
+      "started_ms": 1793848970266,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "Pixel-faithful foreground extraction, not a redesign or regeneration. Keep only the complete Coca-Cola can. Preserve the exact can shape, red packaging, Coca-Cola logo, all original can lettering, silver rims and condensation details. Remove the scene, ice, water splashes, floor and advertising headline outside the can. Do not beautify, retouch, restyle, alter geometry, or invent hidden details. Return a real transparent PNG with clean natural edges and no halo, shadow, border, text, or background. Preserve the original lettering printed on the can.",
+        "image_urls": [
+          {
+            "fixture": "coca-cola-source.png",
+            "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+          }
+        ],
+        "image_size": "auto",
+        "quality": "low",
+        "background": "transparent",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9bb-1de8-79b3-9a1d-84d32ea3a961",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9bb-1de8-79b3-9a1d-84d32ea3a961",
+      "accepted_ms": 1793848974850,
+      "cost_usd": 0.014,
+      "provider_result_ms": 19980,
+      "elapsed_ms": 22571,
+      "media": {
+        "format": "png",
+        "width": 816,
+        "height": 816,
+        "alpha": {
+          "min": 0,
+          "max": 254,
+          "sum": 55732363,
+          "squaresSum": 14057412645,
+          "mean": 83.70032409409842,
+          "stdev": 118.76896832357436,
+          "minX": 0,
+          "minY": 0,
+          "maxX": 399,
+          "maxY": 64
+        }
+      },
+      "sha256": "50ca7415ad54a8c98053617f83a1e008632c3e26bcc9c9d4ea5a2698e6f2ea00",
+      "bytes": 787348,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "cutout",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:23:13.749Z",
+      "started_ms": 1793848993749,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "Pixel-faithful foreground extraction, not a redesign or regeneration. Keep only the complete Coca-Cola can. Preserve the exact can shape, red packaging, Coca-Cola logo, all original can lettering, silver rims and condensation details. Remove the scene, ice, water splashes, floor and advertising headline outside the can. Do not beautify, retouch, restyle, alter geometry, or invent hidden details. Return a real transparent PNG with clean natural edges and no halo, shadow, border, text, or background. Preserve the original lettering printed on the can.",
+        "image_urls": [
+          {
+            "fixture": "coca-cola-source.png",
+            "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+          }
+        ],
+        "image_size": "auto",
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "transparent",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9bb-7a45-7631-9298-652710469351",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9bb-7a45-7631-9298-652710469351",
+      "accepted_ms": 1793848998470,
+      "cost_usd": 0.0305,
+      "provider_result_ms": 13968,
+      "elapsed_ms": 16442,
+      "media": {
+        "format": "png",
+        "width": 816,
+        "height": 816,
+        "alpha": {
+          "min": 0,
+          "max": 254,
+          "sum": 59181429,
+          "squaresSum": 14939505977,
+          "mean": 88.88022184976931,
+          "stdev": 120.56894208757583,
+          "minX": 0,
+          "minY": 0,
+          "maxX": 359,
+          "maxY": 48
+        }
+      },
+      "sha256": "4596729a7cb72aa495d35f62d14b13ae3569c22de526a07569e7127928ae5dd8",
+      "bytes": 885796,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "agent-cutout",
+    "label": "复杂广告透明抠图",
+    "2.5": {
+      "case_id": "agent-cutout",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:23:45.207Z",
+      "started_ms": 1793849025207,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "把刚生成的广告图里的可乐罐抠出来，保留罐身包装文字和水珠，去掉冰块、水花、背景以及罐子外面的「冰爽一刻」，输出透明底 PNG，保持这张广告图的画布尺寸。",
+        "image_urls": [
+          {
+            "fixture": "advertisement-source.jpg",
+            "sha256": "c987f405772ebc8761116e64f0548a0a8f2a84232777412714b961a4e5972861"
+          }
+        ],
+        "image_size": "auto",
+        "quality": "low",
+        "background": "transparent",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9bb-ed1f-7901-b11e-4850fb580db4",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9bb-ed1f-7901-b11e-4850fb580db4",
+      "accepted_ms": 1793849027867,
+      "cost_usd": 0.0136,
+      "provider_result_ms": 15676,
+      "elapsed_ms": 18783,
+      "media": {
+        "format": "png",
+        "width": 912,
+        "height": 1152,
+        "alpha": {
+          "min": 0,
+          "max": 254,
+          "sum": 70099930,
+          "squaresSum": 17690979666,
+          "mean": 66.72218605324075,
+          "stdev": 111.29558317451506,
+          "minX": 0,
+          "minY": 16,
+          "maxX": 320,
+          "maxY": 160
+        }
+      },
+      "sha256": "c86c5c4107dfd18c6a3889a63dd511d003297577175c2d9b00856606e34ef537",
+      "bytes": 1198229,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "agent-cutout",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/edit",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:23:30.839Z",
+      "started_ms": 1793849010839,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "把刚生成的广告图里的可乐罐抠出来，保留罐身包装文字和水珠，去掉冰块、水花、背景以及罐子外面的「冰爽一刻」，输出透明底 PNG，保持这张广告图的画布尺寸。",
+        "image_urls": [
+          {
+            "fixture": "advertisement-source.jpg",
+            "sha256": "c987f405772ebc8761116e64f0548a0a8f2a84232777412714b961a4e5972861"
+          }
+        ],
+        "image_size": "auto",
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "transparent",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9bb-b269-7b10-ac32-49e816d38c17",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9bb-b269-7b10-ac32-49e816d38c17",
+      "accepted_ms": 1793849012864,
+      "cost_usd": 0.0288,
+      "provider_result_ms": 11110,
+      "elapsed_ms": 13785,
+      "media": {
+        "format": "png",
+        "width": 912,
+        "height": 1152,
+        "alpha": {
+          "min": 0,
+          "max": 254,
+          "sum": 122520531,
+          "squaresSum": 30920060727,
+          "mean": 116.61691623263889,
+          "stdev": 125.82009720023764,
+          "minX": 0,
+          "minY": 48,
+          "maxX": 233,
+          "maxY": 49
+        }
+      },
+      "sha256": "4e834e9dca18a93b60b97f55d246507a03b0587836dfb2ae0b477864c5b6325d",
+      "bytes": 1522687,
+      "fallback": false
+    }
+  },
+  {
+    "case_id": "sticker",
+    "label": "透明底文生图",
+    "2.5": {
+      "case_id": "sticker",
+      "model": "gpt-image-2.5-flare",
+      "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:24:04.597Z",
+      "started_ms": 1793849044597,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "A friendly orange robot mascot waving, full body, a simple rounded silhouette with generous transparent padding. Return a real transparent PNG. No floor, horizon, environmental shadow, border, text, checkerboard or scenic background.",
+        "image_size": {
+          "width": 1024,
+          "height": 1024
+        },
+        "quality": "low",
+        "background": "transparent",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9bc-325b-7160-9ca0-cca42c49d4e0",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9bc-325b-7160-9ca0-cca42c49d4e0",
+      "accepted_ms": 1793849045575,
+      "cost_usd": 0.0062,
+      "provider_result_ms": 12481,
+      "elapsed_ms": 15284,
+      "media": {
+        "format": "png",
+        "width": 1024,
+        "height": 1024,
+        "alpha": {
+          "min": 0,
+          "max": 254,
+          "sum": 76994293,
+          "squaresSum": 19358493663,
+          "mean": 73.42747974395752,
+          "stdev": 114.32460756023087,
+          "minX": 0,
+          "minY": 16,
+          "maxX": 439,
+          "maxY": 113
+        }
+      },
+      "sha256": "0de7dd4ae30adf44220400983602c413983c8e364b681e2151bb6027eb6118bc",
+      "bytes": 1081914,
+      "fallback": false
+    },
+    "2.6": {
+      "case_id": "sticker",
+      "model": "gpt-image-2.6-flare",
+      "endpoint": "openai/gpt-image-2.6/flare/text-to-image",
+      "stage": "complete",
+      "started_at": "2026-11-05T03:24:20.577Z",
+      "started_ms": 1793849060577,
+      "price": {
+        "endpoint_id": "openai/gpt-image-2.6/flare/text-to-image",
+        "unit_price": 1,
+        "unit": "units",
+        "currency": "USD"
+      },
+      "submission_count": 1,
+      "request": {
+        "prompt": "A friendly orange robot mascot waving, full body, a simple rounded silhouette with generous transparent padding. Return a real transparent PNG. No floor, horizon, environmental shadow, border, text, checkerboard or scenic background.",
+        "image_size": {
+          "width": 1024,
+          "height": 1024
+        },
+        "quality": "low",
+        "reasoning_effort": "high",
+        "background": "transparent",
+        "output_format": "png",
+        "num_images": 1,
+        "sync_mode": false
+      },
+      "request_id": "01a1a9bc-709e-7241-b21a-ccbd9e68cf26",
+      "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9bc-709e-7241-b21a-ccbd9e68cf26",
+      "accepted_ms": 1793849063196,
+      "cost_usd": 0.025,
+      "provider_result_ms": 9967,
+      "elapsed_ms": 12420,
+      "media": {
+        "format": "png",
+        "width": 1024,
+        "height": 1024,
+        "alpha": {
+          "min": 0,
+          "max": 254,
+          "sum": 79825653,
+          "squaresSum": 20059067589,
+          "mean": 76.12767505645752,
+          "stdev": 115.47470449352359,
+          "minX": 0,
+          "minY": 32,
+          "maxX": 623,
+          "maxY": 76
+        }
+      },
+      "sha256": "a7161a184f4d4feffb4766811a220a459f2b72bb4a703c1565680b2f6e741c31",
+      "bytes": 1113073,
+      "fallback": false
+    }
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "case_id": "sticker",
+  "path": "real shared editImage",
+  "started_at": "2026-11-05T03:25:58.913Z",
+  "stage": "complete",
+  "requested_model": null,
+  "quality": "low",
+  "reasoning": "default high",
+  "fallback": false,
+  "elapsed_ms": 78853,
+  "success": true,
+  "model": "gpt-image-2.6-flare",
+  "provider": "fal",
+  "message": "Image generated successfully.",
+  "cost_usd": 0.025,
+  "output": "output.png",
+  "media": {
+    "format": "png",
+    "width": 1024,
+    "height": 1024,
+    "hasAlpha": true
+  }
+}

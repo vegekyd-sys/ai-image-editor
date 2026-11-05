@@ -1,0 +1,26 @@
+[
+  {
+    "project": "0394b691-388d-424d-9885-c172ca2763c2",
+    "name": "product-1",
+    "model": "gpt-image-2.6-flare",
+    "prompt": "给这罐可口可乐做一张夏日冰爽产品广告图，保留包装与品牌标识，画面上只写「冰爽一刻」，不要出现任何其他文字或标语。"
+  },
+  {
+    "project": "0394b691-388d-424d-9885-c172ca2763c2",
+    "name": "product-2",
+    "model": "gpt-image-2.6-flare",
+    "prompt": "把画面上的「冰爽一刻」四个字重做为干净工整的现代中文黑体，字形准确、笔画完整、清晰易读、边缘干净，不要手写飞白笔触，不要额外装饰划线；文字位置仍放在左上蓝天区域，不遮挡可乐罐。画面上只保留这四个字和罐身上的原包装英文，不要任何其他文案或标语。"
+  },
+  {
+    "project": "0394b691-388d-424d-9885-c172ca2763c2",
+    "name": "product-3",
+    "model": "gpt-image-2.6-flare",
+    "prompt": "Pixel-faithful foreground extraction, not a redesign or regeneration. Keep only the single red Coca-Cola aluminum can standing upright in the center of the frame, complete with its printed packaging: the white Coca-Cola script logo, the white \"ORIGINAL TASTE\" line, the white swoosh ribbon, the red body color grading, the silver top rim and silver bottom rim, and all the water droplets and condensation beads sitting on the can surface. Preserve the can's exact proportions, tilt angle, curvature, printed artwork shapes and letter spacing, highlight and shadow gradient across the metal, droplet placement and density, and the exact visible extent of the can silhouette where it is currently visible. Remove the entire blue sky background, white clouds, sun rays, the sea and distant shoreline, every ice cube in front of, behind and around the can, all water splash and spray droplets in the air, all mist and foam, the water surface at the bottom, and every part of the can that is cut off or hidden behind ice or splash must simply remain absent rather than being invented. Remove the white Chinese text 「冰爽一刻」 in the upper left completely, with no leftover characters, strokes or halos. Remove all ambient glow, sun flare, background shadows and reflections that belong to the scene. Do not beautify, retouch, restyle, recolor, sharpen, or alter the can's geometry, printed logo or typography, and do not invent hidden or occluded parts of the can, its rims, or its base. Return a real transparent PNG with clean natural edges and no halo, shadow, border, text, or background."
+  },
+  {
+    "project": "b9f34d86-e56c-4e3d-b73b-99fc0988fde2",
+    "name": "infographic",
+    "model": "gpt-image-2.6-flare",
+    "prompt": "做一张中文信息图，标题「手冲咖啡四步法」，内容只有这四步：1 准备滤纸与咖啡粉；2 温水润湿滤纸；3 分段注水；4 享用咖啡。用清晰的步骤编号和示意图，只要一张静态图片。"
+  }
+]

@@ -1,0 +1,42 @@
+{
+  "case_id": "poster",
+  "model": "gpt-image-2.5-flare",
+  "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:18:24.024Z",
+  "started_ms": 1793848704024,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "设计一张当代摄影展海报。标题「城市之间」，英文副标题「BETWEEN CITIES」，日期「2026.10.01—10.07」，地点「上海 · 光影艺术空间」。这些文字须完整清晰，其他设计由你决定。",
+    "image_size": {
+      "width": 1248,
+      "height": 832
+    },
+    "quality": "low",
+    "background": "auto",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9b7-0464-7ab2-ac23-68cee6979adb",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b7-0464-7ab2-ac23-68cee6979adb",
+  "accepted_ms": 1793848706982,
+  "cost_usd": 0.0044,
+  "provider_result_ms": 16462,
+  "elapsed_ms": 20804,
+  "media": {
+    "format": "png",
+    "width": 1248,
+    "height": 832,
+    "alpha": null
+  },
+  "sha256": "dff10306e630a9d430e24b1eb877f2d0b1fe6455099d70dc19819255c77bc8a2",
+  "bytes": 1506440,
+  "fallback": false
+}

@@ -1,0 +1,130 @@
+[
+  {
+    "row": 1888,
+    "index": 0,
+    "file": "coca-cola-source.png",
+    "sha256": "0d42aa1446edaf3aa0c5660937ef8978ba5a41774beeae5f88b1ea1c1255af25",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "coca-cola-source"
+  },
+  {
+    "row": 1961,
+    "index": 0,
+    "file": "agent-product.jpg",
+    "sha256": "c987f405772ebc8761116e64f0548a0a8f2a84232777412714b961a4e5972861",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "agent-product"
+  },
+  {
+    "row": 2003,
+    "index": 0,
+    "file": "agent-infographic.jpg",
+    "sha256": "81de8db205a6e8f7094e5a1cf6d8d780879695a87a8d17404f3bd2d6015a47e3",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "agent-infographic"
+  },
+  {
+    "row": 2003,
+    "index": 1,
+    "file": "agent-cutout.png",
+    "sha256": "dca9b1597919fd1d0f515b70b269308875748b80b982ae9c93a519bd8f9d7b18",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "agent-cutout"
+  },
+  {
+    "row": 2003,
+    "index": 2,
+    "file": "ecommerce.jpg",
+    "sha256": "2deac63adc5a0107474df8782857a173998f0e1aabe8260d6aec12a14c3ca99c",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "ecommerce"
+  },
+  {
+    "row": 2016,
+    "index": 0,
+    "file": "poster.jpg",
+    "sha256": "f03b7c0737d3fda906e6f244a8c8ddd18ef950711fd121af61b0e5aaf2c55faf",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "poster"
+  },
+  {
+    "row": 2016,
+    "index": 1,
+    "file": "app-ui.jpg",
+    "sha256": "eb81551b97fd239167a1f98ae717adddb126f07d72abdf1dd3bc0ee6499fce4f",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "app-ui"
+  },
+  {
+    "row": 2016,
+    "index": 2,
+    "file": "web-ui.jpg",
+    "sha256": "a9b125d71450908a0d06abf0c6c5a47dbbc11a010b0037f2f5b64381c6ec8867",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "web-ui"
+  },
+  {
+    "row": 2027,
+    "index": 0,
+    "file": "portrait-source.jpg",
+    "sha256": "3cfa1d60168495c6022bd45fd4c67fba85526a03db525beba7b8456e8d4564dd",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "portrait-source"
+  },
+  {
+    "row": 2027,
+    "index": 1,
+    "file": "face-preserve.jpg",
+    "sha256": "b5cb08d33c220d9732594fab372ee18ff2a4e285ef0c6ce88b475a41e3e9783e",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "face-preserve"
+  },
+  {
+    "row": 2027,
+    "index": 2,
+    "file": "multi-reference.jpg",
+    "sha256": "fabff6ea3b5a48a95f76700c8220fd2b3bb20d33721265354465642aa78cce3b",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "multi-reference"
+  },
+  {
+    "row": 2027,
+    "index": 3,
+    "file": "storyboard.jpg",
+    "sha256": "db98aca83664d220782c4ce4c0dfc12a3618d3fc0156cfe35be37b1e394b3624",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "storyboard"
+  },
+  {
+    "row": 2027,
+    "index": 4,
+    "file": "sticker.png",
+    "sha256": "9361f035ae013db8002423391d8c57c37328e2ff502d8fba3132bd51887ecca4",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "sticker"
+  },
+  {
+    "row": 2073,
+    "index": 0,
+    "file": "agent-cutout-provider.png",
+    "sha256": "dca9b1597919fd1d0f515b70b269308875748b80b982ae9c93a519bd8f9d7b18",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "agent-cutout-provider"
+  },
+  {
+    "row": 2073,
+    "index": 1,
+    "file": "illustration.jpg",
+    "sha256": "2e3d83a18132948beb43f91adda8028aa37161ce95480c28c2bf80bde23db211",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "illustration"
+  },
+  {
+    "row": 2073,
+    "index": 2,
+    "file": "cutout.png",
+    "sha256": "e765e9e6e2aade1e0503a32b706294d66e440e3506af89bdc3080aa64c0a6ecf",
+    "note": "Session view_image capture; may be resized, not original file identity proof",
+    "case_name": "cutout"
+  }
+]

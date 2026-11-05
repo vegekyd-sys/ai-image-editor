@@ -1,0 +1,28 @@
+{
+  "actualCloudPreview": true,
+  "project_id": "bd5ce2ed-882b-4d56-a360-54c2f13218ce",
+  "formats": [
+    {
+      "format": "gif",
+      "width": 960,
+      "height": 960,
+      "usesOriginal": true,
+      "downloadOriginalBytesEqual": true,
+      "visiblyAnimating": true,
+      "syntheticFixture": false
+    },
+    {
+      "format": "svg",
+      "width": 832,
+      "height": 832,
+      "usesOriginal": true,
+      "downloadOriginalBytesEqual": true,
+      "visiblyAnimating": null,
+      "syntheticFixture": true
+    }
+  ],
+  "reopened": true,
+  "pageErrors": [],
+  "auth": "Normal SSR cookie fixture; no deployed auth bypass",
+  "optionalAnalysisMocked": false
+}

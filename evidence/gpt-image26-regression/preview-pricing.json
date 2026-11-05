@@ -1,0 +1,18 @@
+{
+  "observed_at": "2026-11-05T03:16:23.208Z",
+  "shared_database": true,
+  "operation": "insert missing 2.6 exact prices only, existing rows preserved",
+  "rows": [
+    {
+      "model_id": "gpt-image-2.6-flare",
+      "markup": 2,
+      "is_active": true
+    },
+    {
+      "model_id": "gpt-image-2.6-sunburst",
+      "markup": 2,
+      "is_active": true
+    }
+  ],
+  "storage_allowed_mime_types": null
+}

@@ -1,0 +1,57 @@
+{
+  "case_id": "agent-cutout",
+  "model": "gpt-image-2.6-flare",
+  "endpoint": "openai/gpt-image-2.6/flare/edit",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:23:30.839Z",
+  "started_ms": 1793849010839,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "把刚生成的广告图里的可乐罐抠出来，保留罐身包装文字和水珠，去掉冰块、水花、背景以及罐子外面的「冰爽一刻」，输出透明底 PNG，保持这张广告图的画布尺寸。",
+    "image_urls": [
+      {
+        "fixture": "advertisement-source.jpg",
+        "sha256": "c987f405772ebc8761116e64f0548a0a8f2a84232777412714b961a4e5972861"
+      }
+    ],
+    "image_size": "auto",
+    "quality": "low",
+    "reasoning_effort": "high",
+    "background": "transparent",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9bb-b269-7b10-ac32-49e816d38c17",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9bb-b269-7b10-ac32-49e816d38c17",
+  "accepted_ms": 1793849012864,
+  "cost_usd": 0.0288,
+  "provider_result_ms": 11110,
+  "elapsed_ms": 13785,
+  "media": {
+    "format": "png",
+    "width": 912,
+    "height": 1152,
+    "alpha": {
+      "min": 0,
+      "max": 254,
+      "sum": 122520531,
+      "squaresSum": 30920060727,
+      "mean": 116.61691623263889,
+      "stdev": 125.82009720023764,
+      "minX": 0,
+      "minY": 48,
+      "maxX": 233,
+      "maxY": 49
+    }
+  },
+  "sha256": "4e834e9dca18a93b60b97f55d246507a03b0587836dfb2ae0b477864c5b6325d",
+  "bytes": 1522687,
+  "fallback": false
+}

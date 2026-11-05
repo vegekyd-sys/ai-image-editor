@@ -1,0 +1,53 @@
+{
+  "case_id": "multi-reference",
+  "model": "gpt-image-2.6-flare",
+  "endpoint": "openai/gpt-image-2.6/flare/edit",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:22:03.323Z",
+  "started_ms": 1793848923323,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "Image 1: Base image to edit\nImage 2: Reference image 1\n\n用图1的人物与图2的可口可乐产品，设计一张自然的夏日生活方式产品照片：人物坐在露天咖啡店，可乐罐放在桌面上。保留人物面容、衬衫和产品包装，不添加任何宣传文字。",
+    "image_urls": [
+      {
+        "fixture": "portrait-source.jpg",
+        "sha256": "09f9772b274a9ffe982ba2e1bc13e1ae03719d34f8e3344f4e75fe80581b86a4"
+      },
+      {
+        "fixture": "coca-cola-source.png",
+        "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+      }
+    ],
+    "image_size": {
+      "width": 1248,
+      "height": 832
+    },
+    "quality": "low",
+    "reasoning_effort": "high",
+    "background": "auto",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9ba-64e9-71b1-91b3-5ae5050b2271",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9ba-64e9-71b1-91b3-5ae5050b2271",
+  "accepted_ms": 1793848929168,
+  "cost_usd": 0.0378,
+  "provider_result_ms": 15089,
+  "elapsed_ms": 17954,
+  "media": {
+    "format": "png",
+    "width": 1248,
+    "height": 832,
+    "alpha": null
+  },
+  "sha256": "f144d36760ef39a4f68068652a05737e41fab4dc0f2d362388ef4e7cb41a4d1a",
+  "bytes": 1548359,
+  "fallback": false
+}

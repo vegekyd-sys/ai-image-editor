@@ -1,0 +1,39 @@
+{
+  "case_id": "agent-infographic",
+  "model": "gpt-image-2.5-flare",
+  "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:17:00.966Z",
+  "started_ms": 1793848620966,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "做一张中文信息图，标题「手冲咖啡四步法」，内容只有这四步：1 准备滤纸与咖啡粉；2 温水润湿滤纸；3 分段注水；4 享用咖啡。用清晰的步骤编号和示意图，只要一张静态图片。",
+    "image_size": "auto",
+    "quality": "low",
+    "background": "auto",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9b5-bb59-71e3-a80c-b710e9ab96de",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b5-bb59-71e3-a80c-b710e9ab96de",
+  "accepted_ms": 1793848621892,
+  "cost_usd": 0.0073,
+  "provider_result_ms": 17087,
+  "elapsed_ms": 21221,
+  "media": {
+    "format": "png",
+    "width": 1254,
+    "height": 1254,
+    "alpha": null
+  },
+  "sha256": "46bd96bb5d306a5757c0545d145f2b615d9638ff1e9adc8e17ab273191a2b069",
+  "bytes": 1810648,
+  "fallback": false
+}

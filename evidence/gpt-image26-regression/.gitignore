@@ -1,0 +1,6 @@
+# Preserve originals locally; tracked review thumbnails, receipts and source fixtures travel with the branch.
+/paired/*/*/output.png
+/application/*/output.*
+/preview-product-*.png
+/preview-infographic.png
+/preview-saved.png

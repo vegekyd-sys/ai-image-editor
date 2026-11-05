@@ -1,0 +1,23 @@
+{
+  "case_id": "multi-reference",
+  "path": "real shared editImage",
+  "started_at": "2026-11-05T03:25:15.274Z",
+  "stage": "complete",
+  "requested_model": "openai",
+  "quality": "low",
+  "reasoning": "default high",
+  "fallback": false,
+  "elapsed_ms": 23661,
+  "success": true,
+  "model": "gpt-image-2.6-flare",
+  "provider": "fal",
+  "message": "Image generated successfully.",
+  "cost_usd": 0.038,
+  "output": "output.png",
+  "media": {
+    "format": "png",
+    "width": 1248,
+    "height": 832,
+    "hasAlpha": false
+  }
+}

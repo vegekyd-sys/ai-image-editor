@@ -1,0 +1,67 @@
+[
+  {
+    "case_id": "agent-product",
+    "review": "两版均完成冰爽广告与四字标题；2.6 罐身更直，文字更紧凑。不是严格像素保真。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "agent-infographic",
+    "review": "两版均有四步与中文标题；2.6 结构更规整，玻璃滤杯材质更清楚。逐字核对仍应看原图。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "ecommerce",
+    "review": "两版都更像广告，缺少真正详情页的信息分层；2.6 新增营销文案，未证明严格遵守“信息仅来自包装”。保留质量不足。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "poster",
+    "review": "两版核心标题、英文、日期和地点可辨；2.6 暗色电影感更强，增加了未要求的小字，不能说全约束通过。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "app-ui",
+    "review": "两版主要预算/支出值和三分类齐全；都增加未指定旅行日期，2.6 也保留此问题。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "web-ui",
+    "review": "两版均完成山间品牌、产品与订阅结构；2.6 布局更简洁。小号文字仍要原尺寸检查，不因大图好看判定所有文案通过。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "illustration",
+    "review": "两版均完成成年咖啡师递咖啡；2.6 光影和人物表情更精细，风格偏好交用户判断。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "storyboard",
+    "review": "均为 2×3 六格与 2s 标签；2.6 材质更鲜明，图内景别/运镜小字仍非正式导演交付。只验证静态图。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "face-preserve",
+    "review": "两版都保留大体身份、服装和手位；新背景生效。2.6 有发丝/面部与腰带细节重绘，不做“面容完全不变”的声明。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "multi-reference",
+    "review": "两版均使用人物和可乐；2.6 画面更整洁，但脸部、姿态和衣服仍有变化，不是严格保真合成。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "cutout",
+    "review": "输入本身已经透明，属于有限覆盖。两版都有真实 alpha、边缘干净；不能据此证明复杂抠图。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "agent-cutout",
+    "review": "2.6 深浅底检查未见历史样本的宽光晕，但主体尺度和细节重绘明显，不满足严格 pixel-faithful 原位抠图。仍为部分通过。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  },
+  {
+    "case_id": "sticker",
+    "review": "两版本次真实 alpha，2.6 深色底未见历史橙色宽光晕，机器人轮廓完整；本样本视觉有改善。共享应用路径另有 78.9s 慢样本。",
+    "method": "Human visual inspection of original outputs, paired contact sheets, and dark-background alpha composites; no biometric metric or statistically established quality win"
+  }
+]

@@ -1,0 +1,102 @@
+{
+  "deployment": "https://ai-image-editor-5av7aovby-vegekyd-sys-projects.vercel.app",
+  "runs": [
+    {
+      "id": "102217aa-eda1-40f7-8089-44bdf3e768f4",
+      "status": "completed",
+      "started_at": "2026-11-05T03:21:07.406373+00:00",
+      "ended_at": "2026-11-05T03:21:28.313+00:00"
+    },
+    {
+      "id": "0a74ac75-0698-4587-a2c9-d21ebacdac77",
+      "status": "completed",
+      "started_at": "2026-11-05T03:20:09.350599+00:00",
+      "ended_at": "2026-11-05T03:21:38.105+00:00"
+    },
+    {
+      "id": "3ade5953-aa9d-4c74-ae32-8e0a0e4332ab",
+      "status": "completed",
+      "started_at": "2026-11-05T03:23:22.943935+00:00",
+      "ended_at": "2026-11-05T03:24:38.173+00:00"
+    }
+  ],
+  "usage": [
+    {
+      "run_id": "3ade5953-aa9d-4c74-ae32-8e0a0e4332ab",
+      "project_id": "0394b691-388d-424d-9885-c172ca2763c2",
+      "tool_name": "agent",
+      "model_used": "deepseek/deepseek-flash",
+      "credits_charged": 2,
+      "duration_ms": null,
+      "input_tokens": 15148,
+      "output_tokens": 2678,
+      "created_at": "2026-11-05T03:24:38.01115+00:00"
+    },
+    {
+      "run_id": "3ade5953-aa9d-4c74-ae32-8e0a0e4332ab",
+      "project_id": "0394b691-388d-424d-9885-c172ca2763c2",
+      "tool_name": "generate_image",
+      "model_used": "gpt-image-2.6-flare",
+      "credits_charged": 7,
+      "duration_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "created_at": "2026-11-05T03:23:48.81167+00:00"
+    },
+    {
+      "run_id": "0a74ac75-0698-4587-a2c9-d21ebacdac77",
+      "project_id": "0394b691-388d-424d-9885-c172ca2763c2",
+      "tool_name": "agent",
+      "model_used": "deepseek/deepseek-flash",
+      "credits_charged": 3,
+      "duration_ms": null,
+      "input_tokens": 33419,
+      "output_tokens": 2321,
+      "created_at": "2026-11-05T03:21:37.977375+00:00"
+    },
+    {
+      "run_id": "0a74ac75-0698-4587-a2c9-d21ebacdac77",
+      "project_id": "0394b691-388d-424d-9885-c172ca2763c2",
+      "tool_name": "generate_image",
+      "model_used": "gpt-image-2.6-flare",
+      "credits_charged": 7,
+      "duration_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "created_at": "2026-11-05T03:21:22.876843+00:00"
+    },
+    {
+      "run_id": "0a74ac75-0698-4587-a2c9-d21ebacdac77",
+      "project_id": "0394b691-388d-424d-9885-c172ca2763c2",
+      "tool_name": "generate_image",
+      "model_used": "gpt-image-2.6-flare",
+      "credits_charged": 9,
+      "duration_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "created_at": "2026-11-05T03:20:45.639402+00:00"
+    },
+    {
+      "run_id": "102217aa-eda1-40f7-8089-44bdf3e768f4",
+      "project_id": "b9f34d86-e56c-4e3d-b73b-99fc0988fde2",
+      "tool_name": "agent",
+      "model_used": "deepseek/deepseek-flash",
+      "credits_charged": 2,
+      "duration_ms": null,
+      "input_tokens": 29639,
+      "output_tokens": 472,
+      "created_at": "2026-11-05T03:21:28.109888+00:00"
+    },
+    {
+      "run_id": "102217aa-eda1-40f7-8089-44bdf3e768f4",
+      "project_id": "b9f34d86-e56c-4e3d-b73b-99fc0988fde2",
+      "tool_name": "generate_image",
+      "model_used": "gpt-image-2.6-flare",
+      "credits_charged": 8,
+      "duration_ms": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "created_at": "2026-11-05T03:21:26.515887+00:00"
+    }
+  ]
+}

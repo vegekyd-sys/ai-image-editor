@@ -1,0 +1,42 @@
+{
+  "case_id": "app-ui",
+  "model": "gpt-image-2.5-flare",
+  "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:18:45.406Z",
+  "started_ms": 1793848725406,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "做一张旅行记账 App 的中文首页 UI 静态概念图，展示东京旅行、本次预算 ¥8,000、已花费 ¥2,450，以及餐饮、交通、住宿三类支出。只生成一张图片，不写代码。",
+    "image_size": {
+      "width": 768,
+      "height": 1360
+    },
+    "quality": "low",
+    "background": "auto",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9b7-5368-7623-ad71-2ccf97fa17a7",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b7-5368-7623-ad71-2ccf97fa17a7",
+  "accepted_ms": 1793848726361,
+  "cost_usd": 0.0037,
+  "provider_result_ms": 20514,
+  "elapsed_ms": 23031,
+  "media": {
+    "format": "png",
+    "width": 768,
+    "height": 1360,
+    "alpha": null
+  },
+  "sha256": "bb9e6336da0755d3bb1769e304bf71fe75c38581c2b5eb13ff5471d7ffa8dd25",
+  "bytes": 1050240,
+  "fallback": false
+}

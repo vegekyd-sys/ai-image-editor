@@ -1,0 +1,23 @@
+{
+  "case_id": "poster",
+  "path": "real shared editImage",
+  "started_at": "2026-11-05T03:23:42.105Z",
+  "stage": "complete",
+  "requested_model": "openai",
+  "quality": "low",
+  "reasoning": "default high",
+  "fallback": false,
+  "elapsed_ms": 14629,
+  "success": true,
+  "model": "gpt-image-2.6-flare",
+  "provider": "fal",
+  "message": "Image generated successfully.",
+  "cost_usd": 0.0173,
+  "output": "output.png",
+  "media": {
+    "format": "png",
+    "width": 1248,
+    "height": 832,
+    "hasAlpha": false
+  }
+}

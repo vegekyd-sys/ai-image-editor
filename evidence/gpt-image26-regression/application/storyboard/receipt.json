@@ -1,0 +1,23 @@
+{
+  "case_id": "storyboard",
+  "path": "real shared editImage",
+  "started_at": "2026-11-05T03:24:36.490Z",
+  "stage": "complete",
+  "requested_model": "openai",
+  "quality": "low",
+  "reasoning": "default high",
+  "fallback": false,
+  "elapsed_ms": 22713,
+  "success": true,
+  "model": "gpt-image-2.6-flare",
+  "provider": "fal",
+  "message": "Image generated successfully.",
+  "cost_usd": 0.0228,
+  "output": "output.png",
+  "media": {
+    "format": "png",
+    "width": 768,
+    "height": 1360,
+    "hasAlpha": false
+  }
+}

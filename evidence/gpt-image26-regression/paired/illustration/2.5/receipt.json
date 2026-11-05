@@ -1,0 +1,42 @@
+{
+  "case_id": "illustration",
+  "model": "gpt-image-2.5-flare",
+  "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:19:58.015Z",
+  "started_ms": 1793848798015,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "画一张原创动画风格插画：一位成年咖啡师在雨后的街角咖啡店门前给路人递咖啡，温暖治愈，人物穿完整的衬衫和围裙。",
+    "image_size": {
+      "width": 1248,
+      "height": 832
+    },
+    "quality": "low",
+    "background": "auto",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9b8-6f27-7040-8020-d43e784d3077",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b8-6f27-7040-8020-d43e784d3077",
+  "accepted_ms": 1793848799771,
+  "cost_usd": 0.0044,
+  "provider_result_ms": 14467,
+  "elapsed_ms": 17027,
+  "media": {
+    "format": "png",
+    "width": 1248,
+    "height": 832,
+    "alpha": null
+  },
+  "sha256": "a6fd7f7d51b5027604dd939950b18f97ccd76f7e1742e41274b0fff9cdf6e46f",
+  "bytes": 1588815,
+  "fallback": false
+}

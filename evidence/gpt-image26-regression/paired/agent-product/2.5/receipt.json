@@ -1,0 +1,45 @@
+{
+  "case_id": "agent-product",
+  "model": "gpt-image-2.5-flare",
+  "endpoint": "openai/gpt-image-2.5/flare/edit",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:16:03.696Z",
+  "started_ms": 1793848563702,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "给这罐可口可乐做一张夏日冰爽产品广告图，保留包装与品牌标识，画面上只写「冰爽一刻」。只需要一张静态成图。",
+    "image_urls": [
+      {
+        "fixture": "coca-cola-source.png",
+        "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+      }
+    ],
+    "image_size": "auto",
+    "quality": "low",
+    "background": "auto",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9b4-e7d9-7d92-a7d8-5437178f1bf1",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b4-e7d9-7d92-a7d8-5437178f1bf1",
+  "accepted_ms": 1793848567767,
+  "cost_usd": 0.0137,
+  "provider_result_ms": 18752,
+  "elapsed_ms": 21879,
+  "media": {
+    "format": "png",
+    "width": 816,
+    "height": 816,
+    "alpha": null
+  },
+  "sha256": "ec51e0f486abc5a6f8429341ca986d19e622757ef2054848e10f1ae651e0d70e",
+  "bytes": 1197106,
+  "fallback": false
+}

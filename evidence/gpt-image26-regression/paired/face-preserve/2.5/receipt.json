@@ -1,0 +1,48 @@
+{
+  "case_id": "face-preserve",
+  "model": "gpt-image-2.5-flare",
+  "endpoint": "openai/gpt-image-2.5/flare/edit",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:21:23.648Z",
+  "started_ms": 1793848883648,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "Preserve this person’s exact facial identity, face shape, eyes, nose, mouth, hair, pose and clothing. Change only the background to a softly blurred city street in daylight. Do not beautify, reshape or retouch the face. No added text or logos.",
+    "image_urls": [
+      {
+        "fixture": "portrait-source.jpg",
+        "sha256": "09f9772b274a9ffe982ba2e1bc13e1ae03719d34f8e3344f4e75fe80581b86a4"
+      }
+    ],
+    "image_size": {
+      "width": 880,
+      "height": 1184
+    },
+    "quality": "low",
+    "background": "auto",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9b9-c2ed-7110-93a1-f86ed0a6b88d",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b9-c2ed-7110-93a1-f86ed0a6b88d",
+  "accepted_ms": 1793848885976,
+  "cost_usd": 0.017,
+  "provider_result_ms": 15783,
+  "elapsed_ms": 19293,
+  "media": {
+    "format": "png",
+    "width": 880,
+    "height": 1184,
+    "alpha": null
+  },
+  "sha256": "8856af9e893ca02d9f495aa0870f23c819108da697edc834001cc3ded532cf14",
+  "bytes": 1351187,
+  "fallback": false
+}

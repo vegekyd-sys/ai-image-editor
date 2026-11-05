@@ -1,0 +1,49 @@
+{
+  "case_id": "ecommerce",
+  "model": "gpt-image-2.6-flare",
+  "endpoint": "openai/gpt-image-2.6/flare/edit",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:17:48.148Z",
+  "started_ms": 1793848668148,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "给这罐可口可乐设计一张中文电商详情页图片，保留品牌和包装，突出冰爽饮用场景，信息只使用包装上可见的内容，不编造营养、配料或健康功效。",
+    "image_urls": [
+      {
+        "fixture": "coca-cola-source.png",
+        "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+      }
+    ],
+    "image_size": {
+      "width": 1248,
+      "height": 832
+    },
+    "quality": "low",
+    "reasoning_effort": "high",
+    "background": "auto",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9b6-8218-7572-a6ce-5af67da25b77",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9b6-8218-7572-a6ce-5af67da25b77",
+  "accepted_ms": 1793848672858,
+  "cost_usd": 0.0255,
+  "provider_result_ms": 14890,
+  "elapsed_ms": 17942,
+  "media": {
+    "format": "png",
+    "width": 1248,
+    "height": 832,
+    "alpha": null
+  },
+  "sha256": "8512dee690dd40993c80dff467e6ba0322bd227a32243f37efd5c5a9ebf7f6e5",
+  "bytes": 1768801,
+  "fallback": false
+}

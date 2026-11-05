@@ -1,0 +1,43 @@
+import fs from 'node:fs';
+import {createRequire} from 'node:module';
+import {config} from 'dotenv';
+import sharp from 'sharp';
+config({path:'.env.local',quiet:true});process.env.GPT_IMAGE25_PROVIDER='fal';
+const require=createRequire(import.meta.url);require.extensions['.md']=(m:any,f:string)=>{m.exports=fs.readFileSync(f,'utf8');};
+const dir='.artifacts/image25/default-scenarios';
+const data=(file:string)=>`data:image/${file.endsWith('.png')?'png':'jpeg'};base64,${fs.readFileSync(`${dir}/${file}`).toString('base64')}`;
+const originalFetch=globalThis.fetch;let sample:any;
+globalThis.fetch=async(...args:Parameters<typeof fetch>)=>{
+ const r=await originalFetch(...args);
+ if(String(args[0]).startsWith('https://queue.fal.run/')){const b=await r.clone().json().catch(()=>null);if(b?.request_id)sample.requestId=b.request_id;if(b?.detail)sample.providerError=b.detail.map((x:any)=>({type:x.type,message:x.msg}));sample.httpStatus=r.status;}
+ return r;
+};
+(async()=>{
+ const {editImage}=await import('../../../src/lib/skills/edit-image');
+ const coke=data('coca-cola-source.png');const portrait=data('portrait-source.jpg');
+ const cases:any[]=[
+  {id:'ecommerce',label:'可口可乐电商详情页',image:coke,aspect:'3:2',prompt:'给这罐可口可乐设计一张中文电商详情页图片，保留品牌和包装，突出冰爽饮用场景，信息只使用包装上可见的内容，不编造营养、配料或健康功效。'},
+  {id:'poster',label:'中英文字海报',aspect:'3:2',prompt:'设计一张当代摄影展海报。标题「城市之间」，英文副标题「BETWEEN CITIES」，日期「2026.10.01—10.07」，地点「上海 · 光影艺术空间」。这些文字须完整清晰，其他设计由你决定。'},
+  {id:'app-ui',label:'App UI 静态概念图',aspect:'9:16',prompt:'做一张旅行记账 App 的中文首页 UI 静态概念图，展示东京旅行、本次预算 ¥8,000、已花费 ¥2,450，以及餐饮、交通、住宿三类支出。只生成一张图片，不写代码。'},
+  {id:'web-ui',label:'网站首页静态概念图',aspect:'16:9',prompt:'设计一张独立咖啡品牌「山间」的网站首页静态概念图，包含品牌介绍、三款咖啡豆和订阅入口。文案用中文，只生成图片。'},
+  {id:'illustration',label:'原创动漫插画',aspect:'3:2',prompt:'画一张原创动画风格插画：一位成年咖啡师在雨后的街角咖啡店门前给路人递咖啡，温暖治愈，人物穿完整的衬衫和围裙。'},
+  {id:'storyboard',label:'导演分镜图',aspect:'9:16',image:coke,prompt:'为可口可乐夏日产品广告的 S1 段画一张竖版导演分镜图，6 个镜头，2 列 3 行。保持参考罐身和品牌。镜头依次是冰块特写、可乐罐上的冷凝水、拉环开启、倒入杯中、杯壁气泡、产品英雄镜头。每格标签使用 S1-P1 至 S1-P6，并写 2s、景别和运镜。写实广告摄影，除此之外不加标题。'},
+  {id:'face-preserve',label:'普通人像保真编辑',aspect:'3:4',image:portrait,prompt:'Preserve this person’s exact facial identity, face shape, eyes, nose, mouth, hair, pose and clothing. Change only the background to a softly blurred city street in daylight. Do not beautify, reshape or retouch the face. No added text or logos.'},
+  {id:'multi-reference',label:'人物＋品牌产品双参考',aspect:'3:2',image:portrait,refs:[coke],prompt:'用图1的人物与图2的可口可乐产品，设计一张自然的夏日生活方式产品照片：人物坐在露天咖啡店，可乐罐放在桌面上。保留人物面容、衬衫和产品包装，不添加任何宣传文字。'},
+  {id:'cutout',label:'商品抠图与原画布',image:fs.existsSync(`${dir}/agent-product.jpeg`)?data('agent-product.jpeg'):coke,background:'transparent',prompt:'Pixel-faithful foreground extraction, not a redesign or regeneration. Keep only the complete Coca-Cola can. Preserve the exact can shape, red packaging, Coca-Cola logo, all original can lettering, silver rims and condensation details. Remove the scene, ice, water splashes, floor and advertising headline outside the can. Do not beautify, retouch, restyle, alter geometry, or invent hidden details. Return a real transparent PNG with clean natural edges and no halo, shadow, border, text, or background. Preserve the original lettering printed on the can.'},
+  {id:'sticker',label:'透明底文生图',background:'transparent',aspect:'1:1',prompt:'A friendly orange robot mascot waving, full body, a simple rounded silhouette with generous transparent padding. Return a real transparent PNG. No floor, horizon, environmental shadow, border, text, checkerboard or scenic background.'},
+ ];
+ for(const t of cases){
+  if(fs.existsSync(`${dir}/${t.id}.json`)){console.log('SKIP',t.id);continue;}
+  sample={id:t.id,label:t.label,prompt:t.prompt,requestedModel:t.background?null:'openai',aspect:t.aspect??null,background:t.background??'auto',quality:'low'};
+  const start=Date.now();
+  try{
+   const r=await editImage({editPrompt:t.prompt,preferredModel:t.background?undefined:'openai',aspectRatio:t.aspect,background:t.background},{currentImage:t.image,referenceImages:t.refs});
+   sample.success=r.success;sample.usedModel=r.usedModel;sample.provider=r.provider;sample.message=r.message;sample.costUsd=r.usage?.providerCostUsd;
+   if(r.image){const bytes=Buffer.from(r.image.split(',')[1],'base64');const m=await sharp(bytes).metadata();sample.width=m.width;sample.height=m.height;sample.output=`${t.id}.${m.format}`;fs.writeFileSync(`${dir}/${sample.output}`,bytes);if(t.background==='transparent'){const stats=await sharp(bytes).stats();sample.alpha={min:stats.channels[3]?.min,max:stats.channels[3]?.max};if(t.image){const source=await sharp(Buffer.from(t.image.split(',')[1],'base64')).metadata();sample.sourceCanvas={width:source.width,height:source.height};}}}
+   if(r.success&&(r.usedModel!=='gpt-image-2.5-flare'||r.provider!=='fal'))throw Error('Unexpected model/provider: migration failed');
+  }catch(e){sample.success=false;sample.error=e instanceof Error?e.message:String(e);}
+  sample.elapsedMs=Date.now()-start;fs.writeFileSync(`${dir}/${t.id}.json`,JSON.stringify(sample,null,2));console.log(JSON.stringify(sample));
+ }
+ process.exit(0);
+})();

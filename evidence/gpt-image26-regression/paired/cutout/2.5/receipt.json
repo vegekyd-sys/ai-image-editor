@@ -1,0 +1,56 @@
+{
+  "case_id": "cutout",
+  "model": "gpt-image-2.5-flare",
+  "endpoint": "openai/gpt-image-2.5/flare/edit",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:22:50.264Z",
+  "started_ms": 1793848970266,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "Pixel-faithful foreground extraction, not a redesign or regeneration. Keep only the complete Coca-Cola can. Preserve the exact can shape, red packaging, Coca-Cola logo, all original can lettering, silver rims and condensation details. Remove the scene, ice, water splashes, floor and advertising headline outside the can. Do not beautify, retouch, restyle, alter geometry, or invent hidden details. Return a real transparent PNG with clean natural edges and no halo, shadow, border, text, or background. Preserve the original lettering printed on the can.",
+    "image_urls": [
+      {
+        "fixture": "coca-cola-source.png",
+        "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+      }
+    ],
+    "image_size": "auto",
+    "quality": "low",
+    "background": "transparent",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9bb-1de8-79b3-9a1d-84d32ea3a961",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9bb-1de8-79b3-9a1d-84d32ea3a961",
+  "accepted_ms": 1793848974850,
+  "cost_usd": 0.014,
+  "provider_result_ms": 19980,
+  "elapsed_ms": 22571,
+  "media": {
+    "format": "png",
+    "width": 816,
+    "height": 816,
+    "alpha": {
+      "min": 0,
+      "max": 254,
+      "sum": 55732363,
+      "squaresSum": 14057412645,
+      "mean": 83.70032409409842,
+      "stdev": 118.76896832357436,
+      "minX": 0,
+      "minY": 0,
+      "maxX": 399,
+      "maxY": 64
+    }
+  },
+  "sha256": "50ca7415ad54a8c98053617f83a1e008632c3e26bcc9c9d4ea5a2698e6f2ea00",
+  "bytes": 787348,
+  "fallback": false
+}

@@ -1,0 +1,53 @@
+{
+  "case_id": "sticker",
+  "model": "gpt-image-2.5-flare",
+  "endpoint": "openai/gpt-image-2.5/flare/text-to-image",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:24:04.597Z",
+  "started_ms": 1793849044597,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.5/flare/text-to-image",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "A friendly orange robot mascot waving, full body, a simple rounded silhouette with generous transparent padding. Return a real transparent PNG. No floor, horizon, environmental shadow, border, text, checkerboard or scenic background.",
+    "image_size": {
+      "width": 1024,
+      "height": 1024
+    },
+    "quality": "low",
+    "background": "transparent",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9bc-325b-7160-9ca0-cca42c49d4e0",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9bc-325b-7160-9ca0-cca42c49d4e0",
+  "accepted_ms": 1793849045575,
+  "cost_usd": 0.0062,
+  "provider_result_ms": 12481,
+  "elapsed_ms": 15284,
+  "media": {
+    "format": "png",
+    "width": 1024,
+    "height": 1024,
+    "alpha": {
+      "min": 0,
+      "max": 254,
+      "sum": 76994293,
+      "squaresSum": 19358493663,
+      "mean": 73.42747974395752,
+      "stdev": 114.32460756023087,
+      "minX": 0,
+      "minY": 16,
+      "maxX": 439,
+      "maxY": 113
+    }
+  },
+  "sha256": "0de7dd4ae30adf44220400983602c413983c8e364b681e2151bb6027eb6118bc",
+  "bytes": 1081914,
+  "fallback": false
+}

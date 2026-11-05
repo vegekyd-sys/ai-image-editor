@@ -1,0 +1,57 @@
+{
+  "case_id": "cutout",
+  "model": "gpt-image-2.6-flare",
+  "endpoint": "openai/gpt-image-2.6/flare/edit",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:23:13.749Z",
+  "started_ms": 1793848993749,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "Pixel-faithful foreground extraction, not a redesign or regeneration. Keep only the complete Coca-Cola can. Preserve the exact can shape, red packaging, Coca-Cola logo, all original can lettering, silver rims and condensation details. Remove the scene, ice, water splashes, floor and advertising headline outside the can. Do not beautify, retouch, restyle, alter geometry, or invent hidden details. Return a real transparent PNG with clean natural edges and no halo, shadow, border, text, or background. Preserve the original lettering printed on the can.",
+    "image_urls": [
+      {
+        "fixture": "coca-cola-source.png",
+        "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+      }
+    ],
+    "image_size": "auto",
+    "quality": "low",
+    "reasoning_effort": "high",
+    "background": "transparent",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9bb-7a45-7631-9298-652710469351",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.6/requests/01a1a9bb-7a45-7631-9298-652710469351",
+  "accepted_ms": 1793848998470,
+  "cost_usd": 0.0305,
+  "provider_result_ms": 13968,
+  "elapsed_ms": 16442,
+  "media": {
+    "format": "png",
+    "width": 816,
+    "height": 816,
+    "alpha": {
+      "min": 0,
+      "max": 254,
+      "sum": 59181429,
+      "squaresSum": 14939505977,
+      "mean": 88.88022184976931,
+      "stdev": 120.56894208757583,
+      "minX": 0,
+      "minY": 0,
+      "maxX": 359,
+      "maxY": 48
+    }
+  },
+  "sha256": "4596729a7cb72aa495d35f62d14b13ae3569c22de526a07569e7127928ae5dd8",
+  "bytes": 885796,
+  "fallback": false
+}

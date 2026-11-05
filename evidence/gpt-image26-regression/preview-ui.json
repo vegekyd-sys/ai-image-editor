@@ -1,0 +1,13 @@
+{
+  "url": "https://ai-image-editor-5av7aovby-vegekyd-sys-projects.vercel.app",
+  "actualCloudPreview": true,
+  "auth": "Existing dedicated test identity; normal SSR session cookie seeded as test fixture, no deployed auth bypass",
+  "image": {
+    "width": 912,
+    "height": 1152
+  },
+  "saved_bytes": 1530353,
+  "filename": "makaron-给这罐可口可乐做一张夏日冰爽产品广告图-保留包装与品牌标识--4.png",
+  "reopened": true,
+  "pageErrors": []
+}

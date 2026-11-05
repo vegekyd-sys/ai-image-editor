@@ -1,0 +1,59 @@
+{
+  "project_id": "bd5ce2ed-882b-4d56-a360-54c2f13218ce",
+  "project_url": "https://ai-image-editor-5av7aovby-vegekyd-sys-projects.vercel.app/projects/bd5ce2ed-882b-4d56-a360-54c2f13218ce",
+  "origin": "https://ai-image-editor-5av7aovby-vegekyd-sys-projects.vercel.app",
+  "stage": "persisted",
+  "media": [
+    {
+      "format": "gif",
+      "mime": "image/gif",
+      "bytes_equal": true,
+      "sha256": "b65e3068aa892ff399ec51f03cf21b2c916da05d0e77211625f3b14bcd3ef0e4",
+      "metadata": {
+        "format": "gif",
+        "size": 871237,
+        "width": 960,
+        "height": 8640,
+        "space": "srgb",
+        "channels": 4,
+        "depth": "uchar",
+        "isProgressive": false,
+        "isPalette": true,
+        "bitsPerSample": 8,
+        "paletteBitDepth": 8,
+        "pages": 9,
+        "pageHeight": 960,
+        "loop": 0,
+        "delay": [
+          160,
+          160,
+          160,
+          160,
+          160,
+          160,
+          160,
+          160,
+          160
+        ],
+        "background": {
+          "r": 109,
+          "g": 193,
+          "b": 253
+        },
+        "hasProfile": false,
+        "hasAlpha": true,
+        "autoOrient": {
+          "width": 960,
+          "height": 8640
+        }
+      }
+    },
+    {
+      "format": "svg",
+      "mime": "image/svg+xml",
+      "bytes_equal": true,
+      "sha256": "c7e994e66534c1c7d63911eaeb5da5951a0eb75e114aa6ddeeb8748bcb97b8ad",
+      "fixture_only": true
+    }
+  ]
+}

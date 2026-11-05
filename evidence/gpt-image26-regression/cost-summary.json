@@ -1,0 +1,15 @@
+{
+  "currency": "USD",
+  "prior_session_estimated_usd": 1.31885704,
+  "current_paired_reported_usd": 0.4615,
+  "current_shared_tools_reported_usd": 0.2358,
+  "cloud_image_credits": 48,
+  "cloud_agent_credits": 7,
+  "cloud_image_supplier_cost_upper_bound_usd": 0.24,
+  "cloud_text_estimate_upper_bound_usd": 0.035,
+  "cloud_upper_bound_method": "ceil(provider USD * verified model markup 2 / credit value $0.01), both image exact rows and DeepSeek Flash row verified. This is a rounding upper bound, not invoice.",
+  "native_subscription_unknown_result_retained": true,
+  "prior_422_unknown_costs_retained": true,
+  "invoice_not_queried": true,
+  "estimated_combined_completed_calls_usd": 2.29115704
+}

@@ -1,0 +1,23 @@
+{
+  "case_id": "cutout",
+  "path": "real shared editImage",
+  "started_at": "2026-11-05T03:25:38.937Z",
+  "stage": "complete",
+  "requested_model": null,
+  "quality": "low",
+  "reasoning": "default high",
+  "fallback": false,
+  "elapsed_ms": 19971,
+  "success": true,
+  "model": "gpt-image-2.6-flare",
+  "provider": "fal",
+  "message": "Image generated successfully.",
+  "cost_usd": 0.0305,
+  "output": "output.png",
+  "media": {
+    "format": "png",
+    "width": 3000,
+    "height": 3000,
+    "hasAlpha": true
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "case_id": "storyboard",
+  "model": "gpt-image-2.5-flare",
+  "endpoint": "openai/gpt-image-2.5/flare/edit",
+  "stage": "complete",
+  "started_at": "2026-11-05T03:20:54.028Z",
+  "started_ms": 1793848854028,
+  "price": {
+    "endpoint_id": "openai/gpt-image-2.5/flare/edit",
+    "unit_price": 1,
+    "unit": "units",
+    "currency": "USD"
+  },
+  "submission_count": 1,
+  "request": {
+    "prompt": "为可口可乐夏日产品广告的 S1 段画一张竖版导演分镜图，6 个镜头，2 列 3 行。保持参考罐身和品牌。镜头依次是冰块特写、可乐罐上的冷凝水、拉环开启、倒入杯中、杯壁气泡、产品英雄镜头。每格标签使用 S1-P1 至 S1-P6，并写 2s、景别和运镜。写实广告摄影，除此之外不加标题。",
+    "image_urls": [
+      {
+        "fixture": "coca-cola-source.png",
+        "sha256": "26f7955ffdc5b3696c74bc67b50a33280c683ee39d6708bf390a7d1cba895871"
+      }
+    ],
+    "image_size": {
+      "width": 768,
+      "height": 1360
+    },
+    "quality": "low",
+    "background": "auto",
+    "output_format": "png",
+    "num_images": 1,
+    "sync_mode": false
+  },
+  "request_id": "01a1a9b9-5c5f-7542-bde8-4438c2955d59",
+  "result_url": "https://queue.fal.run/openai/gpt-image-2.5/requests/01a1a9b9-5c5f-7542-bde8-4438c2955d59",
+  "accepted_ms": 1793848859757,
+  "cost_usd": 0.0122,
+  "provider_result_ms": 24130,
+  "elapsed_ms": 28997,
+  "media": {
+    "format": "png",
+    "width": 768,
+    "height": 1360,
+    "alpha": null
+  },
+  "sha256": "d05db4743c5232b080e38af82d999896e5ffe5b25ae86f6ef4aee659eef1460c",
+  "bytes": 1746181,
+  "fallback": false
+}
