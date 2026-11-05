@@ -1,27 +1,24 @@
 'use client';
 
-// Video Timeline V2 design prototype (dev only).
+// Video Timeline V2 design prototype (dev only), rev 2.
 // Built on the real Editor shell: same GUI column / resizable CUI panel on
-// desktop, same GUI ↔ full-screen CUI on mobile, same bottom-bar slot,
-// AgentStatusBar, DesignEditorFrame + DesignFieldEditor, StudioRunStageCard,
-// liquid-glass classes. Only TimelineDock is new, and it replaces the
-// DesignEditPanel pill carousel in that slot for timeline videos.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// desktop, same GUI ↔ full-screen CUI on mobile, same bottom-bar slot and
+// AgentStatusBar, same canvas controls and liquid-glass classes.
+// New: TimelineDock (replaces DesignEditPanel in the slot for timeline videos)
+// with an inline inspector instead of the floating field editor.
+// CUI gets no special UI: the Agent just talks; edits show up in the GUI.
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import AgentStatusBar from '@/components/AgentStatusBar';
-import DesignEditorFrame from '@/components/DesignEditorFrame';
-import DesignFieldEditor from '@/components/DesignFieldEditor';
-import { StudioRunStageCard } from '@/components/StudioRunDock';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
-import type { DesignPayload, EditableField } from '@/types';
 import TimelineComposition from './TimelineComposition';
 import TimelineDock from './TimelineDock';
 import { AGENT_REQUEST, AGENT_SCRIPT, applyOp, docDuration, initialDoc, type Box, type Clip, type TimelineDoc, type TimelineOp } from './prototype-doc';
 
-type Row = { time: string; text: string; clipId: string };
-type AgentState = { active: boolean; status: string; clipId: string | null; rows: Row[]; done: boolean; request: string | null };
+type AgentState = { active: boolean; status: string; clipId: string | null; changes: number; done: boolean; request: string | null };
+type Corner = 'tl' | 'tr' | 'bl' | 'br';
 
-const IDLE_AGENT: AgentState = { active: false, status: '', clipId: null, rows: [], done: false, request: null };
+const IDLE_AGENT: AgentState = { active: false, status: '', clipId: null, changes: 0, done: false, request: null };
 const CAPTION_BOX: Box = { x: 80, y: 1920 - 260 - 110, w: 920, h: 110 };
 
 function fmt(t: number) {
@@ -45,7 +42,7 @@ export default function TimelinePrototype() {
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [focusToken, setFocusToken] = useState(0);
   const [agent, setAgent] = useState<AgentState>(IDLE_AGENT);
   const [follow, setFollow] = useState(true);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
@@ -115,7 +112,6 @@ export default function TimelinePrototype() {
     setDoc(initialDoc());
     setHistory([]);
     setSelectedId(null);
-    setEditingId(null);
     setFollow(true);
     setAgent({ ...IDLE_AGENT, active: true, status: '思考中…', request });
     await sleep(900);
@@ -125,12 +121,7 @@ export default function TimelinePrototype() {
         setHistory(h => [...h, docRef.current]);
         setDoc(d => step.ops!.reduce(applyOp, d));
       }
-      setAgent(a => ({
-        ...a,
-        status: step.status,
-        clipId: step.focus?.clipId ?? a.clipId,
-        rows: step.row ? [...a.rows, step.row] : a.rows,
-      }));
+      setAgent(a => ({ ...a, status: step.status, clipId: step.focus?.clipId ?? a.clipId, changes: a.changes + (step.row ? 1 : 0) }));
       if (step.focus && followRef.current) {
         playerRef.current?.pause();
         const frame = Math.round(step.focus.time * 30);
@@ -151,7 +142,7 @@ export default function TimelinePrototype() {
       }
     }
     if (runToken.current !== token) return;
-    setAgent(a => ({ ...a, active: false, clipId: null, done: true, status: `已完成 ${a.rows.length} 处修改 · 可在时间线上继续调整` }));
+    setAgent(a => ({ ...a, active: false, clipId: null, done: true, status: `已完成 ${a.changes} 处修改` }));
     if (followRef.current) {
       playerRef.current?.seekTo(0);
       playerRef.current?.play();
@@ -163,11 +154,10 @@ export default function TimelinePrototype() {
     return () => { clearTimeout(timer); runToken.current++; };
   }, [runAgent]);
 
-  // Keep the newest Agent step in view (AgentChatView scrolls to messagesEnd the same way)
   useEffect(() => {
     const el = chatScrollRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-  }, [agent.rows.length, agent.active, agent.done, viewMode, isDesktop]);
+  }, [agent.active, agent.done, agent.request, viewMode, isDesktop]);
 
   // ── Canvas geometry (Player letterboxes the 9:16 composition) ──
   const scale = canvasSize.w && canvasSize.h ? Math.min(canvasSize.w / doc.width, canvasSize.h / doc.height) : 0;
@@ -176,36 +166,57 @@ export default function TimelinePrototype() {
   const toScreen = (b: Box) => ({ left: ox + b.x * scale, top: oy + b.y * scale, width: b.w * scale, height: b.h * scale });
 
   const visibleAt = (c: Clip) => time >= c.start && time < c.start + c.duration;
-  const hitOrder = ['t-overlay', 't-text', 't-caption', 't-main'];
-  const onCanvasPointerDown = (e: React.PointerEvent) => {
-    if (!scale) return;
+  const hitTest = (e: React.PointerEvent | React.MouseEvent) => {
+    if (!scale) return undefined;
     const rect = canvasRef.current!.getBoundingClientRect();
     const x = (e.clientX - rect.left - ox) / scale;
     const y = (e.clientY - rect.top - oy) / scale;
-    const hit = hitOrder
+    return ['t-overlay', 't-text', 't-caption', 't-main']
       .flatMap(tid => Object.values(docRef.current.clips).filter(c => c.trackId === tid && visibleAt(c)))
       .find(c => {
         const b = clipBox(c, docRef.current);
         return b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
       });
+  };
+  const onCanvasPointerDown = (e: React.PointerEvent) => {
+    const hit = hitTest(e);
     userTouched();
     setSelectedId(hit?.id ?? null);
     if (hit) playerRef.current?.pause();
   };
+  // Double-tap text on canvas → jump straight into the inline inspector input.
+  const onCanvasDoubleClick = (e: React.MouseEvent) => {
+    const hit = hitTest(e);
+    if (hit && (hit.kind === 'text' || hit.kind === 'caption')) {
+      setSelectedId(hit.id);
+      setFocusToken(t => t + 1);
+    }
+  };
 
-  // Drag selected text / PiP on canvas (DesignOverlay-style move)
-  const moveRef = useRef<{ x0: number; y0: number; box: Box; id: string } | null>(null);
-  const onFramePointerDown = (e: React.PointerEvent, clip: Clip) => {
+  // Move / corner-scale the selected PiP or text box (DesignOverlay-style)
+  const gesture = useRef<{ x0: number; y0: number; box: Box; id: string; corner?: Corner } | null>(null);
+  const startGesture = (e: React.PointerEvent, clip: Clip, corner?: Corner) => {
     if (!clip.box) return;
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pushHistory();
-    moveRef.current = { x0: e.clientX, y0: e.clientY, box: clip.box, id: clip.id };
+    gesture.current = { x0: e.clientX, y0: e.clientY, box: clip.box, id: clip.id, corner };
   };
-  const onFramePointerMove = (e: React.PointerEvent) => {
-    const m = moveRef.current;
-    if (!m || !e.buttons || !scale) return;
-    dispatch({ op: 'update', id: m.id, patch: { box: { ...m.box, x: Math.round(m.box.x + (e.clientX - m.x0) / scale), y: Math.round(m.box.y + (e.clientY - m.y0) / scale) } } });
+  const moveGesture = (e: React.PointerEvent) => {
+    const g = gesture.current;
+    if (!g || !e.buttons || !scale) return;
+    const dx = (e.clientX - g.x0) / scale;
+    const dy = (e.clientY - g.y0) / scale;
+    const b = g.box;
+    if (!g.corner) {
+      dispatch({ op: 'update', id: g.id, patch: { box: { ...b, x: Math.round(b.x + dx), y: Math.round(b.y + dy) } } });
+      return;
+    }
+    const right = g.corner[1] === 'r';
+    const bottom = g.corner[0] === 'b';
+    const w = Math.max(160, b.w + (right ? dx : -dx));
+    const h = w * (b.h / b.w);
+    dispatch({ op: 'update', id: g.id, patch: { box: { ...b, w: Math.round(w), h: Math.round(h), x: Math.round(right ? b.x : b.x + b.w - w), y: Math.round(bottom ? b.y : b.y + b.h - h) } } });
   };
 
   const selected = selectedId ? doc.clips[selectedId] : null;
@@ -213,55 +224,13 @@ export default function TimelinePrototype() {
   const frameClip = selected ?? (agent.active && follow ? agentClip : null);
   const frameBox = frameClip && visibleAt(frameClip) ? clipBox(frameClip, doc) : null;
   const isAgentFrame = !selected && !!frameClip;
+  const canTransform = !!frameClip?.box && !isAgentFrame;
 
-  // ── Field editor reuse: map a clip to the existing EditableField contract ──
-  const editing = editingId ? doc.clips[editingId] : null;
-  const editorModel = useMemo(() => {
-    if (!editing) return null;
-    const field: EditableField = editing.kind === 'video'
-      ? { id: editing.id, type: 'video', label: editing.label, propKey: 'src', trimBeforePropKey: 'tb', trimAfterPropKey: 'ta' }
-      : { id: editing.id, type: 'text', label: editing.label, propKey: 'text' };
-    const design: DesignPayload = {
-      code: '',
-      width: doc.width,
-      height: doc.height,
-      props: editing.kind === 'video'
-        ? { src: editing.src, tb: Math.round((editing.sourceIn ?? 0) * doc.fps), ta: Math.round(((editing.sourceIn ?? 0) + editing.duration) * doc.fps) }
-        : { text: editing.text },
-      animation: { fps: doc.fps, durationInSeconds: duration },
-    } as DesignPayload;
-    return { field, design };
-  }, [editing, doc.width, doc.height, doc.fps, duration]);
-
-  const onEditorUpdate = (key: string, value: unknown) => {
-    if (!editing) return;
-    if (key === 'text') dispatch({ op: 'update', id: editing.id, patch: { text: String(value) } });
-    if (key === 'tb') {
-      const tb = Number(value) / doc.fps;
-      const end = (editing.sourceIn ?? 0) + editing.duration;
-      dispatch({ op: 'update', id: editing.id, patch: { sourceIn: tb, duration: Math.max(0.5, end - tb) } });
-    }
-    if (key === 'ta') dispatch({ op: 'update', id: editing.id, patch: { duration: Math.max(0.5, Number(value) / doc.fps - (editing.sourceIn ?? 0)) } });
-  };
-
-  const fieldEditor = editorModel && editing ? (
-    <DesignFieldEditor
-      field={editorModel.field}
-      design={editorModel.design}
-      posterImage={editing.poster}
-      onUpdateProp={onEditorUpdate}
-      onClose={() => setEditingId(null)}
-      isDesktop={isDesktop}
-    />
-  ) : null;
-
-  const statusText = agent.active
-    ? agent.status
-    : agent.done ? agent.status : '视频已就绪 · 点时间线上的元素直接编辑';
+  const statusText = agent.active ? agent.status : agent.done ? agent.status : '视频已就绪';
 
   // ── GUI column ──
   const canvas = (
-    <div ref={canvasRef} className="flex-1 relative min-h-0 overflow-hidden" onPointerDown={onCanvasPointerDown}>
+    <div ref={canvasRef} className="flex-1 relative min-h-0 overflow-hidden" onPointerDown={onCanvasPointerDown} onDoubleClick={onCanvasDoubleClick}>
       <Player
         ref={playerRef}
         component={TimelineComposition}
@@ -299,18 +268,24 @@ export default function TimelinePrototype() {
       {frameBox && frameClip && scale > 0 && (
         <div
           className="absolute z-20"
-          style={{ ...toScreen(frameBox), border: `1.5px solid ${isAgentFrame ? 'rgba(232,121,249,0.9)' : '#d946ef'}`, cursor: frameClip.box && !isAgentFrame ? 'move' : 'default', transition: moveRef.current ? 'none' : 'all 260ms cubic-bezier(.2,.8,.2,1)' }}
-          onPointerDown={e => !isAgentFrame && onFramePointerDown(e, frameClip)}
-          onPointerMove={onFramePointerMove}
-          onPointerUp={() => { moveRef.current = null; }}
+          style={{ ...toScreen(frameBox), border: `1.5px solid ${isAgentFrame ? 'rgba(232,121,249,0.9)' : '#d946ef'}`, cursor: canTransform ? 'move' : 'default', transition: gesture.current ? 'none' : 'all 260ms cubic-bezier(.2,.8,.2,1)' }}
+          onPointerDown={e => canTransform && startGesture(e, frameClip)}
+          onPointerMove={moveGesture}
+          onPointerUp={() => { gesture.current = null; }}
         >
           {(['tl', 'tr', 'bl', 'br'] as const).map(c => (
-            <div key={c} className="absolute" style={{
-              width: 10, height: 10,
-              [c[0] === 't' ? 'top' : 'bottom']: -2, [c[1] === 'l' ? 'left' : 'right']: -2,
-              [`border${c[0] === 't' ? 'Top' : 'Bottom'}`]: '3px solid #d946ef',
-              [`border${c[1] === 'l' ? 'Left' : 'Right'}`]: '3px solid #d946ef',
-            }} />
+            <div key={c}
+              onPointerDown={e => canTransform && startGesture(e, frameClip, c)}
+              onPointerMove={moveGesture}
+              onPointerUp={() => { gesture.current = null; }}
+              className="absolute"
+              style={{
+                width: 14, height: 14,
+                [c[0] === 't' ? 'top' : 'bottom']: -3, [c[1] === 'l' ? 'left' : 'right']: -3,
+                [`border${c[0] === 't' ? 'Top' : 'Bottom'}`]: '3px solid #d946ef',
+                [`border${c[1] === 'l' ? 'Left' : 'Right'}`]: '3px solid #d946ef',
+                cursor: canTransform ? (c === 'tl' || c === 'br' ? 'nwse-resize' : 'nesw-resize') : 'default',
+              }} />
           ))}
           <span className="absolute -top-[18px] left-0 text-[10px] font-medium text-white px-1.5 py-[1px] rounded-sm whitespace-nowrap flex items-center gap-1" style={{ background: 'rgb(217,70,239)' }}>
             {isAgentFrame && <span className="w-1.5 h-1.5 rounded-full bg-white" style={{ animation: 'breathe 1s ease-in-out infinite' }} />}
@@ -349,19 +324,6 @@ export default function TimelinePrototype() {
           {fmt(time)} / {fmt(duration)}
         </span>
       </div>
-
-      {/* Seek bar — 2px, fuchsia fill */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-none" style={{ height: 2 }}>
-        <div className="absolute inset-0 bg-white/12" />
-        <div className="absolute inset-y-0 left-0 bg-fuchsia-500/75" style={{ width: `${(time / duration) * 100}%` }} />
-      </div>
-
-      {/* Desktop field editor floats over the GUI column (DesignEditorFrame) */}
-      {isDesktop && fieldEditor && (
-        <div onPointerDown={e => e.stopPropagation()}>
-          <DesignEditorFrame isDesktop desktopWidth={editing?.kind === 'video' ? 420 : 340} keyboardInset={0}>{fieldEditor}</DesignEditorFrame>
-        </div>
-      )}
     </div>
   );
 
@@ -375,29 +337,26 @@ export default function TimelinePrototype() {
         notification={agent.active && !follow ? { text: 'Agent 仍在剪辑 · 已暂停跟随' } : null}
         onSeeNotification={() => setFollow(true)}
       />
-      {!isDesktop && fieldEditor ? (
-        <DesignEditorFrame isDesktop={false} desktopWidth={340} keyboardInset={0}>{fieldEditor}</DesignEditorFrame>
-      ) : (
-        <TimelineDock
-          doc={doc}
-          duration={duration}
-          time={time}
-          selectedId={selectedId}
-          agentClipId={agent.active ? agent.clipId : null}
-          isDesktop={isDesktop}
-          canUndo={history.length > 0}
-          onSelect={(id) => { userTouched(); setSelectedId(id); if (id) playerRef.current?.pause(); }}
-          onSeek={(t) => { userTouched(); playerRef.current?.pause(); seek(t); }}
-          onEdit={(id) => { setSelectedId(id); setEditingId(id); }}
-          onUndo={undo}
-          onDragStart={pushHistory}
-          onOp={dispatch}
-        />
-      )}
+      <TimelineDock
+        doc={doc}
+        duration={duration}
+        time={time}
+        playing={playing}
+        selectedId={selectedId}
+        agentClipId={agent.active ? agent.clipId : null}
+        isDesktop={isDesktop}
+        canUndo={history.length > 0}
+        focusToken={focusToken}
+        onSelect={(id) => { userTouched(); setSelectedId(id); if (id) playerRef.current?.pause(); }}
+        onSeek={(t) => { userTouched(); if (playing) playerRef.current?.pause(); seek(t); }}
+        onUndo={undo}
+        onDragStart={pushHistory}
+        onOp={dispatch}
+      />
     </div>
   );
 
-  // ── CUI (shared between desktop panel and mobile full screen) ──
+  // ── CUI: exactly today's chat — bubbles, assistant text, status line ──
   const isPanel = isDesktop;
   const userBubble = (text: string) => (
     <div className="flex min-w-0 justify-end overflow-hidden">
@@ -407,44 +366,18 @@ export default function TimelinePrototype() {
       </div>
     </div>
   );
-  const assistant = (children: React.ReactNode) => (
-    <div className={`${isPanel ? 'text-[17px] leading-[1.6]' : 'text-[22px] leading-[1.68]'} pr-2`} style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>{children}</div>
+  const assistant = (text: string) => (
+    <div className={`${isPanel ? 'text-[17px] leading-[1.6]' : 'text-[22px] leading-[1.68]'} pr-2`} style={{ color: 'rgba(255,255,255,0.84)', wordBreak: 'break-word' }}>{text}</div>
   );
 
   const chat = (
     <div className="flex flex-col h-full" style={{ background: '#0a0a0a' }}>
       <div ref={chatScrollRef} className={`flex-1 overflow-y-auto ${isPanel ? 'px-4 pt-4' : 'px-5 pt-[260px]'} pb-4 flex flex-col gap-5`}>
         {userBubble('用 Remotion 做一条 8 秒竖版视频：开场大标题“东京夜色”，三段夜景依次切换，配上音乐。')}
-        <StudioRunStageCard
-          stage={{ id: 'composition', status: 'completed', artifactVersion: 1, stageUpdatedAt: new Date().toISOString() }}
-          status="completed"
-          ordinal={6}
-          total={8}
-          isPanel={isPanel}
-        />
         {assistant('第一版已经放到时间线上：3 段视频、开场标题和一条音乐。')}
         {agent.request && userBubble(agent.request)}
-        {agent.request && (
-          <div className="flex flex-col gap-2.5">
-            {assistant('好，我直接在时间线上改，每一步你都能在下面看到：')}
-            {/* Edit log — StudioRun TimedItems row layout (time column + text) */}
-            {agent.rows.length > 0 && (
-              <div className="divide-y divide-white/[0.055]">
-                {agent.rows.map((row, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { const c = docRef.current.clips[row.clipId]; if (c) { setSelectedId(c.id); seek(c.start + 0.3); if (!isDesktop) setViewMode('gui'); } }}
-                    className={`w-full text-left grid gap-3 py-2.5 animate-tip-in cursor-pointer active:opacity-60 ${isPanel ? 'grid-cols-[52px_1fr]' : 'grid-cols-[68px_1fr]'}`}
-                  >
-                    <span className={`${isPanel ? 'text-[11px]' : 'text-[13px]'} tabular-nums pt-0.5`} style={{ color: 'rgba(232,121,249,0.72)' }}>{row.time}</span>
-                    <span className={`${isPanel ? 'text-[15px]' : 'text-[19px]'} leading-[1.65]`} style={{ color: 'rgba(255,255,255,0.78)' }}>{row.text}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {agent.done && assistant('改好了：开头缩短 1 秒、加了 3 句字幕、右下角放了画中画。都在时间线上，可以直接拖动、点开编辑或撤销。')}
-          </div>
-        )}
+        {agent.request && assistant('好，我直接在时间线上改。')}
+        {agent.done && assistant('改好了：开头缩短 1 秒，加了 3 句字幕，右下角放了画中画。可以直接在时间线上继续调整或撤销。')}
         {agent.active && (
           <div className="flex items-center gap-2 pl-0.5">
             <div className="w-1.5 h-1.5 rounded-full bg-fuchsia-400 animate-pulse flex-shrink-0" />
@@ -460,7 +393,7 @@ export default function TimelinePrototype() {
             rows={1}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (input.trim()) { runAgent(input.trim()); setInput(''); } } }}
-            placeholder="让 Agent 改时间线，比如：字幕换成黄色"
+            placeholder="你想怎么修改这条视频？"
             className={`w-full bg-transparent outline-none border-none leading-relaxed resize-none block ${isPanel ? 'text-[17px]' : 'text-[21px]'}`}
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', padding: isPanel ? '10px 14px 4px' : '12px 16px 6px' }}
           />
@@ -468,12 +401,14 @@ export default function TimelinePrototype() {
             <div className="flex-1" />
             {agent.active ? (
               <button onClick={() => { runToken.current++; setAgent(a => ({ ...a, active: false, clipId: null, status: '已停止' })); }}
+                aria-label="Stop agent"
                 className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full cursor-pointer"
                 style={{ background: 'linear-gradient(145deg, rgba(239,68,68,0.22), rgba(10,10,14,0.36))', color: '#ef4444', border: '0.5px solid rgba(239,68,68,0.26)' }}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="1" y="1" width="10" height="10" rx="2" /></svg>
               </button>
             ) : (
               <button onClick={() => { runAgent(input.trim() || AGENT_REQUEST); setInput(''); }}
+                aria-label="Send message"
                 className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full cursor-pointer"
                 style={{ background: 'linear-gradient(145deg, rgba(192,38,211,0.92), rgba(145,18,178,0.74))', color: '#fff', border: '0.5px solid rgba(232,121,249,0.40)' }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" /></svg>
@@ -518,7 +453,7 @@ export default function TimelinePrototype() {
           <button onClick={() => setViewMode('gui')} className="absolute top-3 left-3 w-9 h-9 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white/80 z-50" aria-label="Back">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
           </button>
-          {/* CUI PiP — same draggable preview as today, but it plays the live timeline */}
+          {/* Existing CUI PiP; for timeline videos it simply plays the live timeline */}
           <div onClick={() => setViewMode('gui')} className="absolute top-3 right-3 z-50 overflow-hidden rounded-2xl cursor-pointer" style={{ width: 132, height: 235, border: '1.5px solid rgba(255,255,255,0.14)', boxShadow: '0 12px 32px rgba(0,0,0,0.5)' }}>
             <Player
               ref={playerRef}
@@ -533,12 +468,6 @@ export default function TimelinePrototype() {
               loop
             />
             <span className="absolute top-1.5 left-1.5 text-[10px] font-medium text-white/80 px-1.5 py-[1px] rounded-md" style={{ background: 'rgba(0,0,0,0.45)' }}>@3</span>
-            {agent.active && (
-              <span className="absolute bottom-1.5 left-1.5 right-1.5 text-[10px] text-white px-1.5 py-[2px] rounded-md flex items-center gap-1 truncate" style={{ background: 'rgba(217,70,239,0.85)' }}>
-                <span className="w-1.5 h-1.5 rounded-full bg-white flex-shrink-0" style={{ animation: 'breathe 1s ease-in-out infinite' }} />
-                <span className="truncate">{agentClip?.label ?? 'Agent'}</span>
-              </span>
-            )}
           </div>
         </div>
       )}

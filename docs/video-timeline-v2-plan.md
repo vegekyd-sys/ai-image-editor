@@ -1,6 +1,6 @@
 # Makaron 视频时间线 V2：方案与设计（第二版）
 
-> 状态：方案稿，2026-11-05 CST。未实现、未合并、未上线。
+> 状态：方案稿，第二轮 UI 评审后更新于 2026-11-06 02:42 CST。未实现、未合并、未上线。
 > 分支：`claude/video-timeline-v2`（基于 `origin/dev` 0df70536）。
 > UI 原型：开发环境打开 `/timeline-v2-prototype`（代码 `src/app/timeline-v2-prototype/`），基于真实 Editor 结构和组件搭建，含 Agent 实时剪辑演示。
 
@@ -36,7 +36,7 @@
 
 于是“时间线 / 元素”天然合并：
 
-- 点时间线上的 clip → 画布高亮该元素 → 属性条出现该元素的字段。
+- 点时间线上的 clip → 画布高亮该元素 → Dock 底部行变成该元素的编辑行。
 - 点画布上的元素 → 时间线滚动到该 clip 并选中，播放头若不在 clip 范围内则跳到 clip 起点。
 - 画布上拖动/缩放（现有 Moveable/DesignOverlay）→ 写回 clip 的 `transform`；时间线上拖动/裁剪 → 写回 clip 的时间。
 
@@ -126,7 +126,7 @@ interface ComponentDef {
 
 - **字幕**是一个 clip 内含多个 segment（逐句/逐词时间）。时间线上整体是一条，展开后每句可单独拖动边界、改字；画布上整体拖位置。来源可以是 ASR（现有火山 ASR 工具）或 Agent 手写。样式预设 + `caption-style` 组件（卡拉 OK 高亮、逐词弹出……）。
 - **画中画**不是特殊类型：`overlay` 轨上的 `video` / `image` clip + `transform`（位置、缩放、圆角、描边、阴影、裁切）。UI 上提供“画中画”快捷入口和角落吸附。
-- **自定义组件**承接 Agent 的创造力：`run_code` 以后写的是 `ComponentDef`（一个标题动画、一个片头、一个转场），由时间线实例化。组件用 `propsSchema` 声明可编辑字段，所以 Agent 写的任何东西依然能在属性条里编辑——这就是“所有之前 editable 能编辑的东西”的延续。
+- **自定义组件**承接 Agent 的创造力：`run_code` 以后写的是 `ComponentDef`（一个标题动画、一个片头、一个转场），由时间线实例化。组件用 `propsSchema` 声明可编辑字段，所以 Agent 写的任何东西依然能在 Dock 编辑行里编辑（字段多时编辑行可横向滚动）——这就是“所有之前 editable 能编辑的东西”的延续。
 - **pending clip**：视频/图片/音乐生成是异步的（分钟级）。Agent 先在时间线上放一个占位 clip（带进度），生成完成后原地变成真实素材。这同时解决“Agent 编排需要等生成”的问题。
 
 ### 3.3 事务与操作
@@ -172,24 +172,21 @@ TimelineDoc ─ compile() ─▶ RenderPlan（排程、z 序、资源表、组�
 
 ## 4. Killer feature：Agent 实时剪辑
 
-### 4.1 用户看到什么（全部落在现有 GUI / CUI 结构里）
+### 4.1 用户看到什么（只在 GUI 里体现，CUI 保持原样）
 
-不新增光标、卡片、胶囊等新控件；Agent 的每一步改动通过下面这些**现有位置**体现。原型见 §5.0。
+不新增光标、卡片、胶囊等新控件。**CUI 不加任何特殊 UI**：Agent 照常对话，开始时一句“我直接在时间线上改”，结束时一句总结，运行中只有现有的状态行。实时效果全部体现在 GUI：
 
-| 现有位置 | 今天显示什么 | Agent 剪辑时显示什么 |
-|---|---|---|
-| GUI 底部 `AgentStatusBar` | 呼吸点 + Agent 状态文字 | 当前这一步：“加字幕：第 2 句”“生成画中画素材 · 预计 3 秒”；完成后“已完成 6 处修改” |
-| GUI 底部内容槽（Tips / pills / 视频卡同一位置） | design 的 editable pills | **TimelineDock**：被改的 clip 用现有 `mkr-liquid-pill-selected` 发光 + 同款呼吸点；新 clip 用现有 `animate-tip-in` 出现；主轨磁吸让位用宽度/位置过渡 |
-| 画布 `DesignOverlay` 选中框 | fuchsia 框 + 角标 + 名称标签 | 同一套框落在 Agent 正在改的元素上，标签写成“Agent · 字幕” |
-| 画布播放器 | 自定义播放/时间/进度条 | 播放头跳到正在改的位置（跟随）；完成后从头播放一遍 |
-| CUI 消息流 | 用户气泡、Assistant 文本、Studio Run 阶段卡 | Assistant 文本下方用 Studio Run `TimedItems` 同款“时间码 + 文本”行逐条追加每一步；点击一行 = 选中该 clip 并定位 |
-| CUI 消息底部状态行 | 脉冲点 + 12px 状态文字 | 同 AgentStatusBar 的当前步骤 |
-| 手机 CUI 的 PiP 小窗 | 当前图片 | 直接播放这条时间线视频，Agent 改动实时可见，底部一枚 fuchsia 标签写正在改的元素 |
-| 生成中的素材 | 画布 spinner “AI 正在生成…” | 时间线上的 pending clip：虚线边框 + 同款 spinner + 百分比；画面上同位置显示占位框，完成后原地替换 |
+| 现有位置 | Agent 剪辑时显示什么 |
+|---|---|
+| GUI 底部 `AgentStatusBar` | 当前这一步：“加字幕：第 2 句”“生成画中画素材 · 预计 3 秒”；完成后“已完成 6 处修改” |
+| 时间线 Dock | 新 clip 出现、主轨磁吸让位、裁剪收缩都用位置/宽度过渡；正在被改的 clip 外发光 + 呼吸点；生成中的素材是 pending clip（虚线 + 进度填充 + spinner），完成后原地换成胶片 |
+| 画布选中框（`DesignOverlay` 同款） | 落在 Agent 正在改的元素上，标签写成“Agent · 字幕” |
+| 播放器 | 播放头跳到正在改的位置（跟随）；完成后从头播放一遍 |
+| 手机 CUI 的 PiP 小窗（现有） | 播放这条时间线视频，所以在聊天里也能看到改动；不加额外标签 |
 
 **跟随**：Agent 运行时播放头和画布默认跟随。用户一旦点时间线、点画布或拖动，跟随暂停；`AgentStatusBar` 用现有通知形态显示“Agent 仍在剪辑 · 已暂停跟随”，右侧现有 **See** 按钮恢复跟随。
 
-**撤销**：Agent 的每个 tx 是撤销栈里的一步，入口就是时间线 Dock 工具行的“撤销”。不在对话行上另加按钮。
+**撤销**：Agent 的每个 tx 是撤销栈里的一步，入口在 Dock 底部行的撤销按钮。
 
 ### 4.2 数据流
 
@@ -231,89 +228,121 @@ Prompt 层面只写意图和一条重要的节奏规则：**一个用户可感�
 
 ## 5. UI 设计：嵌进现有 GUI / CUI，不另起界面
 
-### 5.0 可运行原型
+### 5.0 可运行原型（第二轮）
 
 - 路由：`/timeline-v2-prototype`，仅开发环境（生产 `notFound()`）。代码在 `src/app/timeline-v2-prototype/`。
-- 直接复用真实组件：`AgentStatusBar`、`DesignEditorFrame` + `DesignFieldEditor`（文字编辑和视频裁剪编辑器原样复用）、`StudioRunStageCard`、播放按钮 / 时间徽标 / 进度条 / 历史点轨 / Save / 输入框的原 class 与样式。播放用真实的 `@remotion/player`，素材用 `public/home-hero` 视频和 `public/home-studio/night.mp3`。
-- 新增的只有 `TimelineDock`（以及原型用的文档、reducer 和 Remotion 编译）。
-- 打开后自动跑一遍脚本化的 Agent：剪短开头 → 逐句加 3 句字幕 → 画中画 pending → 揭开。可在输入框再次发送来重跑。改字、拖 clip、裁剪、拖画中画、撤销都能操作。
-- 设计稿 HTML（`docs/design/video-timeline-v2-mockup.html`）已删除：它自造了一套界面，不再作为依据。
+- 复用：Editor 外壳布局、`AgentStatusBar`、画布控件（播放键 / 时间徽标 / 历史点轨 / Save）、CUI 气泡和输入框、`mkr-liquid-*` 类、真实 `@remotion/player`。新增：`TimelineDock`、`useFilmstrip`（抽帧方式同 `VideoRetakeTimeline`）。
+- 打开后自动演示一遍 Agent 剪辑；可选中、改字、裁剪、分割、删除、拖动/拉角缩放画中画、撤销；手机可左右滑动定位。
+
+第二轮评审意见与改法：
+
+| 意见 | 改法 |
+|---|---|
+| CUI 不需要特殊 UI | 删除对话里的“时间码 + 步骤”行和阶段卡，Agent 只正常说话 |
+| 缩略图差 | 主轨和画中画显示**真实逐帧胶片**（按 `sourceIn` 取帧，裁剪后看到的就是保留的画面），不再拉伸单张 poster |
+| 轨道小、难用 | 桌面主轨 54px、元素轨 28–30px；空轨自动隐藏；去掉轨道图标列；clip 圆角 10px；可横向滚动，⌘+滚轮或 −/+ 缩放；最小 64px/秒 |
+| 手机窄 | 手机播放头**固定在中间**，左右滑动时间线定位（剪映习惯），固定 58px/秒，所以短片段也有足够宽度；底部内容槽为时间线视频加高到 192px |
+| 编辑器弹出一般 | **取消浮层编辑器**。选中后 Dock 底部那一行原地变成编辑行：文字 / 字幕是输入框（字幕编辑播放头下的那一句），视频是“名称 · 时长 · 素材起点 + 分割 / 删除 / 完成”；裁剪直接拖 clip 两端；画中画在画布上拖动和拉角缩放；双击画布文字直接进入输入框 |
 
 ### 5.1 原则
 
-1. **时间线视频复用现有布局**：只替换底部内容槽里的那一个组件，其他（画布、顶栏、历史点轨、AgentStatusBar、CUI 面板 / 全屏、手势）全部不动。
-2. **新控件用现有词汇拼**：clip = `mkr-liquid-pill` + pill 渐变；选中 = `border-fuchsia-500 ring-1 ring-fuchsia-500/50`（同 editable pill）；裁剪手柄 = `DesignVideoTrimEditor` 的 fuchsia 手柄 + 黑色握把；播放头 = `VideoRetakeTimeline` 的白线 + 三角；工具行 = `DesignEditPanel` 的 “Design · N editables” 11px 文字行。
-3. **编辑器不重写**：选中元素后点 Edit 或双击，打开今天的 `DesignEditorFrame`（桌面浮在 GUI 左下 bottom:160 / left:12，手机在底部槽内联替换）。文字用 `DesignTextEditor`，视频用 `DesignVideoTrimEditor`，图片 / 画中画在画布上用 `DesignOverlay` 拖动和缩放。
-4. 颜色只用现有 token：fuchsia 系、白色透明度阶梯；不引入新的轨道配色。
+1. **只替换一个组件**：时间线视频在 Editor 底部内容槽显示 `TimelineDock`，其余（画布、顶栏、历史点轨、AgentStatusBar、CUI 面板 / 全屏、手势）不动。
+2. **CUI 不变**。
+3. **一个 Dock 内闭环**：浏览、选择、编辑、撤销都在 Dock 里完成，不弹浮层；画面上的位置和大小在画布上直接操作。
+4. 只用现有 token：fuchsia 选中 / 手柄、白色透明度阶梯、pill 渐变、liquid 图标按钮。
 
 ### 5.2 桌面（≥1024px）
 
 ```
-┌──────────── GUI 列（flex-1）────────────┐│┌──── CUI 面板 500px（可拖宽，原样）────┐
-│ ← +                               Save ││ │ 用户气泡                             │
-│                                        ││ │ ● 合成制作 已完成  Studio Run 6/8     │
-│      Remotion Player（9:16 居中）       ││ │ Assistant：第一版已经放到时间线上…    │
-│      ┌Agent · 字幕┐ ← DesignOverlay 框   ││ │ 用户：开头剪短一点，加上字幕…        │
-│ (▶)        ● ● ▬ Video        0:05/0:07││ │ Assistant：好，我直接在时间线上改：   │
-│━━━━━━━━━━━━━━━━━ 进度条 ━━━━━━━━━━━━━━━━││ │ 0:00  开头缩短 1 秒，后续片段前移     │
-├────────────────────────────────────────┤│ │ 0:00  字幕「夜色从海底开始」         │
-│ ● 加字幕：第 2 句          AgentStatusBar││ │ 0:02  画中画 · 生成中 …              │
-│ 0s   1s   2s   3s   4s   5s ...  刻度   ││ │ ● 加字幕：第 2 句     ← 状态行       │
-│ ▣ [   画中画 38% ◌   ]                  ││ ├──────────────────────────────────────┤
-│ T [东京夜色]                            ││ │ [ 让 Agent 改时间线…           (↑) ] │
-│ 字 [夜色从海底开始|霓虹醒来|这座城不睡]   ││ └──────────────────────────────────────┘
-│ ▶ [水母][机器人][时装]   ┃ 播放头         ││
-│ ♪ ∿∿∿∿∿∿∿ night.mp3 ∿∿∿∿∿∿∿∿∿∿∿∿∿∿     ││
-│   Timeline · 0:03.2 / 0:07.6 · 撤销      ││  ← 选中时变成：标题 · 0:00.2–0:02.8 [Edit] 删除
-└────────────────────────────────────────┘│
+┌──────────── GUI 列 ────────────────────┐┌── CUI 面板（原样）──┐
+│ ← +                               Save ││ 用户气泡           │
+│          Remotion Player               ││ Assistant 文本      │
+│          ┌Agent · 画中画┐               ││ ● 状态行            │
+│ (▶)         ● ● ▬ Video     0:03/0:07  ││                    │
+├────────────────────────────────────────┤│                    │
+│ ● 生成画中画素材 · 预计 3 秒  AgentStatusBar│                    │
+│ 0   1s   2s  (0:03.0)  4s   5s   6s     ││                    │
+│          [◌ 画中画 38% ▓▓░░░░]           ││                    │
+│  [T 东京夜色    ]                         ││                    │
+│ [夜色从海底开始][霓虹醒来   ][这座城不睡 ] ││                    │
+│ [▮▮▮▮▮▮▮ 2.2s][▮▮▮▮▮▮ 2.6s][▮▮▮▮▮▮ 2.8s] ││ ← 真实逐帧胶片     │
+│ [∿∿∿∿∿∿∿∿∿∿ night.mp3 ∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿]  ││                    │
+│ 0:03.0 / 0:07.6                (−)(+)(↶)││ [ 输入框 ]          │
+└────────────────────────────────────────┘└────────────────────┘
+选中文字后底部行 →  [ 东京夜色                    ] (🗑)(✓)
+选中视频后底部行 →  机器人 2.6s · 素材从 0.5s 开始      (⫼)(🗑)(✓)
 ```
 
-- 轨道从上到下：画中画 / 文字 / 字幕 / 主轨 / 音频，上方轨道在画面上层。左侧 26px 轨道图标格沿用 pill 的图标格（`rgba(255,255,255,.045)` 底 + white/30 图标）。
-- 轨道高度：画中画 / 文字 / 字幕 26px，主轨 46px（poster 封面），音频 22px（波形）。
-- 时间线默认铺满宽度；长视频时可横向滚动和缩放（P3 加）。
+- 轨道从上到下：画中画 / 文字 / 字幕 / 主轨 / 音频，上方轨道在画面上层；空轨隐藏。
+- 时间刻度 20px，播放头是白线 + 顶部白色时间胶囊。
+- 选中：2px fuchsia 描边 + 两端 10px fuchsia 裁剪手柄（同 `DesignVideoTrimEditor`）。
+- Dock 总高约 260px（1440×900 下画布仍有约 600px 高）。
+- 时间线视频不再显示画布底部的 2px 进度条，由时间线播放头取代。
 
 ### 5.3 手机（<1024px）
 
-- **GUI**：画布 + 原有控件不变；底部仍是 `AgentStatusBar`（带“聊天”按钮）+ 120.5px 内容槽（`MOBILE_EDITOR_SLOT_HEIGHT`），槽内放 TimelineDock 紧凑版：画中画 / 文字 / 字幕各 12px（9px 标签），主轨 24px，音频 5px 细条，下面一行工具行。
-- 选中 clip 后点 Edit：`DesignEditorFrame` 按今天的方式在同一个 120.5px 槽内联替换时间线，键盘弹起时随之上移；关闭后时间线回来。
-- **CUI**：仍是全屏、右侧滑入、左上返回、左缘右滑返回。唯一变化是 PiP 小窗里播放这条时间线视频，所以用户在聊天里也能看到 Agent 改出来的画面。
-- 时间线横向手势区避开左缘 36px（与现有返回手势阈值一致）。
+```
+┌──────────────────────────┐
+│ ← +                 Save │
+│        Player            │
+│ (▶)   ● ● ▬ Video   0:04 │
+├──────────────────────────┤
+│ ● 已完成 6 处修改    聊天 │ ← AgentStatusBar 原样
+│         │                │
+│   [◌ 画中画 49% ]│        │
+│ [T 东京夜色]     │        │
+│ …开始][霓虹醒来 ]│[这座城… │
+│ [▮▮▮▮▮][▮▮▮▮▮▮▮│▮▮][▮▮▮ │ ← 播放头固定居中，左右滑
+│ ∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿│∿∿∿∿∿∿∿ │
+│ 0:04.2 / 0:07.6      (↶) │ ← 选中后变编辑行
+└──────────────────────────┘
+```
+
+- 内容槽 192px（Tips / pills 仍是 120.5px）：元素轨 20–22px，主轨 44px，音频 12px，底部行 48px。
+- 轻点 clip 选中；左右滑动始终是定位（未选中的 clip 不响应拖动，避免误移）；选中后才能拖手柄裁剪 / 拖动位置（14px 宽手柄）。
+- 编辑行的输入框 16px 字号（避免 iOS 自动放大），键盘弹起时 Dock 随 visualViewport 上移（复用现有 `keyboardInset` 处理）。
+- CUI 保持全屏、返回手势不变；横向滑动区避开左缘 36px。
 
 ### 5.4 老视频（不兼容，优雅展示）
 
-- 不做任何改变：老的 composition 视频继续显示今天的 `DesignEditPanel` pills（“Design · N editables”），播放、编辑、导出零回归。
-- 唯一新增：工具行文字后面加一句弱提示“时间线编辑适用于新视频”（11px white/25）。不加迁移按钮。
+- 不做任何改变：老的 composition 视频继续显示今天的 `DesignEditPanel` pills 和浮层编辑器，播放、编辑、导出零回归。
+- 工具行文字后加一句弱提示“时间线编辑适用于新视频”（11px white/25）。不加迁移按钮。
 
 ### 5.5 交互清单
 
 | 操作 | 桌面 | 手机 |
 |---|---|---|
-| 定位 | 点时间线空白处 / 拖动 | 同左 |
-| 选择 | 点 clip，或点画布上的元素（双向同步） | 同左 |
-| 编辑内容 | 工具行 Edit / 双击 clip → 现有 DesignEditorFrame | 工具行 Edit |
-| 裁剪 / 改时长 | 拖 clip 两端 fuchsia 手柄（主轨磁吸，后面自动前移） | 同左 |
-| 移动 | 拖 clip（主轨按顺序磁吸，其它轨自由放置） | 长按后拖（P3） |
-| 位置 / 大小 | 画布上拖选中框（画中画、文字） | 同左 |
-| 删除 | 工具行“删除” | 同左 |
-| 撤销 | 工具行“撤销” / ⌘Z（Agent 的一个 tx 是一步） | 工具行“撤销” |
-| 恢复跟随 | AgentStatusBar 的 See | 同左 |
+| 定位 | 点 / 拖时间线空白处 | 左右滑动 |
+| 缩放时间线 | ⌘ + 滚轮、−/+ | 固定（P2 可加双指） |
+| 选择 | 点 clip / 点画布元素（双向同步） | 轻点 |
+| 改文字 / 字幕 | 选中后底部行输入；或双击画布文字 | 同左 |
+| 裁剪 / 改时长 | 拖两端手柄（主轨磁吸） | 选中后拖手柄 |
+| 移动 | 拖 clip（主轨按顺序磁吸） | 选中后拖 |
+| 分割 | 底部行分割按钮（在播放头处） | 同左 |
+| 位置 / 大小 | 画布上拖动、拉角缩放 | 同左 |
+| 删除 / 撤销 | 底部行按钮；⌘Z | 底部行按钮 |
+| 恢复跟随 Agent | AgentStatusBar 的 See | 同左 |
 
-时间线获得焦点时吞掉键盘快捷键，避免触发项目级上一张/下一张。**产品实现时四种语言（zh / zh-Hant / ja / en）同批补齐；原型里的中文文案只用于评审。**
+时间线获得焦点时吞掉键盘快捷键。**产品实现时四种语言（zh / zh-Hant / ja / en）同批补齐；原型中文文案只用于评审。**
 
 ---
 
-## 6. 分期与验收
+## 6. 开发计划
 
-| 阶段 | 内容 | 验收证据 |
-|---|---|---|
-| P0 Spike | 升级 Remotion 4.0.541；`<Track>` + `TransitionSeries` + overlay 画中画 + 字幕在 Player / 浏览器 MP4 / Lambda MP4 三处一致；SSE + Realtime 推送一个 tx 到页面的最小链路 | 三份 MP4 逐帧对比；录屏：终端发 tx，浏览器实时出现 |
-| P1 协议内核 | Zod schema、reducer（含主轨磁吸、split、元素级变基、反向 op）、compile、Agent JSON Schema 生成 | 单测 + 冲突/变基用例 |
-| P2 渲染与存储 | `MakaronTimeline` 组件、组件 hash 缓存、pending 占位、design JSON 存取、tx 流水、Lambda composition | 本地项目页真实播放、保存重开一致、导出一致 |
-| P3 时间线 UI | 把原型的 TimelineDock 正式接入 Editor 底部内容槽：五类轨道、画布↔时间线双向选择、复用 DesignEditorFrame 编辑、字幕逐句编辑、画中画、移动端紧凑版、长视频滚动缩放、老视频保持 pills | 桌面 + iPhone 真机：覆盖旧 editable 的全部能力（改字、换图、换视频+裁剪、拖位置、缩放）+ 字幕 + 画中画 |
-| P4 Agent 实时剪辑 | 工具、prompt 节奏规则、Choreographer、跟随 / See 恢复、AgentStatusBar 与 CUI 时间码行、pending clip、PiP 实时播放、CLI/后台广播 | 真实对话：Agent 从素材剪出 30 秒带字幕配乐视频，全过程实时可见；中途用户改字不被覆盖；撤销 Agent 某一步 |
-| P5 打磨 | 关键帧、节拍吸附、剪辑过程回放（需要时再设计入口） | 演示视频 |
+估算按“1 人 + Agent 协作、全天投入”的工作日，合计约 **18 个工作日**。M1 与 M3 的纯 UI 部分可以并行（M3 先用原型的内存文档开发），其余按顺序。
 
-发布门禁：单测或 Agent 任务通过不算发布证据，必须是真实项目流程 + Preview/Export 一致 + 双端交互 + 四语言。
+| 里程碑 | 工期 | 主要工作 | 关键文件 | 验收证据 |
+|---|---|---|---|---|
+| **M0 技术验证** | 2 天 | Remotion 全家桶 4.0.527 → 4.0.541；`<Track>` + `TransitionSeries` + 画中画 + 字幕在 Player / 浏览器 MP4 / Lambda MP4 三处一致；在独立 Remotion site 验证（不占用共享 `git-dev` alias）；iPhone Safari 上 3 段视频胶片抽帧耗时与内存；SSE + Realtime 推一个 tx 到页面的最小链路 | `package.json`、`src/remotion/index.tsx`、`src/lib/remotion-lambda-renderer.ts` | 三份 MP4 抽帧对比；iPhone 录屏；终端发 tx 浏览器实时变化 |
+| **M1 协议内核** | 3 天 | `src/lib/timeline/`：Zod schema（MTP v1）、reducer（insert / update / remove / split / move、主轨磁吸、反向 op）、元素级变基与冲突、`compileTimeline()` → Remotion 树、给 Agent 用的 JSON Schema | `src/lib/timeline/*` | 单测：每个 op、撤销往返、两方并发改不同元素都保留、同元素冲突给出诊断 |
+| **M2 存储与渲染** | 3 天 | `DesignPayload.timeline` 字段（`design_path` JSON 内）；`PATCH /api/projects/[id]/timeline/[snapshotId]`（按 revision 应用 tx，追加 `timeline-log/<snapId>.jsonl`）；`ImageCanvas` 识别时间线 design 走 `MakaronTimeline` 组件；Lambda 新 composition `makaron-timeline` 与浏览器导出；pending clip 占位 | `src/types`、`src/app/api/...`、`ImageCanvas.tsx`、`src/remotion/` | 本地真实项目：新建 → 编辑 → 刷新一致 → 导出 MP4 与预览一致 |
+| **M3 GUI 时间线** | 4 天 | 原型 Dock 产品化到 `src/components/timeline/`；`Editor.tsx` 底部槽增加 `isViewingTimeline` 分支（手机 192px）；画布选中复用 / 扩展 `DesignOverlay`（clip 选择、拖动、拉角缩放）；底部编辑行；把 `VideoRetakeTimeline` 的抽帧提取成共享 `useVideoFrames`；老视频保持 pills + 提示；四语言；iOS 手势与键盘 | `Editor.tsx`、`ImageCanvas.tsx`、`DesignOverlay.tsx`、`VideoRetakeTimeline.tsx`、`src/lib/locales/*` | 桌面 + iPhone 真机：改字、换素材、裁剪、分割、删除、画中画拖动缩放、字幕逐句改、撤销；老视频零回归 |
+| **M4 Agent 实时剪辑** | 4 天 | 工具 `get_timeline` / `edit_timeline` / `preview_timeline`；`generate_*` 加 `place` 参数先插 pending；prompt 节奏规则（一步一个 tx）；`/api/agent` SSE 增加 `timeline_tx` 事件 + Supabase Realtime 广播 `timeline:{snapshotId}`；前端 `TimelineStore` + 动画编排（过渡、发光、跟随、See 恢复）；CLI / 后台运行同样可见；CUI 不改 | `src/app/api/agent/route.ts`、Agent 工具目录、`src/components/timeline/` | 真实对话：Agent 把素材剪成带字幕和配乐的视频，全过程在 GUI 实时可见；运行中用户改字不被覆盖；撤销 Agent 某一步；终端 CLI 发起、浏览器实时看到 |
+| **M5 验收与发布** | 2 天 | 真实项目流程回归、Preview / Export 一致性、性能（长视频 60s+ 胶片与滚动）、Vercel Preview 验收、changelog、合并 dev → 生产 | — | 发布门禁：真实项目流程 + Preview/Export 一致 + 双端交互 + 四语言 |
+
+依赖与顺序：M0 → M1 → M2 → M4；M3 在 M1 的 schema 定下后开始，和 M2 并行，最晚在 M4 前接上真实存储。M0 的抽帧性能结论决定 M3 是前端抽帧还是服务端生成胶片图。
+
+---
 
 ## 7. 风险与开放问题
 
