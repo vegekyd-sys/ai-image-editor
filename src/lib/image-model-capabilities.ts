@@ -39,11 +39,11 @@ const FLARE: ImageModelCapability = {
 const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
   'gpt-image-2.6-flare': {
     ...FLARE, id: 'gpt-image-2.6-flare', label: 'GPT Image 2.6 Flare', autoPriority: 1,
-    notes: 'GPT Image 2.6 Flare via fal. PNG/JPEG/WebP, animated GIF (generation/edit), SVG vector (text-to-image only). imageQuality auto/low/medium/high, imageReasoningEffort low/medium/high; default low quality + high reasoning. Up to 16 ordered inputs; native 1K/2K/4K, ratio 1:3–3:1, max edge 3840 and 8294400 pixels. GIF frameCount 2–64, frameDurationMs 20–2000 in steps of 10; all frames share pixel budget; native-sheet packing additionally caps each frame edge at 960. Square/near-square GIF at default 9 frames is validated; fewer frames do not allow larger frames. GIF 2K/4K is unsupported. SVG requires no source/references; current fal SVG generation returned 422 during live acceptance and remains experimental/unverified. Do not promise working SVG generation or silently rasterize. Unsupported format/tier requests fail before generation, never flatten or substitute.',
+    notes: 'GPT Image 2.6 Flare via fal. PNG/JPEG/WebP, animated GIF (generation/edit), SVG vector (text-to-image only). imageQuality auto/low/medium/high, imageReasoningEffort low/medium/high; default low quality + high reasoning. Up to 16 ordered inputs; native 1K/2K/4K, ratio 1:3–3:1, max edge 3840 and 8294400 pixels. GIF frameCount 2–16 (provider-enforced), frameDurationMs 20–2000 in steps of 10; frames are drawn on one native sheet, so square frames are 960px up to 9 frames, 816px for 10–12 and 720px for 13–16; gifFrameSize sticker uses ~512px frames at about half the cost. New GIF stickers/memes/loops follow skills/gif-maker/SKILL.md. GIF 2K/4K is unsupported. SVG requires no source/references; current fal SVG generation returned 422 during live acceptance and remains experimental/unverified. Do not promise working SVG generation or silently rasterize. Unsupported format/tier requests fail before generation, never flatten or substitute.',
   },
   'gpt-image-2.6-sunburst': {
     ...FLARE, id: 'gpt-image-2.6-sunburst', label: 'GPT Image 2.6 Sunburst', autoPriority: undefined,
-    notes: 'GPT Image 2.6 Sunburst via fal. PNG/JPEG/WebP, animated GIF (generation/edit), SVG vector (text-to-image only). imageQuality auto/low/medium/high, imageReasoningEffort low/medium/high; default low quality + high reasoning. Up to 16 ordered inputs; native 1K/2K/4K, ratio 1:3–3:1, max edge 3840 and 8294400 pixels. GIF frameCount 2–64, frameDurationMs 20–2000 in steps of 10; all frames share pixel budget; native-sheet packing additionally caps each frame edge at 960. Square/near-square GIF at default 9 frames is validated; fewer frames do not allow larger frames. GIF 2K/4K is unsupported. SVG requires no source/references; current fal SVG generation returned 422 during live acceptance and remains experimental/unverified. Do not promise working SVG generation or silently rasterize. Unsupported format/tier requests fail before generation, never flatten or substitute.',
+    notes: 'GPT Image 2.6 Sunburst via fal. PNG/JPEG/WebP, animated GIF (generation/edit), SVG vector (text-to-image only). imageQuality auto/low/medium/high, imageReasoningEffort low/medium/high; default low quality + high reasoning. Up to 16 ordered inputs; native 1K/2K/4K, ratio 1:3–3:1, max edge 3840 and 8294400 pixels. GIF frameCount 2–16 (provider-enforced), frameDurationMs 20–2000 in steps of 10; frames are drawn on one native sheet, so square frames are 960px up to 9 frames, 816px for 10–12 and 720px for 13–16; gifFrameSize sticker uses ~512px frames at about half the cost. New GIF stickers/memes/loops follow skills/gif-maker/SKILL.md. GIF 2K/4K is unsupported. SVG requires no source/references; current fal SVG generation returned 422 during live acceptance and remains experimental/unverified. Do not promise working SVG generation or silently rasterize. Unsupported format/tier requests fail before generation, never flatten or substitute.',
   },
   'gemini-2.1': {
     id: 'gemini-2.1', label: 'Nano Banana 2.1', autoPriority: 2, maxInputImages: 14,
@@ -120,14 +120,15 @@ export function getImageRequestConflicts(req: GenerateImageRequest, capability: 
   const conflicts: string[] = [];
   const format = req.outputFormat ?? 'png';
   const is26 = capability.id.startsWith('gpt-image-2.6-');
-  if ((req.outputFormat || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined) && !is26) conflicts.push('explicit image format/quality/reasoning controls require GPT Image 2.6');
+  if ((req.outputFormat || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) && !is26) conflicts.push('explicit image format/quality/reasoning controls require GPT Image 2.6');
   if (!['png', 'jpeg', 'webp', 'gif', 'svg'].includes(format)) conflicts.push('unsupported outputFormat');
   if (format === 'svg' && (req.image || req.references?.length)) conflicts.push('SVG supports text-to-image only; omit source and references');
   if (req.background === 'transparent' && format === 'jpeg') conflicts.push('JPEG cannot preserve transparency');
   if (req.imageQuality && !['auto', 'low', 'medium', 'high'].includes(req.imageQuality)) conflicts.push('unsupported imageQuality');
   if (req.imageReasoningEffort && !['low', 'medium', 'high'].includes(req.imageReasoningEffort)) conflicts.push('unsupported imageReasoningEffort');
-  if ((req.frameCount !== undefined || req.frameDurationMs !== undefined) && format !== 'gif') conflicts.push('frame controls require outputFormat=gif');
-  if (req.frameCount !== undefined && (!Number.isInteger(req.frameCount) || req.frameCount < 2 || req.frameCount > 64)) conflicts.push('frameCount must be an integer 2–64');
+  if ((req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) && format !== 'gif') conflicts.push('frame controls require outputFormat=gif');
+  if (req.gifFrameSize !== undefined && !['sticker', 'full'].includes(req.gifFrameSize)) conflicts.push('gifFrameSize must be sticker or full');
+  if (req.frameCount !== undefined && (!Number.isInteger(req.frameCount) || req.frameCount < 2 || req.frameCount > 16)) conflicts.push('frameCount must be an integer 2–16');
   if (req.frameDurationMs !== undefined && (!Number.isInteger(req.frameDurationMs) || req.frameDurationMs < 20 || req.frameDurationMs > 2000 || req.frameDurationMs % 10 !== 0)) conflicts.push('frameDurationMs must be 20–2000 in steps of 10');
   const count = (req.image ? 1 : 0) + (req.references?.length ?? 0);
   if (capability.id === 'mj-v8.2') {
@@ -207,7 +208,7 @@ export function prepareImageModelRequest(req: GenerateImageRequest, model: Activ
 /** Prefer delivering an image. Capabilities guide tradeoffs instead of blocking users. */
 export function planImageGeneration(req: GenerateImageRequest): ImageGenerationPlan {
   const normalized = normalizeImageModelId(req.model);
-  if (req.outputFormat || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined) {
+  if (req.outputFormat || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) {
     const selected = resolveImageModel(req.model, req.background) ?? DEFAULT_IMAGE_MODEL;
     validateImageModelRequest(req, selected);
     return { model: selected, request: { ...req, model: selected }, adjustments: [] };

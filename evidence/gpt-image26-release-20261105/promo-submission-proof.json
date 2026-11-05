@@ -1,0 +1,117 @@
+[
+  {
+    "kind": "creation",
+    "runId": "a21f06c5-6ed5-430a-a3af-cba91f7b8e5b",
+    "calls": [
+      {
+        "tool": "read_file"
+      },
+      {
+        "tool": "generate_image"
+      },
+      {
+        "tool": "generate_animation",
+        "model": "seedance-2.5-eco",
+        "duration": 15
+      }
+    ]
+  },
+  {
+    "kind": "caption",
+    "runId": "8b564faf-9b47-40c3-8b41-a31b74933001",
+    "calls": [
+      {
+        "tool": "read_file"
+      },
+      {
+        "tool": "run_code",
+        "description": "Probe source video and discover CJK fonts / ffmpeg filters"
+      },
+      {
+        "tool": "run_code",
+        "description": "Report probe data, ffmpeg filter support, and CJK font paths"
+      },
+      {
+        "tool": "run_code",
+        "description": "Surface probe + font discovery result"
+      },
+      {
+        "tool": "preview_frame"
+      },
+      {
+        "tool": "run_code",
+        "description": "Extract top-region crops and luminance profile to find blank subtitle zone"
+      },
+      {
+        "tool": "run_code",
+        "description": "Render stacked top-region crops for visual check"
+      },
+      {
+        "tool": "read_file"
+      },
+      {
+        "tool": "run_code",
+        "description": "Measure flying hat height during 3-7s window"
+      },
+      {
+        "tool": "read_file"
+      },
+      {
+        "tool": "run_code",
+        "description": "Scan topmost bright content row per subtitle window"
+      },
+      {
+        "tool": "run_code",
+        "description": "Inspect upper-zone content at hat peak and late-terminal moments"
+      },
+      {
+        "tool": "read_file"
+      },
+      {
+        "tool": "run_code",
+        "description": "Burn ASS captions with Noto CJK and render QA contact sheet"
+      },
+      {
+        "tool": "list_files"
+      },
+      {
+        "tool": "run_code",
+        "description": "Render captioned MP4 and QA contact sheet, persist both"
+      },
+      {
+        "tool": "read_file"
+      },
+      {
+        "tool": "run_code",
+        "description": "Extract full-res top crops from v1 for collision check"
+      },
+      {
+        "tool": "read_file"
+      },
+      {
+        "tool": "run_code",
+        "description": "Render v2 with raised caption band and QA the worst frames"
+      },
+      {
+        "tool": "read_file"
+      },
+      {
+        "tool": "run_code",
+        "description": "Full-resolution check of caption vs hat and post-12s clean frame"
+      },
+      {
+        "tool": "read_file"
+      },
+      {
+        "tool": "run_code",
+        "description": "Verify audio bit-identity and full-decode integrity"
+      },
+      {
+        "tool": "write_file"
+      },
+      {
+        "tool": "write_file"
+      }
+    ]
+  }
+]

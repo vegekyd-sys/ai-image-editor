@@ -1,0 +1,112 @@
+{
+  "status": "downloaded-probed",
+  "url": "https://cdn.makaron.app/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/workspace/260de927-277e-4c43-bb28-0c1bdfded800/media/1793873427789-makaron-spark-final.mp4",
+  "outputFile": "/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/outputs/gpt26-release-20261105/promo/makaron-image26-launch-15s-gif-emphasis.mp4",
+  "width": 1080,
+  "height": 1920,
+  "fps": "24/1",
+  "duration": 15.072,
+  "videoCodec": "h264",
+  "audioCodec": "aac",
+  "originalNativeAudioSha256Equal": true,
+  "usage": {
+    "credits_charged": 6,
+    "credits_refunded": 0,
+    "credits_net": 6,
+    "input_tokens": 35759,
+    "output_tokens": 31259,
+    "cache_read_tokens": 1701760,
+    "cache_write_tokens": 0,
+    "entries": [
+      {
+        "tool_name": "agent",
+        "model": "deepseek/deepseek-flash",
+        "calls": 1,
+        "credits": 6,
+        "input_tokens": 35759,
+        "output_tokens": 31259
+      }
+    ],
+    "sources": [
+      "cli"
+    ]
+  },
+  "runId": "1066189f-8882-4671-aa06-3253b752ca67",
+  "projectId": "260de927-277e-4c43-bb28-0c1bdfded800",
+  "request": "一句话变 GIF 文案放大，感知更强",
+  "headlineVisualSizePx": 112,
+  "gifVisualSizePx": 144,
+  "captionWindowSeconds": [
+    3,
+    8.2
+  ],
+  "captionBlockY": [
+    1492,
+    1757
+  ],
+  "browserPlaybackVerified": true,
+  "browserDownloadBytesEqual": true,
+  "sha256": "05cdbc4ea833372ab3a369367c8d5987a12c6556277684b82325e2f4c252eb8c",
+  "newGenerationCalls": 0,
+  "calls": [
+    {
+      "tool": "run_code",
+      "description": "Measure exact text widths and bottom-zone emptiness"
+    },
+    {
+      "tool": "run_code",
+      "description": "Re-measure GIF width and map bottom-zone occupied rows"
+    },
+    {
+      "tool": "read_file"
+    },
+    {
+      "tool": "run_code",
+      "description": "Render calibration still and capture font resolution log"
+    },
+    {
+      "tool": "read_file"
+    },
+    {
+      "tool": "run_code",
+      "description": "Render v3 with enlarged bottom headline block and QA sheets"
+    },
+    {
+      "tool": "read_file"
+    },
+    {
+      "tool": "read_file"
+    },
+    {
+      "tool": "run_code",
+      "description": "Render v4 with cleaned glow and native GIF underline"
+    },
+    {
+      "tool": "read_file"
+    },
+    {
+      "tool": "run_code",
+      "description": "Render final version with continuous cyan bar and verify audio/decode"
+    },
+    {
+      "tool": "read_file"
+    },
+    {
+      "tool": "run_code",
+      "description": "Final phone-size QA and tail-region difference check"
+    },
+    {
+      "tool": "run_code",
+      "description": "Phone sheet and tail difference on published final file"
+    },
+    {
+      "tool": "read_file"
+    },
+    {
+      "tool": "read_file"
+    },
+    {
+      "tool": "write_file"
+    }
+  ]
+}

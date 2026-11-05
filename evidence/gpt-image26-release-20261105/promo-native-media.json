@@ -1,0 +1,52 @@
+{
+  "status": "downloaded-probed",
+  "originalUrl": "https://cdn.makaron.app/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/260de927-277e-4c43-bb28-0c1bdfded800/videos/0e7ff149-222d-4fa7-8709-4b7d791752a9-enhanced.mp4",
+  "outputFile": "/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/outputs/gpt26-release-20261105/promo/makaron-image26-launch-15s.mp4",
+  "bytes": 6598527,
+  "width": 1080,
+  "height": 1920,
+  "videoCodec": "h264",
+  "fps": "24/1",
+  "duration": 15.072,
+  "audioCodec": "aac",
+  "audioChannels": 2,
+  "audioSampleRate": "32000",
+  "usage": {
+    "credits_charged": 447,
+    "credits_refunded": 0,
+    "credits_net": 447,
+    "input_tokens": 44943,
+    "output_tokens": 5143,
+    "cache_read_tokens": 140672,
+    "cache_write_tokens": 0,
+    "entries": [
+      {
+        "tool_name": "create_video",
+        "model": "seedance-2.5-eco",
+        "calls": 1,
+        "credits": 436,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "tool_name": "generate_image",
+        "model": "gpt-image-2.6-flare",
+        "calls": 1,
+        "credits": 6,
+        "input_tokens": 0,
+        "output_tokens": 0
+      },
+      {
+        "tool_name": "agent",
+        "model": "deepseek/deepseek-flash",
+        "calls": 1,
+        "credits": 5,
+        "input_tokens": 44943,
+        "output_tokens": 5143
+      }
+    ],
+    "sources": [
+      "cli"
+    ]
+  }
+}

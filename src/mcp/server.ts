@@ -127,8 +127,9 @@ Generation timing varies; report actual completion. No automatic retry or model 
       imageQuality: z.enum(['auto', 'low', 'medium', 'high']).nullish().describe('GPT Image 2.6 rendering quality. Default low; choose higher when the user asks for more visual detail.'),
       imageReasoningEffort: z.enum(['low', 'medium', 'high']).nullish().describe('GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high.'),
       outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).nullish().describe('Default PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
-      frameCount: z.number().int().min(2).max(64).nullish().describe('GIF frames, default 9. All frames share 8294400 pixels; current minimum frame area may require fewer frames. Invalid canvas/count fails before payment.'),
+      frameCount: z.number().int().min(2).max(16).nullish().describe('GIF frames 2–16, default 9. Square frames are 960px up to 9 frames, 816px for 10–12, 720px for 13–16.'),
       frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).nullish().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
+      gifFrameSize: z.enum(['sticker', 'full']).nullish().describe('GIF frame canvas: sticker ~512px frames (about half cost, for chat stickers/memes), full largest frames (default).'),
       imageResolution: z.string().nullish().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
       midjourney: z.object({
         speed: z.enum(['fast', 'draft']).optional(), quality: z.enum(['standard', 'hd']).optional(),
@@ -141,11 +142,11 @@ Generation timing varies; report actual completion. No automatic retry or model 
     },
     async (params) => {
       try {
-        const plan = planImageGeneration({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined, aspectRatio: params.aspectRatio ?? undefined, imageResolution: params.imageResolution ?? undefined, imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, isNsfw: params.isNsfw ?? undefined, midjourney: params.midjourney ?? undefined });
+        const plan = planImageGeneration({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined, aspectRatio: params.aspectRatio ?? undefined, imageResolution: params.imageResolution ?? undefined, imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, gifFrameSize: params.gifFrameSize ?? undefined, isNsfw: params.isNsfw ?? undefined, midjourney: params.midjourney ?? undefined });
         const imageInputCount = (plan.request.image ? 1 : 0) + (plan.request.references?.length ?? 0);
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', plan.model, { imageInputCount, imageResolution: plan.request.imageResolution, imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, midjourneyQuality: params.midjourney?.quality });
+          const check = await options.onToolStart('makaron_edit_image', plan.model, { imageInputCount, imageResolution: plan.request.imageResolution, imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, gifFrameSize: params.gifFrameSize ?? undefined, midjourneyQuality: params.midjourney?.quality });
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -165,7 +166,7 @@ Generation timing varies; report actual completion. No automatic retry or model 
             preferredModel: params.model ?? undefined,
             isNsfw: params.isNsfw ?? undefined,
             aspectRatio: params.aspectRatio ?? undefined,
-            imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined,
+            imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, gifFrameSize: params.gifFrameSize ?? undefined,
             imageResolution: params.imageResolution ?? undefined,
             background: params.background ?? undefined,
           },

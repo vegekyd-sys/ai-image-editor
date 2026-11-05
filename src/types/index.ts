@@ -99,6 +99,7 @@ export interface PhotoMetadata {
     outputFormat?: import('@/lib/models/types').ImageOutputFormat;
     frameCount?: number;
     frameDurationMs?: number;
+    gifFrameSize?: import('@/lib/models/types').GifFrameSize;
   };
   /** Exact submitted MJ payload, persisted with every candidate for prompt transparency. */
   midjourneyGeneration?: {

@@ -1,0 +1,34 @@
+{
+  "origin": "https://www.makaron.app",
+  "auth": "existing CLI test identity, normal Supabase session cookies; no auth bypass or production code change",
+  "cases": [
+    {
+      "id": "production-default-png",
+      "projectId": "92424131-e5da-4ff0-b358-2dfa0c31795e",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "mime": "image/png",
+      "saveOriginal": false,
+      "staticSavePreservesDimensions": true,
+      "reopen": true,
+      "sha256": "8f3a7b5c3f9a86271a2a50d3ffbd2b7a784ec8360924be4fbf53360c4ba61a3e"
+    },
+    {
+      "id": "production-native-gif",
+      "projectId": "a1bd5ada-aab3-4d5d-a32d-c1a4ff8615ba",
+      "dimensions": [
+        960,
+        960
+      ],
+      "mime": "image/gif",
+      "saveOriginal": true,
+      "staticSavePreservesDimensions": false,
+      "reopen": true,
+      "sha256": "e8fdcecdb1c447e1691afaba7522206f000a01701f754df3a8aa9826e26d7ee2"
+    }
+  ],
+  "pageErrors": [],
+  "gifVisibleFramesDiffer": true
+}

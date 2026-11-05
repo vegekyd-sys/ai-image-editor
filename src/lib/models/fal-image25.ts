@@ -50,6 +50,33 @@ export function image25Size(aspectRatio?: string, resolution?: string): 'auto' |
   return { width: Math.round(Math.sqrt(1048576 * ratio) / 16) * 16, height: Math.round(Math.sqrt(1048576 / ratio) / 16) * 16 };
 }
 
+/**
+ * fal renders every native GIF frame on one sprite sheet, then slices it. Live validation errors
+ * (2026-11-05) show the candidate grids: <=8 frames 4x2/2x4, 9 frames 3x3, 10-12 frames 4x3/3x4/4x4,
+ * 13-16 frames 4x4. The whole sheet must keep each edge <= 3840 and total pixels <= 8294400, so
+ * 10-12 frames top out at 816px squares and 13-16 frames at 720px squares (720px x16 verified live).
+ */
+const GIF_SHEET_GRIDS: [number, number][][] = [[[4, 2], [2, 4]], [[3, 3]], [[4, 3], [3, 4], [4, 4]], [[4, 4]]];
+export function gifFrameSize(frames: number, ratio = 1): { width: number; height: number } {
+  if (!Number.isInteger(frames) || frames < 2 || frames > 16) throw new FalImage25RequestError('GIF frameCount must be an integer 2–16. No generation submitted.');
+  const grids = GIF_SHEET_GRIDS[frames <= 8 ? 0 : frames === 9 ? 1 : frames <= 12 ? 2 : 3];
+  let best = { width: 0, height: 0 };
+  for (const [cols, rows] of grids) {
+    let area = Math.min(1048576, 8294400 / (cols * rows));
+    area = Math.min(area, (3840 / cols) ** 2 / ratio, (3840 / rows) ** 2 * ratio);
+    const width = Math.floor(Math.sqrt(area * ratio) / 16) * 16;
+    const height = Math.floor(Math.sqrt(area / ratio) / 16) * 16;
+    if (width * height > best.width * best.height) best = { width, height };
+  }
+  if (best.width < 256 || best.height < 256) throw new FalImage25RequestError('GIF frame canvas/count exceeds the supported native-sheet pixel budget. Use a square/near-square canvas and fewer frames. No generation submitted.');
+  return best;
+}
+
+/** Chat-sticker frames: ~512x512 pixel area (OpenAI's own GIF example size; live 2026-11-05: 0.033 vs 0.062 fal units at 816px, 19s vs 31s). Fits every sheet grid. */
+export function gifStickerSize(ratio = 1): { width: number; height: number } {
+  return { width: Math.round(Math.sqrt(262144 * ratio) / 16) * 16, height: Math.round(Math.sqrt(262144 / ratio) / 16) * 16 };
+}
+
 /** Provider-specific 2.6 tiers and original-format output. Legacy 2.5 remains available to controlled comparisons only. */
 export function buildFalImage25Request(req: GenerateImageRequest, model: FalGptImageId) {
   validateImageModelRequest(req, model);
@@ -72,15 +99,7 @@ export function buildFalImage25Request(req: GenerateImageRequest, model: FalGptI
     const frames = req.frameCount ?? 9;
     if (req.imageResolution === '2K' || req.imageResolution === '4K') throw new FalImage25RequestError('Native GIF frames currently support at most 960 pixels per edge, not 2K/4K. Use 1K or omit imageResolution. No generation submitted.');
     const ratio = req.aspectRatio && req.aspectRatio !== 'auto' ? req.aspectRatio.split(':').map(Number).reduce((a, b) => a / b) : 1;
-    const pixels = Math.min(1048576, Math.floor(8294400 / frames));
-    const width = Math.floor(Math.sqrt(pixels * ratio) / 16) * 16;
-    const height = Math.floor(Math.sqrt(pixels / ratio) / 16) * 16;
-    // fal packs frames into a native sheet. Total frame pixels alone are insufficient:
-    // live 8 x 1008-square and 6/2 x 1024-square failed at sheet edges 4032/4096.
-    // A conservative 960px frame edge keeps its four-column/row layout within 3840.
-    const scale = Math.min(1, 960 / Math.max(width, height));
-    imageSize = { width: Math.floor(width * scale / 16) * 16, height: Math.floor(height * scale / 16) * 16 };
-    if (imageSize.width * imageSize.height < 655360 || imageSize.width * imageSize.height * frames > 8294400) throw new FalImage25RequestError('GIF frame canvas/count exceeds the supported native-sheet pixel budget. Use a square/near-square canvas and fewer frames. No generation submitted.');
+    imageSize = req.gifFrameSize === 'sticker' ? gifStickerSize(ratio) : gifFrameSize(frames, ratio);
   }
   return {
     endpoint: `openai/gpt-image-${version}/${variant}/${images.length ? 'edit' : 'text-to-image'}`,
