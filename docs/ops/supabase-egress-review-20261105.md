@@ -115,3 +115,8 @@
 
 - 合入 `dev` 并执行 `release:prod`：2724 条测试通过，`/api/health` 12/12 健康，生产 bundle 里四种语言的 Changelog 都已就位。
 - Lambda：上线后导出变慢。三段对照（R2 / 北美绕过 / 摘掉路由）的结果分别是 1075 / 1164 / 1173ms，排除了缓存的影响，已恢复全量缓存。详见 Worker README。
+
+## 9. 待跟进
+
+- **11-06 复查**：定时任务 `r2-cache-egress-check-20261106`（20:00 CST）会核对 Supabase egress 是否下降、R2 用量和 Lambda 导出耗时，结果追加到本文和项目记忆。
+- **美东冷读**：R2 在 APAC，美东 Lambda 冷读时请求层 p90 约 450ms（直连约 100ms），端到端导出目前没有受影响。如果 Lambda 每秒成片耗时 p50 持续高于约 900ms，就按 Worker README 的方案处理：延长边缘 TTL 并加后台复核、加 ENAM 副本，或者临时设置 `BYPASS_CONTINENTS=NA`。
