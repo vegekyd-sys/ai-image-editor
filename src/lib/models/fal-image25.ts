@@ -20,13 +20,17 @@ export async function readFalImage25<T>(operation: () => Promise<T>, signal?: Ab
   }
 }
 
-export function checkFalImage25Response(response: Response, data?: { detail?: { type?: string }[] }): void {
+export function checkFalImage25Response(response: Response, data?: { detail?: { type?: string; loc?: (string | number)[]; msg?: string }[] }): void {
   if (response.ok) return;
   if (data?.detail?.some(item => item.type === 'content_policy_violation')) {
     throw new FalImage25RequestError('The provider content checker rejected this request. It may concern the input image, prompt or generated result; the provider did not specify which. Do not retry automatically or switch models to bypass the rejection.');
   }
   if (response.status === 429 || response.status >= 500) throw new Error(`Temporary provider response HTTP ${response.status}`);
-  throw new FalImage25RequestError(`Provider rejected the request (HTTP ${response.status}).`);
+  // Keep actionable parameter validation without echoing source URLs, prompt text or credentials.
+  const fields = new Set(['image_size', 'frame_count', 'frame_duration_ms', 'output_format', 'quality', 'reasoning_effort']);
+  const detail = data?.detail?.filter(item => item.loc?.some(field => fields.has(String(field))) && item.type === 'value_error')
+    .map(item => `${item.loc!.filter(field => field !== 'body').join('.')}: ${String(item.msg ?? '').replace(/https?:\/\/\S+|data:\S+/gi, '[redacted]').slice(0, 400)}`).join('; ');
+  throw new FalImage25RequestError(`Provider rejected the request (HTTP ${response.status}).${detail ? ` Parameter validation: ${detail}` : ''}`);
 }
 
 
@@ -66,12 +70,17 @@ export function buildFalImage25Request(req: GenerateImageRequest, model: FalGptI
   let imageSize = image25Size(req.aspectRatio, req.imageResolution);
   if (format === 'gif') {
     const frames = req.frameCount ?? 9;
-    if (imageSize === 'auto' || !req.imageResolution) {
-      const ratio = req.aspectRatio && req.aspectRatio !== 'auto' ? req.aspectRatio.split(':').map(Number).reduce((a, b) => a / b) : 1;
-      const pixels = Math.min(1048576, Math.floor(8294400 / frames));
-      imageSize = { width: Math.floor(Math.sqrt(pixels * ratio) / 16) * 16, height: Math.floor(Math.sqrt(pixels / ratio) / 16) * 16 };
-    }
-    if (imageSize.width * imageSize.height < 655360 || imageSize.width * imageSize.height * frames > 8294400) throw new FalImage25RequestError('GIF frame canvas/count exceeds the shared pixel budget. Reduce frame count or resolution. No generation submitted.');
+    if (req.imageResolution === '2K' || req.imageResolution === '4K') throw new FalImage25RequestError('Native GIF frames currently support at most 960 pixels per edge, not 2K/4K. Use 1K or omit imageResolution. No generation submitted.');
+    const ratio = req.aspectRatio && req.aspectRatio !== 'auto' ? req.aspectRatio.split(':').map(Number).reduce((a, b) => a / b) : 1;
+    const pixels = Math.min(1048576, Math.floor(8294400 / frames));
+    const width = Math.floor(Math.sqrt(pixels * ratio) / 16) * 16;
+    const height = Math.floor(Math.sqrt(pixels / ratio) / 16) * 16;
+    // fal packs frames into a native sheet. Total frame pixels alone are insufficient:
+    // live 8 x 1008-square and 6/2 x 1024-square failed at sheet edges 4032/4096.
+    // A conservative 960px frame edge keeps its four-column/row layout within 3840.
+    const scale = Math.min(1, 960 / Math.max(width, height));
+    imageSize = { width: Math.floor(width * scale / 16) * 16, height: Math.floor(height * scale / 16) * 16 };
+    if (imageSize.width * imageSize.height < 655360 || imageSize.width * imageSize.height * frames > 8294400) throw new FalImage25RequestError('GIF frame canvas/count exceeds the supported native-sheet pixel budget. Use a square/near-square canvas and fewer frames. No generation submitted.');
   }
   return {
     endpoint: `openai/gpt-image-${version}/${variant}/${images.length ? 'edit' : 'text-to-image'}`,

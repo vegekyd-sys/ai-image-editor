@@ -21,7 +21,7 @@ describe('Original GPT Image formats and successor migration', () => {
   it('budgets every GIF frame before submission instead of requesting square 1K x 9', () => {
     const body = buildFalImage25Request({ prompt: 'pulse', outputFormat: 'gif' }, model).body;
     expect(body).toMatchObject({ output_format: 'gif', frame_count: 9, frame_duration_ms: 200, image_size: { width: 960, height: 960 } });
-    expect(() => buildFalImage25Request({ prompt: 'pulse', outputFormat: 'gif', imageResolution: '1K' }, model)).toThrow('shared pixel budget');
+    expect(buildFalImage25Request({ prompt: 'pulse', outputFormat: 'gif', imageResolution: '1K' }, model).body.image_size).toEqual({ width: 960, height: 960 });
   });
   it('returns actual SVG paths and MIME, no raster replacement', async () => {
     const out = await preserveGptImageOutput(Buffer.from(svg), 'svg');

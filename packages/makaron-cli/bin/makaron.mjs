@@ -2071,7 +2071,7 @@ Options:
   --quality <tier>          auto, low, medium, high (2.6; default low).
   --image-reasoning <tier>  low, medium, high (2.6; default high).
   --output-format <format> png, jpeg, webp, gif, svg (2.6; default png).
-  --frame-count <n>         GIF frames, default 9; shared pixel budget applies.
+  --frame-count <n>         GIF frames, default 9; max frame edge 960px.
   --frame-duration-ms <n>  GIF frame delay, default 200; multiples of 10.
   --out <file>              Save images; batches use name-1.ext, name-2.ext, etc.
   --mj-speed <mode>         fast (up to 4 images) or draft (up to 24).

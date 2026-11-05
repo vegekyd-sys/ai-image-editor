@@ -39,6 +39,8 @@ If the conversation history shows an active long-video-director workflow, contin
 
 Default tool: `generate_image`.
 
+New generative GIF art or meme animation follows the image-generation route. Use `animated-gif` only to assemble existing frames or implement explicitly requested timing/export controls; its legacy broad GIF triggers do not replace the native image-generation route.
+
 Before complex image work (multi-image, skills, model choice, red marks, restoration, captions, layout/mockup image generation), call `read_file('prompts/image.md')`. Do not re-read guides already in history.
 
 Multi-image edits and identity restoration always require that image guide before generation, including when the user already specifies the exact edit and image model.

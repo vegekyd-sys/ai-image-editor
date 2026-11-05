@@ -1,11 +1,39 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
-import { buildFalImage25Request, createFalImage25Backend } from '@/lib/models/fal-image25';
+import { buildFalImage25Request, checkFalImage25Response, createFalImage25Backend } from '@/lib/models/fal-image25';
 import { DEFAULT_IMAGE_MODEL, getImageModelCapability, planImageGeneration } from '@/lib/image-model-capabilities';
 import { FAL_IMAGE26_IDS, IMAGE_MODEL_IDS, isFalGptImage, isFalImage25 } from '@/lib/models/types';
 
 beforeEach(() => vi.stubEnv('FAL_KEY', 'test-key'));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+describe('native GIF sheet regression from real failed chat requests', () => {
+  it.each([2, 6, 8, 9])('keeps %i frames within the sheet edge even when total pixels would allow larger frames', frames => {
+    for (const imageResolution of [undefined, '1K']) {
+      const { body } = buildFalImage25Request({ prompt: 'Animate the reference', image: 'https://example.com/ref.png', aspectRatio: '1:1', outputFormat: 'gif', frameCount: frames, imageResolution }, FAL_IMAGE26_IDS[0]);
+      expect(body.image_size).toEqual({ width: 960, height: 960 });
+      expect(body.frame_count).toBe(frames);
+    }
+  });
+
+  it('rejects unsupported per-frame resolution before any provider call', async () => {
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    await expect(createFalImage25Backend(FAL_IMAGE26_IDS[0]).generate({ prompt: 'Animate', outputFormat: 'gif', frameCount: 2, imageResolution: '2K' })).rejects.toThrow('not 2K/4K');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('returns the native-sheet validation reason while omitting private prompt/URL echoes', () => {
+    const response = new Response(null, { status: 422 });
+    expect(() => checkFalImage25Response(response, { detail: [{ type: 'value_error', loc: ['body', 'image_size'], msg: "No supported sheet fits 8 GIF frames at size '1008x1008'. The longest edge must be less than or equal to 3840." }] })).toThrow('image_size: No supported sheet fits 8 GIF frames');
+    try {
+      checkFalImage25Response(response, { detail: [{ type: 'value_error', loc: ['body', 'prompt'], msg: 'private prompt' }, { type: 'value_error', loc: ['body', 'image_size'], msg: 'Bad size https://private.example/file?secret=value' }] });
+    } catch (error) {
+      expect(String(error)).not.toContain('private prompt');
+      expect(String(error)).not.toContain('secret=value');
+      expect(String(error)).toContain('[redacted]');
+    }
+  });
+});
 
 describe('GPT Image 2.6 upgrade', () => {
   it('keeps Auto and old provider selection separate from explicit 2.6', () => {
