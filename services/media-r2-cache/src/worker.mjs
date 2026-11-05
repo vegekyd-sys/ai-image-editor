@@ -23,6 +23,10 @@ export const DEFAULTS = {
   MAX_FILL_BYTES: String(1024 ** 3), // larger objects are never copied (stay on origin)
   MAX_EDGE_BYTES: String(512 * 1024 ** 2), // Cache API object limit
   LOCK_SECONDS: '120',
+  // Comma-separated client continent codes (request.cf.continent) served by
+  // plain passthrough, e.g. "NA" to keep Remotion Lambda on the old path.
+  // Off by default: a 2026-11-05 A/B showed equal Lambda export times.
+  BYPASS_CONTINENTS: '',
 };
 
 const num = (env, name) => Number(env[name] ?? DEFAULTS[name]);
@@ -309,7 +313,10 @@ export function createHandler(deps = {}) {
       return handlePurge(request, env, url);
     }
 
-    const target = env.R2C_DISABLED === '1' || !env.MEDIA_R2 ? null : cacheTarget(url, request.method);
+    const bypass = String(env.BYPASS_CONTINENTS || '').split(',').map(c => c.trim()).filter(Boolean);
+    const continent = request.cf?.continent;
+    const regionBypass = Boolean(continent && bypass.includes(continent));
+    const target = env.R2C_DISABLED === '1' || !env.MEDIA_R2 || regionBypass ? null : cacheTarget(url, request.method);
     if (!target) return passthrough(request, env);
 
     try {

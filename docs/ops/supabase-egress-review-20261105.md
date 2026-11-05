@@ -110,3 +110,8 @@
 ## 7. 已上线（2026-11-05 21:10 CST）
 
 已购买 Workers Paid，`cdn.makaron.app` 的公开媒体请求已经由 R2 缓存 Worker 接管，线上冒烟检查通过（详见 `services/media-r2-cache/README.md`）。覆盖写触发器和 Vault 密钥已经由人工在 SQL Editor 里执行完毕，实测 R2 副本在数秒内被清除。省钱效果要看 11-06 起的 Supabase egress。
+
+## 8. 网站发布与 Lambda 回归（2026-11-05 22:40 CST）
+
+- 合入 `dev` 并执行 `release:prod`：2724 条测试通过，`/api/health` 12/12 健康，生产 bundle 里四种语言的 Changelog 都已就位。
+- Lambda：上线后导出变慢。三段对照（R2 / 北美绕过 / 摘掉路由）的结果分别是 1075 / 1164 / 1173ms，排除了缓存的影响，已恢复全量缓存。详见 Worker README。

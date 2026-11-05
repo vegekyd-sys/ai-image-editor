@@ -11,7 +11,8 @@
     "EDGE_TTL_SECONDS": "60",
     "REVALIDATE_SECONDS": "600",
     "R2C_DISABLED": "0",
-    "CF_ZONE_ID": "f8509107c309261487e0bcfbcf72d704"
+    "CF_ZONE_ID": "f8509107c309261487e0bcfbcf72d704",
+    "BYPASS_CONTINENTS": ""
   },
   "r2_buckets": [{ "binding": "MEDIA_R2", "bucket_name": "makaron-cdn-media" }],
   "observability": { "enabled": true, "head_sampling_rate": 0.05 },
@@ -29,7 +30,8 @@
         "EDGE_TTL_SECONDS": "60",
         "REVALIDATE_SECONDS": "600",
         "R2C_DISABLED": "0",
-    "CF_ZONE_ID": "f8509107c309261487e0bcfbcf72d704"
+    "CF_ZONE_ID": "f8509107c309261487e0bcfbcf72d704",
+    "BYPASS_CONTINENTS": ""
       },
       "r2_buckets": [{ "binding": "MEDIA_R2", "bucket_name": "makaron-cdn-media" }]
     }

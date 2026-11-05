@@ -301,3 +301,18 @@ test('fill reads Storage directly and drops a version that differs from the one 
   assert.equal(cache.store.size, 0);
   void run;
 });
+
+test('requests from bypassed continents pass straight through', async () => {
+  const { r2, origin, run } = setup({ files: file(bytes(500)) });
+  const req = new Request(MEDIA);
+  Object.defineProperty(req, 'cf', { value: { continent: 'NA' } });
+  const pending = [];
+  const handler = createHandler({ fetchOrigin: origin.fetchOrigin, edgeCache: () => ({ match: async () => undefined, put: async () => {}, delete: async () => {} }), now: () => 1 });
+  const res = await handler(req, { MEDIA_R2: r2, BYPASS_CONTINENTS: 'NA' }, { waitUntil: p => pending.push(p) });
+  await res.arrayBuffer(); await Promise.all(pending);
+  assert.equal(res.headers.get('x-makaron-cache'), null);
+  assert.equal(r2.ops.length, 0);
+  // Other continents still use the cache.
+  const asia = await run(MEDIA);
+  assert.equal(asia.res.headers.get('x-makaron-cache'), 'MISS');
+});
