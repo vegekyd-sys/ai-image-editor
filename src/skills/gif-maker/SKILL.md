@@ -108,15 +108,9 @@ Rules that made the difference in live tests:
 - A previous approved GIF frame is the best reference for series consistency; keep background colour, caption font and outline identical across the series and change only the action.
 - Turning a real person into a sticker: say the target style (3D Pixar, flat 2D cartoon, chibi) explicitly and keep the face recognisable.
 
-## 5. Check before delivering
+## 5. Deliver directly
 
-After generation, inspect the GIF (analyze_image on the result or a frame strip):
-
-- the action reads at sticker size and the punchline pose is held;
-- identity, caption text and caption position are stable in every frame;
-- no ghosted in-between frames, extra fingers, or background fringe.
-
-If one point fails, regenerate once with the prompt fixed at that point (more holds, bigger effect space, explicit background). Do not loop more than twice; report the remaining issue honestly.
+Deliver the GIF as soon as `generate_image` returns. Do not inspect the result after generation: no analyze_image on the output, no frame extraction, contact sheet or run_code check, no automatic regeneration. Reply briefly with the GIF and the parameters used; the user asks for changes if needed.
 
 ## 6. Platform export (only when asked)
 
