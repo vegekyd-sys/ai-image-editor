@@ -2079,6 +2079,7 @@ Options:
   --output-format <format> png, jpeg, webp, gif, svg (2.6; default png).
   --frame-count <n>         GIF frames 2-16, default 9; 960px frames up to 9, 816px for 10-12, 720px for 13-16.
   --frame-duration-ms <n>  GIF frame delay, default 200; multiples of 10.
+  --gif-size <size>         sticker (~512px frames, about half cost) or full (default, largest frames).
   --out <file>              Save images; batches use name-1.ext, name-2.ext, etc.
   --mj-speed <mode>         fast (up to 4 images) or draft (up to 24).
   --mj-quality <mode>       standard or hd; HD regenerates, not lossless upscaling.
@@ -3220,9 +3221,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       }
       editArgs.background = background;
     }
-    else if (['--quality', '--image-reasoning', '--output-format', '--frame-count', '--frame-duration-ms'].includes(args[i])) {
+    else if (['--quality', '--image-reasoning', '--output-format', '--gif-size', '--frame-count', '--frame-duration-ms'].includes(args[i])) {
       const flag = args[i], value = args[++i];
-      const fields = { '--quality': ['imageQuality', ['auto', 'low', 'medium', 'high']], '--image-reasoning': ['imageReasoningEffort', ['low', 'medium', 'high']], '--output-format': ['outputFormat', ['png', 'jpeg', 'webp', 'gif', 'svg']] };
+      const fields = { '--quality': ['imageQuality', ['auto', 'low', 'medium', 'high']], '--image-reasoning': ['imageReasoningEffort', ['low', 'medium', 'high']], '--output-format': ['outputFormat', ['png', 'jpeg', 'webp', 'gif', 'svg']], '--gif-size': ['gifFrameSize', ['sticker', 'full']] };
       if (fields[flag]) {
         const [key, allowed] = fields[flag];
         if (!allowed.includes(value)) { console.error(`Invalid ${flag}: use ${allowed.join(', ')}.`); process.exit(1); }

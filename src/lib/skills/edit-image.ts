@@ -59,7 +59,7 @@ export async function editImage(
     image: references ? undefined : ctx.currentImage,
     references, prompt: finalPrompt, model: requestedModel, category: skill,
     aspectRatio, imageResolution, background, isNsfw,
-    imageQuality: input.imageQuality, imageReasoningEffort: input.imageReasoningEffort, outputFormat: input.outputFormat, frameCount: input.frameCount, frameDurationMs: input.frameDurationMs,
+    imageQuality: input.imageQuality, imageReasoningEffort: input.imageReasoningEffort, outputFormat: input.outputFormat, frameCount: input.frameCount, frameDurationMs: input.frameDurationMs, gifFrameSize: input.gifFrameSize,
     midjourney: input.midjourney, onMidjourneyReceipt: input.onMidjourneyReceipt,
     thinkingEffort: 'minimal' as const,
   };

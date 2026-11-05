@@ -10,7 +10,9 @@ export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type ImageQuality = 'auto' | 'low' | 'medium' | 'high';
 export type ImageReasoningEffort = 'low' | 'medium' | 'high';
 export type ImageOutputFormat = 'png' | 'jpeg' | 'webp' | 'gif' | 'svg';
-export type ImageGenerationOptions = { imageQuality?: ImageQuality; imageReasoningEffort?: ImageReasoningEffort; outputFormat?: ImageOutputFormat; frameCount?: number; frameDurationMs?: number };
+export type ImageGenerationOptions = { imageQuality?: ImageQuality; imageReasoningEffort?: ImageReasoningEffort; outputFormat?: ImageOutputFormat; frameCount?: number; frameDurationMs?: number; gifFrameSize?: GifFrameSize };
+/** GIF frame canvas: sticker = ~512px frames (about half the cost and faster), full = largest native sheet size. */
+export type GifFrameSize = 'sticker' | 'full';
 export type ImageBackground = 'auto' | 'opaque' | 'transparent';
 
 export interface GenerateImageRequest extends ImageGenerationOptions {

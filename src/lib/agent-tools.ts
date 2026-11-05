@@ -1397,6 +1397,7 @@ function createGenerateImageTool(
       outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).optional().describe('Default PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
       frameCount: z.number().int().min(2).max(16).optional().describe('GIF frames 2–16, default 9. Frames share one native sheet: square frames are 960px up to 9 frames, 816px for 10–12, 720px for 13–16. Plan holds by repeating poses; see skills/gif-maker/SKILL.md.'),
       frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).optional().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
+      gifFrameSize: z.enum(['sticker', 'full']).optional().describe('GIF frame canvas. sticker = ~512px frames, about half the cost and faster: use for chat stickers, 表情包, emoji/reaction memes. full (default) = largest native frames for GIFs viewed large.'),
       imageResolution: z.string().optional().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Use larger tiers only when requested. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background preference. Set "transparent" for transparent/no background, background removal, 抠图/抠像/去背景 or reusable alpha assets. Also pass media_index for source-image cutout. Conflicts are resolved to deliver an image; see the capability table.'),
@@ -1413,7 +1414,7 @@ function createGenerateImageTool(
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, isNsfw, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, midjourney, style_reference_media_indices, media_index, reference_media_indices, retake_source }) => {
+      execute: async ({ editPrompt, skill, model, isNsfw, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, midjourney, style_reference_media_indices, media_index, reference_media_indices, retake_source }) => {
         if (isNsfw) ctx.isNsfw = true;
         // GPT-5.6 currently fills omitted optional numeric tool fields with 0.
         // Treat that provider sentinel exactly like omission so empty projects
@@ -1466,7 +1467,7 @@ function createGenerateImageTool(
         let billingModel: ModelId | undefined;
         let imagePlan: ImageGenerationPlan;
         try {
-          imagePlan = planImageGeneration({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, midjourney: mjOptions, isNsfw: ctx.isNsfw });
+          imagePlan = planImageGeneration({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, midjourney: mjOptions, isNsfw: ctx.isNsfw });
           billingModel = imagePlan.model;
         } catch (error) {
           return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: error instanceof ImageCapabilityError ? error.code : 'model_retired', ...(error instanceof ImageCapabilityError ? { conflicts: error.conflicts, compatibleModels: error.compatibleModels } : {}) };
@@ -1518,7 +1519,7 @@ function createGenerateImageTool(
             } : undefined;
         const imageStartedAt = Date.now();
         const skillResult = await editImage(
-          { editPrompt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { editPrompt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           {
             currentImage: editTarget,
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
@@ -1557,7 +1558,7 @@ function createGenerateImageTool(
           id: skillResult.taskId || crypto.randomUUID(),
           prompt: mjGeneration?.prompt || editPrompt,
           model: skillResult.usedModel || billingModel,
-          imageQuality: imagePlan.request.imageQuality, imageReasoningEffort: imagePlan.request.imageReasoningEffort, outputFormat: imagePlan.request.outputFormat, frameCount: imagePlan.request.frameCount, frameDurationMs: imagePlan.request.frameDurationMs,
+          imageQuality: imagePlan.request.imageQuality, imageReasoningEffort: imagePlan.request.imageReasoningEffort, outputFormat: imagePlan.request.outputFormat, frameCount: imagePlan.request.frameCount, frameDurationMs: imagePlan.request.frameDurationMs, gifFrameSize: imagePlan.request.gifFrameSize,
           inputImages: [editTarget, ...resolvedRefs].filter((url): url is string => Boolean(url?.startsWith('http'))),
         };
         const mediaIndices: number[] = [];

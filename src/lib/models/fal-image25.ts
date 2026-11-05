@@ -72,6 +72,11 @@ export function gifFrameSize(frames: number, ratio = 1): { width: number; height
   return best;
 }
 
+/** Chat-sticker frames: ~512x512 pixel area (OpenAI's own GIF example size; live 2026-11-05: 0.033 vs 0.062 fal units at 816px, 19s vs 31s). Fits every sheet grid. */
+export function gifStickerSize(ratio = 1): { width: number; height: number } {
+  return { width: Math.round(Math.sqrt(262144 * ratio) / 16) * 16, height: Math.round(Math.sqrt(262144 / ratio) / 16) * 16 };
+}
+
 /** Provider-specific 2.6 tiers and original-format output. Legacy 2.5 remains available to controlled comparisons only. */
 export function buildFalImage25Request(req: GenerateImageRequest, model: FalGptImageId) {
   validateImageModelRequest(req, model);
@@ -94,7 +99,7 @@ export function buildFalImage25Request(req: GenerateImageRequest, model: FalGptI
     const frames = req.frameCount ?? 9;
     if (req.imageResolution === '2K' || req.imageResolution === '4K') throw new FalImage25RequestError('Native GIF frames currently support at most 960 pixels per edge, not 2K/4K. Use 1K or omit imageResolution. No generation submitted.');
     const ratio = req.aspectRatio && req.aspectRatio !== 'auto' ? req.aspectRatio.split(':').map(Number).reduce((a, b) => a / b) : 1;
-    imageSize = gifFrameSize(frames, ratio);
+    imageSize = req.gifFrameSize === 'sticker' ? gifStickerSize(ratio) : gifFrameSize(frames, ratio);
   }
   return {
     endpoint: `openai/gpt-image-${version}/${variant}/${images.length ? 'edit' : 'text-to-image'}`,

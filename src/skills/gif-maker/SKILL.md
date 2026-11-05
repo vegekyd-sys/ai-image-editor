@@ -49,7 +49,12 @@ Hard limits (fal enforces them; invalid requests fail before payment):
 - No 2K/4K. Keep square (`aspectRatio: "1:1"`) for stickers.
 - All frames share one duration. Create holds by **repeating a pose across consecutive frames in the plan**, not by asking for variable timing.
 
-Always pass `outputFormat: "gif"`, `frameCount`, `frameDurationMs`, `aspectRatio: "1:1"` and `background` explicitly:
+Frame canvas (`gifFrameSize`):
+
+- `"sticker"` — ~512px frames. Use for chat stickers, 表情包, emoji and reaction memes. About half the cost and ~40% faster than full size, and still 2x the 240px WeChat size.
+- `"full"` (default) — largest native frames (960/816/720px). Use when the GIF is viewed large: banners, product loops, showcase art.
+
+Always pass `outputFormat: "gif"`, `frameCount`, `frameDurationMs`, `gifFrameSize`, `aspectRatio: "1:1"` and `background` explicitly:
 
 - `background: "opaque"` for a solid coloured background (default for 表情包/meme).
 - `background: "transparent"` only when the user wants a die-cut sticker without a background; then ask for a thick white sticker outline around the subject so GIF's 1-bit transparency edge stays clean. With `"auto"` the model may choose transparency itself and leave a jagged coloured fringe around the subject.
@@ -115,7 +120,7 @@ If one point fails, regenerate once with the prompt fixed at that point (more ho
 
 ## 6. Platform export (only when asked)
 
-The native GIF is 720–960px and 1–2.5MB. For chat platforms, convert with
+Sticker GIFs are ~512px; full GIFs are 720–960px and 1–2.5MB. For chat platforms, convert with
 `run_code` `runtime: "node"` FFmpeg (palettegen/paletteuse) and publish the result:
 
 - WeChat 表情: 240×240, under 500KB (128-colour palette usually lands at 130–300KB).
@@ -127,7 +132,7 @@ ffmpeg -i in.gif -filter_complex "scale=240:240:flags=lanczos,split[a][b];[a]pal
 
 ## 7. Worked examples (live-tested, GPT Image 2.6 Flare)
 
-Reference character, finger wag, `frameCount: 12, frameDurationMs: 120, background: "opaque"`:
+Reference character, finger wag, `frameCount: 12, frameDurationMs: 120, gifFrameSize: "sticker", background: "opaque"`:
 
 ```text
 FRAME PLAN (12 frames, seamless loop):

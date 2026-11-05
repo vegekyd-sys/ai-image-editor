@@ -129,3 +129,15 @@ describe('native GIF sheet grid (live fal validation 2026-11-05)', () => {
     expect(() => buildFalImage25Request({ prompt: 'Sticker', outputFormat: 'gif', frameCount: 17 }, FAL_IMAGE26_IDS[0])).toThrow('2–16');
   });
 });
+
+describe('sticker GIF frames', () => {
+  it('uses ~512px frames for stickers regardless of frame count', () => {
+    for (const frames of [2, 9, 12, 16]) {
+      const { body } = buildFalImage25Request({ prompt: 'Sticker', aspectRatio: '1:1', outputFormat: 'gif', frameCount: frames, gifFrameSize: 'sticker' }, FAL_IMAGE26_IDS[0]);
+      expect(body.image_size).toEqual({ width: 512, height: 512 });
+    }
+  });
+  it('rejects gifFrameSize without GIF output', () => {
+    expect(() => planImageGeneration({ prompt: 'x', outputFormat: 'png', gifFrameSize: 'sticker' })).toThrow();
+  });
+});
