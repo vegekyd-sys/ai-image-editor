@@ -39,13 +39,12 @@ function resolveImage(input: string): string {
 }
 
 /** In stdio mode, save result to disk. In serverless mode, return base64 in MCP response. */
-function formatResult(image: string, message: string, prefix: string) {
-  const mimeType = image.startsWith('data:image/png')
-    ? 'image/png' as const
-    : image.startsWith('data:image/webp')
-      ? 'image/webp' as const
-      : 'image/jpeg' as const;
-  const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+function formatResult(image: string, message: string, prefix: string, saveToDisk = true) {
+  const mimeType = /^data:(image\/[a-z0-9.+-]+);base64,/i.exec(image)?.[1] ?? 'image/jpeg';
+  const extensions: Record<string, string> = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/svg+xml': 'svg' };
+  const extension = extensions[mimeType];
+  if (!extension) throw new Error('Unsupported generated image MIME type');
+  if (!saveToDisk) return { content: [{ type: 'text' as const, text: message }, { type: 'image' as const, data: image.replace(/^data:image\/[a-z0-9.+-]+;base64,/i, ''), mimeType }] };
   // Try to save to disk (stdio mode). If fs is unavailable or cwd is read-only (serverless), return base64.
   try {
     const outDir = join(process.cwd(), 'mcp-output');
@@ -70,6 +69,8 @@ function formatResult(image: string, message: string, prefix: string) {
 }
 
 export interface McpServerOptions {
+  /** HTTP clients receive original media bytes; stdio may save to disk. */
+  returnImageContent?: boolean;
   submitVideo?: (input: CreateVideoInput, toolName: string) => Promise<CreateVideoResult>;
   onVideoStatus?: (taskId: string, status: string, queryFailed?: boolean) => Promise<void>;
   /** Authenticated Makaron owner for private subscription relay routing. */
@@ -96,7 +97,7 @@ export interface McpServerOptions {
     },
   ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
-  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: string; midjourneyQuality?: string }) => Promise<{ allowed: boolean; message?: string }>;
+  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: string; midjourneyQuality?: string } & import('../lib/models/types').ImageGenerationOptions) => Promise<{ allowed: boolean; message?: string }>;
   /** Called only before a Grok personal-plan request safely falls back to the paid API. */
   onBeforeGrokApiFallback?: (toolName: string, model?: string) => Promise<void>;
 }
@@ -123,6 +124,11 @@ Generation timing varies; report actual completion. No automatic retry or model 
       model: z.string().nullish().describe('Explicit image model preference; otherwise omit for Auto. Unknown IDs use Auto, Flare first. See the generated Image Model Capability table.'),
       isNsfw: z.boolean().nullish().describe('Caller/Agent-assessed NSFW input; routes directly to Qwen Spicy.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5/2.6 support up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
+      imageQuality: z.enum(['auto', 'low', 'medium', 'high']).nullish().describe('GPT Image 2.6 rendering quality. Default low; choose higher when the user asks for more visual detail.'),
+      imageReasoningEffort: z.enum(['low', 'medium', 'high']).nullish().describe('GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high.'),
+      outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).nullish().describe('Default PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
+      frameCount: z.number().int().min(2).max(64).nullish().describe('GIF frames, default 9. All frames share 8294400 pixels; current minimum frame area may require fewer frames. Invalid canvas/count fails before payment.'),
+      frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).nullish().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
       imageResolution: z.string().nullish().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.5/2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
       midjourney: z.object({
         speed: z.enum(['fast', 'draft']).optional(), quality: z.enum(['standard', 'hd']).optional(),
@@ -135,11 +141,11 @@ Generation timing varies; report actual completion. No automatic retry or model 
     },
     async (params) => {
       try {
-        const plan = planImageGeneration({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined, aspectRatio: params.aspectRatio ?? undefined, imageResolution: params.imageResolution ?? undefined, isNsfw: params.isNsfw ?? undefined, midjourney: params.midjourney ?? undefined });
+        const plan = planImageGeneration({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined, aspectRatio: params.aspectRatio ?? undefined, imageResolution: params.imageResolution ?? undefined, imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, isNsfw: params.isNsfw ?? undefined, midjourney: params.midjourney ?? undefined });
         const imageInputCount = (plan.request.image ? 1 : 0) + (plan.request.references?.length ?? 0);
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', plan.model, { imageInputCount, imageResolution: plan.request.imageResolution, midjourneyQuality: params.midjourney?.quality });
+          const check = await options.onToolStart('makaron_edit_image', plan.model, { imageInputCount, imageResolution: plan.request.imageResolution, imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, midjourneyQuality: params.midjourney?.quality });
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -159,6 +165,7 @@ Generation timing varies; report actual completion. No automatic retry or model 
             preferredModel: params.model ?? undefined,
             isNsfw: params.isNsfw ?? undefined,
             aspectRatio: params.aspectRatio ?? undefined,
+            imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined,
             imageResolution: params.imageResolution ?? undefined,
             background: params.background ?? undefined,
           },
@@ -174,9 +181,9 @@ Generation timing varies; report actual completion. No automatic retry or model 
           ? `${result.message} (model: ${result.usedModel})`
           : result.message;
         const images = result.images ?? [result.image];
-        if (images.length === 1) return formatResult(result.image, msg, 'edit');
+        if (images.length === 1) return formatResult(result.image, msg, 'edit', !options?.returnImageContent);
         // Preserve every candidate; one onToolComplete call bills the whole batch once.
-        return { content: images.flatMap((image, index) => formatResult(image, `${msg} Candidate ${index + 1}/${images.length}.`, `edit-${index + 1}`).content) };
+        return { content: images.flatMap((image, index) => formatResult(image, `${msg} Candidate ${index + 1}/${images.length}.`, `edit-${index + 1}`, !options?.returnImageContent).content) };
 
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

@@ -1,15 +1,19 @@
 /** Models offered to new Agent and MCP requests. */
-export const IMAGE_MODEL_IDS = ['gemini', 'gemini-2.1', 'gemini-lite', 'qwen-spicy', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'wan2.7-image', 'mj-v8.2'] as const;
+export const IMAGE_MODEL_IDS = ['gemini', 'gemini-2.1', 'gemini-lite', 'qwen-spicy', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'wan2.7-image', 'mj-v8.2'] as const;
 /** Accept the old Qwen ID at API/tool boundaries; it is normalized before routing and billing. */
 export const IMAGE_MODEL_INPUT_IDS = [...IMAGE_MODEL_IDS, 'openai', 'qwen'] as const;
 /** Keep old IDs at the input boundary so existing clients get a capability-aware migration. */
-export type ModelId = typeof IMAGE_MODEL_IDS[number] | 'openai' | 'qwen' | 'pony' | 'wai';
+export type ModelId = typeof IMAGE_MODEL_IDS[number] | 'openai' | 'qwen' | 'pony' | 'wai' | 'gpt-image-2.5-flare' | 'gpt-image-2.5-sunburst';
 /** Default for ordinary photo edits and image generation; legacy gemini remains selectable. */
 export { DEFAULT_IMAGE_MODEL, resolveImageModel } from '../image-model-capabilities';
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export type ImageQuality = 'auto' | 'low' | 'medium' | 'high';
+export type ImageReasoningEffort = 'low' | 'medium' | 'high';
+export type ImageOutputFormat = 'png' | 'jpeg' | 'webp' | 'gif' | 'svg';
+export type ImageGenerationOptions = { imageQuality?: ImageQuality; imageReasoningEffort?: ImageReasoningEffort; outputFormat?: ImageOutputFormat; frameCount?: number; frameDurationMs?: number };
 export type ImageBackground = 'auto' | 'opaque' | 'transparent';
 
-export interface GenerateImageRequest {
+export interface GenerateImageRequest extends ImageGenerationOptions {
   image?: string;           // input image (URL/base64). Missing = text-to-image
   prompt: string;           // model contract owns scene/context/edit preparation
   model?: string;          // explicit model preference; unknown IDs use Auto
@@ -17,7 +21,7 @@ export interface GenerateImageRequest {
   aspectRatio?: string;
   /** Native resolution preference, planned against each image model's canvas limits. */
   imageResolution?: string;
-  /** Output background contract. Transparent output defaults to GPT Image 2.5 Flare. */
+  /** Output background contract. Transparent output defaults to GPT Image 2.6 Flare. */
   background?: ImageBackground;
   thinkingEffort?: ReasoningEffort;
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)

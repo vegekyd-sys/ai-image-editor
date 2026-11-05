@@ -538,7 +538,7 @@ describe('agent prompt policy guards', () => {
     expect(anchor).toContain('Scene and prop cards must not drift into 2D illustration when the character anchor is 3D cartoon')
     expect(anchor).toContain('any scene or prop anchor drifts into a different render family')
     expect(anchor).toContain('Use "passed self-check" rather than "approved"')
-    expect(storyboard).toContain('Generate exactly one storyboard image per segment with `generate_image` using `model: "gpt-image-2.5-flare"`')
+    expect(storyboard).toContain('Generate exactly one storyboard image per segment with `generate_image` using `model: "gpt-image-2.6-flare"`')
     expect(storyboard).toContain('Always pass `aspectRatio` to `generate_image` using the approved target aspect ratio')
     expect(storyboard).toContain('Do not create one full-video storyboard sheet')
     expect(storyboard).toContain('Generate storyboards sequentially in segment order')

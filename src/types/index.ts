@@ -94,6 +94,11 @@ export interface PhotoMetadata {
     model: string;
     inputImages?: string[];
     promptKind?: 'submitted' | 'brief';
+    imageQuality?: import('@/lib/models/types').ImageQuality;
+    imageReasoningEffort?: import('@/lib/models/types').ImageReasoningEffort;
+    outputFormat?: import('@/lib/models/types').ImageOutputFormat;
+    frameCount?: number;
+    frameDurationMs?: number;
   };
   /** Exact submitted MJ payload, persisted with every candidate for prompt transparency. */
   midjourneyGeneration?: {

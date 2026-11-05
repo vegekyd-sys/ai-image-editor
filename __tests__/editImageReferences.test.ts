@@ -88,7 +88,7 @@ describe('editImage reference contract', () => {
     const prompt = '给这个键盘设计一个高级的信息丰富的电商详情页';
     await editImage({ editPrompt: prompt, preferredModel: 'openai' }, {});
     expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'gpt-image-2.5-flare', prompt,
+      model: 'gpt-image-2.6-flare', prompt,
     }));
   });
 
@@ -100,7 +100,7 @@ describe('editImage reference contract', () => {
 
     expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
       image: undefined,
-      model: 'gpt-image-2.5-flare',
+      model: 'gpt-image-2.6-flare',
       background: 'transparent',
       references: undefined,
     }));
@@ -118,7 +118,7 @@ describe('editImage reference contract', () => {
 
     expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
       image: 'https://example.com/source.jpg',
-      model: 'gpt-image-2.5-flare',
+      model: 'gpt-image-2.6-flare',
       background: 'transparent',
       references: undefined,
     }));

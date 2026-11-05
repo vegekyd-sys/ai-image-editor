@@ -405,11 +405,11 @@ npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 # Output to file
 npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 
-# Strict transparent PNG/WebP output through GPT Image 2.5 Flare (fails rather than returning opaque)
-npx makaron-cli edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
+# Strict transparent PNG/WebP output through GPT Image 2.6 Flare (fails rather than returning opaque)
+npx makaron-cli edit --image-model gpt-image-2.6-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|gpt-image-2.6-flare|gpt-image-2.6-sunburst|wan2.7-image|mj-v8.2`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output defaults to GPT Image 2.5 Flare; an explicitly selected GPT Image 2.5/2.6 variant is retained. Output is returned only when the provider supplies real alpha.
+Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.6-flare|gpt-image-2.6-sunburst|wan2.7-image|mj-v8.2`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output defaults to GPT Image 2.6 Flare; an explicitly selected GPT Image 2.6 variant is retained. Output is returned only when the provider supplies real alpha.
 
 Midjourney V8.2 (`mj-v8.2`) accepts natural-language briefs and prepares the English prompt automatically. Fast returns up to 4 images, Draft up to 24 smaller drafts, and HD regenerates up to 4 higher-resolution images. Every returned image is saved; `--out scene.png` produces `scene-1.png`, `scene-2.png`, etc. A single result keeps the requested filename. Provider filtering can reduce the batch size.
 
@@ -734,14 +734,13 @@ npx makaron-cli admin fetch-skill https://www.makaron.app/s/4c4cbd57
 
 FAL video models: **fal H3 Turbo** uses `minimax-h3-max` for single-start-frame I2V/T2V. **FAL H3 Max** uses the new selector `fal-h3-max`: native T2V or image/video/audio reference-to-video, default 768p, optional 480p/1080p, integer 5–15s; at most 9 images / 3 videos / 3 audios / 12 total. Reference video/audio each 2–15s and each modality totals at most 15s. Source-video modifications use generation with feature references, not typed edit/extend. Reference input tokens are billed in addition to output video; query current pricing.
 
-GPT Image 2.6 Flare and Sunburst are explicit optional fal routes (`gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`). This adapter returns one static PNG at low quality and low reasoning; GIF, SVG and markup overlays are not exposed. Auto stays on GPT Image 2.5 Flare. Exact active pricing rows are required before submission.
+GPT Image 2.6 Flare is the default image route; Sunburst is an explicit alternative. The fal adapter defaults to low rendering quality and **high reasoning**, independently selectable with `--quality auto|low|medium|high` and `--image-reasoning low|medium|high`. Legacy 2.5 request IDs migrate to the matching 2.6 variant; historical metadata is unchanged. Administrator Codex Subscription Agents use the same image tool and image API billing.
 
-The legacy `openai` image-model parameter now resolves to GPT Image 2.5 Flare.
+`--output-format png|jpeg|webp|gif|svg` preserves the original format. GIF supports generation/editing and `--frame-count` / `--frame-duration-ms`; all frames share the pixel budget (default 9 frames, 200 ms, 960 square). SVG supports **text-to-image only**, with one output and no source/reference images. Unsafe or external SVG content is rejected. CLI saves real GIF/SVG bytes with matching extensions, even if `--out` requested a different extension. No silent rasterization, fallback model or automatic paid retry.
 
-`chat --stream` follows the original durable run when its live connection ends before completion. It does not submit another generation; already printed reply text is not replayed.
+```sh
+makaron edit --output-format gif --quality medium --frame-count 9 --frame-duration-ms 160 --out spark.gif "A looping purple spark tracing a cyan circle"
+makaron edit --output-format svg --image-reasoning high --out spark.svg "A simple purple cloud and three cyan diamond sparks, vector paths"
+```
 
-Wan Retake (`wan-3.0` / `wan-3.0-prime`) rebuilds the selected interval using cropped video references and automatic assembly; it is reference-guided generation, with no native endpoint locks. Kling 4 remains the single default; choose alternatives explicitly.
-
-Native Retake alternatives: `--model grok` uses xAI video editing (selection <=8.5s, source >=1s, at most 720p, no extra image references); `--model google-omni` uses native Google editing (selection <=10s, source >=3s); `--model minimax-h3` uses reference-guided rebuilding (source >=2s). These routes do not support exact final/middle/corrected-frame locks. MiniMax provider availability depends on its account balance; the October 23 real probe was rejected with HTTP 402 and produced no video.
-
-Five matched native-edit cases found no universal quality/cost/speed winner: Grok was cheaper and faster but failed lettering and camera-change requests; Omni corrected lettering and kept book color better, but applied the product effect to the wrong object. Keep Kling as the API default, choose alternatives explicitly, and verify the actual requested object, action and joins. See `docs/research/retake-native-model-benchmark-2026-10-23.md` in the source repository for scope and evidence.
+The provider schema also advertises xhigh/max reasoning, but the live 2.6 endpoint rejected both during acceptance. They are not exposed as working Makaron tiers. Exact active 2.6 pricing rows are required before submission; final cost uses that task's fal billable USD units.

@@ -18,19 +18,19 @@ describe('transparent image routing', () => {
     expect(resolveModelChain({
       prompt: 'a sticker',
       background: 'transparent',
-    })).toEqual(['gpt-image-2.5-flare']);
+    })).toEqual(['gpt-image-2.6-flare']);
 
     expect(resolveModelChain({
       prompt: 'a sticker',
       model: 'gemini',
       background: 'transparent',
-    })).toEqual(['gpt-image-2.5-flare']);
+    })).toEqual(['gpt-image-2.6-flare']);
   });
 
   it('attempts only Flare when transparent generation fails', async () => {
     const generate = vi.fn().mockResolvedValue({ image: null });
     mockedGetBackend.mockReturnValue({
-      id: 'gpt-image-2.5-flare',
+      id: 'gpt-image-2.6-flare',
       canHandle: () => true,
       generate,
     });
@@ -41,14 +41,14 @@ describe('transparent image routing', () => {
     })).rejects.toThrow('No automatic retry'.toLowerCase());
 
     expect(mockedGetBackend).toHaveBeenCalledTimes(1);
-    expect(mockedGetBackend).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    expect(mockedGetBackend).toHaveBeenCalledWith('gpt-image-2.6-flare');
     expect(generate).toHaveBeenCalledTimes(1);
 
   });
 
   it('migrates legacy Image 2 calls to paid fal even with subscription context', async () => {
     mockedGetBackend.mockReturnValue({
-      id: 'gpt-image-2.5-flare',
+      id: 'gpt-image-2.6-flare',
       canHandle: () => true,
       generate: vi.fn().mockResolvedValue({
         image: 'data:image/png;base64,cG5n',
@@ -56,7 +56,7 @@ describe('transparent image routing', () => {
         usage: {
           inputTokens: 0,
           outputTokens: 0,
-          modelId: 'gpt-image-2.5-flare',
+          modelId: 'gpt-image-2.6-flare',
           provider: 'fal',
         },
       }),
@@ -67,7 +67,7 @@ describe('transparent image routing', () => {
       model: 'openai',
     })).resolves.toMatchObject({
       image: 'data:image/png;base64,cG5n',
-      model: 'gpt-image-2.5-flare',
+      model: 'gpt-image-2.6-flare',
       provider: 'fal',
       usage: { provider: 'fal' },
     });
@@ -78,7 +78,7 @@ describe('transparent image routing', () => {
 describe('Nano Banana 2.1 strict routing', () => {
   it('defaults to Flare while preserving explicit classic and Lite routing', () => {
     expect(resolveModelChain({ prompt: 'Scene', model: 'gemini-2.1' })).toEqual(['gemini-2.1']);
-    expect(resolveModelChain({ prompt: 'Scene' })).toEqual(['gpt-image-2.5-flare']);
+    expect(resolveModelChain({ prompt: 'Scene' })).toEqual(['gpt-image-2.6-flare']);
     expect(resolveModelChain({ prompt: 'Scene', model: 'gemini-lite' })).toEqual(['gemini-lite']);
   });
   it('fails once on an uncertain paid outcome', async () => {
@@ -95,9 +95,9 @@ describe('Nano Banana 2.1 strict routing', () => {
 describe('ordinary image defaults and paid fallback boundaries', () => {
   it('retains classic selection and special provider routes', () => {
     expect(resolveModelChain({ prompt: 'Scene', model: 'gemini' })).toEqual(['gemini']);
-    expect(resolveModelChain({ prompt: 'Scene', image: 'photo', category: 'enhance' })).toEqual(['gpt-image-2.5-flare']);
+    expect(resolveModelChain({ prompt: 'Scene', image: 'photo', category: 'enhance' })).toEqual(['gpt-image-2.6-flare']);
     expect(resolveModelChain({ prompt: 'Scene', isNsfw: true })).toEqual(['qwen-spicy']);
-    expect(resolveModelChain({ prompt: 'Scene', references: Array.from({length: 4}, () => ({url:'photo',role:'reference'})) })).toEqual(['gpt-image-2.5-flare']);
+    expect(resolveModelChain({ prompt: 'Scene', references: Array.from({length: 4}, () => ({url:'photo',role:'reference'})) })).toEqual(['gpt-image-2.6-flare']);
   });
   it.each([new Error('timeout'), new NanoBanana21RequestError('unknown'), null])('never switches auto models after an unknown outcome', async error => {
     mockedGetBackend.mockReset();

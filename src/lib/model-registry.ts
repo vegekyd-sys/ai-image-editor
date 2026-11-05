@@ -16,8 +16,6 @@ export interface ModelInfo {
 export const MODEL_REGISTRY: ModelInfo[] = [
   // Image
   { id: 'mj-v8.2', nameKey: 'model.midjourney.name', descKey: 'model.midjourney.desc', category: 'image', speedLabel: '4 / 24' },
-  { id: 'gpt-image-2.5-flare', nameKey: 'model.image25Flare.name', descKey: 'model.image25Flare.desc', category: 'image' },
-  { id: 'gpt-image-2.5-sunburst', nameKey: 'model.image25Sunburst.name', descKey: 'model.image25Sunburst.desc', category: 'image' },
   { id: 'gpt-image-2.6-flare', nameKey: 'model.image26Flare.name', descKey: 'model.image26Flare.desc', category: 'image' },
   { id: 'gpt-image-2.6-sunburst', nameKey: 'model.image26Sunburst.name', descKey: 'model.image26Sunburst.desc', category: 'image' },
   { id: 'wan2.7-image', nameKey: 'model.wan27Image.name', descKey: 'model.wan27Image.desc', category: 'image', speedLabel: '~10s' },

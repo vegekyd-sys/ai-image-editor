@@ -39,11 +39,11 @@ export function toPublicStorageUrl(url: string): string {
 export function normalizeImageFilename(filename: string, mimeType: string): string {
   const extension = mimeType === 'image/png'
     ? 'png'
-    : mimeType === 'image/webp'
-      ? 'webp'
-      : 'jpg'
-  return /\.(?:jpe?g|png|webp)$/i.test(filename)
-    ? filename.replace(/\.(?:jpe?g|png|webp)$/i, `.${extension}`)
+    : mimeType === 'image/webp' ? 'webp'
+      : mimeType === 'image/gif' ? 'gif'
+        : mimeType === 'image/svg+xml' ? 'svg' : 'jpg'
+  return /\.(?:jpe?g|png|webp|gif|svg)$/i.test(filename)
+    ? filename.replace(/\.(?:jpe?g|png|webp|gif|svg)$/i, `.${extension}`)
     : `${filename}.${extension}`
 }
 
@@ -123,7 +123,7 @@ export function getPublicUrl(supabase: SupabaseClient, path: string): string {
  *  Workspace media can exceed 2000px. Supabase's default cover mode crops a
  *  width-only transform instead of scaling the whole image, so request contain. */
 export function getOptimizedUrl(url: string, quality = 95): string {
-  if (!url || !url.includes('/storage/v1/object/public/')) return url
+  if (!url || /\.(gif|svg)(?:[?#]|$)/i.test(url) || !url.includes('/storage/v1/object/public/')) return url
   // Local Supabase Storage does not expose the hosted /render/image route.
   // E2E must render the original object instead of a guaranteed 404.
   if (!supportsSupabaseImageTransforms(url)) return normalizeDomain(url)
@@ -233,7 +233,7 @@ export async function uploadAudio(
 }
 
 export function getThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
-  if (!url || !url.includes('/storage/v1/object/public/')) return url
+  if (!url || /\.(gif|svg)(?:[?#]|$)/i.test(url) || !url.includes('/storage/v1/object/public/')) return url
   if (!supportsSupabaseImageTransforms(url)) return normalizeDomain(url)
   const base = normalizeDomain(url).split('?')[0].replace(
     '/storage/v1/object/public/',
@@ -245,7 +245,7 @@ export function getThumbnailUrl(url: string, width = 200, quality = 60, height?:
 }
 
 export function getOriginFormatThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
-  if (!url || !url.includes('/storage/v1/object/public/')) return url
+  if (!url || /\.(gif|svg)(?:[?#]|$)/i.test(url) || !url.includes('/storage/v1/object/public/')) return url
   if (!supportsSupabaseImageTransforms(url)) return normalizeDomain(url)
   const base = normalizeDomain(url).split('?')[0].replace(
     '/storage/v1/object/public/',

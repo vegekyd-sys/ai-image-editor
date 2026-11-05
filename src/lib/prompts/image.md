@@ -199,7 +199,7 @@ Omit this line if the user explicitly requested text or captions.
 - `image_refs` works for text-to-image too. No `media_index` is needed. Just pass references and a prompt.
 - `image_refs` are not remembered between tool calls. If you need the same references again, pass them again.
 
-## Context Mode for model='gpt-image-2.5-flare'
+## Context Mode for model='gpt-image-2.6-flare'
 
 When the selected model uses Context Mode, pass the original design/layout brief and prior feedback. Inspire the image model's judgment instead of choosing layout or colors for it.
 

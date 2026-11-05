@@ -1,6 +1,6 @@
 import type { GenerateImageRequest, ImageBackground, ModelId } from './models/types';
 
-export type ActiveImageModelId = Exclude<ModelId, 'openai' | 'qwen' | 'pony' | 'wai'>;
+export type ActiveImageModelId = Exclude<ModelId, 'openai' | 'qwen' | 'pony' | 'wai' | 'gpt-image-2.5-flare' | 'gpt-image-2.5-sunburst'>;
 export type ImageAspectRatioCapability =
   | { kind: 'enum'; values: readonly string[] }
   | { kind: 'range'; min: number; max: number }
@@ -28,27 +28,22 @@ export interface ImageModelCapability {
 const STANDARD_RATIOS = ['1:1', '3:2', '2:3', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const;
 const PANORAMIC_RATIOS = [...STANDARD_RATIOS, '1:4', '4:1', '1:8', '8:1'] as const;
 const FLARE: ImageModelCapability = {
-  id: 'gpt-image-2.5-flare', label: 'GPT Image 2.5 Flare', autoPriority: 1,
+  id: 'gpt-image-2.6-flare', label: 'GPT Image 2.6 Flare', autoPriority: 1,
   maxInputImages: 16, aspectRatio: { kind: 'range', min: 1 / 3, max: 3 },
   resolutions: ['1K', '2K', '4K'], fourKSize: { longSide: 3840, minLongToShortRatio: 16 / 9 },
   supportsTransparency: true, supportsNsfw: false, promptMode: 'context', provider: 'fal',
-  notes: 'Primary image model, including product, text, layout, face restoration and director storyboards. Pass the original user brief with prior feedback verbatim. Native 2K up to 2048 long edge; 4K uses 3840 long edge, <=8294400 pixels, so requires 16:9 through 3:1 landscape or portrait. 4K without a ratio defaults to 16:9. Square 4K requires Nano Banana 2.1; transparent square 4K relaxes to 2K. Low quality; no subscription substitution.',
+  notes: 'Primary image model, including product, text, layout, face restoration and director storyboards. Pass the original user brief with prior feedback verbatim. Native 2K up to 2048 long edge; 4K uses 3840 long edge, <=8294400 pixels, so requires 16:9 through 3:1 landscape or portrait. 4K without a ratio defaults to 16:9. Square 4K requires Nano Banana 2.1; transparent square 4K relaxes to 2K. Default low quality and high reasoning. Administrator Codex Subscription Agents use this same image tool; image API usage is billed separately.',
 };
 
 /** Current Makaron adapter contracts, not every capability advertised upstream. */
 const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
-  'gpt-image-2.5-flare': FLARE,
-  'gpt-image-2.5-sunburst': {
-    ...FLARE, id: 'gpt-image-2.5-sunburst', label: 'GPT Image 2.5 Sunburst', autoPriority: undefined,
-    notes: FLARE.notes.replace('Primary image model,', 'Explicit Sunburst only,'),
-  },
   'gpt-image-2.6-flare': {
-    ...FLARE, id: 'gpt-image-2.6-flare', label: 'GPT Image 2.6 Flare', autoPriority: undefined,
-    notes: 'Explicit optional GPT Image 2.6 Flare via fal. Static PNG generation/editing only; low quality and low reasoning. Up to 16 ordered inputs, native 1K/2K/4K within the same 1:3–3:1, 3840-edge and 8294400-pixel limits. GIF, SVG and markup overlays are not exposed by this adapter. No automatic fallback or default change.',
+    ...FLARE, id: 'gpt-image-2.6-flare', label: 'GPT Image 2.6 Flare', autoPriority: 1,
+    notes: 'GPT Image 2.6 Flare via fal. PNG/JPEG/WebP, animated GIF (generation/edit), SVG vector (text-to-image only). imageQuality auto/low/medium/high, imageReasoningEffort low/medium/high; default low quality + high reasoning. Up to 16 ordered inputs; native 1K/2K/4K, ratio 1:3–3:1, max edge 3840 and 8294400 pixels. GIF frameCount 2–64, frameDurationMs 20–2000 in steps of 10; all frames share pixel budget, default 9 frames at 960 square. SVG requires no source/references. Unsupported format/tier requests fail before generation, never flatten or substitute.',
   },
   'gpt-image-2.6-sunburst': {
     ...FLARE, id: 'gpt-image-2.6-sunburst', label: 'GPT Image 2.6 Sunburst', autoPriority: undefined,
-    notes: 'Explicit optional GPT Image 2.6 Sunburst via fal. Static PNG generation/editing only; low quality and low reasoning. Up to 16 ordered inputs, native 1K/2K/4K within the same 1:3–3:1, 3840-edge and 8294400-pixel limits. GIF, SVG and markup overlays are not exposed by this adapter. No automatic fallback or default change.',
+    notes: 'GPT Image 2.6 Sunburst via fal. PNG/JPEG/WebP, animated GIF (generation/edit), SVG vector (text-to-image only). imageQuality auto/low/medium/high, imageReasoningEffort low/medium/high; default low quality + high reasoning. Up to 16 ordered inputs; native 1K/2K/4K, ratio 1:3–3:1, max edge 3840 and 8294400 pixels. GIF frameCount 2–64, frameDurationMs 20–2000 in steps of 10; all frames share pixel budget, default 9 frames at 960 square. SVG requires no source/references. Unsupported format/tier requests fail before generation, never flatten or substitute.',
   },
   'gemini-2.1': {
     id: 'gemini-2.1', label: 'Nano Banana 2.1', autoPriority: 2, maxInputImages: 14,
@@ -89,12 +84,12 @@ const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
   },
 };
 
-export const DEFAULT_IMAGE_MODEL: ActiveImageModelId = 'gpt-image-2.5-flare';
+export const DEFAULT_IMAGE_MODEL: ActiveImageModelId = 'gpt-image-2.6-flare';
 
 export function normalizeImageModelId(model?: string | null): ActiveImageModelId | undefined {
   if (!model || model === 'auto') return undefined;
   if (model === 'pony' || model === 'wai') return undefined;
-  const id = model === 'openai' ? 'gpt-image-2.5-flare' : model === 'qwen' ? 'qwen-spicy' : model;
+  const id = model === 'openai' || model === 'gpt-image-2.5-flare' ? 'gpt-image-2.6-flare' : model === 'gpt-image-2.5-sunburst' ? 'gpt-image-2.6-sunburst' : model === 'qwen' ? 'qwen-spicy' : model;
   if (!Object.hasOwn(IMAGE_CAPABILITIES, id)) return undefined;
   return id as ActiveImageModelId;
 }
@@ -123,6 +118,17 @@ function ratioDescription(ratio: ImageAspectRatioCapability): string {
 
 export function getImageRequestConflicts(req: GenerateImageRequest, capability: ImageModelCapability): string[] {
   const conflicts: string[] = [];
+  const format = req.outputFormat ?? 'png';
+  const is26 = capability.id.startsWith('gpt-image-2.6-');
+  if ((req.outputFormat || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined) && !is26) conflicts.push('explicit image format/quality/reasoning controls require GPT Image 2.6');
+  if (!['png', 'jpeg', 'webp', 'gif', 'svg'].includes(format)) conflicts.push('unsupported outputFormat');
+  if (format === 'svg' && (req.image || req.references?.length)) conflicts.push('SVG supports text-to-image only; omit source and references');
+  if (req.background === 'transparent' && format === 'jpeg') conflicts.push('JPEG cannot preserve transparency');
+  if (req.imageQuality && !['auto', 'low', 'medium', 'high'].includes(req.imageQuality)) conflicts.push('unsupported imageQuality');
+  if (req.imageReasoningEffort && !['low', 'medium', 'high'].includes(req.imageReasoningEffort)) conflicts.push('unsupported imageReasoningEffort');
+  if ((req.frameCount !== undefined || req.frameDurationMs !== undefined) && format !== 'gif') conflicts.push('frame controls require outputFormat=gif');
+  if (req.frameCount !== undefined && (!Number.isInteger(req.frameCount) || req.frameCount < 2 || req.frameCount > 64)) conflicts.push('frameCount must be an integer 2–64');
+  if (req.frameDurationMs !== undefined && (!Number.isInteger(req.frameDurationMs) || req.frameDurationMs < 20 || req.frameDurationMs > 2000 || req.frameDurationMs % 10 !== 0)) conflicts.push('frameDurationMs must be 20–2000 in steps of 10');
   const count = (req.image ? 1 : 0) + (req.references?.length ?? 0);
   if (capability.id === 'mj-v8.2') {
     if (req.image) conflicts.push('precise source-image editing is not supported; omit the source only for a new generation');
@@ -201,6 +207,11 @@ export function prepareImageModelRequest(req: GenerateImageRequest, model: Activ
 /** Prefer delivering an image. Capabilities guide tradeoffs instead of blocking users. */
 export function planImageGeneration(req: GenerateImageRequest): ImageGenerationPlan {
   const normalized = normalizeImageModelId(req.model);
+  if (req.outputFormat || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined) {
+    const selected = resolveImageModel(req.model, req.background) ?? DEFAULT_IMAGE_MODEL;
+    validateImageModelRequest(req, selected);
+    return { model: selected, request: { ...req, model: selected }, adjustments: [] };
+  }
   // Explicit batch generation has a different editing contract. Never silently reroute it.
   if (normalized === 'mj-v8.2') {
     validateImageModelRequest(req, normalized);

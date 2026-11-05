@@ -1,6 +1,7 @@
 import { validateImageModelRequest, getImageModelCapability } from '../image-model-capabilities';
 import sharp from 'sharp';
 import type { GenerateImageRequest, ModelBackend } from './types';
+import { preserveGptImageOutput } from './gpt-image-output';
 import { normalizeOpenAIImageOutput } from './openai-image-output';
 import { parseImageDataUrl } from './image-data-url';
 import { fitTransparentResultToAspectRatio, fitTransparentResultToSourceCanvas } from './transparent-source-canvas';
@@ -45,7 +46,7 @@ export function image25Size(aspectRatio?: string, resolution?: string): 'auto' |
   return { width: Math.round(Math.sqrt(1048576 * ratio) / 16) * 16, height: Math.round(Math.sqrt(1048576 / ratio) / 16) * 16 };
 }
 
-/** Shared static PNG transport; 2.6 does not silently opt in to animation or vectors. */
+/** Provider-specific 2.6 tiers and original-format output. Legacy 2.5 remains available to controlled comparisons only. */
 export function buildFalImage25Request(req: GenerateImageRequest, model: FalGptImageId) {
   validateImageModelRequest(req, model);
   const images = [...(req.image ? [{ url: req.image, role: 'Base image to edit' }] : []), ...(req.references ?? [])];
@@ -61,16 +62,28 @@ export function buildFalImage25Request(req: GenerateImageRequest, model: FalGptI
   const version = model.startsWith('gpt-image-2.6-') ? '2.6' : '2.5';
   const prompt = images.length > 1 ? `${images.map((ref, i) => `Image ${i + 1}: ${ref.role}`).join('\n')}\n\n${req.prompt}` : req.prompt;
   if (version === '2.6' && prompt.length > 32000) throw new FalImage25RequestError('GPT Image 2.6 prompt exceeds 32000 characters including reference labels. No generation was submitted.');
+  const format = req.outputFormat ?? 'png';
+  let imageSize = image25Size(req.aspectRatio, req.imageResolution);
+  if (format === 'gif') {
+    const frames = req.frameCount ?? 9;
+    if (imageSize === 'auto' || !req.imageResolution) {
+      const ratio = req.aspectRatio && req.aspectRatio !== 'auto' ? req.aspectRatio.split(':').map(Number).reduce((a, b) => a / b) : 1;
+      const pixels = Math.min(1048576, Math.floor(8294400 / frames));
+      imageSize = { width: Math.floor(Math.sqrt(pixels * ratio) / 16) * 16, height: Math.floor(Math.sqrt(pixels / ratio) / 16) * 16 };
+    }
+    if (imageSize.width * imageSize.height < 655360 || imageSize.width * imageSize.height * frames > 8294400) throw new FalImage25RequestError('GIF frame canvas/count exceeds the shared pixel budget. Reduce frame count or resolution. No generation submitted.');
+  }
   return {
     endpoint: `openai/gpt-image-${version}/${variant}/${images.length ? 'edit' : 'text-to-image'}`,
     body: {
       prompt,
       ...(images.length ? { image_urls: images.map(ref => ref.url) } : {}),
-      image_size: image25Size(req.aspectRatio, req.imageResolution),
-      quality: 'low',
-      ...(version === '2.6' ? { reasoning_effort: 'low' } : {}),
+      image_size: imageSize,
+      quality: req.imageQuality ?? 'low',
+      ...(version === '2.6' ? { reasoning_effort: req.imageReasoningEffort ?? 'high' } : {}),
       background: req.background ?? 'auto',
-      output_format: 'png',
+      output_format: format,
+      ...(format === 'gif' ? { frame_count: req.frameCount ?? 9, frame_duration_ms: req.frameDurationMs ?? 200 } : {}),
       num_images: 1,
       sync_mode: false,
     },
@@ -114,8 +127,11 @@ export function createFalImage25Backend(model: FalGptImageId): ModelBackend {
         checkFalImage25Response(submission, task);
         if (typeof task?.request_id !== 'string' || !/^[a-z0-9-]{1,100}$/i.test(task.request_id)) throw new Error('Submission outcome unknown.');
         requestId = task.request_id;
-        const resultUrl = `https://queue.fal.run/${image26 ? endpoint : 'openai/gpt-image-2.5'}/requests/${requestId}`;
-        const signal = AbortSignal.timeout(240000);
+        // Live accepted receipts return the family root, not the full endpoint in the OpenAPI example.
+        const acceptedUrl = new URL(task.response_url ?? `https://queue.fal.run/openai/gpt-image-${image26 ? '2.6' : '2.5'}/requests/${requestId}`);
+        if (acceptedUrl.protocol !== 'https:' || acceptedUrl.hostname !== 'queue.fal.run' || acceptedUrl.username || acceptedUrl.password || acceptedUrl.search || !acceptedUrl.pathname.endsWith(`/requests/${requestId}`)) throw new Error('Unexpected accepted result URL.');
+        const resultUrl = acceptedUrl.href;
+        const signal = AbortSignal.timeout(600000);
         stage = 'status';
         while (true) {
           const status = await readFalImage25(async () => {
@@ -147,23 +163,23 @@ export function createFalImage25Backend(model: FalGptImageId): ModelBackend {
         }, signal);
         stage = 'decode';
         if (buffer.length > 50 * 1024 * 1024) throw new Error('Output exceeds image size limit.');
+        let image: string | null;
         if (image26) {
-          const metadata = await sharp(buffer, { failOn: 'error', limitInputPixels: 8294400 }).metadata();
-          if (metadata.format !== 'png' || (metadata.pages ?? 1) > 1) throw new FalImage25RequestError('Expected a single static PNG. Animated or vector output was not flattened or accepted.');
+          image = await preserveGptImageOutput(buffer, req.outputFormat ?? 'png', req.background);
+        } else {
+          await sharp(buffer, { failOn: 'error', limitInputPixels: 8294400 }).raw().toBuffer();
+          image = await normalizeOpenAIImageOutput(`data:image/png;base64,${buffer.toString('base64')}`, req.background);
         }
-        await sharp(buffer, { failOn: 'error', limitInputPixels: 8294400 }).raw().toBuffer();
-        stage = 'output normalization';
-        let image = await normalizeOpenAIImageOutput(`data:image/png;base64,${buffer.toString('base64')}`, req.background);
         if (!image) throw new Error('Output did not satisfy the transparent background request.');
-        if (req.background === 'transparent') {
+        if (req.background === 'transparent' && !['gif', 'svg'].includes(req.outputFormat ?? 'png')) {
           const source = req.image ?? req.references?.[0]?.url;
           stage = 'canvas';
           if (req.aspectRatio && req.aspectRatio !== 'auto') image = await fitTransparentResultToAspectRatio(image, req.aspectRatio);
           else if (source && !req.imageResolution) image = await fitTransparentResultToSourceCanvas(source, image);
         }
-        console.log(`[${model}] provider=fal request=${requestId} quality=low costUsd=${cost} totalMs=${Date.now() - started}`);
+        console.log(`[${model}] provider=fal request=${requestId} quality=${body.quality} reasoning=${image26 ? body.reasoning_effort : 'not-exposed'} format=${body.output_format} costUsd=${cost} totalMs=${Date.now() - started}`);
         // fal supplies cost, not token counts. Do not invent token telemetry.
-        return { image, provider: 'fal', usage: { modelId: model, inputTokens: 0, outputTokens: 0, provider: 'fal', providerCostUsd: cost } };
+        return { image, taskId: requestId, provider: 'fal', usage: { modelId: model, inputTokens: 0, outputTokens: 0, provider: 'fal', providerCostUsd: cost } };
       } catch (error) {
         console.warn(`[${model}] stage=${stage} request=${requestId ?? 'unknown'} errorType=${error instanceof Error ? error.name : 'unknown'}${error instanceof RangeError && error.message === 'Maximum call stack size exceeded' ? ' errorCode=stack_overflow' : ''}`);
         const reason = error instanceof FalImage25RequestError ? error.message : `The request did not complete successfully during ${stage}.`;

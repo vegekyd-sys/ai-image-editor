@@ -1,3 +1,4 @@
+import { estimateGptImageCredits } from '@/lib/models/gpt-image-quote';
 import { isFalGptImage } from '@/lib/models/types';
 import { getTokenRate } from '@/lib/billing/token-rates';
 import { createMakaronMcpServer } from '@/mcp/server';
@@ -68,6 +69,7 @@ async function handleMcp(req: Request): Promise<Response> {
   }
 
   const server = createMakaronMcpServer({
+    returnImageContent: true,
     userId: auth.userId,
     submitVideo: auth.type === 'user' ? (input, toolName) => submitMcpVideo(input, { userId: auth.userId!, apiKeyId: auth.keyId!, toolName }) : undefined,
     onVideoStatus: auth.type === 'user' ? (taskId, status, queryFailed) => settleMcpVideoStatus(auth.userId!, taskId, status, queryFailed) : undefined,
@@ -92,6 +94,8 @@ async function handleMcp(req: Request): Promise<Response> {
       if (toolName === 'makaron_edit_image' && isFalGptImage(model)) {
         const rate = await getTokenRate(model);
         if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Selected GPT Image pricing is not configured.' };
+        const check = await requireCredits(auth.userId!, estimateGptImageCredits(meta ?? {}, rate.markup));
+        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
       // Video is atomically reserved after resolving provider inputs.
       if (toolName === 'makaron_create_video' || toolName === 'makaron_edit_video' || toolName === 'makaron_upscale_video') {

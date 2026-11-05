@@ -7,15 +7,15 @@ import { FAL_IMAGE26_IDS, IMAGE_MODEL_IDS, isFalGptImage, isFalImage25 } from '@
 beforeEach(() => vi.stubEnv('FAL_KEY', 'test-key'));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
-describe('optional GPT Image 2.6', () => {
+describe('GPT Image 2.6 upgrade', () => {
   it('keeps Auto and old provider selection separate from explicit 2.6', () => {
-    expect(DEFAULT_IMAGE_MODEL).toBe('gpt-image-2.5-flare');
+    expect(DEFAULT_IMAGE_MODEL).toBe('gpt-image-2.6-flare');
     expect(planImageGeneration({ prompt: 'A product photo' }).model).toBe(DEFAULT_IMAGE_MODEL);
     for (const model of FAL_IMAGE26_IDS) {
       expect(IMAGE_MODEL_IDS).toContain(model);
       expect(isFalGptImage(model)).toBe(true);
       expect(isFalImage25(model)).toBe(false);
-      expect(getImageModelCapability(model).autoPriority).toBeUndefined();
+      expect(getImageModelCapability(model).autoPriority).toBe(model.endsWith('flare') ? 1 : undefined);
       expect(planImageGeneration({ prompt: 'Sticker', model, background: 'transparent' }).model).toBe(model);
     }
   });
@@ -24,7 +24,7 @@ describe('optional GPT Image 2.6', () => {
     const variant = model.endsWith('flare') ? 'flare' : 'sunburst';
     const generated = buildFalImage25Request({ prompt: 'A poster', aspectRatio: '16:9', imageResolution: '4K' }, model);
     expect(generated.endpoint).toBe(`openai/gpt-image-2.6/${variant}/text-to-image`);
-    expect(generated.body).toMatchObject({ output_format: 'png', num_images: 1, quality: 'low', reasoning_effort: 'low', image_size: { width: 3840, height: 2160 } });
+    expect(generated.body).toMatchObject({ output_format: 'png', num_images: 1, quality: 'low', reasoning_effort: 'high', image_size: { width: 3840, height: 2160 } });
     const edited = buildFalImage25Request({ prompt: 'Change only the mug', image: 'https://example.com/base.png', references: [{ url: 'https://example.com/color.png', role: 'color only' }] }, model);
     expect(edited.endpoint).toBe(`openai/gpt-image-2.6/${variant}/edit`);
     expect(edited.body.image_urls).toEqual(['https://example.com/base.png', 'https://example.com/color.png']);
@@ -51,8 +51,8 @@ describe('optional GPT Image 2.6', () => {
     vi.stubGlobal('fetch', fetcher);
     const result = await createFalImage25Backend(model).generate({ prompt: 'Sticker', background: 'transparent' });
     expect(result.usage).toMatchObject({ modelId: model, provider: 'fal', providerCostUsd: 0.0073, inputTokens: 0, outputTokens: 0 });
-    expect(fetcher.mock.calls[2][0]).toBe(`https://queue.fal.run/${endpoint}/requests/gpt26-request/status`);
-    expect(fetcher.mock.calls[3][0]).toBe(`https://queue.fal.run/${endpoint}/requests/gpt26-request`);
+    expect(fetcher.mock.calls[2][0]).toBe(`https://queue.fal.run/openai/gpt-image-2.6/requests/gpt26-request/status`);
+    expect(fetcher.mock.calls[3][0]).toBe(`https://queue.fal.run/openai/gpt-image-2.6/requests/gpt26-request`);
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
     expect(await sharp(Buffer.from(result.image!.split(',')[1], 'base64')).metadata()).toMatchObject({ format: 'png', hasAlpha: true });
   });

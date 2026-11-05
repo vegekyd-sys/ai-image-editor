@@ -17,12 +17,12 @@ describe('Image 2.5 model selector', () => {
   });
   it('shows Flare for legacy selections without offering the retired Image 2 option', () => {
     render(<LocaleProvider><ModelSelector preferredModel="openai" onModelChange={vi.fn()} /></LocaleProvider>);
-    expect(screen.getByTestId('model-selector').getAttribute('aria-label')).toContain('GPT Image 2.5 Flare');
+    expect(screen.getByTestId('model-selector').getAttribute('aria-label')).toContain('GPT Image 2.6 Flare');
     expect(getImageModels().some(model => model.id === 'openai')).toBe(false);
   });
   it('shares the canonical model id with the backend and tool schemas', () => {
-    expect(IMAGE_MODEL_IDS).toContain('gpt-image-2.5-flare');
-    expect(getImageModels().filter(m => m.id === 'gpt-image-2.5-flare')).toHaveLength(1);
+    expect(IMAGE_MODEL_IDS).toContain('gpt-image-2.6-flare');
+    expect(getImageModels().filter(m => m.id === 'gpt-image-2.6-flare')).toHaveLength(1);
   });
   it('is opt-in and selects Wan without changing video settings', async () => {
     const onModelChange = vi.fn();
@@ -30,8 +30,8 @@ describe('Image 2.5 model selector', () => {
     render(<LocaleProvider><ModelSelector preferredModel="auto" onModelChange={onModelChange} videoModel="seedance-fast" videoResolution="720p" onVideoModelChange={onVideoModelChange} onVideoResolutionChange={vi.fn()} /></LocaleProvider>);
     expect(onModelChange).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('model-selector'));
-    fireEvent.click(await screen.findByText('GPT Image 2.5 Flare'));
-    expect(onModelChange).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    fireEvent.click(await screen.findByText('GPT Image 2.6 Flare'));
+    expect(onModelChange).toHaveBeenCalledWith('gpt-image-2.6-flare');
     expect(onVideoModelChange).not.toHaveBeenCalled();
   });
 });
@@ -42,7 +42,7 @@ it('chooses Flare when leaving auto and retains the classic Nano Banana 2 option
   render(<LocaleProvider><ModelSelector preferredModel="auto" onModelChange={onModelChange} /></LocaleProvider>);
   fireEvent.click(screen.getByTestId('model-selector'));
   fireEvent.click(await screen.findByTestId('model-auto-image'));
-  expect(onModelChange).toHaveBeenLastCalledWith('gpt-image-2.5-flare');
+  expect(onModelChange).toHaveBeenLastCalledWith('gpt-image-2.6-flare');
   fireEvent.click(await screen.findByText('Nano Banana 2'));
   expect(onModelChange).toHaveBeenLastCalledWith('gemini');
 });

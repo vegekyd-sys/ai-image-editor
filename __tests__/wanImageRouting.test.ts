@@ -13,10 +13,10 @@ beforeEach(() => {
 
 describe('explicit Wan routing', () => {
   it('preserves Auto and transparent contracts but never switches an explicit Wan call', () => {
-    expect(resolveModelChain({ prompt: 'A mug.' })).toEqual(['gpt-image-2.5-flare']);
-    expect(resolveModelChain({ prompt: 'Enhance.', image: 'https://example.com/a.jpg', category: 'enhance' })).toEqual(['gpt-image-2.5-flare']);
+    expect(resolveModelChain({ prompt: 'A mug.' })).toEqual(['gpt-image-2.6-flare']);
+    expect(resolveModelChain({ prompt: 'Enhance.', image: 'https://example.com/a.jpg', category: 'enhance' })).toEqual(['gpt-image-2.6-flare']);
     expect(resolveModelChain({ prompt: 'Edit.', model: 'wan2.7-image', isNsfw: true })).toEqual(['qwen-spicy']);
-    expect(resolveModelChain({ prompt: 'Cutout.', model: 'wan2.7-image', background: 'transparent' })).toEqual(['gpt-image-2.5-flare']);
+    expect(resolveModelChain({ prompt: 'Cutout.', model: 'wan2.7-image', background: 'transparent' })).toEqual(['gpt-image-2.6-flare']);
   });
 
   it('routes the actual model/provider through the shared skill', async () => {

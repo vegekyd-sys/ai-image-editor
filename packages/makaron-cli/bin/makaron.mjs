@@ -2008,7 +2008,8 @@ function saveMcpImage(result, outputPath) {
   const saved = [];
   const stamp = Date.now();
   for (const [index, image] of images.entries()) {
-    const extension = image.mimeType === 'image/png' ? 'png' : image.mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const extension = ({ 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/svg+xml': 'svg' })[image.mimeType];
+    if (!extension) throw new Error(`Unsupported generated MIME type: ${image.mimeType}`);
     const requestedExtension = outputPath ? path.extname(outputPath).slice(1).toLowerCase() : '';
     const compatible = extension === 'jpg' ? ['jpg', 'jpeg'].includes(requestedExtension) : requestedExtension === extension;
     const stem = outputPath ? outputPath.slice(0, outputPath.length - path.extname(outputPath).length) : `makaron-output-${stamp}`;
@@ -2061,12 +2062,17 @@ Usage:
 Options:
   --image <file|url>        Base image to edit. Omit for text-to-image.
   --ref <file|url>          Additional reference image. Repeatable; model-specific limit (Nano Banana 2.1: 14 total inputs).
-  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.5-flare, gpt-image-2.5-sunburst, gpt-image-2.6-flare, gpt-image-2.6-sunburst, wan2.7-image, or mj-v8.2. Legacy qwen maps to qwen-spicy.
+  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.6-flare, gpt-image-2.6-sunburst, wan2.7-image, or mj-v8.2. Legacy qwen maps to qwen-spicy.
   --skill <id>              enhance, creative, wild, or captions.
   --image-resolution <id>  1K, 2K, or 4K; Auto chooses Nano Banana 2.1.
   --nsfw                  Route NSFW directly to Qwen Spicy.
   --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
   --background <mode>       auto, opaque, or transparent.
+  --quality <tier>          auto, low, medium, high (2.6; default low).
+  --image-reasoning <tier>  low, medium, high (2.6; default high).
+  --output-format <format> png, jpeg, webp, gif, svg (2.6; default png).
+  --frame-count <n>         GIF frames, default 9; shared pixel budget applies.
+  --frame-duration-ms <n>  GIF frame delay, default 200; multiples of 10.
   --out <file>              Save images; batches use name-1.ext, name-2.ext, etc.
   --mj-speed <mode>         fast (up to 4 images) or draft (up to 24).
   --mj-quality <mode>       standard or hd; HD regenerates, not lossless upscaling.
@@ -2079,16 +2085,18 @@ Options:
   --help, -h                Show this help.
 
 Notes:
-  GPT Image 2.6 choices return static PNG only, at low quality and low reasoning.
+  GPT Image 2.6 defaults to low rendering quality + high reasoning.
+  PNG/JPEG/WebP, animated GIF and vector SVG are preserved in the returned file.
+  SVG is text-to-image only; GIF frames share the pixel budget. No format substitution.
   MJ options require --image-model mj-v8.2; Draft + HD is invalid. Describe the scene
   naturally; the server prepares the English prompt. MJ is generation, not precise editing.
-  Model selection is optional. Transparent output routes strictly to GPT Image 2.5 Flare
+  Model selection is optional. Transparent output routes strictly to GPT Image 2.6 Flare
   and fails instead of returning an opaque fallback.
 
 Examples:
   makaron edit --image portrait.jpg --image-model qwen-spicy --out result.jpg "cinematic warm light"
   makaron edit --image product.jpg --ref style.png --aspect 1:1 "use this visual style"
-  makaron edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
+  makaron edit --image-model gpt-image-2.6-flare --background transparent --out sticker.png "a magenta star sticker"
 `);
 }
 
@@ -3203,6 +3211,19 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       }
       editArgs.background = background;
     }
+    else if (['--quality', '--image-reasoning', '--output-format', '--frame-count', '--frame-duration-ms'].includes(args[i])) {
+      const flag = args[i], value = args[++i];
+      const fields = { '--quality': ['imageQuality', ['auto', 'low', 'medium', 'high']], '--image-reasoning': ['imageReasoningEffort', ['low', 'medium', 'high']], '--output-format': ['outputFormat', ['png', 'jpeg', 'webp', 'gif', 'svg']] };
+      if (fields[flag]) {
+        const [key, allowed] = fields[flag];
+        if (!allowed.includes(value)) { console.error(`Invalid ${flag}: use ${allowed.join(', ')}.`); process.exit(1); }
+        editArgs[key] = value;
+      } else {
+        const number = Number(value), frames = flag === '--frame-count';
+        if (!Number.isInteger(number) || number < (frames ? 2 : 20) || number > (frames ? 64 : 2000) || (!frames && number % 10)) { console.error(`Invalid ${flag}.`); process.exit(1); }
+        editArgs[frames ? 'frameCount' : 'frameDurationMs'] = number;
+      }
+    }
     else if (args[i] === '--out' && args[i + 1]) outputPath = args[++i];
     else if (['--mj-speed', '--mj-quality', '--style-ref', '--mj-style-weight', '--mj-stylize', '--mj-chaos', '--mj-seed'].includes(args[i])) {
       const flag = args[i], value = args[++i];
@@ -3233,7 +3254,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     editArgs.midjourney = mjArgs;
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image|mj-v8.2] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|wan2.7-image|mj-v8.2] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);

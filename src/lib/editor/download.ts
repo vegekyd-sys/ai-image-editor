@@ -118,12 +118,12 @@ async function loadDownloadAsset(params: DownloadAssetParams): Promise<PreparedD
   if (!response.ok) throw new Error('Could not load image');
   const blob = await response.blob();
   const slug = (projectTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
-  const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg';
+  const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : blob.type === 'image/gif' ? 'gif' : blob.type === 'image/svg+xml' ? 'svg' : 'jpg';
   return { blob, filename: `makaron-${slug}-${(index ?? viewIndex) + 1}.${ext}`, kind: 'image' };
 }
 
 export async function savePreparedDownload(asset: PreparedDownload): Promise<void> {
-  if (isNativePhotoLibrarySaveAvailable()) {
+  if (isNativePhotoLibrarySaveAvailable() && asset.blob.type !== 'image/svg+xml') {
     const normalized = asset.kind === 'image' ? await normalizeImageBlobForNativeSave(asset.blob) : null;
     await saveBlobToNativePhotoLibrary(normalized?.blob || asset.blob,
       normalized ? asset.filename.replace(/\.[^.]+$/, `.${normalized.filenameExt}`) : asset.filename, asset.kind);
@@ -172,7 +172,9 @@ function blobToImageElement(blob: Blob): Promise<HTMLImageElement> {
   });
 }
 
-export async function normalizeImageBlobForNativeSave(blob: Blob): Promise<{ blob: Blob; filenameExt: 'jpg' | 'png' }> {
+export async function normalizeImageBlobForNativeSave(blob: Blob): Promise<{ blob: Blob; filenameExt: 'jpg' | 'png' | 'gif' }> {
+  if (blob.type === 'image/gif') return { blob, filenameExt: 'gif' };
+  if (blob.type === 'image/svg+xml') throw new Error('SVG must be downloaded as the original vector file, not converted to a photo.');
   if (blob.type === 'image/jpeg' || blob.type === 'image/jpg') {
     return { blob, filenameExt: 'jpg' };
   }
@@ -444,10 +446,10 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
 
     const res = await fetch(img);
     const blob = await res.blob();
-    const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg';
+    const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : blob.type === 'image/gif' ? 'gif' : blob.type === 'image/svg+xml' ? 'svg' : 'jpg';
     const filename = `makaron-${slug}-${idx}.${ext}`;
 
-    if (isNativePhotoLibrarySaveAvailable()) {
+    if (isNativePhotoLibrarySaveAvailable() && blob.type !== 'image/svg+xml') {
       try {
         const nativeImage = await normalizeImageBlobForNativeSave(blob);
         const nativeFilename = `makaron-${slug}-${idx}.${nativeImage.filenameExt}`;

@@ -41,10 +41,10 @@ export async function POST(req: NextRequest) {
     const spicyFirst = isNsfw === true || (!transparent && category === 'enhance');
     const nano21Preview = TIPS_PREVIEW_IMAGE_MODEL === NANO_BANANA_21_MODEL;
     const routePlan = transparent || spicyFirst ? planImageGeneration({ image, prompt: editPrompt, aspectRatio, background, category, isNsfw, model: spicyFirst ? 'qwen-spicy' : undefined }) : undefined;
-    if (routePlan?.model.startsWith('gpt-image-2.5') && await isBillingEnabled()) {
-      const rate = await getTokenRate('gpt-image-2.5-flare');
+    if (routePlan?.model.startsWith('gpt-image-2.6') && await isBillingEnabled()) {
+      const rate = await getTokenRate(routePlan.model);
       if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) {
-        return Response.json({ error: 'GPT Image 2.5 pricing is not configured.', code: 'pricing_unavailable' }, { status: 503 });
+        return Response.json({ error: 'GPT Image 2.6 pricing is not configured.', code: 'pricing_unavailable' }, { status: 503 });
       }
       const check = await requireCredits(user.id, 5);
       if (!check.ok) return check.response;

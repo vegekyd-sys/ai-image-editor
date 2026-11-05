@@ -1,5 +1,5 @@
 import { generateImage } from '../model-router';
-import type { ImageBackground } from '../models/types';
+import type { ImageBackground, ImageGenerationOptions } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
 import { ProviderImageInputError } from '../provider-image-preflight';
 import { FalImage25RequestError } from '../models/fal-image25';
@@ -8,7 +8,7 @@ import { WanImageRequestError } from '../models/wan-image';
 import { MidjourneyRequestError, type MidjourneyRequest, type MidjourneyTask } from '../midjourney';
 import { ImageCapabilityError, planImageGeneration } from '../image-model-capabilities';
 
-export interface EditImageInput {
+export interface EditImageInput extends ImageGenerationOptions {
   editPrompt: string;
   midjourney?: Omit<MidjourneyRequest, 'prompt' | 'aspectRatio' | 'imageUrls'>;
   onMidjourneyReceipt?: (task: MidjourneyTask, request: MidjourneyRequest) => Promise<void>;
@@ -59,6 +59,7 @@ export async function editImage(
     image: references ? undefined : ctx.currentImage,
     references, prompt: finalPrompt, model: requestedModel, category: skill,
     aspectRatio, imageResolution, background, isNsfw,
+    imageQuality: input.imageQuality, imageReasoningEffort: input.imageReasoningEffort, outputFormat: input.outputFormat, frameCount: input.frameCount, frameDurationMs: input.frameDurationMs,
     midjourney: input.midjourney, onMidjourneyReceipt: input.onMidjourneyReceipt,
     thinkingEffort: 'minimal' as const,
   };

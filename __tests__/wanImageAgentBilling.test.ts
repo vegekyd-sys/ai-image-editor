@@ -1,3 +1,4 @@
+import { estimateGptImageCredits } from '@/lib/models/gpt-image-quote';
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
@@ -25,11 +26,11 @@ function setup(provider = 'azure') {
   const requireCredits = vi.fn().mockResolvedValue({ ok: true, balance: 100 });
   const deductCredits = vi.fn().mockResolvedValue({ charged: 6, remaining: 94 });
   const getToolPrice = vi.fn().mockResolvedValue({ credits: 6, isFree: false });
-  const getTokenRate = vi.fn().mockResolvedValue({ model_id: 'gpt-image-2.5-flare', markup: 2, is_active: true });
+  const getTokenRate = vi.fn().mockResolvedValue({ model_id: 'gpt-image-2.6-flare', markup: 2, is_active: true });
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
   const ctx = { preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined, isNsfw: false };
   const context = vm.createContext({
-    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, resolveModelChain, getTokenRate,
+    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, resolveModelChain, getTokenRate, estimateGptImageCredits,
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration,
     validateImageIndex: (images: string[], index: number) => images[index - 1] ? { idx: index - 1 } : { error: 'Invalid media index' }, getToolPrice, isBillingEnabled,
     resolveToolName,
@@ -149,22 +150,22 @@ describe('App Agent Image 2.5 billing', () => {
     ctx.preferredModel = 'openai';
     getTokenRate.mockResolvedValue(null);
     expect(await tool.execute({ editPrompt: 'Product image' })).toMatchObject({ success: false, error: 'pricing_unavailable' });
-    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.6-flare');
     expect(editImage).not.toHaveBeenCalled();
   });
   it('rejects missing exact pricing before a paid call', async () => {
     const { tool, ctx, getTokenRate, editImage } = setup();
-    ctx.preferredModel = 'gpt-image-2.5-flare';
+    ctx.preferredModel = 'gpt-image-2.6-flare';
     getTokenRate.mockResolvedValue(null);
     expect(await tool.execute({ editPrompt: 'A mug.' })).toMatchObject({ success: false, error: 'pricing_unavailable' });
     expect(editImage).not.toHaveBeenCalled();
   });
   it('passes exact provider cost into the ledger before publishing', async () => {
     const { tool, ctx, editImage, deductByTokens, deductCredits } = setup();
-    ctx.preferredModel = 'gpt-image-2.5-flare';
-    editImage.mockResolvedValue({ success: true, image: 'data:image/jpeg;base64,YQ==', usedModel: 'gpt-image-2.5-flare', provider: 'fal', usage: { modelId: 'gpt-image-2.5-flare', inputTokens: 0, outputTokens: 0, providerCostUsd: 0.0062 } });
+    ctx.preferredModel = 'gpt-image-2.6-flare';
+    editImage.mockResolvedValue({ success: true, image: 'data:image/jpeg;base64,YQ==', usedModel: 'gpt-image-2.6-flare', provider: 'fal', usage: { modelId: 'gpt-image-2.6-flare', inputTokens: 0, outputTokens: 0, providerCostUsd: 0.0062 } });
     expect((await tool.execute({ editPrompt: 'Cup', background: 'transparent' })).success).toBe(true);
-    expect(deductByTokens).toHaveBeenCalledWith('test-user', 'generate_image', 'gpt-image-2.5-flare', 0, 0, undefined, undefined, undefined, 0.0062);
+    expect(deductByTokens).toHaveBeenCalledWith('test-user', 'generate_image', 'gpt-image-2.6-flare', 0, 0, undefined, undefined, undefined, 0.0062);
     expect(deductCredits).not.toHaveBeenCalled();
   });
 });
@@ -185,7 +186,7 @@ describe('optional Image 2.6 Agent billing', () => {
     getTokenRate.mockResolvedValue({ model_id: model, markup: 2, is_active: true });
     editImage.mockResolvedValue({ success: true, image: 'data:image/png;base64,YQ==', usedModel: model, provider: 'fal', usage: { modelId: model, inputTokens: 0, outputTokens: 0, providerCostUsd: 0.0123 } });
     expect((await tool.execute({ editPrompt: 'A mug', background: 'transparent' })).success).toBe(true);
-    expect(requireCredits).toHaveBeenCalledWith('test-user', 5);
+    expect(requireCredits).toHaveBeenCalledWith('test-user', 6);
     expect(editImage.mock.calls[0][0].preferredModel).toBe(model);
     expect(deductByTokens).toHaveBeenCalledExactlyOnceWith('test-user', 'generate_image', model, 0, 0, undefined, undefined, undefined, 0.0123);
     expect(deductCredits).not.toHaveBeenCalled();
@@ -220,10 +221,10 @@ describe('Nano Banana 2.1 Agent execution and billing', () => {
 it('preflights native Flare 2K in Auto', async () => {
   const {tool,ctx,getTokenRate,requireCredits,editImage}=setup();
   ctx.preferredModel=undefined;
-  getTokenRate.mockResolvedValue({model_id:'gpt-image-2.5-flare',markup:2,is_active:true});
+  getTokenRate.mockResolvedValue({model_id:'gpt-image-2.6-flare',markup:2,is_active:true});
   await tool.execute({editPrompt:'A forest scene',imageResolution:'2K'});
-  expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
-  expect(requireCredits).toHaveBeenCalledWith('test-user',5);
+  expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.6-flare');
+  expect(requireCredits).toHaveBeenCalledWith('test-user',24);
   expect(editImage).toHaveBeenCalledWith(expect.objectContaining({preferredModel:undefined,imageResolution:'2K'}),expect.anything());
 });
 
@@ -232,10 +233,10 @@ describe('Image capability Agent integration cases', () => {
   it('R01/R17: Auto quotes Flare and delivers once', async () => {
     const { tool, ctx, getTokenRate, requireCredits, editImage } = setup();
     ctx.preferredModel = undefined;
-    editImage.mockResolvedValue({ success: true, image: 'image', usedModel: 'gpt-image-2.5-flare' });
+    editImage.mockResolvedValue({ success: true, image: 'image', usedModel: 'gpt-image-2.6-flare' });
     expect((await tool.execute({ editPrompt: 'A portrait.' })).success).toBe(true);
-    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
-    expect(requireCredits).toHaveBeenCalledWith('test-user', 5);
+    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.6-flare');
+    expect(requireCredits).toHaveBeenCalledWith('test-user', 6);
     expect(editImage).toHaveBeenCalledTimes(1);
   });
   it('R02/R17: original 8:1 banner Auto request quotes Nano before generation', async () => {
@@ -250,7 +251,7 @@ describe('Image capability Agent integration cases', () => {
   });
   it('R14/R06: Agent NSFW flag overrides app preference and stays active', async () => {
     const { tool, ctx, getToolPrice, editImage } = setup();
-    ctx.preferredModel = 'gpt-image-2.5-flare';
+    ctx.preferredModel = 'gpt-image-2.6-flare';
     await tool.execute({ editPrompt: 'Sensitive artwork.', isNsfw: true });
     expect(ctx.isNsfw).toBe(true);
     expect(getToolPrice).toHaveBeenCalledWith('generate_image_qwen-spicy');
@@ -260,7 +261,7 @@ describe('Image capability Agent integration cases', () => {
   });
   it('R13/R14/R17: incompatible Flare preference quotes Nano and continues generation', async () => {
     const { tool, ctx, editImage, getTokenRate, requireCredits, deductCredits } = setup();
-    ctx.preferredModel = 'gpt-image-2.5-flare';
+    ctx.preferredModel = 'gpt-image-2.6-flare';
     getTokenRate.mockResolvedValue({ model_id: 'google/gemini-nano-banana-2.1', markup: 2 });
     const result = await tool.execute({ editPrompt: 'Banner.', model: 'gemini-2.1', aspectRatio: '8:1', imageResolution: '4K' });
     expect(result.success).toBe(true);
@@ -280,7 +281,7 @@ describe('Image capability Agent integration cases', () => {
     getTokenRate.mockClear();
     const result = await tool.execute({ editPrompt: 'Combine.', media_index: 1, reference_media_indices: [2] });
     expect(result.success).toBe(true);
-    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.6-flare');
     expect(editImage).toHaveBeenCalledTimes(2);
   });
 });

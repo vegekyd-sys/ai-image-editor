@@ -51,18 +51,18 @@ beforeEach(() => {
 
 describe('R16–R19: MCP HTTP → shared image Skill → selected provider → billing', () => {
   it.each([
-    [{}, 'gpt-image-2.5-flare', 5],
-    [{ model: 'gpt-image-2.6-flare' }, 'gpt-image-2.6-flare', 5],
-    [{ model: 'gpt-image-2.6-sunburst', background: 'transparent' }, 'gpt-image-2.6-sunburst', 5],
+    [{}, 'gpt-image-2.6-flare', 6],
+    [{ model: 'gpt-image-2.6-flare' }, 'gpt-image-2.6-flare', 6],
+    [{ model: 'gpt-image-2.6-sunburst', background: 'transparent' }, 'gpt-image-2.6-sunburst', 6],
     [{ aspectRatio: '8:1' }, 'gemini-2.1', 7],
-    [{ imageResolution: '4K' }, 'gpt-image-2.5-flare', 5],
+    [{ imageResolution: '4K' }, 'gpt-image-2.6-flare', 48],
     [{ imageResolution: '4K', aspectRatio: '1:1' }, 'gemini-2.1', 16],
-    [{ imageResolution: '4K', aspectRatio: '1:1', background: 'transparent' }, 'gpt-image-2.5-flare', 5],
-    [{ model: 'gpt-image-2.5-flare', isNsfw: true }, 'qwen-spicy', 3],
-    [{ model: 'unknown-model' }, 'gpt-image-2.5-flare', 5],
+    [{ imageResolution: '4K', aspectRatio: '1:1', background: 'transparent' }, 'gpt-image-2.6-flare', 24],
+    [{ model: 'gpt-image-2.6-flare', isNsfw: true }, 'qwen-spicy', 3],
+    [{ model: 'unknown-model' }, 'gpt-image-2.6-flare', 6],
     [{ background: 'transparent', aspectRatio: '8:1' }, 'gemini-2.1', 7],
     [{ isNsfw: true, aspectRatio: '8:1', imageResolution: '8K', background: 'transparent' }, 'qwen-spicy', 3],
-    [{ imageResolution: '8K' }, 'gpt-image-2.5-flare', 5],
+    [{ imageResolution: '8K' }, 'gpt-image-2.6-flare', 6],
   ] as const)('keeps preflight and actual execution aligned for %j', async (args, model, quote) => {
     const { response, payload } = await callImage(args);
     expect(payload.result.isError).not.toBe(true);
@@ -76,7 +76,7 @@ describe('R16–R19: MCP HTTP → shared image Skill → selected provider → b
   });
 
   it.each([
-    { model: 'gpt-image-2.5-flare', aspectRatio: '8:1' },
+    { model: 'gpt-image-2.6-flare', aspectRatio: '8:1' },
     { isNsfw: true, image: 'data:image/png;base64,YQ==', aspectRatio: '1:1' },
   ])('relaxes incompatible %j before quoting and submitting', async args => {
     const { payload } = await callImage(args);

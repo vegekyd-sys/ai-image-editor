@@ -11,40 +11,40 @@ const route = (req: Partial<GenerateImageRequest>) => resolveModelChain({ prompt
 describe('Image Model Capability acceptance matrix', () => {
   it('R21: covers every offered canonical model and generates its Agent contract', () => {
     expect(listImageModelCapabilities().map(c => c.id).sort()).toEqual(IMAGE_MODEL_IDS.slice().sort());
-    expect(DEFAULT_IMAGE_MODEL).toBe('gpt-image-2.5-flare');
+    expect(DEFAULT_IMAGE_MODEL).toBe('gpt-image-2.6-flare');
     const guide = formatImageCapabilitiesForAgent();
     for (const c of listImageModelCapabilities()) expect(guide).toContain(c.id);
-    expect(guide).toContain('gpt-image-2.5-flare > gemini-2.1 > qwen-spicy');
+    expect(guide).toContain('gpt-image-2.6-flare > gemini-2.1 > qwen-spicy');
     expect(guide).toContain('set isNsfw=true');
   });
   it.each([
     {}, { image: 'base' }, { references: refs(4) }, { image: 'base', references: refs(15) },
     ...['enhance', 'creative', 'wild', 'captions'].map(category => ({ image: 'base', category })),
   ])('R01: Auto Flare regardless of old category or input shape: %j', req => {
-    expect(route(req)).toEqual(['gpt-image-2.5-flare']);
+    expect(route(req)).toEqual(['gpt-image-2.6-flare']);
   });
   it.each(['8:1', '1:8', '4:1', '1:4'])('R02: Auto %s uses 2.1 before submission', aspectRatio => {
     expect(route({ aspectRatio, image: 'base' })).toEqual(['gemini-2.1']);
   });
   it.each(['1K', '2K', '4K'] as const)('R03: explicit %s resolution retains Flare-first Auto', imageResolution => {
-    expect(route({ imageResolution })).toEqual(['gpt-image-2.5-flare']);
+    expect(route({ imageResolution })).toEqual(['gpt-image-2.6-flare']);
   });
   it('R03: square 4K uses Nano; transparent square retains alpha with explained 2K', () => {
     expect(route({ imageResolution: '4K', aspectRatio: '1:1' })).toEqual(['gemini-2.1']);
     const plan = planImageGeneration({ prompt: 'cutout', imageResolution: '4K', aspectRatio: '1:1', background: 'transparent' });
-    expect(plan).toMatchObject({ model: 'gpt-image-2.5-flare', request: { imageResolution: '2K', aspectRatio: '1:1', background: 'transparent' } });
+    expect(plan).toMatchObject({ model: 'gpt-image-2.6-flare', request: { imageResolution: '2K', aspectRatio: '1:1', background: 'transparent' } });
     expect(plan.adjustments.join(' ')).toContain('2K');
     expect(() => validateImageModelRequest(plan.request, plan.model)).not.toThrow();
   });
   it.each([...IMAGE_MODEL_IDS, 'openai'] as const)('R04/R05: explicit %s is retained or normalized', model => {
-    expect(route({ model })).toEqual([model === 'openai' ? 'gpt-image-2.5-flare' : model]);
+    expect(route({ model })).toEqual([model === 'openai' ? 'gpt-image-2.6-flare' : model]);
   });
   it('R05: old Qwen normalizes; unknown and retired IDs use Flare-first Auto', () => {
     expect(route({ model: 'qwen' })).toEqual(['qwen-spicy']);
-    for (const model of ['pony', 'wai', 'unknown', 'constructor']) expect(route({ model })).toEqual(['gpt-image-2.5-flare']);
+    for (const model of ['pony', 'wai', 'unknown', 'constructor']) expect(route({ model })).toEqual(['gpt-image-2.6-flare']);
     expect(route({ model: 'unknown', aspectRatio: '8:1' })).toEqual(['gemini-2.1']);
   });
-  it.each([{}, { image: 'base' }, { image: 'base', references: refs(2) }, { model: 'gpt-image-2.5-flare' as const }])('R06: NSFW goes directly to Spicy: %j', req => {
+  it.each([{}, { image: 'base' }, { image: 'base', references: refs(2) }, { model: 'gpt-image-2.6-flare' as const }])('R06: NSFW goes directly to Spicy: %j', req => {
     expect(route({ ...req, isNsfw: true })).toEqual(['qwen-spicy']);
   });
   it.each([
@@ -57,18 +57,18 @@ describe('Image Model Capability acceptance matrix', () => {
     expect(() => validateImageModelRequest(plan.request, plan.model)).not.toThrow();
   });
   it.each([{}, { image: 'base' }, { image: 'base', aspectRatio: '16:9' }, { model: 'gemini' as const }])('R08: existing transparent override is preserved: %j', req => {
-    expect(route({ ...req, background: 'transparent' })).toEqual(['gpt-image-2.5-flare']);
+    expect(route({ ...req, background: 'transparent' })).toEqual(['gpt-image-2.6-flare']);
   });
   it('R08/R09: transparent Sunburst stays selected; transparent panorama keeps 8:1', () => {
-    expect(route({ model: 'gpt-image-2.5-sunburst', background: 'transparent' })).toEqual(['gpt-image-2.5-sunburst']);
+    expect(route({ model: 'gpt-image-2.6-sunburst', background: 'transparent' })).toEqual(['gpt-image-2.6-sunburst']);
     const plan = planImageGeneration({ prompt: 'banner', aspectRatio: '8:1', background: 'transparent' });
     expect(plan).toMatchObject({ model: 'gemini-2.1', request: { aspectRatio: '8:1', background: 'opaque' } });
     const contentFirst = planImageGeneration({ prompt: 'banner', aspectRatio: '8:1', background: 'transparent', references: refs(16) });
-    expect(contentFirst).toMatchObject({ model: 'gpt-image-2.5-flare', request: { aspectRatio: undefined, background: 'transparent' } });
+    expect(contentFirst).toMatchObject({ model: 'gpt-image-2.6-flare', request: { aspectRatio: undefined, background: 'transparent' } });
     expect(contentFirst.request.references).toHaveLength(16);
   });
   it.each([
-    ['gpt-image-2.5-flare', 16], ['gemini-2.1', 14], ['wan2.7-image', 9], ['qwen-spicy', 3],
+    ['gpt-image-2.6-flare', 16], ['gemini-2.1', 14], ['wan2.7-image', 9], ['qwen-spicy', 3],
   ] as const)('R10: %s counts base plus references at %i limit', (model, count) => {
     expect(route({ model, image: 'base', references: refs(count - 1) })).toEqual([model]);
     const plan = planImageGeneration({ prompt: 'artwork', model, image: 'base', references: refs(count) });
@@ -76,10 +76,10 @@ describe('Image Model Capability acceptance matrix', () => {
     expect(plan.request.image).toBe('base');
   });
   it.each(['1:3', '3:1', '4:5', '2.5:1'])('R11: Flare accepts supported ratio %s', aspectRatio => {
-    expect(route({ model: 'gpt-image-2.5-flare', aspectRatio })).toEqual(['gpt-image-2.5-flare']);
+    expect(route({ model: 'gpt-image-2.6-flare', aspectRatio })).toEqual(['gpt-image-2.6-flare']);
   });
   it.each(['3.01:1', '1:3.01', '8:1', '0:1', '1:0', '-1:2', '8：1', 'invalid'])('R11: impossible Flare canvas gets a compatible generation plan: %s', aspectRatio => {
-    const plan = planImageGeneration({ prompt: 'artwork', model: 'gpt-image-2.5-flare', aspectRatio });
+    const plan = planImageGeneration({ prompt: 'artwork', model: 'gpt-image-2.6-flare', aspectRatio });
     expect(() => validateImageModelRequest(plan.request, plan.model)).not.toThrow();
   });
   it.each(['1:8', '8:1', '2.5:1'])('R11: Wan accepts range ratio %s', aspectRatio => {
@@ -102,15 +102,15 @@ describe('Image Model Capability acceptance matrix', () => {
     expect(edit).toMatchObject({ model: 'qwen-spicy', request: { aspectRatio: undefined, imageResolution: undefined, background: 'opaque' } });
   });
   it('R13: explicit Flare panorama uses Nano before submission, preserving all requirements', () => {
-    expect(route({ model: 'gpt-image-2.5-flare', aspectRatio: '8:1', imageResolution: '4K', references: refs(14) })).toEqual(['gemini-2.1']);
+    expect(route({ model: 'gpt-image-2.6-flare', aspectRatio: '8:1', imageResolution: '4K', references: refs(14) })).toEqual(['gemini-2.1']);
   });
   it('R20: explicitly configured Tips 2.1 and Enhance Spicy retain their route', () => {
     expect(route({ model: 'gemini-2.1', category: 'captions', image: 'base' })).toEqual(['gemini-2.1']);
     expect(route({ model: 'qwen-spicy', category: 'enhance', image: 'base' })).toEqual(['qwen-spicy']);
   });
   it('provider builders can validate against the same capabilities', () => {
-    expect(getImageModelCapability('openai').id).toBe('gpt-image-2.5-flare');
-    expect(() => validateImageModelRequest({ prompt: 'banner', aspectRatio: '8:1' }, 'gpt-image-2.5-flare')).toThrow();
+    expect(getImageModelCapability('openai').id).toBe('gpt-image-2.6-flare');
+    expect(() => validateImageModelRequest({ prompt: 'banner', aspectRatio: '8:1' }, 'gpt-image-2.6-flare')).toThrow();
   });
 });
 
@@ -121,7 +121,7 @@ describe('one selected paid submission', () => {
     vi.mocked(getBackend).mockReset().mockImplementation(id => ({ id, canHandle: () => true, generate }));
   });
   it.each([
-    [{}, 'gpt-image-2.5-flare'], [{ aspectRatio: '8:1' }, 'gemini-2.1'], [{ isNsfw: true }, 'qwen-spicy'],
+    [{}, 'gpt-image-2.6-flare'], [{ aspectRatio: '8:1' }, 'gemini-2.1'], [{ isNsfw: true }, 'qwen-spicy'],
   ] as const)('R18: executes the selected route once: %j', async (req, model) => {
     generate.mockResolvedValue({ image: 'decoded-artwork', provider: 'supplier', usage: { modelId: model, inputTokens: 4, outputTokens: 5, providerCostUsd: 0.05 } });
     await expect(generateImage({ prompt: 'artwork', ...req })).resolves.toMatchObject({ model, image: 'decoded-artwork', provider: 'supplier', fallbackUsed: false, usage: { providerCostUsd: 0.05 } });
@@ -136,7 +136,7 @@ describe('one selected paid submission', () => {
   });
   it('R13/R17: conflict relaxes before one paid submission and returns the adjustment', async () => {
     generate.mockResolvedValue({ image: 'artwork', provider: 'supplier' });
-    const result = await generateImage({ prompt: 'artwork', aspectRatio: '8:1', background: 'transparent', model: 'gpt-image-2.5-flare' });
+    const result = await generateImage({ prompt: 'artwork', aspectRatio: '8:1', background: 'transparent', model: 'gpt-image-2.6-flare' });
     expect(result.model).toBe('gemini-2.1');
     expect(result.adjustments?.join(' ')).toContain('opaque');
     expect(generate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ aspectRatio: '8:1', background: 'opaque', model: 'gemini-2.1' }));
