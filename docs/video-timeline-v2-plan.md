@@ -1,317 +1,310 @@
-# Makaron 视频时间线化 V2：方案与设计
+# Makaron 视频时间线 V2：方案与设计（第二版）
 
-> 状态：方案稿（2026-11-05 CST），尚未开始实现、未合并、未上线。
-> Worktree：`.claude/worktrees/makaron-video-timeline-upgrade-7fec73`，分支 `claude/makaron-video-timeline-upgrade-7fec73`。
-> 配套 UI 稿：[`docs/design/video-timeline-v2-mockup.html`](design/video-timeline-v2-mockup.html)
+> 状态：方案稿，2026-11-05 CST。未实现、未合并、未上线。
+> 分支：`claude/video-timeline-v2`（基于 `origin/dev` 0df70536）。
+> UI 稿：[`docs/design/video-timeline-v2-mockup.html`](design/video-timeline-v2-mockup.html)（含 Agent 实时剪辑动效演示）。
 
-## 0. 一句话结论
+## 0. 产品决定（已确认）
 
-**把每条 Makaron 视频从“一段 Agent 写的 React 组件 + 扁平 props”升级为“一份 `TimelineProject` JSON 驱动的 Remotion 合成”**：
-
-- React（scene 代码）决定**画面长什么样**；
-- Timeline 协议决定**什么时候出现、出现多久、叠在哪一层**；
-- Player 预览、截帧、浏览器导出、Lambda 导出都吃同一份编译产物；
-- UI 和 Agent 改的是同一份文档，通过同一个 reducer 和同一套 revision 机制。
-
-我们不从零开始：`codex/editable-timeline-project`（8 月，22 个独立提交、未合并、已落后 dev 791 个提交）已经做出协议内核和编译器，V2 在它的基础上做**收敛 + 对齐 Remotion 新能力 + 补齐迁移和 UI**。
-
----
-
-## 1. 调研：Remotion 最近“更新的时间线”到底是什么
-
-| 事实 | 版本 / 日期 | 对我们的意义 |
+| # | 决定 | 落到方案里 |
 |---|---|---|
-| Remotion Studio“全新时间线体验”：`<Track>` / `<Series>` / `<TransitionSeries>` 默认在 Studio 时间线上显示为共享轨道（PR #12228） | v4.0.536，2026-10-16 | 说明 Remotion 官方的时间线模型就是“轨道 + 不重叠 clip”，和我们要做的协议同构 |
-| 核心包新增 `<Track>` 组件：`name / width / height / showInTimeline / hidden / freeze` + 标准时间 props（`from / durationInFrames / trimBefore / trimAfter / playbackRate / loop`）；同一 Track 上 clip 重叠会抛错；不产生 DOM | v4.0.534+ | **编译器输出目标**：我们的 track 直接编译成 `<Track>`，免费得到“同轨不重叠”的运行时校验，并兼容 Studio 和 OTIO 导出 |
-| Studio 新增 rolling edit、波形/缩略图缓存、虚拟化轨道、undo/redo（PR #12875） | v4.0.53x | UI 交互参考（不能直接嵌入我们的 Player） |
-| Studio Interactivity：时间线/画布上的编辑写回源码（`Interactive.Div` 等） | v4.0.475+ | “编辑写回代码”这条路对用户产品不适用（要求本地源码 + Studio），**不采用** |
-| `@remotion/timeline-utils`（波形、filmstrip） | 4.0.541，标注 internal | 可以参考实现，**不依赖**（非公开 API） |
-| 付费 **Remotion Timeline**（复制 `timeline/` 文件夹，Tailwind，`TimelineProvider/Timeline/ZoomSlider/CanvasComposition`） | 无公开 changelog | 交互现成，但状态结构不公开、风格要重做，见 §7 决策点 |
-| 付费 **Editor Starter**：`UndoableState = { tracks, assets: Record, items: Record, fps, compositionWidth, compositionHeight, deletedAssets }`，item 类型 Image/Text/Video/Gif/Solid/Audio/Captions，50 步 undo，Lambda 渲染 | — | **数据形状对齐参考**：规范化 `items/assets` 字典 + `tracks[]` 只存 id 顺序 |
-| 官方 skill `export-opentimeline`：composition → OTIO（Resolve / Premiere） | — | 协议定好后可以零成本获得“导出到专业剪辑软件” |
-| 当前最新 v4.0.541（2026-11-05），没有 5.x；Makaron 锁在 **4.0.527** | — | 需要升级到 ≥4.0.536 才能用 `<Track>` |
-
-**判断**：Remotion 官方现在的方向是“代码即时间线”（Track 写在 JSX 里，Studio 从运行时读出来），这适合开发者，不适合我们的终端用户。Makaron 应采用 **JSON 为唯一真相 → 编译成 `<Track>/<Sequence>/<TransitionSeries>`** 的路线（Editor Starter 的路线），同时利用 Remotion 的运行时 sequence 注册机制做**旧视频迁移**（§4）。
+| 1 | “时间线 / 元素”合并 | 时间线上的每一个 clip **就是**一个元素。只有一个 Dock，没有模式切换；选中 clip = 选中画布元素 = 打开该元素的属性 |
+| 2 | 老视频先不兼容，优雅展示 | 老 composition 保持现有播放和 editable 编辑不变；时间线区域以只读“整段”展示，不做迁移 |
+| 3 | 在最新 dev 开分支 | `claude/video-timeline-v2` |
+| 4 | 字幕、画中画必须支持；覆盖所有旧 editable 能编辑的东西 | 元素类型覆盖 文字 / 图片 / 视频（含裁剪）/ 位置 / 缩放，新增 字幕 / 画中画 / 音频 / 转场 / 自定义组件 |
+| 5 | **Killer feature：Makaron Agent 操作时间线，并实时、动态地展示出来** | Agent 每次编辑都是一个事务，实时推送到前端，按“编排”逐步播放动画；CLI / 后台 Agent 改动同样实时出现在打开的页面里 |
 
 ---
 
-## 2. 现状（本 worktree 基线）
+## 1. Remotion 调研结论（简版）
 
-- 视频 = `DesignPayload { code, props, editables, animation{fps,durationInSeconds} }`，存在 workspace `code/<snapId>.json`（`snapshots.design_path`）。
-- 时间信息藏在 Agent 写的 JSX 里（`<Sequence from>`、`trimBefore`）或者任意 props 数组里；GUI 只能改 props，改不了“时间”。
-- 可编辑属性靠 `editable-manifest` 推断，变换/裁剪存成扁平 props：`_pos_<id>`、`_scale_<id>`、`_trimBefore_<id>`。
-- 预览 `RemotionRenderer`（`@remotion/player`）、导出 `renderMediaOnWeb` / Lambda `dynamic-design` composition，全部吃 `{code, designProps}`。
-- 现在说的“timeline”其实是**版本快照条**（`timeline-utils.ts` / `timeline-derivations.ts`），和合成时间线是两回事。V2 里把新东西统一叫 **“剪辑时间线（Edit Timeline）”**，代码命名 `timelineProject`，避免再混淆。
+- Remotion 最近的“时间线更新”是 **v4.0.536（2026-10-16）**：Studio 默认按轨道显示 `<Track>/<Series>/<TransitionSeries>`；核心包新增 `<Track>`（≥4.0.534，同轨 clip 重叠直接报错，不产生 DOM）。当前最新 4.0.541，Makaron 锁在 4.0.527。
+- Remotion 没有可以嵌入终端用户产品的免费时间线 UI；付费 Timeline / Editor Starter 是“复制源码”模板。Editor Starter 公开的状态形状（`tracks[]` + `items: Record` + `assets: Record` + `fps / compositionWidth / compositionHeight`）作为我们的协议对齐参考。
+- Studio 的“编辑写回源码”路线面向开发者，不适合我们。
+- **结论**：渲染、播放、导出、时间语义（`<Track>`、`<Sequence>`、`TransitionSeries`、`@remotion/media-utils` 波形）直接用 Remotion；时间线 UI 自建，用 Makaron 设计语言。需要升级 Remotion 到 4.0.541。
 
-历史尝试：
+---
 
-| 分支 | 做了什么 | 结论 |
+## 2. 产品模型：元素就是 clip
+
+老模型：Agent 写一整段 React，GUI 从里面“推断”出可编辑字段，时间藏在代码里。
+新模型：**视频是一组放在轨道上的元素**。每个元素自带时间（从哪一帧出现、持续多久）、空间（位置/缩放/旋转/透明度/裁切）、内容（文字、素材）和样式（预设或 Agent 写的组件）。
+
+```
+画布上看到的一切  ==  时间线上的一个 clip  ==  属性面板里的一组字段  ==  Agent 能用 op 改的一个对象
+```
+
+于是“时间线 / 元素”天然合并：
+
+- 点时间线上的 clip → 画布高亮该元素 → 属性条出现该元素的字段。
+- 点画布上的元素 → 时间线滚动到该 clip 并选中，播放头若不在 clip 范围内则跳到 clip 起点。
+- 画布上拖动/缩放（现有 Moveable/DesignOverlay）→ 写回 clip 的 `transform`；时间线上拖动/裁剪 → 写回 clip 的时间。
+
+### 旧 editable 能力 → 新元素的对应关系
+
+| 旧 editable | 旧存储 | 新协议 |
 |---|---|---|
-| `codex/editable-timeline-project`（未合并） | `TimelineProject` Zod schema、`compileTimelineProject → RenderPlan/RenderBundle`、事务 reducer + revision 冲突、`TimelineComposition`、`EditableTimelineDock` UI、5 种 clip | **内核可复用**；问题是没合并、落后太多、transition/effect 未实现、旧视频只能整段包成一个 clip |
-| 2026-07 `ai-image-editor-remotion-timeline-editor` | 在现有 Player 上做剪辑 UI（拉伸、缩放、紧凑/展开） | 教训：**旧 composition 必须真的映射成 clip**，壳子不算数；时间线获得焦点时要吞掉键盘快捷键 |
-| `codex/remotion-preview-proxy-track`（未合并） | 多 clip 预览卡顿的 proxy 轨 | 时间线化后更依赖它，作为性能保障并入 Phase 3 |
+| 文字内容（`type: 'text'`） | `design.props[propKey]` | `TextClip.text` / `CaptionClip.segments[].text` / `ComponentClip.props[key]` |
+| 替换图片（`type: 'image'`） | `props[propKey]` = URL | `ImageClip.assetId` |
+| 替换视频 + 裁剪（`type: 'video'`） | `props[propKey]` + `_trimBefore_* / _trimAfter_*` | `VideoClip.assetId + sourceIn + durationInFrames` |
+| 位置 | `_pos_<id>` | `clip.transform.x / y` |
+| 缩放 | `_scale_<id>` | `clip.transform.scale` |
+| 只在某些帧可见（帧感知 pill） | 代码里的 `<Sequence>` | `clip.from + durationInFrames`（时间线上直接可见、可拖） |
+| — | — | 新增：旋转、透明度、圆角/描边（画中画）、入场/出场动画、音量、速度、字幕、转场 |
 
 ---
 
-## 3. 时间线协议：Makaron Timeline Protocol（MTP）v2
+## 3. 时间线协议：Makaron Timeline Protocol（MTP）v1
 
-### 3.1 设计原则
+新视频从头使用新协议（不做旧数据迁移），所以协议按“元素优先”重新定义，不沿用 `codex/editable-timeline-project` 的 scene-first 结构；那个分支只复用经过验证的部分：Zod schema 生成 Agent JSON Schema、事务 reducer、revision 冲突、编译器与 Player 热更新边界。
 
-1. **JSON 是唯一真相**。时间语义只存在于 `timelineProject`，不再双写到 `design.props`，运行时永远不用正则从源码猜时间。
-2. **两张正交的图**（沿用 v1）：Editable 节点图（`sceneId / nodeId`，管长相）和时间图（`clipId / trackId / assetId`，管时间）。同一个 scene 可以被多个 clip 复用，每个 clip 可以有自己的覆盖值。
-3. **整数帧**。所有时间字段都是 frame；对外的秒只在 Agent / CLI 输入边界换算（与“外部 clip 合同用秒”的约定一致）。
-4. **规范化存储**（对齐 Editor Starter）：`tracks[]` 只存顺序和 clipId，`clips / assets / scenes` 存字典，方便事务 patch 和 diff。
-5. **一个编译器、一个 reducer**：UI、Agent、CLI、迁移脚本都只能通过 `applyTransaction` 改文档，通过 `compile` 出渲染计划。
-
-### 3.2 文档结构
+### 3.1 文档
 
 ```ts
-interface TimelineProject {
+interface TimelineDoc {
   kind: 'makaron-timeline';
-  schemaVersion: 2;
-  revision: number;                       // CAS，每次事务 +1
-  canvas: { width: number; height: number; fps: number };
-  duration: { type: 'story' } | { type: 'fixed'; frames: number };
+  version: 1;
+  revision: number;                         // 每个事务 +1
+  canvas: { width: number; height: number; fps: number; background?: string };
+  durationInFrames: number | 'auto';        // auto = 主轨结束 / 所有轨最晚结束
 
-  tracks: Track[];                        // 数组顺序 = 图层顺序（上层在后）
+  tracks: Track[];                          // 数组顺序 = 图层顺序，后面的在上层
   clips: Record<ClipId, Clip>;
-  assets: Record<AssetId, Asset>;         // 视频/图片/音频/字体，带来源和 poster
-  scenes: Record<SceneId, SceneRef>;      // React scene：源码路径 + hash + 节点清单
-  transitions: Record<TransitionId, Transition>;  // 只存在于 story 轨相邻 clip 之间
-  overrides: Record<`${ClipId}/${NodeId}`, NodeOverride>;
-
-  migration?: { from: 'legacy-design'; method: 'native' | 'runtime-capture' | 'wrap'; confidence: number; sourceHash: string; at: string };
+  assets: Record<AssetId, Asset>;           // 媒体：url、poster、时长、尺寸、来源（上传/生成/素材库）、状态
+  components: Record<ComponentId, ComponentDef>;  // Agent 写的 React 组件（标题样式、特效、片头……）
+  transitions: Record<TransitionId, Transition>;
+  captionStyles: Record<StyleId, CaptionStyle>;   // 字幕样式预设，可被 Agent 组件扩展
 }
 
 interface Track {
   id: TrackId;
-  kind: 'story' | 'overlay' | 'text' | 'audio' | 'caption';
-  label: string;
-  layout: 'magnetic' | 'free';   // story 固定 magnetic：clip 首尾相接，删除/拉长自动 ripple
+  kind: 'main' | 'overlay' | 'text' | 'caption' | 'audio';
+  name: string;
+  magnetic: boolean;           // main 轨默认 true：clip 首尾相接，删除/变长自动让位
   muted?: boolean; hidden?: boolean; locked?: boolean;
-  clipIds: ClipId[];              // magnetic 轨按此顺序排列；free 轨仅作索引
+  clipIds: ClipId[];           // 按时间排序
 }
 ```
 
-### 3.3 Clip
+### 3.2 元素（clip）
 
 ```ts
-type Clip = SceneClip | VideoClip | ImageClip | AudioClip | TextClip | CaptionClip;
-
 interface ClipBase {
-  id: ClipId; trackId: TrackId; label: string;
-  placement:
-    | { type: 'magnetic' }                                        // 仅 story 轨
-    | { type: 'absolute'; from: number }
-    | { type: 'attached'; to: ClipId; edge: 'start' | 'end'; offset: number };  // 跟随某个 story clip
-  durationInFrames: number | { type: 'to-end' };                  // to-end：铺满到项目结尾（背景音乐）
-  playbackRate?: number;
-  opacity?: number; volume?: number;                              // volume 支持 0..1 或关键帧数组（Phase 4）
-  props?: JsonRecord;
+  id: ClipId; trackId: TrackId; name: string;
+  from: number;                     // 项目帧；magnetic 轨由 reducer 计算后写回，渲染层只读
+  durationInFrames: number;
+  transform?: { x: number; y: number; scale: number; rotation: number; opacity: number;
+                anchor?: 'center' | 'top-left'; crop?: Rect; radius?: number; border?: Border; shadow?: Shadow };
+  enter?: Motion; exit?: Motion;    // 预设（fade/slide/pop/typewriter…）或 { componentId }
+  keyframes?: Partial<Record<'x'|'y'|'scale'|'rotation'|'opacity'|'volume', Keyframe[]>>;  // P3
+  createdBy?: 'user' | 'agent';     // 用于 UI 标记和回放
 }
 
-interface SceneClip extends ClipBase { kind: 'scene'; sceneId: SceneId; sceneIn: number }   // 新增 sceneIn
-interface VideoClip extends ClipBase { kind: 'video'; assetId: AssetId; sourceIn: number }
-interface AudioClip extends ClipBase { kind: 'audio'; assetId: AssetId; sourceIn: number; fadeIn?: number; fadeOut?: number }
-interface ImageClip extends ClipBase { kind: 'image'; assetId: AssetId; fit?: 'cover' | 'contain'; motion?: 'none' | 'ken-burns' }
-interface TextClip  extends ClipBase { kind: 'text'; presetId: string; text: string; style?: JsonRecord }
-interface CaptionClip extends ClipBase { kind: 'caption'; assetId: AssetId /* 词级时间轴 JSON */; presetId: string }
+type Clip =
+  | (ClipBase & { kind: 'video';   assetId: AssetId; sourceIn: number; playbackRate?: number; volume?: number;
+                  fit?: 'cover' | 'contain' })                 // 主轨 = 正片；overlay 轨 = 画中画
+  | (ClipBase & { kind: 'image';   assetId: AssetId; fit?: 'cover' | 'contain'; motion?: 'none' | 'ken-burns' })
+  | (ClipBase & { kind: 'audio';   assetId: AssetId; sourceIn: number; volume?: number; fadeIn?: number; fadeOut?: number;
+                  role?: 'music' | 'voiceover' | 'sfx' })
+  | (ClipBase & { kind: 'text';    text: string; style: TextStyle; componentId?: ComponentId })
+  | (ClipBase & { kind: 'caption'; segments: CaptionSegment[]; styleId: StyleId; source?: { assetId: AssetId; asr: 'volcengine' } })
+  | (ClipBase & { kind: 'component'; componentId: ComponentId; props: JsonRecord })   // 逃生舱：任意 React
+  | (ClipBase & { kind: 'pending'; job: { type: 'video' | 'image' | 'music' | 'voiceover'; jobId: string; progress?: number;
+                  label: string; becomes: 'video' | 'image' | 'audio' } });       // 生成中的占位
 
-interface Transition {
-  id: TransitionId; fromClipId: ClipId; toClipId: ClipId;   // 必须是 story 轨上的相邻 clip
-  presentation: 'fade' | 'slide' | 'wipe' | 'flip' | 'clock-wipe' | 'custom';
-  durationInFrames: number; direction?: string; customSceneId?: SceneId;
+interface CaptionSegment { id: string; from: number; to: number; text: string; words?: { text: string; from: number; to: number }[] }
+
+interface ComponentDef {
+  id: ComponentId; name: string;
+  codePath: string; codeHash: string;      // 不可变，改代码 = 新 hash
+  propsSchema: EditableProp[];             // 组件声明自己的可编辑 props（文字/图片/颜色/数字/开关）
+  kind: 'element' | 'text-style' | 'caption-style' | 'motion' | 'transition';
 }
 ```
 
-相对 v1 的收敛点（每一条都有理由）：
+要点：
 
-| v1 | v2 | 为什么 |
-|---|---|---|
-| `sequence / absolute / relative` + `fixed / until / project-rest` 六种组合 | `magnetic / absolute / attached` + `frames / to-end` | v1 的组合在 UI 上无法解释；剪映/CapCut 的心智就是“主轨磁吸 + 其他元素可以吸附到主轨片段”，够覆盖 95% |
-| scene clip 没有入点 | `SceneClip.sceneIn` | **旧视频切分的关键**：一个整段旧 composition 切成两半 = 两个 clip 引用同一个 scene，`sceneIn` 不同 |
-| transition 是一种 clip，未实现 | 独立 `transitions` 字典，编译到 `@remotion/transitions` 的 `TransitionSeries` | 转场本质是“边”不是“片段”；和 Remotion 语义一致，会让 story 总时长缩短重叠帧 |
-| `effect` / `component` 轨，报 capability error | 删除；特效 = scene（自定义 React） | 不承诺做不到的东西；Agent 想要特效就写 scene |
-| 新增 | `text` / `caption` 一等 clip | 文字和字幕是用户最常改的东西，必须不经过 Agent 就能增删、拖动 |
-| 节点覆盖存 `transform / mediaTrim` | 保留，key 改成 `clipId/nodeId` 的字典 | 便于 O(1) patch；继续禁止把 `_pos_*` 写进 canonical 文档（只在运行时投影） |
+- **字幕**是一个 clip 内含多个 segment（逐句/逐词时间）。时间线上整体是一条，展开后每句可单独拖动边界、改字；画布上整体拖位置。来源可以是 ASR（现有火山 ASR 工具）或 Agent 手写。样式预设 + `caption-style` 组件（卡拉 OK 高亮、逐词弹出……）。
+- **画中画**不是特殊类型：`overlay` 轨上的 `video` / `image` clip + `transform`（位置、缩放、圆角、描边、阴影、裁切）。UI 上提供“画中画”快捷入口和角落吸附。
+- **自定义组件**承接 Agent 的创造力：`run_code` 以后写的是 `ComponentDef`（一个标题动画、一个片头、一个转场），由时间线实例化。组件用 `propsSchema` 声明可编辑字段，所以 Agent 写的任何东西依然能在属性条里编辑——这就是“所有之前 editable 能编辑的东西”的延续。
+- **pending clip**：视频/图片/音乐生成是异步的（分钟级）。Agent 先在时间线上放一个占位 clip（带进度），生成完成后原地变成真实素材。这同时解决“Agent 编排需要等生成”的问题。
 
-### 3.4 事务（UI 与 Agent 共用）
+### 3.3 事务与操作
 
 ```ts
-applyTransaction(project, {
-  expectedRevision: 7,
-  label: '把开场延长到 3 秒',        // 进 undo 栈和 Agent 时间线卡片
-  origin: 'user' | 'agent' | 'migration',
-  ops: [
-    { op: 'set_duration', clipId: 'c_intro', frames: 90 },
-    { op: 'set_override', clipId: 'c_intro', nodeId: 'title', values: { title: '新标题' } },
-  ],
-}) → { ok: true, project, revision: 8 } | { ok: false, code: 'revision_conflict' | 'invalid', diagnostics }
+interface TimelineTx {
+  txId: string;
+  baseRevision: number;
+  origin: 'user' | 'agent' | 'system';
+  label: string;                  // “加字幕”“把开场缩短到 2 秒”——进 undo 栈、Agent 卡片、回放
+  ops: Op[];
+}
 ```
 
-操作集合：`insert_clip / remove_clip / move_clip（跨轨、改顺序）/ set_duration / trim（左右）/ split / set_speed / set_placement / upsert_asset / upsert_scene / set_override / clear_override / upsert_transition / remove_transition / upsert_track / set_track_flags`。
+操作：`add_track / update_track / remove_track`、`add_clip / update_clip / move_clip（时间与跨轨）/ trim_clip（左/右）/ split_clip / remove_clip`、`add_asset / update_asset`、`add_component`、`set_transition / remove_transition`、`caption.set_segments / caption.update_segment`、`resolve_pending`。
 
-- reducer 先应用到候选文档 → schema 校验 → 语义校验（引用、`attached` 无环、源素材边界、同轨重叠、transition 相邻且不长于两侧 clip）→ 原子提交，revision +1。
-- **undo/redo 存的是反向事务**，不是整份快照（对齐 Editor Starter 的 50 步，但更省内存，也天然可同步给 Agent）。
-- Agent 的过期写入拿到 `revision_conflict`，必须重新读再改，不会覆盖用户刚在画布上的修改。
+- 同一个 reducer 在**服务端和浏览器**都跑（纯函数，确定性），服务端结果为准。
+- 校验三层：schema → 语义（引用存在、同轨不重叠、素材边界、转场两侧相邻）→ 可渲染（组件编译、素材可访问）。前两层阻断，第三层给 diagnostics。
+- **并发：按元素变基，不按整份文档拒绝**。Agent 运行时用户可以继续编辑。每个 tx 记录它碰过的 clipId；如果从 `baseRevision` 到现在没有别的 tx 动过同一批 clip，直接变基应用；有交叉才返回 `conflict`，带上对方改了什么，让 Agent 重读后再改。用户的手动修改永远不会被 Agent 静默覆盖。
+- **Undo/redo** 存反向 op。Agent 的一个 tx 在 undo 栈里就是一步（“撤销 Agent：加字幕”）。
 
-### 3.5 编译与渲染
+### 3.4 渲染
 
 ```
-TimelineProject ──compileTimeline()──▶ RenderPlan（解析后的整数帧排程、z 序、资源表、每 clip 的有效 props）
-                                         │
-              ┌──────────────────────────┼─────────────────────────────┐
-         Player 预览                 截帧/poster                  浏览器 MP4 / Lambda MP4
-   <MakaronTimeline plan={…}/>   renderStillOnWeb(同组件)    renderMediaOnLambda('makaron-timeline', inputProps=bundle)
+TimelineDoc ─ compile() ─▶ RenderPlan（排程、z 序、资源表、组件引用）
+  ├─ Player：<MakaronTimeline plan />，时间/属性改动只改 inputProps，不重编译组件、不重置播放
+  ├─ 截帧 / poster：renderStillOnWeb（同一组件）
+  ├─ 浏览器导出：renderMediaOnWeb
+  └─ 服务端导出：Lambda 新 composition `makaron-timeline`（与旧 `dynamic-design` 并存）
 ```
 
-`MakaronTimeline` 组件的结构（Remotion ≥ 4.0.536）：
+- 每条轨编译为 `<Track name>`，clip 为 `<Sequence from durationInFrames premountFor>`；主轨上有转场时用 `TransitionSeries`。
+- 组件按 `codeHash` 编译缓存；`pending` clip 渲染为带进度的占位画面（导出时阻止，提示“还有素材在生成”）。
+- Web App 与版本化 Lambda runtime 成对发布、成对回滚。
 
-```tsx
-<AbsoluteFill>
-  {plan.tracks.map((t) =>
-    t.kind === 'story'
-      ? <Track key={t.id} name={t.label}>
-          <TransitionSeries>{/* scene/video/image clip + TransitionSeries.Transition */}</TransitionSeries>
-        </Track>
-      : <Track key={t.id} name={t.label} hidden={t.hidden}>
-          {t.clips.map((c) => <Sequence key={c.id} from={c.from} durationInFrames={c.duration} premountFor={…}>
-                                <ClipRenderer clip={c} />
-                              </Sequence>)}
-        </Track>
-  )}
-</AbsoluteFill>
-```
+### 3.5 存储
 
-- **scene 源码按 `sceneId + sourceHash` 编译并缓存**，时间轴操作和文字覆盖只改 `inputProps`，不重新编译、不重置 Player（v1 已验证的边界）。
-- `SceneClip` 用 `<Sequence from={-sceneIn}>` 实现 scene 内部入点，这样旧 composition 被切开后两段都正确。
-- Lambda 侧新注册 composition `makaron-timeline`，与旧 `dynamic-design` 并存；Web App 与版本化 Lambda runtime **成对发布、成对回滚**（沿用 editable ABI 的教训）。
-- 编译到 `<Track>` 之后，Remotion 官方 OTIO 导出 skill 可直接用于“导出到 Premiere / Resolve”（Phase 5 可选）。
-
-### 3.6 持久化
-
-- 继续使用 `code/<snapId>.json`，在 `DesignPayload` 上新增 `timeline?: TimelineProject`，scene 源码放 `scenes/<sceneId>.<hash>.tsx`（不可变），文档只存引用和 hash。
-- 写入复用现有 `PUT .../snapshots/[snapshotId]/design` 路由，把 `__makaronEditableRevision` 升级为 `timeline.revision` 的 CAS；失败在 UI 上明确显示“未保存”，不静默吞掉。
-- 不需要数据库迁移。旧视频读取时在内存里适配（§4），**第一次编辑时才落盘**为 V2 文档，不做批量改写生产数据。
+- 视频 snapshot 的 design JSON 新增 `timeline: TimelineDoc`（存在 `code/<snapId>.json`），组件源码存 `components/<id>.<hash>.tsx`。有 `timeline` 字段的走新渲染器，没有的走老路径。
+- 事务落盘 + 追加写 `timeline-log/<snapId>.jsonl`（tx 流水，供回放和审计）。
+- 无需数据库迁移；revision CAS 复用现有 design PUT 路由。
 
 ---
 
-## 4. “每条视频都时间线驱动”：迁移策略
+## 4. Killer feature：Agent 实时剪辑
 
-目标：**不管多老的视频，打开后都能看到时间线并编辑时间**，而不是只有新视频才有。分三档，按顺序尝试，结果写进 `migration.method / confidence`：
+### 4.1 用户看到什么
 
-| 档 | 适用 | 做法 | 结果 |
-|---|---|---|---|
-| A. 原生 | 新的 Agent 产出 | Agent 先写 scene（`run_code` 只写 React scene），再用 `edit_timeline` 编排 | 多 scene、多轨，完整可编辑 |
-| B. 运行时捕获 | 旧 composition，顶层由 `<Sequence>/<Series>/<TransitionSeries>` 组成（视频 Director 合同产出的大多是这种） | 在隐藏的 Player 中挂载旧代码，读取 Remotion 运行时 sequence 注册表（Studio 时间线就是这么来的）拿到每个顶层 sequence 的 `from / durationInFrames / displayName / 媒体 src`，生成 scene clip + 外部视频/音频 clip；**不读源码文本** | 1 个视频 → N 个 story clip + 音频轨，置信度 ≥0.8 才自动采用 |
-| C. 整段包装 | 任何其他情况 | 整个旧 composition = 1 个 scene，1 个全时长 story clip | 仍然可以：切分（靠 `sceneIn`）、改时长、加文字/字幕/音乐轨、调速、加转场 |
+1. 用户说“把这段旅行素材剪成 30 秒竖屏，加字幕和配乐，结尾放个片尾卡”。
+2. 时间线上出现 **Agent 光标**：一个 fuchsia 的 Makaron Spark ✦ 带“Makaron”标签，像协作者的鼠标一样在轨道上移动。
+3. Agent 每完成一步，时间线**逐个播放**这一步的变化：
+   - 新 clip 从光标位置“长”出来（从 0 宽度展开），带 Spark 编辑痕迹的光扫；
+   - 移动的 clip 平滑滑到新位置，主轨其他 clip 让位；
+   - 裁剪时 clip 边缘动画收缩，时长气泡跳数字；
+   - 字幕一句一句“落”到字幕轨上，同时画布上打字机式出现；
+   - 删除的 clip 溶解消失；
+   - 生成中的视频是一个 pending clip，带进度环和预估剩余时间，完成后 poster 由模糊到清晰揭开。
+4. **镜头跟随**：播放头和画布自动跳到 Agent 正在改的位置，展示改完的那一帧。用户一旦自己拖动或选择，跟随自动暂停，在边缘显示“Agent 正在 00:12 编辑 →”，点一下回到跟随。
+5. 对话里每个 tx 是一张**剪辑卡片**：标题（“加字幕 · 14 句”）、迷你时间线 diff（新增绿 / 删除红 / 修改 fuchsia）、操作“定位”“撤销这一步”。
+6. 完成后可以“回放剪辑过程”：按 tx 流水把整个视频从空白搭起来的过程加速播放一遍（可导出成一段 timelapse，也是传播素材）。
 
-- B 档依赖 Remotion 内部 `SequenceManager` 在 Player 里是否可读，**需要 Phase 0 spike 验证**；不可用时 B 档降级为“导出时一次性 AST 迁移”（v1 文档已规划），仍然不允许运行时反复猜。
-- 迁移结果用户可以“一键还原为原始视频”（保留原 `design.code` 不删）。
-- 2026-07 那次的验收用例必须保留：**“6 张图 + 特效生成的视频”打开后要看到 6 个 clip**，不是一个壳。
+### 4.2 数据流
 
----
+```
+Agent（LLM）
+  │ edit_timeline({ baseRevision, label, ops })
+  ▼
+服务端 timeline service ── reducer + 校验 + 变基 ──▶ 持久化 doc + 追加 tx 流水
+  │                                                   │
+  │ SSE 事件 timeline_tx { txId, label, ops, revision, clipIds, cursor }   │ Supabase Realtime 广播 `timeline:{snapshotId}`
+  ▼                                                   ▼
+发起这次对话的页面                             其他打开该项目的页面 / CLI、后台 Agent 运行时
+  └──────────────┬──────────────────────────────────────┘
+                 ▼
+        前端 TimelineStore.apply(tx)（同一个 reducer，结果立即一致）
+                 ▼
+        Choreographer：把 tx 的 ops 排成动画序列（光标移动 → 逐 op 动效 → 跟随定位）
+```
 
-## 5. Agent 合同
+- 状态立刻生效，**动画只是展示层**：如果新的 tx 来了而上一个还在播放，上一个快进到结束，不会造成状态和画面不一致。
+- 编排规则：每个 op 120–250ms，单个 tx 动画总长不超过 1.5s；超过 20 个 op 的 tx（例如 40 句字幕）按组动画；用户开启“减少动态效果”时只保留高亮。
+- 后台 Agent / CLI（`makaron chat`）没有页面 SSE，一样通过 Realtime 广播，所以“在终端里让 Agent 剪辑，浏览器里实时看到”自然成立。
+- 断线重连：按 revision 拉取缺失的 tx 补齐，不重播动画，只高亮变化区域。
 
-| 工具 | 作用 |
+### 4.3 Agent 工具
+
+| 工具 | 说明 |
 |---|---|
-| `get_timeline` | 读取精简视图：轨道、clip（秒+帧）、scene 节点清单、当前 revision；大文档分页 |
-| `edit_timeline({ expectedRevision, ops })` | 唯一的时间编辑入口，返回新 revision 或 diagnostics |
-| `run_code`（scene 模式） | 只负责新增/修改 React scene 的长相；**不再负责排时间** |
-| `preview_timeline({ frames \| seconds })` | 用同一编译产物截帧给 Agent 自检 |
-| `publish_timeline` / `materialize_media` | 定稿与导出 MP4（沿用现有发布链路） |
+| `get_timeline` | 精简视图：轨道、clip（秒 + 帧）、素材、组件 props、当前 revision、用户当前选中的 clip（作为上下文） |
+| `edit_timeline({ baseRevision, label, ops })` | 唯一的时间线写入口，返回新 revision、diagnostics 或 conflict |
+| `preview_timeline({ at: seconds[] })` | 同一渲染产物截帧 / 联系表，用于自检 |
+| `create_component`（即 `run_code` 的组件模式） | 写一个 React 组件并声明 `propsSchema`，之后用 `add_clip` 实例化 |
+| `transcribe_to_captions({ assetId \| clipId })` | 调现有 ASR，返回 segment，Agent 再决定样式写入 |
+| 现有 `generate_video / image / music / voiceover` | 增加可选参数 `place: { trackId, from }`：先插 pending clip，完成后由系统 tx `resolve_pending` 替换 |
 
-- prompt 只说意图与路由；ops 的 JSON Schema 由 Zod 直接生成，不手写第二份。
-- 典型对话：“把第二段换成那条海边视频，加个淡入淡出，配乐铺满” → 1 次 `upsert_asset` + `move_clip/remove_clip` + `upsert_transition` + `insert_clip(audio, to-end)`，一次事务，UI 上直接动画呈现变化。
-- CLI / MCP 同步暴露 `timeline get / edit`，发布时按 release checklist 同步 NPM（AGENTS.md 要求）。
+Prompt 层面只写意图和一条重要的节奏规则：**一个用户可感知的步骤一个 tx，并给出简短 label**（先排镜头 → 再加字幕 → 再配乐 → 最后片尾），这样实时展示才有节奏感；不要把所有操作塞进一个巨大的 tx。
 
 ---
 
-## 6. UI 设计（Makaron 风格）
+## 5. UI 设计
 
-详见 mockup。核心原则：**简单的默认 + 渐进展开**——用户第一眼只看到一条故事轨，需要时才展开文字/音频/字幕轨。
+### 5.1 视觉语言（全部来自现有 token）
 
-### 6.1 视觉语言（全部来自现有 token）
+- 黑底 `#000`，面板 `#0a0a0a / #141414`，描边 `rgba(255,255,255,.08–.12)`；Geist / Geist Mono（时间码 tabular-nums）。
+- 选中 / 用户操作：fuchsia `#d946ef / #e879f9`。**Agent 的动作统一用 Spark 星芒 + fuchsia 光扫**——品牌里 Spark 就是“编辑发生过的签名”（Edit Trace），用在这里最贴切。
+- 轨道配色：主轨用 poster filmstrip；画中画 indigo；文字 violet 胶囊；字幕 amber 词块；音频 cyan 波形；pending 是带进度的虚线玻璃块。
+- Dock 是一整块 liquid glass（`mkr-liquid-timeline-rail` 的模糊、内高光、顶部径向光）。
 
-- 底色纯黑 `#000`，面板 `#0a0a0a / #141414`，描边 `rgba(255,255,255,.08–.12)`；
-- 主色 fuchsia `#d946ef / #e879f9`：选中、播放头、拖拽手柄；辅色 cyan（`rgba(34,211,238)`，liquid rail 已有）用于音频；
-- Liquid glass：`mkr-liquid-timeline-rail` 的模糊 + 内高光 + 顶部径向光，dock 整体是一块玻璃；
-- Geist Sans / Geist Mono（时间码一律 tabular-nums mono）；圆角 clip 6px、dock 16–20px；
-- 动效：clip 进出 `animate-tip-in`，Agent 改动以 fuchsia 光扫过对应 clip（“AI 刚改了这里”）。
-
-### 6.2 布局
+### 5.2 桌面布局
 
 ```
-┌──────────── 画布（Remotion Player，DesignOverlay 照旧） ────────────┐
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
- ▶  00:04.12 / 00:18.00     [时间线 | 元素]        ⤺ ⤻   − ●── +
- ───────────────────────── 时间刻度 ────────────────┃─────────────────
- 故事   [ 片段1 filmstrip ]◆[ 片段2 ]◆[  片段3  ]◆[ 片段4 ]   ＋
- 文字          ( 标题 )            ( 副标题 )
- 音频   ∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿ 配乐 ∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿
-        ＋ 字幕   ＋ 画中画
- ─────────────────────────────────────────────────────────────────────
- 选中后：[ ✂ 分割 ] [ ⏱ 时长 ] [ 1.0× 速度 ] [ ⇄ 替换 ] [ 🗑 删除 ] [ ✦ 让 Agent 改 ]
+┌─ CUI 对话 ──────┐┌──────── 画布（Player + DesignOverlay） ────────┐
+│ 用户：剪成30秒… ││                                                 │
+│ ✦ 剪辑卡片 ×4    ││        ✦ Spark 编辑痕迹落在刚改的元素上         │
+│ （diff/定位/撤销）││                                                 │
+└─────────────────┘└─────────────────────────────────────────────────┘
+ ▶ 00:12.04 / 00:30.00   ✦ Makaron 正在剪辑：加字幕 (3/4)  [跟随 ●]   ⤺ ⤻  − ●── +
+ 刻度 ────────────────────────────────┃────────────────────────────
+ 画中画  [ 自拍小窗 ]
+ 文字          ( 夏天，去看海 )
+ 字幕    ▮▮ ▮▮▮ ▮▮ ▮▮▮▮ ▮▮ ← 一句句落下
+ 主轨   [片段1]◆[片段2][ ✦ 生成中 62% ]◆[片段4]  ＋
+ 音频   ∿∿∿∿∿∿∿∿∿∿∿∿∿∿ 配乐 ∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿
+ ── 选中元素时：属性条（同一个 Dock 底部） ──────────────────────────
+ [文字] 夏天，去看海 ✎ | 字体 Geist Black | 字号 64 | 颜色 ● | 入场 pop | 位置 x 120 y 860 | 时长 2.4s | ✦ 让 Agent 改
 ```
 
-- **Dock 两个模式**：`时间线`（管时间）/ `元素`（现有 DesignEditPanel pills，管内容）。在画布上点元素 → 自动切到元素；在时间线上点 clip → 画布跳到该 clip 并高亮其节点。两者是同一选择状态。
-- **故事轨**最高（桌面 56px / 移动 48px），显示 poster filmstrip；clip 之间的 ◆ 是转场芯片，点它选择转场类型；末尾 `＋` 直接唤起上传/生成。
-- **叠加轨**：文字是胶囊形 clip，音频显示波形（cyan），字幕显示词块；默认折叠，只有有内容时才出现。
-- **播放头**：1px 白线 + fuchsia 圆头 + 轻微辉光；桌面自由拖动，移动端**固定居中、内容滚动**（剪映式，单手友好）。
-- **选中态**：fuchsia 1.5px 描边 + 外发光 + 左右竖条手柄（命中区 ≥ 24px，移动端 ≥ 44px）；拖动时显示时长气泡和吸附线（吸附到播放头、clip 边缘、整秒）。
-- **上下文操作条**沿用 `PillCarousel` / liquid pill 样式，固定在 dock 底部；最后一个按钮“让 Agent 改”把选中 clip 作为上下文塞进 CUI。
-- **紧凑 / 展开**：默认紧凑（只有故事轨 + 当前选中的轨），上滑 dock 或点 ⌄ 展开全部轨道；桌面可拖动 dock 高度（复用 resizable CUI panel 的做法）。
+- 轨道顺序与画面层级一致：上面的轨道在画面上层（和剪映/Premiere 一致）。主轨固定在音频轨上方，突出显示。
+- **属性条**是元素的编辑器，替代原来的 pill carousel + FloatingPanel：短字段内联编辑，长文本/字幕点开浮层编辑；字段列表来自 clip 类型或组件 `propsSchema`。
+- 字幕 clip 双击展开为逐句视图，可以直接在时间线上改字、拖每句边界。
+- Agent 运行中用户仍可编辑；Agent 正在动的 clip 显示 Spark 角标并短暂锁定（≈1s 动画期）。
 
-### 6.3 交互清单
+### 5.3 iPhone
+
+- Dock 占屏幕下半部分，播放头固定居中，左右滑动时间线，双指缩放。
+- 选中元素后属性条以底部 sheet 形式出现（复用现有 mobile editable 面板的手势与安全区处理）。
+- Agent 运行时顶部有一枚胶囊“✦ 正在加字幕 3/4”，点击展开剪辑卡片列表；跟随默认开启。
+- 时间线横向滚动区左侧 20px 不响应，避免和 Safari 返回手势冲突；GUI/CUI 互斥渲染保持不变。
+
+### 5.4 老视频（不兼容，优雅展示）
+
+- 播放、现有 editable 编辑、导出全部保持现状，零回归。
+- Dock 位置显示只读的“整段”条：poster filmstrip + 播放头可拖动定位 + 时长，右侧一枚说明胶囊“经典合成 · 时间线编辑适用于新视频”。
+- 不提供迁移按钮；如需重做，用户在对话里让 Agent 重新生成即可，新的产物天然是时间线视频。
+
+### 5.5 交互清单
 
 | 操作 | 桌面 | iPhone |
 |---|---|---|
-| 定位 | 点刻度 / 拖播放头 | 左右滑动时间线 |
-| 缩放 | ⌘+滚轮 / 滑杆 | 双指捏合 |
-| 选择 | 单击，Shift 多选 | 点按 |
-| 改时长 / 裁剪 | 拖左右手柄 | 拖手柄（带放大时长气泡） |
-| 重新排序 | 拖动 story clip（其余自动让位） | 长按后拖动 |
-| 分割 | `S` / 操作条 ✂ | 操作条 ✂（在播放头处分割） |
-| 删除 | `Delete` | 操作条 🗑 |
-| 撤销 / 重做 | ⌘Z / ⇧⌘Z | 顶部 ⤺ ⤻ |
+| 定位 | 点刻度 / 拖播放头 | 左右滑 |
+| 缩放 | ⌘ + 滚轮 / 滑杆 | 双指 |
+| 选择 | 点 clip 或画布元素；Shift 多选 | 点按 |
+| 改时长 / 裁剪 | 拖边缘手柄（吸附到播放头、clip 边缘、字幕句边界、节拍点） | 拖手柄（放大时长气泡） |
+| 移动 / 换轨 | 拖动 | 长按后拖动 |
+| 分割 / 删除 | `S` / `Delete` | 属性条按钮 |
+| 撤销 / 重做 | ⌘Z / ⇧⌘Z（Agent 的 tx 也是一步） | 顶部按钮 |
+| 交给 Agent | 属性条“✦ 让 Agent 改”，把选中 clip 带入对话 | 同左 |
 
-- 时间线获得焦点时**吞掉键盘快捷键**，不触发项目级上一张/下一张（7 月教训）。
-- GUI/CUI 互斥渲染与 iOS 返回手势路径保持不变；时间线横向滚动区域留出左边缘 20px 不响应，避免与 Safari 返回手势冲突。
-- 四种语言（zh / zh-Hant / ja / en）同批补齐，包括 tooltip 和无障碍文案。
-
-### 6.4 用不用 Remotion 的 UI 组件
-
-“可以直接用 Remotion”的理解：**渲染与时间语义直接用 Remotion（Player、`<Track>`、`TransitionSeries`、`@remotion/media-utils` 波形），时间线 UI 自建**。理由：Remotion 没有可嵌入用户产品的免费时间线组件；付费 Timeline 的状态结构不公开、视觉要整体重画，买来主要省的是拖拽/缩放的交互细节。建议先基于 v1 的 `EditableTimelineDock` 继续做，把付费 Timeline 作为可选参考（见 §7）。
+时间线获得焦点时吞掉键盘快捷键，避免触发项目级上一张/下一张。四种语言（zh / zh-Hant / ja / en）同批补齐。
 
 ---
 
-## 7. 需要你拍板的决策
-
-1. **是否复用 `codex/editable-timeline-project`**：建议“复用内核文件、在最新 dev 上重建分支”，不直接 merge 那个落后 791 个提交的分支。
-2. **Remotion 升级 4.0.527 → 4.0.541**：`<Track>` 需要 ≥4.0.534；升级涉及 Lambda site/函数重新部署与 Snapshot 重建，需要单独验收。
-3. **是否购买 Remotion Timeline / Editor Starter 作参考**：价格未能确认；Makaron 本身的 Remotion 公司授权情况需要你确认。
-4. **V2 首发范围**：建议先做 story / text / audio 三类轨 + 转场；caption 轨、画中画、关键帧音量放到第二批。
-
----
-
-## 8. 分期与验收
+## 6. 分期与验收
 
 | 阶段 | 内容 | 验收证据 |
 |---|---|---|
-| P0 Spike（2–3 天） | 新分支基于最新 dev；升级 Remotion 到 4.0.541；验证 `<Track>` + `TransitionSeries` 在 Player / `renderMediaOnWeb` / Lambda 三处一致；验证 Player 内能否读 sequence 注册表（决定迁移 B 档） | 同一份 3 段 JSON 的三份 MP4 逐帧对比；spike 报告 |
-| P1 协议内核 | 从 v1 移植并收敛 schema（§3.3 的差异）、reducer、编译器、反向事务 undo；单测覆盖：磁吸 ripple、attached 跟随、split（含 sceneIn）、转场缩短时长、revision 冲突 | 单测 + schema 快照 |
-| P2 渲染接入 | `MakaronTimeline` 组件、Player 热更新不重编译、poster/截帧只准备当前帧可见资源、Lambda composition 成对发布 | 本地 Makaron 项目页真实播放 + 浏览器 MP4 + Lambda MP4 一致 |
-| P3 迁移 | A/B/C 三档 + “还原原始视频”；接入 proxy track 解决多 clip 卡顿 | 抽 20 个真实旧项目（含“6 图 + 特效”）全部能出时间线；B 档命中率与置信度报告 |
-| P4 时间线 UI | Dock、故事轨、叠加轨、操作条、移动端居中播放头、四语言 | 桌面 + iPhone 真机：改字、拖动、裁剪、重排、分割、撤销，保存后重开完全一致 |
-| P5 Agent | `get_timeline / edit_timeline / preview_timeline`、prompt 路由、CLI/MCP 同步 | 真实对话：Agent 生成多段视频 → 用户画布改字 → Agent 再改时长不覆盖用户修改 → 导出 |
+| P0 Spike | 升级 Remotion 4.0.541；`<Track>` + `TransitionSeries` + overlay 画中画 + 字幕在 Player / 浏览器 MP4 / Lambda MP4 三处一致；SSE + Realtime 推送一个 tx 到页面的最小链路 | 三份 MP4 逐帧对比；录屏：终端发 tx，浏览器实时出现 |
+| P1 协议内核 | Zod schema、reducer（含主轨磁吸、split、元素级变基、反向 op）、compile、Agent JSON Schema 生成 | 单测 + 冲突/变基用例 |
+| P2 渲染与存储 | `MakaronTimeline` 组件、组件 hash 缓存、pending 占位、design JSON 存取、tx 流水、Lambda composition | 本地项目页真实播放、保存重开一致、导出一致 |
+| P3 时间线 UI | 单 Dock：五类轨道、属性条、画布↔时间线双向选择、字幕逐句编辑、画中画快捷入口、移动端、老视频只读展示 | 桌面 + iPhone 真机：覆盖旧 editable 的全部能力（改字、换图、换视频+裁剪、拖位置、缩放）+ 字幕 + 画中画 |
+| P4 Agent 实时剪辑 | 工具、prompt 节奏规则、Choreographer、Agent 光标、跟随、剪辑卡片、pending 生成、CLI/后台广播 | 真实对话：Agent 从素材剪出 30 秒带字幕配乐视频，全过程实时可见；中途用户改字不被覆盖；撤销 Agent 某一步 |
+| P5 回放与打磨 | 剪辑过程回放 / timelapse 导出、关键帧、节拍吸附 | 演示视频 |
 
-发布门禁沿用 v1 的 Phase 5：单测或 Agent 任务通过都不算发布证据，必须是真实项目流程 + Preview/Export 一致 + 双端交互。
+发布门禁：单测或 Agent 任务通过不算发布证据，必须是真实项目流程 + Preview/Export 一致 + 双端交互 + 四语言。
 
-## 9. 风险
+## 7. 风险与开放问题
 
-- **多 clip 预览卡顿**：Safari 上 `<Sequence>` 切换卡顿已知（proxy track 分支）。时间线化会放大这个问题，P3 必须带上。
-- **字体**：文字覆盖引入新字符时需要刷新字体子集而不重编译 scene（v1 遗留）。
-- **迁移 B 档依赖 Remotion 内部 API**：只在迁移时用一次，结果固化到 JSON，运行时不依赖；锁定 Remotion 版本并加回归测试。
+- **多 clip 预览卡顿**（Safari `<Sequence>` 切换）：时间线化后更明显，P2 起接入 proxy track（`codex/remotion-preview-proxy-track` 的成果）。
+- **字体**：文字/字幕改字引入新字符时需刷新字体子集而不重编译组件。
+- **Agent 自由度 vs 结构**：组件逃生舱保证创造力；需要观察 Agent 是否过度依赖 `component` 而不用结构化元素——prompt 里明确“能用结构化元素就用结构化元素，组件只用于样式和特效”。
+- **Realtime 成本与顺序**：tx 按 revision 有序应用，乱序时按 revision 补拉；广播只发 tx，不发整份文档。
 - **共享 Preview 环境**：Lambda runtime 与 Snapshot 变更不能占用共享 `git-dev` alias（AGENTS.md）。
