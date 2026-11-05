@@ -1,0 +1,26 @@
+[
+  {
+    "id": "dpl_ESMHXQGQkMT3g7AtbjQdrJj3BWQf",
+    "url": "ai-image-editor-nrvqx8x03-vegekyd-sys-projects.vercel.app",
+    "target": "production",
+    "status": "READY",
+    "meta": {
+      "githubCommitMessage": "fix: align full release gates with Image 2.6 GIF routing",
+      "githubCommitOrg": "vegekyd-sys",
+      "githubCommitRef": "dev",
+      "githubCommitRepo": "ai-image-editor",
+      "githubCommitSha": "0df70536dfdbc41d9b4afd3d41dc8a6cd035e85e"
+    }
+  },
+  {
+    "id": "dpl_CJTCdBhCm3Yi8xtDLhVCLYajjHex",
+    "url": "ai-image-editor-eyzi3om8m-vegekyd-sys-projects.vercel.app",
+    "target": null,
+    "status": "READY",
+    "meta": {
+      "gitCommitMessage": "fix: align full release gates with Image 2.6 GIF routing",
+      "gitCommitRef": "HEAD",
+      "gitCommitSha": "0df70536dfdbc41d9b4afd3d41dc8a6cd035e85e"
+    }
+  }
+]

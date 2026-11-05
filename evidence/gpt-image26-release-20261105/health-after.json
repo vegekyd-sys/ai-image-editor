@@ -1,0 +1,124 @@
+[
+  {
+    "origin": "https://www.makaron.app",
+    "httpStatus": 200,
+    "status": "healthy",
+    "timestamp": "2026-11-05T09:37:55.014Z",
+    "services": {
+      "supabase_db": {
+        "status": "healthy",
+        "latency": 66
+      },
+      "supabase_auth": {
+        "status": "healthy",
+        "latency": 90
+      },
+      "supabase_storage": {
+        "status": "healthy",
+        "latency": 90
+      },
+      "gemini": {
+        "status": "healthy",
+        "latency": 111
+      },
+      "openrouter": {
+        "status": "healthy",
+        "latency": 337
+      },
+      "mulerouter_image": {
+        "status": "healthy",
+        "latency": 0
+      },
+      "fal_rotation": {
+        "status": "healthy",
+        "latency": 0
+      },
+      "kling": {
+        "status": "healthy",
+        "latency": 0
+      },
+      "piapi": {
+        "status": "healthy",
+        "latency": 380
+      },
+      "azure_openai": {
+        "status": "healthy",
+        "latency": 820
+      },
+      "codex_subscription": {
+        "status": "healthy",
+        "latency": 1533
+      },
+      "huggingface": {
+        "status": "healthy",
+        "latency": 201
+      }
+    },
+    "summary": {
+      "healthy": 12,
+      "unhealthy": 0,
+      "unavailable": 0
+    }
+  },
+  {
+    "origin": "https://ai-image-editor-git-dev-vegekyd-sys-projects.vercel.app",
+    "httpStatus": 200,
+    "status": "healthy",
+    "timestamp": "2026-11-05T09:37:58.265Z",
+    "services": {
+      "supabase_db": {
+        "status": "healthy",
+        "latency": 157
+      },
+      "supabase_auth": {
+        "status": "healthy",
+        "latency": 196
+      },
+      "supabase_storage": {
+        "status": "healthy",
+        "latency": 135
+      },
+      "gemini": {
+        "status": "healthy",
+        "latency": 142
+      },
+      "openrouter": {
+        "status": "healthy",
+        "latency": 156
+      },
+      "mulerouter_image": {
+        "status": "healthy",
+        "latency": 0
+      },
+      "fal_rotation": {
+        "status": "healthy",
+        "latency": 0
+      },
+      "kling": {
+        "status": "healthy",
+        "latency": 0
+      },
+      "piapi": {
+        "status": "healthy",
+        "latency": 412
+      },
+      "azure_openai": {
+        "status": "healthy",
+        "latency": 919
+      },
+      "codex_subscription": {
+        "status": "healthy",
+        "latency": 1069
+      },
+      "huggingface": {
+        "status": "healthy",
+        "latency": 227
+      }
+    },
+    "summary": {
+      "healthy": 12,
+      "unhealthy": 0,
+      "unavailable": 0
+    }
+  }
+]
