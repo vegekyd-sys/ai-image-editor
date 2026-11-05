@@ -308,6 +308,15 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.fasterMediaDelivery.title': "画像と動画の読み込みが高速に",
+  'changelog.fasterMediaDelivery.item1': "プロジェクト内の画像と動画をグローバルなエッジキャッシュから配信するようになり、表示・シーク・ダウンロードがより速くなりました。",
+  'changelog.fasterMediaDelivery.item2': "同じ素材を繰り返し再生・書き出ししても毎回オリジンに取りに行かず、より安定して動作します。",
+  'changelog.fasterImage26Svg.title': "GPT Image 2.6 が高速に、SVG に対応",
+  'changelog.fasterImage26Svg.item1': "GPT Image 2.6 の画像や GIF は、多くの場合これまでの約半分の時間で完成します。",
+  'changelog.fasterImage26Svg.item2': "SVG を頼むと本物のベクターファイルを出力。どこまで拡大しても鮮明で、ロゴやステッカー、印刷に使えます。",
+  'changelog.gifStickers.title': "スタンプ GIF がもっときれいに、もっとお得に",
+  'changelog.gifStickers.item1': "作りたいスタンプやミームを普段の言葉で伝えるだけ。各 GIF はひとつのリアクションに絞り、決めの表情で止まり、文字は全フレームで揺れません。",
+  'changelog.gifStickers.item2': "スタンプ用 GIF はチャット向けサイズで生成。費用は約半分、生成も速く、ファイルも小さくそのまま送れます。",
   'changelog.gptImage26.title': "GPT Image 2.6 と GIF アニメーション",
   'changelog.gptImage26.item1': "既定の画像モデルが GPT Image 2.6 Flare に更新され、精細な制作向けに Sunburst も選べます。モデル選択では隣り合って表示されます。",
   'changelog.gptImage26.item2': "画質と推論レベルを指定できます。既定は低画質・高推論です。2.5 の選択肢は対応する 2.6 モデルに置き換わり、過去の作品も引き続き閲覧できます。",
@@ -1086,6 +1095,7 @@ const ja = {
   'model.chooseAgent': 'Agentモデルを選択',
   'model.azureApiBadge': 'Azure API',
   'model.openRouterApiBadge': 'OpenRouter API',
+  'model.openaiApiBadge': 'OpenAI API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': '既定 · 従量課金',
   'model.agentGroup.codex': '個人Codexプラン',

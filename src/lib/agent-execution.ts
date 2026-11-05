@@ -1,3 +1,4 @@
+import { isOpenAIQuotaExhausted } from './openai-direct-state';
 import type { ModelMessage } from 'ai';
 import type { AgentModelProvider } from './agent-models';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -129,6 +130,27 @@ export function shouldFailoverCodexSubscriptionToApi(input: {
     && (
       input.previousProviderFailover
       || isCodexSubscriptionTerminalFailure(input.latestFailureDetail)
+      || input.retryableFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS
+    );
+}
+
+/**
+ * The owner's direct OpenAI key moves to the paid fallback API immediately on a
+ * quota/auth refusal and after repeated retryable failures otherwise.
+ */
+export function shouldFailoverOpenAIDirectToApi(input: {
+  requestedProvider: string;
+  hasApiFallback: boolean;
+  previousProviderFailover: boolean;
+  retryableFailureCount: number;
+  latestFailureDetail?: unknown;
+}): boolean {
+  return input.requestedProvider === 'openai'
+    && input.hasApiFallback
+    && (
+      input.previousProviderFailover
+      || isOpenAIQuotaExhausted(input.latestFailureDetail)
+      || /invalid_api_key|incorrect api key|\b401\b/i.test(String(input.latestFailureDetail ?? ''))
       || input.retryableFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS
     );
 }
@@ -336,7 +358,7 @@ export function buildTypedCompactionMessage(
     // Responses transport that created it.
     const expectedProviderKey = agentProvider === 'azure-openai'
       ? 'azure'
-      : agentProvider === 'codex-subscription'
+      : agentProvider === 'codex-subscription' || agentProvider === 'openai'
         ? 'openai'
         : undefined;
     if (agentProvider && (!expectedProviderKey || providerKey !== expectedProviderKey)) {

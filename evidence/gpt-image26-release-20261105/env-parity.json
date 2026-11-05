@@ -1,0 +1,48 @@
+[
+  {
+    "key": "NEXT_PUBLIC_SUPABASE_URL",
+    "prodPresent": true,
+    "previewPresent": true,
+    "same": true
+  },
+  {
+    "key": "FAL_KEY",
+    "prodPresent": true,
+    "previewPresent": true,
+    "same": true
+  },
+  {
+    "key": "EVOLINK_API_KEY",
+    "prodPresent": true,
+    "previewPresent": true,
+    "same": true
+  },
+  {
+    "key": "REMOTION_SNAPSHOT_ID",
+    "prodPresent": true,
+    "previewPresent": true,
+    "same": true,
+    "prod": "snap_pHdcY38EA1V5UMQvFzgjDP1bKivr",
+    "preview": "snap_pHdcY38EA1V5UMQvFzgjDP1bKivr"
+  },
+  {
+    "key": "MEDIA_SANDBOX_SNAPSHOT_ID",
+    "prodPresent": true,
+    "previewPresent": true,
+    "same": true,
+    "prod": "snap_zplfw9ZKVGw14hcyfEg3cdAvzXkf",
+    "preview": "snap_zplfw9ZKVGw14hcyfEg3cdAvzXkf"
+  },
+  {
+    "key": "CODEX_SUBSCRIPTION_RELAY_URL",
+    "prodPresent": true,
+    "previewPresent": true,
+    "same": true
+  },
+  {
+    "key": "CODEX_SUBSCRIPTION_RELAY_SECRET",
+    "prodPresent": true,
+    "previewPresent": true,
+    "same": true
+  }
+]

@@ -1,3 +1,4 @@
+import { refreshOpenAIDirectBudget } from '@/lib/openai-direct';
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
@@ -98,6 +99,7 @@ export async function POST(req: NextRequest) {
     if (requestedAgentModel === null) {
       return NextResponse.json({ error: 'Unsupported agentModel' }, { status: 400 });
     }
+    await refreshOpenAIDirectBudget();
     const resolvedAgentModel = resolveAgentModelSpecForUser(
       requestedAgentModel,
       process.env.AGENT_MODEL,

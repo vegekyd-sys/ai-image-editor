@@ -1,3 +1,4 @@
+import { isOpenAIDirectAvailable } from './openai-direct-state';
 export const AGENT_MODEL_IDS = [
   'gpt-6-luna',
   'gpt-6-sol',
@@ -24,8 +25,8 @@ export type CodexSubscriptionAgentModelPreference = (typeof CODEX_SUBSCRIPTION_A
 export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.6-grok-subscription' as const;
 export type GrokSubscriptionAgentModelPreference = typeof GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE;
 export type AgentModelPreference = 'auto' | AgentModelId | CodexSubscriptionAgentModelPreference | GrokSubscriptionAgentModelPreference;
-export type AgentModelProvider = 'azure-openai' | 'codex-subscription' | 'grok-subscription' | 'openrouter' | 'deepseek';
-export type GPT56ApiProvider = Extract<AgentModelProvider, 'azure-openai' | 'openrouter'>;
+export type AgentModelProvider = 'azure-openai' | 'openai' | 'codex-subscription' | 'grok-subscription' | 'openrouter' | 'deepseek';
+export type GPT56ApiProvider = Extract<AgentModelProvider, 'azure-openai' | 'openai' | 'openrouter'>;
 export type GPT56AgentProvider = GPT56ApiProvider | 'codex-subscription';
 export type AgentCacheStrategy = 'explicit' | 'automatic';
 export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
@@ -61,31 +62,37 @@ export const GPT56_PROVIDER_MODEL_IDS: Record<
   'gpt-6-luna': {
     openrouter: 'openai/gpt-6-luna',
     'azure-openai': 'gpt-6-luna',
+    openai: 'gpt-6-luna',
     'codex-subscription': 'gpt-6-luna',
   },
   'gpt-6.1-sol': {
     openrouter: 'openai/gpt-6.1-sol',
     'azure-openai': 'gpt-6.1-sol',
+    openai: 'gpt-6.1-sol',
     'codex-subscription': 'gpt-6.1-sol',
   },
   'gpt-6-sol': {
     openrouter: 'openai/gpt-6-sol',
     'azure-openai': 'gpt-6-sol',
+    openai: 'gpt-6-sol',
     'codex-subscription': 'gpt-6-sol',
   },
   'gpt-5.6-terra': {
     openrouter: 'openai/gpt-5.6-terra',
     'azure-openai': 'gpt-5.6-terra',
+    openai: 'gpt-5.6-terra',
     'codex-subscription': 'gpt-5.6-terra',
   },
   'gpt-5.6-sol': {
     openrouter: 'openai/gpt-5.6-sol',
     'azure-openai': 'gpt-5.6-sol',
+    openai: 'gpt-5.6-sol',
     'codex-subscription': 'gpt-5.6-sol',
   },
   'gpt-5.6-luna': {
     openrouter: 'openai/gpt-5.6-luna',
     'azure-openai': 'gpt-5.6-luna',
+    openai: 'gpt-5.6-luna',
     'codex-subscription': 'gpt-5.6-luna',
   },
 };
@@ -130,6 +137,7 @@ export function resolveGPT56AgentProvider(value?: string): GPT56AgentProvider {
     return 'codex-subscription';
   }
   if (normalized === 'openrouter') return 'openrouter';
+  if (normalized === 'openai' || normalized === 'openai-direct') return 'openai';
   if (normalized === 'azure' || normalized === 'azure-openai') return 'azure-openai';
   return DEFAULT_GPT56_AGENT_PROVIDER;
 }
@@ -137,9 +145,29 @@ export function resolveGPT56AgentProvider(value?: string): GPT56AgentProvider {
 export function resolveCodexSubscriptionFallbackProvider(
   value: string | undefined = process.env.CODEX_SUBSCRIPTION_FALLBACK_PROVIDER,
 ): GPT56ApiProvider {
-  return resolveGPT56AgentProvider(value) === 'openrouter'
-    ? 'openrouter'
-    : 'azure-openai';
+  const provider = resolveGPT56AgentProvider(value);
+  return provider === 'openrouter' || provider === 'openai' ? provider : 'azure-openai';
+}
+
+/**
+ * Paid-API provider for GPT Agent models: the owner's direct OpenAI key while
+ * its monthly budget lasts, then the configured provider (Azure by default).
+ */
+export function resolveGPT56ApiProviderWithOpenAIDirect(
+  configured: GPT56ApiProvider,
+  openAIDirectAvailable: boolean = isOpenAIDirectAvailable(),
+): GPT56ApiProvider {
+  return openAIDirectAvailable ? 'openai' : configured;
+}
+
+/** Fallback when the direct OpenAI key cannot serve a request (quota, auth, outage). */
+export function resolveOpenAIDirectFallbackProvider(
+  configured: string | undefined = process.env.GPT56_AGENT_PROVIDER,
+): Extract<GPT56ApiProvider, 'azure-openai' | 'openrouter'> {
+  const provider = resolveGPT56AgentProvider(configured);
+  if (provider === 'openrouter') return 'openrouter';
+  if (process.env.AZURE_OPENAI_API_KEY?.trim()) return 'azure-openai';
+  return process.env.OPENROUTER_API_KEY?.trim() ? 'openrouter' : 'azure-openai';
 }
 
 export function isCodexSubscriptionOwner(
@@ -228,9 +256,16 @@ export function resolveGPT56AgentProviderForUser(options: {
   allowedUserIds?: string;
   dynamicallyAllowed?: boolean;
   fallbackProvider?: string;
+  /** Route paid GPT API traffic to the owner's direct OpenAI key first. */
+  openAIDirectAvailable?: boolean;
 }): GPT56AgentProvider {
   const provider = resolveGPT56AgentProvider(options.configuredProvider);
-  if (provider !== 'codex-subscription') return provider;
+  const openAIDirect = options.openAIDirectAvailable ?? false;
+  if (provider !== 'codex-subscription') {
+    return provider === 'azure-openai' || provider === 'openrouter'
+      ? resolveGPT56ApiProviderWithOpenAIDirect(provider, openAIDirect)
+      : provider;
+  }
 
   const ownerUserId = (options.ownerUserId ?? process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID)?.trim();
   if (!ownerUserId) {
@@ -242,7 +277,10 @@ export function resolveGPT56AgentProviderForUser(options: {
   return (options.dynamicallyAllowed
     ?? isCodexSubscriptionAllowedUser(options.userId, ownerUserId, options.allowedUserIds))
     ? 'codex-subscription'
-    : resolveCodexSubscriptionFallbackProvider(options.fallbackProvider);
+    : resolveGPT56ApiProviderWithOpenAIDirect(
+        resolveCodexSubscriptionFallbackProvider(options.fallbackProvider),
+        openAIDirect,
+      );
 }
 
 export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
@@ -457,9 +495,12 @@ export function resolveAgentModelSpecForUser(
   preference: AgentModelPreference | undefined,
   configuredDefault: string | undefined = process.env.AGENT_MODEL,
   userId: string | undefined,
-  configuredGPT56Provider: string | undefined = process.env.GPT56_AGENT_PROVIDER,
+  /** Omit to use GPT56_AGENT_PROVIDER plus the direct-OpenAI-first budget rule; pass a provider to pin it. */
+  explicitGPT56Provider?: string,
   codexSubscriptionAllowed?: boolean,
+  openAIDirectAvailable: boolean = explicitGPT56Provider === undefined && isOpenAIDirectAvailable(),
 ): AgentModelSpec {
+  const configuredGPT56Provider = explicitGPT56Provider ?? process.env.GPT56_AGENT_PROVIDER;
   const explicitlyUsesGrokSubscription = isGrokSubscriptionAgentModelPreference(preference);
   if (explicitlyUsesGrokSubscription) {
     const selected = resolveAgentModelSpec(preference, configuredDefault, configuredGPT56Provider);
@@ -491,6 +532,7 @@ export function resolveAgentModelSpecForUser(
       : configuredGPT56Provider,
     userId,
     dynamicallyAllowed: codexSubscriptionAllowed,
+    openAIDirectAvailable,
   });
   return resolveAgentModelSpec(selected.id, undefined, provider);
 }

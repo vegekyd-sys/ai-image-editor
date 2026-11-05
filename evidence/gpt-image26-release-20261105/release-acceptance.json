@@ -1,0 +1,341 @@
+{
+  "at": "2026-11-05T09:39:08.165Z",
+  "codeCommit": "0df70536dfdbc41d9b4afd3d41dc8a6cd035e85e",
+  "production": {
+    "id": "dpl_ESMHXQGQkMT3g7AtbjQdrJj3BWQf",
+    "url": "https://www.makaron.app",
+    "deploymentUrl": "https://ai-image-editor-nrvqx8x03-vegekyd-sys-projects.vercel.app",
+    "status": "READY"
+  },
+  "preview": {
+    "id": "dpl_CJTCdBhCm3Yi8xtDLhVCLYajjHex",
+    "url": "https://ai-image-editor-eyzi3om8m-vegekyd-sys-projects.vercel.app",
+    "sharedDevAlias": "https://ai-image-editor-git-dev-vegekyd-sys-projects.vercel.app",
+    "status": "READY"
+  },
+  "gitDevPushed": true,
+  "cli": {
+    "kind": "registry-fresh-install-readonly-accepted",
+    "version": "0.17.9",
+    "latest": "0.17.9",
+    "shasum": "6f638069651a4d464ba347d213709bf3a3af4c8e",
+    "filesCompared": 9,
+    "catalogRevision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
+    "discoveredEntries": [
+      "long-video-director",
+      "video-edit",
+      "explainer-video",
+      "cinematic-video",
+      "talking-head",
+      "video-translate",
+      "tiktok-video",
+      "multi-angle-video",
+      "photo-to-video"
+    ],
+    "mediaOperationsExecuted": 0
+  },
+  "checks": {
+    "fullTestsPassed": 2724,
+    "skipped": 1,
+    "typescript": true,
+    "productionBuild": true,
+    "crc32cTraces": 10,
+    "ffmpegTraces": 9,
+    "controlledRoutingCases": 3,
+    "health": [
+      {
+        "origin": "https://www.makaron.app",
+        "status": "healthy",
+        "summary": {
+          "healthy": 12,
+          "unhealthy": 0,
+          "unavailable": 0
+        }
+      },
+      {
+        "origin": "https://ai-image-editor-git-dev-vegekyd-sys-projects.vercel.app",
+        "status": "healthy",
+        "summary": {
+          "healthy": 12,
+          "unhealthy": 0,
+          "unavailable": 0
+        }
+      }
+    ],
+    "onlineProvider": [
+      {
+        "id": "production-default-png",
+        "projectId": "92424131-e5da-4ff0-b358-2dfa0c31795e",
+        "runId": "31878bc9-8141-44dd-8314-084a341d2786",
+        "images": [
+          {
+            "model": "gpt-image-2.6-flare",
+            "mime": "image/png",
+            "width": 1024,
+            "height": 1024,
+            "frames": 1,
+            "sha256": "8f3a7b5c3f9a86271a2a50d3ffbd2b7a784ec8360924be4fbf53360c4ba61a3e"
+          }
+        ],
+        "calls": [
+          {
+            "tool": "read_file",
+            "input": {
+              "path": "prompts/image.md"
+            }
+          },
+          {
+            "tool": "generate_image",
+            "input": {
+              "editPrompt": "依据附件角色板，取单个 Makaron Pixel Wizard 紫色泡泡幽灵、深紫软塌巫师帽、像素脸，生成一张1024方形PNG：它惊讶地看着一张彩色图片变成会动的预览卡。干净奶油色背景，洋红和青色Spark来自预览卡；文字仅「灵感开始动了」。",
+              "aspectRatio": "1:1",
+              "outputFormat": "png",
+              "imageResolution": "1K",
+              "reference_media_indices": [
+                1
+              ]
+            }
+          },
+          {
+            "tool": "analyze_image",
+            "input": {
+              "question": "请检查这张生成图：确认是否为方形、单个符合角色板的紫色像素脸泡泡幽灵和深紫软塌巫师帽，惊讶地看着一张彩色图片变成动态预览卡，奶油色背景，洋红与青色 Spark 来自预览卡；逐字确认图中文字是否仅为「灵感开始动了」，并指出任何明显偏差。",
+              "media_index": 2
+            }
+          }
+        ],
+        "usage": {
+          "credits_charged": 10,
+          "credits_refunded": 0,
+          "credits_net": 10,
+          "input_tokens": 12,
+          "output_tokens": 1621,
+          "cache_read_tokens": 107288,
+          "cache_write_tokens": 39203,
+          "entries": [
+            {
+              "tool_name": "generate_image",
+              "model": "gpt-image-2.6-flare",
+              "calls": 1,
+              "credits": 8,
+              "input_tokens": 0,
+              "output_tokens": 0
+            },
+            {
+              "tool_name": "agent",
+              "model": "gpt-6-luna",
+              "calls": 1,
+              "credits": 2,
+              "input_tokens": 12,
+              "output_tokens": 1621
+            }
+          ],
+          "sources": [
+            "cli"
+          ]
+        }
+      },
+      {
+        "id": "production-native-gif",
+        "projectId": "a1bd5ada-aab3-4d5d-a32d-c1a4ff8615ba",
+        "runId": "533a332e-f38c-46a7-8306-8b8dfbd013a0",
+        "images": [
+          {
+            "model": "gpt-image-2.6-flare",
+            "mime": "image/gif",
+            "width": 960,
+            "height": 960,
+            "frames": 8,
+            "delay": [
+              160,
+              160,
+              160,
+              160,
+              160,
+              160,
+              160,
+              160
+            ],
+            "loop": 0,
+            "uniqueFrames": 8,
+            "sha256": "e8fdcecdb1c447e1691afaba7522206f000a01701f754df3a8aa9826e26d7ee2"
+          }
+        ],
+        "calls": [
+          {
+            "tool": "read_file",
+            "input": {
+              "path": "skills/makaron-mascot/SKILL.md"
+            }
+          },
+          {
+            "tool": "generate_image",
+            "input": {
+              "skill": "makaron-mascot",
+              "editPrompt": "Create one original seamless looping square GIF animation featuring exactly one mascot, Pixel Wizard — a small purple bubble-ghost creature with pixel-art face, large floppy dark purple wizard hat, magic wand with glowing pixel asterisk tip, neon pink and cyan pixel-edge glow. Pixel-art style edges on a 3D body, translucent and squishy, floats in the air. Size: 15-25% of frame. See reference image for exact visual identity.\nUse the attached role sheet only as a guide to Pixel Wizard’s identity and palette; do not reproduce its panels, layouts, captions, poses, or text. Show the wizard interacting with a simple dark floating preview card and a bright magenta-and-cyan Spark. Across exactly 8 distinct, readable animation frames: begin hovering poised beside the card as Spark pops outward; wizard reaches to press Spark; Spark playfully pulls the wizard forward so its soft bubble body stretches elastically; wizard’s floppy hat gives a funny wobble and its pixel expression turns comically startled; it springs back with a soft squash-and-bounce, then settles into the opening poised hover so the final frame connects seamlessly to the first. Keep the wizard’s identity, hat, pixel face, and Spark design consistent throughout. Clean polished pixel-art-meets-soft-3D look, deep near-black purple background, luminous but controlled pink/cyan glow. No additional characters, no words, no lettering, no logos, no borders. Seamless infinite loop.",
+              "frameCount": 8,
+              "aspectRatio": "1:1",
+              "outputFormat": "gif",
+              "frameDurationMs": 160,
+              "imageResolution": "1K",
+              "reference_media_indices": [
+                1
+              ]
+            }
+          },
+          {
+            "tool": "analyze_image",
+            "input": {
+              "question": "Inspect the generated GIF result: identify visible character/action and whether there is any text or obvious layout issue. If animation metadata is available, report frame count, timing, and canvas size; otherwise state that only visual content could be checked.",
+              "media_index": 2
+            }
+          }
+        ],
+        "usage": {
+          "credits_charged": 13,
+          "credits_refunded": 0,
+          "credits_net": 13,
+          "input_tokens": 12,
+          "output_tokens": 2446,
+          "cache_read_tokens": 103003,
+          "cache_write_tokens": 37398,
+          "entries": [
+            {
+              "tool_name": "generate_image",
+              "model": "gpt-image-2.6-flare",
+              "calls": 1,
+              "credits": 11,
+              "input_tokens": 0,
+              "output_tokens": 0
+            },
+            {
+              "tool_name": "agent",
+              "model": "gpt-6-luna",
+              "calls": 1,
+              "credits": 2,
+              "input_tokens": 12,
+              "output_tokens": 2446
+            }
+          ],
+          "sources": [
+            "cli"
+          ]
+        }
+      },
+      {
+        "id": "production-subscription-png",
+        "projectId": "7bfa3d98-f591-401d-bdfe-39c9b22d7b38",
+        "runId": "b8de0de3-451c-426e-a19a-23b25bc8b9a9",
+        "images": [
+          {
+            "model": "gpt-image-2.6-flare",
+            "mime": "image/png",
+            "width": 1024,
+            "height": 1024,
+            "frames": 1,
+            "sha256": "3035a91942e889ad60dcc4d43a73a5db8939786e33659f69529b69aeb2544f26"
+          }
+        ],
+        "calls": [
+          {
+            "tool": "read_file",
+            "input": {
+              "path": "prompts/image.md"
+            }
+          },
+          {
+            "tool": "read_file",
+            "input": {
+              "path": "prompts/captions.md"
+            }
+          },
+          {
+            "tool": "generate_image",
+            "input": {
+              "skill": "captions",
+              "editPrompt": "上线后管理员个人Codex套餐通道测试。用当前默认图片模型生成一张1024方形PNG：奶油色背景，一只优雅紫色玻璃杯，左边恰好3颗青色球，右边恰好2颗粉色球，标题准确「灵感一触即发」。仅一张图，不做变体或代码，不换供应商、不重提付费请求，未知结果只查原任务。直接完成。",
+              "aspectRatio": "1:1",
+              "outputFormat": "png",
+              "imageResolution": "1K"
+            }
+          }
+        ],
+        "usage": {
+          "credits_charged": 6,
+          "credits_refunded": 0,
+          "credits_net": 6,
+          "input_tokens": 35796,
+          "output_tokens": 462,
+          "cache_read_tokens": 109312,
+          "cache_write_tokens": 0,
+          "entries": [
+            {
+              "tool_name": "generate_image",
+              "model": "gpt-image-2.6-flare",
+              "calls": 1,
+              "credits": 6,
+              "input_tokens": 0,
+              "output_tokens": 0
+            },
+            {
+              "tool_name": "agent",
+              "model": "gpt-6-luna:codex-subscription",
+              "calls": 1,
+              "credits": 0,
+              "input_tokens": 35796,
+              "output_tokens": 462
+            }
+          ],
+          "sources": [
+            "cli"
+          ]
+        }
+      }
+    ],
+    "onlineGui": {
+      "origin": "https://www.makaron.app",
+      "auth": "existing CLI test identity, normal Supabase session cookies; no auth bypass or production code change",
+      "cases": [
+        {
+          "id": "production-default-png",
+          "projectId": "92424131-e5da-4ff0-b358-2dfa0c31795e",
+          "dimensions": [
+            1024,
+            1024
+          ],
+          "mime": "image/png",
+          "saveOriginal": false,
+          "staticSavePreservesDimensions": true,
+          "reopen": true,
+          "sha256": "8f3a7b5c3f9a86271a2a50d3ffbd2b7a784ec8360924be4fbf53360c4ba61a3e"
+        },
+        {
+          "id": "production-native-gif",
+          "projectId": "a1bd5ada-aab3-4d5d-a32d-c1a4ff8615ba",
+          "dimensions": [
+            960,
+            960
+          ],
+          "mime": "image/gif",
+          "saveOriginal": true,
+          "staticSavePreservesDimensions": false,
+          "reopen": true,
+          "sha256": "e8fdcecdb1c447e1691afaba7522206f000a01701f754df3a8aa9826e26d7ee2"
+        }
+      ],
+      "pageErrors": [],
+      "gifVisibleFramesDiffer": true
+    },
+    "previewSunburst": {
+      "model": "gpt-image-2.6-sunburst",
+      "output": "preview-sunburst.png",
+      "success": true
+    }
+  },
+  "notes": [
+    "First full release gate exposed stale 2.5 assertion, prompt size overages and missing frozen-contract amendment. All fixed; full gate then passed.",
+    "First GUI assertion compared a static PNG save against preview bytes. Existing static Save converts to JPEG; corrected to verify dimensions. GIF download must preserve original bytes and passed.",
+    "IAB authentication redirect did not finish; authenticated actual Editor replay used existing Playwright workflow and a normal test-account Supabase session. No auth bypass or production configuration changed.",
+    "Real SVG generation remains provider-blocked/experimental and is not advertised in selector or release video."
+  ]
+}

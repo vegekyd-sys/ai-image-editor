@@ -272,6 +272,15 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.fasterMediaDelivery.title': "Faster image and video loading",
+  'changelog.fasterMediaDelivery.item1': "Images and videos in your projects are now served from a global edge cache, so opening, seeking, and downloading are faster.",
+  'changelog.fasterMediaDelivery.item2': "Media you play or export repeatedly no longer goes back to the origin each time, for a steadier experience.",
+  'changelog.fasterImage26Svg.title': "Faster GPT Image 2.6 and real SVG files",
+  'changelog.fasterImage26Svg.item1': "GPT Image 2.6 images and GIFs now usually finish in about half the time.",
+  'changelog.fasterImage26Svg.item2': "Ask for SVG to get a real vector file that stays sharp at any size, ready for logos, stickers and print.",
+  'changelog.gifStickers.title': "Better animated stickers and memes",
+  'changelog.gifStickers.item1': "Ask for a sticker or meme in plain words: each GIF focuses on one clear reaction, holds the punchline, and keeps the caption steady in every frame.",
+  'changelog.gifStickers.item2': "Sticker GIFs now use a chat-sized canvas, costing about half as much and generating faster, with smaller files ready for chat apps.",
   'changelog.gptImage26.title': "GPT Image 2.6 and Animated GIFs",
   'changelog.gptImage26.item1': "GPT Image 2.6 Flare is the default image model, with Sunburst available for detailed work. Both appear together in the model picker.",
   'changelog.gptImage26.item2': "Choose image quality and reasoning effort, with low quality and high reasoning as the defaults. The matching 2.6 models replace the 2.5 options, while existing creations remain accessible.",
@@ -1090,6 +1099,7 @@ const en = {
   'model.chooseAgent': 'Choose agent model',
   'model.azureApiBadge': 'Azure API',
   'model.openRouterApiBadge': 'OpenRouter API',
+  'model.openaiApiBadge': 'OpenAI API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': 'Default · usage based',
   'model.agentGroup.codex': 'Personal Codex plan',

@@ -63,6 +63,11 @@
     "studioRunProfile": "generated-explainer"
   },
   {
+    "name": "gif-maker",
+    "path": "skills/gif-maker/SKILL.md",
+    "description": "Create new animated GIFs with GPT Image 2.6 native GIF output: chat stickers, 表情包, reaction memes, mascot/character loops, emoji-style reactions, simple product or icon loops, and pixel sprites. Read before any generate_image call with outputFormat \"gif\". Assembling existing frames uses animated-gif instead."
+  },
+  {
     "name": "localization-dub",
     "path": "skills/localization-dub/SKILL.md",
     "description": "Produce multi-locale subtitle, dub, or subtitle-plus-dub variants from one accepted source; use video-translate for the single-video translation route.",

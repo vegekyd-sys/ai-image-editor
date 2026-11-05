@@ -1,0 +1,22 @@
+{
+  "title": "灵感，别罚站。",
+  "project_url": "https://www.makaron.app/projects/260de927-277e-4c43-bb28-0c1bdfded800",
+  "model": "seedance-2.5-eco",
+  "video_generation_calls": 1,
+  "caption_generation_calls": 0,
+  "final_path": "/Users/tianyicai/.codex/worktrees/gpt-image26-candidate/ai-image-editor/outputs/gpt26-release-20261105/promo/makaron-image26-launch-15s-final.mp4",
+  "player_url": "http://127.0.0.1:3057",
+  "width": 1080,
+  "height": 1920,
+  "fps": 24,
+  "duration_sec": 15.072,
+  "audio_preserved": true,
+  "browser_play_to_end": true,
+  "browser_download_bytes_equal": true,
+  "sha256": "51a1dbd7cc025ee6bc9892f105cbc7953b12b6030589034a074767b7689e34b1",
+  "creative_chat_credits": 447,
+  "caption_chat_credits": 13,
+  "two_chat_total_credits": 460,
+  "supplier_video_quote_usd": 2.178,
+  "independent_invoice_verified": false
+}
