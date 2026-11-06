@@ -5,7 +5,10 @@ import {
   type RemotionFontCatalogManifest,
 } from '@/remotion/font-catalog';
 import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest';
-import { provisionRemotionFontFamilies } from '@/lib/remotion-font-provision';
+import {
+  findProvisionedRemotionFontManifest,
+  provisionRemotionFontFamilies,
+} from '@/lib/remotion-font-provision';
 
 interface FontDesignInput {
   code: string;
@@ -50,13 +53,29 @@ export function discoverGoogleFontFamilies(input: FontDesignInput): string[] {
 }
 
 export async function resolveRemotionFontManifestForDesign(
-  input: FontDesignInput & { serveUrl?: string },
+  input: FontDesignInput & {
+    serveUrl?: string;
+    /**
+     * Viewers who may not provision fonts (anonymous preview) still get the
+     * pinned catalog plus any on-demand families the author already
+     * published; families nobody has provisioned yet fall back to the catalog.
+     */
+    readOnly?: boolean;
+  },
 ): Promise<ResolvedRemotionFontManifest> {
   const baseManifestUrl = resolveRemotionFontManifestUrl(input.serveUrl);
   const requestedFamilies = discoverGoogleFontFamilies(input);
   const baseFamilies = new Set(REMOTION_FONT_CATALOG.map(({ family }) => family.toLowerCase()));
   const dynamicFamilies = requestedFamilies.filter((family) => !baseFamilies.has(family.toLowerCase()));
   if (dynamicFamilies.length === 0) return { manifestUrl: baseManifestUrl };
+  if (input.readOnly) {
+    if (dynamicFamilies.length > MAX_DYNAMIC_GOOGLE_FONTS_PER_DESIGN) return { manifestUrl: baseManifestUrl };
+    const published = await findProvisionedRemotionFontManifest({
+      serveUrl: new URL(baseManifestUrl).origin,
+      families: dynamicFamilies,
+    });
+    return published || { manifestUrl: baseManifestUrl };
+  }
   if (dynamicFamilies.length > MAX_DYNAMIC_GOOGLE_FONTS_PER_DESIGN) {
     throw new Error(
       `A Remotion design can use at most ${MAX_DYNAMIC_GOOGLE_FONTS_PER_DESIGN} on-demand Google Fonts`,

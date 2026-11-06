@@ -378,6 +378,59 @@ export interface ProvisionedRemotionFontManifest {
   reusedExistingManifest: boolean;
 }
 
+function canonicalAddedFamilies(families: string[]): { requestedFamilies: string[]; addedFamilies: string[] } {
+  const requestedFamilies = [...new Set(families.map((family) => {
+    const canonical = GOOGLE_FONT_BY_NAME.get(family.trim().toLowerCase())?.fontFamily;
+    if (!canonical) throw new Error(`Unsupported Google Font "${family}"`);
+    return canonical;
+  }))].sort((a, b) => a.localeCompare(b));
+  const catalogFamilies = new Set(REMOTION_FONT_CATALOG.map(({ family }) => family.toLowerCase()));
+  return {
+    requestedFamilies,
+    addedFamilies: requestedFamilies.filter((family) => !catalogFamilies.has(family.toLowerCase())),
+  };
+}
+
+function derivedManifestLocation(serveUrl: string, addedFamilies: string[]): { manifestKey: string; manifestUrl: string } {
+  const requestHash = createHash('sha256')
+    .update(`${REMOTION_FONT_CATALOG_VERSION}\n${addedFamilies.join('\n')}`)
+    .digest('hex');
+  const manifestKey = `sites/_font-catalog/${REMOTION_FONT_CATALOG_VERSION}/manifests/${requestHash}.json`;
+  return { manifestKey, manifestUrl: publicObjectUrl(serveUrl, manifestKey) };
+}
+
+async function fetchCompleteDerivedManifest(
+  manifestUrl: string,
+  addedFamilies: string[],
+): Promise<RemotionFontCatalogManifest | null> {
+  try {
+    const response = await fetch(manifestUrl, { cache: 'no-store' });
+    if (!response.ok) return null;
+    const manifest = validateRemotionFontManifest(await response.json());
+    const families = new Set(manifest.faces.map((face) => face.family.toLowerCase()));
+    return addedFamilies.every((family) => families.has(family.toLowerCase())) ? manifest : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read-only counterpart of provisionRemotionFontFamilies for viewers who may
+ * not provision fonts (anonymous preview). It returns the derived manifest the
+ * author's session already published for these families, or null when none
+ * exists yet. It never writes to S3.
+ */
+export async function findProvisionedRemotionFontManifest(input: {
+  serveUrl: string;
+  families: string[];
+}): Promise<{ manifest: RemotionFontCatalogManifest; manifestUrl: string } | null> {
+  const { addedFamilies } = canonicalAddedFamilies(input.families);
+  if (addedFamilies.length === 0) return null;
+  const { manifestUrl } = derivedManifestLocation(input.serveUrl, addedFamilies);
+  const manifest = await fetchCompleteDerivedManifest(manifestUrl, addedFamilies);
+  return manifest ? { manifest, manifestUrl } : null;
+}
+
 /**
  * Extends the deploy-time base catalog with arbitrary Google Font families.
  * Assets remain content-addressed and the derived manifest is immutable, so
@@ -392,13 +445,7 @@ export async function provisionRemotionFontFamilies(input: {
   families: string[];
   concurrency?: number;
 }): Promise<ProvisionedRemotionFontManifest> {
-  const requestedFamilies = [...new Set(input.families.map((family) => {
-    const canonical = GOOGLE_FONT_BY_NAME.get(family.trim().toLowerCase())?.fontFamily;
-    if (!canonical) throw new Error(`Unsupported Google Font "${family}"`);
-    return canonical;
-  }))].sort((a, b) => a.localeCompare(b));
-  const catalogFamilies = new Set(REMOTION_FONT_CATALOG.map(({ family }) => family.toLowerCase()));
-  const addedFamilies = requestedFamilies.filter((family) => !catalogFamilies.has(family.toLowerCase()));
+  const { requestedFamilies, addedFamilies } = canonicalAddedFamilies(input.families);
   if (addedFamilies.length === 0) {
     const baseResponse = await fetch(input.baseManifestUrl, { cache: 'no-store' });
     if (!baseResponse.ok) {
@@ -416,30 +463,19 @@ export async function provisionRemotionFontFamilies(input: {
     };
   }
 
-  const requestHash = createHash('sha256')
-    .update(`${REMOTION_FONT_CATALOG_VERSION}\n${addedFamilies.join('\n')}`)
-    .digest('hex');
-  const manifestKey = `sites/_font-catalog/${REMOTION_FONT_CATALOG_VERSION}/manifests/${requestHash}.json`;
-  const manifestUrl = publicObjectUrl(input.serveUrl, manifestKey);
-  try {
-    const existingResponse = await fetch(manifestUrl, { cache: 'no-store' });
-    if (existingResponse.ok) {
-      const existing = validateRemotionFontManifest(await existingResponse.json());
-      const existingFamilies = new Set(existing.faces.map((face) => face.family.toLowerCase()));
-      if (addedFamilies.every((family) => existingFamilies.has(family.toLowerCase()))) {
-        return {
-          manifest: existing,
-          manifestUrl,
-          requestedFamilies,
-          addedFamilies,
-          uploadedAssetCount: 0,
-          totalBytes: 0,
-          reusedExistingManifest: true,
-        };
-      }
-    }
-  } catch {
-    // First use is expected to miss; continue with deterministic provisioning.
+  const { manifestKey, manifestUrl } = derivedManifestLocation(input.serveUrl, addedFamilies);
+  // First use is expected to miss; continue with deterministic provisioning.
+  const existing = await fetchCompleteDerivedManifest(manifestUrl, addedFamilies);
+  if (existing) {
+    return {
+      manifest: existing,
+      manifestUrl,
+      requestedFamilies,
+      addedFamilies,
+      uploadedAssetCount: 0,
+      totalBytes: 0,
+      reusedExistingManifest: true,
+    };
   }
 
   const [baseResponse, sourceFaces] = await Promise.all([

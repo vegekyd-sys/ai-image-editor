@@ -46,8 +46,11 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    // Anyone who can open a project sees its preview, so the font manifest must
+    // not depend on login. Signed-out viewers resolve read-only: the pinned
+    // catalog plus fonts the author already published, never new provisioning.
     const authResult = await authenticateRequest(request);
-    if ('error' in authResult) return authResult.error;
+    const readOnly = 'error' in authResult;
     const body = await request.json() as {
       code?: unknown;
       props?: unknown;
@@ -64,6 +67,7 @@ export async function POST(request: NextRequest) {
       substitutions: body.fontSubstitutions && typeof body.fontSubstitutions === 'object'
         ? body.fontSubstitutions as Record<string, string>
         : {},
+      readOnly,
     });
     const manifest = resolved.manifest
       ? sameOriginBrowserManifest(resolved.manifest)
