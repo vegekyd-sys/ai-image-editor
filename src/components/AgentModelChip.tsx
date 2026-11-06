@@ -370,6 +370,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
         <ModelGlyph size={variant === 'segment' ? 14 : 16} />
         {variant === 'segment' && (
           <span className="mkr-action-seg-label" data-collapsible="true">
+            {/* i18n-ignore: "Auto" is the model token used across the selector */}
             {value === 'auto' ? 'Auto' : selected ? t(selected.nameKey as Parameters<typeof t>[0]) : value}
           </span>
         )}
