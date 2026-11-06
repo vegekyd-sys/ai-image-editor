@@ -2392,10 +2392,10 @@ Not sure which built-in skill to use? Start with:
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else printVideoHelp();
   } else if (topic === 'music') {
-    if (subtopic === 'create') console.log('Usage: makaron music create [--vocals] [--style "genre"] "description"');
+    if (subtopic === 'create') console.log('Usage: makaron music create [--duration <10-360>] [--vocals] [--style "genre"] "description"\n  Instrumental music uses Suno V6 and returns 2 takes (the first is the default). --vocals uses Seed Audio (max 120s).');
     else if (subtopic === 'status') console.log('Usage: makaron music status <taskId>');
     else console.log(`Music commands:
-  music create [--vocals] [--style "genre"] "description"    Generate music
+  music create [--duration N] [--vocals] [--style "genre"] "description"    Generate music
   music status <taskId>                                      Check music status
 `);
   } else if (topic === 'admin') {
@@ -3569,17 +3569,20 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (sub === 'create') {
     const promptParts = [];
-    let instrumental = true, style = undefined;
+    let instrumental = true, style = undefined, duration = undefined;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--vocals') instrumental = false;
       else if (args[i] === '--style' && args[i + 1]) style = args[++i];
+      else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
       else promptParts.push(args[i]);
     }
     const prompt = promptParts.join(' ');
-    if (!prompt) { console.error('Usage: makaron music create [--vocals] [--style "lo-fi"] "gentle piano"'); process.exit(1); }
+    if (!prompt) { console.error('Usage: makaron music create [--duration 30] [--vocals] [--style "lo-fi"] "gentle piano"'); process.exit(1); }
+    if (duration !== undefined && (!Number.isFinite(duration) || duration <= 0)) { console.error('--duration must be a positive number of seconds'); process.exit(1); }
     process.stderr.write('🎵 Generating music...\n');
     const mArgs = { prompt, instrumental };
     if (style) mArgs.style = style;
+    if (duration !== undefined) mArgs.duration_seconds = duration;
     const result = await callMcpTool(baseUrl, headers, 'makaron_create_music', mArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) console.log(text);
@@ -3593,7 +3596,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   } else {
     console.log(`Music commands:
-  music create [--vocals] [--style "genre"] "description"    Generate music
+  music create [--duration N] [--vocals] [--style "genre"] "description"    Generate music
   music status <taskId>                                      Check music status
 `);
   }
