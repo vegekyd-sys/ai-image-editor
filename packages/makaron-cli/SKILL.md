@@ -307,6 +307,7 @@ npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
 
 # 3a. Submit reference-to-video rendering (images must be public URLs from step 1 or uploaded)
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --video-model kling-4
+npx makaron-cli video create --script "Shot 1 (20s): <<<image_1>>> ..." --image https://...jpg --duration 20 --video-model kling-4-flash
 
 # 3b. Native SeeDance, Wan 3.0, MiniMax H3, or fal H3 Turbo text-to-video (no image required)
 npx makaron-cli video create --script "Shot 1 (5s): A neon one-person studio wakes at dawn" --duration 5 --video-model seedance-fast --aspect 16:9
@@ -353,7 +354,7 @@ Seedance 2.5 uses `--video-model seedance-2.5` or `seedance-2.5-eco` for 4-30s v
 
 For Wan 3.0, use `--video-model wan-3.0` or the faster `--video-model wan-3.0-prime`. Both support 2-30s generation, up to 10 image + 5 video + 5 audio feature references, native audio, and 480p/720p/1080p/2K/4K. Pass `--video-resolution 2k|4k` to use the matching FlashVSR/Pro endpoint automatically; Pro is not a separate model selector. They do not expose typed edit/extend or a relaxed-content-filter flag.
 
-Video edit model behavior: `--video-model kling-4 --video --video-operation edit` uses Kling 4.0 direct edit and preserves source audio; `--video-model seedance-fast --video`, `--video-model seedance-mini --video`, or `--video-model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s. `--video-model minimax-h3 --video` uses H3 feature/reference mode: up to 3 video references totaling <=15s. `--video-model grok --video --video-operation edit` accepts one MP4 up to 8.7s; `--video-operation extend` accepts one 2-15s MP4 and adds 2-10s. Grok edit/extend output is capped at 720p.
+Video edit model behavior: `--video-model kling-4 --video --video-operation edit` uses Kling 4.0 direct edit and preserves source audio (`kling-4-flash` does the same for a 3–20s source at 720p); `--video-model seedance-fast --video`, `--video-model seedance-mini --video`, or `--video-model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s. `--video-model minimax-h3 --video` uses H3 feature/reference mode: up to 3 video references totaling <=15s. `--video-model grok --video --video-operation edit` accepts one MP4 up to 8.7s; `--video-operation extend` accepts one 2-15s MP4 and adds 2-10s. Grok edit/extend output is capped at 720p.
 
 ### `music` — Music generation
 

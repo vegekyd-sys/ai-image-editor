@@ -2177,6 +2177,8 @@ function printVideoHelp() {
   video create --script "..." --video-model minimax-h3-max   H3 Max Turbo (native 768p default)
   video create --script "..." --video-model wan-3.0-prime    Fast Wan tier, up to 4k
   video create --script "..." --video-model seedance-2.5     4-30s multimodal generation/edit/extend
+  video create --script "..." --video-model kling-4          Kling 4.0, 3-30s, 720p/1080p
+  video create --script "..." --video-model kling-4-flash    Kling 4.0 Flash, faster/lower cost, 3-20s 720p
   video create --script "..." --video <file|url> --video-model grok --video-operation extend
                                                                Edit or extend one MP4 with Grok
   video create --script "..." --video <url> --audio <url> --video-model sync-lipsync-v3
@@ -3386,6 +3388,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       ? 'wan-3.0'
       : ['wan3-prime', 'wan3.0-prime', 'wan30-prime', 'wan-3-prime', 'w3.0-video-prime', 'w3.0-video-prime-pro', 'wan-3.0-prime-pro', 'prime'].includes(videoModel)
         ? 'wan-3.0-prime'
+      : ['kling4', 'kling-4.0', 'kling 4.0', 'kling 4'].includes(String(videoModel).toLowerCase()) ? 'kling-4'
+      : ['kling4-flash', 'kling-4.0-flash', 'kling 4.0 flash', 'kling 4 flash'].includes(String(videoModel).toLowerCase()) ? 'kling-4-flash'
         : (videoModel || 'fal-h3-max');
     const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco'].includes(selectedVideoModel);
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
@@ -3403,7 +3407,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const kling4MaxSeconds = isKling4Flash ? 20 : 30;
     const supportsNativeTextToVideo = isKling4 || isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
     if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
-      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|minimax-h3|minimax-h3-max]');
+      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|kling-4|kling-4-flash|minimax-h3|minimax-h3-max]');
       process.exit(1);
     }
     if (isKling4 && (images.length > 10 || videos.length > 5 || audios.length)) { console.error(`${kling4Label} accepts at most 10 images and 5 videos, with no audio references.`); process.exit(1); }
