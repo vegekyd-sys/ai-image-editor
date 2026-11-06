@@ -42,6 +42,15 @@
 - 成片：1280×720、24fps、20.04s，H.264 + AAC，音轨全程有声（平均 -17.6 dB，无 >0.8s 静音）。快照 `video_meta.status=completed`，视频与 poster 均已持久化到 `cdn.makaron.app`。
 - 内容：角色还原度高，五个信息节拍按顺序出现。缺陷：约 11s 出现屏幕文字“文字可参考 更省”（“更省”错位，且脚本要求不生成额外文字）；约 19s Pixel Wizard 被复制成两只，原本应与 Spark 击掌。中文台词未做转写核对。
 
+## Flash Retake（同一项目）
+
+目标：把 17.6–20.04s 结尾的第二只 Pixel Wizard 改成 Spark，和原来那只击掌。
+
+- 第一次（run `ce5736a9-…`）在提交前失败，报 `Image unavailable or too large`，没有建任务、没有扣视频费。根因不在参考图：`cdn.makaron.app` 的 R2 缓存层（`x-makaron-cache: HIT-R2`）对不带 Range 的 GET 也回 206 + 完整 content-range，而 `readProviderImage` 只接受 200，于是把源视频判成不可读。Agent 把它误报成了参考图问题。Worker 原因：`services/media-r2-cache/src/worker.mjs` 的 `serveR2()` 用 `object.range` 判断 206，但 R2 `get()` 不带 range 时也会返回 `range`。
+- 本分支修复 `ba5cf7ae`：只接受覆盖完整对象（`bytes 0-(N-1)/N`）的 206，真正的部分内容仍拒绝；有单测。Worker 未改，线上影响另开会话调研。
+- 第二次（run `90733406-f256-4fba-80f5-1f7264589983`，job `fe05388a-a8cd-4c89-accc-b8bc99f7be02`）成功：context 17.04–20.04s，生成 3s，Flash edit。计费 `video:kling-4-flash:720p:edit` (3+3)×$0.063 = $0.378 → 76 credits，reservation completed。
+- 验收：成片与原片同为 481 帧、20.041667s、1280×720/24fps；AAC 数据包 SHA-256 与原片一致；区间外 2/10/16/17.3s 抽帧（160×90 灰度）平均差 0.17–0.25/255。结尾不再有第二只 wizard，Spark 星芒约 18s 从左侧进场，19.3s 与 Pixel Wizard 击掌并迸出粒子。Spark 是无脸的星芒形态，不是设定图第 7 格那种带表情的 companion sprite。
+
 ## 发布前必须完成
 
 1. `check:skill-sync` 的路由证据已因 Skill 正文变化过期，需用私密环境跑 `npm run test:skill-routing -- --live --env <私密环境文件>`。
