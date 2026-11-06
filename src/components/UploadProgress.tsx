@@ -11,6 +11,9 @@ export interface UploadProgressItem {
 /** Local preparation (compress/transcode) is weighted as the first 30%. */
 export const PREPARE_WEIGHT = 0.3;
 
+/** Product accent (matches the create button / caret). */
+export const UPLOAD_ACCENT = '#d946ef';
+
 export function overallProgress(items: UploadProgressItem[]): { done: number; failed: number; percent: number; active: boolean } {
   let done = 0;
   let failed = 0;
@@ -30,66 +33,99 @@ export function overallProgress(items: UploadProgressItem[]): { done: number; fa
 }
 
 /**
- * One combined progress row inside the input box: "上传中 3/7 · 42%" plus a
- * thin bar. Replaces the separate processing / uploading counters.
+ * Upload progress folded into the input box's own chrome instead of a separate
+ * row: a compact ring + "4/6" next to the primary action, and a hairline along
+ * the box's bottom edge (see UploadProgressEdge).
  */
-export function UploadProgress({
+export function UploadProgressChip({
   items,
   hint = false,
   testId,
-  className,
-  style,
 }: {
   items: UploadProgressItem[];
-  /** Highlight because the user tried to send before uploads finished. */
+  /** The user tried to send before uploads finished. */
   hint?: boolean;
   testId?: string;
-  className?: string;
-  style?: React.CSSProperties;
 }) {
   const { t } = useLocale();
   if (items.length === 0) return null;
   const { done, failed, percent, active } = overallProgress(items);
   if (!active && failed === 0) return null;
   const isError = !active && failed > 0;
+  const total = items.length;
   const label = isError
     ? t('upload.failedSummary', failed)
     : hint
-      ? t('upload.waitForAttachments', done, items.length)
-      : t('upload.progress', done, items.length);
-  const color = isError ? 'rgba(248,113,113,0.95)' : hint ? 'rgba(232,121,249,0.95)' : 'rgba(255,255,255,0.6)';
+      ? t('upload.waitForAttachments', done, total)
+      : `${t('upload.progress', done, total)} · ${percent}%`;
+  const ringColor = isError ? 'rgba(248,113,113,0.95)' : UPLOAD_ACCENT;
+  const r = 6;
+  const c = 2 * Math.PI * r;
   return (
     <div
       data-testid={testId}
       role="status"
       aria-live="polite"
-      className={className}
-      style={{ display: 'flex', flexDirection: 'column', gap: 4, ...style }}
+      aria-label={label}
+      title={label}
+      style={{
+        flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5,
+        padding: '3px 8px 3px 6px', borderRadius: 999,
+        background: isError ? 'rgba(248,113,113,0.1)' : hint ? 'rgba(217,70,239,0.14)' : 'rgba(255,255,255,0.05)',
+        boxShadow: hint && !isError ? 'inset 0 0 0 0.5px rgba(217,70,239,0.45)' : 'inset 0 0 0 0.5px rgba(255,255,255,0.08)',
+        fontSize: '0.7rem', fontWeight: 500, lineHeight: 1, fontVariantNumeric: 'tabular-nums',
+        color: isError ? 'rgba(248,113,113,0.95)' : hint ? 'rgba(240,171,252,0.95)' : 'rgba(255,255,255,0.62)',
+        transition: 'background 0.2s, color 0.2s',
+        whiteSpace: 'nowrap',
+      }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.7rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color, lineHeight: 1.2 }}>
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-        {!isError && <span style={{ flexShrink: 0, color: 'rgba(255,255,255,0.45)' }}>{percent}%</span>}
-        {!isError && failed > 0 && (
-          <span style={{ flexShrink: 0, color: 'rgba(248,113,113,0.95)' }}>{t('upload.failedShort', failed)}</span>
+      <svg width={16} height={16} viewBox="0 0 16 16" aria-hidden style={{ flexShrink: 0 }}>
+        <circle cx={8} cy={8} r={r} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={2} />
+        {isError ? (
+          <>
+            <circle cx={8} cy={8} r={r} fill="none" stroke={ringColor} strokeWidth={2} />
+            <line x1={8} y1={5} x2={8} y2={8.6} stroke={ringColor} strokeWidth={1.6} strokeLinecap="round" />
+            <circle cx={8} cy={10.8} r={0.9} fill={ringColor} />
+          </>
+        ) : (
+          <circle
+            cx={8} cy={8} r={r} fill="none" stroke={ringColor} strokeWidth={2} strokeLinecap="round"
+            strokeDasharray={c} strokeDashoffset={c * (1 - Math.max(0.04, percent / 100))}
+            transform="rotate(-90 8 8)" style={{ transition: 'stroke-dashoffset 300ms ease-out' }}
+          />
         )}
-      </div>
+      </svg>
+      <span>
+        {isError ? t('upload.failedShort', failed) : `${done}/${total}`}
+        {hint && !isError ? ` · ${t('upload.sendWhenDone')}` : ''}
+      </span>
+    </div>
+  );
+}
+
+/** Hairline progress along the bottom edge of the input box. Parent must be position:relative. */
+export function UploadProgressEdge({ items, inset = 18 }: { items: UploadProgressItem[]; inset?: number }) {
+  if (items.length === 0) return null;
+  const { failed, percent, active } = overallProgress(items);
+  const visible = active;
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute', left: inset, right: inset, bottom: 0, height: 2,
+        pointerEvents: 'none', opacity: visible ? 1 : 0, transition: 'opacity 400ms ease',
+      }}
+    >
       <div
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={isError ? undefined : percent}
-        style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}
-      >
-        <div
-          style={{
-            height: '100%',
-            width: `${isError ? 100 : Math.max(3, percent)}%`,
-            borderRadius: 2,
-            background: isError ? 'rgba(248,113,113,0.6)' : 'linear-gradient(90deg, #d946ef, #f0abfc)',
-            transition: 'width 300ms ease-out',
-          }}
-        />
-      </div>
+        style={{
+          height: '100%', width: `${visible ? Math.max(2, percent) : 100}%`, borderRadius: 2,
+          background: failed > 0
+            ? 'linear-gradient(90deg, rgba(217,70,239,0.0), rgba(217,70,239,0.75) 70%, rgba(248,113,113,0.8))'
+            : 'linear-gradient(90deg, rgba(217,70,239,0.0), rgba(217,70,239,0.85) 60%, #f0abfc)',
+          boxShadow: '0 0 8px rgba(217,70,239,0.55)',
+          transition: 'width 300ms ease-out',
+        }}
+      />
     </div>
   );
 }

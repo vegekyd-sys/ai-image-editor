@@ -1,6 +1,6 @@
 'use client';
 
-import { PREPARE_WEIGHT, UploadProgress, type UploadProgressItem } from '@/components/UploadProgress';
+import { PREPARE_WEIGHT, UploadProgressChip, UploadProgressEdge, type UploadProgressItem } from '@/components/UploadProgress';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -696,6 +696,13 @@ export default function AgentChatView({
   }
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const processingCount = attachments.filter(a => a.status === 'processing').length;
+  const uploadItems = attachments.map((a): UploadProgressItem => {
+    if (a.status === 'ready') return { status: 'done', progress: 1 };
+    if (a.status === 'error') return { status: 'error', progress: 0 };
+    const p = a.progress ?? 0;
+    if (a.phase === 'upload') return { status: 'active', progress: PREPARE_WEIGHT + (1 - PREPARE_WEIGHT) * p };
+    return { status: 'active', progress: PREPARE_WEIGHT * (a.phase === 'transcode' ? p : 0) };
+  });
   const attachmentFilesRef = useRef(new Map<string, File>());
   const [attachmentHint, setAttachmentHint] = useState(false);
   const patchAttachment = useCallback((id: string, patch: Partial<Attachment>) => {
@@ -1781,6 +1788,7 @@ export default function AgentChatView({
         <div
           className="mkr-input-box-liquid"
           style={{
+            position: 'relative',
             background: 'linear-gradient(145deg, rgba(24,24,30,0.72), rgba(8,8,12,0.58))',
             borderRadius: '20px',
             border: '0.5px solid rgba(255,255,255,0.11)',
@@ -1789,6 +1797,7 @@ export default function AgentChatView({
             WebkitBackdropFilter: 'blur(20px) saturate(1.35)',
           }}
         >
+          <UploadProgressEdge items={uploadItems} inset={20} />
           {retakeContext && <div data-testid="chat-retake-context" className="flex items-center gap-2 px-3 pt-2.5">
             <span className="min-w-0 truncate rounded-full border border-fuchsia-300/20 bg-fuchsia-300/[0.08] px-2.5 py-1 text-[11px] font-medium text-fuchsia-200/85">
               {t('video.retakeChatContext', retakeContext.mediaIndex, retakeContext.start.toFixed(2), retakeContext.end.toFixed(2))}
@@ -1829,18 +1838,6 @@ export default function AgentChatView({
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem', padding: isPanel ? '10px 14px 4px' : '12px 16px 6px' }}
           />
 
-          <UploadProgress
-            testId="chat-attachment-status"
-            hint={attachmentHint}
-            style={{ padding: isPanel ? '0 14px 4px' : '0 16px 4px' }}
-            items={attachments.map((a): UploadProgressItem => {
-              if (a.status === 'ready') return { status: 'done', progress: 1 };
-              if (a.status === 'error') return { status: 'error', progress: 0 };
-              const p = a.progress ?? 0;
-              if (a.phase === 'upload') return { status: 'active', progress: PREPARE_WEIGHT + (1 - PREPARE_WEIGHT) * p };
-              return { status: 'active', progress: PREPARE_WEIGHT * (a.phase === 'transcode' ? p : 0) };
-            })}
-          />
           {/* Row 2: Toolbar — 📷 | thumbnails | flex-1 spacer | ↑ */}
           <div className="flex items-center gap-2 px-3 pb-2.5">
             {/* Image attach button */}
@@ -1943,6 +1940,8 @@ export default function AgentChatView({
 
             {/* Spacer (only when no thumbnails taking flex space) */}
             {attachments.length === 0 && <div className="flex-1" />}
+
+            <UploadProgressChip items={uploadItems} hint={attachmentHint} testId="chat-attachment-status" />
 
             {/* Skill selector — right side, before send */}
             {skills && skills.length > 0 && onSkillChange && (

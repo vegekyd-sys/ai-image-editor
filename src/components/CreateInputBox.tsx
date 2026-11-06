@@ -8,7 +8,7 @@ import AgentModelChip from '@/components/AgentModelChip';
 import type { AgentModelPreference } from '@/lib/agent-models';
 import { useLocale } from '@/lib/i18n';
 import type { MediaItemState } from '@/lib/upload/media-queue';
-import { PREPARE_WEIGHT, UploadProgress, type UploadProgressItem } from '@/components/UploadProgress';
+import { PREPARE_WEIGHT, UPLOAD_ACCENT, UploadProgressChip, UploadProgressEdge, type UploadProgressItem } from '@/components/UploadProgress';
 
 function Spinner({ size = 20 }: { size?: number }) {
   return (
@@ -63,7 +63,7 @@ function UploadStateOverlay({
   if (state.status === 'done') {
     return (
       <div data-upload-status="done" aria-label={t('upload.itemDone')} style={{ ...base, background: 'rgba(0,0,0,0.25)' }}>
-        <svg width={compact ? 12 : 16} height={compact ? 12 : 16} viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+        <svg width={compact ? 12 : 16} height={compact ? 12 : 16} viewBox="0 0 24 24" fill="none" stroke={UPLOAD_ACCENT} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
       </div>
     );
   }
@@ -603,6 +603,7 @@ export default function CreateInputBox({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       style={{
+        position: 'relative',
         display: 'flex', gap: 0,
         borderRadius: 18,
         border: dragOver ? '1px solid rgba(217,70,239,0.58)' : `0.5px solid rgba(255,255,255,${isInline ? 0.13 : 0.16})`,
@@ -821,7 +822,6 @@ export default function CreateInputBox({
             }}
           />
         )}
-        <UploadProgress items={uploadItems} testId="create-upload-status" style={{ padding: '2px 14px 2px' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
           {onAgentModelChange && (
             <AgentModelChip value={agentModel} onChange={onAgentModelChange} disabled={creating} />
@@ -846,6 +846,7 @@ export default function CreateInputBox({
               </div>
             ))}
           </div>
+          <UploadProgressChip items={uploadItems} testId="create-upload-status" />
           {/* Skill selector */}
           <SkillSelector
             skills={skills}
@@ -875,6 +876,7 @@ export default function CreateInputBox({
           </HydrationSafeAction>
         </div>
       </div>
+      <UploadProgressEdge items={uploadItems} />
       {/* Hidden file input for photo/video uploads */}
       {hiddenFileInput}
     </div>

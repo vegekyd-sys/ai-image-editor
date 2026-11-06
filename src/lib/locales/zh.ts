@@ -434,6 +434,7 @@ const zh = {
   'status.uploadingVideo': '上传视频...',
   'status.videoUploadFailed': (message: string) => `视频上传失败：${message}`,
   'upload.progress': (done: number, total: number) => `上传中 ${done}/${total}`,
+  'upload.sendWhenDone': '传完即可发送',
   'upload.failedShort': (count: number) => `${count} 个失败`,
   'upload.itemProcessing': '压缩中',
   'upload.itemUploading': (percent: number) => `上传中 ${percent}%`,

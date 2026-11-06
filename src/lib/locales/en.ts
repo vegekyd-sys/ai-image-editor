@@ -434,6 +434,7 @@ const en = {
   'status.uploadingVideo': 'Uploading video...',
   'status.videoUploadFailed': (message: string) => `Video upload failed: ${message}`,
   'upload.progress': (done: number, total: number) => `Uploading ${done}/${total}`,
+  'upload.sendWhenDone': 'sends when done',
   'upload.failedShort': (count: number) => `${count} failed`,
   'upload.itemProcessing': 'Compressing',
   'upload.itemUploading': (percent: number) => `Uploading ${percent}%`,

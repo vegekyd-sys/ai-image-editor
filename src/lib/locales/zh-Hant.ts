@@ -476,6 +476,7 @@ const zhHant = {
   'status.uploadingVideo': '正在上傳影片...',
   'status.videoUploadFailed': (message: string) => `影片上傳失敗：${message}`,
   'upload.progress': (done: number, total: number) => `上傳中 ${done}/${total}`,
+  'upload.sendWhenDone': '傳完即可傳送',
   'upload.failedShort': (count: number) => `${count} 個失敗`,
   'upload.itemProcessing': '壓縮中',
   'upload.itemUploading': (percent: number) => `上傳中 ${percent}%`,
