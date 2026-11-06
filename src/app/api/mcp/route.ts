@@ -7,9 +7,9 @@ import { validateApiKey } from '@/lib/billing/api-keys';
 import { enterBillingAttribution, resolveRequestBillingSource } from '@/lib/billing/attribution';
 import { checkBalance, deductCredits, deductByTokens, isBillingEnabled, recordSubscriptionUsage, requireCredits } from '@/lib/billing/credits';
 import { getToolPrice, resolveToolName } from '@/lib/billing/pricing';
-import { deductSeedAudioCredits } from '@/lib/billing/seed-audio';
+import { deductAudioCredits, quoteAudioGeneration } from '@/lib/billing/audio';
+import { getAudioModelCapability } from '@/lib/audio-model-capabilities';
 import { submitMcpVideo, settleMcpVideoStatus } from '@/lib/billing/mcp-video';
-import { quoteSeedAudio } from '@/lib/billing/media-pricing';
 
 export const maxDuration = 300;
 
@@ -101,8 +101,8 @@ async function handleMcp(req: Request): Promise<Response> {
       if (toolName === 'makaron_create_video' || toolName === 'makaron_edit_video' || toolName === 'makaron_upscale_video') {
         return { allowed: true };
       }
-      if (toolName === 'makaron_create_seed_audio') {
-        const quote = await quoteSeedAudio({ durationSeconds: 20 });
+      if (toolName === 'makaron_create_audio') {
+        const quote = await quoteAudioGeneration({ provider: getAudioModelCapability(model).provider, durationSeconds: 20 });
         const check = await requireCredits(auth.userId!, quote.credits);
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
@@ -177,14 +177,11 @@ async function handleMcp(req: Request): Promise<Response> {
           usage.cacheReadTokens == null ? undefined : { cacheRead: usage.cacheReadTokens, cacheWrite: 0 },
           usage.providerCostUsd,
         ));
-      } else if (meta?.seedAudioDurationSec || meta?.seedAudioProviderCredits) {
-        trackCharge(await deductSeedAudioCredits(auth.userId!, {
-          durationSeconds: meta.seedAudioDurationSec,
-          providerCreditsUsed: meta.seedAudioProviderCredits,
-          model,
-          generationSeconds: meta.seedAudioGenerationSec ?? (durationMs ? durationMs / 1000 : undefined),
-          apiKeyId: auth.keyId,
-        }));
+      } else if (meta?.audioUsage) {
+        trackCharge(await deductAudioCredits(auth.userId!, {
+          ...meta.audioUsage,
+          generationSeconds: meta.audioUsage.generationSeconds ?? (durationMs ? durationMs / 1000 : undefined),
+        }, { apiKeyId: auth.keyId }));
       } else {
         // Per-action billing — ComfyUI, Suno etc.
         const pricingName = resolveToolName(toolName, model, meta?.imageInputCount);

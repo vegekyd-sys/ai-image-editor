@@ -1,137 +1,213 @@
-const SUNO_BASE = 'https://api.sunoapi.org/api/v1'
+/**
+ * sunoapi.org adapter for instrumental background music (Suno V6).
+ *
+ * Only the audio router (`resolveAudioRoute`) decides when this provider is
+ * used: pure instrumental BGM with no audio/image conditioning. Every other
+ * audio request stays on Seed Audio.
+ *
+ * One Suno generation is billed once and returns several takes (currently 2).
+ */
 
-export interface SunoTaskInput {
-  prompt: string
-  instrumental?: boolean  // default true
-  model?: string          // default 'V5_5'
-  style?: string          // genre/mood tags (custom mode only)
+const SUNO_BASE = 'https://api.sunoapi.org/api/v1'
+const DEFAULT_MODEL = 'V6'
+const DEFAULT_FETCH_TIMEOUT_MS = 30_000
+const DEFAULT_WAIT_TIMEOUT_MS = 240_000
+export const SUNO_MIN_DURATION_SECONDS = 10
+export const SUNO_MAX_DURATION_SECONDS = 360
+export const SUNO_MAX_STYLE_CHARS = 1000
+const SUNO_MAX_TITLE_CHARS = 80
+
+export type SunoModel = 'V6' | 'V6_MINI' | 'V6_WILD'
+
+export interface SunoMusicInput {
+  /** Genre, mood, instruments, tempo, energy arc and ending (Suno "style"). */
+  style: string
+  title?: string
+  durationSeconds?: number
+  negativeTags?: string
+  model?: SunoModel
+  signal?: AbortSignal
 }
 
-export interface SunoTrack {
+export interface SunoTake {
   audioUrl: string
   streamAudioUrl?: string
   duration: number
   title: string
   tags: string
+  providerTrackId?: string
 }
+
+export type SunoTaskStatus = 'pending' | 'processing' | 'streaming' | 'completed' | 'failed'
 
 export interface SunoTaskResult {
   taskId: string
-  status: 'pending' | 'processing' | 'streaming' | 'completed' | 'failed'
-  tracks?: SunoTrack[]   // 2 tracks per generation
+  status: SunoTaskStatus
+  takes: SunoTake[]
   error?: string
 }
 
-function headers() {
+export interface SunoMusicResult {
+  taskId: string
+  provider: 'sunoapi'
+  model: SunoModel
+  takes: SunoTake[]
+  generationSeconds: number
+}
+
+export function isSunoConfigured(): boolean {
+  return !!process.env.SUNOAPI_KEY?.trim()
+}
+
+function headers(): Record<string, string> {
   const key = process.env.SUNOAPI_KEY?.trim()
-  if (!key) throw new Error('SUNOAPI_KEY must be set')
+  if (!key) throw new Error('SUNOAPI_KEY is not configured.')
   return {
-    'Authorization': `Bearer ${key}`,
+    Authorization: `Bearer ${key}`,
     'Content-Type': 'application/json',
   }
 }
 
-/** Submit a music generation task. Returns the Suno task ID. */
-export async function createSunoTask(input: SunoTaskInput): Promise<string> {
-  const useCustomMode = !!input.style
-  const body: Record<string, unknown> = {
-    prompt: input.prompt,
-    customMode: useCustomMode,
-    instrumental: input.instrumental ?? true,
-    model: input.model || 'V4_5',
-    callBackUrl: 'https://makaron.app/api/noop',
-  }
-  if (useCustomMode && input.style) {
-    body.style = input.style
-    body.title = '' // required in custom mode, let Suno auto-generate
-  }
-
-  console.log(`\n🎵 [suno] creating task: prompt="${input.prompt.slice(0, 80)}", model=${body.model}, instrumental=${body.instrumental}`)
-
-  const res = await fetch(`${SUNO_BASE}/generate`, {
-    method: 'POST',
-    headers: headers(),
-    body: JSON.stringify(body),
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`SunoAPI generate failed (${res.status}): ${text}`)
-  }
-
-  const json = await res.json()
-  if (json.code !== 200) {
-    throw new Error(`SunoAPI error (${json.code}): ${json.msg}`)
-  }
-
-  const taskId = json.data?.taskId
-  if (!taskId) throw new Error('SunoAPI: no taskId in response')
-
-  console.log(`🎵 [suno] task created: ${taskId}`)
-  return taskId
+function pollIntervalMs(): number {
+  const value = Number(process.env.SUNOAPI_POLL_INTERVAL_MS)
+  return Number.isFinite(value) && value > 0 ? value : 3000
 }
 
-/** Poll a music generation task status. */
-export async function getSunoTask(taskId: string): Promise<SunoTaskResult> {
-  const res = await fetch(`${SUNO_BASE}/generate/record-info?taskId=${taskId}`, {
-    headers: headers(),
-  })
+function waitTimeoutMs(): number {
+  const value = Number(process.env.SUNOAPI_WAIT_TIMEOUT_MS)
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_WAIT_TIMEOUT_MS
+}
 
-  if (!res.ok) {
+async function sunoFetch(path: string, init?: RequestInit): Promise<any> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_FETCH_TIMEOUT_MS)
+  const onAbort = () => controller.abort()
+  init?.signal?.addEventListener('abort', onAbort)
+  try {
+    const res = await fetch(`${SUNO_BASE}${path}`, { ...init, headers: headers(), signal: controller.signal })
     const text = await res.text()
-    throw new Error(`SunoAPI poll failed (${res.status}): ${text}`)
+    if (!res.ok) throw new Error(`SunoAPI ${path} failed (${res.status}): ${text.slice(0, 300)}`)
+    const json = JSON.parse(text)
+    if (json.code !== 200) throw new Error(`SunoAPI error (${json.code}): ${json.msg || 'unknown error'}`)
+    return json.data
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(init?.signal?.aborted ? 'Suno request was cancelled.' : `SunoAPI ${path} timed out.`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+    init?.signal?.removeEventListener('abort', onAbort)
   }
+}
 
-  const json = await res.json()
-  if (json.code !== 200) {
-    throw new Error(`SunoAPI error (${json.code}): ${json.msg}`)
+export function buildSunoGenerateBody(input: SunoMusicInput): Record<string, unknown> {
+  const style = input.style.trim()
+  if (!style) throw new Error('Suno style prompt is required.')
+  if (style.length > SUNO_MAX_STYLE_CHARS) {
+    throw new Error(`Suno music prompt must be ${SUNO_MAX_STYLE_CHARS} characters or less.`)
   }
+  const body: Record<string, unknown> = {
+    customMode: true,
+    instrumental: true,
+    model: input.model || DEFAULT_MODEL,
+    style,
+    title: (input.title?.trim() || 'Background music').slice(0, SUNO_MAX_TITLE_CHARS),
+    prompt: '',
+    callBackUrl: 'https://makaron.app/api/noop',
+  }
+  if (input.durationSeconds != null) {
+    const duration = Math.round(input.durationSeconds)
+    if (duration < SUNO_MIN_DURATION_SECONDS || duration > SUNO_MAX_DURATION_SECONDS) {
+      throw new Error(`Suno music duration must be between ${SUNO_MIN_DURATION_SECONDS} and ${SUNO_MAX_DURATION_SECONDS} seconds.`)
+    }
+    body.duration = duration
+  }
+  if (input.negativeTags?.trim()) body.negativeTags = input.negativeTags.trim().slice(0, 200)
+  return body
+}
 
-  const data = json.data
-  const sunoStatus: string = data?.status || 'PENDING'
+/** Submit an instrumental music generation. Returns the Suno task ID. */
+export async function createSunoTask(input: SunoMusicInput): Promise<string> {
+  const body = buildSunoGenerateBody(input)
+  const data = await sunoFetch('/generate', { method: 'POST', body: JSON.stringify(body), signal: input.signal })
+  const taskId = data?.taskId
+  if (!taskId) throw new Error('SunoAPI returned no taskId.')
+  return String(taskId)
+}
 
-  // Map Suno status to normalized status
-  let status: SunoTaskResult['status']
-  let error: string | undefined
-  const sunoData: Record<string, unknown>[] = data?.response?.sunoData || []
+function toTake(record: Record<string, unknown>): SunoTake | null {
+  const audioUrl = typeof record.audioUrl === 'string' ? record.audioUrl : typeof record.audio_url === 'string' ? record.audio_url : ''
+  const streamAudioUrl = typeof record.streamAudioUrl === 'string' ? record.streamAudioUrl : typeof record.stream_audio_url === 'string' ? record.stream_audio_url : ''
+  if (!audioUrl && !streamAudioUrl) return null
+  const duration = Number(record.duration)
+  return {
+    audioUrl,
+    streamAudioUrl: streamAudioUrl || undefined,
+    duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
+    title: typeof record.title === 'string' ? record.title : '',
+    tags: typeof record.tags === 'string' ? record.tags : '',
+    providerTrackId: typeof record.id === 'string' ? record.id : undefined,
+  }
+}
 
+export function mapSunoRecord(taskId: string, data: Record<string, any> | null | undefined): SunoTaskResult {
+  const sunoStatus = String(data?.status || 'PENDING')
+  const records: Record<string, unknown>[] = Array.isArray(data?.response?.sunoData) ? data.response.sunoData : []
+  const takes = records.map(toTake).filter((take): take is SunoTake => !!take)
   switch (sunoStatus) {
     case 'SUCCESS':
-      status = 'completed'
-      break
-    case 'FIRST_SUCCESS':
-      // Only one track is ready — keep polling until SUCCESS (both tracks ready)
-      status = 'processing'
-      break
-    case 'TEXT_SUCCESS': {
-      const hasStream = sunoData.some((t: Record<string, unknown>) => t.streamAudioUrl)
-      status = hasStream ? 'streaming' : 'processing'
-      break
-    }
+      return { taskId, status: 'completed', takes: takes.filter(take => take.audioUrl) }
     case 'CREATE_TASK_FAILED':
     case 'GENERATE_AUDIO_FAILED':
     case 'CALLBACK_EXCEPTION':
     case 'SENSITIVE_WORD_ERROR':
-      status = 'failed'
-      error = data?.errorMessage || sunoStatus
-      break
+      return { taskId, status: 'failed', takes: [], error: String(data?.errorMessage || sunoStatus) }
+    case 'TEXT_SUCCESS':
+    case 'FIRST_SUCCESS':
+      // FIRST_SUCCESS means one take is final; keep waiting until every take is final.
+      return { taskId, status: takes.some(take => take.streamAudioUrl) ? 'streaming' : 'processing', takes }
     default:
-      status = 'processing'
+      return { taskId, status: sunoStatus === 'PENDING' ? 'pending' : 'processing', takes }
   }
+}
 
-  // Extract tracks when streaming (streamAudioUrl available) or completed (audioUrl available)
-  let tracks: SunoTrack[] | undefined
-  if ((status === 'streaming' || status === 'completed') && sunoData.length) {
-    tracks = sunoData
-      .filter((t: Record<string, unknown>) => t.streamAudioUrl || t.audioUrl)
-      .map((t: Record<string, unknown>) => ({
-        audioUrl: (t.audioUrl as string) || '',
-        streamAudioUrl: (t.streamAudioUrl as string) || undefined,
-        duration: (t.duration as number) || 0,
-        title: (t.title as string) || '',
-        tags: (t.tags as string) || '',
-      }))
+/** Read the current provider state of a Suno task. */
+export async function getSunoTask(taskId: string, signal?: AbortSignal): Promise<SunoTaskResult> {
+  const data = await sunoFetch(`/generate/record-info?taskId=${encodeURIComponent(taskId)}`, { signal })
+  return mapSunoRecord(taskId, data)
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer)
+      reject(new Error('Suno request was cancelled.'))
+    }, { once: true })
+  })
+}
+
+/** Generate instrumental BGM and wait until every take has a final audio URL. */
+export async function generateSunoMusic(input: SunoMusicInput): Promise<SunoMusicResult> {
+  const startedAt = Date.now()
+  const model = input.model || DEFAULT_MODEL
+  const taskId = await createSunoTask({ ...input, model })
+  const deadline = startedAt + waitTimeoutMs()
+  while (Date.now() < deadline) {
+    await sleep(pollIntervalMs(), input.signal)
+    const result = await getSunoTask(taskId, input.signal)
+    if (result.status === 'failed') throw new Error(`Suno generation failed: ${result.error || 'unknown error'}`)
+    if (result.status === 'completed') {
+      if (!result.takes.length) throw new Error('Suno generation completed without audio.')
+      return {
+        taskId,
+        provider: 'sunoapi',
+        model,
+        takes: result.takes,
+        generationSeconds: (Date.now() - startedAt) / 1000,
+      }
+    }
   }
-
-  return { taskId, status, tracks, error }
+  throw new Error(`Suno generation timed out after ${Math.round(waitTimeoutMs() / 1000)}s (task ${taskId}).`)
 }

@@ -167,3 +167,15 @@ export async function quoteSeedAudio(input: { durationSeconds?: number | null; p
     ? input.providerCreditsUsed / 0.17 : input.durationSeconds ?? 0
   return calculateMediaQuote(price, { durationSec })
 }
+
+export const SUNO_MUSIC_PRICE_ID = 'audio:suno-v6:default:generation'
+
+/** Suno is billed per generation (2 takes), independent of duration.
+ * The row's `output_usd_per_second` holds USD per generation; the quantity is the generation count.
+ */
+export async function quoteSunoMusic(input: { generations?: number | null } = {}): Promise<MediaQuote> {
+  const price = (await getMediaPrices()).find(row => row.id === SUNO_MUSIC_PRICE_ID)
+  if (!price) throw new PricingUnavailableError('Suno music pricing is not configured.')
+  const generations = Math.max(1, Math.ceil(input.generations ?? 1))
+  return calculateMediaQuote(price, { durationSec: generations })
+}

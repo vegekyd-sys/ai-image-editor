@@ -171,7 +171,6 @@ export default function ProjectEditorContainer({
   })
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
   const [timelineVersion, setTimelineVersion] = useState(2)
-  const [initialMusicTaskId, setInitialMusicTaskId] = useState<string | null>(null)
   const [pendingImageState, setPendingImageState] = useState<{ images: string[] | null; loading: boolean }>(() => {
     if (typeof window === 'undefined') return { images: null, loading: false }
     const multi = sessionStorage.getItem('pendingImages')
@@ -368,10 +367,6 @@ export default function ProjectEditorContainer({
       }
 
       if (musicRows?.length && !cancelled) {
-        const pendingTask = musicRows.find(r => r.status === 'pending' || r.status === 'processing')
-        if (pendingTask) {
-          setInitialMusicTaskId(pendingTask.suno_task_id)
-        }
         const completedRows = musicRows.filter(r => r.status === 'completed' && r.audio_url)
         const hasMusic = messages.some(m => m.content?.includes('music:'))
         if (completedRows.length && !hasMusic) {
@@ -510,7 +505,6 @@ export default function ProjectEditorContainer({
         onNewProject={!readOnly ? handleNewProject : undefined}
         initialAnimations={initialAnimations}
         timelineVersion={timelineVersion}
-        initialMusicTaskId={initialMusicTaskId}
         readOnly={readOnly}
         disableAgentLiveReload={disableAgentLiveReload}
         disableBodyScrollLock={disableBodyScrollLock}

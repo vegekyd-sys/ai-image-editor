@@ -929,6 +929,51 @@ describe('credits', () => {
     });
   });
 
+  describe('Provider-neutral audio billing', () => {
+    it('settles a Suno generation once as create_suno_music, regardless of take count', async () => {
+      mockRpc.mockResolvedValue({ data: 200, error: null });
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : mockQuery(t === 'media_pricing' ? seededMediaPrices() : null));
+
+      const { deductAudioCredits } = await import('@/lib/billing/audio');
+      const result = await deductAudioCredits('user-1', {
+        provider: 'sunoapi',
+        model: 'suno-v6',
+        providerModel: 'V6',
+        generations: 1,
+        generationSeconds: 26,
+      }, { apiKeyId: 'key-1' });
+
+      expect(result.charged).toBe(12);
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_amount: 12,
+        p_tool_name: 'create_suno_music',
+        p_model_used: 'V6',
+        p_duration_ms: 26000,
+      }));
+    });
+
+    it('keeps Seed Audio settlement on measured usage', async () => {
+      mockRpc.mockResolvedValue({ data: 300, error: null });
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : mockQuery(t === 'media_pricing' ? seededMediaPrices() : null));
+
+      const { deductAudioCredits } = await import('@/lib/billing/audio');
+      const result = await deductAudioCredits('user-1', {
+        provider: 'evolink',
+        model: 'evolink-seed-audio',
+        providerModel: 'doubao-seed-audio-1-0',
+        durationSeconds: 8,
+        providerCreditsUsed: 1.36,
+        generationSeconds: 12.4,
+      });
+
+      expect(result.charged).toBe(4);
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_tool_name: 'create_seed_audio',
+        p_model_used: 'doubao-seed-audio-1-0',
+      }));
+    });
+  });
+
   describe('deduct_and_log RPC atomicity', () => {
     it('uses RPC when available — no fallback', async () => {
       const rates = [

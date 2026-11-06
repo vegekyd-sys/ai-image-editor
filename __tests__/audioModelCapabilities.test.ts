@@ -11,7 +11,7 @@ describe('audio model capabilities', () => {
     expect(normalizeAudioModelId()).toBe('evolink-seed-audio')
     expect(normalizeAudioModelId('auto')).toBe('evolink-seed-audio')
     expect(normalizeAudioModelId('doubao-seed-audio-1-0')).toBe('evolink-seed-audio')
-    expect(normalizeAudioModelId('suno')).toBe('evolink-seed-audio')
+    expect(normalizeAudioModelId('suno')).toBe('suno-v6')
     expect(normalizeAudioModelId('tts')).toBe('evolink-seed-audio')
     expect(normalizeAudioModelId('voiceover')).toBe('evolink-seed-audio')
 
@@ -42,6 +42,7 @@ describe('audio model capabilities', () => {
     expect(text).toContain('evolink-seed-audio')
     expect(text).not.toContain('volcengine-seed-tts')
     expect(text).toContain('default=wav/48000Hz')
-    expect(text).not.toContain('Suno')
+    expect(text).toContain('suno-v6 (Suno V6)')
+    expect(text).toContain('2 takes per generation')
   })
 })

@@ -44,8 +44,6 @@ import { containRect, coverRect } from '@/lib/image/geometry';
 import { extractPhotoMetadata, enrichMetadataLocation } from '@/lib/image/metadata';
 import { getPromptLanguage, getTranslationVariants, useLocale } from '@/lib/i18n';
 import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
-import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
-import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache';
 import { getDefaultVideoModelId, isFastVideoRenderModel, normalizeVideoResolution } from '@/lib/video-model-capabilities';
@@ -104,7 +102,6 @@ interface EditorProps {
   onBack?: () => void;
   onNewProject?: (file: File) => void;
   initialAnimations?: ProjectAnimation[];
-  initialMusicTaskId?: string | null;
   timelineVersion?: number;
   readOnly?: boolean;
   disableAgentLiveReload?: boolean;
@@ -151,7 +148,6 @@ export default function Editor({
   onBack,
   onNewProject,
   initialAnimations,
-  initialMusicTaskId,
   timelineVersion = 1,
   readOnly,
   disableBodyScrollLock = false,
@@ -339,11 +335,6 @@ export default function Editor({
   }, []);
 
 
-  // Music generation state
-  const [musicTaskId, setMusicTaskId] = useState<string | null>(initialMusicTaskId ?? null);
-  const [, setMusicTracks] = useState<{ audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }[]>([]);
-  const musicMsgIdRef = useRef<string>(''); // which assistant message to attach tracks to
-  const musicPollingRef = useRef(!!initialMusicTaskId); // true during music polling — prevents onDone from resetting status
   const agentAbortRef = useRef<AbortController>(new AbortController());
   const pendingDesignMsgIdRef = useRef<string>('');
   const pendingDesignSnapIdRef = useRef<string>('');
@@ -473,7 +464,7 @@ export default function Editor({
   const animationStateRef = useRef(animationState);
   animationStateRef.current = animationState;
   const hasBackgroundTaskRef = useRef(false);
-  hasBackgroundTaskRef.current = musicPollingRef.current || animationState?.status === 'polling' || animations.some(a => a.status === 'processing') || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
+  hasBackgroundTaskRef.current = animationState?.status === 'polling' || animations.some(a => a.status === 'processing') || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
   const viewIndexRef = useRef(viewIndex);
   viewIndexRef.current = viewIndex;
   const draftParentIndexRef = useRef(draftParentIndex);
@@ -1690,7 +1681,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       return getImageForApi(s) || '';
     });
 
-    const { callbacks: agentCallbacks, setCurrentMsgId, getCurrentMsgId } = makeAgentCallbacks({
+    const { callbacks: agentCallbacks, setCurrentMsgId } = makeAgentCallbacks({
       projectId: projectId!,
       setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
       setDesignDraftParent: (idx) => {
@@ -1720,14 +1711,6 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         setCreditBalance(balance);
         setCreditExhausted(true);
       },
-      onMusicTaskCreated: (taskId) => {
-        setMusicTaskId(taskId);
-        musicPollingRef.current = true;
-        setMusicTracks([]);
-        musicMsgIdRef.current = getCurrentMsgId();
-        setAgentStatus(t('status.generatingMusic'));
-      },
-      musicPollingRef,
       hasBackgroundTaskRef,
       captureDesignFrame: async (frame, uploadPath) => {
         const design = draftDesignRef.current || pendingDesignRef.current;
@@ -2593,14 +2576,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [snapshots, tipsSourceIndex, pendingImages, isTipsFetching, inactive, startTipsFetchForSnapshot]);
 
   // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
-  // Pick up late-arriving initialMusicTaskId (from Supabase fetch after cache-init)
-  const musicInitRef = useRef(!!initialMusicTaskId);
-  useEffect(() => {
-    if (musicInitRef.current || !initialMusicTaskId) return;
-    musicInitRef.current = true;
-    setMusicTaskId(initialMusicTaskId);
-    musicPollingRef.current = true;
-  }, [initialMusicTaskId]);
 
   const animationInitRef = useRef((initialAnimations ?? []).length > 0);
   useEffect(() => {
@@ -2793,77 +2768,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     }
   }, [snapshots, tipsSourceIndex, isTipsFetching, triggerPreviewsReadyNotification]);
 
-  // ── Music polling: poll Suno status when musicTaskId is set ──
-  useEffect(() => {
-    if (inactive) return;
-    if (!musicTaskId) return;
-    console.log(`🎵 [music] polling started for ${musicTaskId}`);
-    let stopped = false;
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/music/${musicTaskId}?projectId=${projectId}`);
-        const data = await res.json();
-        if (stopped) return;
-        if ((data.status === 'streaming' || data.status === 'completed') && data.tracks?.length) {
-          setMusicTracks(data.tracks);
-          // Format: music:trackIndex|title|duration|tags|playUrl|finalUrl
-          const musicLines = data.tracks.map((tk: { title: string; duration: number; tags: string; audioUrl: string; streamAudioUrl?: string; trackIndex: number }) => {
-            const playUrl = tk.streamAudioUrl || tk.audioUrl;
-            const finalUrl = tk.audioUrl || '';
-            return `music:${tk.trackIndex}|${tk.title}|${Math.round(tk.duration)}|${tk.tags}|${playUrl}|${finalUrl}`;
-          }).join('\n');
-          const msgId = `music-${musicTaskId}`;
-          const statusText = data.status === 'streaming' ? t('status.musicStreaming') : t('status.musicReady');
-          const fullContent = `🎵 ${statusText}\n${musicLines}`;
-          setMessages(prev => {
-            if (prev.some(m => m.id === msgId)) {
-              const updated = prev.map(m => m.id === msgId ? { ...m, content: fullContent } : m);
-              const msg = updated.find(m => m.id === msgId);
-              if (msg && data.status === 'completed') onSaveMessage?.(msg);
-              return updated;
-            }
-            const musicMsg: Message = { id: msgId, role: 'assistant', content: fullContent, timestamp: Date.now() };
-            if (data.status === 'completed') onSaveMessage?.(musicMsg);
-            return [...prev, musicMsg];
-          });
-          if (data.status === 'streaming') {
-            setAgentStatus(t('status.musicStreaming'));
-          }
-          // Stop polling only when completed with 2 tracks
-          if (data.status === 'completed' && data.tracks.length >= 2) {
-            // Replace stream/temp URLs with permanent Supabase URLs in all design code
-            const supabase = createBrowserSupabase();
-            setSnapshots(prev => {
-              prev.forEach(snap => {
-                if (!snap.design?.code) return;
-                resolveAudioUrlsInCode(snap.design.code, projectId!, supabase).then(({ code, changed }) => {
-                  if (!changed) return;
-                  setSnapshots(p => p.map(s => s.id !== snap.id ? s : { ...s, design: { ...s.design!, code } }));
-                  onSaveDesignProps?.(snap.id, { ...snap.design!, code });
-                });
-              });
-              return prev;
-            });
-            setMusicTaskId(null);
-            musicPollingRef.current = false;
-            setAgentStatus(t('status.musicReady'));
-            setTimeout(() => setAgentStatus(t('editor.greeting')), 3000);
-          }
-        } else if (data.status === 'failed') {
-          console.warn('🎵 [music] failed:', data.error);
-          setMusicTaskId(null);
-          musicPollingRef.current = false;
-          setAgentStatus(t('status.musicFailed'));
-          setTimeout(() => setAgentStatus(t('editor.greeting')), 3000);
-        }
-      } catch (e) {
-        console.warn('🎵 [music] poll error:', e);
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 2_000);
-    return () => { stopped = true; clearInterval(interval); };
-  }, [musicTaskId, projectId, t, inactive]);
 
 
   // When animationState transitions — handle creation flow lifecycle
@@ -2990,20 +2894,13 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     } else if (animationState?.status === 'done') {
       setAgentStatus(t('status.videoDone'));
     } else if (animationState?.status === 'polling' || videoProcessing) {
-      if (!isAgentActive && !musicTaskId) {
+      if (!isAgentActive) {
         setAgentStatus(videoRenderingStatus);
       }
-    } else if (!isAgentActive && !musicTaskId) {
+    } else if (!isAgentActive) {
       setAgentStatus(t('editor.greeting'));
     }
-  }, [animationState?.status, videoProcessing, isAgentActive, musicTaskId, t, videoRenderingStatus]);
-
-  // Update StatusBar with music generation progress (same pattern as video)
-  useEffect(() => {
-    if (musicTaskId && !isAgentActive) {
-      setAgentStatus(t('status.generatingMusic'));
-    }
-  }, [musicTaskId, isAgentActive, t]);
+  }, [animationState?.status, videoProcessing, isAgentActive, t, videoRenderingStatus]);
 
   const showSaveToast = useCallback(() => {
     setSaveToast(true);
@@ -3155,8 +3052,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
   // CUI: tap inline video → first click shows in GUI, second click plays
   // Design poster captured from CUI's visible Player — update snapshot + message
-  // Music select: insert immediately with whatever URL is available (stream or permanent)
-  // completed polling will replace stream URLs with permanent URLs in design code later
+  // Music select: the user picked a take (e.g. Suno's alternate) from a MusicCard; insert its permanent URL.
   const handleMusicSelect = useCallback((track: { audioUrl: string; duration: number; title: string; tags: string }) => {
     if (!projectId) { console.warn('🎵 [music] no projectId'); return; }
     if (isAgentActive) { console.warn('🎵 [music] agent busy, skipping'); return; }
@@ -3595,7 +3491,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       end: videoRetakeSelection.end + retakeSourceOffset,
     } : undefined,
     onClearRetake: () => setVideoRetakeSelection(null),
-    hasBackgroundTask: musicPollingRef.current || animationState?.status === 'polling' || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing'),
+    hasBackgroundTask: animationState?.status === 'polling' || snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing'),
     skills: availableSkills,
     selectedSkill,
     onSkillChange: setSelectedSkill,
