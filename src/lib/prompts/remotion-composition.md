@@ -391,7 +391,8 @@ For static visuals, use `generate_image` instead of Remotion unless editability 
 - Animate `transform` and opacity, not layout properties.
 - Keep filter stacks and shadows modest for iOS Safari.
 - Fonts are pinned assets shared by Player, Sandbox preview, and Lambda export. You may use any exact family name available in Google Fonts (for example `Bungee Spice`, `Cormorant Garamond`, or `Noto Sans SC`); Makaron discovers and pins it on demand before rendering.
-- Never use `Arial`, `Helvetica`, `Times New Roman`, `PingFang SC`, `Microsoft YaHei`, `STKaiti`, `Kaiti SC`, `KaiTi`, `Didot`, `Bodoni 72`, or another local/system font name. Local fonts differ between macOS and Linux and will be rejected instead of silently falling back.
+- Makaron pins fonts by reading string literals: an inline `fontFamily: "'Noto Serif SC', serif"`, a constant or helper prop holding such a stack (`const SERIF = "'Noto Serif SC', serif"`), or an exact family name in code or props. A family built at runtime (template interpolation, concatenated or computed names) cannot be pinned. If a `run_code` or `preview_frame` result reports a Font check, missing CJK text in frames comes from that unpinned family, not from a font-loading race: fix the named `fontFamily`.
+- Never use `Arial`, `Helvetica`, `Times New Roman`, `PingFang SC`, `Microsoft YaHei`, `STKaiti`, `Kaiti SC`, `KaiTi`, `Didot`, `Bodoni 72`, or another local/system font name. Local fonts differ between macOS and Linux; an inline `fontFamily` literal with one is rejected, and one reached through a variable is reported as a Font check.
 - For an old composition only, migrate a legacy family by persisting an explicit top-level `fontSubstitutions` map in the design payload (for example `{ "STKaiti": "Ma Shan Zheng", "Didot": "GFS Didot", "Arial": "Inter" }`). This is a product/design decision, not a runtime alias. New compositions must use the exact Google Fonts family directly.
 
 ## Verification

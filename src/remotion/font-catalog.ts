@@ -37,6 +37,13 @@ export interface PreparedRemotionFonts {
     alias: string;
     family: string;
   }>;
+  /**
+   * Font usages the static preparation could not bind to a pinned face. They
+   * render through the platform generic font, which differs between the
+   * browser Player (macOS/iOS system CJK fallback) and Linux Sandbox/Lambda
+   * (no CJK fallback, so Chinese text can render blank).
+   */
+  warnings: string[];
 }
 
 export interface RemotionFontFaceTiming {
@@ -73,7 +80,7 @@ export interface RemotionFontTiming {
 }
 
 export const REMOTION_FONT_CATALOG_VERSION = catalogData.version;
-export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r10-google-fonts-on-demand';
+export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r11-font-stack-literals';
 export const REMOTION_FONT_CATALOG = catalogData.families as RemotionFontCatalogDefinition[];
 export const REMOTION_DEFAULT_SANS = 'Inter';
 export const REMOTION_DEFAULT_CJK_SANS = 'Noto Sans SC';
@@ -117,6 +124,46 @@ function cleanFamily(value: string): string {
   return value.trim().replace(/^['"]|['"]$/g, '').trim();
 }
 
+const FONT_STACK_FAMILY_NAME = /^-?[A-Za-z][A-Za-z0-9 .-]{0,47}$/;
+// Single-line JS string literals, skipping escapes. A line without a closing
+// quote (for example an apostrophe in JSX text) never pairs across lines.
+const SINGLE_LINE_STRING_LITERAL = /(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g;
+
+/**
+ * Parses a string literal that is shaped like a CSS font stack, for example
+ * `'Noto Serif SC', serif`. Agent compositions commonly keep such stacks in a
+ * constant (`const SERIF = "'Noto Serif SC', serif"`) and pass the constant to
+ * `fontFamily`, which the `fontFamily: '...'` rewrite cannot see.
+ *
+ * Without a generic family the value only counts as a stack when every named
+ * family is known (`isKnownFamily`), so ordinary copy is never mistaken for one.
+ */
+function parseFontStackLiteral(
+  value: string,
+  isKnownFamily?: (family: string) => boolean,
+): { named: string[]; hasGeneric: boolean } | null {
+  if (value.length > 240 || value.includes('\\') || value.includes('${')) return null;
+  const parts = value.split(',').map(cleanFamily);
+  if (parts.some((part) => !part)) return null;
+  const named = parts.filter((part) => !GENERIC_FAMILIES.has(part.toLowerCase()));
+  const hasGeneric = named.length < parts.length;
+  if (named.length === 0 || !named.every((part) => FONT_STACK_FAMILY_NAME.test(part))) return null;
+  if (hasGeneric) return { named, hasGeneric };
+  const looksLikeStack = parts.length > 1 || /^\s*['"]/.test(value);
+  if (looksLikeStack && isKnownFamily && named.every(isKnownFamily)) return { named, hasGeneric };
+  return null;
+}
+
+/** Named families of every generic-terminated font stack held in a string literal. */
+function fontStackLiteralFamilies(code: string): string[] {
+  const families: string[] = [];
+  for (const match of code.matchAll(SINGLE_LINE_STRING_LITERAL)) {
+    const stack = parseFontStackLiteral(match[2]);
+    if (stack) families.push(...stack.named);
+  }
+  return families;
+}
+
 function collectStringValues(value: unknown, values: Set<string>): void {
   if (typeof value === 'string') {
     values.add(value);
@@ -153,7 +200,14 @@ export function collectRemotionFontFamilyCandidates(input: {
   // style={{fontFamily: someProp}}. Keep their exact string values available
   // for matching against @remotion/google-fonts on the server.
   for (const match of input.code.matchAll(/(['"`])([\s\S]*?)\1/g)) values.add(match[2]);
-  collectStringValues(input.props, values);
+  // Stacks kept in constants/helper props: `const SERIF = "'Lora', serif"`.
+  for (const family of fontStackLiteralFamilies(input.code)) values.add(family);
+  const propValues = new Set<string>();
+  collectStringValues(input.props, propValues);
+  for (const value of propValues) {
+    values.add(value);
+    for (const family of parseFontStackLiteral(value)?.named || []) values.add(family);
+  }
   for (const target of Object.values(input.substitutions || {})) values.add(target);
   return [...values];
 }
@@ -277,6 +331,9 @@ function internalStack(
   family: string,
   generic: string,
   manifest: RemotionFontFamilyManifest,
+  // Inside an existing string literal the family names must use the other
+  // quote character; JSX attribute strings cannot contain escape sequences.
+  enclosingQuote?: string,
 ): string {
   const available = manifestFamilies(manifest);
   const primary = internalRemotionFontFamily(family, manifest.version);
@@ -294,7 +351,10 @@ function internalStack(
   // stay colorful. Plain Unicode symbols that Noto Color Emoji does not own
   // (for example U+2726 BLACK FOUR POINTED STAR) continue into the pinned
   // symbol face instead of depending on a macOS/Linux system fallback.
-  return [...new Set([primary, fallback, emoji, symbols])].map(quotedFamily).join(', ') + `, ${generic}`;
+  const quote = enclosingQuote === undefined
+    ? quotedFamily
+    : (name: string) => (enclosingQuote === '"' ? `'${name}'` : `"${name}"`);
+  return [...new Set([primary, fallback, emoji, symbols])].map(quote).join(', ') + `, ${generic}`;
 }
 
 export function prepareRemotionFontCode(input: {
@@ -311,7 +371,17 @@ export function prepareRemotionFontCode(input: {
     ...LEGACY_PLATFORM_FONT_SUBSTITUTIONS,
     ...(input.substitutions || {}),
   };
-  const code = input.code.replace(
+  const available = manifestFamilies(input.manifest);
+  const substitutionsByName = new Map(
+    Object.entries(substitutions).map(([source, target]) => [source.toLowerCase(), target]),
+  );
+  const canonicalFamily = (name: string): string | undefined => {
+    const target = substitutionsByName.get(name.toLowerCase()) || name;
+    return available.get(target.toLowerCase());
+  };
+  const isKnownFamily = (name: string) => Boolean(canonicalFamily(name));
+
+  let code = input.code.replace(
     /(fontFamily\s*:\s*)(['"`])([\s\S]*?)\2/g,
     (match, prefix: string, quote: string, stack: string) => {
       if (quote === '`' && stack.includes('${')) {
@@ -323,12 +393,34 @@ export function prepareRemotionFontCode(input: {
     },
   );
 
+  // A stack held in a constant or helper prop never appears after
+  // `fontFamily:`, e.g.
+  //   const SERIF = "'Noto Serif SC', serif";
+  //   style={{fontFamily: SERIF}}
+  // Rewrite such stack literals to the same pinned internal stack, including
+  // the CJK/emoji/symbol fallbacks. Left alone they resolve to the platform
+  // generic font: the macOS/iOS Player still shows system CJK glyphs, while
+  // Linux Sandbox preview and Lambda export render Chinese text blank.
+  const rewrittenStackLiterals = new Set<string>();
+  code = code.replace(SINGLE_LINE_STRING_LITERAL, (match, quote: string, body: string) => {
+    const stack = parseFontStackLiteral(body, isKnownFamily);
+    // Only rewrite when the leading family is pinned. Anything else may be a
+    // canvas font shorthand or copy; it stays untouched and, if it reaches
+    // fontFamily at runtime, is reported through `warnings`.
+    if (!stack || !isKnownFamily(stack.named[0])) return match;
+    const resolved = resolveRequestedFamily({ stack: body, manifest: input.manifest, substitutions });
+    if (!usedFamilies.includes(resolved.family)) usedFamilies.push(resolved.family);
+    rewrittenStackLiterals.add(body);
+    return `${quote}${internalStack(resolved.family, resolved.generic, input.manifest, quote)}${quote}`;
+  });
+
   // Agent compositions commonly pass a catalog font through a helper prop:
   //   <Title chineseFont="Ma Shan Zheng" />
   //   style={{fontFamily: chineseFont}}
-  // Those runtime values cannot be rewritten statically. Detect the remaining
-  // explicit string literals and register the same pinned face under that
-  // public family name as well as the versioned internal name.
+  // Persisted props cannot be rewritten without changing user-editable data.
+  // Detect the remaining explicit string literals and prop values, and
+  // register the same pinned face under each public family name (or each
+  // named family of a prop stack) as well as the versioned internal name.
   const remainingStringLiterals = new Set(
     Array.from(code.matchAll(/(['"`])([\s\S]*?)\1/g), match => match[2]),
   );
@@ -353,16 +445,31 @@ export function prepareRemotionFontCode(input: {
     }
     if (!usedFamilies.includes(family)) usedFamilies.push(family);
   };
-  for (const family of manifestFamilies(input.manifest).values()) {
+  for (const family of available.values()) {
     if (remainingStringLiterals.has(family)) addDynamicAlias(family, family);
   }
   for (const [source, target] of Object.entries(substitutions)) {
     if (!remainingStringLiterals.has(source)) continue;
-    const canonical = manifestFamilies(input.manifest).get(target.toLowerCase());
+    const canonical = available.get(target.toLowerCase());
     if (canonical) addDynamicAlias(source, canonical);
   }
+  for (const value of remainingStringLiterals) {
+    for (const name of parseFontStackLiteral(value, isKnownFamily)?.named || []) {
+      const canonical = canonicalFamily(name);
+      if (canonical) addDynamicAlias(name, canonical);
+    }
+  }
 
-  const available = manifestFamilies(input.manifest);
+  const warnings = runtimeFontFamilyWarnings({
+    authoredCode: input.code,
+    preparedCode: code,
+    isBound: (value) => rewrittenStackLiterals.has(value)
+      || dynamicFamilyAliases.some(({ alias }) => alias === value)
+      || (parseFontStackLiteral(value, isKnownFamily)?.named || [])
+        .some((name) => dynamicFamilyAliases.some(({ alias }) => alias === name)),
+    anyRuntimeBinding: rewrittenStackLiterals.size > 0 || dynamicFamilyAliases.length > 0,
+  });
+
   const defaultFamilies = [
     REMOTION_DEFAULT_SANS,
     REMOTION_DEFAULT_CJK_SANS,
@@ -377,7 +484,59 @@ export function prepareRemotionFontCode(input: {
     defaultFontFamily: internalStack(REMOTION_DEFAULT_SANS, 'sans-serif', input.manifest),
     usedFamilies,
     dynamicFamilyAliases,
+    warnings,
   };
+}
+
+const RUNTIME_FONT_FAMILY_EXPRESSION = /fontFamily\s*:[ \t]*([^\s,}'"`][^,}\n]*)/g;
+
+/**
+ * `fontFamily: <expression>` cannot be rewritten statically. Report the
+ * expressions whose value Makaron could not bind to a pinned face, so the
+ * Agent learns why Linux Sandbox/Lambda frames lose CJK text instead of
+ * guessing at font-loading races.
+ */
+function runtimeFontFamilyWarnings(input: {
+  authoredCode: string;
+  preparedCode: string;
+  isBound: (value: string) => boolean;
+  anyRuntimeBinding: boolean;
+}): string[] {
+  const warnings: string[] = [];
+  const unverified: string[] = [];
+  const seen = new Set<string>();
+  for (const match of input.preparedCode.matchAll(RUNTIME_FONT_FAMILY_EXPRESSION)) {
+    const expression = match[1].trim().slice(0, 80);
+    if (!expression || seen.has(expression)) continue;
+    seen.add(expression);
+    if (/^[A-Za-z_$][\w$]*$/.test(expression)) {
+      const declaration = input.authoredCode.match(new RegExp(
+        `\\b(?:const|let|var)\\s+${expression.replace(/\$/g, '\\$')}\\s*=\\s*(['"\`])([^\\n]*?)\\1`,
+      ));
+      if (declaration) {
+        if (!input.isBound(declaration[2])) {
+          warnings.push(
+            `fontFamily: ${expression} resolves to "${declaration[2]}", which is not a pinned Makaron font family.`,
+          );
+        }
+        continue;
+      }
+    }
+    if (!input.anyRuntimeBinding) unverified.push(expression);
+  }
+  if (unverified.length > 0) {
+    warnings.push(
+      `fontFamily: ${unverified.join(' / ')} is a runtime value that Makaron could not match to any pinned font.`,
+    );
+  }
+  if (warnings.length === 0) return [];
+  return [
+    ...warnings,
+    'Unpinned fontFamily values fall back to the platform generic font: the browser Player may still show '
+      + 'system CJK glyphs, but Sandbox preview_frame and Lambda export run on Linux without system CJK fonts, '
+      + 'so Chinese/Japanese/Korean text renders blank. This is not a font-loading race. Use an exact font '
+      + 'family name or a stack string such as "\'Noto Serif SC\', serif" in a string literal, a const, or a prop.',
+  ];
 }
 
 /**
