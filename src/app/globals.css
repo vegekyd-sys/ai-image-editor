@@ -229,6 +229,16 @@ textarea {
   animation-duration: 5.4s;
 }
 
+/* A dragged file approaching the box energizes its flow highlight. */
+.mkr-input-box-liquid[data-drop]::after {
+  opacity: calc(0.5 + 0.5 * var(--drop-p, 0));
+  animation-duration: 2.6s;
+}
+.mkr-input-box-liquid[data-drop="over"]::after {
+  opacity: 1;
+  animation-duration: 1.6s;
+}
+
 .mkr-liquid-surface,
 .mkr-liquid-rail,
 .mkr-liquid-placeholder,

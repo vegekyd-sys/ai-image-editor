@@ -11,11 +11,17 @@ export function dropProximityStyle(dragging: boolean, proximity: number, over: b
   if (!dragging && !over) return {};
   const p = over ? 1 : proximity;
   return {
-    borderColor: `rgba(217,70,239,${(0.22 + 0.5 * p).toFixed(3)})`,
-    boxShadow: `0 16px 40px rgba(0,0,0,0.48), 0 0 ${Math.round(18 + 42 * p)}px rgba(217,70,239,${(0.12 + 0.33 * p).toFixed(3)}), inset 0 0.5px 0 rgba(255,255,255,0.15)`,
+    // Drives the box's own energy-flow highlight (globals.css [data-drop]).
+    ['--drop-p' as string]: p.toFixed(2),
+    borderColor: `rgba(217,70,239,${(0.3 + 0.55 * p).toFixed(3)})`,
+    boxShadow: `0 16px 40px rgba(0,0,0,0.48), 0 0 0 ${(1 + 2 * p).toFixed(1)}px rgba(217,70,239,${(0.12 + 0.3 * p).toFixed(3)}), 0 0 ${Math.round(24 + 56 * p)}px rgba(217,70,239,${(0.2 + 0.4 * p).toFixed(3)}), inset 0 0.5px 0 rgba(255,255,255,0.15)`,
     transform: `scale(${(1 + 0.018 * p).toFixed(4)})`,
     transition: 'transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, box-shadow 0.22s ease, background 0.2s ease',
   };
+}
+
+export function dropState(dragging: boolean, over: boolean): 'over' | 'near' | undefined {
+  return over ? 'over' : dragging ? 'near' : undefined;
 }
 
 /** Label layered over the input box during a file drag. */

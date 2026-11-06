@@ -8,7 +8,7 @@ import AgentModelChip from '@/components/AgentModelChip';
 import type { AgentModelPreference } from '@/lib/agent-models';
 import { useLocale } from '@/lib/i18n';
 import type { MediaItemState } from '@/lib/upload/media-queue';
-import { DropOverlay, dropProximityStyle } from '@/components/DropAffordance';
+import { DropOverlay, dropProximityStyle, dropState } from '@/components/DropAffordance';
 import { useDragProximity } from '@/hooks/useDragProximity';
 import { PREPARE_WEIGHT, UPLOAD_ACCENT, UploadProgressChip, UploadProgressEdge, type UploadProgressItem } from '@/components/UploadProgress';
 
@@ -348,6 +348,7 @@ export default function CreateInputBox({
     return (
       <div
         ref={resolvedBoxRef}
+        data-drop={dropState(drag.dragging, dragOver)}
         className={liquidInputClassName}
         role="button"
         aria-label={actionTitle || createLabel}
@@ -607,6 +608,7 @@ export default function CreateInputBox({
   return (
     <div
       ref={resolvedBoxRef}
+      data-drop={dropState(drag.dragging, dragOver)}
       className={liquidInputClassName}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}

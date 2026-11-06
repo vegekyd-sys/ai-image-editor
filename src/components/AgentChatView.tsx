@@ -1,6 +1,6 @@
 'use client';
 
-import { DropOverlay, dropProximityStyle } from '@/components/DropAffordance';
+import { DropOverlay, dropProximityStyle, dropState } from '@/components/DropAffordance';
 import { useDragProximity } from '@/hooks/useDragProximity';
 import { PREPARE_WEIGHT, UploadProgressChip, UploadProgressEdge, type UploadProgressItem } from '@/components/UploadProgress';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
@@ -1799,6 +1799,7 @@ export default function AgentChatView({
         {/* Two-row layout: textarea on top, toolbar on bottom */}
         <div
           ref={inputBoxRef}
+          data-drop={dropState(inputDrag.dragging, inputDropOver)}
           className="mkr-input-box-liquid"
           style={{
             position: 'relative',
@@ -1811,7 +1812,7 @@ export default function AgentChatView({
             ...dropProximityStyle(inputDrag.dragging, inputDrag.proximity, inputDropOver),
           }}
         >
-          {isPanel && <DropOverlay dragging={inputDrag.dragging} proximity={inputDrag.proximity} over={isDragOver} radius={20} />}
+          {isPanel && <DropOverlay dragging={inputDrag.dragging} proximity={inputDrag.proximity} over={inputDropOver} radius={20} />}
           <UploadProgressEdge items={uploadItems} inset={20} />
           {retakeContext && <div data-testid="chat-retake-context" className="flex items-center gap-2 px-3 pt-2.5">
             <span className="min-w-0 truncate rounded-full border border-fuchsia-300/20 bg-fuchsia-300/[0.08] px-2.5 py-1 text-[11px] font-medium text-fuchsia-200/85">
