@@ -47,7 +47,11 @@ export async function readProviderImage(source: string, limit: number, options?:
         });
       },
     }, response => {
-      if (response.statusCode !== 200 || Number(response.headers['content-length']) > limit) {
+      // cdn.makaron.app's R2 tier can answer an un-ranged GET with 206 carrying
+      // the complete object (bytes 0-(N-1)/N). That is a full body; partial ones are not.
+      const range = /^bytes 0-(\d+)\/(\d+)$/.exec(String(response.headers['content-range'] ?? ''));
+      const completePartial = response.statusCode === 206 && !!range && Number(range[1]) + 1 === Number(range[2]);
+      if ((response.statusCode !== 200 && !completePartial) || Number(response.headers['content-length']) > limit) {
         response.destroy(); reject(new Error('Image unavailable or too large')); return;
       }
       const chunks: Buffer[] = [];
