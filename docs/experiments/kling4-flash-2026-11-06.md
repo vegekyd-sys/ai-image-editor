@@ -1,6 +1,6 @@
 # Kling 4.0 Flash 接入（EvoLink）
 
-日期：2026-11-06。分支 `claude/worktree-kling-4-flash-2fbb35`，基线 `dev` 的 `a7fdc555`。仅本地候选：未推送、合并、部署、发 npm，迁移未应用到共享数据库。
+日期：2026-11-06。分支 `claude/worktree-kling-4-flash-2fbb35`，基线 `dev` 的 `a7fdc555`。代码仅本地候选：未推送、合并、部署、发 npm。共享数据库迁移已于 2026-11-06 应用（见下）。
 
 ## 供应商合同
 
@@ -26,12 +26,24 @@
 ## 验收
 
 - 真实供应商冒烟：经 `createKling4Task` 提交 3s 文生视频，task `task-unified-1793975060-v44zdqi6`，约 64s 完成（供应商 `duration` 62s）。下载为 1280×720、24fps、3.04s H.264 + AAC，画面符合提示词。供应商回执 `usage.cost.usd = 0.282`，与 3 × $0.094 估价一致。
-- 未真实调用：reference-to-video、video-edit、Retake 整条链路，以及 App/CLI → Agent → 计费 → 快照持久化。单测覆盖其 payload、路由、报价与拒绝路径。
+- 未真实调用：reference-to-video、video-edit、Retake。CLI → Agent → 计费 → 快照持久化已在下文端到端验证。单测覆盖其 payload、路由、报价与拒绝路径。
 - TypeScript、定点 ESLint、i18n UI 检查、video reference workflow 检查通过；全量 vitest 385 文件 / 2777 测试通过。
+
+## 共享数据库迁移（已应用）
+
+2026-11-06 22:39 CST 经用户授权，用 Management API 在单个事务里应用 `20261106221835_kling4_flash_pricing_and_retake.sql`，并登记 `supabase_migrations.schema_migrations`。应用前核对线上 Retake 约束和 `kling-4` 价格行与迁移前提一致；应用后 `video:kling-4-flash:720p:{generate,edit}`（0.094 / 0.063，markup 2）在线，约束包含 `kling-4-flash`。
+
+## CLI chat 端到端（本地 3110 服务，本分支代码 + 共享数据库）
+
+`MAKARON_URL=http://localhost:3110 makaron chat --project auto --image public/brand/makaron-spark-pixel-wizard-concepts.png "...用 kling-4-flash 做 20 秒单镜头..."`
+
+- 第一轮 Agent（gpt-6-luna）按脚本优先流程只出脚本、等确认（2 credits）；第二轮回复“确认”后一次提交。项目 `cd29e045-e5bb-414a-b4ea-919d19b7c50a`，run `25cf12d2-9c49-4751-b36d-7ba9caf4e83f`，task `task-unified-1793976386-nimpngm7`，snapshot `d6a579ad-e9f1-407f-86c7-d7154bcc3dfa`。
+- 计费：`create_video · kling-4-flash` 376 credits = 20 × $0.094 × 2 × 100，与价格行一致；无退款。
+- 成片：1280×720、24fps、20.04s，H.264 + AAC，音轨全程有声（平均 -17.6 dB，无 >0.8s 静音）。快照 `video_meta.status=completed`，视频与 poster 均已持久化到 `cdn.makaron.app`。
+- 内容：角色还原度高，五个信息节拍按顺序出现。缺陷：约 11s 出现屏幕文字“文字可参考 更省”（“更省”错位，且脚本要求不生成额外文字）；约 19s Pixel Wizard 被复制成两只，原本应与 Spark 击掌。中文台词未做转写核对。
 
 ## 发布前必须完成
 
-1. 在授权发布中应用 `supabase/migrations/20261106221835_kling4_flash_pricing_and_retake.sql`。未应用前，App 内选择 Flash 会在报价阶段因缺价失败（无供应商调用、无扣费）。
-2. `check:skill-sync` 的路由证据已因 Skill 正文变化过期，需用私密环境跑 `npm run test:skill-routing -- --live --env <私密环境文件>`。
+1. `check:skill-sync` 的路由证据已因 Skill 正文变化过期，需用私密环境跑 `npm run test:skill-routing -- --live --env <私密环境文件>`。
 3. 按 `docs/makaron-release-checklist.md` 同步 CLI 版本、发包并做 registry 全新安装验收。
 4. Preview 上用真实账号走一次 App 选择 Flash → 出片 → 重新打开项目。
