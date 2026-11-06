@@ -54,8 +54,22 @@ async function convertOnServer(file: File): Promise<File | null> {
  * and fails on many modern iPhone HEIC profiles, so it is the last resort
  * (anonymous users, whose server request is rejected).
  */
-export async function ensureDecodableFile(file: File): Promise<File> {
-  if (!isHeicFile(file)) return file;
+const conversionCache = new WeakMap<File, Promise<File>>();
+
+export function ensureDecodableFile(file: File): Promise<File> {
+  if (!isHeicFile(file)) return Promise.resolve(file);
+  // Attach-time preview, eager preparation and send can all ask for the same
+  // file; share one conversion instead of uploading it to the server twice.
+  let pending = conversionCache.get(file);
+  if (!pending) {
+    pending = convertHeic(file);
+    conversionCache.set(file, pending);
+    pending.catch(() => conversionCache.delete(file));
+  }
+  return pending;
+}
+
+async function convertHeic(file: File): Promise<File> {
   if (await canDecodeNatively(file)) return file;
   const fromServer = await convertOnServer(file);
   if (fromServer) return fromServer;

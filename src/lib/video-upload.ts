@@ -1,7 +1,7 @@
 'use client';
 
-import { renderMediaOnWeb } from '@remotion/web-renderer';
-import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
+// Remotion + Babel are only needed for the fallback transcode path; they are
+// imported lazily so attaching a video doesn't download them first.
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
 export const MAX_DURATION = 900; // Upload limit only. Model reference-video limits stay in generate_animation/create-video.
 export const MAX_DURATION_TOLERANCE = 1; // Allow tiny container/audio metadata padding over the upload limit
@@ -134,6 +134,10 @@ async function transcodeWithRemotion(
   videoBitrate: number,
   onProgress?: (progress: number) => void,
 ): Promise<Blob> {
+  const [{ renderMediaOnWeb }, { evalRemotionJSX, preloadBabel }] = await Promise.all([
+    import('@remotion/web-renderer'),
+    import('@/lib/evalRemotionJSX'),
+  ]);
   await preloadBabel().catch(() => {});
 
   const code = `function Design() {
