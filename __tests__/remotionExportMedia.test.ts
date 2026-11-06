@@ -13,7 +13,7 @@ const exec = promisify(execFile);
 const cleanups: Array<() => Promise<unknown>> = [];
 afterEach(async () => {vi.unstubAllEnvs(); await Promise.all(cleanups.splice(0).map(fn => fn()));});
 
-async function fixture(options: {hevc?: boolean; rotate4k?: boolean; fps?: number} = {}) {
+async function fixture(options: {hevc?: boolean; rotate4k?: boolean; fps?: number; undecodableAudio?: boolean} = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'export-media-test-'));
   cleanups.push(() => rm(root, {recursive: true, force: true}));
   const ffmpeg = await findFfmpeg(), ffprobe = await findFfprobe();
@@ -23,11 +23,12 @@ async function fixture(options: {hevc?: boolean; rotate4k?: boolean; fps?: numbe
   const duration = options.rotate4k ? '0.2' : '1';
   await exec(ffmpeg, ['-v','error','-f','lavfi','-i',`color=c=red:s=${size}:r=${rate}:d=${duration}`,
     '-f','lavfi','-i',`sine=frequency=440:duration=${duration}`,
+    ...(options.undecodableAudio?['-f','lavfi','-i',`sine=frequency=880:duration=${duration}`,'-map','0:v','-map','1:a','-map','2:a']:[]),
     '-c:v',options.hevc?'libx265':'libx264','-preset','ultrafast',
     ...(options.hevc?['-x265-params','pools=1:frame-threads=1:log-level=error']:[]),
     '-threads','2','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart',encoded]);
   const modernRotation = options.rotate4k && (await exec(ffmpeg,['-h','full'],{maxBuffer:8*1024**2})).stdout.includes('-display_rotation');
-  await exec(ffmpeg, ['-v','error',...(modernRotation?['-display_rotation','90']:[]),'-i',encoded,'-c','copy',
+  await exec(ffmpeg, ['-v','error',...(modernRotation?['-display_rotation','90']:[]),'-i',encoded,'-map','0','-c','copy',
     ...(options.rotate4k && !modernRotation?['-metadata:s:v:0','rotate=90']:[]),source]);
   const bytes = await readFile(source);
   const server = createServer((req, res) => {
@@ -45,9 +46,26 @@ async function fixture(options: {hevc?: boolean; rotate4k?: boolean; fps?: numbe
   await import('node:fs/promises').then(fs => fs.mkdir(work));
   const script = path.join(work,'prepare.cjs');
   await writeFile(script,EXPORT_MEDIA_PREPARATION_SCRIPT);
+  // iPhone APAC spatial audio probes as codec_type=audio, codec_name=unknown and cannot be decoded. ffmpeg cannot
+  // author such a track, so the source probe reports the second audio track the way ffprobe reports APAC.
+  let probeBinary = ffprobe;
+  if (options.undecodableAudio) {
+    probeBinary = path.join(root,'ffprobe-apac.cjs');
+    await writeFile(probeBinary,`#!${process.execPath}
+const {execFileSync} = require('node:child_process');
+const args = process.argv.slice(2);
+const json = JSON.parse(execFileSync(${JSON.stringify(ffprobe)}, args, {maxBuffer: 4 * 1024 ** 2}));
+const target = args[args.length - 1];
+if (/^https?:/.test(target) || target.endsWith('source.bin')) {
+  const extra = (json.streams || []).filter(s => s.codec_type === 'audio')[1];
+  if (extra) Object.assign(extra, {codec_name: 'unknown', codec_tag_string: 'apac'});
+}
+process.stdout.write(JSON.stringify(json));
+`,{mode:0o755});
+  }
   async function run(extra: Record<string, unknown> = {}) {
     await writeFile(path.join(work,'request.json'),JSON.stringify({action:'prepare',url,fps:30,timeoutMs:20000,...extra}));
-    return exec(process.execPath,[script],{cwd:work,env:{...process.env,FFMPEG_PATH:ffmpeg,FFPROBE_PATH:ffprobe},timeout:25000});
+    return exec(process.execPath,[script],{cwd:work,env:{...process.env,FFMPEG_PATH:ffmpeg,FFPROBE_PATH:probeBinary},timeout:25000});
   }
   return {work, run, manifest:async()=>JSON.parse(await readFile(path.join(work,'result.json'),'utf8')) as ExportMediaManifest};
 }
@@ -64,6 +82,14 @@ describe('export media preparation runtime', () => {
     const f = await fixture({rotate4k:true}); await f.run(); const m = await f.manifest();
     expect(m.original).toMatchObject({width:2160,height:3840});
     expect(m.output).toMatchObject({width:2160,height:3840,fps:30,audioStreams:1});
+  },30000);
+  it('does not map an undecodable APAC audio track (iPhone spatial audio) into the prepared file', async () => {
+    const f = await fixture({hevc:true,undecodableAudio:true}); await f.run(); const m = await f.manifest();
+    expect(m.prepared).toBe(true);
+    expect(m.original.audioStreams).toBe(1);
+    expect(m.output).toMatchObject({codec:'h264',pixelFormat:'yuv420p',audioStreams:1});
+    const {stdout} = await exec(await findFfprobe(),['-v','error','-show_entries','stream=codec_type','-of','csv=p=0',path.join(f.work,'prepared.mp4')]);
+    expect(stdout.trim().split('\n').filter(t=>t==='audio')).toHaveLength(1);
   },30000);
   it('keeps compatible originals and avoids a full download/transcode', async () => {
     const f = await fixture({fps:30}); await f.run();
