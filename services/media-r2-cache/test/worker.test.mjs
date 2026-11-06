@@ -18,8 +18,9 @@ class FakeR2 {
   constructor() { this.objects = new Map(); this.ops = []; this.fail = false; }
   wrap(key, rec, range) {
     const data = range ? rec.data.slice(range.offset, range.offset + range.length) : rec.data;
+    // Like real R2, `range` is reported even for full reads and head().
     return {
-      key, size: rec.data.length, etag: rec.etag, httpEtag: `"${rec.etag}"`, range,
+      key, size: rec.data.length, etag: rec.etag, httpEtag: `"${rec.etag}"`, range: range || { offset: 0, length: rec.data.length },
       httpMetadata: rec.httpMetadata || {}, customMetadata: rec.customMetadata || {},
       body: new Response(data).body,
       text: async () => new TextDecoder().decode(rec.data),
@@ -315,4 +316,54 @@ test('requests from bypassed continents pass straight through', async () => {
   // Other continents still use the cache.
   const asia = await run(MEDIA);
   assert.equal(asia.res.headers.get('x-makaron-cache'), 'MISS');
+});
+
+test('R2 hit without Range is a 200 full object for GET and HEAD, even though R2 reports a range', async () => {
+  const data = bytes(2048);
+  const { run, cache } = setup({ files: file(data) });
+  await run(MEDIA);
+  cache.store.clear();
+  const get = await run(MEDIA);
+  assert.equal(get.res.status, 200);
+  assert.equal(get.res.headers.get('x-makaron-cache'), 'HIT-R2');
+  assert.equal(get.res.headers.get('content-length'), '2048');
+  assert.equal(get.res.headers.get('content-range'), null);
+  assert.deepEqual(get.body, data);
+  cache.store.clear();
+  const head = await run(MEDIA, { method: 'HEAD' });
+  assert.equal(head.res.status, 200);
+  assert.equal(head.res.headers.get('x-makaron-cache'), 'HIT-R2');
+  assert.equal(head.res.headers.get('content-length'), '2048');
+  assert.equal(head.res.headers.get('content-range'), null);
+  assert.equal(head.body.length, 0);
+});
+
+test('R2 hit with bytes=0-0 and bytes=-N stays 206 with exact content-range', async () => {
+  const data = bytes(2048);
+  const { run, cache } = setup({ files: file(data) });
+  await run(MEDIA);
+  for (const [range, contentRange, slice] of [
+    ['bytes=0-0', 'bytes 0-0/2048', data.slice(0, 1)],
+    ['bytes=-100', 'bytes 1948-2047/2048', data.slice(1948)],
+  ]) {
+    cache.store.clear();
+    const { res, body } = await run(MEDIA, { headers: { range } });
+    assert.equal(res.status, 206, range);
+    assert.equal(res.headers.get('x-makaron-cache'), 'HIT-R2', range);
+    assert.equal(res.headers.get('content-range'), contentRange, range);
+    assert.equal(res.headers.get('content-length'), String(slice.length), range);
+    assert.deepEqual(body, slice, range);
+  }
+});
+
+test('R2 hit with a matching If-None-Match is still 304, with or without Range', async () => {
+  const { run, cache } = setup({ files: file(bytes(512)) });
+  await run(MEDIA);
+  for (const headers of [{ 'if-none-match': '"e1"' }, { 'if-none-match': '"e1"', range: 'bytes=0-0' }]) {
+    cache.store.clear();
+    const { res, body } = await run(MEDIA, { headers });
+    assert.equal(res.status, 304, JSON.stringify(headers));
+    assert.equal(res.headers.get('x-makaron-cache'), 'HIT-R2');
+    assert.equal(body.length, 0);
+  }
 });
