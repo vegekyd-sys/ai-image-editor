@@ -357,6 +357,7 @@ npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
 
 # 3a. Submit reference-to-video rendering (images must be public URLs from step 1 or uploaded)
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --video-model kling-4
+npx makaron-cli video create --script "Shot 1 (20s): <<<image_1>>> ..." --image https://...jpg --duration 20 --video-model kling-4-flash
 npx makaron-cli video create --script "Shot 1 (15s): <<<image_1>>> and <<<image_2>>> build a neon one-person studio" --image https://...jpg --image https://...webp --duration 15 --video-model seedance-mini --video-resolution 480p --aspect 9:16
 
 # 3b. Native SeeDance, Wan 3.0, MiniMax H3, or fal H3 Turbo text-to-video (no image required)
@@ -408,7 +409,7 @@ Seedance 2.5 uses `--video-model seedance-2.5` or `seedance-2.5-eco` for 4-30s v
 
 Wan 3.0 exposes two model choices: `--video-model wan-3.0` and the faster `--video-model wan-3.0-prime`. Both support 2-30s generation, native audio, up to 10 images + 5 videos + 5 audios, and 480p/720p/1080p/2K/4K. Pass `--video-resolution 2k|4k` to select the matching FlashVSR/Pro endpoint automatically; Pro is not a separate model selector. Use generation mode with feature references; typed edit/extend and the relaxed content-filter flag are not supported.
 
-Video edit model behavior: `--video-model kling-4 --video --video-operation edit` uses Kling 4.0 direct edit and preserves source audio; `--video-model seedance-fast --video`, `--video-model seedance-mini --video`, or `--video-model seedance --video` uses the SeeDance video-reference path and requires target <=15s, <=50MB with width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. `--video-model minimax-h3 --video` uses H3 feature/reference mode: up to 3 video references totaling <=15s, each <=50MB with width/height 256-5760px and aspect ratio 0.4-2.5. `--video-model google-omni --video` uses Gemini Omni direct video editing and accepts one reference video in Makaron. `--video-model grok --video --video-operation edit` accepts one MP4 up to 8.7s and caps output at 720p; `--video-operation extend` accepts one 2-15s MP4 and adds 2-10s.
+Video edit model behavior: `--video-model kling-4 --video --video-operation edit` uses Kling 4.0 direct edit and preserves source audio (`kling-4-flash` does the same for a 3–20s source at 720p); `--video-model seedance-fast --video`, `--video-model seedance-mini --video`, or `--video-model seedance --video` uses the SeeDance video-reference path and requires target <=15s, <=50MB with width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. `--video-model minimax-h3 --video` uses H3 feature/reference mode: up to 3 video references totaling <=15s, each <=50MB with width/height 256-5760px and aspect ratio 0.4-2.5. `--video-model google-omni --video` uses Gemini Omni direct video editing and accepts one reference video in Makaron. `--video-model grok --video --video-operation edit` accepts one MP4 up to 8.7s and caps output at 720p; `--video-operation extend` accepts one 2-15s MP4 and adds 2-10s.
 
 ### `music` — Music generation
 
