@@ -80,6 +80,8 @@ R2 的 `get()` / `head()` 不带 range 时也会返回 `range` 字段，旧版 `
 - 部署后同一对象，两轮请求间隔 75 秒：curl HTTP/2 GET 两轮都是 `200 HIT-R2`，content-length=13618517，没有 content-range；Node `https.get`（HTTP/1.1）第二轮 `200 HIT-R2`，收到 13618517 字节；HEAD `200 HIT-R2`；`Range: bytes=0-0` 返回 `206 HIT-R2`，`content-range: bytes 0-0/13618517`；`bytes=-100` 返回 `206 HIT-R2`，content-range 正确。
 - `scripts/acceptance.sh` 15/15 通过。
 
+**2026-11-06 23:48 CST 已上生产**：version `c53679db-c4b7-46f3-846b-346fb1529196`（上一版是 `cbf223db-912d-4715-aee7-eb79ef7dcd54`，回滚用 `npx wrangler rollback cbf223db-912d-4715-aee7-eb79ef7dcd54`）。线上回归：不带 Range 的 GET 两次间隔 79 秒都是 `200 HIT-R2`；Node `https.get` 回 `200 HIT-R2`；HEAD 回 `200`；`bytes=0-0` 回 `206 HIT-R2`；真实的 `readProviderImage` 读取成功。acceptance.sh 生产模式（`TEST_HOST=https://cdn.makaron.app`，生产 purge 密钥）15/15 通过。
+
 ## 本地文件
 
 `.secrets` 和 `launch.local.sql` 都已 gitignore，里面保存测试和生产环境的 PURGE_SECRET，不要提交。
