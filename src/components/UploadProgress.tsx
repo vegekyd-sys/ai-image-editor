@@ -41,14 +41,18 @@ export function UploadProgressChip({
   items,
   hint = false,
   testId,
+  showCount = true,
 }: {
   items: UploadProgressItem[];
   /** The user tried to send before uploads finished. */
   hint?: boolean;
   testId?: string;
+  /** False where every thumbnail already shows its own progress (desktop):
+   * the chip then only appears for the send-before-ready hint. */
+  showCount?: boolean;
 }) {
   const { t } = useLocale();
-  if (items.length === 0) return null;
+  if (items.length === 0 || (!showCount && !hint)) return null;
   const { done, failed, percent, active } = overallProgress(items);
   if (!active && failed === 0) return null;
   const isError = !active && failed > 0;

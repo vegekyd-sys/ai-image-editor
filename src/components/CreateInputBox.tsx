@@ -843,7 +843,7 @@ export default function CreateInputBox({
               </div>
             ))}
           </div>
-          <UploadProgressChip items={uploadItems} testId="create-upload-status" />
+          <UploadProgressChip items={uploadItems} testId="create-upload-status" showCount={!isDesktop} />
           {/* Model · Skill · Create read as one control */}
           <div className="mkr-action-cluster">
             {onAgentModelChange && (

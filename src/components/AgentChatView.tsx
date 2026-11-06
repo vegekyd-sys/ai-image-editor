@@ -1932,7 +1932,7 @@ export default function AgentChatView({
             {/* Spacer (only when no thumbnails taking flex space) */}
             {attachments.length === 0 && <div className="flex-1" />}
 
-            <UploadProgressChip items={uploadItems} hint={attachmentHint} testId="chat-attachment-status" />
+            <UploadProgressChip items={uploadItems} hint={attachmentHint} testId="chat-attachment-status" showCount={!isPanel} />
 
             {/* Model · Skill · Send read as one control */}
               <div className="mkr-action-cluster">
