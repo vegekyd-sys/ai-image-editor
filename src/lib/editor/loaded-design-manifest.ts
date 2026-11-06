@@ -1,6 +1,5 @@
 import type { DesignPayload } from '@/types';
 import { compileEditableManifestWithProvenance } from './editable-provenance-compiler';
-import { isTimelineDesign } from '@/lib/timeline/design';
 
 export function normalizeLoadedDesignManifest(
   value: unknown,
@@ -8,8 +7,6 @@ export function normalizeLoadedDesignManifest(
   if (!value || typeof value !== 'object') return undefined;
   const design = value as DesignPayload;
   if (typeof design.code !== 'string') return design;
-  // Timeline videos are edited through their timeline, not code editables.
-  if (isTimelineDesign(design)) return { ...design, editables: [] };
 
   const props = { ...(design.props ?? {}) };
   const manifest = compileEditableManifestWithProvenance({

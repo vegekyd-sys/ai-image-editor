@@ -72,7 +72,6 @@ import {
 } from './composition-parts';
 import { compileSavedCompositionPart } from './composition-workspace-runner';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
-import { createTimelineTools } from './timeline/agent-tools';
 import { isDirectRemotionCompositionSource } from './remotion-code-normalization';
 import {
   getAgentProviderTools,
@@ -363,7 +362,6 @@ export type AgentStreamEvent =
   | { type: 'render' | 'composition'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string }  // Agent React composition for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
-  | import('./timeline/agent-tools').TimelineTxStreamEvent  // one timeline video edit step, applied live in open editors
   | {
       type: 'context_compaction';
       provider: 'anthropic' | 'openai';
@@ -5609,9 +5607,6 @@ const tools = preserveOptionalToolFields({
     delete_file: createDeleteFileTool(scope),
 
     run_code: createRunCodeTool(scope),
-
-    // ── Timeline videos (MTP v1) ────────────────────────────────────────────
-    ...createTimelineTools(ctx),
 
     generate_audio: createGenerateAudioTool(scope),
 

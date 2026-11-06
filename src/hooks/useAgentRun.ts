@@ -352,9 +352,6 @@ function dispatchEvent(row: AgentEventRow, callbacks: AgentStreamCallbacks) {
     case 'music_task':
       callbacks.onMusicTask?.((data as { taskId: string }).taskId)
       break
-    case 'timeline_tx':
-      callbacks.onTimelineTx?.(data as unknown as Parameters<NonNullable<typeof callbacks.onTimelineTx>>[0])
-      break
     case 'video_snapshot': {
       const video = data as { snapshotId?: string; taskId?: string; videoMeta?: import('@/types').VideoMeta }
       if (video.snapshotId && video.taskId && video.videoMeta) {

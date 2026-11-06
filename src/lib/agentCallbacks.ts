@@ -62,8 +62,6 @@ export interface AgentCallbackContext {
 
   // Music
   onMusicTaskCreated?: (taskId: string) => void;
-  /** Live timeline video edit step from the Agent (edit_timeline). */
-  onTimelineTx?: (event: import('@/components/timeline/useTimelineEditor').TimelineTxEvent) => void;
   /** When true, onDone won't reset status to greeting (music polling shows its own status) */
   musicPollingRef?: { current: boolean };
   /** When true, onDone won't reset status to greeting (video polling or music polling active) */
@@ -413,11 +411,6 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
           return [...prev, videoMsg];
         });
       }
-    },
-
-    onTimelineTx: (event) => {
-      if (event.label) ctx.setAgentStatus?.(event.label);
-      ctx.onTimelineTx?.(event);
     },
 
     onMusicTask: (taskId) => {

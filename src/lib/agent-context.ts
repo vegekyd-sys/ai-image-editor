@@ -8,8 +8,6 @@
  * Frontend-only context (annotation, draft warnings) is passed via options.
  */
 
-import { getTimelineDoc } from './timeline/design';
-import { timelineDuration } from './timeline/reducer';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ModelMessage } from 'ai';
 import type { AgentModelProvider } from './agent-models';
@@ -704,18 +702,13 @@ export async function buildPromptContext(
     ? `[VIDEO MODE] You are viewing a video. First consume its Media Index description as existing media understanding. Use analyze_video only for missing or uncovered visual scenes/actions. Use transcribe_audio for dialogue, subtitles, word/utterance timestamps, or speech-dependent cuts when exact timing is not already available. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
     : '';
 
-  const currentTimeline = !currentSnapIsVideo && currentDesign ? getTimelineDoc(currentDesign) : null;
-  const designWarning = currentTimeline
-    ? `[TIMELINE VIDEO MODE] You are viewing a timeline video (snapshot_id: ${currentSnap?.id}). The user edits it on the timeline under the canvas. To change it, call get_timeline (if you need details) and then edit_timeline with one call per user-perceivable step — each step lands live in the user's editor. Do NOT use run_code patches or analyze_image on it; use preview_frame({snapshot_id}) to check frames.\n\n`
-    : !currentSnapIsVideo && currentDesignPath
+  const designWarning = !currentSnapIsVideo && currentDesignPath
     ? `[COMPOSITION MODE] You are viewing a Remotion composition (not a photo). Do NOT call analyze_image — it only shows a static poster frame, not the actual content. Modify the existing composition by using its workspace code path with run_code patch mode.\n\n`
     : '';
 
   // Composition editable state and path contract. Keep the full code out of the
   // prompt; the agent must use code_path explicitly when patching persisted compositions.
-  const designContext = currentTimeline
-    ? `[Current Timeline Video]\nsnapshot_id: ${currentSnap?.id}\nrevision: ${currentTimeline.revision}\nsize: ${currentTimeline.width}x${currentTimeline.height} @ ${currentTimeline.fps}fps\nduration: ${timelineDuration(currentTimeline)}s\nclips: ${Object.values(currentTimeline.clips).length} (${[...new Set(Object.values(currentTimeline.clips).map(c => c.kind))].join(', ') || 'none'})\nThe user may have edited it in the GUI since your last turn; call get_timeline before editing existing clips.\n\n`
-    : currentDesignPath
+  const designContext = currentDesignPath
     ? `[Current Composition]\npath: ${currentDesignPath}${currentDesign ? `\nwidth: ${currentDesign.width}\nheight: ${currentDesign.height}${currentDesign.animation ? `\nanimation: ${currentDesign.animation.durationInSeconds}s @ ${currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this composition, call run_code with { type: 'patch', code_path: '${currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not recreate it with render unless the user asks for a new composition.\n${currentDesign?.editables?.length ? `\n[Composition Editable State]\n${currentDesign.editables.map(f =>
         `- ${f.label} (${f.propKey}): "${(currentDesign!.props as Record<string, unknown>)?.[f.propKey] ?? ''}"`
       ).join('\n')}\nUser may have edited these values in the GUI. Preserve/merge current props when patching.\n` : ''}\n`

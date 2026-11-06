@@ -6,7 +6,6 @@ import {
   mergePersistedEditableProps,
 } from '@/lib/editor/editable-persistence';
 import * as workspace from '@/lib/workspace';
-import { getTimelineDoc, timelineToDesign } from '@/lib/timeline/design';
 
 type RouteContext = {
   params: Promise<{ id: string; snapshotId: string }>;
@@ -52,21 +51,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       __makaronEditableRevision?: number;
     };
 
-    // Timeline videos: never let a whole-design or props write roll the
-    // timeline back (Agent tx and the timeline API may have moved it ahead).
-    const timelineGuard = await workspace.readFile(snapshot.design_path, admin, project.user_id)
-      .then(file => (file ? JSON.parse(file.content) as Record<string, unknown> : null))
-      .catch(() => null);
-    const currentTimeline = timelineGuard ? getTimelineDoc(timelineGuard as { code: string; props?: Record<string, unknown> }) : null;
-    if (currentTimeline) {
-      const incoming = body.design !== undefined
-        ? getTimelineDoc(body.design as { code: string; props?: Record<string, unknown> })
-        : getTimelineDoc({ code: String(timelineGuard!.code), props: body.props as Record<string, unknown> });
-      if (!incoming || incoming.revision < currentTimeline.revision) {
-        return NextResponse.json({ ok: true, staleIgnored: true });
-      }
-      persisted = { ...timelineGuard!, ...timelineToDesign(incoming, timelineGuard!) } as typeof persisted;
-    } else if (body.design !== undefined) {
+    if (body.design !== undefined) {
       persisted = createPersistedEditableDesign(body.design);
     } else {
       const revision = safeRevision(body.revision);

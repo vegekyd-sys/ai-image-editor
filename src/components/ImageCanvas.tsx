@@ -127,17 +127,10 @@ interface ImageCanvasProps {
   onVideoRetakeChange?: (range: VideoRetakeRange) => void;
   videoSeekRequest?: { time: number; token: number };
   /** Called after the current video frame is captured from the playing element. */
-  /** Timeline videos: receive the design Player to drive playhead/seek. */
-  onDesignPlayer?: (player: PlayerRef | null) => void;
-  /** Timeline videos: selection/transform layer rendered over the design Player. */
-  designCanvasOverlay?: React.ReactNode;
-  /** Timeline videos show their own playhead in the dock instead of the seek bar. */
-  hideDesignSeekBar?: boolean;
 }
 
 export default function ImageCanvas({
   projectId,
-  onDesignPlayer, designCanvasOverlay, hideDesignSeekBar,
   designSnapshotId,
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
@@ -266,12 +259,6 @@ export default function ImageCanvas({
   // Remotion Player custom controls — frame tracked via ref (no re-render during playback)
   const remotionRef = useRef<PlayerRef | null>(null);
   const [remotionPlayer, setRemotionPlayer] = useState<PlayerRef | null>(null);
-  // Timeline videos drive playhead/seek through the design Player; deliver it
-  // whenever either side changes (the Player can mount before the parent knows
-  // the design is a timeline).
-  useEffect(() => {
-    onDesignPlayer?.(remotionPlayer);
-  }, [onDesignPlayer, remotionPlayer]);
   const [remotionPlaying, setRemotionPlaying] = useState(false);
   const remotionFrameRef = useRef(0);
   const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
@@ -1580,7 +1567,7 @@ export default function ImageCanvas({
               snapshotId={designSnapshotId}
               mode={isLongDesign ? 'inline' : 'fill'}
               hideControls
-              posterImage={currentDesign?.animation && !selectedEditableId && !hideDesignSeekBar ? displayImage : undefined}
+              posterImage={currentDesign?.animation && !selectedEditableId ? displayImage : undefined}
               onLoading={setRemotionLoading}
               onError={(err) => console.error('[canvas design]', err)}
               onContainerRef={setDesignContainerEl}
@@ -1601,7 +1588,7 @@ export default function ImageCanvas({
             />
 
             {/* Poster fallback while RemotionRenderer is loading (fetching images/fonts/audio) */}
-            {remotionLoading && displayImage && !selectedEditableId && !hideDesignSeekBar && (
+            {remotionLoading && displayImage && !selectedEditableId && (
               <img
                 src={displayImage}
                 alt="poster"
@@ -1645,7 +1632,7 @@ export default function ImageCanvas({
             )}
 
             {/* Seek bar — Spotify-style: 2px default, 6px on hover/drag */}
-            {currentDesign?.animation && !hideDesignSeekBar && (
+            {currentDesign?.animation && (
               <div
                 data-remotion-seek
                 className="absolute bottom-0 left-0 right-0 z-20 cursor-pointer group"
@@ -1680,7 +1667,6 @@ export default function ImageCanvas({
                 </div>
               </div>
             )}
-            {designCanvasOverlay}
             {/* Edit mode gesture shield div removed — handled by capture-phase on outer container */}
             {/* Editable design overlay */}
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (

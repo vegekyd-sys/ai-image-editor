@@ -1743,9 +1743,3 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
 [data-editable], .makaron-editable-node { cursor: pointer; pointer-events: auto; }
 [data-editable]:hover:not([data-editable-selected]),
 .makaron-editable-node:hover:not([data-editable-selected]) { outline: 1.5px dashed rgba(255,255,255,0.7); outline-offset: -1px; }
-
-/* Timeline video: Agent-touched clip / canvas tag pulse (matches AgentStatusBar breathe). */
-@keyframes mkr-timeline-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.55; }
-  50% { transform: scale(1.9); opacity: 1; }
-}

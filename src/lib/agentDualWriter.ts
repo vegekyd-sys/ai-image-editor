@@ -459,16 +459,6 @@ export class AgentDualWriter {
         return;
       }
 
-      case 'timeline_tx': {
-        // Persist so durable/background runs and reconnecting pages replay each edit step.
-        await this.flushContent();
-        this.currentTurnHasDelivery = true;
-        const { type: _t, ...rest } = event as Record<string, unknown>;
-        await this.insertEvent(event.type, rest);
-        this.tryEnqueue(event);
-        return;
-      }
-
       case 'music_task': {
         await this.flushContent();
         this.currentTurnHasDelivery = true;

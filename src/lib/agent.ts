@@ -52,7 +52,6 @@ import { getTokenRate } from './billing/token-rates';
 import { deepSeekFlashProviderCost, deepSeekFlashTariffMultiplier } from './billing/deepseek-flash-rate';
 import { PricingUnavailableError } from './billing/media-pricing';
 import * as workspace from './workspace';
-import { drainTimelineEvents, isTimelineDesignFile } from './timeline/agent-tools';
 import {
   createTools,
   formatGeneratedAudioForCui,
@@ -430,7 +429,7 @@ export async function* runMakaronAgent(
     // must pass code_path explicitly in run_code patch mode for persisted compositions.
     const promptHasCompositionPointer = typeof prompt === 'string'
       && (prompt.includes('[Current Composition]') || prompt.includes('[Current composition pointer]'));
-    const designInjection = options?.currentDesignPath && !promptHasCompositionPointer && !isTimelineDesignFile(options.currentDesign)
+    const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
       ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${options.currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
     const textOnlyVisionNote = animImages?.length && !runtime.spec.supportsImageInput
@@ -1320,13 +1319,8 @@ export async function* runMakaronAgent(
           }
         }
 
-        // Timeline video edit steps → live timeline_tx events for open editors.
-        if (toolName === 'edit_timeline') {
-          for (const timelineEvent of drainTimelineEvents(ctx)) yield timelineEvent;
-        }
-
         // Composition output handling — emit design SSE with published flag.
-        if (toolName === 'run_code' || toolName === 'write_file' || toolName === 'publish_draft' || toolName === 'create_timeline') {
+        if (toolName === 'run_code' || toolName === 'write_file' || toolName === 'publish_draft') {
           // Design output stored in ctx.__pendingDesign → emit as SSE event
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {

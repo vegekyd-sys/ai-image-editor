@@ -17,8 +17,6 @@ export const DURABLE_INPUT_GUARDED_TOOLS = new Set([
   ...DURABLE_IDEMPOTENT_TOOLS,
   'studio_run',
   'publish_draft',
-  'create_timeline',
-  'edit_timeline',
   'write_file',
   'write_code_file',
   'run_code',
