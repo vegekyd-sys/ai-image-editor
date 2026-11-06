@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   collectRemotionFontSourceFaces,
   collectRemotionFontSourceFacesForFamilies,
+  findProvisionedRemotionFontManifest,
 } from '@/lib/remotion-font-provision';
-import { REMOTION_FONT_CATALOG, internalRemotionFontFamily } from '@/remotion/font-catalog';
+import { REMOTION_FONT_CATALOG, REMOTION_FONT_CATALOG_VERSION, internalRemotionFontFamily } from '@/remotion/font-catalog';
 
 describe('Remotion deploy-time font provisioner', () => {
   it('resolves every catalog family and requested weight without network access', async () => {
@@ -37,5 +38,51 @@ describe('Remotion deploy-time font provisioner', () => {
     expect(faces.length).toBeGreaterThan(0);
     expect(faces.every((face) => face.family === 'Bungee Spice')).toBe(true);
     expect(faces.every((face) => face.sourceUrl.startsWith('https://fonts.gstatic.com/'))).toBe(true);
+  });
+
+  describe('read-only lookup for signed-out preview', () => {
+    afterEach(() => vi.unstubAllGlobals());
+    const serveUrl = 'https://bucket.s3.us-east-1.amazonaws.com';
+    const sha = 'c'.repeat(64);
+    const derived = {
+      version: REMOTION_FONT_CATALOG_VERSION,
+      faces: [{
+        family: 'Lobster Two',
+        internalFamily: internalRemotionFontFamily('Lobster Two'),
+        style: 'normal',
+        weight: 400,
+        subset: '[0]',
+        unicodeRange: 'U+0000-00FF',
+        sha256: sha,
+        url: `${serveUrl}/assets/${sha}.woff2`,
+      }],
+    };
+
+    it('reads the deterministic derived manifest the author already published', async () => {
+      const fetchMock = vi.fn(async () => new Response(JSON.stringify(derived), { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const found = await findProvisionedRemotionFontManifest({ serveUrl, families: ['lobster two'] });
+
+      expect(found?.manifest.faces[0].family).toBe('Lobster Two');
+      expect(found?.manifestUrl).toMatch(
+        new RegExp(`^${serveUrl}/sites/_font-catalog/${REMOTION_FONT_CATALOG_VERSION}/manifests/[a-f0-9]{64}\\.json$`),
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns null instead of provisioning when nothing was published', async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('missing', { status: 403 })));
+
+      await expect(findProvisionedRemotionFontManifest({ serveUrl, families: ['Lobster Two'] })).resolves.toBeNull();
+    });
+
+    it('needs no lookup for catalog families', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      await expect(findProvisionedRemotionFontManifest({ serveUrl, families: ['Noto Sans SC'] })).resolves.toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
   });
 });
