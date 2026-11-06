@@ -1934,8 +1934,7 @@ export default function AgentChatView({
 
             <UploadProgressChip items={uploadItems} hint={attachmentHint} testId="chat-attachment-status" />
 
-            {/* Model · Skill read as one control next to send */}
-            {(onModelChange || (skills && skills.length > 0 && onSkillChange)) && (
+            {/* Model · Skill · Send read as one control */}
               <div className="mkr-action-cluster">
                 {/* Model selector */}
                 {onModelChange && (
@@ -1968,8 +1967,6 @@ export default function AgentChatView({
                     variant="segment"
                   />
                 )}
-              </div>
-            )}
 
             {/* Send / Stop button */}
             {isAgentActive && onAbort ? (
@@ -1977,7 +1974,7 @@ export default function AgentChatView({
                 data-testid="chat-stop"
                 aria-label="Stop agent"
                 onClick={onAbort}
-                className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 cursor-pointer"
+                className="mkr-liquid-icon-button w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 cursor-pointer"
                 style={{ background: 'linear-gradient(145deg, rgba(239,68,68,0.22), rgba(10,10,14,0.36))', color: '#ef4444', border: '0.5px solid rgba(239,68,68,0.26)' }}
 >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
@@ -1991,7 +1988,7 @@ export default function AgentChatView({
                 onClick={handleSubmit}
                 disabled={processingCount > 0 ? false : (!input.trim() && attachments.length === 0)}
                 aria-disabled={processingCount > 0 || undefined}
-                className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+                className="mkr-liquid-icon-button w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
                 style={{
                   background: (input.trim() || (attachments.length > 0 && allReady)) ? 'linear-gradient(145deg, rgba(192,38,211,0.92), rgba(145,18,178,0.74))' : 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(10,10,14,0.34))',
                   color: (input.trim() || (attachments.length > 0 && allReady)) ? '#fff' : 'rgba(255,255,255,0.25)',
@@ -2004,6 +2001,7 @@ export default function AgentChatView({
                 </svg>
               </button>
             )}
+              </div>
           </div>
         </div>
       </div>}
