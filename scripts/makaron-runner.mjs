@@ -11,6 +11,7 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
@@ -119,7 +120,8 @@ function ensureSymlink(source, target) {
     if (stat.isSymbolicLink()) {
       const resolved = resolve(dirname(target), readlinkSync(target));
       if (resolved === source) return;
-      rmSync(target);
+      // rmSync refuses a symlink that points at a directory (ERR_FS_EISDIR).
+      unlinkSync(target);
     } else {
       throw new Error(`Refusing to replace local config at ${target}. Move it aside first.`);
     }
@@ -150,11 +152,12 @@ function ensureDependencies(path, devPath) {
       rmSync(target, { recursive: true, force: true });
     }
     ensureSymlink(shared, target);
+    resetBuildCacheOnDependencyChange(path, `shared:${hashFile(devLock)}`);
     return 'shared';
   }
 
-  if (existsSync(target) && lstatSync(target).isSymbolicLink()) {
-    rmSync(target);
+  if (isSymlink(target)) {
+    unlinkSync(target);
   }
   const marker = resolve(target, '.makaron-package-lock.sha256');
   const expectedHash = existsSync(runnerLock) ? hashFile(runnerLock) : 'missing';
@@ -163,7 +166,37 @@ function ensureDependencies(path, devPath) {
     run('npm', ['ci'], { cwd: path });
     writeFileSync(marker, `${expectedHash}\n`);
   }
+  resetBuildCacheOnDependencyChange(path, `local:${expectedHash}`);
   return 'local';
+}
+
+function isSymlink(path) {
+  try {
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The webpack persistent cache snapshots node_modules. When the runner swaps
+ * between the shared dev node_modules and a runner-local install (or either
+ * lockfile changes), that snapshot no longer matches and `next build` crashes
+ * in WasmHash with "Cannot read properties of undefined (reading 'length')".
+ * Drop only the webpack cache when the dependency fingerprint changes.
+ */
+function resetBuildCacheOnDependencyChange(path, fingerprint) {
+  const cacheDir = resolve(path, '.next', 'cache');
+  const marker = resolve(cacheDir, '.makaron-dependencies');
+  const previous = existsSync(marker) ? readFileSync(marker, 'utf8').trim() : null;
+  if (previous === fingerprint) return;
+  const webpackCache = resolve(cacheDir, 'webpack');
+  if (existsSync(webpackCache)) {
+    console.log('Dependencies changed since the last build; clearing the runner webpack cache.');
+    rmSync(webpackCache, { recursive: true, force: true });
+  }
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileSync(marker, `${fingerprint}\n`);
 }
 
 function syncIgnoredConfig(path, devPath) {
