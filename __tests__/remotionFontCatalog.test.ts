@@ -252,6 +252,78 @@ describe('Remotion shared font catalog', () => {
     expect(prepared.usedFamilies).toContain('Ma Shan Zheng');
   });
 
+  it('pins font stacks kept in constants instead of falling back to the platform generic', () => {
+    // Real session 32452f29: Chinese titles rendered blank in Sandbox preview
+    // because the stacks lived in constants the fontFamily rewrite never saw.
+    const prepared = prepareRemotionFontCode({
+      code: `
+        const SERIF = "'Noto Serif SC', serif";
+        const SANS = 'Noto Sans SC, sans-serif';
+        const title = <div style={{fontFamily: SERIF}}>生日快乐</div>;
+        const label = <div style={{fontFamily: SANS}}>京都 · 一家人的晚餐</div>;
+        const badge = <Badge font="'Ma Shan Zheng', cursive" />;
+      `,
+      manifest: makeManifest(),
+    });
+
+    expect(prepared.usedFamilies).toEqual(
+      expect.arrayContaining(['Noto Serif SC', 'Noto Sans SC', 'Ma Shan Zheng']),
+    );
+    expect(prepared.code).toContain(
+      `const SERIF = "'${internalRemotionFontFamily('Noto Serif SC')}', `,
+    );
+    expect(prepared.code).toContain(
+      `const SANS = '"${internalRemotionFontFamily('Noto Sans SC')}", `,
+    );
+    // JSX attribute strings cannot hold escapes, so inner names use the other quote.
+    expect(prepared.code).toContain(
+      `font="'${internalRemotionFontFamily('Ma Shan Zheng')}', '${internalRemotionFontFamily('Noto Sans SC')}'`,
+    );
+    expect(prepared.code).not.toMatch(/'Noto Serif SC', serif/);
+    expect(prepared.warnings).toEqual([]);
+  });
+
+  it('aliases each family of a font stack supplied through persisted props', () => {
+    const prepared = prepareRemotionFontCode({
+      code: 'const title = <div style={{fontFamily: props.titleFont}}>云影落长安</div>;',
+      props: { titleFont: "'Noto Serif SC', serif", caption: 'Hello, world' },
+      manifest: makeManifest(),
+    });
+
+    expect(prepared.dynamicFamilyAliases).toContainEqual({ alias: 'Noto Serif SC', family: 'Noto Serif SC' });
+    expect(prepared.usedFamilies).toContain('Noto Serif SC');
+    expect(prepared.warnings).toEqual([]);
+  });
+
+  it('leaves copy and canvas font shorthands untouched', () => {
+    const code = `
+      const copy = 'Hello, world';
+      const canvas = "bold 48px Inter, sans-serif";
+      const unknown = "'Lobster Two', cursive";
+    `;
+    const prepared = prepareRemotionFontCode({ code, manifest: makeManifest() });
+
+    expect(prepared.code).toBe(code);
+    expect(prepared.warnings).toEqual([]);
+  });
+
+  it('reports runtime fontFamily values that cannot reach a pinned face', () => {
+    const prepared = prepareRemotionFontCode({
+      code: `
+        const KAI = 'STKaiti';
+        const title = <div style={{fontFamily: KAI}}>微信华章</div>;
+        const body = <div style={{fontFamily: theme.body}}>正文</div>;
+      `,
+      manifest: makeManifest(),
+    });
+
+    expect(prepared.warnings).toHaveLength(3);
+    expect(prepared.warnings[0]).toContain('fontFamily: KAI resolves to "STKaiti"');
+    expect(prepared.warnings[1]).toContain('fontFamily: theme.body is a runtime value');
+    expect(prepared.warnings[2]).toContain('Sandbox preview_frame and Lambda export run on Linux');
+    expect(prepared.warnings[2]).toContain('not a font-loading race');
+  });
+
   it('records cold and document-cache font loading timings', async () => {
     class MockFontFace {
       constructor(

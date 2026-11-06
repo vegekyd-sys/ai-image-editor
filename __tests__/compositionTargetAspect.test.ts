@@ -7,6 +7,7 @@ import { formatAspectRatio } from '@/lib/media-aspect';
 import { validateDesign } from '@/lib/design-harness';
 import { normalizeCompositionAnimation } from '@/lib/composition-duration';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from '@/lib/media-markers';
+import { remotionFontWarningText } from '@/lib/remotion-font-diagnostics';
 
 // Run the actual tool factory and guard, isolating database writes and unrelated
 // provider SDKs. This exercises schema -> execution -> validation -> autosave.
@@ -36,6 +37,7 @@ function harness(dimensions = [[1280, 720], [1280, 720]]) {
     normalizeCompositionAnimation, resolveMediaMarkersInString, resolveMediaMarkersInValue,
     refreshSnapshotUrls: vi.fn(), getStudioRunCheckpoint: async () => null,
     studioCompositionPromiseError: () => null, persistCompositionDraft: persist,
+    remotionFontWarningText,
   });
   vm.runInContext(executable, scope);
   const tool = vm.runInContext('createRunCodeTool({ctx})', scope);

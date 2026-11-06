@@ -13,6 +13,7 @@ import {
 } from './composition-draft';
 import { normalizeCompositionAnimation } from './composition-duration';
 import { validateDesignReport, type DesignResult } from './design-harness';
+import { remotionFontWarningText } from './remotion-font-diagnostics';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
 import * as workspace from './workspace';
 
@@ -374,6 +375,6 @@ export async function compileSavedCompositionPart(input: {
     advisories: validation.advisories,
     message: `Composition compiled from ${assembled.paths.length} files (${assembled.totalChars} chars) and autosaved to ${saved.path}.${validation.advisories.length > 0
       ? ` Editable coverage has ${validation.advisories.length} non-blocking ${validation.advisories.length === 1 ? 'advisory' : 'advisories'}; the draft remains previewable and publishable.`
-      : ''}`,
+      : ''}${remotionFontWarningText(saved.draft)}`,
   };
 }

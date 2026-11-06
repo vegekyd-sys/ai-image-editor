@@ -5,6 +5,7 @@ import { after } from 'next/server';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
+import { remotionFontWarningText, remotionFontWarnings } from './remotion-font-diagnostics';
 import type { ImageBackground, ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
@@ -3979,6 +3980,7 @@ Returns the rendered image so you can see it with your vision.`,
               mimeType: 'image/jpeg',
               analysis,
               source: 'composition-contact-sheet',
+              fontWarnings: remotionFontWarnings(design),
               frames: targetFrames,
               framePaths,
               frameUrls,
@@ -4114,6 +4116,7 @@ Returns the rendered image so you can see it with your vision.`,
             analysis,
             source: 'composition',
             frame: targetFrame,
+            fontWarnings: remotionFontWarnings(design),
             totalFrames,
             fps,
             question,
@@ -4132,6 +4135,9 @@ Returns the rendered image so you can see it with your vision.`,
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
         }
+        const fontNote = Array.isArray(output.fontWarnings) && output.fontWarnings.length > 0
+          ? `\nFont check (explains missing CJK text in these frames; fix the composition, do not retry the preview):\n${output.fontWarnings.map((warning: string) => `- ${warning}`).join('\n')}`
+          : '';
         if (Array.isArray(output.frames)) {
           const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
           if (output.analysis) {
@@ -4139,7 +4145,7 @@ Returns the rendered image so you can see it with your vision.`,
               type: 'content' as const,
               value: [{
                 type: 'text' as const,
-                text: `Visual QA for contact sheet frames ${output.frames.join(', ')} of ${output.totalFrames}:${loc}\n${output.analysis}\nUse this as visual evidence. If clean, publish without adding another preview call.`,
+                text: `Visual QA for contact sheet frames ${output.frames.join(', ')} of ${output.totalFrames}:${loc}\n${output.analysis}\nUse this as visual evidence. If clean, publish without adding another preview call.${fontNote}`,
               }],
             };
           }
@@ -4147,7 +4153,7 @@ Returns the rendered image so you can see it with your vision.`,
             type: 'content' as const,
             value: [
               modelFileContent(output.base64Data, output.mimeType),
-              { type: 'text' as const, text: `Contact sheet frames ${output.frames.join(', ')} of ${output.totalFrames}.${loc} Individual frame paths: ${(output.framePaths || []).join(', ')}.${output.question ? ` Focus: ${output.question}.` : ''} Compare all frames together for scene distinctness, subject specificity, meaningful motion, readability, and slideshow risk. If clean, publish without adding another preview call.` },
+              { type: 'text' as const, text: `Contact sheet frames ${output.frames.join(', ')} of ${output.totalFrames}.${loc} Individual frame paths: ${(output.framePaths || []).join(', ')}.${output.question ? ` Focus: ${output.question}.` : ''} Compare all frames together for scene distinctness, subject specificity, meaningful motion, readability, and slideshow risk. If clean, publish without adding another preview call.${fontNote}` },
             ],
           };
         }
@@ -4159,7 +4165,7 @@ Returns the rendered image so you can see it with your vision.`,
             type: 'content' as const,
             value: [{
               type: 'text' as const,
-              text: `Visual QA for frame ${output.frame}/${output.totalFrames} (${time}s).${loc}\n${output.analysis}\nUse this as visual evidence.${nextStep}`,
+              text: `Visual QA for frame ${output.frame}/${output.totalFrames} (${time}s).${loc}\n${output.analysis}\nUse this as visual evidence.${nextStep}${fontNote}`,
             }],
           };
         }
@@ -4167,7 +4173,7 @@ Returns the rendered image so you can see it with your vision.`,
           type: 'content' as const,
           value: [
             modelFileContent(output.base64Data, output.mimeType),
-            { type: 'text' as const, text: `Frame ${output.frame}/${output.totalFrames} (${time}s).${loc}${output.question ? ` Focus: ${output.question}.` : ''}${nextStep}` },
+            { type: 'text' as const, text: `Frame ${output.frame}/${output.totalFrames} (${time}s).${loc}${output.question ? ` Focus: ${output.question}.` : ''}${nextStep}${fontNote}` },
           ],
         };
       },
@@ -5165,7 +5171,7 @@ function createRunCodeTool(
 
             const draftIdx = drafts.length;
             const patchSource = result.code_path ? ` from ${result.code_path}` : '';
-            return { type: 'text' as const, code_path: autosave.path, content: `Patched${patchSource} — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. After QA, use publish_draft({ design_path: "${autosave.path}" }) when the editable composition should appear in the timeline.` };
+            return { type: 'text' as const, code_path: autosave.path, content: `Patched${patchSource} — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. After QA, use publish_draft({ design_path: "${autosave.path}" }) when the editable composition should appear in the timeline.${remotionFontWarningText(patched)}` };
           }
 
           // { type: 'render' (or aliases 'composition' / legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -5256,7 +5262,7 @@ function createRunCodeTool(
             (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload, codePath: autosave.path });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
 
-            return { type: 'text' as const, code_path: autosave.path, content: `Composition ready — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame with design_path if the run resumes later. After QA, use publish_draft({ design_path: "${autosave.path}" }) when the editable composition should appear in the timeline.` };
+            return { type: 'text' as const, code_path: autosave.path, content: `Composition ready — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame with design_path if the run resumes later. After QA, use publish_draft({ design_path: "${autosave.path}" }) when the editable composition should appear in the timeline.${remotionFontWarningText(designPayload)}` };
           }
 
           // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)
