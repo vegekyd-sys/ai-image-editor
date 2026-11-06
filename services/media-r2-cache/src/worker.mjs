@@ -288,14 +288,17 @@ export function createHandler(deps = {}) {
     return Response.json({ purged: targets.length });
   }
 
-  function serveR2(request, object, target, status) {
+  // R2 reports `range` on every object, including full reads and head(), so
+  // 206 is only sent when the client asked for a range (GET with a valid
+  // Range header). Full GETs and HEADs are 200 with the full content-length.
+  function serveR2(request, object, target, status, ranged) {
     const meta = metaFromR2(object);
     if (etagMatches(request.headers.get('if-none-match'), meta.etag)) {
       object.body?.cancel?.();
       return new Response(null, { status: 304, headers: clientHeaders(meta, status) });
     }
     const h = clientHeaders(meta, status);
-    if (object.range) {
+    if (ranged && object.range) {
       const { offset, length } = object.range;
       h.set('content-range', `bytes ${offset}-${offset + length - 1}/${object.size}`);
       h.set('content-length', String(length));
@@ -360,7 +363,7 @@ export function createHandler(deps = {}) {
             await revalidate(target, url, meta, env);
           }
         });
-        return serveR2(request, object, target, 'HIT-R2');
+        return serveR2(request, object, target, 'HIT-R2', request.method !== 'HEAD' && Boolean(rangeHeader));
       }
 
       // Tier 3: origin, request forwarded unchanged. Fill R2 in the background.
