@@ -25,7 +25,7 @@ function fakeSupabase(tables: Record<string, unknown[]>) {
 }
 
 describe('agent audio index', () => {
-  it('exposes the generated audio intent and run from project_music tags', async () => {
+  it('exposes the generated audio intent from project_music tags', async () => {
     const ctx = await buildPromptContext(
       'project-1',
       fakeSupabase({
@@ -40,7 +40,7 @@ describe('agent audio index', () => {
           title: 'Welcome voiceover',
           track_index: 3,
           status: 'completed',
-          tags: 'audio,seed-audio,kind:voiceover,evolink-seed-audio,evolink,doubao-seed-audio-1-0,format:wav,generation:20.0s,run:run-7',
+          tags: 'audio,seed-audio,kind:voiceover,evolink-seed-audio,evolink,doubao-seed-audio-1-0,format:wav,generation:20.0s',
         }],
       }) as never,
       'user-1',
@@ -48,7 +48,7 @@ describe('agent audio index', () => {
     )
 
     expect(ctx.fullPrompt).toContain('<<<audio_1>>> [audio] — Welcome voiceover, 12s, generated kind=voiceover, project_music track_index=3')
-    expect(ctx.audioAttachments).toEqual([expect.objectContaining({ kind: 'voiceover', runId: 'run-7', trackIndex: 3 })])
+    expect(ctx.audioAttachments).toEqual([expect.objectContaining({ kind: 'voiceover', trackIndex: 3 })])
   })
 
   it('restores project_music rows as audio refs without adding them to Timeline Media Index', async () => {

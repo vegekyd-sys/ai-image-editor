@@ -23,7 +23,6 @@ import { loadCompositionDraft } from './composition-draft';
 import { resolveExplicitTurnMediaIndices } from './media-provenance';
 import { formatSourceRangeHint, sourceRangeFromVideoMeta } from './media-source-range';
 import { WorkspaceStudioRunStore } from './studio-run';
-import { parseGeneratedAudioTags } from './audio-soundtrack-guard';
 import {
   buildTypedCompactionMessage,
   formatDurableExecutionSnapshot,
@@ -40,9 +39,8 @@ export interface AudioAttachmentContext {
   title?: string;
   duration?: number;
   trackIndex?: number;
-  /** Generated audio intent and owning Agent run, read from project_music tags. */
+  /** Generated audio intent (voiceover, music, mixed, ...) read from the project_music `kind:` tag. */
   kind?: string;
-  runId?: string;
 }
 
 export interface PromptContextOptions {
@@ -309,6 +307,11 @@ interface DbProjectMusic {
   tags?: string | null;
 }
 
+function generatedAudioKind(tags: string | null | undefined): { kind?: string } {
+  const tag = String(tags || '').split(',').map(item => item.trim()).find(item => item.startsWith('kind:'));
+  return tag ? { kind: tag.slice(5) } : {};
+}
+
 function getUsableAudioUrl(row: DbProjectMusic): string {
   return row.audio_url || row.suno_audio_url || row.stream_audio_url || '';
 }
@@ -321,7 +324,6 @@ function normalizeAudioAttachment(audio: AudioAttachmentContext): AudioAttachmen
     duration: typeof audio.duration === 'number' && Number.isFinite(audio.duration) ? audio.duration : undefined,
     trackIndex: typeof audio.trackIndex === 'number' && Number.isFinite(audio.trackIndex) ? audio.trackIndex : undefined,
     ...(audio.kind ? { kind: audio.kind } : {}),
-    ...(audio.runId ? { runId: audio.runId } : {}),
   };
 }
 
@@ -489,7 +491,7 @@ export async function buildPromptContext(
         title: row.title || undefined,
         duration: typeof row.duration === 'number' ? row.duration : undefined,
         trackIndex: typeof row.track_index === 'number' ? row.track_index : undefined,
-        ...parseGeneratedAudioTags(row.tags),
+        ...generatedAudioKind(row.tags),
       };
     })
     .filter((audio) => !!audio.audioUrl);
