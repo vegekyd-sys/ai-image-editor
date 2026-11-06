@@ -1,5 +1,9 @@
 import React from 'react';
 
+export function allowsMediaSourceOverride(props: Record<string, any>): boolean {
+  return props.requestInit == null && props.credentials !== 'include' && props.crossOrigin !== 'use-credentials';
+}
+
 /** Normalize legacy Remotion trims before selecting a decoder. Html5Video
  * accepts startFrom/endAt, while @remotion/media silently ignores them. */
 export function normalizeMediaTrimProps(props: Record<string, any>): Record<string, any> {
@@ -13,9 +17,11 @@ export function normalizeMediaTrimProps(props: Record<string, any>): Record<stri
   };
 }
 
-export function withMediaTrim(Component: React.ElementType): React.ComponentType<any> {
+export function withMediaTrim(Component: React.ElementType, sources?: Record<string, string>): React.ComponentType<any> {
   return React.forwardRef(function MediaWithNormalizedTrim(props: Record<string, any>, ref: React.ForwardedRef<any>) {
-    return React.createElement(Component, { ...normalizeMediaTrimProps(props), ...(ref ? { ref } : {}) });
+    return React.createElement(Component, { ...normalizeMediaTrimProps(props),
+      ...(typeof props.src === 'string' && sources && allowsMediaSourceOverride(props) && Object.hasOwn(sources, props.src) ? {src: sources[props.src]} : {}),
+      ...(ref ? { ref } : {}) });
   });
 }
 

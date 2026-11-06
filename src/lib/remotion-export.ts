@@ -15,6 +15,7 @@ import {
 } from '@/lib/remotion-server'
 import { resolveVideoUrlsInCode } from '@/lib/video-url-resolver'
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
+import { beginQueuedMediaDelivery, resolveRemotionMediaDelivery, takeQueuedMediaDelivery } from '@/lib/remotion-media-delivery'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import type { RemotionLambdaOutputDestination } from '@/lib/remotion-lambda-renderer'
 import { normalizeCompositionAnimation } from '@/lib/composition-duration'
@@ -508,6 +509,9 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
   }
   if (!fingerprintSource) throw new Error('Could not load Remotion composition for export')
   const fingerprint = fingerprintDesign(fingerprintSource, outputType, renderProfile)
+  if (outputType === 'video' && readEnv('REMOTION_RENDERER') === 'lambda') {
+    beginQueuedMediaDelivery(fingerprintSource, input.userId, input.projectId, fingerprint)
+  }
 
   const { data: reusableRows, error: reusableError } = await admin
     .from('remotion_export_jobs')
@@ -837,7 +841,14 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
 
   try {
     const loadStart = Date.now()
+    const queuedDelivery = takeQueuedMediaDelivery(job.user_id, job.project_id,
+      typeof job.metadata?.fingerprint === 'string' ? job.metadata.fingerprint : undefined)
     const { design, designPath } = await loadJobDesign(job, admin)
+    let releaseDelivery: () => void = () => {}
+    const deliveryReady = new Promise<void>(resolve => {releaseDelivery = resolve})
+    const delivery = job.output_type === 'video' && readEnv('REMOTION_RENDERER') === 'lambda'
+      ? queuedDelivery?.promise || resolveRemotionMediaDelivery(design, {userId: job.user_id, readySignal: deliveryReady})
+      : null
     const resolvedDesign = await normalizeDesignForServer(design, job.project_id, admin)
     stageTimings.resolveDesignMs = Date.now() - loadStart
     // Jobs queued before the source-resolution default may have no profile metadata.
@@ -891,8 +902,25 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
           },
         })
       : { design: resolvedDesign, summary: undefined }
-    const renderDesign = preparedMedia.design
     stageTimings.prepareMediaMs = Date.now() - preparationStart
+    const renderDesign = preparedMedia.design
+    let mediaSources: Record<string, string> | undefined
+    // Use only versions resolved during existing work. Unready sources receive
+    // an origin capability, so no replica or version lookup can delay export.
+    releaseDelivery()
+    queuedDelivery?.release()
+    if (delivery) {
+      const deliveryStart = Date.now()
+      const plan = await delivery
+      mediaSources = plan.sources(renderDesign)
+      const preparedTargets = Object.values(mediaSources).map(value => new URL(value))
+      outputMetadata.mediaDelivery = {
+        ...plan.summary,
+        preparedNativeUrls: preparedTargets.filter(value => value.hostname.endsWith('.r2.cloudflarestorage.com')).length,
+        preparedWorkerUrls: preparedTargets.filter(value => value.searchParams.has('__mk_render')).length,
+      }
+      stageTimings.mediaDeliveryWaitMs = Date.now() - deliveryStart
+    }
     if (preparedMedia.summary) {
       outputMetadata.mediaPreparation = preparedMedia.summary
       job.metadata = { ...(job.metadata || {}), mediaPreparation: preparedMedia.summary }
@@ -909,6 +937,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
       let lambdaResult: Awaited<ReturnType<typeof renderDesignVideoLambdaToUrl>>
       try {
         lambdaResult = await renderDesignVideoLambdaToUrl(renderDesign, {
+          mediaSources,
           scale: renderTarget.scale,
           onProgress: updateProgress,
           outputDestination: directOutputDestination || undefined,
@@ -927,6 +956,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
         }).eq('id', job.id)
         const retryStart = Date.now()
         lambdaResult = await renderDesignVideoLambdaToUrl(renderDesign, {
+          mediaSources,
           scale: renderTarget.scale,
           onProgress: updateProgress,
         })

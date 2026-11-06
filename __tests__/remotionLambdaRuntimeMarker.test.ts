@@ -21,8 +21,16 @@ describe('Remotion Lambda runtime marker', () => {
       fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION,
       editableRuntimeVersion: REMOTION_EDITABLE_RUNTIME_VERSION,
       remotionVersion: REMOTION_VERSION,
+      mediaSourcesVersion: 1,
     });
     expect(() => assertRemotionRuntimeMarker(marker, serveUrl)).not.toThrow();
+  });
+
+  it('allows the old application contract but requires source routing support when overrides are supplied', () => {
+    const {mediaSourcesVersion: _version, ...oldMarker} = marker;
+    expect(() => assertRemotionRuntimeMarker(oldMarker, serveUrl)).not.toThrow();
+    expect(() => assertRemotionRuntimeMarker(oldMarker, serveUrl, true)).toThrow('version mismatch');
+    expect(() => assertRemotionRuntimeMarker(marker, serveUrl, true)).not.toThrow();
   });
 
   it('rejects the legacy font-only marker that lacks the editable runtime ABI', () => {
