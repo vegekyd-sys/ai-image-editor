@@ -31,11 +31,34 @@ async function probeNativeDecode(file: File): Promise<boolean> {
   }
 }
 
-/** Convert HEIC/HEIF to JPEG. Tries native decode → heic2any → server fallback (/api/upload). */
+async function convertOnServer(file: File): Promise<File | null> {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    if (!res.ok) return null;
+    const { image } = await res.json();
+    if (!image) return null;
+    const blob = await (await fetch(image)).blob();
+    return new File([blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Convert HEIC/HEIF to JPEG: native decode (Safari) → server conversion
+ * (signed-in users; returns a 2048px JPEG) → heic2any WASM.
+ *
+ * heic2any runs on the main thread, can freeze the page for tens of seconds
+ * and fails on many modern iPhone HEIC profiles, so it is the last resort
+ * (anonymous users, whose server request is rejected).
+ */
 export async function ensureDecodableFile(file: File): Promise<File> {
   if (!isHeicFile(file)) return file;
   if (await canDecodeNatively(file)) return file;
-  // Try 1: heic2any WASM (works for most HEIC profiles)
+  const fromServer = await convertOnServer(file);
+  if (fromServer) return fromServer;
   try {
     const heic2any = (await import('heic2any')).default;
     const blob = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 });
@@ -43,23 +66,6 @@ export async function ensureDecodableFile(file: File): Promise<File> {
     return new File([resultBlob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' });
   } catch {
     // heic2any failed (unsupported profile like MiHB/MiHA from AirDrop)
-  }
-  // Try 2: Server-side conversion via sips (handles all macOS-supported HEIC profiles)
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
-    if (res.ok) {
-      const { image } = await res.json();
-      if (image) {
-        const bin = atob(image.split(',')[1]);
-        const arr = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        return new File([arr], file.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' });
-      }
-    }
-  } catch {
-    // Server fallback also failed
   }
   throw new Error('HEIC conversion failed: unsupported format');
 }

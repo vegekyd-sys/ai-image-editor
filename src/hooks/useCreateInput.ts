@@ -7,7 +7,7 @@ const MAX_FILES = 10;
 
 // HEIC decode is CPU heavy (WASM); run a couple at a time instead of
 // blocking every later file behind the previous conversion.
-const heicLimiter = createLimiter(2);
+const heicLimiter = createLimiter(3);
 
 function newDraftProjectId(): string {
   return typeof crypto.randomUUID === 'function'
