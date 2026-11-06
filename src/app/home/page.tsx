@@ -1575,8 +1575,12 @@ function HomePageInner() {
       if (skillName) opts.skill = skillName
       const skillLaunchContext = createHomeSkillLaunchContext(homeSkill, prompt, skillName)
       if (skillLaunchContext) opts.skillLaunchContext = skillLaunchContext
-      const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
+      const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined, undefined, {
+        clientProjectId: createInput.draftProjectIdRef.current,
+        onItemState: createInput.setFileState,
+      })
       if (!result) throw new Error('Failed to create project')
+      createInput.rotateDraftProjectId()
       saveAgentModelPreference(result.projectId, createAgentModel)
       void clearCreateDraft()
       router.push(`/projects/${result.projectId}`)

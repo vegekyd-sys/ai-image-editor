@@ -892,8 +892,12 @@ function ProjectsPageInner() {
       const opts: { prompt?: string; skill?: string } = {}
       if (prompt) opts.prompt = prompt
       if (selectedSkill) opts.skill = selectedSkill
-      const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined, extractedMetadataRef.current)
+      const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined, extractedMetadataRef.current, {
+        clientProjectId: createInput.draftProjectIdRef.current,
+        onItemState: createInput.setFileState,
+      })
       if (!result) throw new Error('Failed to create project')
+      createInput.rotateDraftProjectId()
       saveAgentModelPreference(result.projectId, createAgentModel)
 
       // Text-only projects can start the Agent before navigation. Await only

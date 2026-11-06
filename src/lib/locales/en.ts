@@ -433,6 +433,17 @@ const en = {
   'status.videoTranscoding': (percent: number) => `Transcoding video ${percent}%`,
   'status.uploadingVideo': 'Uploading video...',
   'status.videoUploadFailed': (message: string) => `Video upload failed: ${message}`,
+  'upload.preparing': 'Preparing upload…',
+  'upload.processingCount': (done: number, total: number) => `Processing ${done}/${total}`,
+  'upload.uploadingCount': (done: number, total: number) => `Uploading ${done}/${total}`,
+  'upload.itemProcessing': 'Processing',
+  'upload.itemUploading': (percent: number) => `Uploading ${percent}%`,
+  'upload.itemTranscoding': (percent: number) => `Compressing ${percent}%`,
+  'upload.itemDone': 'Done',
+  'upload.itemFailed': 'Failed, tap to retry',
+  'upload.retry': 'Retry upload',
+  'upload.failedSummary': (count: number) => `${count} file${count === 1 ? '' : 's'} failed to upload. Tap a thumbnail to retry`,
+  'upload.waitForAttachments': (done: number, total: number) => `Processing attachments ${done}/${total}. You can send when they finish`,
 
   // Tips bar
   'tips.continueEditing': 'Commit',

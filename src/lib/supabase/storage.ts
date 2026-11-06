@@ -255,3 +255,74 @@ export function getOriginFormatThumbnailUrl(url: string, width = 200, quality = 
   if (height) params.push(`height=${height}`, `resize=${resize}`)
   return base + '?' + params.join('&')
 }
+
+/** Decode a data URL into a typed Blob without the per-byte string loop on the
+ * main thread (fetch decodes data URLs natively). */
+export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const res = await fetch(dataUrl)
+  return res.blob()
+}
+
+/**
+ * Upload a Blob to the images bucket with byte-level progress.
+ *
+ * supabase-js uses fetch(), which cannot report upload progress. This mirrors
+ * its Blob upload request (FormData + cacheControl + x-upsert) over XHR so the
+ * UI can show "uploading 42%". If the XHR path fails for any reason other than
+ * an explicit storage error, it falls back to the regular supabase-js upload.
+ */
+export async function uploadBlobWithProgress(
+  supabase: SupabaseClient,
+  path: string,
+  blob: Blob,
+  contentType: string,
+  onProgress?: (fraction: number) => void,
+): Promise<string> {
+  const typed = blob.type === contentType ? blob : new Blob([blob], { type: contentType })
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+
+  if (typeof XMLHttpRequest !== 'undefined' && baseUrl && anonKey && token) {
+    const objectPath = path.split('/').map(encodeURIComponent).join('/')
+    const url = `${baseUrl.replace(/\/$/, '')}/storage/v1/object/${BUCKET}/${objectPath}`
+    const outcome = await new Promise<'ok' | 'network' | Error>((resolve) => {
+      const form = new FormData()
+      form.append('cacheControl', '3600')
+      form.append('', typed)
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', url)
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.setRequestHeader('apikey', anonKey)
+      xhr.setRequestHeader('x-upsert', 'true')
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) onProgress?.(Math.min(0.99, event.loaded / event.total))
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) return resolve('ok')
+        let message = `Storage upload failed (${xhr.status})`
+        try {
+          const body = JSON.parse(xhr.responseText || '{}')
+          message = body.message || body.error || message
+        } catch { /* keep status message */ }
+        // Auth/size/policy errors would fail the same way through supabase-js.
+        resolve(xhr.status >= 400 && xhr.status < 500 ? new Error(message) : 'network')
+      }
+      xhr.onerror = () => resolve('network')
+      xhr.ontimeout = () => resolve('network')
+      xhr.send(form)
+    })
+    if (outcome === 'ok') {
+      onProgress?.(1)
+      return getPublicUrl(supabase, path)
+    }
+    if (outcome instanceof Error) throw outcome
+    console.warn('[upload] XHR upload failed, retrying with supabase-js', path)
+  }
+
+  const { error } = await supabase.storage.from(BUCKET).upload(path, typed, { contentType, upsert: true })
+  if (error) throw error
+  onProgress?.(1)
+  return getPublicUrl(supabase, path)
+}

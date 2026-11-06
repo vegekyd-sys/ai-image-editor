@@ -6,6 +6,8 @@ import type { CreateInputState } from '@/hooks/useCreateInput';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import AgentModelChip from '@/components/AgentModelChip';
 import type { AgentModelPreference } from '@/lib/agent-models';
+import { useLocale } from '@/lib/i18n';
+import { summarizeStates, type MediaItemState } from '@/lib/upload/media-queue';
 
 function Spinner({ size = 20 }: { size?: number }) {
   return (
@@ -13,6 +15,66 @@ function Spinner({ size = 20 }: { size?: number }) {
       <circle cx="12" cy="12" r="10" stroke="rgba(217,70,239,0.12)" strokeWidth="2.5" fill="none" />
       <path fill="rgba(217,70,239,0.7)" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
+  );
+}
+
+/**
+ * Per-attachment status layered on the existing thumbnail: processing /
+ * uploading xx% / done / failed (tap to retry). Renders nothing once a file is
+ * simply ready, so idle thumbnails look exactly as before.
+ */
+function UploadStateOverlay({
+  state,
+  showDone,
+  compact = false,
+  onRetry,
+}: {
+  state?: MediaItemState;
+  showDone: boolean;
+  compact?: boolean;
+  onRetry?: () => void;
+}) {
+  const { t } = useLocale();
+  if (!state || state.status === 'ready' || (state.status === 'done' && !showDone)) return null;
+  const percent = Math.round(state.progress * 100);
+  const base: React.CSSProperties = {
+    position: 'absolute', inset: 0, zIndex: 3, borderRadius: 'inherit',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+    color: '#fff', fontSize: compact ? '0.5rem' : '0.6rem', fontWeight: 600, lineHeight: 1,
+    fontVariantNumeric: 'tabular-nums', textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+  };
+  if (state.status === 'error') {
+    return (
+      <button
+        type="button"
+        data-upload-status="error"
+        aria-label={t('upload.retry')}
+        title={state.error ? `${t('upload.itemFailed')} · ${state.error}` : t('upload.itemFailed')}
+        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+        style={{ ...base, border: 'none', padding: 0, background: 'rgba(127,29,29,0.72)', cursor: 'pointer', pointerEvents: 'auto' }}
+      >
+        <svg width={compact ? 12 : 16} height={compact ? 12 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+        </svg>
+      </button>
+    );
+  }
+  if (state.status === 'done') {
+    return (
+      <div data-upload-status="done" aria-label={t('upload.itemDone')} style={{ ...base, background: 'rgba(0,0,0,0.25)' }}>
+        <svg width={compact ? 12 : 16} height={compact ? 12 : 16} viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+      </div>
+    );
+  }
+  const uploading = state.status === 'uploading';
+  const label = uploading
+    ? t('upload.itemUploading', percent)
+    : state.phase === 'transcode' ? t('upload.itemTranscoding', percent) : t('upload.itemProcessing');
+  return (
+    <div data-upload-status={state.status} aria-label={label} title={label} style={{ ...base, background: 'rgba(0,0,0,0.5)' }}>
+      <Spinner size={compact ? 10 : 14} />
+      {(uploading || state.phase === 'transcode') && <span>{percent}%</span>}
+    </div>
   );
 }
 
@@ -155,10 +217,30 @@ export default function CreateInputBox({
   onDrop,
 }: CreateInputBoxProps) {
   const {
-    files, previews, text, setText, creating,
+    files, previews, itemStates, text, setText, creating,
     fileInputRef, cardIndex, setCardIndex, cardDragX, setCardDragX,
-    addFiles, removeFile,
+    addFiles, removeFile, retryFile,
   } = input;
+  const { t } = useLocale();
+  const uploadSummary = summarizeStates(itemStates);
+  const preparedCount = itemStates.filter(s => s && (s.status === 'ready' || s.status === 'done')).length;
+  const processingCount = itemStates.filter(s => s?.status === 'processing').length;
+  // Overall status line: immediate feedback the moment send is tapped, and a
+  // visible reason when the upload takes a while (esp. on phones).
+  const uploadStatusText = files.length === 0
+    ? null
+    : creating
+      ? (uploadSummary.uploading || uploadSummary.done > 0
+        ? t('upload.uploadingCount', uploadSummary.done, files.length)
+        : processingCount > 0
+          ? t('upload.processingCount', preparedCount, files.length)
+          : t('upload.preparing'))
+      : uploadSummary.failed > 0
+        ? t('upload.failedSummary', uploadSummary.failed)
+        : processingCount > 0
+          ? t('upload.processingCount', preparedCount, files.length)
+          : null;
+  const uploadStatusIsError = !creating && uploadSummary.failed > 0;
 
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null);
   const mobileSwipeElRef = useRef<HTMLDivElement | null>(null);
@@ -574,11 +656,7 @@ export default function CreateInputBox({
               <>
                 { }
                 <img src={previews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                {creating && files[0]?.type.startsWith('video/') && (
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
-                    <Spinner size={16} />
-                  </div>
-                )}
+                <UploadStateOverlay state={itemStates[0]} showDone={creating} onRetry={() => retryFile(0)} />
               </>
             ) : previews[0] === null ? (
               <Spinner size={16} />
@@ -600,10 +678,10 @@ export default function CreateInputBox({
                     background: '#1a1a1a', zIndex: zIdx, boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
                   });
                   const n = files.length;
-                  const layers: { preview: string | null; rotate: number; z: number }[] = [];
-                  if (n >= 3) layers.push({ preview: previews[0], rotate: -6, z: 1 });
-                  if (n >= 2) layers.push({ preview: previews[n >= 3 ? 1 : 0], rotate: n >= 3 ? 4 : -5, z: 2 });
-                  layers.push({ preview: previews[n - 1], rotate: 0, z: 3 });
+                  const layers: { preview: string | null; rotate: number; z: number; index: number }[] = [];
+                  if (n >= 3) layers.push({ preview: previews[0], rotate: -6, z: 1, index: 0 });
+                  if (n >= 2) layers.push({ preview: previews[n >= 3 ? 1 : 0], rotate: n >= 3 ? 4 : -5, z: 2, index: n >= 3 ? 1 : 0 });
+                  layers.push({ preview: previews[n - 1], rotate: 0, z: 3, index: n - 1 });
                   return layers.map((layer, li) => (
                     <div key={li} style={cardStyle(layer.rotate, layer.z)}>
                       {layer.preview && layer.preview !== 'heic-pending' ? (
@@ -612,6 +690,7 @@ export default function CreateInputBox({
                       ) : layer.preview === null ? (
                         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
                       ) : null}
+                      {layer.z === 3 && <UploadStateOverlay state={itemStates[layer.index]} showDone={creating} />}
                     </div>
                   ));
                 })()}
@@ -657,6 +736,7 @@ export default function CreateInputBox({
                         ) : layer.preview === null ? (
                           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
                         ) : null}
+                        {layer.isFront && <UploadStateOverlay state={itemStates[layer.key]} showDone={creating} onRetry={() => retryFile(layer.key)} />}
                       </div>
                     );
                   });
@@ -755,19 +835,36 @@ export default function CreateInputBox({
           <div className="hide-scrollbar" onWheel={(e) => { if (e.deltaY !== 0) { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault(); } }}
             style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 4 }}>
             {isDesktop && files.length >= 2 && previews.map((preview, i) => (
-              <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+              <div key={i} data-testid="create-attachment" data-upload-state={itemStates[i]?.status ?? 'idle'} style={{ position: 'relative', flexShrink: 0 }}>
                 {preview && preview !== 'heic-pending' ? (
 
                   <img src={preview} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', display: 'block', border: '1px solid rgba(255,255,255,0.12)' }} />
                 ) : (
                   <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={10} /></div>
                 )}
-                <div onClick={(e) => { e.stopPropagation(); removeFile(i); }}
-                  style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                  <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <div style={{ position: 'absolute', inset: 0, borderRadius: 8, overflow: 'hidden', pointerEvents: itemStates[i]?.status === 'error' ? 'auto' : 'none' }}>
+                  <UploadStateOverlay state={itemStates[i]} showDone={creating} compact onRetry={() => retryFile(i)} />
                 </div>
+                {!creating && <div onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                  style={{ position: 'absolute', top: -4, right: -4, zIndex: 4, width: 14, height: 14, borderRadius: '50%', background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                  <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </div>}
               </div>
             ))}
+            {uploadStatusText && (
+              <span
+                data-testid="create-upload-status"
+                role="status"
+                aria-live="polite"
+                style={{
+                  flexShrink: 0, marginLeft: isDesktop && files.length >= 2 ? 4 : 2, whiteSpace: 'nowrap',
+                  fontSize: '0.7rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums',
+                  color: uploadStatusIsError ? 'rgba(248,113,113,0.95)' : 'rgba(255,255,255,0.55)',
+                }}
+              >
+                {uploadStatusText}
+              </span>
+            )}
           </div>
           {/* Skill selector */}
           <SkillSelector
