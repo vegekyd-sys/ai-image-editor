@@ -28,5 +28,10 @@
     "baselineSha256": "e1ffb7d39f0cad95e702d7a3971c9fdd97e4bc4f9720c7b31c7ee5ca98d6d202",
     "sha256": "b9d61c73ed05e94e4c2d6833cc9077fdbaa70b25a157df08d6fde34b0099204a",
     "reason": "User approved replacing Image 2 defaults with FAL GPT Image 2.5 Flare on 2026-09-10. Preserve context-mode briefs and transparent fidelity rules; migrate model names, proactive product/design routing and remove stale fixed latency promises. Regression: agentPromptPolicy.test.ts, agentMediaScenarioMatrix.test.ts, modelRouterTransparency.test.ts; 13 real scenario outputs reviewed."
+  },
+  "src/lib/prompts/audio.md": {
+    "baselineSha256": "055fa794791fb1ae3aba28de7e871c4557c31328c9d1bd6f2e730051c801d0d6",
+    "sha256": "4de820e1f6505778b4fd84d2e7243eebc92f6484154803ec70751ea3079cd61e",
+    "reason": "User approved on 2026-11-06/07: instrumental-only BGM (kind=music, no audio/image references) routes to Suno V6 with 2 takes; everything else stays on the Seed Audio default. Added the Instrumental BGM (Suno V6) brief and positive guidance that speech plus music for one deliverable is one kind=mixed Seed Audio generation (no runtime guard). Seed Audio direction rules are unchanged. Regression: sunoMusicRouting.test.ts, agentAudioIndex.test.ts, agentPromptPolicy.test.ts; real Agent runs: pure BGM -> Suno, narration+BGM -> one mixed Seed generation, 45s Chiang Mai vlog rebuilt with Suno BGM."
   }
 }
