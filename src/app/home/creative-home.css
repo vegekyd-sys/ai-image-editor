@@ -33,6 +33,11 @@
 .creative-hero-composer [data-makaron-home-inline-composer] { max-width:none !important; margin:0 !important; padding:0 !important; }
 .creative-hero-composer [data-makaron-home-inline-composer] > div { border:1px solid var(--home-glass-edge) !important; background:var(--home-glass) !important; box-shadow:var(--home-glass-shadow) !important; border-radius:24px !important; }
 .creative-hero-composer:focus-within [data-makaron-home-inline-composer] > div { border-color:#e879f980 !important; }
+/* File drag: the glass composer glows stronger as the file approaches (--drop-p set inline). */
+.creative-hero-composer [data-makaron-home-inline-composer] > div[data-drop] {
+  border-color:rgba(232,121,249,calc(0.3 + 0.55 * var(--drop-p, 0))) !important;
+  box-shadow:0 0 0 calc(1px + 2px * var(--drop-p, 0)) rgba(217,70,239,calc(0.12 + 0.3 * var(--drop-p, 0))), 0 0 calc(24px + 56px * var(--drop-p, 0)) rgba(217,70,239,calc(0.2 + 0.4 * var(--drop-p, 0))), var(--home-glass-shadow) !important;
+}
 .creative-hero-composer textarea { min-height:78px !important; padding-top:18px !important; }
 .creative-actions { align-self:start; display:flex; align-items:center; justify-content:center; gap:36px; margin-top:18px; pointer-events:auto; }
 .creative-primary { background:var(--home-accent); color:#000; padding:18px 30px; min-height:54px; min-width:182px; border-radius:100px; font-weight:650; font-size:16px; display:inline-flex; align-items:center; justify-content:center; gap:22px; text-decoration:none; transition:background .2s,transform .2s; }
