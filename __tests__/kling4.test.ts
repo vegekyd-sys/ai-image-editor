@@ -8,7 +8,7 @@ import { buildKling4Payload, createKling4Task, type Kling4Input } from '../src/l
 import { normalizeVideoModelId, resolveVideoProviderModel, validateVideoModelRequest, estimateVideoProviderCostUsd } from '../src/lib/video-model-capabilities'
 import { createVideo } from '../src/lib/skills/create-video'
 import { bindRetakeReferences } from '../src/lib/video-retake-references'
-import { planRetake } from '../src/lib/video-retake-contract'
+import { planRetake, resolveRetakeModel } from '../src/lib/video-retake-contract'
 import { calculateMediaQuote, type MediaPrice } from '../src/lib/billing/media-pricing'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
@@ -50,11 +50,6 @@ describe('Kling 4.0 candidate contract', () => {
     const edit=buildKling4Payload({prompt:'Edit <<<video_1>>>',images:[],videos:['https://example.org/source.mp4'],operation:'edit'})
     expect(edit).toEqual({model:'kling-v4-video-edit',prompt:'Edit <<<video_1>>>',video_urls:['https://example.org/source.mp4'],duration:'auto',quality:'720p'})
   })
-  it('does not invent Flash endpoints, pricing or fallbacks', () => {
-    expect(normalizeVideoModelId('Kling 4.0 Flash')).toBe('kling-4-flash')
-    expect(validateVideoModelRequest({model:'kling-4-flash'})).toMatch(/no verified callable API/)
-    expect(estimateVideoProviderCostUsd({model:'kling-4-flash',durationSec:5})).toBeUndefined()
-  })
   it('rejects unsupported inputs before calling a provider', () => {
     expect(()=>buildKling4Payload({prompt:'hello',images:[],duration:2})).toThrow(/3 to 30/)
     expect(()=>buildKling4Payload({prompt:'<<<image_2>>>',images:['https://example.org/1.png']})).toThrow(/missing/)
@@ -82,9 +77,9 @@ describe('Kling 4.0 candidate contract', () => {
     expect(reserve).toHaveBeenCalledWith(expect.objectContaining({model:'kling-4',durationSec:3.95,referenceVideoDurationSec:3.95,operation:'edit'}))
     expect(fetch).toHaveBeenCalledTimes(1)
   })
-  it('rejects Flash and replacement edit audio before reservation or submission', async () => {
+  it('rejects replacement edit audio before reservation or submission', async () => {
     const reserve=vi.fn(),fetch=vi.fn();vi.stubGlobal('fetch',fetch)
-    expect((await createVideo({script:'test',images:[],videoModel:'kling-4-flash',onBeforeProviderSubmit:reserve})).success).toBe(false)
+    expect((await createVideo({script:'test',images:[],videoModel:'kling-4-flash',videoOperation:'edit',videoUrl:'https://example.org/source.mp4',generateAudio:true,onBeforeProviderSubmit:reserve})).success).toBe(false)
     expect((await createVideo({script:'test',images:[],videoModel:'kling-4',videoOperation:'edit',videoUrl:'https://example.org/source.mp4',keepOriginalSound:false,onBeforeProviderSubmit:reserve})).success).toBe(false)
     expect(reserve).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled()
   })
@@ -158,5 +153,77 @@ describe('Kling O3 retirement and 30-second boundary', () => {
       expect(source).not.toMatch(/Kling (?:is |accepts |supports )?5-15/)
       expect(source).toMatch(/Kling 4.0[^\n]*3[-–]30/)
     }
+  })
+})
+
+
+describe('Kling 4.0 Flash (EvoLink, checked 2026-11-06)', () => {
+  const image = 'https://example.org/reference.png'
+  const video = 'https://example.org/source.mp4'
+  it('normalizes aliases and exposes a selectable registry entry and capability', () => {
+    for (const alias of ['Kling 4.0 Flash', 'kling4-flash', 'kling 4 flash']) expect(normalizeVideoModelId(alias)).toBe('kling-4-flash')
+    expect(getVideoModels().find(m => m.id === 'kling-4-flash')?.unavailable).toBeFalsy()
+    expect(listVideoModelCapabilities().find(m => m.id === 'kling-4-flash')).toMatchObject({ maxOutputDuration: 20, maxReferenceVideoDuration: 20, supportedResolutions: ['720p'] })
+  })
+  it.each([
+    { images: [], videos: [], operation: undefined, model: 'kling-v4-flash-text-to-video' },
+    { images: [image], videos: [], operation: undefined, model: 'kling-v4-flash-reference-to-video' },
+    { images: [image], videos: [video], operation: 'generate', model: 'kling-v4-flash-reference-to-video' },
+    { images: [image], videos: [video], operation: 'edit', model: 'kling-v4-flash-video-edit' },
+  ])('maps to the separate Flash route $model', ({ images, videos, operation, model }) => {
+    const edit = operation === 'edit'
+    expect(buildKling4Payload({ model: 'kling-4-flash', prompt: 'Go', images, videos, operation: operation as Kling4Input['operation'] })).toEqual({
+      model, prompt: 'Go', duration: edit ? 'auto' : 5, quality: '720p',
+      ...(!edit ? { aspect_ratio: '16:9' } : {}),
+      ...(images.length ? { image_urls: images } : {}),
+      ...(videos.length ? { video_urls: videos } : {}),
+    })
+  })
+  it('enforces 3–20s, 720p only, and never routes to standard Kling 4.0', () => {
+    expect(() => buildKling4Payload({ model: 'kling-4-flash', prompt: 'Go', images: [], duration: 21 })).toThrow('Kling 4.0 Flash duration must be an integer from 3 to 20 seconds.')
+    expect(() => buildKling4Payload({ model: 'kling-4-flash', prompt: 'Go', images: [], resolution: '1080p' })).toThrow('Kling 4.0 Flash supports 720p.')
+    expect(buildKling4Payload({ model: 'kling-4-flash', prompt: 'Go', images: [], duration: 20 })).toMatchObject({ model: 'kling-v4-flash-text-to-video', duration: 20 })
+    expect(validateVideoModelRequest({ model: 'kling-4-flash', outputDuration: 25 })).toBe('Kling 4.0 Flash output must be an integer from 3 to 20 seconds.')
+    expect(validateVideoModelRequest({ model: 'kling-4-flash', resolution: '1080p' })).toMatch(/resolution/i)
+    expect(validateVideoModelRequest({ model: 'kling-4-flash', outputDuration: 20 })).toBeNull()
+    expect(validateVideoModelRequest({ model: 'kling-4', outputDuration: 25 })).toBeNull()
+  })
+  it('quotes $0.094/s plain and $0.063/s x (output + max(rounded input, output)) with video', () => {
+    const price = { id: 'flash', model_id: 'kling-4-flash', output_usd_per_second: .094, video_reference_usd_per_second: .063, input_usd_per_second: 0, input_usd_per_image: 0, free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true, updated_at: 'flash' } as MediaPrice
+    expect(calculateMediaQuote(price, { durationSec: 5, imageCount: 2 }).supplierCostUsd).toBeCloseTo(.47)
+    expect(estimateVideoProviderCostUsd({ model: 'kling-4-flash', durationSec: 5 })).toBeCloseTo(.47)
+    // Rate-card examples: 5s output + 8s reference = 13 billed seconds; 5s auto edit = 10 billed seconds.
+    expect(calculateMediaQuote(price, { durationSec: 5, referenceVideoDurationSec: 8 }).supplierCostUsd).toBeCloseTo(.819)
+    expect(estimateVideoProviderCostUsd({ model: 'kling-4-flash', durationSec: 5, referenceVideoDurationSec: 8 })).toBeCloseTo(.819)
+    expect(calculateMediaQuote({ ...price, operation: 'edit' }, { durationSec: 5, referenceVideoDurationSec: 5 }).supplierCostUsd).toBeCloseTo(.63)
+    // Flash rounds source seconds to nearest, not up.
+    expect(calculateMediaQuote({ ...price, operation: 'edit' }, { durationSec: 3, referenceVideoDurationSec: 6.4 }).supplierCostUsd).toBeCloseTo((3 + 6) * .063)
+    expect(estimateVideoProviderCostUsd({ model: 'kling-4-flash', operation: 'edit', durationSec: 3, referenceVideoDurationSec: 6.4 })).toBeCloseTo((3 + 6) * .063)
+  })
+  it('reserves once, then sends exactly one Flash POST with a Flash label', async () => {
+    vi.stubEnv('EVOLINK_API_KEY', 'test')
+    const reserve = vi.fn(async () => undefined)
+    const fetch = vi.fn(async (_url: unknown, init: RequestInit | undefined) => {
+      expect(reserve).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(String(init?.body))).toMatchObject({ model: 'kling-v4-flash-text-to-video', duration: 20, quality: '720p' })
+      return new Response(JSON.stringify({ id: 'task-unified-flash' }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const result = await createVideo({ script: 'Shot 1 (20s): one continuous take.', images: [], duration: 20, videoModel: 'kling-4-flash', onBeforeProviderSubmit: reserve })
+    expect(result).toMatchObject({ success: true, taskId: 'task-unified-flash', videoModel: 'kling-4-flash', providerModel: 'kling-v4-flash-text-to-video', message: expect.stringContaining('Kling 4.0 Flash submitted') })
+    expect(reserve).toHaveBeenCalledWith(expect.objectContaining({ model: 'kling-4-flash', durationSec: 20 }))
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+  it.each([2, 21, 30])('rejects Flash duration %s without reservation or submission', async duration => {
+    const reserve = vi.fn(), fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
+    const result = await createVideo({ script: 'Continuous take', images: [], duration, videoModel: 'kling-4-flash', onBeforeProviderSubmit: reserve })
+    expect(result.success).toBe(false); expect(result.message).toContain('3 to 20')
+    expect(reserve).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled()
+  })
+  it('supports Retake with Kling-native references and integer context', () => {
+    expect(resolveRetakeModel('kling-4-flash')).toBe('kling-4-flash')
+    expect(planRetake({ start: 1, end: 3 }, 5.04, 'kling-4-flash')).toMatchObject({ contextStart: .5, contextEnd: 3.5, generationDuration: 3, model: 'kling-4-flash' })
+    expect(() => planRetake({ start: 0, end: 1 }, 2, 'kling-4-flash')).toThrow(/Kling 4.0 Flash Retake requires at least three seconds/)
+    expect(bindRetakeReferences({ prompt: 'Edit <<<media_2>>>', model: 'kling-4-flash', sourceIndex: 2, referenceIndices: [] })).toBe('Edit <<<video_1>>>')
   })
 })

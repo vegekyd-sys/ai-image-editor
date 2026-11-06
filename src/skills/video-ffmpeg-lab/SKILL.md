@@ -64,6 +64,7 @@ Current known defaults:
 | --- | ---: | ---: | --- | --- |
 | SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px; aspect ratio 0.4-2.5; frame pixels 409,600-2,086,876 | Default video model, higher quality, feature/reference mode preferred. The lower frame-pixel bound matters: tiny videos must be resized/padded before submission. |
 | Kling 4.0 | 30s | 30s total, >=3s each | <=200MB each; 720-2160px per side; 24-60fps | Native generation or typed edit; edit preserves source audio. |
+| Kling 4.0 Flash | 20s | 20s total, >=3s each | Same as Kling 4.0; 720p output only | Faster/lower-cost Kling 4.0; same routes. |
 
 If a new model appears, follow its capability/tool error messages instead of inventing a new case. The long-video generation workflow stays the same: probe → segment to accepted duration → generate per segment → assemble generated outputs.
 

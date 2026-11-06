@@ -99,11 +99,14 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
     nonNegative(price.video_reference_usd_per_second, 'video reference rate')
     if (price.video_reference_usd_per_second === 0) throw new PricingUnavailableError('Video reference rate must be positive.')
   }
-  const hasVideoReferenceTariff = ['seedance-2.5', 'kling-4'].includes(price.model_id)
+  const hasVideoReferenceTariff = ['seedance-2.5', 'kling-4', 'kling-4-flash'].includes(price.model_id)
     && referenceVideoDurationSec > 0 && price.video_reference_usd_per_second != null
   // Keep the original input duration in the quote for auditing/settlement.
-  const billableSourceSeconds = price.model_id === 'kling-4' && price.operation === 'edit'
-    ? Math.ceil(referenceVideoDurationSec) : referenceVideoDurationSec
+  // Kling 4.0 edit rounds the source up; Flash rounds source/reference seconds to nearest.
+  const billableSourceSeconds = price.model_id === 'kling-4-flash'
+    ? Math.round(referenceVideoDurationSec)
+    : price.model_id === 'kling-4' && price.operation === 'edit'
+      ? Math.ceil(referenceVideoDurationSec) : referenceVideoDurationSec
   const supplierCostUsd = hasVideoReferenceTariff
     ? (Math.max(billableSourceSeconds, durationSec) + durationSec) * price.video_reference_usd_per_second! * multiplier
     : (
