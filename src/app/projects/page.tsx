@@ -172,7 +172,7 @@ function ProjectsPageInner() {
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [visibleProjectCount, setVisibleProjectCount] = useState(INITIAL_PROJECT_CARD_COUNT)
   const projectLoadMoreRef = useRef<HTMLDivElement | null>(null)
-  const createInput = useCreateInput()
+  const createInput = useCreateInput(user?.id)
   const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const extractedMetadataRef = useRef<import('@/types').PhotoMetadata | undefined>(undefined)
@@ -892,8 +892,12 @@ function ProjectsPageInner() {
       const opts: { prompt?: string; skill?: string } = {}
       if (prompt) opts.prompt = prompt
       if (selectedSkill) opts.skill = selectedSkill
-      const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined, extractedMetadataRef.current)
+      const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined, extractedMetadataRef.current, {
+        clientProjectId: createInput.draftProjectIdRef.current,
+        onItemState: createInput.setFileState,
+      })
       if (!result) throw new Error('Failed to create project')
+      createInput.rotateDraftProjectId()
       saveAgentModelPreference(result.projectId, createAgentModel)
 
       // Text-only projects can start the Agent before navigation. Await only

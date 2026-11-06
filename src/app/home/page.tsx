@@ -128,7 +128,7 @@ function HomePageInner() {
   const isPreAuthIOSGuest = !FREE_MEDIA_ENABLED && isIOSAppShell && !renderUser && !!preAuthBasicMonthlyTrial
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
-  const createInput = useCreateInput()
+  const createInput = useCreateInput(user?.id)
   const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -1575,8 +1575,12 @@ function HomePageInner() {
       if (skillName) opts.skill = skillName
       const skillLaunchContext = createHomeSkillLaunchContext(homeSkill, prompt, skillName)
       if (skillLaunchContext) opts.skillLaunchContext = skillLaunchContext
-      const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
+      const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined, undefined, {
+        clientProjectId: createInput.draftProjectIdRef.current,
+        onItemState: createInput.setFileState,
+      })
       if (!result) throw new Error('Failed to create project')
+      createInput.rotateDraftProjectId()
       saveAgentModelPreference(result.projectId, createAgentModel)
       void clearCreateDraft()
       router.push(`/projects/${result.projectId}`)

@@ -23,6 +23,8 @@ interface SkillSelectorProps {
   overrideLabel?: string | null;
   /** Popover direction: 'up' (default) or 'down' */
   direction?: 'up' | 'down';
+  /** 'segment' renders the trigger as a segment of the input box action cluster. */
+  variant?: 'default' | 'segment';
 }
 
 export default function SkillSelector({
@@ -35,6 +37,7 @@ export default function SkillSelector({
   onOpenChange,
   overrideLabel,
   direction = 'up',
+  variant = 'default',
 }: SkillSelectorProps) {
   const { t } = useLocale();
   const displaySkills = skills.map(skill => skill.builtIn && skill.name === 'multi-angle-video'
@@ -112,8 +115,9 @@ export default function SkillSelector({
       <button
         ref={triggerRef}
         onClick={handleTriggerClick}
-        className={(selectedSkill || installing || open) ? 'mkr-liquid-pill flex-shrink-0 flex items-center transition-all active:scale-95' : 'flex-shrink-0 flex items-center transition-all active:scale-95'}
-        style={{
+        data-active={variant === 'segment' ? Boolean(selectedSkill || installing || open) : undefined}
+        className={variant === 'segment' ? 'mkr-action-seg' : (selectedSkill || installing || open) ? 'mkr-liquid-pill flex-shrink-0 flex items-center transition-all active:scale-95' : 'flex-shrink-0 flex items-center transition-all active:scale-95'}
+        style={variant === 'segment' ? undefined : {
           padding: (selectedSkill || installing || open) ? '4px 10px' : '5px 6px',
           borderRadius: (selectedSkill || installing || open) ? 12 : 0,
           border: (selectedSkill || installing || open) ? '0.5px solid rgba(232,121,249,0.24)' : 'none',

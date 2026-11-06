@@ -4,7 +4,8 @@ import { extractPhotoMetadata } from '@/lib/image/metadata'
 import { getMarketingAttribution } from '@/lib/marketing/attribution'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 import { cacheProjectData, stagePendingProjectImages, stagePendingProjectLaunch } from '@/lib/imageCache'
-import { uploadImage } from '@/lib/supabase/storage'
+import { dataUrlToBlob, uploadBlobWithProgress, uploadImage } from '@/lib/supabase/storage'
+import { isVideoFile, prepareMedia, uploadLimiter, type MediaItemState, type PreparedMedia } from '@/lib/upload/media-queue'
 import type { PhotoMetadata } from '@/types'
 import type { SkillLaunchContext } from '@/lib/skill-launch-context'
 
@@ -12,10 +13,6 @@ export interface ProjectLaunchOptions {
   prompt?: string
   skill?: string
   skillLaunchContext?: SkillLaunchContext
-}
-
-function isVideoFile(file: File): boolean {
-  return file.type.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(file.name)
 }
 
 export async function compressCreateImageFile(file: File): Promise<string> {
@@ -137,10 +134,113 @@ function stageProjectLaunch(
   })
 }
 
+export interface CreateMediaHooks {
+  /** Stable per-draft project id so a retry after a failed upload reuses the
+   * same project shell and already-uploaded files. */
+  clientProjectId?: string
+  onItemState?: (file: File, state: MediaItemState) => void
+}
+
+export class CreateMediaUploadError extends Error {
+  constructor(readonly failedFiles: File[], readonly firstError: unknown) {
+    super(firstError instanceof Error ? firstError.message : String(firstError))
+    this.name = 'CreateMediaUploadError'
+  }
+}
+
+type VideoPersistResult = { videoUrl: string; duration: number; width: number; height: number }
+type PersistResult =
+  | { kind: 'image'; url: string; payload: string }
+  | { kind: 'video'; video: VideoPersistResult }
+
+// Successful uploads per (file, project): a retry only re-uploads failures.
+const persistCache = new WeakMap<File, Map<string, Promise<PersistResult>>>()
+
+function imageExtension(payload: string): { ext: string; mime: string } {
+  if (/^data:image\/png;/i.test(payload)) return { ext: 'png', mime: 'image/png' }
+  if (/^data:image\/webp;/i.test(payload)) return { ext: 'webp', mime: 'image/webp' }
+  return { ext: 'jpg', mime: 'image/jpeg' }
+}
+
+function persistCreateMedia(
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+  file: File,
+  onItemState?: (file: File, state: MediaItemState) => void,
+): Promise<PersistResult> {
+  let byProject = persistCache.get(file)
+  if (!byProject) {
+    byProject = new Map()
+    persistCache.set(file, byProject)
+  }
+  const cached = byProject.get(projectId)
+  if (cached) return cached
+
+  const report = (state: MediaItemState) => onItemState?.(file, state)
+  const promise = (async (): Promise<PersistResult> => {
+    const prepared: PreparedMedia = await prepareMedia(file, state => {
+      if (state.status === 'processing') report(state)
+    })
+    report({ status: 'uploading', progress: 0 })
+    const onProgress = (progress: number) => report({ status: 'uploading', progress })
+    return uploadLimiter(async (): Promise<PersistResult> => {
+      if (prepared.kind === 'image') {
+        const { payload } = prepared
+        if (payload.startsWith('http')) return { kind: 'image', url: payload, payload }
+        const { ext, mime } = imageExtension(payload)
+        const blob = await dataUrlToBlob(payload)
+        const url = await uploadBlobWithProgress(
+          supabase,
+          `${userId}/${projectId}/snapshot-${crypto.randomUUID()}.${ext}`,
+          blob,
+          mime,
+          onProgress,
+        )
+        return { kind: 'image', url, payload }
+      }
+      const { uploadVideoToStorage } = await import('@/lib/video-upload')
+      const video = await uploadVideoToStorage(file, projectId, (progress, stage) => {
+        if (stage === 'upload') onProgress(progress)
+      }, prepared.result)
+      return { kind: 'video', video }
+    })
+  })()
+  byProject.set(projectId, promise)
+  promise.then(
+    () => report({ status: 'done', progress: 1 }),
+    (err: unknown) => {
+      byProject!.delete(projectId)
+      report({ status: 'error', progress: 0, error: err instanceof Error ? err.message : String(err) })
+    },
+  )
+  return promise
+}
+
+/**
+ * Start uploading an attachment to the draft project's storage folder right
+ * after it is attached. `createProject` with the same `clientProjectId` joins
+ * the in-flight (or finished) upload instead of starting another one.
+ */
+export function preuploadCreateMedia(
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+  file: File,
+  onItemState?: (state: MediaItemState) => void,
+): Promise<unknown> {
+  return persistCreateMedia(supabase, userId, projectId, file, onItemState ? (_f, state) => onItemState(state) : undefined)
+}
+
 /**
  * Create a new project and stage its initial media.
  * Images are uploaded before navigation so sessionStorage only carries compact
  * permanent URLs, never large base64 payloads.
+ *
+ * The project shell request and every file's prepare → upload pipeline run in
+ * parallel (bounded by the shared media queue). Each file reports its state via
+ * `hooks.onItemState`; if any file fails, a CreateMediaUploadError lists them
+ * and a retry with the same `clientProjectId` only re-uploads the failures.
  */
 export async function createProject(
   supabase: SupabaseClient,
@@ -148,6 +248,7 @@ export async function createProject(
   files: File[],
   options?: ProjectLaunchOptions,
   preExtractedMetadata?: PhotoMetadata,
+  hooks?: CreateMediaHooks,
 ): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
   const attribution = getMarketingAttribution()
   const metaEventId = createMetaEventId('project.create')
@@ -166,49 +267,35 @@ export async function createProject(
 
   const imageFiles = files.filter(f => !isVideoFile(f));
   const videoFiles = files.filter(f => isVideoFile(f));
+  const projectId = hooks?.clientProjectId || crypto.randomUUID()
+  const firstImage = imageFiles[0]
 
-  // Single image (no videos): compress + metadata + DB insert in parallel
-  if (imageFiles.length <= 1 && videoFiles.length === 0) {
-    const [base64, rawMetadata, projectId] = await Promise.all([
-      compressCreateImageFile(imageFiles[0]),
-      preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : extractPhotoMetadata(imageFiles[0]),
-      createProjectShell('Untitled', marketing),
-    ]);
-    const metadata = await enrichImageMetadata(base64, rawMetadata)
-    if (base64) {
-      const imageUrls = await persistCreateImages(supabase, userId, projectId, [base64])
-      await stagePendingProjectImages(projectId, imageUrls)
-    }
-    stageProjectLaunch(projectId, options, metadata)
-    trackProjectCreated(projectId, { ...options, eventId: metaEventId });
-    return { projectId, metadata };
+  const shellPromise = createProjectShell('Untitled', marketing, { clientProjectId: projectId })
+  const metadataPromise: Promise<PhotoMetadata | undefined> = preExtractedMetadata
+    ? Promise.resolve(preExtractedMetadata)
+    : firstImage ? extractPhotoMetadata(firstImage).catch(() => undefined) : Promise.resolve(undefined)
+  const settled = await Promise.allSettled(
+    files.map(file => persistCreateMedia(supabase, userId, projectId, file, hooks?.onItemState)),
+  )
+  const createdProjectId = await shellPromise
+  const failed = files.filter((_, i) => settled[i].status === 'rejected')
+  if (failed.length) {
+    const firstError = (settled.find(r => r.status === 'rejected') as PromiseRejectedResult).reason
+    throw new CreateMediaUploadError(failed, firstError)
   }
+  const results = settled.map(r => (r as PromiseFulfilledResult<PersistResult>).value)
+  const images = results.filter((r): r is Extract<PersistResult, { kind: 'image' }> => r.kind === 'image')
+  const videos = results.filter((r): r is Extract<PersistResult, { kind: 'video' }> => r.kind === 'video')
 
-  // Multi file (images + videos): create the project server-side, then stage media locally.
-  const firstImage = imageFiles[0] || files[0];
-  const [projectId, metadata] = await Promise.all([
-    createProjectShell('Untitled', marketing),
-    preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : (!isVideoFile(firstImage) ? extractPhotoMetadata(firstImage) : Promise.resolve(undefined)),
-  ]);
+  if (images.length) await stagePendingProjectImages(createdProjectId, images.map(i => i.url))
+  if (videoFiles.length) sessionStorage.setItem('pendingVideos', JSON.stringify(videos.map(v => v.video)))
 
-  const payloads = await Promise.all(imageFiles.map(file => compressCreateImageFile(file)))
-  const imageUrls = await Promise.all(payloads.map(async payload => {
-    return (await persistCreateImages(supabase, userId, projectId, [payload]))[0]
-  }))
-  if (imageUrls.length) await stagePendingProjectImages(projectId, imageUrls)
+  const metadata = await metadataPromise
+  const enrichedMetadata = images[0] ? await enrichImageMetadata(images[0].payload, metadata) : metadata
+  stageProjectLaunch(createdProjectId, options, enrichedMetadata)
 
-  // Upload videos (transcode + upload via video-upload.ts)
-  if (videoFiles.length) {
-    const { uploadVideoToStorage } = await import('@/lib/video-upload');
-    const videoData = await Promise.all(videoFiles.map(f => uploadVideoToStorage(f, projectId)));
-    sessionStorage.setItem('pendingVideos', JSON.stringify(videoData));
-  }
-
-  const enrichedMetadata = payloads[0] ? await enrichImageMetadata(payloads[0], metadata) : metadata
-  stageProjectLaunch(projectId, options, enrichedMetadata)
-
-  trackProjectCreated(projectId, { ...options, eventId: metaEventId });
-  return { projectId, metadata: enrichedMetadata };
+  trackProjectCreated(createdProjectId, { ...options, eventId: metaEventId });
+  return { projectId: createdProjectId, metadata: enrichedMetadata };
 }
 
 export async function createProjectFromStagedMedia(

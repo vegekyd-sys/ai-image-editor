@@ -1,5 +1,8 @@
 'use client';
 
+import { DropOverlay, dropProximityStyle, dropState } from '@/components/DropAffordance';
+import { useDragProximity } from '@/hooks/useDragProximity';
+import { PREPARE_WEIGHT, UploadProgressChip, UploadProgressEdge, type UploadProgressItem } from '@/components/UploadProgress';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -684,6 +687,10 @@ export default function AgentChatView({
     type: 'image' | 'video';
     thumbnail: string;
     status: 'processing' | 'ready' | 'error';
+    /** 0–1 progress of the current phase, when known. */
+    progress?: number;
+    phase?: 'transcode' | 'upload';
+    error?: string;
     data?: string; // image: base64; video: storage URL
     duration?: number;
     width?: number;
@@ -691,6 +698,64 @@ export default function AgentChatView({
   }
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const processingCount = attachments.filter(a => a.status === 'processing').length;
+  const uploadItems = attachments.map((a): UploadProgressItem => {
+    if (a.status === 'ready') return { status: 'done', progress: 1 };
+    if (a.status === 'error') return { status: 'error', progress: 0 };
+    const p = a.progress ?? 0;
+    if (a.phase === 'upload') return { status: 'active', progress: PREPARE_WEIGHT + (1 - PREPARE_WEIGHT) * p };
+    return { status: 'active', progress: PREPARE_WEIGHT * (a.phase === 'transcode' ? p : 0) };
+  });
+  const attachmentFilesRef = useRef(new Map<string, File>());
+  const [attachmentHint, setAttachmentHint] = useState(false);
+  const patchAttachment = useCallback((id: string, patch: Partial<Attachment>) => {
+    setAttachments(prev => prev.map(a => (a.id === id ? { ...a, ...patch } : a)));
+  }, []);
+  // Process one attachment: images are resized locally; videos go through the
+  // shared transcode queue (one at a time) and upload with byte progress.
+  const processAttachment = useCallback(async (id: string, file: File) => {
+    const isVideo = file.type.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/i.test(file.name);
+    if (!isVideo) {
+      try {
+        const base64 = await compressImageFile(file);
+        patchAttachment(id, { status: 'ready', thumbnail: base64, data: base64, progress: 1, error: undefined });
+      } catch (err) {
+        patchAttachment(id, { status: 'error', error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+    try {
+      const [{ uploadVideoToStorage }, { prepareVideo }] = await Promise.all([
+        import('@/lib/video-upload'),
+        import('@/lib/upload/media-queue'),
+      ]);
+      const prepared = prepareVideo(file, progress => patchAttachment(id, { phase: 'transcode', progress }));
+      const result = await uploadVideoToStorage(file, projectId || '', (progress, stage) => {
+        if (stage === 'upload') patchAttachment(id, { phase: 'upload', progress });
+      }, prepared);
+      patchAttachment(id, { status: 'ready', data: result.videoUrl, duration: result.duration, width: result.width, height: result.height, progress: 1, error: undefined });
+    } catch (err) {
+      patchAttachment(id, { status: 'error', error: err instanceof Error ? err.message : String(err) });
+    }
+  }, [patchAttachment, projectId]);
+  useEffect(() => {
+    if (processingCount === 0) setAttachmentHint(false);
+  }, [processingCount]);
+  // The "sends when done" hint widens the chip and squeezes the thumbnail row
+  // on phones, so it only flashes briefly after a premature send tap.
+  useEffect(() => {
+    if (!attachmentHint) return;
+    const timer = setTimeout(() => setAttachmentHint(false), 3000);
+    return () => clearTimeout(timer);
+  }, [attachmentHint]);
+  const retryAttachment = useCallback((id: string) => {
+    const file = attachmentFilesRef.current.get(id);
+    if (!file) return;
+    void import('@/lib/upload/media-queue').then(({ forgetPreparedMedia }) => {
+      forgetPreparedMedia(file);
+      patchAttachment(id, { status: 'processing', progress: 0, phase: undefined, error: undefined });
+      void processAttachment(id, file);
+    });
+  }, [patchAttachment, processAttachment]);
   const allReady = attachments.length > 0 && attachments.every(a => a.status === 'ready' || a.status === 'error');
   const [isExiting, setIsExiting] = useState(false);
   const [inlineImagePreview, setInlineImagePreview] = useState<{
@@ -701,6 +766,11 @@ export default function AgentChatView({
   const [inlineImagePreviewLoadedUrl, setInlineImagePreviewLoadedUrl] = useState<string | null>(null);
   const inlineImagePreviewRef = useRef<HTMLSpanElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  // The input box brightens as a dragged file approaches it; the whole panel
+  // still accepts the drop.
+  const inputBoxRef = useRef<HTMLDivElement | null>(null);
+  const inputDrag = useDragProximity(inputBoxRef, mode === 'panel');
+  const inputDropOver = isDragOver && inputDrag.proximity >= 1;
   const dragCountRef = useRef(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const processingImageCount = processingCount; // legacy compat for any remaining references
@@ -1059,7 +1129,11 @@ export default function AgentChatView({
     const text = input.trim();
     const hasContent = text || attachments.some(a => a.status === 'ready');
     const hasProcessing = attachments.some(a => a.status === 'processing');
-    if (!hasContent || isAgentActive || hasProcessing) return;
+    if (hasProcessing && !isAgentActive) {
+      setAttachmentHint(true);
+      return;
+    }
+    if (!hasContent || isAgentActive) return;
 
     const retakeText = retakeContext && text
       ? `${t('video.retakeDraftPrompt', retakeContext.mediaIndex, retakeContext.start.toFixed(2), retakeContext.end.toFixed(2))} ${text}`
@@ -1077,6 +1151,8 @@ export default function AgentChatView({
     userScrolledUp.current = false;
     setInput('');
     setAttachments([]);
+    attachmentFilesRef.current.clear();
+    setAttachmentHint(false);
     if (selectedSkill) onSkillChange?.(null);
   }, [input, attachments, isAgentActive, onSendMessage, selectedSkill, onSkillChange, retakeContext, onClearRetake, t]);
 
@@ -1208,9 +1284,7 @@ export default function AgentChatView({
     >
       {/* Drop zone overlay */}
       {isDragOver && (
-        <div className="absolute inset-0 z-[60] flex items-center justify-center pointer-events-none" style={{ background: 'rgba(0,0,0,0.6)', border: '2px dashed rgba(217,70,239,0.5)', borderRadius: 12, margin: 8 }}>
-          <span className="text-white/60 text-sm">Drop images here</span>
-        </div>
+        <div className="absolute inset-0 z-[60] pointer-events-none" style={{ background: 'rgba(217,70,239,0.04)', border: '1.5px dashed rgba(217,70,239,0.32)', borderRadius: 12, margin: 8 }} />
       )}
 
       {/* ── Back button (overlay mode only) ── */}
@@ -1626,54 +1700,54 @@ export default function AgentChatView({
         multiple
         className="hidden"
         onChange={async (e) => {
-          const files = Array.from(e.target.files ?? []);
+          const files = Array.from(e.target.files ?? []).slice(0, Math.max(0, 10 - attachments.length));
           e.target.value = '';
-          for (const file of files) {
+          // Show every attachment immediately, then process in the background.
+          const queued = files.map(file => {
             const id = (typeof crypto.randomUUID === 'function') ? crypto.randomUUID() : `${Date.now()}${Math.random().toString(36).slice(2)}`;
-            if (file.type.startsWith('video/')) {
-              // Video: extract poster immediately, process in background
+            const isVideo = file.type.startsWith('video/') || /\.(mp4|mov|webm|m4v)$/i.test(file.name);
+            attachmentFilesRef.current.set(id, file);
+            return { id, file, isVideo };
+          });
+          if (queued.length === 0) return;
+          setAttachments(prev => [...prev, ...queued.map(({ id, isVideo }) => ({ id, type: (isVideo ? 'video' : 'image') as 'video' | 'image', thumbnail: '', status: 'processing' as const, progress: 0 }))]);
+          for (const { id, file, isVideo } of queued) {
+            if (!isVideo) {
+              void processAttachment(id, file);
+              continue;
+            }
+            void (async () => {
+              // Duration check + poster first (cheap), then the queued transcode/upload.
+              const url = URL.createObjectURL(file);
+              const v = document.createElement('video');
               try {
-                const url = URL.createObjectURL(file);
-                const v = document.createElement('video');
-                v.muted = true; v.src = url;
-                await new Promise<void>(r => { v.onloadedmetadata = () => r(); setTimeout(r, 5000); });
+                v.muted = true; v.playsInline = true; v.preload = 'metadata'; v.src = url;
+                await new Promise<void>(r => { v.onloadedmetadata = () => r(); v.onerror = () => r(); setTimeout(r, 5000); });
                 const videoDuration = v.duration;
                 const { MAX_DURATION, MAX_ACCEPTED_DURATION } = await import('@/lib/video-upload');
                 if (videoDuration > MAX_ACCEPTED_DURATION) {
-                  v.pause(); v.removeAttribute('src'); v.load();
-                  URL.revokeObjectURL(url);
-                  setAttachments(prev => [...prev, { id, type: 'video', thumbnail: '', status: 'error' as const }]);
+                  patchAttachment(id, { status: 'error' });
                   setTimeout(() => setAttachments(prev => prev.filter(a => a.id !== id)), 3000);
+                  attachmentFilesRef.current.delete(id);
                   alert(t('video.tooLong').replace('{duration}', videoDuration.toFixed(1).replace(/\.0$/, '')).replace('{max}', String(MAX_DURATION)));
-                  continue;
+                  return;
                 }
-                v.currentTime = Math.min(0.5, v.duration * 0.1);
-                await new Promise<void>(r => { v.onseeked = () => r(); setTimeout(r, 3000); });
-                const c = document.createElement('canvas');
-                c.width = v.videoWidth; c.height = v.videoHeight;
-                c.getContext('2d')!.drawImage(v, 0, 0);
-                const poster = c.toDataURL('image/jpeg', 0.75);
+                void processAttachment(id, file);
+                if (Number.isFinite(videoDuration) && v.videoWidth > 0) {
+                  v.currentTime = Math.min(0.5, videoDuration * 0.1);
+                  await new Promise<void>(r => { v.onseeked = () => r(); setTimeout(r, 3000); });
+                  const c = document.createElement('canvas');
+                  c.width = v.videoWidth; c.height = v.videoHeight;
+                  c.getContext('2d')!.drawImage(v, 0, 0);
+                  patchAttachment(id, { thumbnail: c.toDataURL('image/jpeg', 0.75) });
+                }
+              } catch {
+                /* poster is optional; processing reports its own errors */
+              } finally {
                 v.pause(); v.removeAttribute('src'); v.load();
                 URL.revokeObjectURL(url);
-                setAttachments(prev => [...prev, { id, type: 'video', thumbnail: poster, status: 'processing' }]);
-                // Background: transcode + upload
-                import('@/lib/video-upload').then(({ uploadVideoToStorage }) =>
-                  uploadVideoToStorage(file, projectId || '').then(result => {
-                    setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'ready' as const, data: result.videoUrl, duration: result.duration, width: result.width, height: result.height } : a));
-                  }).catch(() => {
-                    setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'error' as const } : a));
-                  })
-                );
-              } catch { /* skip unreadable video */ }
-            } else {
-              // Image: show placeholder, compress in background
-              setAttachments(prev => [...prev, { id, type: 'image', thumbnail: '', status: 'processing' }]);
-              compressImageFile(file).then(base64 => {
-                setAttachments(prev => prev.map(a => a.id === id ? { ...a, status: 'ready' as const, thumbnail: base64, data: base64 } : a));
-              }).catch(() => {
-                setAttachments(prev => prev.filter(a => a.id !== id));
-              });
-            }
+              }
+            })();
           }
         }}
       />
@@ -1724,16 +1798,22 @@ export default function AgentChatView({
         />
         {/* Two-row layout: textarea on top, toolbar on bottom */}
         <div
+          ref={inputBoxRef}
+          data-drop={dropState(inputDrag.dragging, inputDropOver)}
           className="mkr-input-box-liquid"
           style={{
+            position: 'relative',
             background: 'linear-gradient(145deg, rgba(24,24,30,0.72), rgba(8,8,12,0.58))',
             borderRadius: '20px',
             border: '0.5px solid rgba(255,255,255,0.11)',
             boxShadow: '0 18px 48px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.09)',
             backdropFilter: 'blur(20px) saturate(1.35)',
             WebkitBackdropFilter: 'blur(20px) saturate(1.35)',
+            ...dropProximityStyle(inputDrag.dragging, inputDrag.proximity, inputDropOver),
           }}
         >
+          {isPanel && <DropOverlay dragging={inputDrag.dragging} proximity={inputDrag.proximity} over={inputDropOver} radius={20} />}
+          <UploadProgressEdge items={uploadItems} inset={20} />
           {retakeContext && <div data-testid="chat-retake-context" className="flex items-center gap-2 px-3 pt-2.5">
             <span className="min-w-0 truncate rounded-full border border-fuchsia-300/20 bg-fuchsia-300/[0.08] px-2.5 py-1 text-[11px] font-medium text-fuchsia-200/85">
               {t('video.retakeChatContext', retakeContext.mediaIndex, retakeContext.start.toFixed(2), retakeContext.end.toFixed(2))}
@@ -1793,22 +1873,6 @@ export default function AgentChatView({
               </svg>
             </button>
 
-            {/* Model selector */}
-            {onModelChange && (
-              <ModelSelector
-                preferredModel={preferredModel}
-                onModelChange={onModelChange}
-                videoAuto={videoAuto}
-                onVideoAutoChange={onVideoAutoChange}
-                videoModel={videoModel}
-                onVideoModelChange={onVideoModelChange}
-                videoResolution={videoResolution}
-                onVideoResolutionChange={onVideoResolutionChange}
-                agentModel={agentModel}
-                onAgentModelChange={onAgentModelChange}
-                onOpenChange={setModelSelectorOpen}
-              />
-            )}
 
             {/* Unified attachments — scrollable thumbnails */}
             {attachments.length > 0 && (
@@ -1832,15 +1896,35 @@ export default function AgentChatView({
                         <svg width="14" height="14" viewBox="0 0 8 8" fill="rgba(255,255,255,0.85)"><polygon points="2,1 7,4 2,7" /></svg>
                       </div>
                     )}
-                    {/* Processing spinner */}
-                    {att.status === 'processing' && (
-                      <div className="absolute inset-0 flex items-center justify-center rounded-lg" style={{ background: 'rgba(0,0,0,0.4)' }}>
-                        <div className="w-4 h-4 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
-                      </div>
+                    {/* Processing / uploading progress */}
+                    {att.status === 'processing' && (() => {
+                      const percent = Math.round((att.progress ?? 0) * 100);
+                      const label = att.phase === 'upload'
+                        ? t('upload.itemUploading', percent)
+                        : att.phase === 'transcode' ? t('upload.itemTranscoding', percent) : t('upload.itemProcessing');
+                      return (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 rounded-lg" style={{ background: 'rgba(0,0,0,0.5)' }} aria-label={label} title={label}>
+                          <div className="w-3.5 h-3.5 border-2 border-fuchsia-400/40 border-t-fuchsia-400 rounded-full animate-spin" />
+                          {att.phase && <span className="text-[8px] font-semibold leading-none text-white tabular-nums">{percent}%</span>}
+                        </div>
+                      );
+                    })()}
+                    {att.status === 'error' && (
+                      <button
+                        type="button"
+                        data-testid="chat-attachment-retry"
+                        onClick={() => retryAttachment(att.id)}
+                        aria-label={t('upload.retry')}
+                        title={att.error ? `${t('upload.itemFailed')} · ${att.error}` : t('upload.itemFailed')}
+                        className="absolute inset-0 flex items-center justify-center rounded-lg"
+                        style={{ background: 'rgba(127,29,29,0.72)', color: '#fff' }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
+                      </button>
                     )}
                     {/* Remove button */}
                     <button
-                      onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
+                      onClick={() => { attachmentFilesRef.current.delete(att.id); setAttachments(prev => prev.filter(a => a.id !== att.id)); }}
                       aria-label="Remove attachment"
                       className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
                       style={{ position: 'absolute', top: -4, right: -4, zIndex: 2, background: 'rgba(20,20,24,0.88)', border: '0.5px solid rgba(255,255,255,0.22)', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}
@@ -1857,18 +1941,41 @@ export default function AgentChatView({
             {/* Spacer (only when no thumbnails taking flex space) */}
             {attachments.length === 0 && <div className="flex-1" />}
 
-            {/* Skill selector — right side, before send */}
-            {skills && skills.length > 0 && onSkillChange && (
-              <SkillSelector
-                skills={skills}
-                selectedSkill={selectedSkill ?? null}
-                onSkillChange={onSkillChange}
-                onDeleteSkill={onDeleteSkill}
-                onUploadSkill={onUploadSkill}
-                installing={installingSkill}
-                onOpenChange={(isOpen) => setSkillSelectorOpen(isOpen)}
-              />
-            )}
+            <UploadProgressChip items={uploadItems} hint={attachmentHint} testId="chat-attachment-status" showCount={!isPanel} />
+
+            {/* Model · Skill · Send read as one control */}
+              <div className="mkr-action-cluster">
+                {/* Model selector */}
+                {onModelChange && (
+                  <ModelSelector
+                    preferredModel={preferredModel}
+                    onModelChange={onModelChange}
+                    videoAuto={videoAuto}
+                    onVideoAutoChange={onVideoAutoChange}
+                    videoModel={videoModel}
+                    onVideoModelChange={onVideoModelChange}
+                    videoResolution={videoResolution}
+                    onVideoResolutionChange={onVideoResolutionChange}
+                    agentModel={agentModel}
+                    onAgentModelChange={onAgentModelChange}
+                    onOpenChange={setModelSelectorOpen}
+                    variant="segment"
+                  />
+                )}
+                {onModelChange && skills && skills.length > 0 && onSkillChange && <span className="mkr-action-divider" aria-hidden />}
+                {/* Skill selector — right side, before send */}
+                {skills && skills.length > 0 && onSkillChange && (
+                  <SkillSelector
+                    skills={skills}
+                    selectedSkill={selectedSkill ?? null}
+                    onSkillChange={onSkillChange}
+                    onDeleteSkill={onDeleteSkill}
+                    onUploadSkill={onUploadSkill}
+                    installing={installingSkill}
+                    onOpenChange={(isOpen) => setSkillSelectorOpen(isOpen)}
+                    variant="segment"
+                  />
+                )}
 
             {/* Send / Stop button */}
             {isAgentActive && onAbort ? (
@@ -1876,7 +1983,7 @@ export default function AgentChatView({
                 data-testid="chat-stop"
                 aria-label="Stop agent"
                 onClick={onAbort}
-                className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 cursor-pointer"
+                className="mkr-liquid-icon-button w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 cursor-pointer"
                 style={{ background: 'linear-gradient(145deg, rgba(239,68,68,0.22), rgba(10,10,14,0.36))', color: '#ef4444', border: '0.5px solid rgba(239,68,68,0.26)' }}
 >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
@@ -1888,8 +1995,9 @@ export default function AgentChatView({
                 data-testid="chat-send"
                 aria-label="Send message"
                 onClick={handleSubmit}
-                disabled={!allReady && attachments.length > 0 ? true : (!input.trim() && attachments.length === 0)}
-                className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+                disabled={processingCount > 0 ? false : (!input.trim() && attachments.length === 0)}
+                aria-disabled={processingCount > 0 || undefined}
+                className="mkr-liquid-icon-button w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
                 style={{
                   background: (input.trim() || (attachments.length > 0 && allReady)) ? 'linear-gradient(145deg, rgba(192,38,211,0.92), rgba(145,18,178,0.74))' : 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(10,10,14,0.34))',
                   color: (input.trim() || (attachments.length > 0 && allReady)) ? '#fff' : 'rgba(255,255,255,0.25)',
@@ -1902,6 +2010,7 @@ export default function AgentChatView({
                 </svg>
               </button>
             )}
+              </div>
           </div>
         </div>
       </div>}

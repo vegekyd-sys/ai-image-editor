@@ -6,13 +6,78 @@ import type { CreateInputState } from '@/hooks/useCreateInput';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import AgentModelChip from '@/components/AgentModelChip';
 import type { AgentModelPreference } from '@/lib/agent-models';
+import { useLocale } from '@/lib/i18n';
+import type { MediaItemState } from '@/lib/upload/media-queue';
+import { DropOverlay, dropProximityStyle, dropState } from '@/components/DropAffordance';
+import { useDragProximity } from '@/hooks/useDragProximity';
+import { PREPARE_WEIGHT, UPLOAD_ACCENT, UploadProgressChip, UploadProgressEdge, type UploadProgressItem } from '@/components/UploadProgress';
 
-function Spinner({ size = 20 }: { size?: number }) {
+function Spinner({ size = 20, color }: { size?: number; color?: string }) {
   return (
     <svg className="mkr-spin" width={size} height={size} viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="10" stroke="rgba(217,70,239,0.12)" strokeWidth="2.5" fill="none" />
-      <path fill="rgba(217,70,239,0.7)" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      <circle cx="12" cy="12" r="10" stroke={color ? 'rgba(255,255,255,0.25)' : 'rgba(217,70,239,0.12)'} strokeWidth="2.5" fill="none" />
+      <path fill={color ?? 'rgba(217,70,239,0.7)'} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
+  );
+}
+
+/**
+ * Per-attachment status layered on the existing thumbnail: processing /
+ * uploading xx% / done / failed (tap to retry). Renders nothing once a file is
+ * simply ready, so idle thumbnails look exactly as before.
+ */
+function UploadStateOverlay({
+  state,
+  showDone,
+  compact = false,
+  onRetry,
+}: {
+  state?: MediaItemState;
+  showDone: boolean;
+  compact?: boolean;
+  onRetry?: () => void;
+}) {
+  const { t } = useLocale();
+  if (!state || state.status === 'ready' || (state.status === 'done' && !showDone)) return null;
+  const percent = Math.round(state.progress * 100);
+  const base: React.CSSProperties = {
+    position: 'absolute', inset: 0, zIndex: 3, borderRadius: 'inherit',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+    color: '#fff', fontSize: compact ? '0.5rem' : '0.6rem', fontWeight: 600, lineHeight: 1,
+    fontVariantNumeric: 'tabular-nums', textShadow: '0 1px 2px rgba(0,0,0,0.6)',
+  };
+  if (state.status === 'error') {
+    return (
+      <button
+        type="button"
+        data-upload-status="error"
+        aria-label={t('upload.retry')}
+        title={state.error ? `${t('upload.itemFailed')} · ${state.error}` : t('upload.itemFailed')}
+        onClick={(e) => { e.stopPropagation(); onRetry?.(); }}
+        style={{ ...base, border: 'none', padding: 0, background: 'rgba(127,29,29,0.72)', cursor: 'pointer', pointerEvents: 'auto' }}
+      >
+        <svg width={compact ? 12 : 16} height={compact ? 12 : 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+        </svg>
+      </button>
+    );
+  }
+  if (state.status === 'done') {
+    return (
+      <div data-upload-status="done" aria-label={t('upload.itemDone')} style={{ ...base, background: 'rgba(0,0,0,0.25)' }}>
+        <svg width={compact ? 12 : 16} height={compact ? 12 : 16} viewBox="0 0 24 24" fill="none" stroke={UPLOAD_ACCENT} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+      </div>
+    );
+  }
+  const uploading = state.status === 'uploading';
+  const label = uploading
+    ? t('upload.itemUploading', percent)
+    : state.phase === 'transcode' ? t('upload.itemTranscoding', percent) : t('upload.itemProcessing');
+  return (
+    <div data-upload-status={state.status} aria-label={label} title={label} style={{ ...base, background: 'rgba(0,0,0,0.5)' }}>
+      <Spinner size={compact ? 10 : 14} />
+      {(uploading || state.phase === 'transcode') && <span>{percent}%</span>}
+    </div>
   );
 }
 
@@ -155,10 +220,28 @@ export default function CreateInputBox({
   onDrop,
 }: CreateInputBoxProps) {
   const {
-    files, previews, text, setText, creating,
+    files, previews, itemStates, text, setText, creating,
     fileInputRef, cardIndex, setCardIndex, cardDragX, setCardDragX,
-    addFiles, removeFile,
+    addFiles, removeFile, retryFile, preuploading,
   } = input;
+  const localBoxRef = useRef<HTMLDivElement | null>(null);
+  const resolvedBoxRef = boxRef ?? localBoxRef;
+  // Desktop file drags: the box reacts as the file approaches, not only on hover.
+  const drag = useDragProximity(resolvedBoxRef, isDesktop);
+  const dragExtra = dropProximityStyle(drag.dragging, drag.proximity, dragOver);
+  const dropOverlay = isDesktop ? <DropOverlay dragging={drag.dragging} proximity={drag.proximity} over={dragOver} /> : null;
+  // One combined progress row: local compression counts as the first part of
+  // each file's upload, so users see a single "上传中 3/7 · 42%".
+  const uploadItems: UploadProgressItem[] = files.map((_, i) => {
+    const state = itemStates[i];
+    if (!state || state.status === 'done') return { status: 'done', progress: 1 };
+    if (state.status === 'error') return { status: 'error', progress: 0 };
+    if (state.status === 'uploading') return { status: 'active', progress: PREPARE_WEIGHT + (1 - PREPARE_WEIGHT) * state.progress };
+    if (state.status === 'ready') {
+      return preuploading || creating ? { status: 'active', progress: PREPARE_WEIGHT } : { status: 'done', progress: 1 };
+    }
+    return { status: 'active', progress: PREPARE_WEIGHT * (state.phase === 'transcode' ? state.progress : 0) };
+  });
 
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null);
   const mobileSwipeElRef = useRef<HTMLDivElement | null>(null);
@@ -264,7 +347,8 @@ export default function CreateInputBox({
     const hasFiles = files.length > 0;
     return (
       <div
-        ref={boxRef}
+        ref={resolvedBoxRef}
+        data-drop={dropState(drag.dragging, dragOver)}
         className={liquidInputClassName}
         role="button"
         aria-label={actionTitle || createLabel}
@@ -299,8 +383,10 @@ export default function CreateInputBox({
           WebkitBackdropFilter: 'blur(16px) saturate(142%) contrast(108%)',
           boxShadow: '0 16px 40px rgba(0,0,0,0.48), inset 0 0.5px 0 rgba(255,255,255,0.15), inset 0 -14px 26px rgba(0,0,0,0.16)',
           transition: 'transform 0.18s ease, border-color 0.2s ease, background 0.2s ease',
+          ...dragExtra,
         }}
       >
+        {dropOverlay}
         <div style={{
           position: 'absolute',
           inset: 0,
@@ -521,13 +607,15 @@ export default function CreateInputBox({
 
   return (
     <div
-      ref={boxRef}
+      ref={resolvedBoxRef}
+      data-drop={dropState(drag.dragging, dragOver)}
       className={liquidInputClassName}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       style={{
+        position: 'relative',
         display: 'flex', gap: 0,
         borderRadius: 18,
         border: dragOver ? '1px solid rgba(217,70,239,0.58)' : `0.5px solid rgba(255,255,255,${isInline ? 0.13 : 0.16})`,
@@ -544,8 +632,10 @@ export default function CreateInputBox({
         boxShadow: isInline
           ? '0 12px 30px rgba(0,0,0,0.28), inset 0 0.5px 0 rgba(255,255,255,0.13), inset 0 -10px 22px rgba(0,0,0,0.12)'
           : '0 16px 40px rgba(0,0,0,0.48), inset 0 0.5px 0 rgba(255,255,255,0.15), inset 0 -14px 26px rgba(0,0,0,0.16)',
+        ...dragExtra,
       }}
     >
+      {dropOverlay}
       {/* Left: + button / photo slot */}
       <div
         data-testid="photo-slot"
@@ -574,11 +664,7 @@ export default function CreateInputBox({
               <>
                 { }
                 <img src={previews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-                {creating && files[0]?.type.startsWith('video/') && (
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
-                    <Spinner size={16} />
-                  </div>
-                )}
+                <UploadStateOverlay state={itemStates[0]} showDone={creating} onRetry={() => retryFile(0)} />
               </>
             ) : previews[0] === null ? (
               <Spinner size={16} />
@@ -600,10 +686,10 @@ export default function CreateInputBox({
                     background: '#1a1a1a', zIndex: zIdx, boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
                   });
                   const n = files.length;
-                  const layers: { preview: string | null; rotate: number; z: number }[] = [];
-                  if (n >= 3) layers.push({ preview: previews[0], rotate: -6, z: 1 });
-                  if (n >= 2) layers.push({ preview: previews[n >= 3 ? 1 : 0], rotate: n >= 3 ? 4 : -5, z: 2 });
-                  layers.push({ preview: previews[n - 1], rotate: 0, z: 3 });
+                  const layers: { preview: string | null; rotate: number; z: number; index: number }[] = [];
+                  if (n >= 3) layers.push({ preview: previews[0], rotate: -6, z: 1, index: 0 });
+                  if (n >= 2) layers.push({ preview: previews[n >= 3 ? 1 : 0], rotate: n >= 3 ? 4 : -5, z: 2, index: n >= 3 ? 1 : 0 });
+                  layers.push({ preview: previews[n - 1], rotate: 0, z: 3, index: n - 1 });
                   return layers.map((layer, li) => (
                     <div key={li} style={cardStyle(layer.rotate, layer.z)}>
                       {layer.preview && layer.preview !== 'heic-pending' ? (
@@ -612,6 +698,7 @@ export default function CreateInputBox({
                       ) : layer.preview === null ? (
                         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
                       ) : null}
+                      {layer.z === 3 && <UploadStateOverlay state={itemStates[layer.index]} showDone={creating} />}
                     </div>
                   ));
                 })()}
@@ -657,6 +744,7 @@ export default function CreateInputBox({
                         ) : layer.preview === null ? (
                           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
                         ) : null}
+                        {layer.isFront && <UploadStateOverlay state={itemStates[layer.key]} showDone={creating} onRetry={() => retryFile(layer.key)} />}
                       </div>
                     );
                   });
@@ -749,55 +837,67 @@ export default function CreateInputBox({
           />
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
-          {onAgentModelChange && (
-            <AgentModelChip value={agentModel} onChange={onAgentModelChange} disabled={creating} />
-          )}
           <div className="hide-scrollbar" onWheel={(e) => { if (e.deltaY !== 0) { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault(); } }}
             style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 4 }}>
             {isDesktop && files.length >= 2 && previews.map((preview, i) => (
-              <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+              <div key={i} data-testid="create-attachment" data-upload-state={itemStates[i]?.status ?? 'idle'} style={{ position: 'relative', flexShrink: 0 }}>
                 {preview && preview !== 'heic-pending' ? (
 
                   <img src={preview} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', display: 'block', border: '1px solid rgba(255,255,255,0.12)' }} />
                 ) : (
                   <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={10} /></div>
                 )}
-                <div onClick={(e) => { e.stopPropagation(); removeFile(i); }}
-                  style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                  <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <div style={{ position: 'absolute', inset: 0, borderRadius: 8, overflow: 'hidden', pointerEvents: itemStates[i]?.status === 'error' ? 'auto' : 'none' }}>
+                  <UploadStateOverlay state={itemStates[i]} showDone={creating} compact onRetry={() => retryFile(i)} />
                 </div>
+                {!creating && <div onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                  style={{ position: 'absolute', top: -4, right: -4, zIndex: 4, width: 14, height: 14, borderRadius: '50%', background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                  <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </div>}
               </div>
             ))}
           </div>
-          {/* Skill selector */}
-          <SkillSelector
-            skills={skills}
-            selectedSkill={selectedSkill}
-            onSkillChange={onSkillChange}
-            onDeleteSkill={onDeleteSkill}
-            onUploadSkill={onUploadSkill}
-            installing={installingSkill}
-            overrideLabel={overrideLabel}
-            direction={skillDirection}
-          />
-          <HydrationSafeAction
-            fallbackHref={progressiveHref || undefined}
-            className="mkr-create-btn"
-            onClick={handlePrimaryActionClick}
-            disabled={creating}
-            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
-          >
-            {creating && <Spinner size={12} />}
-            {!creating && showLoginIcon && (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+          <UploadProgressChip items={uploadItems} testId="create-upload-status" showCount={!isDesktop} />
+          {/* Model · Skill · Create read as one control */}
+          <div className="mkr-action-cluster">
+            {onAgentModelChange && (
+              <>
+                <AgentModelChip value={agentModel} onChange={onAgentModelChange} disabled={creating} variant="segment" />
+                <span className="mkr-action-divider" aria-hidden />
+              </>
             )}
-            {!creating && !showLoginIcon && (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            )}
-            {createLabel}
-          </HydrationSafeAction>
+            {/* Skill selector */}
+            <SkillSelector
+              skills={skills}
+              selectedSkill={selectedSkill}
+              onSkillChange={onSkillChange}
+              onDeleteSkill={onDeleteSkill}
+              onUploadSkill={onUploadSkill}
+              installing={installingSkill}
+              overrideLabel={overrideLabel}
+              direction={skillDirection}
+              variant="segment"
+            />
+            <HydrationSafeAction
+              fallbackHref={progressiveHref || undefined}
+              className="mkr-create-btn mkr-action-primary"
+              onClick={handlePrimaryActionClick}
+              disabled={creating}
+              style={{ fontSize: '0.75rem', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
+            >
+              {creating && <Spinner size={12} color="#fff" />}
+              {!creating && showLoginIcon && (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+              )}
+              {!creating && !showLoginIcon && (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+              )}
+              {createLabel}
+            </HydrationSafeAction>
+          </div>
         </div>
       </div>
+      <UploadProgressEdge items={uploadItems} />
       {/* Hidden file input for photo/video uploads */}
       {hiddenFileInput}
     </div>
