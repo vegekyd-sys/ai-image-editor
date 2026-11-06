@@ -44,6 +44,8 @@ export interface CreateAudioInput {
   callbackUrl?: string
   model?: string
   title?: string
+  /** Agent run that requested the audio; recorded as a `run:` tag for soundtrack guards. */
+  runId?: string
   supabase?: SupabaseClient
   userId?: string
   projectId?: string
@@ -161,7 +163,7 @@ function defaultTitle(kind: AudioGenerationKind, targetLanguage: string): string
   return 'Generated audio'
 }
 
-function takeTags(kind: AudioGenerationKind, result: Pick<ProviderAudioResult, 'model' | 'provider' | 'providerModel' | 'format' | 'generationSeconds'>, take: number, takeCount: number): string {
+function takeTags(kind: AudioGenerationKind, result: Pick<ProviderAudioResult, 'model' | 'provider' | 'providerModel' | 'format' | 'generationSeconds'>, take: number, takeCount: number, runId?: string): string {
   return [
     'audio',
     result.model === SUNO_MUSIC_MODEL_ID ? 'music' : 'seed-audio',
@@ -172,6 +174,7 @@ function takeTags(kind: AudioGenerationKind, result: Pick<ProviderAudioResult, '
     `format:${result.format}`,
     `generation:${result.generationSeconds.toFixed(1)}s`,
     takeCount > 1 ? `take:${take}/${takeCount}` : '',
+    runId ? `run:${runId.replace(/[,\s]/g, '')}` : '',
   ].filter(Boolean).join(',')
 }
 
@@ -368,7 +371,7 @@ export async function createAudio(input: CreateAudioInput): Promise<CreateAudioR
   const namedTakes = result.takes.map((take, index) => ({
     ...take,
     title: takeCount > 1 ? `${title} · take ${index + 1}` : title,
-    tags: takeTags(kind, result, index + 1, takeCount),
+    tags: takeTags(kind, result, index + 1, takeCount, input.runId),
   }))
   const takes: AudioTake[] = input.supabase && input.userId && input.projectId
     ? await persistTakes({

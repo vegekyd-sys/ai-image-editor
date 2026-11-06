@@ -250,8 +250,11 @@ explicitly asks for silent, text-only, or voice-only output.
 - Audio duration must fit the video duration. Fade or trim music/effects at the
   ending rather than extending the video.
 - Use the `kind` field rather than searching for separate voiceover or music
-  tools. Standalone instrumental BGM (`kind: "music"`) is routed to Suno V6
-  automatically; all other standalone audio generation uses Seed Audio.
+  tools. A soundtrack with narration plus music is always one Seed Audio
+  `kind: "mixed"` generation, never narration plus a separate music bed.
+  Standalone instrumental BGM (`kind: "music"`) is routed to Suno V6
+  automatically, but only when the piece has no narration; all other
+  standalone audio generation uses Seed Audio.
 - Audio Index markers such as `<<<audio_N>>>` are labels, not playable URLs.
   Use the returned public `audioUrl` directly in Remotion `<Audio src={...}>`
   props/code. Never put `<<<audio_N>>>` inside composition props or `<Audio>`.

@@ -23,6 +23,7 @@ import { loadCompositionDraft } from './composition-draft';
 import { resolveExplicitTurnMediaIndices } from './media-provenance';
 import { formatSourceRangeHint, sourceRangeFromVideoMeta } from './media-source-range';
 import { WorkspaceStudioRunStore } from './studio-run';
+import { parseGeneratedAudioTags } from './audio-soundtrack-guard';
 import {
   buildTypedCompactionMessage,
   formatDurableExecutionSnapshot,
@@ -39,6 +40,9 @@ export interface AudioAttachmentContext {
   title?: string;
   duration?: number;
   trackIndex?: number;
+  /** Generated audio intent and owning Agent run, read from project_music tags. */
+  kind?: string;
+  runId?: string;
 }
 
 export interface PromptContextOptions {
@@ -316,6 +320,8 @@ function normalizeAudioAttachment(audio: AudioAttachmentContext): AudioAttachmen
     title: audio.title,
     duration: typeof audio.duration === 'number' && Number.isFinite(audio.duration) ? audio.duration : undefined,
     trackIndex: typeof audio.trackIndex === 'number' && Number.isFinite(audio.trackIndex) ? audio.trackIndex : undefined,
+    ...(audio.kind ? { kind: audio.kind } : {}),
+    ...(audio.runId ? { runId: audio.runId } : {}),
   };
 }
 
@@ -483,6 +489,7 @@ export async function buildPromptContext(
         title: row.title || undefined,
         duration: typeof row.duration === 'number' ? row.duration : undefined,
         trackIndex: typeof row.track_index === 'number' ? row.track_index : undefined,
+        ...parseGeneratedAudioTags(row.tags),
       };
     })
     .filter((audio) => !!audio.audioUrl);
@@ -759,7 +766,8 @@ export async function buildPromptContext(
         const title = audio.title || `Reference audio ${i + 1}`;
         const duration = typeof audio.duration === 'number' ? `, ${formatSecondsForPrompt(audio.duration)}s` : '';
         const track = typeof audio.trackIndex === 'number' ? `, project_music track_index=${audio.trackIndex}` : '';
-        return `<<<${label}>>> [audio] — ${title}${duration}${track}, ${audio.audioUrl}`;
+        const kind = audio.kind ? `, generated kind=${audio.kind}` : '';
+        return `<<<${label}>>> [audio] — ${title}${duration}${kind}${track}, ${audio.audioUrl}`;
       }).join('\n')}\nUse these as music/audio references. For same-speaker translation, pass one label to generate_audio as source_voice {type:"audio_index",ref:"audio_1"}; MP3 and WAV are supported. To use one in video generation, mention its marker in story_prompt and pass audio_refs, e.g. story_prompt includes <<<audio_1>>> and audio_refs is ["audio_1"]. Audio markers are not Timeline Media Index items and must not be referenced as <<<media_N>>>.\n\n`
     : '';
 

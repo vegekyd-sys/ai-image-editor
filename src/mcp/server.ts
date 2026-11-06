@@ -645,6 +645,8 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
     'makaron_create_audio',
     `Generate one complete standalone soundtrack.
 
+Mixing rule: if one deliverable needs speech together with music, make exactly one call with kind=mixed (Seed Audio) and direct the music inside it; never generate voice and a separate music track for the same piece.
+
 Routing is automatic. kind=music instrumental background music (no audio or image references) uses Suno V6: 10-360 seconds, one generation returns 2 takes (the first is the default). Everything else uses Seed Audio 1.0: narration, dialogue, multilingual speech, songs with vocals (instrumental=false), ambience, sound effects, and mixed soundtracks, up to 120 seconds.
 
 For Seed Audio, use a compact playback-order timeline. Use kind=translation with exactly one MP3/WAV audio reference and target_language to translate speech while retaining the speaker's voice and performance. Prompts are limited to 1,250 characters (1,000 for Suno music). You may provide up to 3 audio references or 1 image reference, but never both. Bind ordinary audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the Seed Audio production-master default; Suno returns MP3.`,
@@ -694,6 +696,7 @@ For Seed Audio, use a compact playback-order timeline. Use kind=translation with
 
 - Default: instrumental background music via Suno V6, 10-360 seconds, 2 takes per generation (the first is the default).
 - instrumental=false (sung vocals) uses Seed Audio, up to 120 seconds.
+- Only for a deliverable whose soundtrack is music alone. If the same piece also needs narration or dialogue, do not call this tool; call makaron_create_audio once with kind=mixed so voice and music are generated together.
 - Prompt: genre, mood, instruments, tempo, energy arc, and ending (e.g. "gentle piano, warm strings, cinematic, slow build, soft ending"). No artist names.
 - Style: optional extra genre/mood tags (e.g. "lo-fi, ambient, chill").`,
     {
