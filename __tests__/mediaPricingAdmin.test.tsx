@@ -63,7 +63,7 @@ it('shows all video models as readable buttons, even when audio is first in the 
   expect(screen.getByRole('button', { name: 'Seed Audio' })).toBeTruthy()
   expect(screen.getByRole('heading', { name: 'Seed Audio' })).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Suno V6' }))
-  const suno = screen.getByTestId('media-price-audio:suno-v6:default:generation')
+  const suno = screen.getByTestId('media-price-audio:suno-v6:default:generate')
   expect(within(suno).getByText('mediaPricing.output_usd_per_generation')).toBeTruthy()
   expect(within(suno).getByText('mediaPricing.sampleGeneration')).toBeTruthy()
   expect(within(suno).getByText('12 Credits')).toBeTruthy()

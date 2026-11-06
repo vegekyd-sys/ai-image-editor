@@ -59,7 +59,7 @@ describe('database-backed media quotes', () => {
   })
   it('bills Suno music per generation, independent of duration', async () => {
     // $0.06 per generation (2 takes) x 2 markup = 12 Makaron credits.
-    expect(await quoteSunoMusic()).toMatchObject({ priceId: 'audio:suno-v6:default:generation', credits: 12 })
+    expect(await quoteSunoMusic()).toMatchObject({ priceId: 'audio:suno-v6:default:generate', credits: 12 })
     expect((await quoteSunoMusic({ generations: 2 })).credits).toBe(24)
     query.mockResolvedValueOnce({ data: seededMediaPrices().filter(p => p.model_id !== 'suno-v6'), error: null })
     await expect(quoteSunoMusic()).rejects.toThrow('Suno music pricing is not configured.')

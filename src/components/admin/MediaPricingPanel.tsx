@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useLocale } from '@/lib/i18n'
 import type { MediaPrice } from '@/lib/billing/media-pricing'
+import { isPerGenerationPrice } from '@/lib/billing/media-price-units'
 import { listVideoModelCapabilities } from '@/lib/video-model-capabilities'
 
 const fields = ['output_usd_per_second', 'markup', 'input_usd_per_second', 'video_reference_usd_per_second', 'input_usd_per_image', 'free_image_references', 'unfiltered_multiplier', 'input_usd_per_1k_tokens', 'free_input_tokens', 'input_tokens_per_image_pixel', 'input_tokens_per_video_second', 'input_tokens_per_audio_second'] as const
@@ -28,8 +29,8 @@ function PriceEntry({ price, editing, editingElsewhere, onEdit, onSaved }: {
   const [status, setStatus] = useState<'saved' | 'error' | 'conflict' | null>(null)
   const dirty = fields.some(field => draft[field] !== price[field]) || draft.is_active !== price.is_active
   const resolution = price.resolution === 'default' ? t('mediaPricing.defaultResolution') : price.resolution.toUpperCase()
-  // operation=generation rows (Suno) store USD per generation in output_usd_per_second.
-  const perGeneration = price.operation === 'generation'
+  // Per-generation models (Suno) store USD per generation in output_usd_per_second.
+  const perGeneration = isPerGenerationPrice(price)
   const sampleCredits = Math.ceil(price.output_usd_per_second * (perGeneration ? 1 : 5) * 100 * price.markup - 1e-9)
   const fieldLabel = (field: typeof fields[number]) => t(perGeneration && field === 'output_usd_per_second' ? 'mediaPricing.output_usd_per_generation' : `mediaPricing.${field}`)
 
@@ -55,7 +56,7 @@ function PriceEntry({ price, editing, editingElsewhere, onEdit, onSaved }: {
       <div className="order-1 min-w-0">
         <div className="text-sm font-semibold text-white">{resolution}</div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/55">
-          {t(`mediaPricing.${price.operation as 'generate' | 'edit' | 'extend' | 'generation'}`)}
+          {t(perGeneration ? 'mediaPricing.generation' : `mediaPricing.${price.operation as 'generate' | 'edit' | 'extend'}`)}
           {!price.is_active && <span className="text-amber-300">{t('mediaPricing.inactive')}</span>}
         </div>
       </div>
