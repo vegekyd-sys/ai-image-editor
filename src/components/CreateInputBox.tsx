@@ -828,6 +828,20 @@ export default function CreateInputBox({
             }}
           />
         )}
+        {uploadStatusText && (
+          <div
+            data-testid="create-upload-status"
+            role="status"
+            aria-live="polite"
+            style={{
+              padding: '0 14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              fontSize: '0.7rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums',
+              color: uploadStatusIsError ? 'rgba(248,113,113,0.95)' : 'rgba(255,255,255,0.55)',
+            }}
+          >
+            {uploadStatusText}
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
           {onAgentModelChange && (
             <AgentModelChip value={agentModel} onChange={onAgentModelChange} disabled={creating} />
@@ -851,20 +865,6 @@ export default function CreateInputBox({
                 </div>}
               </div>
             ))}
-            {uploadStatusText && (
-              <span
-                data-testid="create-upload-status"
-                role="status"
-                aria-live="polite"
-                style={{
-                  flexShrink: 0, marginLeft: isDesktop && files.length >= 2 ? 4 : 2, whiteSpace: 'nowrap',
-                  fontSize: '0.7rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums',
-                  color: uploadStatusIsError ? 'rgba(248,113,113,0.95)' : 'rgba(255,255,255,0.55)',
-                }}
-              >
-                {uploadStatusText}
-              </span>
-            )}
           </div>
           {/* Skill selector */}
           <SkillSelector
