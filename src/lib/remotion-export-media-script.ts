@@ -38,7 +38,9 @@ async function probe(file, remote = false) {
   const rotated = Math.abs(rotation % 180) === 90;
   return {codec:v.codec_name,pixelFormat:v.pix_fmt,width:rotated?v.height:v.width,height:rotated?v.width:v.height,
     fps:rate[1] ? rate[0]/rate[1] : rate[0],duration:Number(result.format?.duration || v.duration),
-    bitrate:Number(v.bit_rate || result.format?.bit_rate || 0),audioStreams:streams.filter(s=>s.codec_type==='audio').length,
+    // iPhone files carry undecodable tracks (APAC spatial audio, mebx metadata); map only decodable audio by index.
+    videoIndex:v.index,audioIndexes:streams.filter(s=>s.codec_type==='audio' && s.codec_name && s.codec_name!=='unknown' && s.codec_name!=='none').map(s=>s.index),
+    bitrate:Number(v.bit_rate || result.format?.bit_rate || 0),audioStreams:streams.filter(s=>s.codec_type==='audio' && s.codec_name && s.codec_name!=='unknown' && s.codec_name!=='none').length,
     hdr:['smpte2084','arib-std-b67'].includes(v.color_transfer),
     alpha:/^(yuva|gbrap|rgba|bgra|argb|abgr)/.test(v.pix_fmt || '') || v.tags?.alpha_mode === '1'
       || streams.filter(s=>s.codec_type==='video' && !s.disposition?.attached_pic).length > 1};
@@ -88,7 +90,7 @@ try {
       if (original.hdr) filters.push('zscale=t=linear:npl=100','format=gbrpf32le','tonemap=tonemap=hable:desat=0','zscale=p=bt709:t=bt709:m=bt709:r=tv');
       filters.push('fps='+targetFps,'pad=ceil(iw/2)*2:ceil(ih/2)*2','format=yuv420p');
       const args = ['-hide_banner','-loglevel','error','-nostdin','-y','-protocol_whitelist','file,pipe','-i',input,
-        '-map','0:V:0','-map','0:a?','-vf',filters.join(','),'-c:v','libx264','-preset','veryfast','-crf','18',
+        '-map','0:'+local.videoIndex,...local.audioIndexes.flatMap(i=>['-map','0:'+i]),'-vf',filters.join(','),'-c:v','libx264','-preset','veryfast','-crf','18',
         '-g',String(Math.max(1,Math.round(targetFps))),'-keyint_min','1','-sc_threshold','0','-threads','4',
         '-c:a','aac','-b:a','192k','-map_metadata','-1','-movflags','+faststart','-fs',String(Math.floor(outputBudget))];
       if (original.hdr) args.push('-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709');
