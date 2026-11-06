@@ -23,8 +23,8 @@ export function seededMediaPrices(): MediaPrice[] {
       const [id, kind, model_id, resolution, operation, output_usd_per_second] = JSON.parse(`[${line.slice(1, line.lastIndexOf(')')).replaceAll("'", '"').replaceAll(/,\./g, ',0.')}]`)
       return { id, kind, model_id, resolution, operation, output_usd_per_second, input_usd_per_second: 0, input_usd_per_image: 0, free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true, updated_at: '2026-10-04T00:00:00Z' }
     })
-  const kling4 = readdirSync('supabase/migrations').filter(file => file.endsWith('_kling4_candidate_pricing.sql'))
-    .flatMap(file => readFileSync('supabase/migrations/' + file, 'utf8').split('\n').filter(line => line.startsWith("('video:kling-4:")))
+  const kling4 = readdirSync('supabase/migrations').filter(file => file.endsWith('_kling4_candidate_pricing.sql') || file.endsWith('_kling4_flash_pricing_and_retake.sql'))
+    .flatMap(file => readFileSync('supabase/migrations/' + file, 'utf8').split('\n').filter(line => line.startsWith("('video:kling-4:") || line.startsWith("('video:kling-4-flash:")))
     .map(line => {
       const [id, kind, model_id, resolution, operation, output_usd_per_second, video_reference_usd_per_second] = JSON.parse(`[${line.slice(1, line.lastIndexOf(')')).replaceAll("'", '"')}]`)
       return { id, kind, model_id, resolution, operation, output_usd_per_second, video_reference_usd_per_second, input_usd_per_second: 0, input_usd_per_image: 0, free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true, updated_at: '2026-10-22T00:00:00Z' }

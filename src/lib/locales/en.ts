@@ -777,7 +777,7 @@ const en = {
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': 'Text or image/video references, 3–30s; video editing preserves source audio.',
   'model.kling4Flash.name': 'Kling 4.0 Flash',
-  'model.kling4Flash.desc': 'API not verified. Unavailable; no substitute model will be used.',
+  'model.kling4Flash.desc': 'Faster, lower-cost Kling 4.0 for drafts: text or image/video references, 3–20s at 720p; editing preserves source audio.',
   'model.kling.name': 'Kling O3',
   'model.kling.desc': 'Premium 4K output, fast, with built-in sound.',
   'model.seedanceFast.name': 'SeeDance 2.0 Fast',

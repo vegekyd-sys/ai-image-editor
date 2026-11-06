@@ -1001,7 +1001,7 @@ const ja = {
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': 'テキスト・画像/動画参照、3〜30秒。動画編集では元の音声を保持。',
   'model.kling4Flash.name': 'Kling 4.0 Flash',
-  'model.kling4Flash.desc': 'API未確認のため利用不可。他モデルへの置き換えは行いません。',
+  'model.kling4Flash.desc': '高速・低コストの Kling 4.0。下書き向け：テキストまたは画像/動画参照、3〜20秒・720p。動画編集は元の音声を保持します。',
   'model.kling.name': 'Kling O3',
   'model.kling.desc': '高速な4K高品質出力。サウンドも内蔵しています。',
   'model.seedanceFast.name': 'SeeDance 2.0 Fast',

@@ -777,7 +777,7 @@ const zh = {
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': '文生与图/视频参考，3–30 秒；视频编辑保留原声。',
   'model.kling4Flash.name': 'Kling 4.0 Flash',
-  'model.kling4Flash.desc': 'API 尚未验证，暂不可用，不会替换为其他模型。',
+  'model.kling4Flash.desc': '更快、更省的 Kling 4.0，适合快速出草稿：文字或图片/视频参考，3–20 秒 720p；视频编辑保留原声。',
   'model.kling.name': 'Kling O3',
   'model.kling.desc': '4K 高规格输出，速度快，内置音效。',
   'model.seedanceFast.name': 'SeeDance 2.0 Fast',

@@ -49,4 +49,4 @@ Return a submitted or completed video with the selected model, duration, referen
 
 ## Kling 4.0
 
-Opt in with `kling-4`: native text/reference generation, integer 3–30s at 720p/1080p; max 10 images / 5 videos, no audio references. Video inputs each >=3s, total <=30s. Typed edit requires exactly one video and preserves its audio/canvas. Keyframe I2V and extend are not exposed. Retake defaults to Kling 4.0 at 720p and supports original audio only. `kling-4-flash` has no verified callable API; report unavailable without substitution.
+Opt in with `kling-4`: native text/reference generation, integer 3–30s at 720p/1080p; max 10 images / 5 videos, no audio references. Video inputs each >=3s, total <=30s. Typed edit requires exactly one video and preserves its audio/canvas. Keyframe I2V and extend are not exposed. Retake defaults to Kling 4.0 at 720p and supports original audio only. `kling-4-flash` (Kling 4.0 Flash) is the faster, lower-cost variant with the same inputs and edit route, but integer 3–20s, 720p only and video inputs <=20s total. Never substitute one Kling 4 variant for the other.

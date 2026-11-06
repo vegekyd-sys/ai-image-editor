@@ -7,7 +7,7 @@ const zhHant = {
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': '文字生成與圖/影片參考，3–30 秒；影片編輯保留原聲。',
   'model.kling4Flash.name': 'Kling 4.0 Flash',
-  'model.kling4Flash.desc': 'API 尚未驗證，暫不可用，不會替換為其他模型。',
+  'model.kling4Flash.desc': '更快、更省的 Kling 4.0，適合快速出草稿：文字或圖片/影片參考，3–20 秒 720p；影片編輯保留原聲。',
   "mjLab.back": "返回 Makaron",
   "mjLab.eyebrow": "本機試用 · Midjourney V8.2",
   "image.candidates": "候選圖",
