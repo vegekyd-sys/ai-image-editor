@@ -1,5 +1,6 @@
 import { estimateGptImageCredits } from './models/gpt-image-quote';
 import { validatePrimaryVideoFraming } from './composition-video-framing';
+import { mediaContentTypeOrBinary } from './media-content-type';
 import { isFalGptImage } from './models/types';
 import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
@@ -1009,15 +1010,7 @@ function mediaKindMatches(contentType: string | undefined, mediaType: 'image' | 
 }
 
 function inferWorkspaceContentType(filePathOrUrl: string): string {
-  const clean = filePathOrUrl.split('?')[0] || filePathOrUrl;
-  if (/\.(mp4|m4v)$/i.test(clean)) return 'video/mp4';
-  if (/\.mov$/i.test(clean)) return 'video/quicktime';
-  if (/\.webm$/i.test(clean)) return 'video/webm';
-  if (/\.(jpg|jpeg)$/i.test(clean)) return 'image/jpeg';
-  if (/\.png$/i.test(clean)) return 'image/png';
-  if (/\.webp$/i.test(clean)) return 'image/webp';
-  if (/\.gif$/i.test(clean)) return 'image/gif';
-  return 'application/octet-stream';
+  return mediaContentTypeOrBinary(filePathOrUrl);
 }
 
 async function ensureWorkspaceFileIndex(ctx: AgentContext, output: WorkspaceMediaOutputDraft): Promise<void> {

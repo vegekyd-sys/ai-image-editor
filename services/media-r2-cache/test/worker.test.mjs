@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHandler, cacheTarget, fillableOrigin } from '../src/worker.mjs';
+import { createHandler, cacheTarget, fillableOrigin, isMediaResponseType } from '../src/worker.mjs';
 
 const ORIGIN = 'sdyrtztrjgmmpnirswxt.supabase.co';
 const MEDIA = 'https://cdn.makaron.app/storage/v1/object/public/images/u1/p1/media/clip-abc.mp4';
@@ -365,5 +365,48 @@ test('R2 hit with a matching If-None-Match is still 304, with or without Range',
     assert.equal(res.status, 304, JSON.stringify(headers));
     assert.equal(res.headers.get('x-makaron-cache'), 'HIT-R2');
     assert.equal(body.length, 0);
+  }
+});
+
+test('octet-stream audio with a media extension is cached and keeps the origin content-type', async () => {
+  const WAV_PATH = '/storage/v1/object/public/images/u1/workspace/p1/media/1762440000000-master.wav';
+  const WAV = `https://cdn.makaron.app${WAV_PATH}`;
+  const data = bytes(3000);
+  const { run, r2, origin } = setup({ files: { [WAV_PATH]: { data, etag: '"w1"', type: 'application/octet-stream' } } });
+
+  const cold = await run(WAV, { headers: { range: 'bytes=78-' } });
+  assert.equal(cold.res.status, 206);
+  assert.equal(cold.res.headers.get('x-makaron-cache'), 'MISS');
+  assert.equal(cold.res.headers.get('content-type'), 'application/octet-stream');
+  const stored = r2.objects.get('v1/images/u1/workspace/p1/media/1762440000000-master.wav');
+  assert.ok(stored, 'wav copied into R2');
+  assert.equal(stored.httpMetadata.contentType, 'application/octet-stream');
+  assert.deepEqual(stored.data, data);
+
+  r2.ops.length = 0;
+  const warm = await run(WAV, { headers: { range: 'bytes=78-' } });
+  assert.match(warm.res.headers.get('x-makaron-cache'), /^HIT-(EDGE|R2)$/);
+  assert.equal(warm.res.status, 206);
+  assert.equal(warm.res.headers.get('content-type'), 'application/octet-stream');
+  assert.deepEqual(warm.body, data.slice(78));
+  assert.equal(origin.calls.filter(c => !c.search.includes('r2c=')).length, 1, 'only the cold read was forwarded');
+});
+
+test('octet-stream is only trusted as media on a media path; other types stay uncached', async () => {
+  assert.equal(isMediaResponseType('application/octet-stream', '/a/b.wav'), true);
+  assert.equal(isMediaResponseType('application/octet-stream; charset=binary', '/a/b.mp4'), true);
+  assert.equal(isMediaResponseType('application/octet-stream', '/a/b.json'), false);
+  assert.equal(isMediaResponseType('audio/wav', ''), true);
+  assert.equal(isMediaResponseType('text/plain', '/a/b.mp4'), false);
+  assert.equal(isMediaResponseType('application/json', '/a/b.wav'), false);
+  assert.equal(isMediaResponseType('', '/a/b.wav'), false);
+  const ok = new Response('x', { headers: { 'content-type': 'application/octet-stream', etag: '"x"', 'content-length': '1' } });
+  assert.equal(fillableOrigin(ok, 10, '/x/a.wav'), true);
+  assert.equal(fillableOrigin(ok, 10), false, 'no path means no extension evidence');
+
+  for (const type of ['text/plain', 'application/json']) {
+    const { run, r2 } = setup({ files: file(bytes(100), '"e1"', { type }) });
+    await run(MEDIA);
+    assert.equal(r2.objects.has('v1/images/u1/p1/media/clip-abc.mp4'), false, type);
   }
 });

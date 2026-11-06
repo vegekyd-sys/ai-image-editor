@@ -15,6 +15,7 @@
  */
 
 import { createWriteStream, existsSync } from 'fs';
+import { mediaContentTypeOrBinary } from './media-content-type';
 import { createHash } from 'crypto';
 import { mkdir, open, readFile as readLocalFile, stat, writeFile as writeLocalFile } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -405,12 +406,9 @@ function extToContentType(ext: string): string {
     '.md': 'text/markdown', '.txt': 'text/plain', '.json': 'application/json',
     '.js': 'text/javascript', '.mjs': 'text/javascript', '.cjs': 'text/javascript', '.jsx': 'text/javascript',
     '.ts': 'text/typescript', '.tsx': 'text/typescript', '.css': 'text/css',
-    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-    '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf',
-    '.zip': 'application/zip',
-    '.mp4': 'video/mp4', '.mov': 'video/quicktime',
+    '.pdf': 'application/pdf', '.zip': 'application/zip',
   };
-  return map[ext.toLowerCase()] || 'application/octet-stream';
+  return map[ext.toLowerCase()] || mediaContentTypeOrBinary(ext);
 }
 
 function pathToContentType(filePath: string): string {
