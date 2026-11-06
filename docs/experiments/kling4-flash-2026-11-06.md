@@ -45,5 +45,5 @@
 ## 发布前必须完成
 
 1. `check:skill-sync` 的路由证据已因 Skill 正文变化过期，需用私密环境跑 `npm run test:skill-routing -- --live --env <私密环境文件>`。
-3. 按 `docs/makaron-release-checklist.md` 同步 CLI 版本、发包并做 registry 全新安装验收。
-4. Preview 上用真实账号走一次 App 选择 Flash → 出片 → 重新打开项目。
+2. 按 `docs/makaron-release-checklist.md` 同步 CLI 版本、发包并做 registry 全新安装验收。
+3. Preview 上用真实账号走一次 App 选择 Flash → 出片 → 重新打开项目。
