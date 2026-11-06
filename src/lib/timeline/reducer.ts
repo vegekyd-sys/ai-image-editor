@@ -142,6 +142,12 @@ function reversePatch(prev: Clip, patch: Record<string, unknown>): Record<string
   return rev;
 }
 
+function requireClip(doc: TimelineDoc, id: string): Clip {
+  const clip = doc.clips[id];
+  if (!clip) throw new TimelineError('not_found', `Clip "${id}" not found`, [id]);
+  return clip;
+}
+
 function applyOne(doc: TimelineDoc, op: TimelineOp, inverse: TimelineOp[], changed: Set<string>): TimelineDoc {
   switch (op.op) {
     case 'insert': {
@@ -152,8 +158,7 @@ function applyOne(doc: TimelineDoc, op: TimelineOp, inverse: TimelineOp[], chang
       return { ...doc, clips: { ...doc.clips, [clip.id]: clip } };
     }
     case 'update': {
-      const prev = doc.clips[op.id];
-      if (!prev) throw new TimelineError('not_found', `Clip "${op.id}" not found`, [op.id]);
+      const prev = requireClip(doc, op.id);
       const nextKind = (op.patch.kind as string | undefined) ?? prev.kind;
       if (nextKind !== prev.kind && prev.kind !== 'pending') {
         throw new TimelineError('invalid', `Clip "${op.id}" is ${prev.kind}; only pending clips can change kind`, [op.id]);
@@ -165,8 +170,7 @@ function applyOne(doc: TimelineDoc, op: TimelineOp, inverse: TimelineOp[], chang
       return { ...doc, clips: { ...doc.clips, [op.id]: clip } };
     }
     case 'remove': {
-      const prev = doc.clips[op.id];
-      if (!prev) throw new TimelineError('not_found', `Clip "${op.id}" not found`, [op.id]);
+      const prev = requireClip(doc, op.id);
       const clips = { ...doc.clips };
       delete clips[op.id];
       inverse.unshift({ op: 'insert', clip: prev });
@@ -174,8 +178,7 @@ function applyOne(doc: TimelineDoc, op: TimelineOp, inverse: TimelineOp[], chang
       return { ...doc, clips };
     }
     case 'split': {
-      const prev = doc.clips[op.id];
-      if (!prev) throw new TimelineError('not_found', `Clip "${op.id}" not found`, [op.id]);
+      const prev = requireClip(doc, op.id);
       if (doc.clips[op.newId]) throw new TimelineError('invalid', `Clip id "${op.newId}" already exists`, [op.newId]);
       if (prev.kind === 'pending') throw new TimelineError('invalid', 'Pending clips cannot be split', [op.id]);
       const offset = round(op.at - prev.start);

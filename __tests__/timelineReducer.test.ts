@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyOps, applyTx, createTimelineDoc, timelineDuration, TimelineError } from '@/lib/timeline/reducer';
-import type { Clip, TimelineDoc } from '@/lib/timeline/types';
+import type { Clip, TimelineDoc, TimelineOp } from '@/lib/timeline/types';
 
 const video = (id: string, duration: number, extra: Partial<Clip> = {}): Clip =>
   ({ id, trackId: 'main', kind: 'video', src: `https://cdn.example/${id}.mp4`, start: 99, duration, ...extra }) as Clip;
@@ -16,6 +16,26 @@ function seed(): TimelineDoc {
 }
 
 describe('timeline reducer', () => {
+  it.each([
+    { op: 'update', id: 'missing', patch: { kind: 'image' } },
+    { op: 'remove', id: 'missing' },
+    { op: 'split', id: 'missing', at: -1, newId: 'a' },
+  ] satisfies TimelineOp[])('keeps the missing-clip error contract for $op', op => {
+    const doc = seed();
+    const before = structuredClone(doc);
+    for (const run of [
+      () => applyOps(doc, [op]),
+      () => applyTx(doc, { baseRevision: doc.revision, ops: [op] }),
+      () => applyOps(doc, [{ op: 'update', id: 'a', patch: { duration: 1 } }, op]),
+    ]) {
+      let caught: unknown;
+      try { run(); } catch (error) { caught = error; }
+      expect(caught).toBeInstanceOf(TimelineError);
+      expect(caught).toMatchObject({ name: 'TimelineError', code: 'not_found', message: 'Clip "missing" not found', clipIds: ['missing'] });
+      expect(doc).toEqual(before);
+    }
+  });
+
   it('packs the main track back-to-back in insertion order', () => {
     const doc = seed();
     expect(doc.clips.a.start).toBe(0);
