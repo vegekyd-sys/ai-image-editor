@@ -8,6 +8,8 @@ import AgentModelChip from '@/components/AgentModelChip';
 import type { AgentModelPreference } from '@/lib/agent-models';
 import { useLocale } from '@/lib/i18n';
 import type { MediaItemState } from '@/lib/upload/media-queue';
+import { DropOverlay, dropProximityStyle } from '@/components/DropAffordance';
+import { useDragProximity } from '@/hooks/useDragProximity';
 import { PREPARE_WEIGHT, UPLOAD_ACCENT, UploadProgressChip, UploadProgressEdge, type UploadProgressItem } from '@/components/UploadProgress';
 
 function Spinner({ size = 20, color }: { size?: number; color?: string }) {
@@ -222,6 +224,12 @@ export default function CreateInputBox({
     fileInputRef, cardIndex, setCardIndex, cardDragX, setCardDragX,
     addFiles, removeFile, retryFile, preuploading,
   } = input;
+  const localBoxRef = useRef<HTMLDivElement | null>(null);
+  const resolvedBoxRef = boxRef ?? localBoxRef;
+  // Desktop file drags: the box reacts as the file approaches, not only on hover.
+  const drag = useDragProximity(resolvedBoxRef, isDesktop);
+  const dragExtra = dropProximityStyle(drag.dragging, drag.proximity, dragOver);
+  const dropOverlay = isDesktop ? <DropOverlay dragging={drag.dragging} proximity={drag.proximity} over={dragOver} /> : null;
   // One combined progress row: local compression counts as the first part of
   // each file's upload, so users see a single "上传中 3/7 · 42%".
   const uploadItems: UploadProgressItem[] = files.map((_, i) => {
@@ -339,7 +347,7 @@ export default function CreateInputBox({
     const hasFiles = files.length > 0;
     return (
       <div
-        ref={boxRef}
+        ref={resolvedBoxRef}
         className={liquidInputClassName}
         role="button"
         aria-label={actionTitle || createLabel}
@@ -374,8 +382,10 @@ export default function CreateInputBox({
           WebkitBackdropFilter: 'blur(16px) saturate(142%) contrast(108%)',
           boxShadow: '0 16px 40px rgba(0,0,0,0.48), inset 0 0.5px 0 rgba(255,255,255,0.15), inset 0 -14px 26px rgba(0,0,0,0.16)',
           transition: 'transform 0.18s ease, border-color 0.2s ease, background 0.2s ease',
+          ...dragExtra,
         }}
       >
+        {dropOverlay}
         <div style={{
           position: 'absolute',
           inset: 0,
@@ -596,7 +606,7 @@ export default function CreateInputBox({
 
   return (
     <div
-      ref={boxRef}
+      ref={resolvedBoxRef}
       className={liquidInputClassName}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
@@ -620,8 +630,10 @@ export default function CreateInputBox({
         boxShadow: isInline
           ? '0 12px 30px rgba(0,0,0,0.28), inset 0 0.5px 0 rgba(255,255,255,0.13), inset 0 -10px 22px rgba(0,0,0,0.12)'
           : '0 16px 40px rgba(0,0,0,0.48), inset 0 0.5px 0 rgba(255,255,255,0.15), inset 0 -14px 26px rgba(0,0,0,0.16)',
+        ...dragExtra,
       }}
     >
+      {dropOverlay}
       {/* Left: + button / photo slot */}
       <div
         data-testid="photo-slot"

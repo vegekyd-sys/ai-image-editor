@@ -1,5 +1,7 @@
 'use client';
 
+import { DropOverlay, dropProximityStyle } from '@/components/DropAffordance';
+import { useDragProximity } from '@/hooks/useDragProximity';
 import { PREPARE_WEIGHT, UploadProgressChip, UploadProgressEdge, type UploadProgressItem } from '@/components/UploadProgress';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -764,6 +766,11 @@ export default function AgentChatView({
   const [inlineImagePreviewLoadedUrl, setInlineImagePreviewLoadedUrl] = useState<string | null>(null);
   const inlineImagePreviewRef = useRef<HTMLSpanElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  // The input box brightens as a dragged file approaches it; the whole panel
+  // still accepts the drop.
+  const inputBoxRef = useRef<HTMLDivElement | null>(null);
+  const inputDrag = useDragProximity(inputBoxRef, mode === 'panel');
+  const inputDropOver = isDragOver && inputDrag.proximity >= 1;
   const dragCountRef = useRef(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const processingImageCount = processingCount; // legacy compat for any remaining references
@@ -1277,9 +1284,7 @@ export default function AgentChatView({
     >
       {/* Drop zone overlay */}
       {isDragOver && (
-        <div className="absolute inset-0 z-[60] flex items-center justify-center pointer-events-none" style={{ background: 'rgba(0,0,0,0.6)', border: '2px dashed rgba(217,70,239,0.5)', borderRadius: 12, margin: 8 }}>
-          <span className="text-white/60 text-sm">Drop images here</span>
-        </div>
+        <div className="absolute inset-0 z-[60] pointer-events-none" style={{ background: 'rgba(217,70,239,0.04)', border: '1.5px dashed rgba(217,70,239,0.32)', borderRadius: 12, margin: 8 }} />
       )}
 
       {/* ── Back button (overlay mode only) ── */}
@@ -1793,6 +1798,7 @@ export default function AgentChatView({
         />
         {/* Two-row layout: textarea on top, toolbar on bottom */}
         <div
+          ref={inputBoxRef}
           className="mkr-input-box-liquid"
           style={{
             position: 'relative',
@@ -1802,8 +1808,10 @@ export default function AgentChatView({
             boxShadow: '0 18px 48px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.09)',
             backdropFilter: 'blur(20px) saturate(1.35)',
             WebkitBackdropFilter: 'blur(20px) saturate(1.35)',
+            ...dropProximityStyle(inputDrag.dragging, inputDrag.proximity, inputDropOver),
           }}
         >
+          {isPanel && <DropOverlay dragging={inputDrag.dragging} proximity={inputDrag.proximity} over={isDragOver} radius={20} />}
           <UploadProgressEdge items={uploadItems} inset={20} />
           {retakeContext && <div data-testid="chat-retake-context" className="flex items-center gap-2 px-3 pt-2.5">
             <span className="min-w-0 truncate rounded-full border border-fuchsia-300/20 bg-fuchsia-300/[0.08] px-2.5 py-1 text-[11px] font-medium text-fuchsia-200/85">

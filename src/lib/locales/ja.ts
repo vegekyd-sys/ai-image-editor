@@ -470,6 +470,8 @@ const ja = {
   'status.uploadingVideo': '動画をアップロード中...',
   'status.videoUploadFailed': (message: string) => `動画のアップロードに失敗しました：${message}`,
   'upload.progress': (done: number, total: number) => `アップロード中 ${done}/${total}`,
+  'upload.dropHere': 'ここにドロップしてアップロード',
+  'upload.releaseToUpload': '離してアップロード',
   'upload.sendWhenDone': '完了後に送信',
   'upload.failedShort': (count: number) => `${count} 件失敗`,
   'upload.itemProcessing': '圧縮中',
