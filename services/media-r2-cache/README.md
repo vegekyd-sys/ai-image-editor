@@ -82,6 +82,19 @@ R2 的 `get()` / `head()` 不带 range 时也会返回 `range` 字段，旧版 `
 
 **2026-11-06 23:48 CST 已上生产**：version `c53679db-c4b7-46f3-846b-346fb1529196`（上一版是 `cbf223db-912d-4715-aee7-eb79ef7dcd54`，回滚用 `npx wrangler rollback cbf223db-912d-4715-aee7-eb79ef7dcd54`）。线上回归：不带 Range 的 GET 两次间隔 79 秒都是 `200 HIT-R2`；Node `https.get` 回 `200 HIT-R2`；HEAD 回 `200`；`bytes=0-0` 回 `206 HIT-R2`；真实的 `readProviderImage` 读取成功。acceptance.sh 生产模式（`TEST_HOST=https://cdn.makaron.app`，生产 purge 密钥）15/15 通过。
 
+## 2026-11-07 修复：octet-stream 音频进不了 R2（只上了测试环境）
+
+之前，`run_code` 产出的 `.wav` 等音频以 `application/octet-stream` 上传；只要源站 content-type 不是 video/audio/image，Worker 就不补缓存，所以这些文件每次读取都穿透到 Supabase。共享库里有 763 个这样的 wav，近 7 天新增 112 个，都在 `<user>/workspace/<project>/media/`。调研见 `docs/ops/egress-gap-investigation-20261107.md`。
+
+修复：源站返回 `application/octet-stream`，并且路径扩展名在 `MEDIA_EXT` 里时，也当作媒体写入 R2 和边缘缓存（`isMediaResponseType`）。返回给客户端的 content-type 保持源站原值，不改写。应用侧同步修正上传时的 content-type，见 `src/lib/media-content-type.ts`。
+
+验收（2026-11-07 00:30 CST 前后，只部署测试环境 `makaron-media-r2-cache-test`，version `4764b21a-3773-4942-89f3-7f61ee57d463`，上一版是 `ed106940-3c89-41d8-b8d3-77b9a729a012`）：
+- `npm test` 19/19 通过，新增 2 条。
+- 在 `images/r2c-acceptance/` 下上传一个 2MB、`application/octet-stream` 的 wav，用 `Range: bytes=78-` 请求：第 1 次 `MISS`，第 2 次 `HIT-R2`，两次的 content-type 都是 `application/octet-stream`，字节一致。完整 GET 和 HEAD 都是 `HIT-EDGE`，sha256 一致。删除对象并调用 purge 后，再请求回落到源站。
+- `scripts/acceptance.sh` 15/15 通过。
+
+**生产尚未部署。**
+
 ## 本地文件
 
 `.secrets` 和 `launch.local.sql` 都已 gitignore，里面保存测试和生产环境的 PURGE_SECRET，不要提交。

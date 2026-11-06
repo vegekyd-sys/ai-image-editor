@@ -170,3 +170,26 @@ group by host, r2c, sbcache order by gb desc
 ```
 
 第 2.3 节的做法：先导出补缓存路径（`r2c=` 且没有 Range，按路径 `group by`，每 ≤6 小时查一次，避免超过 1000 行的上限），再用 Management API 的 `database/query`（`read_only: true`）和 `storage.objects` 按 name 关联，比较 `created_at`。
+
+## 7. 方案 B 实施（2026-11-07，只到测试环境）
+
+用户批准先做方案 B。
+
+**写入路径确认**：近 7 天新增的 112 个 wav，文件名都是 `<13位毫秒时间戳>-<slug>.wav`，比如 `-master.wav`、`-mix.wav`、`-vo-norm.wav`，对应 `src/lib/media-sandbox.ts` 中 run_code（Node + FFmpeg）产物的保存逻辑：`saveOutput()` 和 outputs 自动保存。这两处都用 `guessContentType` 推断类型，以前没有音频。
+
+**应用侧**：新增 `src/lib/media-content-type.ts`，扩展名列表和 Worker 的 `MEDIA_EXT` 一致：mp4/m4v/mov/webm、mp3/wav/m4a/aac/ogg/oga/opus/flac、jpg/jpeg/png/webp/gif/avif。`workspace.ts` 的 `extToContentType`、`media-sandbox.ts` 的 `guessContentType`、`agent-tools.ts` 的 `inferWorkspaceContentType` 都改为使用它，各自原有的非媒体映射（md/json/txt/pdf 等）不变。
+- 行为变化：音频从 `application/octet-stream` 变为 `audio/*`。`read_file` 读音频时，会走已有的「音视频只返回元数据和本地路径」分支，不再把整个文件转成 base64。
+- 新增 `.avif` 识别。`.heic` 和 `.svg` 仍然不算媒体，与 Worker 一致。
+- 单测 `__tests__/mediaContentType.test.ts` 会校验这张表覆盖 Worker `MEDIA_EXT` 的全部扩展名。
+
+**Worker 侧**：`isMediaResponseType(contentType, pathname)` 接受 `application/octet-stream` 加媒体扩展名，补缓存条件和 `fillableOrigin` 都改为使用它。返回给客户端的 content-type 保持源站原值。
+
+**验证**：`tsc --noEmit` 通过；相关 vitest 9 个文件 47 条通过；Worker `npm test` 19/19 通过；测试域名上 octet-stream 的 wav 第 2 次请求即为 `HIT-R2`，content-type 不变；`acceptance.sh` 15/15 通过。详见 Worker README。
+
+**已有的 763 个对象**：部署 Worker 后，它们在下次被读取时自动进入 R2，不需要批量改 Storage 元数据。不建议直接 `update storage.objects.metadata`：这只改数据库，不改底层对象的 Content-Type，会造成不一致。如果以后确实想统一，只能重新上传（带正确的 content-type 和 `x-upsert`）。覆盖写会触发 purge，但重新上传的收益只是 content-type 更规范，不省流量，所以不建议做。
+
+**上线步骤（都需要用户验收和批准）**：
+1. 生产 Worker：在 `services/media-r2-cache` 运行 `npx wrangler deploy`。回滚用 `npx wrangler rollback c53679db-c4b7-46f3-846b-346fb1529196`。部署后，对一个已有的 octet-stream wav 连续请求两次，确认第 2 次是 `HIT-R2` 且 content-type 不变，再跑一遍 `TEST_HOST=https://cdn.makaron.app` 的 acceptance。
+2. 应用：把本分支合入 `dev`，按仓库发布流程执行 `release:prod`（Vercel）。新产出的音频会带 `audio/*`。
+3. 两步互不依赖。先做第 1 步，已有对象立刻生效。
+4. 第二天用第 2.4 节的查询复核：「整个时段都没有补缓存」里的 wav 应该消失。
