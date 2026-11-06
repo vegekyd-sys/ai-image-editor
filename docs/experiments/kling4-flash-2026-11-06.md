@@ -51,8 +51,17 @@
 - 第二次（run `90733406-f256-4fba-80f5-1f7264589983`，job `fe05388a-a8cd-4c89-accc-b8bc99f7be02`）成功：context 17.04–20.04s，生成 3s，Flash edit。计费 `video:kling-4-flash:720p:edit` (3+3)×$0.063 = $0.378 → 76 credits，reservation completed。
 - 验收：成片与原片同为 481 帧、20.041667s、1280×720/24fps；AAC 数据包 SHA-256 与原片一致；区间外 2/10/16/17.3s 抽帧（160×90 灰度）平均差 0.17–0.25/255。结尾不再有第二只 wizard，Spark 星芒约 18s 从左侧进场，19.3s 与 Pixel Wizard 击掌并迸出粒子。Spark 是无脸的星芒形态，不是设定图第 7 格那种带表情的 companion sprite。
 
-## 发布前必须完成
+## 上线记录（2026-11-07 00:00 CST）
 
-1. `check:skill-sync` 的路由证据已因 Skill 正文变化过期，需用私密环境跑 `npm run test:skill-routing -- --live --env <私密环境文件>`。
-2. 按 `docs/makaron-release-checklist.md` 同步 CLI 版本、发包并做 registry 全新安装验收。
-3. Preview 上用真实账号走一次 App 选择 Flash → 出片 → 重新打开项目。
+- 应用：dev `a8a9122a` 经 `npm run release:prod` 上线，www.makaron.app 指向 `ai-image-editor-5qh6yzimm`，`/api/health` 13/13 正常；`origin/dev` 与 `origin/main` 均为 `a8a9122a`。第一次 release 被 core-prompt 合同检查拦下（Flash 文案改动了受保护段落），修复见 `1f8a2560`。
+- CLI：`makaron-cli@0.17.11` 已发布，npm `latest` = 0.17.11，`release:cli:verify` 通过（9 个文件与检查过的 tarball 一致），全新安装后 `video --help` 列出 kling-4 / kling-4-flash，21 秒请求在本地被拒。
+- Worker：`media-r2-cache` 只对带 Range 的 GET 回 206，生产版本 `c53679db-c4b7-46f3-846b-346fb1529196`（回滚 `npx wrangler rollback cbf223db-912d-4715-aee7-eb79ef7dcd54`）。影响评估见 `docs/incidents/cdn-r2-206-impact-2026-11-06.md`。
+- 线上回归（CLI 0.17.11 → www.makaron.app）：
+  - Flash 文生视频 5s：task `task-unified-1793980652-8g5m3580`，约 72s 完成，1280×720 / 5.04s / 带音轨，扣 94 credits（`video:kling-4-flash:720p:generate`，$0.47）。
+  - Flash Retake（源视频在 CDN `HIT-R2`，回 200）：job `65338f40-e238-4a94-b34d-380ba04cb0b3`，82.7s（生成 63.4s、拼接 10.9s），481 帧、原声逐字节一致，Spark 1–2s 改成金色，扣 76 credits（`video:kling-4-flash:720p:edit`，$0.378）。
+
+## 遗留
+
+- Retake 交付阶段（saving_patch / assembling）读失败目前永远停在 pending，需加重试上限并失败退款。
+- Retake 任务 `612db792` 停在 generating，需单独查。
+- 11-07 复跑影响报告 4.1 的 SQL，确认没有新增读图失败。
