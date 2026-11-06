@@ -31,6 +31,44 @@ async function probeNativeDecode(file: File): Promise<boolean> {
   }
 }
 
+let heicWorker: Worker | null = null;
+let heicWorkerSeq = 0;
+const heicWorkerCallbacks = new Map<number, (result: { blob?: Blob; error?: string }) => void>();
+
+/** Decode in a Web Worker with libheif 1.19 → resized JPEG (≤2048px). */
+async function convertInWorker(file: File): Promise<File | null> {
+  if (typeof Worker === 'undefined' || typeof OffscreenCanvas === 'undefined') return null;
+  try {
+    if (!heicWorker) {
+      heicWorker = new Worker(new URL('./heic.worker.ts', import.meta.url), { type: 'module' });
+      heicWorker.onmessage = (event: MessageEvent<{ id: number; blob?: Blob; error?: string }>) => {
+        heicWorkerCallbacks.get(event.data.id)?.(event.data);
+        heicWorkerCallbacks.delete(event.data.id);
+      };
+      heicWorker.onerror = () => {
+        for (const cb of heicWorkerCallbacks.values()) cb({ error: 'HEIC worker crashed' });
+        heicWorkerCallbacks.clear();
+        heicWorker?.terminate();
+        heicWorker = null;
+      };
+    }
+    const id = ++heicWorkerSeq;
+    const buffer = await file.arrayBuffer();
+    const result = await new Promise<{ blob?: Blob; error?: string }>((resolve) => {
+      heicWorkerCallbacks.set(id, resolve);
+      heicWorker!.postMessage({ id, buffer, maxSize: 2048, quality: 0.92 }, [buffer]);
+    });
+    if (!result.blob) {
+      console.warn('[HEIC] worker decode failed:', result.error);
+      return null;
+    }
+    return new File([result.blob], file.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' });
+  } catch (err) {
+    console.warn('[HEIC] worker unavailable:', err);
+    return null;
+  }
+}
+
 async function convertOnServer(file: File): Promise<File | null> {
   try {
     const formData = new FormData();
@@ -47,9 +85,11 @@ async function convertOnServer(file: File): Promise<File | null> {
 }
 
 /**
- * Convert HEIC/HEIF to JPEG: native decode (Safari) → server conversion
- * (signed-in users; returns a 2048px JPEG) → heic2any WASM.
+ * Convert HEIC/HEIF to JPEG: native decode (Safari) → libheif Web Worker →
+ * server conversion (signed-in users; returns a 2048px JPEG) → heic2any WASM.
  *
+ * Uploading the original to /api/upload is slow on weak uplinks (and blocks
+ * other requests to the same origin), so the worker path comes first.
  * heic2any runs on the main thread, can freeze the page for tens of seconds
  * and fails on many modern iPhone HEIC profiles, so it is the last resort
  * (anonymous users, whose server request is rejected).
@@ -71,6 +111,8 @@ export function ensureDecodableFile(file: File): Promise<File> {
 
 async function convertHeic(file: File): Promise<File> {
   if (await canDecodeNatively(file)) return file;
+  const fromWorker = await convertInWorker(file);
+  if (fromWorker) return fromWorker;
   const fromServer = await convertOnServer(file);
   if (fromServer) return fromServer;
   try {
