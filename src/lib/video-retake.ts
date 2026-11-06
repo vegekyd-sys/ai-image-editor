@@ -94,7 +94,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
     if ((model.startsWith('wan-3.0') || ['grok','google-omni','minimax-h3'].includes(model)) && input.retake.endFrame) throw new Error('This Retake model has no exact final-frame control. Choose a compatible model explicitly.');
-    if (model === 'kling-4' && (input.retake.audioMode === 'generated' || input.retake.endFrame)) throw new Error('Kling 4.0 Retake preserves source audio and does not accept an exact final-frame control.');
+    if ((model === 'kling-4' || model === 'kling-4-flash') && (input.retake.audioMode === 'generated' || input.retake.endFrame)) throw new Error(`${model === 'kling-4-flash' ? 'Kling 4.0 Flash' : 'Kling 4.0'} Retake preserves source audio and does not accept an exact final-frame control.`);
     const corrected = input.retake.correctedBoundaries
     if (corrected && (model !== 'fal-h3-max' || input.retake.editMode !== 'modify' || input.retake.endFrame || input.videoResolution === '1080p'
       || !/^https?:\/\//.test(corrected.startUrl) || !/^https?:\/\//.test(corrected.endUrl))) throw new Error('Corrected boundary controls require checked hosted images, H3 native modify mode, and no competing final asset.')
@@ -174,7 +174,7 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
       aspectRatio, ...(plan.audioMode === 'generated' ? {generateAudio:true, keepOriginalSound:false} : {}),
       referenceVideoDuration: useVideoReference ? plan.contextEnd - plan.contextStart : undefined, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
-      videoOperation: model.startsWith('seedance-2.5') || ['kling-4','grok','google-omni'].includes(model) ? 'edit' : 'generate', videoReferType: 'feature',
+      videoOperation: model.startsWith('seedance-2.5') || ['kling-4','kling-4-flash','grok','google-omni'].includes(model) ? 'edit' : 'generate', videoReferType: 'feature',
       onBeforeProviderSubmit: beforeSubmit })
     if (!result.success || !result.taskId) {
       // A preflight failure never posted. Once posted, an unclassified missing
@@ -224,7 +224,7 @@ export async function advanceVideoRetake(taskId: string, userId?: string): Promi
     if (job.stage === 'saving_patch' && job.patch_url) {
       const bytes = job.model_id === 'google-omni' && !job.patch_url.startsWith('https://cdn.makaron.app/')
         ? Buffer.from(await (await import('./google-omni-video')).fetchGoogleOmniVideoBytes(job.patch_url))
-        : await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', xaiAsset: job.model_id === 'grok', muleAsset: job.model_id.startsWith('wan-3.0'), falAsset: job.model_id === 'fal-h3-max', evolinkAsset: job.model_id.startsWith('seedance-2.5') || job.model_id === 'kling-4' })
+        : await readProviderImage(job.patch_url, 512 * 1024 * 1024, { mediaType: 'video', xaiAsset: job.model_id === 'grok', muleAsset: job.model_id.startsWith('wan-3.0'), falAsset: job.model_id === 'fal-h3-max', evolinkAsset: job.model_id.startsWith('seedance-2.5') || job.model_id === 'kling-4' || job.model_id === 'kling-4-flash' })
       const permanentPatch = await store(job, bytes, 'patch')
       await save(job, { patch_url: permanentPatch, stage: 'assembling' }, token)
     }

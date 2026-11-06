@@ -1,6 +1,6 @@
-import { normalizeVideoModelId } from './video-model-capabilities'
+import { isKling4FamilyModel, normalizeVideoModelId } from './video-model-capabilities'
 
-export const RETAKE_MODELS = ['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max', 'kling-4', 'wan-3.0', 'wan-3.0-prime', 'grok', 'google-omni', 'minimax-h3'] as const
+export const RETAKE_MODELS = ['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max', 'kling-4', 'kling-4-flash', 'wan-3.0', 'wan-3.0-prime', 'grok', 'google-omni', 'minimax-h3'] as const
 export type RetakeModel = typeof RETAKE_MODELS[number]
 export const DEFAULT_RETAKE_MODEL: RetakeModel = 'kling-4'
 export interface RetakeRange { start: number; end: number }
@@ -21,7 +21,7 @@ export interface RetakePlan extends RetakeRange {
 export function resolveRetakeModel(model?: string | null): RetakeModel {
   const id = model && model !== 'auto' ? normalizeVideoModelId(model) : DEFAULT_RETAKE_MODEL
   if (!RETAKE_MODELS.includes(id as RetakeModel)) {
-    throw new Error('Retake supports Seedance 2.5 Eco, Seedance 2.5, FAL H3 Max, Kling 4.0, Wan 3.0 Standard/Prime, Grok, Google Omni and MiniMax H3. H3 Turbo does not accept source video. Choose a supported model explicitly.')
+    throw new Error('Retake supports Seedance 2.5 Eco, Seedance 2.5, FAL H3 Max, Kling 4.0, Kling 4.0 Flash, Wan 3.0 Standard/Prime, Grok, Google Omni and MiniMax H3. H3 Turbo does not accept source video. Choose a supported model explicitly.')
   }
   return id as RetakeModel
 }
@@ -44,7 +44,8 @@ export function planRetake(range: RetakeRange, sourceDuration: number, model?: s
   const selectedModel = resolveRetakeModel(model)
   if (selectedModel === 'fal-h3-max' && sourceDuration < 2) throw new Error('FAL H3 Max requires at least two seconds of source video.')
   if (selectedModel.startsWith('wan-3.0') && sourceDuration < 1) throw new Error('Wan Retake requires at least one second of source video.')
-  if (selectedModel === 'kling-4' && sourceDuration < 3) throw new Error('Kling 4.0 Retake requires at least three seconds of source video.')
+  const kling = isKling4FamilyModel(selectedModel)
+  if (kling && sourceDuration < 3) throw new Error(`${selectedModel === 'kling-4-flash' ? 'Kling 4.0 Flash' : 'Kling 4.0'} Retake requires at least three seconds of source video.`)
   if (selectedModel === 'grok' && sourceDuration < 1) throw new Error('Grok Retake requires at least one second of source video.')
   if (selectedModel === 'google-omni' && sourceDuration < 3) throw new Error('Google Omni Retake requires at least three seconds of source video.')
   if (selectedModel === 'minimax-h3' && sourceDuration < 2) throw new Error('MiniMax H3 Retake requires at least two seconds of source video.')
@@ -52,8 +53,8 @@ export function planRetake(range: RetakeRange, sourceDuration: number, model?: s
   if (selectedModel === 'grok' && length > 8.5) throw new Error('Grok Retake supports selections up to 8.5 seconds (provider input limit 8.7s including container padding). Choose another model explicitly for a longer selection.')
   if (selectedModel === 'google-omni' && length > 10) throw new Error('Google Omni Retake supports selections up to 10 seconds. Choose another model explicitly for a longer selection.')
   const wan = selectedModel.startsWith('wan-3.0')
-  const integerContext = selectedModel === 'kling-4' || wan || selectedModel === 'google-omni' || selectedModel === 'minimax-h3'
-  const minimumContext = wan ? 2 : selectedModel === 'kling-4' ? 3 : selectedModel === 'fal-h3-max' ? 5 : selectedModel === 'google-omni' ? 3 : selectedModel === 'grok' ? 1 : 4
+  const integerContext = kling || wan || selectedModel === 'google-omni' || selectedModel === 'minimax-h3'
+  const minimumContext = wan ? 2 : kling ? 3 : selectedModel === 'fal-h3-max' ? 5 : selectedModel === 'google-omni' ? 3 : selectedModel === 'grok' ? 1 : 4
   const contextLength = Math.min(sourceDuration, selectedModel === 'grok' ? 8.5 : selectedModel === 'google-omni' ? 10 : 15, Math.max(minimumContext, integerContext ? Math.ceil(length) : length))
   const contextStart = Math.max(0, Math.min(range.start - (contextLength - length) / 2, sourceDuration - contextLength))
   const contextEnd = Math.min(sourceDuration, contextStart + contextLength)

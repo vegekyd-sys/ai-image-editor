@@ -1,5 +1,6 @@
 import * as childProcess from 'child_process'
 import * as crypto from 'crypto'
+import { mediaContentTypeOrBinary } from './media-content-type'
 import * as fs from 'fs'
 import * as fsPromises from 'fs/promises'
 import { createRequire } from 'module'
@@ -162,16 +163,9 @@ export interface RunNodeMediaCodeOptions {
 
 function guessContentType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase()
-  if (ext === '.mp4') return 'video/mp4'
-  if (ext === '.mov') return 'video/quicktime'
-  if (ext === '.webm') return 'video/webm'
-  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
-  if (ext === '.png') return 'image/png'
-  if (ext === '.webp') return 'image/webp'
-  if (ext === '.gif') return 'image/gif'
   if (ext === '.json') return 'application/json'
   if (ext === '.txt') return 'text/plain'
-  return 'application/octet-stream'
+  return mediaContentTypeOrBinary(ext)
 }
 
 function slugify(input: string): string {

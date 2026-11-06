@@ -92,6 +92,19 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     estimatedCostPerSecondUsd: .157, estimatedCostPerSecondUsdByResolution: { '720p': .157, '1080p': .235 },
     provider: 'evolink-kling4', providerModel: 'kling-v4-reference-to-video',
   },
+  // EvoLink Kling 4.0 Flash, checked 2026-11-06: same four-route contract as
+  // Kling 4.0, but 720p only, 3–20s output and <=20s of reference/source video.
+  'kling-4-flash': {
+    id: 'kling-4-flash', label: 'Kling 4.0 Flash', minOutputDuration: 3, maxOutputDuration: 20,
+    maxReferenceVideoDuration: 20, supportsVideoReference: true, supportsBaseVideoEdit: true,
+    referenceVideoSize: { maxFileSizeMb: 200, minWidth: 720, minHeight: 720, maxWidth: 2160, maxHeight: 2160, description: 'MP4/MOV, 720–2160px per side, 24–60fps, 3–20s total, <=200MB per clip' },
+    defaultImageWorkflow: 'reference-to-video', longVideoChunkSeconds: 20,
+    maxImageReferences: 10, maxVideoReferences: 5, maxAudioReferences: 0, maxTotalReferences: 15,
+    supportedResolutions: ['720p'], defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '21:9'],
+    estimatedCostPerSecondUsd: .094, estimatedCostPerSecondUsdByResolution: { '720p': .094 },
+    provider: 'evolink-kling4', providerModel: 'kling-v4-flash-reference-to-video',
+  },
   kling: {
     id: 'kling',
     label: 'Kling',
@@ -634,6 +647,12 @@ export function resolveProductVideoModelId(model?: string | null): string {
   return id === 'seedance-2.5' && String(model).trim().toLowerCase() !== 'seedance-2.5-native' ? 'seedance-2.5-eco' : id
 }
 
+/** Kling 4.0 and Kling 4.0 Flash share one EvoLink adapter and request contract. */
+export function isKling4FamilyModel(model?: string | null): boolean {
+  const id = normalizeVideoModelId(model)
+  return id === 'kling-4' || id === 'kling-4-flash'
+}
+
 export const RETIRED_KLING_MESSAGE = 'Kling O3 has been retired for new generation and editing. Historical videos remain available. Select an available model explicitly; no fallback was submitted.'
 
 export function getVideoModelRetirementError(model?: string | null): string | null {
@@ -781,7 +800,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
   const id = normalizeVideoModelId(model)
-  return id === 'kling-4' || getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'minimax-h3-max' || id === 'fal-h3-max' || id === 'google-omni' || id === 'grok'
+  return isKling4FamilyModel(id) || getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'minimax-h3-max' || id === 'fal-h3-max' || id === 'google-omni' || id === 'grok'
 }
 
 export function resolveVideoProviderModel(options: {
@@ -807,7 +826,10 @@ export function resolveVideoProviderModel(options: {
     return 'grok-imagine-video-1.5'
   }
 
-  if (route.model === 'kling-4') return options.operation === 'edit' ? 'kling-v4-video-edit' : hasReferenceMedia ? 'kling-v4-reference-to-video' : 'kling-v4-text-to-video'
+  if (isKling4FamilyModel(route.model)) {
+    const prefix = route.model === 'kling-4-flash' ? 'kling-v4-flash' : 'kling-v4'
+    return options.operation === 'edit' ? `${prefix}-video-edit` : hasReferenceMedia ? `${prefix}-reference-to-video` : `${prefix}-text-to-video`
+  }
 
   if (route.model === 'fal-h3-max') return hasReferenceMedia ? 'minimax/h3-max/reference-to-video' : 'minimax/h3-max/text-to-video'
 
@@ -942,6 +964,11 @@ export function estimateVideoProviderCostUsd(options: {
   if (normalizedModel === 'kling-4' && (options.operation === 'edit' || (options.referenceVideoDurationSec ?? 0) > 0)) {
     const sourceSeconds = options.operation === 'edit' ? Math.ceil(options.referenceVideoDurationSec ?? 0) : options.referenceVideoDurationSec ?? 0
     return (options.durationSec + Math.max(options.durationSec, sourceSeconds)) * (route.resolution === '1080p' ? .141 : .094)
+  }
+  // Flash rounds source/reference seconds to the nearest integer (EvoLink rate card 2026-11-06).
+  if (normalizedModel === 'kling-4-flash' && (options.operation === 'edit' || (options.referenceVideoDurationSec ?? 0) > 0)) {
+    const sourceSeconds = Math.round(options.referenceVideoDurationSec ?? 0)
+    return (options.durationSec + Math.max(options.durationSec, sourceSeconds)) * .063
   }
   if (normalizedModel === 'seedance-2.5' && (options.referenceVideoDurationSec ?? 0) > 0) {
     const referenceRate = route.resolution === '480p' ? 0.084 : 0.180
@@ -1086,11 +1113,11 @@ export function validateVideoModelRequest(options: {
   const normalizedModel = normalizeVideoModelId(options.model)
   const retirementError = getVideoModelRetirementError(normalizedModel)
   if (retirementError) return retirementError
-  if (normalizedModel === 'kling-4-flash') return 'Kling 4.0 Flash has no verified callable API or price. No task submitted; do not substitute Kling 4.0 or another model.'
-  if (normalizedModel === 'kling-4') {
-    if (options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 3 || options.outputDuration > 30)) return 'Kling 4.0 output must be an integer from 3 to 30 seconds.'
-    if (options.operation === 'edit' && (options.videoReferenceCount ?? 0) !== 1) return 'Kling 4.0 editing requires exactly one source video.'
-    if (options.referenceVideoMetas?.some(meta => (meta.durationSec ?? 0) < 3)) return 'Kling 4.0 reference videos must each be at least 3 seconds.'
+  if (isKling4FamilyModel(normalizedModel)) {
+    const { label, maxOutputDuration: max } = capability
+    if (options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 3 || options.outputDuration > max)) return `${label} output must be an integer from 3 to ${max} seconds.`
+    if (options.operation === 'edit' && (options.videoReferenceCount ?? 0) !== 1) return `${label} editing requires exactly one source video.`
+    if (options.referenceVideoMetas?.some(meta => (meta.durationSec ?? 0) < 3)) return `${label} reference videos must each be at least 3 seconds.`
   }
   const resolutionError = validateVideoResolutionRequest({
     model: options.model,

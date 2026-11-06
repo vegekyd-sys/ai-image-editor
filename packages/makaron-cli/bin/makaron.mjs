@@ -2126,12 +2126,12 @@ Inputs:
 
 Generation options:
   --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5,
-                            wan-3.0, wan-3.0-prime, kling-4, grok, google-omni,
+                            wan-3.0, wan-3.0-prime, kling-4, kling-4-flash, grok, google-omni,
                             minimax-h3, minimax-h3-max, fal-h3-max, or sync-lipsync-v3.
   --duration <seconds>      Output duration supported by the selected model.
   --video-resolution <res> auto, 480p, 720p, 768p, 1080p, 2k, or 4k.
   --aspect <ratio>          9:16, 16:9, 1:1, or another supported ratio.
-  --video-operation <mode> generate, edit, or extend (Seedance 2.5 / Grok); Kling 4 supports generate/edit.
+  --video-operation <mode> generate, edit, or extend (Seedance 2.5 / Grok); Kling 4 / Kling 4 Flash support generate/edit.
   --extend-direction <dir> forward or backward.
   --output-format <format>  mp4 or mov.
   --generated-audio        Ask the provider to generate audio.
@@ -2144,6 +2144,8 @@ Generation options:
 Recent model choices:
   kling-4       Kling 4.0 standard: native text/image/video references, 3–30s, 720p/1080p.
                  Native edit preserves source audio; default for video retake.
+  kling-4-flash  Kling 4.0 Flash: faster, lower-cost Kling 4.0 with the same inputs and edit route;
+                 3–20s, 720p only, video inputs <=20s total.
   fal-h3-max     FAL H3 Max (default, 768p) reference-to-video: images, videos and audio;
                  integer 5–15s, 480p/768p/1080p, default 768p. Reference inputs cost extra.
   minimax-h3-max  fal H3 Turbo faster-than-real-time T2V or one-start-image I2V;
@@ -2175,6 +2177,8 @@ function printVideoHelp() {
   video create --script "..." --video-model minimax-h3-max   H3 Max Turbo (native 768p default)
   video create --script "..." --video-model wan-3.0-prime    Fast Wan tier, up to 4k
   video create --script "..." --video-model seedance-2.5     4-30s multimodal generation/edit/extend
+  video create --script "..." --video-model kling-4          Kling 4.0, 3-30s, 720p/1080p
+  video create --script "..." --video-model kling-4-flash    Kling 4.0 Flash, faster/lower cost, 3-20s 720p
   video create --script "..." --video <file|url> --video-model grok --video-operation extend
                                                                Edit or extend one MP4 with Grok
   video create --script "..." --video <url> --audio <url> --video-model sync-lipsync-v3
@@ -2235,7 +2239,7 @@ Commands:
 
   edit [--image <file>] "prompt"     Image edit, text-to-image, or transparent PNG
   analyze --video <file|url>         Analyze video content
-  video script|create|retake|status  H3 Max, Wan, Seedance, Grok, lip-sync, Kling 4; interval retake
+  video script|create|retake|status  H3 Max, Wan, Seedance, Grok, lip-sync, Kling 4 / Flash; interval retake
   music create|status                Music generation
 
   admin                              Admin commands (skills, credits, upload, set-admin)
@@ -2388,7 +2392,7 @@ Not sure which built-in skill to use? Start with:
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
     else if (subtopic === 'create') printVideoCreateHelp();
-    else if (subtopic === 'retake') console.log('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max|kling-4|wan-3.0|wan-3.0-prime|grok|google-omni|minimax-h3] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]\nDefault: kling-4 at 720p; source >=3s, original audio only. Select another compatible model explicitly for generated audio.');
+    else if (subtopic === 'retake') console.log('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max|kling-4|kling-4-flash|wan-3.0|wan-3.0-prime|grok|google-omni|minimax-h3] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]\nDefault: kling-4 at 720p; source >=3s, original audio only. Select another compatible model explicitly for generated audio.');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else printVideoHelp();
   } else if (topic === 'music') {
@@ -3313,12 +3317,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if ((flag === '--model' || flag === '--video-model') && args[i + 1]) params.model = args[++i];
       else if (flag === '--project' && args[i + 1]) params.project_id = args[++i];
       else if (flag === '--request-id' && args[i + 1]) params.request_id = args[++i];
-      else { console.error('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max|kling-4|wan-3.0|wan-3.0-prime|grok|google-omni|minimax-h3] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]\nDefault: kling-4 at 720p; source >=3s, original audio only. Select another compatible model explicitly for generated audio.'); process.exit(1); }
+      else { console.error('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max|kling-4|kling-4-flash|wan-3.0|wan-3.0-prime|grok|google-omni|minimax-h3] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]\nDefault: kling-4 at 720p; source >=3s, original audio only. Select another compatible model explicitly for generated audio.'); process.exit(1); }
     }
     if (!params.video_url || !params.prompt || !Number.isFinite(params.start) || !Number.isFinite(params.end)
       || params.start < 0 || params.end - params.start < .1 || params.end - params.start > 15
       || (params.audio_mode && !['original','generated'].includes(params.audio_mode))
-      || !['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max', 'kling-4', 'wan-3.0', 'wan-3.0-prime', 'grok', 'google-omni', 'minimax-h3'].includes(params.model)) {
+      || !['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max', 'kling-4', 'kling-4-flash', 'wan-3.0', 'wan-3.0-prime', 'grok', 'google-omni', 'minimax-h3'].includes(params.model)) {
       console.error('Retake needs one video, a prompt, a valid 0.1–15 second interval, and a supported model.'); process.exit(1);
     }
     if (!isHttpUrl(params.video_url)) {
@@ -3384,6 +3388,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       ? 'wan-3.0'
       : ['wan3-prime', 'wan3.0-prime', 'wan30-prime', 'wan-3-prime', 'w3.0-video-prime', 'w3.0-video-prime-pro', 'wan-3.0-prime-pro', 'prime'].includes(videoModel)
         ? 'wan-3.0-prime'
+      : ['kling4', 'kling-4.0', 'kling 4.0', 'kling 4'].includes(String(videoModel).toLowerCase()) ? 'kling-4'
+      : ['kling4-flash', 'kling-4.0-flash', 'kling 4.0 flash', 'kling 4 flash'].includes(String(videoModel).toLowerCase()) ? 'kling-4-flash'
         : (videoModel || 'fal-h3-max');
     const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco'].includes(selectedVideoModel);
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
@@ -3395,14 +3401,18 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const isGoogleOmni = selectedVideoModel === 'google-omni';
     const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
     if (['kling', 'kling-o3', 'kling-o3-video', 'kling-v3-omni', 'kling-3', 'kling-3.0'].includes(selectedVideoModel)) { console.error('Kling O3 has been retired. Historical videos remain available. Select an available model explicitly; no task submitted.'); process.exit(1); }
-    const isKling4 = selectedVideoModel === 'kling-4';
-    const supportsNativeTextToVideo = selectedVideoModel === 'kling-4' || selectedVideoModel === 'kling-4-flash' || isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
+    const isKling4Flash = selectedVideoModel === 'kling-4-flash';
+    const isKling4 = selectedVideoModel === 'kling-4' || isKling4Flash;
+    const kling4Label = isKling4Flash ? 'Kling 4.0 Flash' : 'Kling 4.0';
+    const kling4MaxSeconds = isKling4Flash ? 20 : 30;
+    const supportsNativeTextToVideo = isKling4 || isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
     if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
-      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|minimax-h3|minimax-h3-max]');
+      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|kling-4|kling-4-flash|minimax-h3|minimax-h3-max]');
       process.exit(1);
     }
-    if (isKling4 && (images.length > 10 || videos.length > 5 || audios.length)) { console.error('Kling 4.0 accepts at most 10 images and 5 videos, with no audio references.'); process.exit(1); }
-    if (isKling4 && duration != null && (!Number.isInteger(duration) || duration < 3 || duration > 30)) { console.error('Kling 4.0 output duration must be an integer from 3 to 30 seconds.'); process.exit(1); }
+    if (isKling4 && (images.length > 10 || videos.length > 5 || audios.length)) { console.error(`${kling4Label} accepts at most 10 images and 5 videos, with no audio references.`); process.exit(1); }
+    if (isKling4 && duration != null && (!Number.isInteger(duration) || duration < 3 || duration > kling4MaxSeconds)) { console.error(`${kling4Label} output duration must be an integer from 3 to ${kling4MaxSeconds} seconds.`); process.exit(1); }
+    if (isKling4Flash && videoResolution && !['auto', '720p'].includes(videoResolution.toLowerCase())) { console.error('Kling 4.0 Flash supports 720p only.'); process.exit(1); }
     if (isFalReference && (images.length > 9 || videos.length > 3 || audios.length > 3 || images.length + videos.length + audios.length > 12)) { console.error('FAL H3 Max accepts at most 9 images, 3 videos, 3 audios, 12 total.'); process.exit(1); }
     if (isFalReference && duration != null && (!Number.isInteger(duration) || duration < 5 || duration > 15)) { console.error('FAL H3 Max output duration must be an integer from 5 to 15 seconds.'); process.exit(1); }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
@@ -3441,7 +3451,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     let providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION;
     if (isGrok) providerMaxDuration = inferredOperation === 'edit' ? 8.7 : 15;
     if (isSyncLipsync) providerMaxDuration = 60;
-    if (isKling4) providerMaxDuration = 30;
+    if (isKling4) providerMaxDuration = kling4MaxSeconds;
     const providerMaxPixels = isSyncLipsync || isMinimaxH3 || isWan30 || isKling4 ? Infinity : isSeedance25 ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
     const localImages = images.filter(image => !isHttpUrl(image));
     if (localImages.length) {

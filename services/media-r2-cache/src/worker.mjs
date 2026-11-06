@@ -12,6 +12,9 @@
 const PUBLIC_OBJECT = /^\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/;
 const MEDIA_EXT = /\.(?:mp4|m4v|mov|webm|mp3|wav|m4a|aac|ogg|oga|opus|flac|jpe?g|png|webp|gif|avif)$/i;
 const MEDIA_TYPE = /^(?:video|audio|image)\//i;
+// Generic binary type some writers used for media (e.g. run_code .wav outputs
+// before 2026-11-07). Trusted as media only when the path has a media extension.
+const BINARY_TYPE = /^application\/octet-stream\s*(?:;|$)/i;
 const PASS_HEADERS = ['content-type', 'content-disposition', 'content-language', 'last-modified', 'etag'];
 const EXPOSE = 'Content-Range, Content-Length, ETag, Accept-Ranges, X-Makaron-Cache';
 const KEY_VERSION = 'v1';
@@ -104,11 +107,21 @@ function metaFromR2(object) {
   };
 }
 
+/**
+ * A media content type, or application/octet-stream on a path with a media
+ * extension. The client still receives the origin content-type unchanged.
+ */
+export function isMediaResponseType(contentType, pathname) {
+  const type = contentType || '';
+  if (MEDIA_TYPE.test(type)) return true;
+  return BINARY_TYPE.test(type) && MEDIA_EXT.test(pathname || '');
+}
+
 /** Origin response is a complete, public, identity-encoded media object. */
-export function fillableOrigin(response, maxBytes) {
+export function fillableOrigin(response, maxBytes, pathname = '') {
   const h = response.headers;
   if (response.status !== 200) return false;
-  if (!MEDIA_TYPE.test(h.get('content-type') || '')) return false;
+  if (!isMediaResponseType(h.get('content-type'), pathname)) return false;
   if (/(?:private|no-store)/i.test(h.get('cache-control') || '')) return false;
   const enc = h.get('content-encoding');
   if (enc && enc !== 'identity') return false;
@@ -193,7 +206,7 @@ export function createHandler(deps = {}) {
       headers: { 'accept-encoding': 'identity' },
       cf: { cacheTtl: 0, cacheEverything: false },
     });
-    if (!fillableOrigin(res, num(env, 'MAX_FILL_BYTES'))) { await res.body?.cancel(); return; }
+    if (!fillableOrigin(res, num(env, 'MAX_FILL_BYTES'), url.pathname)) { await res.body?.cancel(); return; }
     if (expectedEtag && res.headers.get('etag') !== expectedEtag) {
       await res.body?.cancel();
       log('fill_version_mismatch', {});
@@ -288,14 +301,17 @@ export function createHandler(deps = {}) {
     return Response.json({ purged: targets.length });
   }
 
-  function serveR2(request, object, target, status) {
+  // R2 reports `range` on every object, including full reads and head(), so
+  // 206 is only sent when the client asked for a range (GET with a valid
+  // Range header). Full GETs and HEADs are 200 with the full content-length.
+  function serveR2(request, object, target, status, ranged) {
     const meta = metaFromR2(object);
     if (etagMatches(request.headers.get('if-none-match'), meta.etag)) {
       object.body?.cancel?.();
       return new Response(null, { status: 304, headers: clientHeaders(meta, status) });
     }
     const h = clientHeaders(meta, status);
-    if (object.range) {
+    if (ranged && object.range) {
       const { offset, length } = object.range;
       h.set('content-range', `bytes ${offset}-${offset + length - 1}/${object.size}`);
       h.set('content-length', String(length));
@@ -360,7 +376,7 @@ export function createHandler(deps = {}) {
             await revalidate(target, url, meta, env);
           }
         });
-        return serveR2(request, object, target, 'HIT-R2');
+        return serveR2(request, object, target, 'HIT-R2', request.method !== 'HEAD' && Boolean(rangeHeader));
       }
 
       // Tier 3: origin, request forwarded unchanged. Fill R2 in the background.
@@ -369,7 +385,7 @@ export function createHandler(deps = {}) {
         ? Number(/\/(\d+)$/.exec(response.headers.get('content-range') || '')?.[1])
         : Number(response.headers.get('content-length'));
       if ((response.status === 200 || response.status === 206 || response.status === 304)
-        && (response.status === 304 || MEDIA_TYPE.test(response.headers.get('content-type') || ''))
+        && (response.status === 304 || isMediaResponseType(response.headers.get('content-type'), url.pathname))
         && (response.status === 304 || (Number.isSafeInteger(total) && total <= num(env, 'MAX_FILL_BYTES')))) {
         const etag = response.headers.get('etag');
         const expected = response.status !== 304 && etag && !etag.startsWith('W/') ? etag : null;
