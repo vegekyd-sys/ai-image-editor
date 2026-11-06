@@ -1,5 +1,5 @@
 {
-  "routingFingerprint": "e44c090eb5b62f740053a6c52b1a8d6767f8c4a079bb31002df80290b4aa1a73",
+  "routingFingerprint": "4fa61c3cb41c9d634e4460a02f19d27a73d4d411be3dc5857b35ea0999c85b75",
   "catalogRevision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
   "kind": "controlled-live-natural-language-routing",
   "model": "gpt-6-luna",
@@ -36,22 +36,22 @@
           "executed": true
         }
       ],
-      "text": "我会先读取长视频导演 Skill，确认 60 秒分段制作、人物一致性锚点和分镜规划的适用流程；本轮只做规划，不分析或生成素材。**适用 Skill：**以 `long-video-director` 为主流程；配合 `anchor` 制作可复用的人物／场景／道具锚点，配合 `storyboard` 为每段制作分镜图。60 秒将规划为 **4 段、每段约 15 秒**，以支持人物与场景连续性，并为段间衔接留出明确设计。\n\n**简短制作计划：**后续依次确认故事方向与视觉规格，盘点并制作锚点，再规划分段大纲、段间接缝和导演节拍板；之后逐段制作至少 6 格分镜并检查一致性，最后才进入脚本与视频生成。本轮未分析两张参考图，也未生成或写入任何素材。",
+      "text": "我会先读取长视频导演 Skill，以及它所需的人物锚点与分段分镜规范；本轮只据此整理规划，不分析参考图，也不生成或写入任何素材。**适用 Skill**\n- **long-video-director**：60 秒超出单段时长，需要拆段、设计衔接并分阶段确认。\n- **anchor**：为两位人物建立可复用的人物锚点，后续再按故事需要补场景与道具锚点，减少跨段漂移。\n- **storyboard**：为每段制作独立分镜，逐段检查人物、造型、场景与段落衔接。\n\n**简短制作计划**\n先选故事方向与画幅，再确认两位人物的锚点需求；随后规划约 **4 段、每段约 15 秒**，设计段间接缝与导演节拍板；分镜阶段为每段单独制作至少 6 格并检查连续性。脚本和视频生成留待后续确认后进行。本轮不会查看参考图或生成素材。\n\n可选故事方向：① 两人共同寻找一件遗失之物，轻悬疑；② 一次偶遇逐渐化解误会，温情现实；③ 两人合作完成临时任务，轻快冒险。请选择或修改方向，并告知画幅（如 16:9 或 9:16）。",
       "usage": {
-        "inputTokens": 110037,
+        "inputTokens": 110007,
         "inputTokenDetails": {
           "noCacheTokens": 12,
-          "cacheReadTokens": 80186,
-          "cacheWriteTokens": 29839
+          "cacheReadTokens": 80214,
+          "cacheWriteTokens": 29781
         },
-        "outputTokens": 1154,
+        "outputTokens": 1490,
         "outputTokenDetails": {
-          "textTokens": 315,
-          "reasoningTokens": 839
+          "textTokens": 414,
+          "reasoningTokens": 1076
         },
-        "totalTokens": 111191
+        "totalTokens": 111497
       },
-      "durationMs": 30326
+      "durationMs": 32286
     },
     {
       "id": "natural-reference-replication",
@@ -73,22 +73,22 @@
           "executed": true
         }
       ],
-      "text": "我会按“复刻原片镜头结构、替换人物”的视频编辑路线判断适用 Skill；本轮只读取该 Skill 并给出计划，不分析素材或启动生成。这属于 Skill 中的 **replication（复刻）**，因为原片明确控制镜头顺序、节拍与运镜，而人物内容由参考图替换。我再读取该路线的专用协议，然后只汇总计划。**适用 Skill：**`video-edit` 的 **replication（复刻）**路线。原片负责镜头顺序、时长、构图、运镜、动作与节拍，参考图负责替换人物；这与“只借鉴风格”的新创作不同。\n\n**简短计划：**后续先核对原片完整镜头与节拍，并建立人物替换映射；再用参考视频和人物图进行整段复刻；最后检查镜头顺序、时长、构图、动作及人物一致性。本轮仅依据素材元信息规划，未分析媒体；按你的要求，现停在所有生成之前。",
+      "text": "我会先读取与“按原片镜头节拍复刻并替换人物”对应的内部 Skill；本轮只给出适用 Skill 和简短计划，不分析素材，也不进行任何生成或项目操作。**适用 Skill：** `video-edit` 的 **replication** 配置。原片负责锁定镜头结构，而人物由参考图替换，符合“保留镜头语法、替换内容”的复刻任务。\n\n**简短计划：** 后续先按原片建立逐镜头节拍蓝图，再以原片和人物参考图进行整片复刻；完成后核对镜头顺序、时长、构图、运镜、动作节拍及人物一致性。本轮按要求不分析素材，也不进行任何生成或项目操作。",
       "usage": {
-        "inputTokens": 78991,
+        "inputTokens": 79165,
         "inputTokenDetails": {
           "noCacheTokens": 9,
-          "cacheReadTokens": 75522,
-          "cacheWriteTokens": 3460
+          "cacheReadTokens": 75731,
+          "cacheWriteTokens": 3425
         },
-        "outputTokens": 1220,
+        "outputTokens": 797,
         "outputTokenDetails": {
-          "textTokens": 316,
-          "reasoningTokens": 904
+          "textTokens": 244,
+          "reasoningTokens": 553
         },
-        "totalTokens": 80211
+        "totalTokens": 79962
       },
-      "durationMs": 20731
+      "durationMs": 20783
     },
     {
       "id": "natural-product-explainer",
@@ -105,22 +105,22 @@
           "executed": true
         }
       ],
-      "text": "我会先读取最匹配的「explainer-video」内部 Skill，确认这类产品讲解的制作路径；本轮只给出选择理由和简短计划，不启动任何生成或项目操作。**选择 Skill：`explainer-video`。** 它适合面向新手解释产品机制，并支持中文旁白与字幕；30 秒讲解可按精简节奏规划。\n\n**简短计划：** 0–5 秒提出用户痛点与产品作用；5–22 秒用清晰步骤讲解产品如何工作；22–30 秒总结用户能获得的结果。进入制作前，还需要产品名称和核心工作流程。本轮未启动任何生成或项目操作。",
+      "text": "我会先读取最匹配的「explainer-video」内部 Skill，只据此给出适用理由和简短制作计划；本轮不会生成或处理任何媒体。**适用 Skill：`explainer-video`。**它专门用于产品与流程讲解，支持旁白、字幕和面向新手的分步骤说明；30 秒可规划为一支完整的讲解视频。\n\n**简短计划：**\n- **0–4 秒：**点明产品解决什么问题。\n- **4–10 秒：**说明新用户从哪里开始、需要做什么。\n- **10–22 秒：**用清晰的步骤或动态图示讲解产品如何工作。\n- **22–27 秒：**展示使用后的结果或关键价值。\n- **27–30 秒：**回顾要点，给出简单的下一步提示。\n\n旁白控制在适合 30 秒的篇幅，字幕与讲解同步。由于尚未说明具体产品，以上先按通用结构规划；本轮未生成或处理任何媒体。",
       "usage": {
-        "inputTokens": 54821,
+        "inputTokens": 54953,
         "inputTokenDetails": {
           "noCacheTokens": 6,
-          "cacheReadTokens": 48833,
-          "cacheWriteTokens": 5982
+          "cacheReadTokens": 48993,
+          "cacheWriteTokens": 5954
         },
-        "outputTokens": 450,
+        "outputTokens": 573,
         "outputTokenDetails": {
-          "textTokens": 193,
-          "reasoningTokens": 257
+          "textTokens": 271,
+          "reasoningTokens": 302
         },
-        "totalTokens": 55271
+        "totalTokens": 55526
       },
-      "durationMs": 19621
+      "durationMs": 13281
     }
   ]
 }
