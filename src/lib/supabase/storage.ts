@@ -263,13 +263,118 @@ export async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   return res.blob()
 }
 
+const RESUMABLE_CHUNK_SIZE = 6 * 1024 * 1024 // Supabase TUS requires 6MB chunks
+const RESUMABLE_MIN_SIZE = 8 * 1024 * 1024
+
+function utf8Base64(value: string): string {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(value)))
+}
+
+/** PATCH one chunk via XHR so progress is reported within the chunk too. */
+function patchChunk(
+  url: string,
+  headers: Record<string, string>,
+  body: Blob,
+  onProgress: (loaded: number) => void,
+): Promise<{ status: number; offset: number | null } | null> {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PATCH', url)
+    for (const [key, value] of Object.entries(headers)) xhr.setRequestHeader(key, value)
+    xhr.timeout = 120_000
+    xhr.upload.onprogress = (event) => onProgress(event.loaded)
+    xhr.onload = () => {
+      const raw = xhr.getResponseHeader('Upload-Offset')
+      resolve({ status: xhr.status, offset: raw === null ? null : Number(raw) })
+    }
+    xhr.onerror = () => resolve(null)
+    xhr.ontimeout = () => resolve(null)
+    xhr.send(body)
+  })
+}
+
+/**
+ * Resumable (TUS) upload in 6MB chunks. On a flaky uplink only the failed
+ * chunk is re-sent instead of restarting a 30MB video from zero.
+ * Returns false when the resumable endpoint is unavailable so callers can
+ * fall back to a single-request upload.
+ */
+async function uploadResumable(
+  baseUrl: string,
+  anonKey: string,
+  token: string,
+  path: string,
+  blob: Blob,
+  contentType: string,
+  onProgress?: (fraction: number) => void,
+): Promise<boolean> {
+  const endpoint = `${baseUrl.replace(/\/$/, '')}/storage/v1/upload/resumable`
+  const headers = {
+    'Tus-Resumable': '1.0.0',
+    Authorization: `Bearer ${token}`,
+    apikey: anonKey,
+    'x-upsert': 'true',
+  }
+  const metadata = Object.entries({ bucketName: BUCKET, objectName: path, contentType, cacheControl: '3600' })
+    .map(([key, value]) => `${key} ${utf8Base64(value)}`).join(',')
+  let created: Response
+  try {
+    created = await fetch(endpoint, {
+      method: 'POST',
+      headers: { ...headers, 'Upload-Length': String(blob.size), 'Upload-Metadata': metadata },
+    })
+  } catch {
+    return false
+  }
+  const locationHeader = created.headers.get('location')
+  if (!created.ok || !locationHeader) {
+    if (created.status >= 400 && created.status < 500 && created.status !== 404) {
+      let message = `Storage upload failed (${created.status})`
+      try { message = (await created.json()).message || message } catch { /* keep status */ }
+      throw new Error(message)
+    }
+    return false
+  }
+  const location = new URL(locationHeader, endpoint).toString()
+  const size = blob.size
+  let offset = 0
+  let retries = 0
+  while (offset < size) {
+    const length = Math.min(RESUMABLE_CHUNK_SIZE, size - offset)
+    const start = offset
+    const result = await patchChunk(
+      location,
+      { ...headers, 'Upload-Offset': String(offset), 'Content-Type': 'application/offset+octet-stream' },
+      blob.slice(offset, offset + length),
+      loaded => onProgress?.(Math.min(0.99, (start + loaded) / size)),
+    )
+    if (result && result.status >= 200 && result.status < 300 && result.offset === offset + length) {
+      offset = result.offset
+      retries = 0
+      continue
+    }
+    if (result && result.status >= 400 && result.status < 500 && ![408, 409, 429].includes(result.status)) {
+      throw new Error(`Storage upload failed (${result.status})`)
+    }
+    if (++retries > 4) throw new Error('Upload interrupted. Check your network and retry.')
+    await new Promise(resolve => setTimeout(resolve, 1000 * retries))
+    // A lost response may still mean the chunk committed; HEAD reconciles it.
+    const head = await fetch(location, { method: 'HEAD', headers }).catch(() => null)
+    const committed = head?.ok ? Number(head.headers.get('Upload-Offset')) : NaN
+    if (Number.isSafeInteger(committed) && committed >= offset && committed <= size) offset = committed
+  }
+  onProgress?.(1)
+  return true
+}
+
 /**
  * Upload a Blob to the images bucket with byte-level progress.
  *
  * supabase-js uses fetch(), which cannot report upload progress. This mirrors
  * its Blob upload request (FormData + cacheControl + x-upsert) over XHR so the
- * UI can show "uploading 42%". If the XHR path fails for any reason other than
- * an explicit storage error, it falls back to the regular supabase-js upload.
+ * UI can show "uploading 42%". Files ≥8MB use resumable 6MB TUS chunks so a
+ * dropped connection only re-sends one chunk. If the XHR path fails for any
+ * reason other than an explicit storage error, it falls back to supabase-js.
  */
 export async function uploadBlobWithProgress(
   supabase: SupabaseClient,
@@ -283,6 +388,21 @@ export async function uploadBlobWithProgress(
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   const { data: { session } } = await supabase.auth.getSession()
   const token = session?.access_token
+
+  if (typeof XMLHttpRequest !== 'undefined' && baseUrl && anonKey && token && typed.size >= RESUMABLE_MIN_SIZE) {
+    try {
+      const startedAt = Date.now()
+      if (await uploadResumable(baseUrl, anonKey, token, path, typed, contentType, onProgress)) {
+        console.log(`[upload] resumable ${(typed.size / 1048576).toFixed(1)}MB in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`)
+        return getPublicUrl(supabase, path)
+      }
+    } catch (err) {
+      // Explicit storage rejections (size/policy) won't succeed another way.
+      if (err instanceof Error && /^Storage upload failed/.test(err.message)) throw err
+      console.warn('[upload] resumable upload failed, falling back to single request', err)
+    }
+    onProgress?.(0)
+  }
 
   if (typeof XMLHttpRequest !== 'undefined' && baseUrl && anonKey && token) {
     const objectPath = path.split('/').map(encodeURIComponent).join('/')
