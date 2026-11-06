@@ -122,12 +122,15 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain('waitForPreview: true')
     expect(agentTs).not.toContain("provider=\"suno\"")
     expect(agentTs).not.toContain("provider: z.enum(['auto', 'evolink-seed-audio', 'suno'])")
-    expect(agentTs).toContain('deductSeedAudioCredits')
-    expect(agentTs).toContain('providerCreditsUsed: result.creditsUsed')
+    expect(agentTs).toContain('deductAudioCredits(ctx.userId ?? \'\', result.billing)')
+    expect(agentTs).not.toContain('deductSeedAudioCredits')
+    expect(agentTs).toContain("model: z.enum(['auto', 'evolink-seed-audio', 'suno-v6'])")
+    expect(agentTs).toContain('do not regenerate just to get options')
     expect(agentTs).not.toContain("deductCredits(ctx.userId ?? '', null, 'create_music')")
     expect(agentTs).toContain('const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput, responseLocale)')
-    expect(reconnect).toContain("case 'music_task'")
-    expect(reconnect).toContain('callbacks.onMusicTask?.')
+    // The legacy async Suno polling chain is gone: generation returns completed takes.
+    expect(reconnect).not.toContain("case 'music_task'")
+    expect(agentTs).not.toContain("type: 'music_task'")
   })
 
   it('keeps later video uploads tool-aware while batching first-turn media', () => {

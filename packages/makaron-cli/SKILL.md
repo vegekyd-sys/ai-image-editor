@@ -359,12 +359,12 @@ Video edit model behavior: `--video-model kling-4 --video --video-operation edit
 ### `music` — Music generation
 
 ```bash
-npx makaron-cli music create "gentle piano, warm strings, cinematic"
+npx makaron-cli music create --duration 30 "gentle piano, warm strings, cinematic"
 npx makaron-cli music create --vocals --style "lo-fi" "rainy day vibes"
 npx makaron-cli music status <taskId>
 ```
 
-Options: `--vocals` (include vocals), `--style "genre"`
+Options: `--duration N` (seconds; 10-360 for instrumental), `--vocals` (include vocals), `--style "genre"`. Instrumental music uses Suno V6 and returns 2 takes (the first is the default); `--vocals` uses Seed Audio (up to 120s).
 
 ## Response Schema
 

@@ -3,12 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useLocale } from '@/lib/i18n'
 import type { MediaPrice } from '@/lib/billing/media-pricing'
+import { isPerGenerationPrice } from '@/lib/billing/media-price-units'
 import { listVideoModelCapabilities } from '@/lib/video-model-capabilities'
 
 const fields = ['output_usd_per_second', 'markup', 'input_usd_per_second', 'video_reference_usd_per_second', 'input_usd_per_image', 'free_image_references', 'unfiltered_multiplier', 'input_usd_per_1k_tokens', 'free_input_tokens', 'input_tokens_per_image_pixel', 'input_tokens_per_video_second', 'input_tokens_per_audio_second'] as const
 const modelLabels = new Map(listVideoModelCapabilities().map(model => [model.id, model.label]))
 // i18n-ignore: model brand, not interface copy.
 modelLabels.set('evolink-seed-audio', 'Seed Audio')
+// i18n-ignore: model brand, not interface copy.
+modelLabels.set('suno-v6', 'Suno V6')
 const modelLabel = (id: string) => modelLabels.get(id) || id
 const focusStyle = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black'
 const formatCost = (value: number) => value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 20 })
@@ -26,7 +29,10 @@ function PriceEntry({ price, editing, editingElsewhere, onEdit, onSaved }: {
   const [status, setStatus] = useState<'saved' | 'error' | 'conflict' | null>(null)
   const dirty = fields.some(field => draft[field] !== price[field]) || draft.is_active !== price.is_active
   const resolution = price.resolution === 'default' ? t('mediaPricing.defaultResolution') : price.resolution.toUpperCase()
-  const sampleCredits = Math.ceil(price.output_usd_per_second * 5 * 100 * price.markup - 1e-9)
+  // Per-generation models (Suno) store USD per generation in output_usd_per_second.
+  const perGeneration = isPerGenerationPrice(price)
+  const sampleCredits = Math.ceil(price.output_usd_per_second * (perGeneration ? 1 : 5) * 100 * price.markup - 1e-9)
+  const fieldLabel = (field: typeof fields[number]) => t(perGeneration && field === 'output_usd_per_second' ? 'mediaPricing.output_usd_per_generation' : `mediaPricing.${field}`)
 
   async function save() {
     setBusy(true)
@@ -50,16 +56,16 @@ function PriceEntry({ price, editing, editingElsewhere, onEdit, onSaved }: {
       <div className="order-1 min-w-0">
         <div className="text-sm font-semibold text-white">{resolution}</div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-white/55">
-          {t(`mediaPricing.${price.operation as 'generate' | 'edit' | 'extend'}`)}
+          {t(perGeneration ? 'mediaPricing.generation' : `mediaPricing.${price.operation as 'generate' | 'edit' | 'extend'}`)}
           {!price.is_active && <span className="text-amber-300">{t('mediaPricing.inactive')}</span>}
         </div>
       </div>
       <div className="order-3 sm:order-2">
-        <div className="text-xs text-white/50">{t('mediaPricing.output_usd_per_second')}</div>
+        <div className="text-xs text-white/50">{fieldLabel('output_usd_per_second')}</div>
         <div className="mt-1 break-words text-sm tabular-nums text-white/90">${formatCost(price.output_usd_per_second)} <span className="ml-1 text-xs text-white/45">×{price.markup}</span></div>
       </div>
       <div className="order-4 sm:order-3">
-        <div className="text-xs text-white/50">{t('mediaPricing.sample5s')}</div>
+        <div className="text-xs text-white/50">{t(perGeneration ? 'mediaPricing.sampleGeneration' : 'mediaPricing.sample5s')}</div>
         <div className="mt-1 text-sm font-semibold tabular-nums text-fuchsia-300">{price.is_active ? t('mediaPricing.quoteCredits').replace('{credits}', String(sampleCredits)) : '—'}</div>
       </div>
       <button type="button" disabled={editingElsewhere || busy} aria-expanded={editing}
@@ -71,9 +77,9 @@ function PriceEntry({ price, editing, editingElsewhere, onEdit, onSaved }: {
     {editing && <form onSubmit={event => { event.preventDefault(); void save() }} className="mt-5 border-t border-white/10 pt-4">
       <fieldset disabled={busy} className="grid min-w-0 grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-3">
         {fields.filter(field => field !== 'video_reference_usd_per_second' || price.model_id === 'seedance-2.5').map(field => <label key={field} className="min-w-0 text-xs text-white/65">
-          {t(`mediaPricing.${field}`)}
+          {fieldLabel(field)}
           <input type="number" required={field !== 'video_reference_usd_per_second'} min={field === 'unfiltered_multiplier' ? 1 : field === 'markup' || field === 'output_usd_per_second' || field === 'video_reference_usd_per_second' ? 0.000001 : 0}
-            step={field === 'free_image_references' ? 1 : 'any'} aria-label={`${price.id} ${t(`mediaPricing.${field}`)}`} value={draft[field] ?? (field === 'video_reference_usd_per_second' ? '' : 0)}
+            step={field === 'free_image_references' ? 1 : 'any'} aria-label={`${price.id} ${fieldLabel(field)}`} value={draft[field] ?? (field === 'video_reference_usd_per_second' ? '' : 0)}
             onChange={event => { setDraft(previous => ({ ...previous, [field]: field === 'video_reference_usd_per_second' && !event.target.value ? null : Number(event.target.value) })); setStatus(null) }}
             className={`mt-2 w-full min-w-0 rounded-lg border border-white/15 bg-black px-3 py-2.5 text-sm tabular-nums text-white ${focusStyle}`} />
         </label>)}

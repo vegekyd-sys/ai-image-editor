@@ -60,11 +60,7 @@ export interface AgentCallbackContext {
 
   t: (...args: any[]) => string;
 
-  // Music
-  onMusicTaskCreated?: (taskId: string) => void;
-  /** When true, onDone won't reset status to greeting (music polling shows its own status) */
-  musicPollingRef?: { current: boolean };
-  /** When true, onDone won't reset status to greeting (video polling or music polling active) */
+  /** When true, onDone won't reset status to greeting (video polling active) */
   hasBackgroundTaskRef?: { current: boolean };
 
   // Credits exhausted — show CreditPopup
@@ -411,11 +407,6 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
           return [...prev, videoMsg];
         });
       }
-    },
-
-    onMusicTask: (taskId) => {
-      console.log(`🎵 [agent] music task created: ${taskId}`);
-      ctx.onMusicTaskCreated?.(taskId);
     },
 
     onCaptureFrame: (frame, uploadPath) => {

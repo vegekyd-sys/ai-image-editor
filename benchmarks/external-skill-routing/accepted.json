@@ -1,5 +1,5 @@
 {
-  "routingFingerprint": "6cd10734211bfbcd4a8fcdfb2785c80fb5e1d24d848c5a8cd9994542bf7d8a8b",
+  "routingFingerprint": "7ad9452a42b1f08c6bb45cd9abc1fd63bf063c2a08934c1effdcb8da07822a99",
   "catalogRevision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
   "kind": "controlled-live-natural-language-routing",
   "model": "gpt-6-luna",
@@ -36,22 +36,22 @@
           "executed": true
         }
       ],
-      "text": "我会先读取长视频导演流程及其明确依赖的人物锚点、分镜技能说明；本轮只做规划，不查看两张参考图，也不会生成或写入任何素材。适用技能：\n- **long-video-director（主流程）**：60 秒成片超出单次生成时长，且需要分段连续、接缝设计与逐段把关。\n- **anchor（人物／场景锚点）**：用于跨段稳定人物外观，并在故事方向确定后规划必要的场景与道具锚点。\n- **storyboard（逐段分镜）**：为每段制作独立分镜，帮助锁定镜头节奏、关键画面和段间衔接。\n\n简短计划：先确定故事方向与画幅；再以两张参考图为人物依据，规划最少必要的锚点。之后暂按 **4 段、每段约 15 秒**设计段落与衔接，为每段准备至少 6 格分镜，并按流程逐步征求确认。本轮未分析参考图，也未生成或写入任何素材。",
+      "text": "我会先读取长视频导演 Skill，确认 60 秒分段规划流程；再按其要求读取人物锚点与逐段分镜 Skill。只做规划，不查看素材像素，也不会生成或写入任何内容。**选择的内部 Skill**\n- **long-video-director**：60 秒超出单次视频生成时长，适合分段导演、跨段衔接与一致性管理；它负责把故事、锚点、分段和分镜按审批节点串起来。\n- **anchor（long-video-anchor）**：为人物甲、人物乙建立可复用的人物视觉锚点，后续再按故事需要规划场景或道具锚点。\n- **storyboard（long-video-storyboard）**：在锚点和导演节拍板确认后，为每段制作独立分镜图，维持人物与视觉风格一致。\n\n**简短制作计划**：后续先确定故事方向与画幅，再规划人物/场景/道具锚点；将 60 秒初步拆为约 **4 段 × 15 秒**，制定段间衔接和导演节拍板；随后逐段制作并检查分镜，最后编写生成脚本并等待你确认。本轮不分析两张参考图，也不生成或写入任何素材。",
       "usage": {
-        "inputTokens": 110335,
+        "inputTokens": 112389,
         "inputTokenDetails": {
           "noCacheTokens": 12,
-          "cacheReadTokens": 80397,
-          "cacheWriteTokens": 29926
+          "cacheReadTokens": 81954,
+          "cacheWriteTokens": 30423
         },
-        "outputTokens": 1008,
+        "outputTokens": 1056,
         "outputTokenDetails": {
-          "textTokens": 350,
-          "reasoningTokens": 658
+          "textTokens": 391,
+          "reasoningTokens": 665
         },
-        "totalTokens": 111343
+        "totalTokens": 113445
       },
-      "durationMs": 25494
+      "durationMs": 30352
     },
     {
       "id": "natural-reference-replication",
@@ -88,22 +88,22 @@
           "executed": true
         }
       ],
-      "text": "我会先读取与“按参考片镜头结构复刻、替换人物”对应的内部 Skill；本轮只做规划，不分析或生成素材。适用的是 `video-edit` 的 **replication** 路径：原片负责镜头与节拍结构，参考图负责替换人物。Skill 要求规划时再读取对应的复制协议；我继续只读该协议，不触碰素材。复制协议列出几个执行前参考文件。我会只读取这些规划所需的内部文件，不查看视频/图片，也不启动任何处理。",
+      "text": "我会先读取适用于“按参考片镜头节拍复刻并替换人物”的视频编辑 Skill；本轮只做规划，不分析素材或启动生成。这属于 **replication（复刻）**，不是保留原片像素的局部替换：原片将作为镜头结构与节拍依据，替换人物由参考图提供。我会再读取该 Skill 指定的复刻流程文件，然后给出简短计划并停下。",
       "usage": {
-        "inputTokens": 139749,
+        "inputTokens": 142362,
         "inputTokenDetails": {
           "noCacheTokens": 15,
-          "cacheReadTokens": 133091,
-          "cacheWriteTokens": 6643
+          "cacheReadTokens": 135765,
+          "cacheWriteTokens": 6582
         },
-        "outputTokens": 998,
+        "outputTokens": 902,
         "outputTokenDetails": {
-          "textTokens": 284,
-          "reasoningTokens": 714
+          "textTokens": 256,
+          "reasoningTokens": 646
         },
-        "totalTokens": 140747
+        "totalTokens": 143264
       },
-      "durationMs": 30196
+      "durationMs": 29664
     },
     {
       "id": "natural-product-explainer",
@@ -120,22 +120,22 @@
           "executed": true
         }
       ],
-      "text": "我会先读取最匹配的内部 Skill，确认它对产品讲解视频的适用流程；本轮只给出选择理由和简短计划，不会生成或写入任何内容。**选择 Skill：`explainer-video`**。它适合面向新手讲解产品机制，并支持旁白与字幕；30 秒可按单支短片规划。\n\n**简短计划：**0–4 秒引出产品价值；4–10 秒说明首次使用要准备什么；10–22 秒用清晰步骤讲解产品如何工作；22–27 秒展示使用结果；27–30 秒简要回顾。后续制作前需要产品名称、核心机制和首次使用流程，以免编造产品事实。本轮不会生成媒体或写入项目。",
+      "text": "我会先读取最适用的 explainer-video Skill，仅据此给出简短制作计划；本轮不会生成或处理任何媒体。**选择 Skill：explainer-video（产品讲解视频）**。它适合面向新手解释产品运作方式，并支持中文旁白、字幕与直观的动态演示。\n\n**简短计划（30秒）：**0–4秒点出用户需求；4–9秒说明产品是什么；9–22秒用简洁步骤演示工作流程；22–27秒给出首次使用场景；27–30秒回顾并收尾。旁白与字幕同步，画面以清晰易懂的产品示意为主。具体讲解内容需在后续根据产品名称和核心功能确定；本轮未生成或处理媒体。",
       "usage": {
-        "inputTokens": 54988,
+        "inputTokens": 56129,
         "inputTokenDetails": {
           "noCacheTokens": 6,
-          "cacheReadTokens": 48993,
-          "cacheWriteTokens": 5989
+          "cacheReadTokens": 50009,
+          "cacheWriteTokens": 6114
         },
-        "outputTokens": 487,
+        "outputTokens": 653,
         "outputTokenDetails": {
-          "textTokens": 210,
-          "reasoningTokens": 277
+          "textTokens": 218,
+          "reasoningTokens": 435
         },
-        "totalTokens": 55475
+        "totalTokens": 56782
       },
-      "durationMs": 13101
+      "durationMs": 14208
     }
   ]
 }

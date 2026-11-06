@@ -11,8 +11,9 @@ import { getDefaultVideoModelId, isKling4FamilyModel, resolveProductVideoModelId
 import { getVideoStatus } from '../lib/skills/get-video-status';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from '../lib/video-retake-contract';
 import { analyzeVideo } from '../lib/skills/analyze-video';
-import { createAudio } from '../lib/skills/create-audio';
-import { createMusic } from '../lib/skills/create-music';
+import { createAudio, type CreateAudioResult } from '../lib/skills/create-audio';
+import { resolveAudioRoute } from '../lib/audio-model-capabilities';
+import type { AudioBillingUsage } from '../lib/billing/audio';
 import { getMusicStatus } from '../lib/skills/get-music-status';
 
 /** Resolve image input to data URL or HTTP URL for AI APIs. */
@@ -90,9 +91,8 @@ export interface McpServerOptions {
       videoOperation?: 'generate' | 'edit' | 'extend'
       contentFilter?: boolean
       provider?: string
-      seedAudioDurationSec?: number
-      seedAudioProviderCredits?: number
-      seedAudioGenerationSec?: number
+      /** Provider-neutral audio settlement returned by createAudio. */
+      audioUsage?: AudioBillingUsage
       imageInputCount?: number
     },
   ) => void | Promise<void>;
@@ -595,18 +595,69 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
   );
 
   // ── Unified audio generation ─────────────────────────────────────────────
+  // Both tools call the shared router: instrumental BGM -> Suno V6, everything else -> Seed Audio.
+
+  const formatAudioResultForMcp = (result: CreateAudioResult): string => {
+    if (!result.success) return result.message;
+    const takes = result.takes?.length ? result.takes : [];
+    const lines = takes.length > 1
+      ? takes.map((take, index) => `${index === 0 ? 'Default take' : `Alternate take ${index + 1}`}: ${take.audioUrl} (${Math.round(take.duration)}s)`)
+      : [`Audio URL: ${result.audioUrl || 'not returned'}`];
+    return [
+      result.message,
+      '',
+      ...lines,
+      `Model: ${result.model || 'n/a'}`,
+      `Task ID: ${result.taskId || 'n/a'}`,
+      `Format: ${result.format || 'n/a'}${result.sampleRate ? ` / ${result.sampleRate} Hz` : ''}`,
+    ].join('\n');
+  };
+
+  const runAudioTool = async (label: string, input: Parameters<typeof createAudio>[0]) => {
+    try {
+      const route = resolveAudioRoute({
+        kind: input.kind,
+        model: input.model,
+        instrumental: input.instrumental,
+        audioReferenceCount: input.audioReferences?.length,
+        imageReferenceCount: input.imageUrls?.length,
+      });
+      if ('error' in route) return { content: [{ type: 'text' as const, text: route.error }] };
+      if (options?.onToolStart) {
+        const check = await options.onToolStart('makaron_create_audio', route.modelId);
+        if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+      }
+      const t0 = Date.now();
+      const result = await createAudio(input);
+      if (result.success && result.billing) {
+        await options?.onToolComplete?.('makaron_create_audio', result.model, Date.now() - t0, undefined, {
+          audioUsage: result.billing,
+        });
+      }
+      return { content: [{ type: 'text' as const, text: formatAudioResultForMcp(result) }] };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[MCP ${label} error]`, msg);
+      return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+    }
+  };
 
   server.tool(
     'makaron_create_audio',
-    `Generate one complete standalone soundtrack with Seed Audio 1.0.
+    `Generate one complete standalone soundtrack.
 
-Use a compact playback-order timeline for narration, dialogue, multilingual speech, music, ambience, and sound effects. Use kind=translation with exactly one MP3/WAV audio reference and target_language to translate speech while retaining the speaker's voice and performance. The current gateway accepts prompts up to 1,500 characters and outputs up to 120 seconds. You may provide up to 3 audio references or 1 image reference, but never both. Bind ordinary audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the production-master default.`,
+Mixing: when one deliverable needs speech together with music, one call with kind=mixed (Seed Audio) that directs the music inside it is paid once and keeps voice and music balanced together.
+
+Routing is automatic. kind=music instrumental background music (no audio or image references) uses Suno V6: 10-360 seconds, one generation returns 2 takes (the first is the default). Everything else uses Seed Audio 1.0: narration, dialogue, multilingual speech, songs with vocals (instrumental=false), ambience, sound effects, and mixed soundtracks, up to 120 seconds.
+
+For Seed Audio, use a compact playback-order timeline. Use kind=translation with exactly one MP3/WAV audio reference and target_language to translate speech while retaining the speaker's voice and performance. Prompts are limited to 1,250 characters (1,000 for Suno music). You may provide up to 3 audio references or 1 image reference, but never both. Bind ordinary audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the Seed Audio production-master default; Suno returns MP3.`,
     {
       kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed', 'translation']).optional(),
-      prompt: z.string().max(1250).optional().describe('Complete timeline-directed Seed Audio production brief. Optional only for kind=translation.'),
+      instrumental: z.boolean().optional().describe('kind=music only. Default true (Suno V6 BGM); false requests sung vocals on Seed Audio.'),
+      prompt: z.string().max(1250).optional().describe('Complete timeline-directed production brief. For Suno music: genre, mood, instruments, tempo, energy arc, ending (max 1,000 characters). Optional only for kind=translation.'),
       target_language: z.string().optional().describe('Required for kind=translation.'),
       translated_script: z.string().optional().describe('Optional exact target-language script. Omit to translate all speech in audio_references[0] directly.'),
-      duration_seconds: z.number().positive().max(120).optional().describe('Target duration in seconds.'),
+      duration_seconds: z.number().positive().max(360).optional().describe('Target duration in seconds: 10-360 for Suno music, up to 120 for Seed Audio.'),
       audio_references: z.array(z.string()).max(3).optional().describe('Public HTTPS audio URLs or provider preset voice IDs, bound as @audio1..@audio3 in the prompt.'),
       image_urls: z.array(z.string().url()).max(1).optional().describe('At most one public HTTPS image URL; mutually exclusive with audio_references.'),
       speech_rate: z.number().min(0.5).max(2).optional(),
@@ -614,140 +665,75 @@ Use a compact playback-order timeline for narration, dialogue, multilingual spee
       pitch_rate: z.number().int().min(-12).max(12).optional(),
       format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional(),
       sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional(),
-      callback_url: z.string().url().optional().describe('Optional HTTPS callback URL.'),
+      callback_url: z.string().url().optional().describe('Optional HTTPS callback URL (Seed Audio only).'),
       title: z.string().optional(),
+      model: z.enum(['auto', 'evolink-seed-audio', 'suno-v6']).optional().describe('Omit for automatic routing.'),
     },
-    async (params) => {
-      try {
-        if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_create_seed_audio');
-          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
-        }
-        const t0 = Date.now();
-        const result = await createAudio({
-          prompt: params.prompt,
-          kind: params.kind,
-          targetLanguage: params.target_language,
-          translatedScript: params.translated_script,
-          durationSeconds: params.duration_seconds,
-          audioReferences: params.audio_references,
-          imageUrls: params.image_urls,
-          speechRate: params.speech_rate,
-          loudnessRate: params.loudness_rate,
-          pitchRate: params.pitch_rate,
-          format: params.format,
-          sampleRate: params.sample_rate,
-          callbackUrl: params.callback_url,
-          title: params.title,
-        });
-        if (result.success) {
-          await options?.onToolComplete?.('makaron_create_seed_audio', result.model, Date.now() - t0, undefined, {
-            seedAudioDurationSec: result.duration,
-            seedAudioProviderCredits: result.creditsUsed,
-            seedAudioGenerationSec: result.generationSeconds,
-          });
-        }
-        return { content: [{ type: 'text' as const, text: result.success
-          ? `${result.message}\n\nAudio URL: ${result.audioUrl || 'not returned'}\nTask ID: ${result.taskId || 'n/a'}\nFormat: ${result.format || 'n/a'} / ${result.sampleRate || 'n/a'} Hz`
-          : result.message }] };
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error('[MCP create_audio error]', msg);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
-      }
-    },
+    async (params) => runAudioTool('create_audio', {
+      prompt: params.prompt,
+      kind: params.kind,
+      instrumental: params.instrumental,
+      targetLanguage: params.target_language,
+      translatedScript: params.translated_script,
+      durationSeconds: params.duration_seconds,
+      audioReferences: params.audio_references,
+      imageUrls: params.image_urls,
+      speechRate: params.speech_rate,
+      loudnessRate: params.loudness_rate,
+      pitchRate: params.pitch_rate,
+      format: params.format,
+      sampleRate: params.sample_rate,
+      callbackUrl: params.callback_url,
+      title: params.title,
+      model: params.model,
+    }),
   );
 
-  // ── Music generation (compatibility alias) ───────────────────────────────
+  // ── Music generation (makaron_create_audio with kind=music) ──────────────
 
   server.tool(
     'makaron_create_music',
-    `Compatibility alias for music-only Seed Audio requests. Returns a completed audio URL when generation succeeds.
+    `Generate background music. Shortcut for makaron_create_audio with kind=music; waits for the provider and returns completed audio URLs.
 
-- Music generation waits for the provider result and returns one persisted audio asset when project persistence is available.
-- Default: instrumental background music, no vocals.
-- Prompt: describe genre, mood, instruments (e.g. "gentle piano, cinematic, warm strings").
-- Style: optional genre/mood tags for custom mode (e.g. "lo-fi, ambient, chill").
-- New music generation no longer uses Suno.`,
+- Default: instrumental background music via Suno V6, 10-360 seconds, 2 takes per generation (the first is the default).
+- instrumental=false (sung vocals) uses Seed Audio, up to 120 seconds.
+- Best for a deliverable whose soundtrack is music alone. When the same piece also needs narration or dialogue, makaron_create_audio with kind=mixed generates voice and music together in one call.
+- Prompt: genre, mood, instruments, tempo, energy arc, and ending (e.g. "gentle piano, warm strings, cinematic, slow build, soft ending"). No artist names.
+- Style: optional extra genre/mood tags (e.g. "lo-fi, ambient, chill").`,
     {
-      prompt: z.string().max(1500).describe('Timeline-directed music description: genre, mood, energy arc, instruments, mix role, and ending.'),
+      prompt: z.string().max(1000).describe('Music description: genre, mood, instruments, tempo, energy arc, mix role, and ending.'),
       instrumental: z.boolean().optional().describe('Instrumental only, no vocals (default: true)'),
-      style: z.string().optional().describe('Genre/mood tags for custom mode (e.g. "lo-fi, ambient")'),
-      duration_seconds: z.number().positive().max(120).optional(),
-      loudness_rate: z.number().min(0.5).max(2).optional(),
-      pitch_rate: z.number().int().min(-12).max(12).optional(),
-      format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional(),
-      sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional(),
+      style: z.string().optional().describe('Extra genre/mood tags (e.g. "lo-fi, ambient")'),
+      duration_seconds: z.number().positive().max(360).optional().describe('Target length: 10-360 seconds for instrumental music, up to 120 with vocals.'),
+      format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional().describe('Seed Audio only; Suno returns MP3.'),
+      sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional().describe('Seed Audio only.'),
     },
-    async (params) => {
-      try {
-        if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_create_seed_audio');
-          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
-        }
-        const t0 = Date.now();
-        const result = await createMusic({
-          prompt: params.prompt,
-          instrumental: params.instrumental,
-          style: params.style,
-          durationSeconds: params.duration_seconds,
-          loudnessRate: params.loudness_rate,
-          pitchRate: params.pitch_rate,
-          format: params.format,
-          sampleRate: params.sample_rate,
-        });
-
-        if (result.success) {
-          await options?.onToolComplete?.('makaron_create_seed_audio', result.model, Date.now() - t0, undefined, {
-            seedAudioDurationSec: result.duration,
-            seedAudioProviderCredits: result.creditsUsed,
-            seedAudioGenerationSec: result.generationSeconds,
-          });
-        }
-        return { content: [{ type: 'text' as const, text: result.success
-          ? `${result.message}\n\nAudio URL: ${result.audioUrl || 'not returned'}\nTask ID: ${result.taskId || 'n/a'}`
-          : result.message }] };
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error('[MCP create_music error]', msg);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
-      }
-    },
+    async (params) => runAudioTool('create_music', {
+      kind: 'music',
+      prompt: params.prompt,
+      instrumental: params.instrumental,
+      style: params.style,
+      durationSeconds: params.duration_seconds,
+      format: params.format,
+      sampleRate: params.sample_rate,
+    }),
   );
 
   server.tool(
     'makaron_get_music_status',
-    `Poll the status of a music generation task. Returns status + audioUrl when complete.
-
-Status values:
-- pending: task queued
-- processing: generating (typically 2-3 minutes)
-- completed: done, audioUrl available
-- failed: error occurred
-
-Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
+    `Re-read a Suno music task by ID. makaron_create_music already waits and returns final URLs, so this is only needed to recover URLs for an earlier Suno task ID.`,
     {
       taskId: z.string().describe('Task ID from makaron_create_music'),
     },
     async (params) => {
       try {
         const result = await getMusicStatus({ taskId: params.taskId });
-
-        let response = result.message;
-        if (result.status === 'completed' && result.tracks.length) {
-          const t = result.tracks[0];
-          response += `\n\nAudio URL: ${t.audioUrl}`;
-          if (t.duration) response += `\nDuration: ${Math.round(t.duration)}s`;
-          if (t.title) response += `\nTitle: ${t.title}`;
-          if (result.tracks.length > 1) {
-            response += `\n\nTrack 2: ${result.tracks[1].audioUrl} (${Math.round(result.tracks[1].duration)}s)`;
-          }
-        }
-        if (result.status === 'failed' && result.error) {
-          response += `\n\nError: ${result.error}`;
-        }
-
-        return { content: [{ type: 'text' as const, text: response }] };
+        const lines = [result.message];
+        result.tracks.forEach((track, index) => {
+          lines.push(`${index === 0 ? 'Audio URL' : `Track ${index + 1}`}: ${track.audioUrl || track.streamAudioUrl}${track.duration ? ` (${Math.round(track.duration)}s)` : ''}`);
+        });
+        if (result.status === 'failed' && result.error) lines.push(`Error: ${result.error}`);
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP get_music_status error]', msg);

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { seededMediaPrices } from './helpers/media-prices'
-import { calculateMediaQuote, quoteSeedAudio, quoteVideo } from '@/lib/billing/media-pricing'
+import { calculateMediaQuote, quoteSeedAudio, quoteSunoMusic, quoteVideo } from '@/lib/billing/media-pricing'
 import { estimateVideoCredits, listVideoModelCapabilities, type VideoResolution } from '@/lib/video-model-capabilities'
 
 const { query } = vi.hoisted(() => ({ query: vi.fn() }))
@@ -56,6 +56,13 @@ describe('database-backed media quotes', () => {
   it('bills audio from the same USD rate for supplier credits and measured seconds', async () => {
     expect((await quoteSeedAudio({ durationSeconds: 8 })).credits).toBe(4)
     expect((await quoteSeedAudio({ providerCreditsUsed: 1.36 })).credits).toBe(4)
+  })
+  it('bills Suno music per generation, independent of duration', async () => {
+    // $0.06 per generation (2 takes) x 2 markup = 12 Makaron credits.
+    expect(await quoteSunoMusic()).toMatchObject({ priceId: 'audio:suno-v6:default:generate', credits: 12 })
+    expect((await quoteSunoMusic({ generations: 2 })).credits).toBe(24)
+    query.mockResolvedValueOnce({ data: seededMediaPrices().filter(p => p.model_id !== 'suno-v6'), error: null })
+    await expect(quoteSunoMusic()).rejects.toThrow('Suno music pricing is not configured.')
   })
   it('composes Eco from live base and enhancement tariffs with separate rounding', async () => {
     const prices = seededMediaPrices()

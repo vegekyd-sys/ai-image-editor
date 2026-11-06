@@ -14,7 +14,6 @@ export interface AgentStreamCallbacks {
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
   onAnimationTask?: (taskId: string, prompt: string, imageUrls?: string[], model?: string) => void;
   onVideoSnapshot?: (snapshotId: string, taskId: string, videoMeta: import('@/types').VideoMeta) => void;
-  onMusicTask?: (taskId: string) => void;
   onImageAnalyzed?: (imageIndex: number) => void;
   onCaptureFrame?: (frame: number, uploadPath: string, captureId: string) => void;
   onPreviewFrame?: (workspaceUrl: string) => void;
@@ -104,7 +103,6 @@ function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: Agen
     case 'design': callbacks.onRender?.(data as Parameters<NonNullable<AgentStreamCallbacks['onRender']>>[0]); break;
     case 'animation_task': callbacks.onAnimationTask?.(data.taskId, data.prompt || '', data.imageUrls, data.model); break;
     case 'video_snapshot': callbacks.onVideoSnapshot?.(data.snapshotId, data.taskId, data.videoMeta); break;
-    case 'music_task': callbacks.onMusicTask?.(data.taskId); break;
     case 'image_analyzed': callbacks.onImageAnalyzed?.(data.imageIndex); break;
     case 'preview_frame_captured': callbacks.onPreviewFrame?.(data.workspaceUrl); break;
     case 'nsfw_detected': callbacks.onNsfwDetected?.(); break;
@@ -222,7 +220,6 @@ async function streamDurableAgent(
           || event.type === 'image'
           || event.type === 'render'
           || event.type === 'animation_task'
-          || event.type === 'music_task'
         ) {
           receivedVisibleOutput = true;
         }
@@ -345,9 +342,6 @@ async function streamAgentAttempt(
             callbacks.onVideoSnapshot?.(vs.snapshotId, vs.taskId, vs.videoMeta);
             break;
           }
-          case 'music_task':
-            callbacks.onMusicTask?.((event as { taskId: string }).taskId);
-            break;
           case 'image_analyzed':
             callbacks.onImageAnalyzed?.(event.imageIndex);
             break;

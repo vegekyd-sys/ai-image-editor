@@ -942,7 +942,6 @@ export async function runAgentExecutionAttempt(
           || event.type === 'render'
           || event.type === 'composition'
           || event.type === 'design'
-          || event.type === 'music_task'
         ) {
           attemptHadVisibleOutput = true;
           attemptDeliveredArtifact = true;

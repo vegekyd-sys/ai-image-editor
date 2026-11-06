@@ -1407,12 +1407,6 @@ export async function* runMakaronAgent(
           attemptDeliveredArtifact = true;
           ctx.pendingVideoSnapshot = undefined;
         }
-        if ((ctx as any).musicTaskId) {
-          yield { type: 'music_task', taskId: (ctx as any).musicTaskId };
-          finalStepDeliveredArtifact = true;
-          attemptDeliveredArtifact = true;
-          (ctx as any).musicTaskId = undefined;
-        }
         continue;
       }
 

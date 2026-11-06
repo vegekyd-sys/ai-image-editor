@@ -1,0 +1,212 @@
+{
+ "p1": {
+  "title": "Prompt 1 · Lo-fi house 旅行 vlog",
+  "prompt": "Uplifting cinematic lo-fi house background music for a 30-second travel vlog: warm Rhodes chords, soft side-chained kick, plucked acoustic guitar hook, airy pads, gentle build into a bright drop around 15 seconds, clean ending. Instrumental, no vocals, 110 BPM.",
+  "tracks": [
+   {
+    "file": "audio/p1_elevenlabs-v2.5_1.mp3",
+    "key": "elevenlabs-v2.5",
+    "name": "ElevenLabs Music v2.5",
+    "via": "fal",
+    "price": "$0.30/30s (fal)",
+    "dur": 30.0,
+    "score": 4.17
+   },
+   {
+    "file": "audio/p1_evolink-suno-v6-mini_1.mp3",
+    "key": "evolink-suno-v6-mini",
+    "name": "Suno V6 Mini",
+    "via": "EvoLink",
+    "price": "$0.118/次·2 首",
+    "dur": 30.0,
+    "score": 5.5
+   },
+   {
+    "file": "audio/p1_evolink-suno-v6-mini_2.mp3",
+    "key": "evolink-suno-v6-mini",
+    "name": "Suno V6 Mini",
+    "via": "EvoLink",
+    "price": "$0.118/次·2 首",
+    "dur": 30.0,
+    "score": 6.41
+   },
+   {
+    "file": "audio/p1_evolink-suno-v6_1.mp3",
+    "key": "evolink-suno-v6",
+    "name": "Suno V6",
+    "via": "EvoLink",
+    "price": "$0.118/次·2 首",
+    "dur": 29.9,
+    "score": 5.75
+   },
+   {
+    "file": "audio/p1_evolink-suno-v6_2.mp3",
+    "key": "evolink-suno-v6",
+    "name": "Suno V6",
+    "via": "EvoLink",
+    "price": "$0.118/次·2 首",
+    "dur": 30.0,
+    "score": 6.25
+   },
+   {
+    "file": "audio/p1_lyria-3.5_1.mp3",
+    "key": "lyria-3.5",
+    "name": "Google Lyria 3.5",
+    "via": "fal / Gemini API",
+    "price": "$0.10/首 (fal)",
+    "dur": 63.9,
+    "score": 5.25
+   },
+   {
+    "file": "audio/p1_mureka-9.5_1.mp3",
+    "key": "mureka-9.5",
+    "name": "Mureka 9.5",
+    "via": "fal",
+    "price": "单价未核实",
+    "dur": 188.9,
+    "score": 5.84
+   },
+   {
+    "file": "audio/p1_seed-audio_1.mp3",
+    "key": "seed-audio",
+    "name": "Seed Audio 1.0",
+    "via": "EvoLink（现用）",
+    "price": "≈$0.09/30s",
+    "dur": 30.0,
+    "score": 4.42
+   },
+   {
+    "file": "audio/p1_stable-audio-3_1.mp3",
+    "key": "stable-audio-3",
+    "name": "Stable Audio 3 Medium",
+    "via": "fal",
+    "price": "$0.04/首",
+    "dur": 30.0,
+    "score": 5.0
+   },
+   {
+    "file": "audio/p1_suno-v6_1.mp3",
+    "key": "suno-v6",
+    "name": "Suno V6",
+    "via": "sunoapi.org",
+    "price": "$0.06/次·2 首",
+    "dur": 30.8,
+    "score": 5.29
+   },
+   {
+    "file": "audio/p1_suno-v6_2.mp3",
+    "key": "suno-v6",
+    "name": "Suno V6",
+    "via": "sunoapi.org",
+    "price": "$0.06/次·2 首",
+    "dur": 29.2,
+    "score": 5.58
+   },
+   {
+    "file": "audio/p1b_minimax-music-3_1.wav",
+    "key": "minimax-music-3",
+    "name": "MiniMax Music 3",
+    "via": "fal",
+    "price": "$0.06/30s",
+    "dur": 30.0,
+    "score": 3.92
+   }
+  ]
+ },
+ "p2": {
+  "title": "Prompt 2 · 国风史诗预告",
+  "prompt": "Epic Chinese-style cinematic music for a 30-second fantasy short film trailer: guzheng and erhu melody over taiko drums and a full string orchestra, mysterious opening, rising tension, powerful climax around 20 seconds, resolved final hit. Instrumental, no vocals, 90 BPM.",
+  "tracks": [
+   {
+    "file": "audio/p2_elevenlabs-v2.5_1.mp3",
+    "key": "elevenlabs-v2.5",
+    "name": "ElevenLabs Music v2.5",
+    "via": "fal",
+    "price": "$0.30/30s (fal)",
+    "dur": 30.0,
+    "score": 5.5
+   },
+   {
+    "file": "audio/p2_evolink-suno-v6_1.mp3",
+    "key": "evolink-suno-v6",
+    "name": "Suno V6",
+    "via": "EvoLink",
+    "price": "$0.118/次·2 首",
+    "dur": 29.2,
+    "score": 5.17
+   },
+   {
+    "file": "audio/p2_evolink-suno-v6_2.mp3",
+    "key": "evolink-suno-v6",
+    "name": "Suno V6",
+    "via": "EvoLink",
+    "price": "$0.118/次·2 首",
+    "dur": 28.8,
+    "score": 5.91
+   },
+   {
+    "file": "audio/p2_lyria-3.5_1.mp3",
+    "key": "lyria-3.5",
+    "name": "Google Lyria 3.5",
+    "via": "fal / Gemini API",
+    "price": "$0.10/首 (fal)",
+    "dur": 67.2,
+    "score": 4.58
+   },
+   {
+    "file": "audio/p2_minimax-music-3_1.wav",
+    "key": "minimax-music-3",
+    "name": "MiniMax Music 3",
+    "via": "fal",
+    "price": "$0.06/30s",
+    "dur": 30.0,
+    "score": 3.92
+   },
+   {
+    "file": "audio/p2_mureka-9.5_1.mp3",
+    "key": "mureka-9.5",
+    "name": "Mureka 9.5",
+    "via": "fal",
+    "price": "单价未核实",
+    "dur": 195.7,
+    "score": 4.5
+   },
+   {
+    "file": "audio/p2_seed-audio_1.mp3",
+    "key": "seed-audio",
+    "name": "Seed Audio 1.0",
+    "via": "EvoLink（现用）",
+    "price": "≈$0.09/30s",
+    "dur": 30.0,
+    "score": 5.92
+   },
+   {
+    "file": "audio/p2_stable-audio-3_1.mp3",
+    "key": "stable-audio-3",
+    "name": "Stable Audio 3 Medium",
+    "via": "fal",
+    "price": "$0.04/首",
+    "dur": 30.0,
+    "score": 5.08
+   },
+   {
+    "file": "audio/p2_suno-v6_1.mp3",
+    "key": "suno-v6",
+    "name": "Suno V6",
+    "via": "sunoapi.org",
+    "price": "$0.06/次·2 首",
+    "dur": 28.7,
+    "score": 6.0
+   },
+   {
+    "file": "audio/p2_suno-v6_2.mp3",
+    "key": "suno-v6",
+    "name": "Suno V6",
+    "via": "sunoapi.org",
+    "price": "$0.06/次·2 首",
+    "dur": 29.2,
+    "score": 6.04
+   }
+  ]
+ }
+}

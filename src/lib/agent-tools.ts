@@ -30,7 +30,7 @@ import {
   requireCredits,
 } from './billing/credits';
 import { FAL_ROTATE_CAMERA_TOOL, getToolPrice, resolveToolName } from './billing/pricing';
-import { deductSeedAudioCredits } from './billing/seed-audio';
+import { deductAudioCredits } from './billing/audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
 import {
@@ -330,6 +330,8 @@ export interface AudioAttachment {
   title?: string;
   duration?: number;
   trackIndex?: number;
+  /** Generated audio intent (voiceover, music, mixed, ...), shown in the Audio Index. */
+  kind?: string;
 }
 
 interface WorkspaceMediaOutputDraft {
@@ -363,7 +365,6 @@ export type AgentStreamEvent =
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
   | { type: 'render' | 'composition'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string }  // Agent React composition for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; published?: boolean }  // @deprecated — backward compat alias for 'render'
-  | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | {
       type: 'context_compaction';
       provider: 'anthropic' | 'openai';
@@ -489,6 +490,12 @@ function getPlayableAudioUrl(record: Record<string, unknown>): string {
         : '';
 }
 
+/** Takes of one audio result. `tracks` is the legacy field name kept for older tool history. */
+function getAudioTakeList(record: Record<string, unknown>): Record<string, unknown>[] {
+  const list = Array.isArray(record.takes) ? record.takes : Array.isArray(record.tracks) ? record.tracks : [];
+  return list.filter((take): take is Record<string, unknown> => !!take && typeof take === 'object');
+}
+
 function formatMusicLine(record: Record<string, unknown>, fallbackTrackIndex = 0): string | null {
   const audioUrl = getPlayableAudioUrl(record);
   if (!audioUrl) return null;
@@ -499,12 +506,10 @@ function formatMusicLine(record: Record<string, unknown>, fallbackTrackIndex = 0
   const trackIndex = Number(record.trackIndex);
   const safeTrackIndex = Number.isInteger(trackIndex) && trackIndex >= 0 ? trackIndex : fallbackTrackIndex;
   const tags = cleanMusicField(record.tags, 'audio,generated');
-  const playUrl = typeof record.streamAudioUrl === 'string' && /^https?:\/\//.test(record.streamAudioUrl)
-    ? record.streamAudioUrl
-    : audioUrl;
-  const finalUrl = typeof record.providerAudioUrl === 'string' && /^https?:\/\//.test(record.providerAudioUrl)
-    ? record.providerAudioUrl
-    : (playUrl === audioUrl ? audioUrl : '');
+  // Generation is synchronous and persisted before the tool returns, so the
+  // permanent audioUrl is both the playable and the final URL.
+  const playUrl = audioUrl;
+  const finalUrl = audioUrl;
 
   return `music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${playUrl}|${finalUrl}`;
 }
@@ -515,9 +520,11 @@ export function formatGeneratedAudioForCui(toolName: string | undefined, output:
   const record = output as Record<string, unknown>;
   if (record.success === false) return null;
 
-  const tracks = Array.isArray(record.tracks)
-    ? record.tracks
-        .map((track, index) => track && typeof track === 'object' ? formatMusicLine(track as Record<string, unknown>, index) : null)
+  // Multi-take results (e.g. Suno's 2 takes) render one selectable card per take.
+  const takeList = getAudioTakeList(record);
+  const tracks = takeList.length > 1
+    ? takeList
+        .map((track, index) => formatMusicLine(track, index))
         .filter((line): line is string => !!line)
     : [];
   if (tracks.length) {
@@ -547,11 +554,10 @@ function formatGeneratedAudioForModel(toolName: string, output: unknown): string
   if (record.success === false) {
     return `Audio generation failed: ${String(record.message || 'unknown error')}`;
   }
-  if (Array.isArray(record.tracks)) {
-    const trackLines = record.tracks
-      .map((track, index) => {
-        if (!track || typeof track !== 'object') return '';
-        const item = track as Record<string, unknown>;
+  const takeList = getAudioTakeList(record);
+  if (takeList.length > 1) {
+    const trackLines = takeList
+      .map((item, index) => {
         const audioUrl = getPlayableAudioUrl(item);
         if (!audioUrl) return '';
         const title = cleanMusicField(item.title, `Generated music ${index + 1}`);
@@ -564,15 +570,17 @@ function formatGeneratedAudioForModel(toolName: string, output: unknown): string
         const providerFinal = typeof item.providerAudioUrl === 'string' && item.providerAudioUrl !== audioUrl
           ? `\n  Provider final URL, if already available: ${item.providerAudioUrl}`
           : '';
-        return `- <<<audio_${audioIndex}>>> ${title} (${duration})\n  Resolved public audioUrl: ${audioUrl}${providerFinal}`;
+        return `- ${index === 0 ? 'Default take' : `Alternate take ${index + 1}`}: <<<audio_${audioIndex}>>> ${title} (${duration})\n  Resolved public audioUrl: ${audioUrl}${providerFinal}`;
       })
       .filter(Boolean);
     if (trackLines.length) {
+      const provider = cleanMusicField(record.model || record.provider, '');
       return [
-        `${trackLines.length} audio track(s) are ready.`,
-        'Choose the best track for the user request. Use the exact chosen audioUrl directly in Remotion <Audio src={...}> props/code.',
-        'Do not put <<<audio_N>>> markers inside Remotion code; markers are only labels for choosing.',
+        `${trackLines.length} takes are ready from one generation${provider ? ` (${provider})` : ''}. All are in the Audio Index.`,
+        'Use the default take unless the user picks an alternate; the user sees every take as a selectable card, so do not regenerate just to offer options.',
+        'Use the exact audioUrl directly in Remotion <Audio src={...}> props/code. Do not put <<<audio_N>>> markers inside Remotion code.',
         ...trackLines,
+        record.fallbackFrom ? `Note: ${String(record.fallbackFrom)} was unavailable; this result came from the Seed Audio fallback.` : '',
       ].filter(Boolean).join('\n');
     }
   }
@@ -5341,6 +5349,10 @@ function createGenerateAudioTool(
 
 This is the single Agent-facing audio-generation tool. Use it for every standalone voiceover, narration, dialogue, speech translation, multilingual character performance, music bed, ambience, sound effect, and mixed sound scene. All voiceover content is generated by Seed Audio; there is no separate Agent voiceover or voice-catalog tool.
 
+Plan the soundtrack per deliverable (one video or one standalone track). When its soundtrack combines speech (narration, voiceover, dialogue) with music, ambience, or SFX, the best result is one kind="mixed" Seed Audio generation that directs the music inside the same prompt: one payment, and voice and music are performed and balanced together. kind="music" is the right choice when the deliverable's soundtrack is music alone. When the user wants music under speech generated earlier, a fresh kind="mixed" soundtrack that passes the earlier voice asset as reference_voices keeps the voice identity and stays one cohesive mix.
+
+Routing is automatic; keep model omitted. kind="music" for instrumental music alone (no reference_voices, no image conditioning) is generated by Suno V6, 10-360 seconds, and returns 2 takes: take 1 is added as the default asset and take 2 is a selectable alternate for the user, so do not regenerate just to get options. Everything else, including mixed soundtracks, speech, SFX, songs with sung vocals (instrumental=false), and conditioned audio, uses the Seed Audio default (up to 120 seconds).
+
 Before its first use in a conversation, read \`prompts/audio.md\` and write one compact production brief with an audible timeline. If the final soundtrack contains voice plus music, ambience, or SFX, make exactly one model generation with kind="mixed"; never generate voiceover and supporting audio separately. Use kind="voiceover" only for an intentionally isolated voice master. Use kind="translation" to translate source speech while retaining the source speaker; it requires exactly one source_voice and a target_language. Include translated_script when claims or wording need deterministic control, otherwise Seed Audio translates the referenced speech directly. Then call transcribe_audio on every translated result before composition work.
 
 Exception: if the chosen final-video workflow is generate_animation, do not generate a separate audio asset. Put the requested sound design in story_prompt so the video model generates it with the picture.
@@ -5348,9 +5360,10 @@ Exception: if the chosen final-video workflow is generate_animation, do not gene
 Available audio model notes:
 ${formatAudioCapabilitiesForAgent()}`,
       inputSchema: z.object({
-        kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed', 'translation']).describe('Required audio intent. Use translation for same-speaker cross-language speech. Use mixed whenever one deliverable contains voice plus music/ambience/SFX. Use voiceover only for an intentionally isolated voice-only master.'),
+        kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed', 'translation']).describe('Required audio intent. Use music only when the soundtrack of the deliverable is music alone; if it also has speech, use mixed. Use translation for same-speaker cross-language speech. Use mixed whenever one deliverable contains voice plus music/ambience/SFX. Use voiceover only for an intentionally isolated voice-only master.'),
+        instrumental: z.boolean().optional().describe('Only for kind=music. Default true (instrumental BGM, generated by Suno V6). Set false only when the user wants sung vocals or lyrics; that music is generated by Seed Audio.'),
         prompt: z.string().max(SEED_AUDIO_AGENT_PROMPT_MAX_CHARS).optional().describe(`Natural-language production direction, maximum ${SEED_AUDIO_AGENT_PROMPT_MAX_CHARS} characters before the internal mode wrapper. Required for every kind except translation. For translation, use this only for extra performance direction; target language, source voice, identity preservation, and exact translated text have typed fields.`),
-        duration_seconds: z.number().optional().describe('Requested duration in seconds. Seed Audio supports up to 120 seconds. Also include the duration in the prompt for best results.'),
+        duration_seconds: z.number().optional().describe('Requested duration in seconds. Instrumental music (Suno V6) supports 10-360 seconds; everything else (Seed Audio) supports up to 120 seconds. For Seed Audio also include the duration in the prompt.'),
         reference_voices: z.array(z.string()).max(3).optional().describe('Up to 3 Audio Index labels such as audio_1, or provider preset voice IDs. The prompt must bind them in order as @audio1, @audio2, and @audio3. Cannot be combined with image conditioning.'),
         target_language: z.string().optional().describe('Required for kind=translation, for example English, Japanese, or Spanish (Mexico).'),
         translated_script: z.string().optional().describe('Optional exact target-language script for kind=translation. Omit for direct translation of all source speech; provide it when protected terms, claims, numbers, or deliberate localization wording must be exact.'),
@@ -5381,10 +5394,11 @@ ${formatAudioCapabilitiesForAgent()}`,
         format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional().describe('Output format. Default wav for a production master.'),
         sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional().describe('Output sample rate. Default 48000 for production masters.'),
         title: z.string().optional().describe('Short title for the generated audio asset.'),
-        model: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Audio model. Omit or use auto for the default Seed Audio model.'),
+        model: z.enum(['auto', 'evolink-seed-audio', 'suno-v6']).optional().describe('Leave omitted (auto): instrumental kind=music routes to suno-v6 and everything else to evolink-seed-audio. Pass evolink-seed-audio only when the user explicitly asks for Seed Audio music.'),
       }),
       execute: async ({
         kind,
+        instrumental,
         prompt,
         duration_seconds,
         reference_voices,
@@ -5486,6 +5500,7 @@ ${formatAudioCapabilitiesForAgent()}`,
         }
         const result = await createAudio({
           kind,
+          instrumental: kind === 'music' ? instrumental : undefined,
           prompt,
           targetLanguage: target_language,
           translatedScript: translated_script,
@@ -5503,32 +5518,42 @@ ${formatAudioCapabilitiesForAgent()}`,
           userId: ctx.userId,
           projectId: ctx.projectId,
         });
-        if (result.success) {
-          if (result.audioUrl) {
-            const audioIndex = addAudioAttachment(ctx, {
-              audioUrl: result.audioUrl,
-              title: result.title || title || (
-                kind === 'voiceover'
-                  ? 'Generated voiceover'
-                  : kind === 'translation'
-                    ? `Translated ${target_language || ''} voice`.trim()
-                  : kind === 'mixed'
-                    ? 'Generated unified soundtrack'
-                    : 'Generated audio'
-              ),
-              duration: result.duration,
-              trackIndex: result.trackIndex,
-            });
-            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved ${kind === 'voiceover' ? 'voiceover master' : kind === 'translation' ? 'translated voice master' : kind === 'mixed' ? 'unified soundtrack' : 'audio'} URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.${kind === 'voiceover' || kind === 'translation' || kind === 'mixed' ? '\nIf this asset contains speech, call transcribe_audio with expected_sections and the Composition fps before Storyboard or run_code.' : ''}`;
-          }
-          deductSeedAudioCredits(ctx.userId ?? '', {
-            durationSeconds: result.duration,
-            providerCreditsUsed: result.creditsUsed,
-            model: result.model,
-            generationSeconds: result.generationSeconds,
-          }).catch(e => console.error('[billing] generate_audio deduct error:', e));
+        if (!result.success) return result;
+        const assetLabel = kind === 'voiceover' ? 'voiceover master' : kind === 'translation' ? 'translated voice master' : kind === 'mixed' ? 'unified soundtrack' : kind === 'music' ? 'music' : 'audio';
+        const takes = (result.takes?.length ? result.takes : result.audioUrl ? [{
+          audioUrl: result.audioUrl,
+          providerAudioUrl: result.providerAudioUrl || result.audioUrl,
+          duration: result.duration ?? 0,
+          title: result.title || title || 'Generated audio',
+          tags: '',
+          trackIndex: result.trackIndex,
+        }] : []).map(take => ({
+          ...take,
+          audioIndex: addAudioAttachment(ctx, {
+            audioUrl: take.audioUrl,
+            title: take.title,
+            duration: take.duration,
+            trackIndex: take.trackIndex,
+            kind,
+          }),
+        }));
+        if (takes.length) {
+          const [primary, ...alternates] = takes;
+          result.message = [
+            result.message,
+            `Default ${assetLabel}: <<<audio_${primary.audioIndex}>>> ${primary.audioUrl}`,
+            ...alternates.map((take, index) => `Alternate take ${index + 2}: <<<audio_${take.audioIndex}>>> ${take.audioUrl} (shown to the user as a selectable card; use it only if the user picks it)`),
+            'Use the default URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.',
+            kind === 'voiceover' || kind === 'translation' || kind === 'mixed'
+              ? 'If this asset contains speech, call transcribe_audio with expected_sections and the Composition fps before Storyboard or run_code.'
+              : '',
+          ].filter(Boolean).join('\n');
         }
-        return result;
+        if (result.billing) {
+          deductAudioCredits(ctx.userId ?? '', result.billing)
+            .catch(e => console.error('[billing] generate_audio deduct error:', e));
+        }
+        return { ...result, takes };
       },
       toModelOutput({ output }: { output: any }) {
         return {
