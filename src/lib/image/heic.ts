@@ -4,9 +4,37 @@ export function isHeicFile(file: File): boolean {
     || /\.(heic|heif)$/i.test(file.name);
 }
 
-/** Convert HEIC/HEIF to JPEG. Tries heic2any → server fallback (/api/upload with sips). */
+const nativeDecodeCache = new WeakMap<File, Promise<boolean>>();
+
+/** Safari (iOS 17+/macOS) decodes HEIC natively; skip the slow WASM path there. */
+function canDecodeNatively(file: File): Promise<boolean> {
+  let cached = nativeDecodeCache.get(file);
+  if (!cached) {
+    cached = probeNativeDecode(file);
+    nativeDecodeCache.set(file, cached);
+  }
+  return cached;
+}
+
+async function probeNativeDecode(file: File): Promise<boolean> {
+  if (typeof document === 'undefined') return false;
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return img.naturalWidth > 0;
+  } catch {
+    return false;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** Convert HEIC/HEIF to JPEG. Tries native decode → heic2any → server fallback (/api/upload). */
 export async function ensureDecodableFile(file: File): Promise<File> {
   if (!isHeicFile(file)) return file;
+  if (await canDecodeNatively(file)) return file;
   // Try 1: heic2any WASM (works for most HEIC profiles)
   try {
     const heic2any = (await import('heic2any')).default;

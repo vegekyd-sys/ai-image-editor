@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createProject, createProjectFromStagedMedia } from '@/lib/createProject'
-import { uploadImage } from '@/lib/supabase/storage'
+import { createProject, createProjectFromStagedMedia, CreateMediaUploadError } from '@/lib/createProject'
+import { uploadBlobWithProgress, uploadImage } from '@/lib/supabase/storage'
 import {
   beginCreateDraftContinuation,
   cacheCreateDraft,
@@ -14,9 +14,18 @@ import {
   shouldConsumeCreateDraft,
 } from '@/lib/imageCache'
 
+// Storage paths are `${userId}/${projectId}/${file}`; public URLs drop the user.
+const publicUrlForPath = (path: string) => `https://cdn.makaron.app/${path.split('/').slice(1).join('/')}`
+
 vi.mock('@/lib/supabase/storage', () => ({
   uploadImage: vi.fn(async (_supabase, _userId, projectId: string, filename: string) =>
     `https://cdn.makaron.app/${projectId}/${filename}`),
+  dataUrlToBlob: vi.fn(async (dataUrl: string) => new Blob([dataUrl], { type: 'image/jpeg' })),
+  uploadBlobWithProgress: vi.fn(async (_supabase: unknown, path: string, _blob: Blob, _type: string, onProgress?: (p: number) => void) => {
+    onProgress?.(0.5)
+    onProgress?.(1)
+    return publicUrlForPath(path)
+  }),
 }))
 
 vi.mock('@/lib/image/compress', () => ({
@@ -36,6 +45,10 @@ describe('createProject upload flow', () => {
     vi.restoreAllMocks()
     vi.mocked(uploadImage).mockImplementation(async (_supabase, _userId, projectId, filename) =>
       `https://cdn.makaron.app/${projectId}/${filename}`)
+    vi.mocked(uploadBlobWithProgress).mockImplementation(async (_supabase, path, _blob, _type, onProgress) => {
+      onProgress?.(1)
+      return publicUrlForPath(path)
+    })
     Object.defineProperty(navigator, 'sendBeacon', {
       configurable: true,
       value: vi.fn(() => true),
@@ -64,7 +77,7 @@ describe('createProject upload flow', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const file = new File(['fake image'], 'photo.jpg', { type: 'image/jpeg' })
-    const result = await createProject(supabase as never, 'user-1', [file])
+    const result = await createProject(supabase as never, 'user-1', [file], undefined, undefined, { clientProjectId: 'project-from-api' })
 
     expect(result?.projectId).toBe('project-from-api')
     expect(supabase.from).not.toHaveBeenCalled()
@@ -262,7 +275,7 @@ describe('createProject upload flow', () => {
       new File(['iphone photo 1'], 'IMG_0001.HEIC', { type: 'image/heic' }),
       new File(['iphone photo 2'], 'IMG_0002.HEIC', { type: 'image/heic' }),
     ]
-    const result = await createProject({} as never, 'user-1', files)
+    const result = await createProject({} as never, 'user-1', files, undefined, undefined, { clientProjectId: 'multi-project' })
 
     expect(result?.projectId).toBe('multi-project')
     expect(getPendingProjectImagesSync('multi-project')).toEqual([
@@ -351,7 +364,7 @@ describe('createProject upload flow', () => {
       new File(['large-a'], 'large-a.jpg', { type: 'image/jpeg' }),
       new File(['large-b'], 'large-b.jpg', { type: 'image/jpeg' }),
     ]
-    await expect(createProject({} as never, 'user-1', files)).resolves.toMatchObject({ projectId: 'large-image-project' })
+    await expect(createProject({} as never, 'user-1', files, undefined, undefined, { clientProjectId: 'large-image-project' })).resolves.toMatchObject({ projectId: 'large-image-project' })
 
     expect(setItem).not.toHaveBeenCalledWith('pendingImages', expect.stringContaining('data:image'))
     expect(getPendingProjectImagesSync('large-image-project')).toEqual([
@@ -359,5 +372,67 @@ describe('createProject upload flow', () => {
       expect.stringMatching(/^https:\/\/cdn\.makaron\.app\/large-image-project\/snapshot-/),
     ])
     expect(sessionStorage.getItem('pendingImages')).toBeNull()
+  })
+
+  it('reports per-file progress and sends a client project id for idempotent retries', async () => {
+    const bodies: Array<Record<string, unknown>> = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/marketing/events') return new Response('{}', { status: 200 })
+      const body = JSON.parse(String(init?.body || '{}'))
+      bodies.push(body)
+      return new Response(JSON.stringify({ projectId: body.clientProjectId, snapshots: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+    const files = [
+      new File(['a'], 'a.jpg', { type: 'image/jpeg' }),
+      new File(['b'], 'b.jpg', { type: 'image/jpeg' }),
+    ]
+    const states: string[] = []
+    const result = await createProject({} as never, 'user-1', files, undefined, undefined, {
+      clientProjectId: '33333333-3333-4333-8333-333333333333',
+      onItemState: (file, state) => states.push(`${file.name}:${state.status}`),
+    })
+
+    expect(result?.projectId).toBe('33333333-3333-4333-8333-333333333333')
+    expect(bodies[0]).toMatchObject({ clientProjectId: '33333333-3333-4333-8333-333333333333' })
+    for (const name of ['a.jpg', 'b.jpg']) {
+      expect(states).toContain(`${name}:uploading`)
+      expect(states[states.length - 1 - states.slice().reverse().findIndex(s => s.startsWith(name))]).toBe(`${name}:done`)
+    }
+  })
+
+  it('surfaces failed files and only re-uploads those on retry', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/marketing/events') return new Response('{}', { status: 200 })
+      const body = JSON.parse(String(init?.body || '{}'))
+      return new Response(JSON.stringify({ projectId: body.clientProjectId, snapshots: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+    const good = new File(['good'], 'good.jpg', { type: 'image/jpeg' })
+    const flaky = new File(['flaky'], 'flaky.jpg', { type: 'image/jpeg' })
+    let uploadCalls = 0
+    vi.mocked(uploadBlobWithProgress).mockImplementation(async (_supabase, path) => {
+      uploadCalls += 1
+      if (uploadCalls === 2) throw new Error('network down')
+      return publicUrlForPath(path)
+    })
+    const clientProjectId = '44444444-4444-4444-8444-444444444444'
+    const states = new Map<string, string>()
+    const hooks = { clientProjectId, onItemState: (file: File, state: { status: string }) => states.set(file.name, state.status) }
+
+    const error = await createProject({} as never, 'user-1', [good, flaky], undefined, undefined, hooks).catch(err => err)
+    expect(error).toBeInstanceOf(CreateMediaUploadError)
+    expect((error as CreateMediaUploadError).failedFiles).toHaveLength(1)
+    const failedName = (error as CreateMediaUploadError).failedFiles[0].name
+    expect(states.get(failedName)).toBe('error')
+
+    const result = await createProject({} as never, 'user-1', [good, flaky], undefined, undefined, hooks)
+    expect(result?.projectId).toBe(clientProjectId)
+    expect(uploadCalls).toBe(3)
+    expect(getPendingProjectImagesSync(clientProjectId)).toHaveLength(2)
   })
 })
