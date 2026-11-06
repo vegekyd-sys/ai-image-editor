@@ -1,21 +1,21 @@
 {
-  "reason": "The frozen refactor baseline remains unchanged. Both layered and legacy runtime prompts must honor retirement and the current Kling 4.0 contract; rollback is not permission to advertise retired APIs.",
+  "reason": "The frozen refactor baseline remains unchanged. Both layered and legacy runtime prompts must honor retirement and the current Kling 4.0 and Kling 4.0 Flash contracts; rollback is not permission to advertise retired APIs.",
   "replacements": [
     [
       "Kling 5-15s",
-      "Kling 4.0 3-30s"
+      "Kling 4.0 3-30s; Kling 4.0 Flash 3-20s"
     ],
     [
       "Kling accepts one .mp4/.mov, <=200MB, <=2K.",
-      "Kling 4.0 accepts up to 5 MP4/MOV references (exactly one for edit), each >=3s, <=30s total, <=200MB each, 720-2160px per side, 24-60fps."
+      "Kling 4.0 accepts up to 5 MP4/MOV references (exactly one for edit), each >=3s, <=30s total (Flash <=20s), <=200MB each, 720-2160px per side, 24-60fps."
     ],
     [
       "Works for Kling,",
-      "Works for Kling 4.0,"
+      "Works for Kling 4.0, Kling 4.0 Flash,"
     ],
     [
       "Kling is 5-15 seconds",
-      "Kling 4.0 is 3-30 seconds"
+      "Kling 4.0 is 3-30 seconds; Kling 4.0 Flash is 3-20 seconds (720p only)"
     ],
     [
       "A non-NSFW direct 16-30 second request defaults to Seedance 2.5.",
@@ -23,7 +23,7 @@
     ],
     [
       "Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented.",
-      "Kling 4.0 video references: each 3s or longer, <=30s combined, <=200MB each, 720-2160px per side, 24-60fps; up to 5 videos for generation or exactly one for editing."
+      "Kling 4.0 video references: each 3s or longer, <=30s combined, <=200MB each, 720-2160px per side, 24-60fps; up to 5 videos for generation or exactly one for editing. Kling 4.0 Flash: same, but <=20s combined."
     ]
   ]
 }
