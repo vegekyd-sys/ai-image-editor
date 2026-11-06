@@ -193,3 +193,8 @@ group by host, r2c, sbcache order by gb desc
 2. 应用：把本分支合入 `dev`，按仓库发布流程执行 `release:prod`（Vercel）。新产出的音频会带 `audio/*`。
 3. 两步互不依赖。先做第 1 步，已有对象立刻生效。
 4. 第二天用第 2.4 节的查询复核：「整个时段都没有补缓存」里的 wav 应该消失。
+
+**已上线（2026-11-07 00:37 CST，用户批准）**：
+- 生产 Worker version `61aad4dd-7c13-478b-a291-1fcfcbba888b`（回滚：`npx wrangler rollback c53679db-c4b7-46f3-846b-346fb1529196`）。线上冒烟：真实 octet-stream wav（3.26 MB）第 1 次 `MISS`，之后 `HIT-EDGE`，`bytes=78-` 返回 `206 HIT-R2`，content-type 保持 `application/octet-stream`，sha256 与源站一致；普通图片 `HIT-R2`、`?t=` 透传正常。
+- 应用：dev `a0985876`（含重跑的路由证据 3/3），`release:prod` 门禁 2786 条测试通过，www.makaron.app 健康检查 13/13。
+- 未验证：发布后还没有新的 run_code 音频产出，`audio/*` 写入要等下一次真实产出确认。
