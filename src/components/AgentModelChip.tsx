@@ -21,6 +21,8 @@ interface AgentModelChipProps {
   value: AgentModelPreference;
   onChange: (value: AgentModelPreference) => void;
   disabled?: boolean;
+  /** 'segment' renders as a labelled segment inside the input box action cluster. */
+  variant?: 'icon' | 'segment';
 }
 
 interface PanelPosition {
@@ -68,7 +70,7 @@ function ModelGlyph({ size = 16 }: { size?: number }) {
   );
 }
 
-export default function AgentModelChip({ value, onChange, disabled = false }: AgentModelChipProps) {
+export default function AgentModelChip({ value, onChange, disabled = false, variant = 'icon' }: AgentModelChipProps) {
   const { locale, t } = useLocale();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PanelPosition | null>(null);
@@ -362,10 +364,15 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
         title={label}
         disabled={disabled}
         onClick={(event) => { event.stopPropagation(); setOpen(current => !current); }}
-        className="mkr-create-model-icon"
+        className={variant === 'segment' ? 'mkr-action-seg' : 'mkr-create-model-icon'}
         data-active={open || value !== 'auto'}
       >
-        <ModelGlyph />
+        <ModelGlyph size={variant === 'segment' ? 14 : 16} />
+        {variant === 'segment' && (
+          <span className="mkr-action-seg-label" data-collapsible="true">
+            {value === 'auto' ? 'Auto' : selected ? t(selected.nameKey as Parameters<typeof t>[0]) : value}
+          </span>
+        )}
       </button>
 
       {open && position && createPortal(

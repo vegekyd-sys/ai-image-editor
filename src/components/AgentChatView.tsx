@@ -1864,22 +1864,6 @@ export default function AgentChatView({
               </svg>
             </button>
 
-            {/* Model selector */}
-            {onModelChange && (
-              <ModelSelector
-                preferredModel={preferredModel}
-                onModelChange={onModelChange}
-                videoAuto={videoAuto}
-                onVideoAutoChange={onVideoAutoChange}
-                videoModel={videoModel}
-                onVideoModelChange={onVideoModelChange}
-                videoResolution={videoResolution}
-                onVideoResolutionChange={onVideoResolutionChange}
-                agentModel={agentModel}
-                onAgentModelChange={onAgentModelChange}
-                onOpenChange={setModelSelectorOpen}
-              />
-            )}
 
             {/* Unified attachments — scrollable thumbnails */}
             {attachments.length > 0 && (
@@ -1950,17 +1934,41 @@ export default function AgentChatView({
 
             <UploadProgressChip items={uploadItems} hint={attachmentHint} testId="chat-attachment-status" />
 
-            {/* Skill selector — right side, before send */}
-            {skills && skills.length > 0 && onSkillChange && (
-              <SkillSelector
-                skills={skills}
-                selectedSkill={selectedSkill ?? null}
-                onSkillChange={onSkillChange}
-                onDeleteSkill={onDeleteSkill}
-                onUploadSkill={onUploadSkill}
-                installing={installingSkill}
-                onOpenChange={(isOpen) => setSkillSelectorOpen(isOpen)}
-              />
+            {/* Model · Skill read as one control next to send */}
+            {(onModelChange || (skills && skills.length > 0 && onSkillChange)) && (
+              <div className="mkr-action-cluster">
+                {/* Model selector */}
+                {onModelChange && (
+                  <ModelSelector
+                    preferredModel={preferredModel}
+                    onModelChange={onModelChange}
+                    videoAuto={videoAuto}
+                    onVideoAutoChange={onVideoAutoChange}
+                    videoModel={videoModel}
+                    onVideoModelChange={onVideoModelChange}
+                    videoResolution={videoResolution}
+                    onVideoResolutionChange={onVideoResolutionChange}
+                    agentModel={agentModel}
+                    onAgentModelChange={onAgentModelChange}
+                    onOpenChange={setModelSelectorOpen}
+                    variant="segment"
+                  />
+                )}
+                {onModelChange && skills && skills.length > 0 && onSkillChange && <span className="mkr-action-divider" aria-hidden />}
+                {/* Skill selector — right side, before send */}
+                {skills && skills.length > 0 && onSkillChange && (
+                  <SkillSelector
+                    skills={skills}
+                    selectedSkill={selectedSkill ?? null}
+                    onSkillChange={onSkillChange}
+                    onDeleteSkill={onDeleteSkill}
+                    onUploadSkill={onUploadSkill}
+                    installing={installingSkill}
+                    onOpenChange={(isOpen) => setSkillSelectorOpen(isOpen)}
+                    variant="segment"
+                  />
+                )}
+              </div>
             )}
 
             {/* Send / Stop button */}

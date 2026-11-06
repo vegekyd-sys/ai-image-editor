@@ -10,11 +10,11 @@ import { useLocale } from '@/lib/i18n';
 import type { MediaItemState } from '@/lib/upload/media-queue';
 import { PREPARE_WEIGHT, UPLOAD_ACCENT, UploadProgressChip, UploadProgressEdge, type UploadProgressItem } from '@/components/UploadProgress';
 
-function Spinner({ size = 20 }: { size?: number }) {
+function Spinner({ size = 20, color }: { size?: number; color?: string }) {
   return (
     <svg className="mkr-spin" width={size} height={size} viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="10" stroke="rgba(217,70,239,0.12)" strokeWidth="2.5" fill="none" />
-      <path fill="rgba(217,70,239,0.7)" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      <circle cx="12" cy="12" r="10" stroke={color ? 'rgba(255,255,255,0.25)' : 'rgba(217,70,239,0.12)'} strokeWidth="2.5" fill="none" />
+      <path fill={color ?? 'rgba(217,70,239,0.7)'} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
   );
 }
@@ -823,9 +823,6 @@ export default function CreateInputBox({
           />
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
-          {onAgentModelChange && (
-            <AgentModelChip value={agentModel} onChange={onAgentModelChange} disabled={creating} />
-          )}
           <div className="hide-scrollbar" onWheel={(e) => { if (e.deltaY !== 0) { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault(); } }}
             style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 4 }}>
             {isDesktop && files.length >= 2 && previews.map((preview, i) => (
@@ -847,33 +844,43 @@ export default function CreateInputBox({
             ))}
           </div>
           <UploadProgressChip items={uploadItems} testId="create-upload-status" />
-          {/* Skill selector */}
-          <SkillSelector
-            skills={skills}
-            selectedSkill={selectedSkill}
-            onSkillChange={onSkillChange}
-            onDeleteSkill={onDeleteSkill}
-            onUploadSkill={onUploadSkill}
-            installing={installingSkill}
-            overrideLabel={overrideLabel}
-            direction={skillDirection}
-          />
-          <HydrationSafeAction
-            fallbackHref={progressiveHref || undefined}
-            className="mkr-create-btn"
-            onClick={handlePrimaryActionClick}
-            disabled={creating}
-            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
-          >
-            {creating && <Spinner size={12} />}
-            {!creating && showLoginIcon && (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+          {/* Model · Skill · Create read as one control */}
+          <div className="mkr-action-cluster">
+            {onAgentModelChange && (
+              <>
+                <AgentModelChip value={agentModel} onChange={onAgentModelChange} disabled={creating} variant="segment" />
+                <span className="mkr-action-divider" aria-hidden />
+              </>
             )}
-            {!creating && !showLoginIcon && (
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            )}
-            {createLabel}
-          </HydrationSafeAction>
+            {/* Skill selector */}
+            <SkillSelector
+              skills={skills}
+              selectedSkill={selectedSkill}
+              onSkillChange={onSkillChange}
+              onDeleteSkill={onDeleteSkill}
+              onUploadSkill={onUploadSkill}
+              installing={installingSkill}
+              overrideLabel={overrideLabel}
+              direction={skillDirection}
+              variant="segment"
+            />
+            <HydrationSafeAction
+              fallbackHref={progressiveHref || undefined}
+              className="mkr-create-btn mkr-action-primary"
+              onClick={handlePrimaryActionClick}
+              disabled={creating}
+              style={{ fontSize: '0.75rem', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
+            >
+              {creating && <Spinner size={12} color="#fff" />}
+              {!creating && showLoginIcon && (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+              )}
+              {!creating && !showLoginIcon && (
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+              )}
+              {createLabel}
+            </HydrationSafeAction>
+          </div>
         </div>
       </div>
       <UploadProgressEdge items={uploadItems} />

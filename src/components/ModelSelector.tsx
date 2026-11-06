@@ -30,6 +30,8 @@ interface ModelSelectorProps {
   agentModel?: AgentModelPreference;
   onAgentModelChange?: (model: AgentModelPreference) => void;
   onOpenChange?: (open: boolean) => void;
+  /** 'segment' renders the trigger as a segment of the input box action cluster. */
+  variant?: 'icon' | 'segment';
 }
 
 const ROW_HEIGHT = 68;
@@ -466,6 +468,7 @@ export default function ModelSelector({
   agentModel = 'auto',
   onAgentModelChange,
   onOpenChange,
+  variant = 'icon',
 }: ModelSelectorProps) {
   const preferredModel = storedPreferredModel === 'auto' ? 'auto' : resolveImageModel(storedPreferredModel)!;
   const { locale, t } = useLocale();
@@ -767,8 +770,9 @@ export default function ModelSelector({
         aria-controls={popoverId}
         aria-label={`Model: ${modelLabel}. Click to open selector.`}
         onClick={() => setOpen(v => !v)}
-        className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
-        style={{
+        className={variant === 'segment' ? 'mkr-action-seg' : 'mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95'}
+        data-active={variant === 'segment' ? Boolean(hasExplicitModel || open) : undefined}
+        style={variant === 'segment' ? undefined : {
           background: hasExplicitModel || open
             ? 'linear-gradient(145deg, rgba(217,70,239,0.18), rgba(10,10,14,0.34))'
             : 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(10,10,14,0.34))',
