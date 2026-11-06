@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createProject, createProjectFromStagedMedia, CreateMediaUploadError } from '@/lib/createProject'
+import { createProject, createProjectFromStagedMedia, CreateMediaUploadError, preuploadCreateMedia } from '@/lib/createProject'
 import { uploadBlobWithProgress, uploadImage } from '@/lib/supabase/storage'
 import {
   beginCreateDraftContinuation,
@@ -433,6 +433,33 @@ describe('createProject upload flow', () => {
     const result = await createProject({} as never, 'user-1', [good, flaky], undefined, undefined, hooks)
     expect(result?.projectId).toBe(clientProjectId)
     expect(uploadCalls).toBe(3)
+    expect(getPendingProjectImagesSync(clientProjectId)).toHaveLength(2)
+  })
+
+  it('reuses uploads started at attach time when the project is created', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/marketing/events') return new Response('{}', { status: 200 })
+      const body = JSON.parse(String(init?.body || '{}'))
+      return new Response(JSON.stringify({ projectId: body.clientProjectId, snapshots: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+    let uploadCalls = 0
+    vi.mocked(uploadBlobWithProgress).mockImplementation(async (_supabase, path) => {
+      uploadCalls += 1
+      return publicUrlForPath(path)
+    })
+    const files = [new File(['x'], 'x.jpg', { type: 'image/jpeg' }), new File(['y'], 'y.jpg', { type: 'image/jpeg' })]
+    const clientProjectId = '55555555-5555-4555-8555-555555555555'
+    const states: string[] = []
+    await Promise.all(files.map(file => preuploadCreateMedia({} as never, 'user-1', clientProjectId, file, state => states.push(state.status))))
+    expect(uploadCalls).toBe(2)
+    expect(states.filter(s => s === 'done')).toHaveLength(2)
+
+    const result = await createProject({} as never, 'user-1', files, undefined, undefined, { clientProjectId })
+    expect(result?.projectId).toBe(clientProjectId)
+    expect(uploadCalls).toBe(2)
     expect(getPendingProjectImagesSync(clientProjectId)).toHaveLength(2)
   })
 })

@@ -172,7 +172,7 @@ function ProjectsPageInner() {
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [visibleProjectCount, setVisibleProjectCount] = useState(INITIAL_PROJECT_CARD_COUNT)
   const projectLoadMoreRef = useRef<HTMLDivElement | null>(null)
-  const createInput = useCreateInput()
+  const createInput = useCreateInput(user?.id)
   const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const extractedMetadataRef = useRef<import('@/types').PhotoMetadata | undefined>(undefined)

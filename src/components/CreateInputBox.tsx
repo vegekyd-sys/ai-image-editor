@@ -7,7 +7,8 @@ import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import AgentModelChip from '@/components/AgentModelChip';
 import type { AgentModelPreference } from '@/lib/agent-models';
 import { useLocale } from '@/lib/i18n';
-import { summarizeStates, type MediaItemState } from '@/lib/upload/media-queue';
+import type { MediaItemState } from '@/lib/upload/media-queue';
+import { PREPARE_WEIGHT, UploadProgress, type UploadProgressItem } from '@/components/UploadProgress';
 
 function Spinner({ size = 20 }: { size?: number }) {
   return (
@@ -219,28 +220,20 @@ export default function CreateInputBox({
   const {
     files, previews, itemStates, text, setText, creating,
     fileInputRef, cardIndex, setCardIndex, cardDragX, setCardDragX,
-    addFiles, removeFile, retryFile,
+    addFiles, removeFile, retryFile, preuploading,
   } = input;
-  const { t } = useLocale();
-  const uploadSummary = summarizeStates(itemStates);
-  const preparedCount = itemStates.filter(s => s && (s.status === 'ready' || s.status === 'done')).length;
-  const processingCount = itemStates.filter(s => s?.status === 'processing').length;
-  // Overall status line: immediate feedback the moment send is tapped, and a
-  // visible reason when the upload takes a while (esp. on phones).
-  const uploadStatusText = files.length === 0
-    ? null
-    : creating
-      ? (uploadSummary.uploading || uploadSummary.done > 0
-        ? t('upload.uploadingCount', uploadSummary.done, files.length)
-        : processingCount > 0
-          ? t('upload.processingCount', preparedCount, files.length)
-          : t('upload.preparing'))
-      : uploadSummary.failed > 0
-        ? t('upload.failedSummary', uploadSummary.failed)
-        : processingCount > 0
-          ? t('upload.processingCount', preparedCount, files.length)
-          : null;
-  const uploadStatusIsError = !creating && uploadSummary.failed > 0;
+  // One combined progress row: local compression counts as the first part of
+  // each file's upload, so users see a single "上传中 3/7 · 42%".
+  const uploadItems: UploadProgressItem[] = files.map((_, i) => {
+    const state = itemStates[i];
+    if (!state || state.status === 'done') return { status: 'done', progress: 1 };
+    if (state.status === 'error') return { status: 'error', progress: 0 };
+    if (state.status === 'uploading') return { status: 'active', progress: PREPARE_WEIGHT + (1 - PREPARE_WEIGHT) * state.progress };
+    if (state.status === 'ready') {
+      return preuploading || creating ? { status: 'active', progress: PREPARE_WEIGHT } : { status: 'done', progress: 1 };
+    }
+    return { status: 'active', progress: PREPARE_WEIGHT * (state.phase === 'transcode' ? state.progress : 0) };
+  });
 
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null);
   const mobileSwipeElRef = useRef<HTMLDivElement | null>(null);
@@ -828,20 +821,7 @@ export default function CreateInputBox({
             }}
           />
         )}
-        {uploadStatusText && (
-          <div
-            data-testid="create-upload-status"
-            role="status"
-            aria-live="polite"
-            style={{
-              padding: '0 14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              fontSize: '0.7rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums',
-              color: uploadStatusIsError ? 'rgba(248,113,113,0.95)' : 'rgba(255,255,255,0.55)',
-            }}
-          >
-            {uploadStatusText}
-          </div>
-        )}
+        <UploadProgress items={uploadItems} testId="create-upload-status" style={{ padding: '2px 14px 2px' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
           {onAgentModelChange && (
             <AgentModelChip value={agentModel} onChange={onAgentModelChange} disabled={creating} />

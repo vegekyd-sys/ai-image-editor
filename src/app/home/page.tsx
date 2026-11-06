@@ -128,7 +128,7 @@ function HomePageInner() {
   const isPreAuthIOSGuest = !FREE_MEDIA_ENABLED && isIOSAppShell && !renderUser && !!preAuthBasicMonthlyTrial
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
-  const createInput = useCreateInput()
+  const createInput = useCreateInput(user?.id)
   const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)

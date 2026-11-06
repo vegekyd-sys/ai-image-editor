@@ -1,5 +1,6 @@
 'use client';
 
+import { PREPARE_WEIGHT, UploadProgress, type UploadProgressItem } from '@/components/UploadProgress';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1828,23 +1829,18 @@ export default function AgentChatView({
             style={{ color: 'rgba(255,255,255,0.88)', caretColor: '#d946ef', maxHeight: '8rem', padding: isPanel ? '10px 14px 4px' : '12px 16px 6px' }}
           />
 
-          {(processingCount > 0 || attachments.some(a => a.status === 'error')) && (
-            <div
-              data-testid="chat-attachment-status"
-              role="status"
-              aria-live="polite"
-              className="px-4 pb-1 text-[11px] tabular-nums transition-colors"
-              style={{ color: attachments.some(a => a.status === 'error') && processingCount === 0 ? 'rgba(248,113,113,0.9)' : attachmentHint ? 'rgba(232,121,249,0.95)' : 'rgba(255,255,255,0.42)' }}
-            >
-              {processingCount > 0
-                ? (attachmentHint
-                  ? t('upload.waitForAttachments', attachments.length - processingCount, attachments.length)
-                  : (attachments.some(a => a.status === 'processing' && a.phase === 'upload')
-                    ? t('upload.uploadingCount', attachments.length - processingCount, attachments.length)
-                    : t('upload.processingCount', attachments.length - processingCount, attachments.length)))
-                : t('upload.failedSummary', attachments.filter(a => a.status === 'error').length)}
-            </div>
-          )}
+          <UploadProgress
+            testId="chat-attachment-status"
+            hint={attachmentHint}
+            style={{ padding: isPanel ? '0 14px 4px' : '0 16px 4px' }}
+            items={attachments.map((a): UploadProgressItem => {
+              if (a.status === 'ready') return { status: 'done', progress: 1 };
+              if (a.status === 'error') return { status: 'error', progress: 0 };
+              const p = a.progress ?? 0;
+              if (a.phase === 'upload') return { status: 'active', progress: PREPARE_WEIGHT + (1 - PREPARE_WEIGHT) * p };
+              return { status: 'active', progress: PREPARE_WEIGHT * (a.phase === 'transcode' ? p : 0) };
+            })}
+          />
           {/* Row 2: Toolbar — 📷 | thumbnails | flex-1 spacer | ↑ */}
           <div className="flex items-center gap-2 px-3 pb-2.5">
             {/* Image attach button */}

@@ -1,7 +1,7 @@
 'use client';
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { isHeicFile, ensureDecodableFile } from '@/lib/imageUtils';
-import { createLimiter, forgetPreparedMedia, isVideoFile, prepareMedia, type MediaItemState } from '@/lib/upload/media-queue';
+import { createLimiter, isVideoFile, prepareMedia, type MediaItemState } from '@/lib/upload/media-queue';
 
 const MAX_FILES = 10;
 
@@ -16,7 +16,13 @@ function newDraftProjectId(): string {
       (Number(c) ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (Number(c) / 4)))).toString(16));
 }
 
-export function useCreateInput() {
+/**
+ * @param userId When signed in, each attachment starts uploading to the draft
+ *   project's storage folder as soon as it is attached, so tapping create only
+ *   has to wait for whatever is still in flight. Anonymous users only prepare
+ *   locally (they upload after login via the staged-media flow).
+ */
+export function useCreateInput(userId?: string | null) {
   const [files, setFiles] = useState<File[]>([]);
   // Keyed by a per-attachment id so async poster/HEIC/progress updates land on
   // the right file even when several finish out of order.
@@ -53,9 +59,22 @@ export function useCreateInput() {
     });
   }, []);
 
+  const userIdRef = useRef(userId ?? null);
+  userIdRef.current = userId ?? null;
+
   const startPrepare = useCallback((file: File) => {
     if (file.size === 0) return; // restored-draft placeholders are already uploaded URLs
-    prepareMedia(file, state => setFileState(file, state)).catch(() => { /* surfaced via state */ });
+    const onState = (state: MediaItemState) => setFileState(file, state);
+    const uid = userIdRef.current;
+    if (!uid) {
+      prepareMedia(file, onState).catch(() => { /* surfaced via state */ });
+      return;
+    }
+    const projectId = draftProjectIdRef.current;
+    void Promise.all([import('@/lib/createProject'), import('@/lib/supabase/client')])
+      .then(([{ preuploadCreateMedia }, { createClient }]) =>
+        preuploadCreateMedia(createClient(), uid, projectId, file, onState))
+      .catch(() => { /* surfaced via state */ });
   }, [setFileState]);
 
   const addFiles = useCallback(async (newFiles: File[]) => {
@@ -119,11 +138,20 @@ export function useCreateInput() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!userId) return;
+    for (const file of filesRef.current) {
+      // HEIC originals still decoding start themselves once decoded.
+      if (!isHeicFile(file)) startPrepare(file);
+    }
+  }, [userId, startPrepare]);
+
   /** Re-run preparation for a failed attachment. */
   const retryFile = useCallback((index: number) => {
     const file = filesRef.current[index];
     if (!file) return;
-    forgetPreparedMedia(file);
+    // Failed prepare/upload entries drop themselves from their caches, so this
+    // re-runs only the failed step (a finished transcode is reused).
     startPrepare(file);
   }, [startPrepare]);
 
@@ -178,6 +206,7 @@ export function useCreateInput() {
     fileInputRef, cardIndex, setCardIndex, cardDragX, setCardDragX,
     addFiles, removeFile, retryFile, restoreDraftImages, clear, submit,
     setFileState, draftProjectIdRef, rotateDraftProjectId,
+    preuploading: Boolean(userId),
   };
 }
 

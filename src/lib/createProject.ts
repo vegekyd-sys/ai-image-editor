@@ -218,6 +218,21 @@ function persistCreateMedia(
 }
 
 /**
+ * Start uploading an attachment to the draft project's storage folder right
+ * after it is attached. `createProject` with the same `clientProjectId` joins
+ * the in-flight (or finished) upload instead of starting another one.
+ */
+export function preuploadCreateMedia(
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+  file: File,
+  onItemState?: (state: MediaItemState) => void,
+): Promise<unknown> {
+  return persistCreateMedia(supabase, userId, projectId, file, onItemState ? (_f, state) => onItemState(state) : undefined)
+}
+
+/**
  * Create a new project and stage its initial media.
  * Images are uploaded before navigation so sessionStorage only carries compact
  * permanent URLs, never large base64 payloads.
