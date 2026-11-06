@@ -738,6 +738,13 @@ export default function AgentChatView({
   useEffect(() => {
     if (processingCount === 0) setAttachmentHint(false);
   }, [processingCount]);
+  // The "sends when done" hint widens the chip and squeezes the thumbnail row
+  // on phones, so it only flashes briefly after a premature send tap.
+  useEffect(() => {
+    if (!attachmentHint) return;
+    const timer = setTimeout(() => setAttachmentHint(false), 3000);
+    return () => clearTimeout(timer);
+  }, [attachmentHint]);
   const retryAttachment = useCallback((id: string) => {
     const file = attachmentFilesRef.current.get(id);
     if (!file) return;
