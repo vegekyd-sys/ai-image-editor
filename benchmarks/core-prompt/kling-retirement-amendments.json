@@ -1,5 +1,5 @@
 {
-  "reason": "The frozen refactor baseline remains unchanged. Both layered and legacy runtime prompts must honor retirement and the current Kling 4.0 and Kling 4.0 Flash contracts; rollback is not permission to advertise retired APIs.",
+  "reason": "The frozen refactor baseline remains unchanged. Both layered and legacy runtime prompts must honor retirement and the current Kling 4.0 Kling 4.0 Flash, and Gemini Omni 1.2 contracts; rollback is not permission to advertise retired APIs.",
   "replacements": [
     [
       "Kling 5-15s",
@@ -24,6 +24,34 @@
     [
       "Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented.",
       "Kling 4.0 video references: each 3s or longer, <=30s combined, <=200MB each, 720-2160px per side, 24-60fps; up to 5 videos for generation or exactly one for editing. Kling 4.0 Flash: same, but <=20s combined."
+    ],
+    [
+      "Gemini Omni 1.1 text-to-video follows the same no-marker rule.",
+      "Gemini Omni 1.2 text-to-video follows the same no-marker rule."
+    ],
+    [
+      "Gemini Omni continues forward for 3-10s (10s by default).",
+      "Gemini Omni continues forward for 3-10s (10s by default). To change a Gemini Omni result, reference it with `video_operation: \"edit\"` and describe only the change; Makaron edits it as a follow-up turn without re-uploading."
+    ],
+    [
+      "Google Omni is 3-10 seconds.",
+      "Google Omni is 3-15 seconds."
+    ],
+    [
+      "Google Omni edit/extend accepts one source video up to 10 seconds when uploaded; a Google-generated result can continue statefully to 40 seconds cumulatively.",
+      "Google Omni edit/extend accepts one source video up to 15 seconds when uploaded; a Google-generated result is edited or continued statefully without re-upload, up to 30 seconds cumulatively."
+    ],
+    [
+      "Grok generation 1-15s; Google Omni 3-10s.",
+      "Grok generation 1-15s; Google Omni 3-15s."
+    ],
+    [
+      "Google Omni: one <=10s upload.",
+      "Google Omni: one <=15s upload."
+    ],
+    [
+      "default 10s, preserve continuity, save a new snapshot; Google results can repeat to 40s.",
+      "default 10s, preserve continuity, save a new snapshot; Google results can repeat to 30s. `video_operation: \"edit\"` on a Google result is a follow-up edit turn: describe only the change."
     ]
   ]
 }

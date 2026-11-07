@@ -863,43 +863,43 @@ describe('video model reference limits', () => {
     })).toThrow('Generation is blocked to prevent incorrect billing')
   })
 
-  it('models Gemini Omni 1.1 as a fast multi-resolution generation, edit, and reference-video extension provider', () => {
+  it('models Gemini Omni 1.2 as a fast multi-resolution generation, edit, and reference-video extension provider', () => {
     expect(normalizeVideoResolution('google-omni', 'auto')).toBe('720p')
     expect(resolveVideoGenerationRoute({ model: 'google-omni', resolution: 'auto' })).toMatchObject({
       model: 'google-omni',
       resolution: '720p',
       provider: 'google-omni',
-      providerModel: 'gemini-omni-1.1-flash',
+      providerModel: 'gemini-omni-1.2-flash',
     })
     expect(getVideoModelCapability('google-omni')).toMatchObject({
       minOutputDuration: 3,
-      maxOutputDuration: 10,
+      maxOutputDuration: 15,
       supportsVideoReference: true,
       supportsBaseVideoEdit: true,
       supportsVideoExtend: true,
       maxVideoReferences: 1,
       supportedResolutions: ['360p', '720p', '1080p', '4k'],
-      maxReferenceVideoDuration: 10.5,
+      maxReferenceVideoDuration: 15,
       maxImageReferences: 6,
     })
-    expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(102)
-    expect(estimateVideoCredits({ model: 'google-omni', resolution: '360p', durationSec: 5, imageCount: 1 })).toBe(34)
-    expect(estimateVideoCredits({ model: 'google-omni', resolution: '4k', durationSec: 5, imageCount: 1 })).toBe(305)
+    expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(70)
+    expect(estimateVideoCredits({ model: 'google-omni', resolution: '360p', durationSec: 5, imageCount: 1 })).toBe(24)
+    expect(estimateVideoCredits({ model: 'google-omni', resolution: '4k', durationSec: 5, imageCount: 1 })).toBe(209)
     expect(estimateVideoProviderCostUsd({
       model: 'google-omni',
       durationSec: 10,
       referenceVideoDurationSec: 5,
-    })).toBeCloseTo(1.0552517055)
+    })).toBeCloseTo(0.7366917055)
     expect(estimateVideoCredits({
       model: 'google-omni',
       durationSec: 10,
       referenceVideoDurationSec: 5,
-    })).toBe(212)
+    })).toBe(148)
     expect(estimateVideoCredits({
       model: 'google-omni',
       durationSec: 10,
       referenceVideoDurationSec: 10,
-    })).toBe(220)
+    })).toBe(156)
     expect(supportsNativeTextToVideo('google-omni')).toBe(true)
     expect(resolveVideoOutputDuration({
       model: 'google-omni',
@@ -928,21 +928,39 @@ describe('video model reference limits', () => {
       referenceVideoDuration: 10,
       outputDuration: 10,
     })).toContain('at most 1 reference video')
+    // 1.2: native 15s generation, but each extension adds at most 10s.
+    expect(validateVideoModelRequest({ model: 'google-omni', outputDuration: 15 })).toBeNull()
+    expect(validateVideoModelRequest({ model: 'google-omni', outputDuration: 16 })).toContain('15 seconds or less')
+    expect(validateVideoModelRequest({
+      model: 'google-omni',
+      operation: 'extend',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 10,
+      outputDuration: 12,
+    })).toContain('10 seconds or less per request')
+    expect(validateVideoModelRequest({
+      model: 'google-omni',
+      operation: 'edit',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 15,
+    })).toBeNull()
   })
 
-  it('caps stateful Google Omni continuation at 40 seconds cumulatively', async () => {
+  it('caps stateful Google Omni continuation at 30 seconds cumulatively', async () => {
     const result = await createVideo({
       script: 'Continue the final scene.',
       images: [],
       duration: 10,
-      referenceVideoDuration: 40,
+      referenceVideoDuration: 25,
       videoModel: 'google-omni',
       videoOperation: 'extend',
       previousInteractionId: 'v1_previous',
     })
 
     expect(result.success).toBe(false)
-    expect(result.message).toContain('maximum cumulative duration of 40 seconds')
+    expect(result.message).toContain('maximum cumulative duration of 30 seconds')
   })
 
   it('fails fast before calling Google Omni with more than six image references', async () => {
@@ -962,7 +980,7 @@ describe('video model reference limits', () => {
     })
 
     expect(result.success).toBe(false)
-    expect(result.message).toContain('Gemini Omni 1.1 Flash supports at most 6 reference images per request')
+    expect(result.message).toContain('Gemini Omni 1.2 Flash supports at most 6 reference images per request')
   })
 
   it('defaults public Seedance 2.5 requests to Eco while preserving explicit Native and low-level routing', () => {

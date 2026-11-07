@@ -41,7 +41,8 @@ describe('Retake interval contract', () => {
   it('keeps native-edit limits separate from the shared 15s selection ceiling',()=>{
     expect(planRetake({start:2,end:4},6,'grok')).toMatchObject({model:'grok',contextStart:2,contextEnd:4,generationDuration:2});
     expect(()=>planRetake({start:0,end:8.6},12,'grok')).toThrow('8.5');
-    expect(()=>planRetake({start:0,end:10.1},12,'google-omni')).toThrow('10 seconds');
+    expect(()=>planRetake({start:0,end:15.1},20,'google-omni')).toThrow('15 seconds');
+    expect(planRetake({start:0,end:14},20,'google-omni')).toMatchObject({generationDuration:14});
     expect(planRetake({start:2,end:4},6,'google-omni')).toMatchObject({contextStart:1.5,contextEnd:4.5,generationDuration:3,patchOffset:.5});
     expect(planRetake({start:2,end:4},6,'minimax-h3')).toMatchObject({generationDuration:4,contextStart:1,contextEnd:5});
   });

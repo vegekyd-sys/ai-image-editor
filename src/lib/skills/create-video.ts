@@ -1,5 +1,5 @@
 import { VideoProviderRejection } from '../video-provider-error'
-import { getVideoModelRetirementError, RETIRED_KLING_MESSAGE } from '../video-model-capabilities';
+import { GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS, GOOGLE_OMNI_MAX_EXTEND_SECONDS, getVideoModelRetirementError, RETIRED_KLING_MESSAGE } from '../video-model-capabilities';
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
 import type { VideoQuoteInput } from '../billing/media-pricing';
 import { getVideoModelCapability, isKling4FamilyModel, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoImageWorkflow, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
@@ -284,7 +284,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     resolution: route.resolution,
     aspectRatio,
     outputDuration: provider === 'seedance-2.5' && videoOperation === 'edit' ? -1 : duration,
-    referenceVideoDuration: previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration,
+    referenceVideoDuration: previousInteractionId && videoOperation === 'extend' ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration,
     referenceVideoMetas,
     hasVideoReference,
     videoReferenceCount: previousInteractionId ? 1 : providerVideoUrls.length,
@@ -311,10 +311,10 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: 'Google Omni can only extend forward from the end of the source video.',
     };
   }
-  if (provider === 'google-omni' && previousInteractionId && (referenceVideoDuration ?? 0) + (duration ?? 10) > 40) {
+  if (provider === 'google-omni' && previousInteractionId && videoOperation === 'extend' && (referenceVideoDuration ?? 0) + (duration ?? GOOGLE_OMNI_MAX_EXTEND_SECONDS) > GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS) {
     return {
       success: false,
-      message: 'Google Omni stateful extension supports a maximum cumulative duration of 40 seconds.',
+      message: `Google Omni stateful extension supports a maximum cumulative duration of ${GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS} seconds.`,
     };
   }
   if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'mulerouter' && route.provider !== 'minimax' && route.provider !== 'fal-sync' && provider !== 'fal-h3-max') {
@@ -477,7 +477,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       resolution: route.resolution,
       aspectRatio,
       outputDuration: provider === 'seedance-2.5' && videoOperation === 'edit' ? -1 : resolvedDuration,
-      referenceVideoDuration: billingUsage?.referenceVideoDurationSec ?? (previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration),
+      referenceVideoDuration: billingUsage?.referenceVideoDurationSec ?? (previousInteractionId && videoOperation === 'extend' ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration),
       referenceVideoMetas: resolvedReferenceVideoMetas,
       hasVideoReference,
       imageReferenceCount: filteredImages.length,

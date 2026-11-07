@@ -18,7 +18,7 @@ import { createInspectedRetakeVideoTool } from './agent-retake-tool';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL, planRetake, validateRetakeRange } from './video-retake-contract';
 import { signRetakeInspection, verifyRetakeInspection, resolveRetakeInspectionReceipt, retakeInspectionScope, retakeOutputTime, retakeInspectionProofPath } from './video-retake-inspection';
 import { RETAKE_SCENE_READING, retakePromptPlanning } from './video-retake-prompt-planning';
-import { getVideoModelRetirementError, getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS, GOOGLE_OMNI_MAX_EXTEND_SECONDS, getVideoModelRetirementError, getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
 import {
   deductCredits,
@@ -1630,12 +1630,12 @@ function createGenerateAnimationTool(
   return tool({
       description: "Submit one complete video script for rendering. Before writing the script or calling this tool, read prompts/animate.md once; it returns the full workflow, creative guide, and submission contract. Submit only after visible script confirmation, explicit direct-submit authorization in the current request, or a trusted Skill template launch supplied by the system. A skill name alone is not authorization. Native audio belongs in story_prompt, not separate audio calls. Timeline images/videos use <<<media_N>>>; external workspace assets use URL parameters. Ordinary generation/edits/extensions omit replication_contract; exact source-led replication reads skills/video-edit/SKILL.md and supplies video_intent=\"replicate\" plus measured mappings. Use the schema for arguments and the loaded submission contract for model-specific preparation, full-script submission, reference limits, variants, and continuation.",
       inputSchema: z.object({
-        story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers. Gemini Omni 1.1 and H3 Max text-to-video follow the same no-marker rule; fal H3 Turbo image-to-video uses exactly one media marker; FAL H3 Max accepts image/video/audio references. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
+        story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers. Gemini Omni 1.2 and H3 Max text-to-video follow the same no-marker rule; fal H3 Turbo image-to-video uses exactly one media marker; FAL H3 Max accepts image/video/audio references. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
         video_intent: z.enum(['generate', 'replicate']).nullish().describe('Default generate: ordinary new videos, photo animation, lookbooks, loose references, edits and extensions. Set replicate ONLY when the user wants to reproduce a supplied video\'s measured timing, action and camera with replaced content; requires replication_contract and an actual source video. Never select replicate merely to preserve a face.'),
-        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max accepts integer 5–15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling 4.0 accepts integer 3-30s in one call; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
+        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max accepts integer 5–15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling 4.0 accepts integer 3-30s in one call; Grok accepts 1-15s; Google Omni accepts 3-15s (extend adds 3-10s).'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can honor it. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive. Grok reference-to-video accepts supported fixed ratios.'),
-        model: z.string().optional().describe('Video model/provider id. Defaults to fal-h3-max at 768p. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5-eco (the default for Seedance 2.5), seedance-2.5-native (explicit native only), wan-3.0, wan-3.0-prime, kling-4 (Kling 4.0; 3–30s, 720p/1080p; text/image/video references; edit preserves source audio), kling-4-flash (Kling 4.0 Flash; faster/lower-cost, same inputs, 3–20s, 720p only, video inputs <=20s total), grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Never substitute kling-4-flash and kling-4 for each other; an explicit choice stays on that model. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Only when no model is explicitly selected, default to seedance-2.5-eco for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
-        video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. fal H3 Max supports 480p/768p/1080p (1080p uses latent refinement from 768p), default 768p. fal H3 Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
+        model: z.string().optional().describe('Video model/provider id. Defaults to fal-h3-max at 768p. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5-eco (the default for Seedance 2.5), seedance-2.5-native (explicit native only), wan-3.0, wan-3.0-prime, kling-4 (Kling 4.0; 3–30s, 720p/1080p; text/image/video references; edit preserves source audio), kling-4-flash (Kling 4.0 Flash; faster/lower-cost, same inputs, 3–20s, 720p only, video inputs <=20s total), grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Never substitute kling-4-flash and kling-4 for each other; an explicit choice stays on that model. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Only when no model is explicitly selected, default to seedance-2.5-eco for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref. For google-omni, write story_prompt in English even when the user writes another language (Google validates English only); keep only quoted spoken lines in the language to be heard.'),
+        video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. fal H3 Max supports 480p/768p/1080p (1080p uses latent refinement from 768p), default 768p. fal H3 Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.2 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, MiniMax H3, and FAL H3 Max.'),
         reference_voice_ids: z.array(z.string()).max(3).optional().describe('Grok Imagine Video 1.5 preset xAI voice ids, e.g. ["eve"] or ["eve","leo"]. Reference them as <AUDIO_0>, <AUDIO_1> in story_prompt. Do not use Audio Index labels or uploaded URLs here.'),
@@ -1856,7 +1856,7 @@ function createGenerateAnimationTool(
                   const sourceTaskId = typeof meta?.taskId === 'string' ? meta.taskId : '';
                   if (
                     videoModel === 'google-omni'
-                    && video_operation === 'extend'
+                    && (video_operation === 'extend' || video_operation === 'edit')
                     && sourceTaskId.startsWith('google-omni-')
                     && !sourceTaskId.startsWith('google-omni-job-')
                   ) {
@@ -1900,19 +1900,30 @@ function createGenerateAnimationTool(
             };
           }
           const referenceVideoDuration = totalVideoRefDuration > 0 ? totalVideoRefDuration : undefined;
+          // Omni-generated sources continue in their Google interaction lineage
+          // (no re-upload). 1.2 edits follow-up turns of clips up to 15s, and
+          // 1.2 can continue lineage created by 1.1.
           const isGoogleOmniStatefulExtend = Boolean(
             videoModel === 'google-omni'
             && video_operation === 'extend'
             && googleOmniPreviousInteractionId
             && allVideoUrls.length === 1
           );
-          if (isGoogleOmniStatefulExtend) {
-            console.log(`[generate_animation] using Google Omni stateful extension lineage from ${sourceVideoSnapshotIds[0] || 'timeline video'}`);
+          const isGoogleOmniStatefulEdit = Boolean(
+            videoModel === 'google-omni'
+            && video_operation === 'edit'
+            && googleOmniPreviousInteractionId
+            && allVideoUrls.length === 1
+            && (referenceVideoDuration ?? 0) <= getVideoModelCapability('google-omni').maxReferenceVideoDuration
+          );
+          const isGoogleOmniStateful = isGoogleOmniStatefulExtend || isGoogleOmniStatefulEdit;
+          if (isGoogleOmniStateful) {
+            console.log(`[generate_animation] using Google Omni stateful ${video_operation} lineage from ${sourceVideoSnapshotIds[0] || 'timeline video'}`);
           }
-          if (isGoogleOmniStatefulExtend && (referenceVideoDuration ?? 0) + (duration ?? 10) > 40) {
+          if (isGoogleOmniStatefulExtend && (referenceVideoDuration ?? 0) + (duration ?? GOOGLE_OMNI_MAX_EXTEND_SECONDS) > GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS) {
             return {
               success: false as const,
-              message: 'Google Omni can extend a generated video up to 40 seconds cumulatively.',
+              message: `Google Omni can extend a generated video up to ${GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS} seconds cumulatively.`,
             };
           }
           const modelError = validateVideoModelRequest({
@@ -1940,7 +1951,7 @@ function createGenerateAnimationTool(
           });
           let providerVideoRefUrl = video_ref_url;
           let providerAutoVideoUrls = autoVideoUrls;
-          if (allVideoUrls.length > 0 && ctx.userId && ctx.projectId && !isGoogleOmniStatefulExtend && !forceUpscale) {
+          if (allVideoUrls.length > 0 && ctx.userId && ctx.projectId && !isGoogleOmniStateful && !forceUpscale) {
             const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference');
             const referenceSupabase = ctx.supabase || (await import('@/lib/supabase/service')).getSupabaseAdmin();
             const prepared = await prepareProviderVideoReferences({
@@ -1956,7 +1967,7 @@ function createGenerateAnimationTool(
             providerVideoRefUrl = video_ref_url ? prepared.urls[0] : undefined;
             providerAutoVideoUrls = video_ref_url ? prepared.urls.slice(1) : prepared.urls;
           }
-          if (isGoogleOmniStatefulExtend) {
+          if (isGoogleOmniStateful) {
             providerVideoRefUrl = undefined;
             providerAutoVideoUrls = [];
           }
@@ -1979,7 +1990,7 @@ function createGenerateAnimationTool(
             audioUrls: resolvedAudioRefs.audioUrls.length ? resolvedAudioRefs.audioUrls : undefined,
             referenceVoiceIds: reference_voice_ids,
             videoOperation: video_operation,
-            previousInteractionId: isGoogleOmniStatefulExtend ? googleOmniPreviousInteractionId : undefined,
+            previousInteractionId: isGoogleOmniStateful ? googleOmniPreviousInteractionId : undefined,
             videoExtendDirection: extend_direction,
             generateAudio: generate_audio,
             contentFilter: content_filter,
@@ -2211,7 +2222,7 @@ function createGenerateAnimationTool(
           const renderTimeMessage = actualVideoModel === 'grok'
             ? 'Grok is usually around 30-40 seconds.'
             : actualVideoModel === 'google-omni'
-              ? 'Google Omni is usually around 30-70 seconds, then a short Storage handoff.'
+              ? 'Google Omni is usually around 50-100 seconds, then a short Storage handoff.'
               : actualVideoModel === 'fal-h3-max'
                 ? (createVideoInput.videoUrl || createVideoInput.videoUrls?.length
                   ? 'fal H3 Max with video references may take around 1-2 minutes; shorter references can finish in tens of seconds. Queue and saving time can vary.'
