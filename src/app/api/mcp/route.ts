@@ -129,8 +129,15 @@ async function handleMcp(req: Request): Promise<Response> {
 
     // Post-complete: deduct credits (token-based if usage available, else per-action)
     onToolComplete: auth.type === 'user' ? async (toolName, model, durationMs, usage, meta) => {
-      // Video is already reserved; analysis charges inside its shared analyzer.
-      if (['makaron_create_video', 'makaron_edit_video', 'makaron_upscale_video', 'makaron_analyze_video'].includes(toolName)) return;
+      // Analysis already debited once inside the shared analyzer. Report its
+      // actual debit in HTTP headers without settling a second time.
+      if (toolName === 'makaron_analyze_video') {
+        if (typeof meta?.prechargedCredits === 'number' && Number.isFinite(meta.prechargedCredits) && meta.prechargedCredits >= 0) {
+          creditsCharged += meta.prechargedCredits;
+        }
+        return;
+      }
+      if (['makaron_create_video', 'makaron_edit_video', 'makaron_upscale_video'].includes(toolName)) return;
       const usageSubscriptionProvider = usage?.provider === 'codex-subscription'
         || usage?.provider === 'grok-subscription'
         ? usage.provider

@@ -99,3 +99,13 @@ export async function saveDynamicCodexSubscriptionAllowedUserIds(
   if (error) throw new Error(`Unable to save Codex subscription allowlist: ${error.message}`);
   return normalized;
 }
+
+/** Google allowance is restricted to listed accounts that are currently admins. */
+export async function getGeminiSubscriptionEligibleUserIds(
+  sharedUserIds: string[], admin: SupabaseClient = getSupabaseAdmin(),
+): Promise<string[]> {
+  if (!sharedUserIds.length) return [];
+  const { data, error } = await admin.from('user_profiles').select('id').eq('is_admin', true).in('id', sharedUserIds);
+  if (error) throw error;
+  return normalizeCodexSubscriptionUserIds((data ?? []).map(profile => profile.id));
+}

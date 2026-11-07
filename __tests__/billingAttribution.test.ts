@@ -100,7 +100,7 @@ describe('billing attribution', () => {
     expect(calls[1]).not.toHaveProperty('p_run_id');
   });
 
-  it('attributes refunds and subscription usage rows to the run', async () => {
+  it.each(['codex-subscription', 'gemini-subscription'] as const)('attributes refunds and %s usage rows to the run', async provider => {
     const insert = vi.fn().mockResolvedValue({ data: null, error: null });
     mockFrom.mockImplementation((table: string) => {
       if (table === 'app_settings') return billingSettingsChain;
@@ -111,7 +111,7 @@ describe('billing attribution', () => {
 
     await runWithBillingAttribution({ runId: 'run-4', projectId: 'project-4', source: 'cli', apiKeyId: 'key-4' }, async () => {
       await refundCredits('user-1', 7, 'create_video');
-      await recordSubscriptionUsage('user-1', 'codex-subscription', 'agent', 'gpt-5.6-terra', { inputTokens: 1, outputTokens: 2 });
+      await recordSubscriptionUsage('user-1', provider, provider === 'gemini-subscription' ? 'analyze_video' : 'agent', provider === 'gemini-subscription' ? 'gemini-3.8-flash-n' : 'gpt-5.6-terra', { inputTokens: 1, outputTokens: 2 });
     });
 
     expect(rpcCalls('refund_credits_and_log')[0]).toMatchObject({

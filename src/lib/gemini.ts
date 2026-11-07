@@ -1457,7 +1457,7 @@ async function* parseIncrementalTipsFromStream(
   } catch { /* final parse failed — partial tips remain */ }
 }
 
-// ─── Video Analysis via Gemini 3.0 Flash ──────────────────────────────────────
+// ─── Image and Video Understanding via Gemini Flash ──────────────────────────────────────
 
 export interface LocateFrameInVideoResult {
   verdict: 'located' | 'multiple_candidates' | 'not_found' | 'uncertain';
@@ -1533,8 +1533,6 @@ export async function verifyFrameImageMatch(
   question?: string,
   userId?: string,
 ): Promise<FrameMatchVerification> {
-  const ai = getAI();
-  const model = 'gemini-3-flash-preview';
   const screenshot = await ensureBase64Server(screenshotImage);
   const candidate = await ensureBase64Server(candidateFrameImage);
   const screenshotMime = screenshot.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
@@ -1561,22 +1559,12 @@ Return strict JSON only:
   "concerns": ["uncertainty notes"]
 }`;
 
-  const result = await ai.models.generateContent({
-    model,
-    contents: [{ role: 'user', parts: [
-      { inlineData: { mimeType: screenshotMime, data: screenshotBase64 } },
-      { inlineData: { mimeType: candidateMime, data: candidateBase64 } },
-      { text: prompt },
-    ] }],
+  const { generateFlashUnderstanding } = await import('./flash-understanding');
+  const text = await generateFlashUnderstanding({
+    operation: 'makaron_frame_verify', userId, question: prompt,
+    images: [{ mimeType: screenshotMime, data: screenshotBase64 }, { mimeType: candidateMime, data: candidateBase64 }],
   });
-  const usage = result.usageMetadata;
-  if (usage && userId) {
-    import('./billing/credits').then(({ deductByTokens }) =>
-      deductByTokens(userId, 'analyze_video', model, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0)
-        .catch(e => console.error('[billing] frame verification deduct error:', e))
-    );
-  }
-  return parseFrameMatchVerification(result.text || '');
+  return parseFrameMatchVerification(text);
 }
 
 export async function locateFrameInVideoContent(
@@ -1585,9 +1573,6 @@ export async function locateFrameInVideoContent(
   question?: string,
   userId?: string,
 ): Promise<LocateFrameInVideoResult> {
-  console.log(`[locateFrameInVideoContent] video=${videoUrl.substring(0, 100)} image=${image.substring(0, 80)}`);
-  const ai = getAI();
-  const model = 'gemini-3-flash-preview';
   const resolvedImage = await ensureBase64Server(image);
   const imageMime = resolvedImage.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
   const imageBase64 = resolvedImage.replace(/^data:image\/\w+;base64,/, '');
@@ -1625,37 +1610,12 @@ Return strict JSON only:
   "concerns": ["short uncertainty or ambiguity notes"]
 }`;
 
-  const billUsage = (inputTokens: number, outputTokens: number) => {
-    if (!userId) return;
-    import('./billing/credits').then(({ deductByTokens }) =>
-      deductByTokens(userId, 'analyze_video', model, inputTokens, outputTokens)
-        .catch(e => console.error('[billing] locate_frame deduct error:', e))
-    );
-  };
-
-  const run = async (videoPart: { fileData: { mimeType: string; fileUri: string } } | { inlineData: { mimeType: string; data: string } }) => {
-    const result = await ai.models.generateContent({
-      model,
-      contents: [{ role: 'user', parts: [
-        { inlineData: { mimeType: imageMime, data: imageBase64 } },
-        videoPart,
-        { text: prompt },
-      ] }],
-    });
-    const usage = result.usageMetadata;
-    if (usage) billUsage(usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
-    return parseLocateFrameResult(result.text || '');
-  };
-
-  try {
-    return await run({ fileData: { mimeType: 'video/mp4', fileUri: videoUrl } });
-  } catch {
-    const res = await fetch(videoUrl);
-    if (!res.ok) throw new Error(`Failed to fetch video: ${res.status}`);
-    const buffer = await res.arrayBuffer();
-    if (buffer.byteLength > 38_500_000) throw new Error('Video too large for locate_frame (>38.5MB). Use FFmpeg frame fallback on candidate windows instead.');
-    return await run({ inlineData: { mimeType: 'video/mp4', data: Buffer.from(buffer).toString('base64') } });
-  }
+  const { generateFlashUnderstanding } = await import('./flash-understanding');
+  const text = await generateFlashUnderstanding({
+    operation: 'makaron_frame_locate', userId, videoUrl, question: prompt,
+    images: [{ mimeType: imageMime, data: imageBase64 }],
+  });
+  return parseLocateFrameResult(text);
 }
 
 export async function analyzeVideoContentWithUsage(
@@ -1663,17 +1623,28 @@ export async function analyzeVideoContentWithUsage(
   question?: string,
   userId?: string,
 ) {
-  const { analyzeVideoWithProvider } = await import('./video-analysis');
-  const result = await analyzeVideoWithProvider(videoUrl, question);
+  const { analyzeVideoWithRouting } = await import('./gemini-video-subscription');
+  const result = await analyzeVideoWithRouting(videoUrl, question, userId);
   if (userId) {
-    const { deductByTokens } = await import('./billing/credits');
+    const { deductByTokens, recordSubscriptionUsage } = await import('./billing/credits');
     const usage = result.usage;
-    await deductByTokens(
+    if (result.provider === 'gemini-subscription') {
+      // This describes Makaron credits, not a claim about the subscription's
+      // purchase price or Cloud Run / storage charges.
+      result.creditsCharged = 0;
+      await recordSubscriptionUsage(userId, 'gemini-subscription', 'analyze_video', result.usedModel, {
+        inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+        cacheReadTokens: usage.cacheReadTokens, durationMs: result.elapsedMs,
+      }).catch(() => console.error('[billing] analyze_video subscription usage logging failed'));
+    } else {
+      const debit = await deductByTokens(
       userId, 'analyze_video', usage.modelId,
       usage.inputTokens - usage.cacheReadTokens, usage.outputTokens,
       result.elapsedMs, undefined,
       { cacheRead: usage.cacheReadTokens, cacheWrite: 0 },
-    ).catch(error => console.error('[billing] analyze_video deduct error:', error));
+      ).catch(error => console.error('[billing] analyze_video deduct error:', error));
+      if (debit) result.creditsCharged = debit.charged;
+    }
   }
   return result;
 }
@@ -1696,8 +1667,6 @@ export async function analyzeImageContent(
   question?: string,
   userId?: string,
 ): Promise<string> {
-  const ai = getAI();
-  const model = 'gemini-3-flash-preview';
   const resolved = await ensureBase64Server(image);
   const mimeType = resolved.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
   const base64 = resolved.replace(/^data:image\/[^;]+;base64,/, '');
@@ -1705,24 +1674,9 @@ export async function analyzeImageContent(
     ? `Analyze this image for an editing agent. Focus on: ${question.trim()} Respond in English only.`
     : 'Analyze this image in detail for a photo editing agent. Describe subjects, identities and distinguishing features, composition, objects, text, lighting, mood, and any details that matter for an edit. Respond in English only.';
 
-  const result = await ai.models.generateContent({
-    model,
-    contents: [{ role: 'user', parts: [
-      { inlineData: { mimeType, data: base64 } },
-      { text: prompt },
-    ] }],
+  const { generateFlashUnderstanding } = await import('./flash-understanding');
+  return generateFlashUnderstanding({
+    operation: 'makaron_image_analysis', userId, question: prompt,
+    images: [{ mimeType, data: base64 }],
   });
-  const usage = result.usageMetadata;
-  if (usage && userId) {
-    import('./billing/credits').then(({ deductByTokens }) =>
-      deductByTokens(
-        userId,
-        'analyze_image',
-        model,
-        usage.promptTokenCount || 0,
-        usage.candidatesTokenCount || 0,
-      ).catch(e => console.error('[billing] analyze_image deduct error:', e))
-    );
-  }
-  return result.text || '';
 }

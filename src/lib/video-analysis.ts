@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { probeMP4Duration } from './mp4-probe';
+import { probeMP4Duration, probeMP4HasAudio } from './mp4-probe';
 
 /** Video understanding uses its own model and config; the shared SDK only uploads large fallback files. */
 export const VIDEO_ANALYSIS_MODEL = 'gemini-3.8-flash';
@@ -17,13 +17,24 @@ export interface VideoAnalysisUsage {
 export interface VideoAnalysisResult {
   analysis: string;
   usedModel: string;
+  requestedModel: string;
+  /** Kept separate from the request alias; absence is not proof of model identity. */
+  reportedModel?: string;
+  provider: 'google-api' | 'gemini-subscription';
+  billing: 'api' | 'subscription-allowance';
+  fallbackReason?: string;
+  /** Actual Makaron debit performed by the shared analyzer, never an estimate. */
+  creditsCharged?: number;
+  subscriptionPaidCreditStatus?: 'not_reported' | 'reported_zero';
+  subscriptionConsumedCredits?: number | null;
   processing: VideoProcessing;
   thinking: 'low';
   elapsedMs: number;
-  transport: 'url' | 'inline' | 'file';
+  transport: 'url' | 'inline' | 'file' | 'cloud-url';
   processingCalls: number;
   usage: VideoAnalysisUsage;
   sourceDurationSeconds?: number;
+  timingsMs?: Record<string, number>;
 }
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
@@ -49,26 +60,27 @@ export function normalizeVideoUsage(
 }
 
 export async function analyzeVideoWithProvider(
-  videoUrl: string, question?: string,
+  videoUrl: string, question?: string, options?: { signal?: AbortSignal; images?: { mimeType: string; data: string }[]; processing?: VideoProcessing },
 ): Promise<VideoAnalysisResult> {
   const source = new URL(videoUrl);
   if (!['http:', 'https:'].includes(source.protocol)) throw new Error('Video analysis requires an HTTP(S) URL.');
-  const key = process.env.GOOGLE_API_KEY;
+  const key = process.env.VIDEO_ANALYSIS_GOOGLE_API_KEY?.trim() || process.env.GOOGLE_API_KEY;
   if (!key) throw new Error('GOOGLE_API_KEY is not configured.');
   const model = process.env.VIDEO_ANALYSIS_MODEL?.trim() || VIDEO_ANALYSIS_MODEL;
-  const configuredMode = process.env.VIDEO_ANALYSIS_PROCESSING || 'static';
+  const configuredMode = options?.processing || process.env.VIDEO_ANALYSIS_PROCESSING || 'static';
   if (configuredMode !== 'static' && configuredMode !== 'agentic') throw new Error('Invalid VIDEO_ANALYSIS_PROCESSING.');
   const processing: VideoProcessing = configuredMode;
   const prompt = question || 'Describe this video in detail: scenes, actions, pacing, visual style, audio/dialogue if any.';
   const mimeType = /\.mov$/i.test(source.pathname) ? 'video/quicktime' : /\.webm$/i.test(source.pathname) ? 'video/webm' : 'video/mp4';
   const startedAt = Date.now();
-  const signal = AbortSignal.timeout(120_000); // includes bounded download and inference
+  const signal = options?.signal
+    ? AbortSignal.any([options.signal, AbortSignal.timeout(120_000)])
+    : AbortSignal.timeout(120_000); // includes bounded download and inference
   let sourceDurationSeconds: number | undefined;
+  let sourceHasAudio: boolean | undefined;
 
   async function run(data?: string, uploadedUri?: string) {
-    const analysisPrompt = sourceDurationSeconds
-      ? `Measured container duration: ${sourceDurationSeconds} seconds. Inspect the complete timeline through its final frame; do not infer duration from sampled timestamps. Compare opening and ending framing before calling a camera static.\n\n${prompt}`
-      : prompt;
+    const analysisPrompt = buildVideoAnalysisPrompt(prompt, sourceDurationSeconds, sourceHasAudio);
     const body = processing === 'agentic' ? {
       model, store: false,
       input: [
@@ -78,6 +90,7 @@ export async function analyzeVideoWithProvider(
       generation_config: { thinking_level: 'low' },
     } : {
       contents: [{ role: 'user', parts: [
+        ...(options?.images || []).map(inlineData => ({ inlineData })),
         data ? { inlineData: { mimeType, data } } : { fileData: { mimeType, fileUri: uploadedUri || videoUrl } },
         { text: analysisPrompt },
       ] }],
@@ -129,6 +142,7 @@ export async function analyzeVideoWithProvider(
     }
     const bytes = Buffer.concat(chunks);
     sourceDurationSeconds = probeMP4Duration(bytes);
+    sourceHasAudio = probeMP4HasAudio(bytes);
     if (size <= INLINE_LIMIT) {
       transport = 'inline';
       result = await run(bytes.toString('base64'));
@@ -176,7 +190,19 @@ export async function analyzeVideoWithProvider(
   const rawUsage = processing === 'agentic' ? result.usage : result.usageMetadata;
   if (!rawUsage) throw new Error('Video analysis returned no usage metadata.');
   const usage = normalizeVideoUsage(rawUsage, model, processing);
+  const reportedModel = typeof result.modelVersion === 'string' ? result.modelVersion : undefined;
   const elapsedMs = Date.now() - startedAt;
   console.info(`[video-analysis] model=${model} processing=${processing} thinking=low transport=${transport} durationMs=${elapsedMs} input=${usage.inputTokens} output=${usage.outputTokens} cache=${usage.cacheReadTokens} processingCalls=${processingCalls}`);
-  return { analysis, usedModel: model, processing, thinking: 'low', elapsedMs, transport, processingCalls, usage, sourceDurationSeconds };
+  return {
+    analysis, usedModel: reportedModel || model, requestedModel: model, reportedModel,
+    provider: 'google-api', billing: 'api', processing, thinking: 'low', elapsedMs,
+    transport, processingCalls, usage, sourceDurationSeconds,
+  };
+}
+
+/** Kept byte-for-byte equivalent to the Cloud worker recipe. */
+export function buildVideoAnalysisPrompt(question: string, duration?: number, hasAudio?: boolean): string {
+  let prefix = duration ? `Measured container duration: ${duration} seconds. Inspect the complete timeline through its final frame; do not infer duration from sampled timestamps. Compare opening and ending framing before calling a camera static.\n\n` : '';
+  if (hasAudio === false) prefix += 'The source container has no audio track. Do not invent music, speech, or sound effects.\n\n';
+  return prefix + question;
 }

@@ -41,7 +41,7 @@ export async function isBillingEnabled(): Promise<boolean> {
 
 export function invalidateBillingCache() { _billingEnabled = null }
 
-export type SubscriptionUsageProvider = 'codex-subscription' | 'grok-subscription'
+export type SubscriptionUsageProvider = 'codex-subscription' | 'grok-subscription' | 'gemini-subscription'
 
 function subscriptionUsageModelId(modelId: string, provider: SubscriptionUsageProvider): string {
   const normalized = modelId.trim() || 'unknown'
