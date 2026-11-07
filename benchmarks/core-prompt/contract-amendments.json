@@ -31,7 +31,7 @@
   },
   "src/lib/prompts/audio.md": {
     "baselineSha256": "055fa794791fb1ae3aba28de7e871c4557c31328c9d1bd6f2e730051c801d0d6",
-    "sha256": "4de820e1f6505778b4fd84d2e7243eebc92f6484154803ec70751ea3079cd61e",
-    "reason": "User approved on 2026-11-06/07: instrumental-only BGM (kind=music, no audio/image references) routes to Suno V6 with 2 takes; everything else stays on the Seed Audio default. Added the Instrumental BGM (Suno V6) brief and positive guidance that speech plus music for one deliverable is one kind=mixed Seed Audio generation (no runtime guard). Seed Audio direction rules are unchanged. Regression: sunoMusicRouting.test.ts, agentAudioIndex.test.ts, agentPromptPolicy.test.ts; real Agent runs: pure BGM -> Suno, narration+BGM -> one mixed Seed generation, 45s Chiang Mai vlog rebuilt with Suno BGM."
+    "sha256": "c65b491b0eb1b8fd4d99afb0b4f6fd12551b3a667e9438bc6df9154521763855",
+    "reason": "User decision 2026-11-07: Suno V6 BGM is switched off (its duration is only a soft target; slow styles asked for 15s returned 90+ seconds), so every audio kind uses Seed Audio again. Removed the Instrumental BGM (Suno V6) brief and Suno routing lines; kept the positive guidance that speech plus music for one deliverable is one kind=mixed generation. Seed Audio direction rules are unchanged. Regression: sunoMusicRouting.test.ts, audioModelCapabilities.test.ts, agentPromptPolicy.test.ts, explainerVideoSkill.test.ts."
   }
 }

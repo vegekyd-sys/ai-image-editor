@@ -20,9 +20,9 @@ export const SEED_AUDIO_AGENT_PROMPT_MAX_CHARS = 1250
 /**
  * Single entry for every generated audio asset (Agent, MCP, HTTP).
  *
- * Routing lives in `resolveAudioRoute`: instrumental BGM goes to Suno V6,
- * everything else (speech, songs with vocals, SFX, mixed soundtracks,
- * referenced/conditioned audio) stays on the Seed Audio default.
+ * Routing lives in `resolveAudioRoute`. Suno V6 BGM is switched off by default
+ * (`isSunoBgmEnabled`), so every request uses Seed Audio; when enabled,
+ * instrumental BGM goes to Suno V6 and everything else stays on Seed Audio.
  */
 export interface CreateAudioInput {
   prompt?: string

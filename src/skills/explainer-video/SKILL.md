@@ -252,9 +252,7 @@ explicitly asks for silent, text-only, or voice-only output.
 - Use the `kind` field rather than searching for separate voiceover or music
   tools. A soundtrack with narration plus music works best as one Seed Audio
   `kind: "mixed"` generation, which keeps voice and music in one paid mix.
-  Standalone instrumental BGM (`kind: "music"`) is routed to Suno V6
-  automatically for pieces without narration; all other standalone audio
-  generation uses Seed Audio.
+  All new standalone audio generation uses Seed Audio.
 - Audio Index markers such as `<<<audio_N>>>` are labels, not playable URLs.
   Use the returned public `audioUrl` directly in Remotion `<Audio src={...}>`
   props/code. Never put `<<<audio_N>>>` inside composition props or `<Audio>`.

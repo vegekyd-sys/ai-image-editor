@@ -13,7 +13,7 @@ vi.mock('@/lib/sunoapi', async (importOriginal) => {
   return { ...actual, generateSunoMusic: mocks.suno }
 })
 
-import { resolveAudioRoute, validateAudioRequest } from '@/lib/audio-model-capabilities'
+import { formatAudioCapabilitiesForAgent, isSunoBgmEnabled, resolveAudioRoute, validateAudioRequest } from '@/lib/audio-model-capabilities'
 import { buildSunoGenerateBody, mapSunoRecord } from '@/lib/sunoapi'
 import { createAudio } from '@/lib/skills/create-audio'
 import { formatGeneratedAudioForCui } from '@/lib/agent-tools'
@@ -52,10 +52,29 @@ function fakeSupabase(lastTrackIndex: number | null) {
   return { client, upserts }
 }
 
-describe('audio routing: only instrumental BGM leaves Seed Audio', () => {
+describe('audio routing: Suno V6 BGM is off by default', () => {
   const originalKey = process.env.SUNOAPI_KEY
-  beforeEach(() => { process.env.SUNOAPI_KEY = 'test-key' })
-  afterEach(() => { process.env.SUNOAPI_KEY = originalKey })
+  const originalFlag = process.env.SUNO_BGM_ENABLED
+  beforeEach(() => { process.env.SUNOAPI_KEY = 'test-key'; delete process.env.SUNO_BGM_ENABLED })
+  afterEach(() => { process.env.SUNOAPI_KEY = originalKey; process.env.SUNO_BGM_ENABLED = originalFlag })
+
+  it('routes instrumental BGM, and even an explicit Suno request, to Seed Audio', () => {
+    expect(isSunoBgmEnabled()).toBe(false)
+    expect(resolveAudioRoute({ kind: 'music' })).toMatchObject({ modelId: 'evolink-seed-audio' })
+    expect(resolveAudioRoute({ kind: 'music', model: 'suno-v6' })).toMatchObject({ modelId: 'evolink-seed-audio' })
+    expect(resolveAudioRoute({ kind: 'mixed', model: 'suno' })).toMatchObject({ modelId: 'evolink-seed-audio' })
+  })
+
+  it('hides Suno from the Agent capability card', () => {
+    expect(formatAudioCapabilitiesForAgent()).not.toContain('suno-v6')
+  })
+})
+
+describe('audio routing with SUNO_BGM_ENABLED=true: only instrumental BGM leaves Seed Audio', () => {
+  const originalKey = process.env.SUNOAPI_KEY
+  const originalFlag = process.env.SUNO_BGM_ENABLED
+  beforeEach(() => { process.env.SUNOAPI_KEY = 'test-key'; process.env.SUNO_BGM_ENABLED = 'true' })
+  afterEach(() => { process.env.SUNOAPI_KEY = originalKey; process.env.SUNO_BGM_ENABLED = originalFlag })
 
   it('routes instrumental kind=music to Suno V6 with a Seed Audio fallback', () => {
     expect(resolveAudioRoute({ kind: 'music' })).toMatchObject({ modelId: 'suno-v6', fallbackModelId: 'evolink-seed-audio' })
@@ -124,8 +143,10 @@ describe('sunoapi adapter', () => {
 
 describe('createAudio provider dispatch and takes', () => {
   const originalKey = process.env.SUNOAPI_KEY
+  const originalFlag = process.env.SUNO_BGM_ENABLED
   beforeEach(() => {
     process.env.SUNOAPI_KEY = 'test-key'
+    process.env.SUNO_BGM_ENABLED = 'true'
     mocks.seed.mockReset().mockResolvedValue(seedResult)
     mocks.suno.mockReset().mockResolvedValue(sunoResult)
     mocks.upload.mockReset().mockImplementation(async (_s, _u, _p, taskId, trackIndex, _b, format) => `https://cdn.example/${taskId}-${trackIndex}.${format}`)
@@ -133,6 +154,7 @@ describe('createAudio provider dispatch and takes', () => {
   })
   afterEach(() => {
     process.env.SUNOAPI_KEY = originalKey
+    process.env.SUNO_BGM_ENABLED = originalFlag
     vi.unstubAllGlobals()
   })
 
