@@ -1,5 +1,5 @@
 {
-  "routingFingerprint": "7ad9452a42b1f08c6bb45cd9abc1fd63bf063c2a08934c1effdcb8da07822a99",
+  "routingFingerprint": "2cc3154fba9f83c51aa622a8b75c2f2b8e425fc0dda12da67d6b5d6383b8ab3f",
   "catalogRevision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
   "kind": "controlled-live-natural-language-routing",
   "model": "gpt-6-luna",
@@ -36,22 +36,22 @@
           "executed": true
         }
       ],
-      "text": "我会先读取长视频导演 Skill，确认 60 秒分段规划流程；再按其要求读取人物锚点与逐段分镜 Skill。只做规划，不查看素材像素，也不会生成或写入任何内容。**选择的内部 Skill**\n- **long-video-director**：60 秒超出单次视频生成时长，适合分段导演、跨段衔接与一致性管理；它负责把故事、锚点、分段和分镜按审批节点串起来。\n- **anchor（long-video-anchor）**：为人物甲、人物乙建立可复用的人物视觉锚点，后续再按故事需要规划场景或道具锚点。\n- **storyboard（long-video-storyboard）**：在锚点和导演节拍板确认后，为每段制作独立分镜图，维持人物与视觉风格一致。\n\n**简短制作计划**：后续先确定故事方向与画幅，再规划人物/场景/道具锚点；将 60 秒初步拆为约 **4 段 × 15 秒**，制定段间衔接和导演节拍板；随后逐段制作并检查分镜，最后编写生成脚本并等待你确认。本轮不分析两张参考图，也不生成或写入任何素材。",
+      "text": "我会先按“长视频导演”流程核对长片分段与一致性要求，并读取人物锚点、分镜相关 Skill；本轮只做规划，不分析素材，也不触发生成或项目操作。本片适用 **long-video-director**：60 秒超出单段时长，需分段规划、处理段间衔接并保持人物一致；后续会按流程调用 **long-video-anchor** 制作人物/场景锚点，再用 **long-video-storyboard** 为每段制作分镜。本轮未查看两张参考图，也不对人物外观作判断。\n\n制作计划：先确定故事方向；再规划至少两位人物锚点及必要的场景、道具锚点；随后设计 **4 段、每段约 15 秒**的剧情与衔接，逐段完成导演节拍板和分镜；最后整理生成脚本，并在确认后再进入视频制作。画幅暂按 **16:9** 规划。\n\n可选故事方向：**误会后联手解困**（温暖悬念）；**秘密交接与意外反转**（轻悬疑）；**末班车上的相遇与告别**（情感短片）。你想选哪一个，或希望我调整方向与画幅？",
       "usage": {
-        "inputTokens": 112389,
+        "inputTokens": 110917,
         "inputTokenDetails": {
           "noCacheTokens": 12,
-          "cacheReadTokens": 81954,
-          "cacheWriteTokens": 30423
+          "cacheReadTokens": 80906,
+          "cacheWriteTokens": 29999
         },
-        "outputTokens": 1056,
+        "outputTokens": 1138,
         "outputTokenDetails": {
-          "textTokens": 391,
-          "reasoningTokens": 665
+          "textTokens": 390,
+          "reasoningTokens": 748
         },
-        "totalTokens": 113445
+        "totalTokens": 112055
       },
-      "durationMs": 30352
+      "durationMs": 55784
     },
     {
       "id": "natural-reference-replication",
@@ -88,22 +88,22 @@
           "executed": true
         }
       ],
-      "text": "我会先读取适用于“按参考片镜头节拍复刻并替换人物”的视频编辑 Skill；本轮只做规划，不分析素材或启动生成。这属于 **replication（复刻）**，不是保留原片像素的局部替换：原片将作为镜头结构与节拍依据，替换人物由参考图提供。我会再读取该 Skill 指定的复刻流程文件，然后给出简短计划并停下。",
+      "text": "我会先读取负责“按原片镜头结构复刻并替换人物”的内部 Skill；本轮只做路由与简短计划，不检查素材，也不启动生成。已确定适用的是 `video-edit` 的 **replication（复刻）** 路径：原片的镜头、动作与节拍作为结构约束，替换人物属于内容替换。再读取该路径的制作协议，以确保计划符合其内部要求；仍不会分析素材或启动生成。复刻协议把后续路线指向直接参考视频复刻，并要求用镜头蓝图约束结构、再按相似度标准验收。我只读取这些计划所需的 Skill 参考文件，不会执行其中的媒体检查或生成步骤。",
       "usage": {
-        "inputTokens": 142362,
+        "inputTokens": 141436,
         "inputTokenDetails": {
           "noCacheTokens": 15,
-          "cacheReadTokens": 135765,
-          "cacheWriteTokens": 6582
+          "cacheReadTokens": 134624,
+          "cacheWriteTokens": 6797
         },
-        "outputTokens": 902,
+        "outputTokens": 1117,
         "outputTokenDetails": {
-          "textTokens": 256,
-          "reasoningTokens": 646
+          "textTokens": 324,
+          "reasoningTokens": 793
         },
-        "totalTokens": 143264
+        "totalTokens": 142553
       },
-      "durationMs": 29664
+      "durationMs": 59067
     },
     {
       "id": "natural-product-explainer",
@@ -120,22 +120,22 @@
           "executed": true
         }
       ],
-      "text": "我会先读取最适用的 explainer-video Skill，仅据此给出简短制作计划；本轮不会生成或处理任何媒体。**选择 Skill：explainer-video（产品讲解视频）**。它适合面向新手解释产品运作方式，并支持中文旁白、字幕与直观的动态演示。\n\n**简短计划（30秒）：**0–4秒点出用户需求；4–9秒说明产品是什么；9–22秒用简洁步骤演示工作流程；22–27秒给出首次使用场景；27–30秒回顾并收尾。旁白与字幕同步，画面以清晰易懂的产品示意为主。具体讲解内容需在后续根据产品名称和核心功能确定；本轮未生成或处理媒体。",
+      "text": "我会先读取最适用的「explainer-video」Skill，仅用于确认工作流；随后只给出 Skill 选择理由和简短制作计划，不启动任何生成或项目操作。**选择 Skill：`explainer-video`（产品讲解视频）**——它适用于面向新用户、带旁白与字幕的产品或流程讲解；30 秒时长也适合简洁演示。\n\n**简短计划：**0–4 秒说明产品能做什么；4–10 秒呈现核心用途；10–22 秒按步骤讲清使用流程；22–27 秒展示使用结果；27–30 秒快速回顾。旁白与中文字幕按内容节奏同步。当前未提供产品信息，正式制作时需据此填入准确的功能与步骤；本轮未生成媒体或写入项目。",
       "usage": {
-        "inputTokens": 56129,
+        "inputTokens": 55462,
         "inputTokenDetails": {
           "noCacheTokens": 6,
-          "cacheReadTokens": 50009,
-          "cacheWriteTokens": 6114
+          "cacheReadTokens": 49467,
+          "cacheWriteTokens": 5989
         },
-        "outputTokens": 653,
+        "outputTokens": 587,
         "outputTokenDetails": {
-          "textTokens": 218,
-          "reasoningTokens": 435
+          "textTokens": 223,
+          "reasoningTokens": 364
         },
-        "totalTokens": 56782
+        "totalTokens": 56049
       },
-      "durationMs": 14208
+      "durationMs": 38928
     }
   ]
 }
