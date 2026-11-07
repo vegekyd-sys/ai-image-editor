@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { ModelMessage } from 'ai';
 import {
   buildRecoverablePreflightInstruction,
@@ -11,8 +11,13 @@ import {
   isGrokSubscriptionTerminalFailure,
   isSafeToEnterSubscriptionApiFallback,
   isSafeToEnterCodexSubscriptionApiFallback,
+  isProviderEndpointUnreachable,
   isRetryableProviderOutage,
+  isSubscriptionRelayRecentlyUnreachable,
   MAX_SAME_PROVIDER_ATTEMPTS,
+  MAX_UNREACHABLE_SUBSCRIPTION_ATTEMPTS,
+  noteSubscriptionRelayAttempt,
+  resetSubscriptionRelayReachabilityForTests,
   shouldFailoverAzureGPT56ToOpenRouter,
   shouldFailoverCodexSubscriptionToApi,
   shouldFailoverGrokSubscriptionToApi,
@@ -336,6 +341,72 @@ describe('durable Agent execution', () => {
       retryableFailureCount: MAX_SAME_PROVIDER_ATTEMPTS,
       latestFailureDetail: 'temporary HTTP 503',
     })).toBe(true);
+  });
+
+  describe('unreachable subscription relay', () => {
+    const deadTunnel = 'Cannot connect to API: Client network socket disconnected before secure TLS connection was established';
+    afterEach(() => resetSubscriptionRelayReachabilityForTests());
+
+    it('classifies connection-establishment failures separately from mid-stream drops', () => {
+      expect(isProviderEndpointUnreachable(deadTunnel)).toBe(true);
+      expect(isProviderEndpointUnreachable('getaddrinfo ENOTFOUND old-name.trycloudflare.com')).toBe(true);
+      expect(isProviderEndpointUnreachable('connect ECONNREFUSED 127.0.0.1:8787')).toBe(true);
+      expect(isProviderEndpointUnreachable('error code: 1033')).toBe(true);
+      expect(isProviderEndpointUnreachable('ECONNRESET: socket hang up')).toBe(false);
+      expect(isProviderEndpointUnreachable('temporary HTTP 503')).toBe(false);
+      // Unreachable failures still count toward the generic retry budget.
+      expect(isRetryableProviderOutage('getaddrinfo ENOTFOUND old-name.trycloudflare.com')).toBe(true);
+    });
+
+    it('fails over after one retry instead of the full same-provider budget', () => {
+      for (const provider of ['codex-subscription', 'grok-subscription'] as const) {
+        const decide = provider === 'codex-subscription'
+          ? shouldFailoverCodexSubscriptionToApi
+          : shouldFailoverGrokSubscriptionToApi;
+        const base = { requestedProvider: provider, hasApiFallback: true, previousProviderFailover: false };
+        expect(decide({ ...base, retryableFailureCount: 1, latestFailureDetail: deadTunnel })).toBe(false);
+        expect(decide({
+          ...base,
+          retryableFailureCount: MAX_UNREACHABLE_SUBSCRIPTION_ATTEMPTS,
+          latestFailureDetail: deadTunnel,
+        })).toBe(true);
+        expect(decide({
+          ...base,
+          hasApiFallback: false,
+          retryableFailureCount: MAX_UNREACHABLE_SUBSCRIPTION_ATTEMPTS,
+          latestFailureDetail: deadTunnel,
+        })).toBe(false);
+        // A relay that answers but drops mid-stream keeps the full retry budget.
+        expect(decide({
+          ...base,
+          retryableFailureCount: MAX_UNREACHABLE_SUBSCRIPTION_ATTEMPTS,
+          latestFailureDetail: 'ECONNRESET: socket hang up',
+        })).toBe(false);
+      }
+    });
+
+    it('sends the next run straight to the API backup while the relay is known down', () => {
+      const now = Date.now();
+      noteSubscriptionRelayAttempt('codex-subscription', { terminalDetail: deadTunnel, reachable: false }, now);
+      expect(isSubscriptionRelayRecentlyUnreachable('codex-subscription', now + 1_000)).toBe(true);
+      expect(isSubscriptionRelayRecentlyUnreachable('grok-subscription', now + 1_000)).toBe(false);
+      expect(shouldFailoverCodexSubscriptionToApi({
+        requestedProvider: 'codex-subscription',
+        hasApiFallback: true,
+        previousProviderFailover: false,
+        retryableFailureCount: 0,
+      })).toBe(true);
+      // The memo expires so a recovered relay is tried again.
+      expect(isSubscriptionRelayRecentlyUnreachable('codex-subscription', now + 3 * 60_000 + 1)).toBe(false);
+    });
+
+    it('clears the memo after a reachable attempt and ignores non-subscription providers', () => {
+      noteSubscriptionRelayAttempt('codex-subscription', { terminalDetail: deadTunnel, reachable: false });
+      noteSubscriptionRelayAttempt('codex-subscription', { reachable: true });
+      expect(isSubscriptionRelayRecentlyUnreachable('codex-subscription')).toBe(false);
+      noteSubscriptionRelayAttempt('azure-openai', { terminalDetail: deadTunnel, reachable: false });
+      expect(isSubscriptionRelayRecentlyUnreachable('azure-openai')).toBe(false);
+    });
   });
 
   it('enters API fallback only after a fail-closed safe subscription attempt', () => {

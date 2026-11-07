@@ -130,6 +130,14 @@ The temporary Cloudflare quick tunnel used for Preview can change after a
 restart. Before Production, replace it with a dedicated named tunnel and stable
 hostname, then repeat the same owner, quota, streaming, and API fallback gates.
 
+Until then, a rotated tunnel leaves `.env.local` pointing at a dead host while
+Vercel already has the new one. `npm run dev` now probes the relay URLs first
+(`scripts/check-local-relays.mjs`) and prints a warning; `npm run env:sync-relays`
+copies the current relay values from Vercel Preview into `.env.local`. At
+runtime, a relay that cannot be reached at all (TLS/DNS/refused) moves to the
+API backup after one retry and is skipped for 3 minutes per server process,
+instead of spending the full five-attempt same-provider budget on every run.
+
 ## Admin allowlist management
 
 `/admin` exposes a Codex plan tab for existing Makaron accounts. An admin enters
