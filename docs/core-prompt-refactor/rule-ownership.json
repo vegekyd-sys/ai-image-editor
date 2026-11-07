@@ -140,7 +140,7 @@
     {
       "id": "core-27",
       "text": "Hard duration range: a single SeeDance 2.0 script/call must be 4-15s; SeeDance 2.5 must be 4-30s; Kling 5-15s; Grok generation 1-15s; Google Omni 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, show the segmented plan, and stop for approval. Edit/extend limits are in `prompts/animate.md`.",
-      "amendment": "Retire Kling O3 and use the verified Kling 4.0 3-30s and Kling 4.0 Flash 3-20s output and reference contracts; explicit model selection must not be shortened or replaced.",
+      "amendment": "Retire Kling O3 and use the verified Kling 4.0 3-30s and Kling 4.0 Flash 3-20s output and reference contracts; explicit model selection must not be shortened or replaced. Gemini Omni 1.2 Flash: 3-15s generation, <=15s source upload, follow-up edits in the same Google interaction, and 30s cumulative extension (checked 2026-11-07).",
       "owner": "video"
     },
     {
@@ -156,6 +156,7 @@
     {
       "id": "core-30",
       "text": "Reference video input limit: one SeeDance 2.0 generation may use up to 15s combined source/reference video duration; SeeDance 2.5 allows up to 30s combined; Google Omni: one <=10s upload. Split longer input.",
+      "amendment": "Gemini Omni 1.2 Flash: 3-15s generation, <=15s source upload, follow-up edits in the same Google interaction, and 30s cumulative extension (checked 2026-11-07).",
       "owner": "video"
     },
     {
@@ -167,6 +168,7 @@
     {
       "id": "core-32",
       "text": "Google Omni continuation uses the same Refs mental model as Seedance: reference `<<<media_N>>>`, set `video_operation: \"extend\"`, describe the next beat, default 10s, preserve continuity, save a new snapshot; Google results can repeat to 40s.",
+      "amendment": "Gemini Omni 1.2 Flash: 3-15s generation, <=15s source upload, follow-up edits in the same Google interaction, and 30s cumulative extension (checked 2026-11-07).",
       "owner": "video"
     },
     {

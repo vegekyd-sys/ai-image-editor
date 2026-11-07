@@ -415,27 +415,28 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   },
   'google-omni': {
     id: 'google-omni',
-    label: 'Gemini Omni 1.1 Flash',
+    label: 'Gemini Omni 1.2 Flash',
     minOutputDuration: 3,
-    maxOutputDuration: 10,
-    maxReferenceVideoDuration: 10.5,
+    // 1.2 generates 3-15s natively; extension continuations stay 3-10s.
+    maxOutputDuration: 15,
+    maxReferenceVideoDuration: 15,
     referenceVideoSize: {
       maxFileSizeMb: 55,
-      description: '<=55MB inline upload in Makaron; one video reference per request',
+      description: '<=55MB inline upload in Makaron; one <=15s video per request',
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: true,
     defaultImageWorkflow: 'reference-to-video',
     supportsVideoExtend: true,
-    longVideoChunkSeconds: 10,
-    // Verified from live 1.1 usage metadata on 2026-08-29 at Google's
-    // $17.50 / 1M video-output-token rate.
-    estimatedCostPerSecondUsd: 0.10136,
+    longVideoChunkSeconds: 15,
+    // Google bills 1.2 video output at $12.00 / 1M tokens (1.1 was $17.50),
+    // with the same per-second token counts measured on 1.1 (2026-08-29).
+    estimatedCostPerSecondUsd: 0.069504,
     estimatedCostPerSecondUsdByResolution: {
-      '360p': 0.0337925, // 1,931 tokens/s
-      '720p': 0.10136, // 5,792 tokens/s
-      '1080p': 0.15204, // 8,688 tokens/s
-      '4k': 0.30408, // 17,376 tokens/s
+      '360p': 0.023172, // 1,931 tokens/s
+      '720p': 0.069504, // 5,792 tokens/s
+      '1080p': 0.104256, // 8,688 tokens/s (upscaled)
+      '4k': 0.208512, // 17,376 tokens/s (upscaled)
     },
     // A live 720p extension probe consumed 27,840 input-video tokens for a
     // 5.013-second source. Google bills those tokens at $1.50 / 1M.
@@ -446,7 +447,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     defaultResolution: '720p',
     supportedAspectRatios: ['16:9', '9:16'],
     provider: 'google-omni',
-    providerModel: 'gemini-omni-1.1-flash',
+    providerModel: 'gemini-omni-1.2-flash',
   },
   'minimax-h3': {
     id: 'minimax-h3',
@@ -1041,6 +1042,10 @@ export function getRequiredVideoCredits(
   return credits
 }
 
+/** Omni appends a 3-10s continuation; the cumulative clip is capped at 30s (1.2). */
+export const GOOGLE_OMNI_MAX_EXTEND_SECONDS = 10
+export const GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS = 30
+
 export function isFastVideoRenderModel(model?: string | null): boolean {
   const normalized = normalizeVideoModelId(model)
   return normalized === 'grok' || normalized === 'google-omni' || normalized === 'minimax-h3-max' || normalized === 'fal-h3-max'
@@ -1063,7 +1068,7 @@ export function resolveVideoOutputDuration(options: {
   if (options.requestedDuration != null) return options.requestedDuration
   if (normalizedModel === 'minimax-h3-max') return 5
   if (options.operation === 'extend' && normalizeVideoModelId(options.model) === 'google-omni') {
-    return capability.maxOutputDuration
+    return GOOGLE_OMNI_MAX_EXTEND_SECONDS
   }
   if (options.referenceVideoDuration != null) {
     return Math.min(capability.maxOutputDuration, Math.round(options.referenceVideoDuration))
@@ -1088,7 +1093,7 @@ export function resolvePersistedVideoDuration(options: {
     && options.referenceVideoDuration != null
   ) {
     return normalizeVideoModelId(options.model) === 'google-omni'
-      ? Math.min(40, options.referenceVideoDuration + options.outputDuration)
+      ? Math.min(GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS, options.referenceVideoDuration + options.outputDuration)
       : options.referenceVideoDuration + options.outputDuration
   }
   return options.outputDuration
@@ -1188,6 +1193,10 @@ export function validateVideoModelRequest(options: {
 
   if (options.operation !== 'edit' && options.outputDuration != null && options.outputDuration > capability.maxOutputDuration) {
     return `${capability.label} duration must be ${capability.maxOutputDuration} seconds or less.`
+  }
+
+  if (normalizedModel === 'google-omni' && options.operation === 'extend' && options.outputDuration != null && options.outputDuration > GOOGLE_OMNI_MAX_EXTEND_SECONDS) {
+    return `${capability.label} extends a video by ${GOOGLE_OMNI_MAX_EXTEND_SECONDS} seconds or less per request.`
   }
 
   if (

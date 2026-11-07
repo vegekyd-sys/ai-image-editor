@@ -2,7 +2,7 @@ import { VideoProviderRejection } from './video-provider-error'
 import { transcodeVideoBufferToSdrMp4 } from '@/lib/provider-video-reference'
 import type { VideoGenerationOperation, VideoResolution } from '@/lib/video-model-capabilities'
 
-export const GOOGLE_OMNI_MODEL = 'gemini-omni-1.1-flash'
+export const GOOGLE_OMNI_MODEL = 'gemini-omni-1.2-flash'
 const GOOGLE_OMNI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions'
 const MAX_FETCH_BYTES = 55 * 1024 * 1024
 export const GOOGLE_OMNI_REQUEST_TIMEOUT_MS = 10 * 60 * 1000
@@ -15,7 +15,7 @@ export interface GoogleOmniVideoTaskInput {
   aspectRatio?: string
   resolution?: Extract<VideoResolution, '360p' | '720p' | '1080p' | '4k'>
   operation?: VideoGenerationOperation
-  /** Continue a Google-generated video without re-uploading its cumulative MP4. */
+  /** Continue or edit a Google-generated video in the same interaction lineage, without re-uploading it. */
   previousInteractionId?: string
   videoUrl?: string
   videoUrls?: string[]
@@ -139,39 +139,41 @@ function findOutputVideo(obj: unknown): { uri?: string; data?: string; mime_type
   return null
 }
 
-function toOmniPrompt(
+/**
+ * Omni 1.2 deprecates control tokens such as <IMAGE_REF_0> / <FIRST_FRAME> and
+ * reads media roles from natural language, so Makaron markers become
+ * "Image N" / "the source video" with an explicit role sentence.
+ * imageSlots[i] is the ordinal of media_(i+1) among uploaded images (0 = not an image).
+ */
+export function toOmniPrompt(
   prompt: string,
-  imageCount: number,
+  imageSlots: number[],
   hasVideoReference: boolean,
   hasPreviousInteraction: boolean,
   operation: VideoGenerationOperation,
-  duration?: number,
 ): string {
+  const imageCount = Math.max(0, ...imageSlots)
   const normalized = prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (_, n: string) => {
-    const index = Number(n)
-    return `<IMAGE_REF_${Math.max(0, index - 1)}>`
-  })
-  const declarations = []
+    const ordinal = imageSlots[Number(n) - 1]
+    if (ordinal) return `Image ${ordinal}`
+    return hasVideoReference || hasPreviousInteraction ? 'the source video' : ''
+  }).replace(/[ \t]{2,}/g, ' ').trim()
   const guidance = []
 
-  if (hasVideoReference) {
-    declarations.push('[# Sources <VIDEO_0>@Video1]')
-    guidance.push(operation === 'extend'
-      ? 'Continue Video1 forward from its tail. Preserve its visual style, subject identity, motion, camera direction, lighting, and audio continuity unless the prompt explicitly changes them.'
-      : 'Use Video1 as the primary source video to edit.')
+  if (operation === 'extend') {
+    guidance.push(`${hasVideoReference ? 'Continue the attached source video' : 'Continue the video from the previous turn'} forward from its last frame. Preserve its visual style, subject identity, motion, camera direction, lighting, and audio continuity unless the prompt explicitly changes them.`)
+  } else if (hasVideoReference) {
+    guidance.push('Edit the attached source video. Keep everything not mentioned in the request unchanged: framing, timing, motion, characters, and audio.')
   } else if (hasPreviousInteraction) {
-    guidance.push('Continue the video from the previous interaction forward from its tail. Preserve its visual style, subject identity, motion, camera direction, lighting, and audio continuity unless the prompt explicitly changes them.')
+    guidance.push('Edit the video from the previous turn. Keep everything not mentioned in the request unchanged: framing, timing, motion, characters, and audio.')
   }
 
   if (imageCount > 0) {
-    const refs = Array.from({ length: imageCount }, (_, index) => `<IMAGE_REF_${index}>@Image${index + 1}`).join(' ')
-    declarations.push(`[# References ${refs}]`)
-    guidance.push('Use the given images as references for video generation, not as literal initial frames.')
+    const names = Array.from({ length: imageCount }, (_, index) => `Image ${index + 1}`).join(', ')
+    guidance.push(`The attached images are, in order, ${names}. Use them as references for character, product, and style identity, not as literal first frames.`)
   }
 
-  const parts = [declarations.join(' '), normalized, guidance.join(' ')].filter(Boolean)
-  if (duration) parts.push(`Target duration: ${duration} seconds.`)
-  return parts.join('\n\n')
+  return [normalized, guidance.join(' ')].filter(Boolean).join('\n\n')
 }
 
 function normalizeAspectRatio(aspectRatio?: string): '9:16' | '16:9' | undefined {
@@ -188,10 +190,12 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
   }
 
   const imageParts = []
-  for (const imageUrl of input.images.filter(Boolean)) {
-    if (!imageUrl.startsWith('http')) continue
+  const imageSlots: number[] = []
+  for (const imageUrl of input.images) {
+    if (!imageUrl?.startsWith('http')) { imageSlots.push(0); continue }
     const image = await fetchAsBase64(imageUrl, undefined, requestSignal)
     imageParts.push({ type: 'image', data: image.data, mime_type: image.mimeType })
+    imageSlots.push(imageParts.length)
   }
 
   const videoRef = videoRefs[0]
@@ -200,12 +204,15 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
   if ((operation === 'edit' || operation === 'extend') && !videoRef && !previousInteractionId) {
     throw new Error(`Google Omni ${operation} requires one source video.`)
   }
-  if (previousInteractionId && operation !== 'extend') {
-    throw new Error('Google Omni previousInteractionId is only supported for video extension in Makaron.')
+  if (previousInteractionId && operation !== 'extend' && operation !== 'edit') {
+    throw new Error('Google Omni previousInteractionId is only supported for video edit or extension in Makaron.')
   }
-  const prompt = toOmniPrompt(input.prompt, imageParts.length, Boolean(videoRef), Boolean(previousInteractionId), operation, input.duration)
+  if (previousInteractionId && videoRef) {
+    throw new Error('Google Omni uses either a previous interaction or one uploaded source video, not both.')
+  }
+  const prompt = toOmniPrompt(input.prompt, imageSlots, Boolean(videoRef), Boolean(previousInteractionId), operation)
   const task = previousInteractionId
-    ? 'extend'
+    ? operation
     : videoRef
     ? operation === 'extend' ? 'extend' : 'edit'
     : imageParts.length > 0 ? 'reference_to_video' : 'text_to_video'
@@ -213,6 +220,11 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
     type: 'video',
     delivery: 'uri',
     resolution: input.resolution || '720p',
+  }
+  // 1.2 takes duration as a typed field ("3s".."15s") that overrides any
+  // length written in the prompt. Edits keep the source length.
+  if (input.duration && task !== 'edit') {
+    responseFormat.duration = `${Math.round(input.duration)}s`
   }
   const aspectRatio = normalizeAspectRatio(input.aspectRatio)
   if (aspectRatio && task !== 'edit' && task !== 'extend') responseFormat.aspect_ratio = aspectRatio
@@ -225,7 +237,7 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
       content: [
         { type: 'video', mime_type: video.mimeType, data: video.data },
         ...imageParts,
-        { type: 'text', text: task === 'extend' ? prompt : `${prompt}\n\nKeep everything else the same unless explicitly requested.` },
+        { type: 'text', text: prompt },
       ],
     }]
   } else if (previousInteractionId) {

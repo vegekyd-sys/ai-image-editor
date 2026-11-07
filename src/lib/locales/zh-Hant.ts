@@ -1013,7 +1013,7 @@ const zhHant = {
   'model.wan30Prime.desc': '更快的 Wan 3.0，支援 2–30 秒、原生音訊與多模態參考；2K / 4K 自動啟用 Prime FlashVSR。',
   'model.wan30Prime.badge': '快速 · 4K',
   'model.grok.desc': '快速原生音訊生成：純文字最高 1080p，1–7 張特徵參考圖最高 720p，並支援影片編輯與續寫。最新 6 秒實測 15–34 秒。',
-  'model.googleOmni.desc': '快速影片生成與編輯，支援 360p 草稿、預設 720p、4K 放大與原生音訊。',
+  'model.googleOmni.desc': '最長 15 秒，支援多角色對白口型、對話式連續修改，360p 草稿、預設 720p、可放大到 4K。',
   'model.minimaxH3.desc': '開放多模態影片模型，支援 15 秒、768P 或 2K 直出與多參考素材。',
   'model.minimaxH3Max.name': 'fal H3 Turbo',
   'model.minimaxH3Max.desc': '預設以原生 768P 超即時生成 5–15 秒文字生影片或單圖生影片，亦支援 480P。',
