@@ -105,3 +105,25 @@ it('marks synchronous completed videos terminal without polling an unrecoverable
   expect((await submitMcpVideo({ ...input, videoModel: 'google-omni' }, owner)).success).toBe(true)
   expect(mocks.rpc).toHaveBeenLastCalledWith('finish_mcp_video_submission', expect.objectContaining({ p_state: 'completed' }))
 })
+it('attributes an Agent Retake/video reservation to the run, project and source', async () => {
+  const { runWithBillingAttribution } = await import('@/lib/billing/attribution')
+  await runWithBillingAttribution({ runId: 'run-1', projectId: 'project-1', source: 'cli', apiKeyId: 'key' },
+    () => submitMcpVideo({ ...input, projectId: 'project-from-input' }, { ...owner, toolName: 'retake_video' }))
+  expect(mocks.rpc.mock.calls[0]).toEqual(['reserve_mcp_video', expect.objectContaining({
+    p_tool: 'retake_video', p_source: 'cli', p_run_id: 'run-1', p_project_id: 'project-1',
+  })])
+})
+it('keeps plain hosted MCP calls on source mcp and falls back to the input project', async () => {
+  await submitMcpVideo({ ...input, projectId: 'project-from-input' }, owner)
+  expect(mocks.rpc.mock.calls[0][1]).toMatchObject({ p_source: 'mcp', p_run_id: null, p_project_id: 'project-from-input' })
+})
+it('still reserves through the original signature when the attribution migration is missing', async () => {
+  mocks.rpc
+    .mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.reserve_mcp_video' } })
+    .mockResolvedValue({ data: { created: true }, error: null })
+  expect((await submitMcpVideo(input, owner)).success).toBe(true)
+  const reserveCalls = mocks.rpc.mock.calls.filter(call => call[0] === 'reserve_mcp_video')
+  expect(reserveCalls).toHaveLength(2)
+  expect(reserveCalls[1][1]).not.toHaveProperty('p_run_id')
+  expect(reserveCalls[1][1]).toMatchObject({ p_user_id: 'owner', p_quote: { credits: 30 } })
+})

@@ -5,6 +5,7 @@ import { getVideoStatus } from '@/lib/skills/get-video-status'
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
 import { isBillingEnabled, recordSubscriptionUsage, requireCredits } from './credits'
+import { resolveBillingAttribution } from './attribution'
 import { quoteVideo, type MediaQuote, type VideoQuoteInput } from './media-pricing'
 
 export interface McpVideoOwner { userId: string; apiKeyId: string | null; toolName: string }
@@ -13,6 +14,10 @@ async function rpc(name: string, args: Record<string, unknown>) {
   const { data, error } = await getSupabaseAdmin().rpc(name, args)
   if (error) throw new Error(`Video billing: ${error.message}`)
   return data
+}
+
+function isMissingRpcSignature(error: { code?: string; message?: string }): boolean {
+  return error.code === 'PGRST202' || /could not find the function/i.test(error.message ?? '')
 }
 
 /** Reservation state is per tool call, never shared by concurrent calls on an MCP server. */
@@ -51,11 +56,30 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
     const quote = await quoteVideo(usage)
     const balance = await requireCredits(owner.userId, quote.credits)
     if (!balance.ok) throw new Error(`Insufficient credits: need ${quote.credits}, have ${balance.balance}.`)
-    const row = await rpc('reserve_mcp_video', {
+    const base = {
       p_id: requestId, p_user_id: owner.userId, p_api_key_id: owner.apiKeyId,
       p_tool: owner.toolName, p_model: normalizeVideoModelId(input.videoModel),
       p_fingerprint: fingerprint, p_quote: quote,
-    })
+    }
+    // An Agent run (GUI/CLI) or MCP request owns this charge: carry its run,
+    // project and source so run usage summaries include Retake/MCP video.
+    const attribution = resolveBillingAttribution()
+    const attributed = {
+      ...base,
+      p_source: attribution.source ?? 'mcp',
+      p_run_id: attribution.runId ?? null,
+      p_project_id: attribution.projectId ?? input.projectId ?? null,
+    }
+    const { data: reservation, error: reserveError } = await getSupabaseAdmin().rpc('reserve_mcp_video', attributed)
+    let row = reservation
+    if (reserveError && isMissingRpcSignature(reserveError)) {
+      // Attribution migration 20261107223000 not applied yet: never block a
+      // paid submission over telemetry, use the original signature.
+      console.warn('[billing] reserve_mcp_video attribution unavailable; apply 20261107223000_mcp_video_run_attribution.sql')
+      row = await rpc('reserve_mcp_video', base)
+    } else if (reserveError) {
+      throw new Error(`Video billing: ${reserveError.message}`)
+    }
     if (!row.created) {
       replay = {
         success: Boolean(row.task_id), taskId: row.task_id ?? undefined,
