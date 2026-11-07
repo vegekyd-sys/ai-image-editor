@@ -105,7 +105,66 @@ export function isConfirmedExecutionLeaseLoss(input: {
 
 export function isRetryableProviderOutage(detail: unknown): boolean {
   if (typeof detail !== 'string' || !detail.trim()) return false;
-  return /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b(?:401|403|408|429|500|502|503|504)\b|econnreset|tls connection was established|step timeout.{0,80}exceeded)/i.test(detail);
+  return isProviderEndpointUnreachable(detail)
+    || /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b(?:401|403|408|429|500|502|503|504)\b|econnreset|tls connection was established|step timeout.{0,80}exceeded)/i.test(detail);
+}
+
+/**
+ * The provider endpoint was never reached: no TLS session, DNS miss, refused
+ * connection, or a Cloudflare tunnel that no longer exists. Unlike a stream
+ * that drops mid-response, retrying the same endpoint seconds later almost
+ * never succeeds (typical cause: a quick-tunnel relay URL that rotated).
+ */
+export function isProviderEndpointUnreachable(detail: unknown): boolean {
+  if (typeof detail !== 'string' || !detail.trim()) return false;
+  return /(?:cannot connect to api|before secure tls connection was established|\b(?:enotfound|econnrefused|eai_again|ehostunreach|enetunreach)\b|argo tunnel error|cloudflare tunnel error|error code:?\s*1033)/i.test(detail);
+}
+
+/** Total attempts on an unreachable subscription relay before using the API backup. */
+export const MAX_UNREACHABLE_SUBSCRIPTION_ATTEMPTS = 2;
+const SUBSCRIPTION_RELAY_UNREACHABLE_TTL_MS = 3 * 60_000;
+const unreachableSubscriptionRelays = new Map<string, number>();
+
+/**
+ * Remember, per server process, that a subscription relay could not be reached,
+ * so the next run goes straight to the API backup instead of rediscovering the
+ * outage through several durable attempts. A reachable attempt clears it.
+ */
+export function noteSubscriptionRelayAttempt(
+  provider: string,
+  outcome: { terminalDetail?: unknown; reachable: boolean },
+  now = Date.now(),
+): void {
+  if (provider !== 'codex-subscription' && provider !== 'grok-subscription') return;
+  if (isProviderEndpointUnreachable(outcome.terminalDetail)) {
+    unreachableSubscriptionRelays.set(provider, now + SUBSCRIPTION_RELAY_UNREACHABLE_TTL_MS);
+  } else if (outcome.reachable) {
+    unreachableSubscriptionRelays.delete(provider);
+  }
+}
+
+export function isSubscriptionRelayRecentlyUnreachable(provider: string, now = Date.now()): boolean {
+  const until = unreachableSubscriptionRelays.get(provider);
+  if (until === undefined) return false;
+  if (until > now) return true;
+  unreachableSubscriptionRelays.delete(provider);
+  return false;
+}
+
+export function resetSubscriptionRelayReachabilityForTests(): void {
+  unreachableSubscriptionRelays.clear();
+}
+
+function shouldLeaveUnreachableSubscriptionRelay(
+  provider: string,
+  retryableFailureCount: number,
+  latestFailureDetail: unknown,
+): boolean {
+  return isSubscriptionRelayRecentlyUnreachable(provider)
+    || (
+      isProviderEndpointUnreachable(latestFailureDetail)
+      && retryableFailureCount >= MAX_UNREACHABLE_SUBSCRIPTION_ATTEMPTS
+    );
 }
 
 export function isCodexSubscriptionTerminalFailure(detail: unknown): boolean {
@@ -130,6 +189,11 @@ export function shouldFailoverCodexSubscriptionToApi(input: {
     && (
       input.previousProviderFailover
       || isCodexSubscriptionTerminalFailure(input.latestFailureDetail)
+      || shouldLeaveUnreachableSubscriptionRelay(
+        input.requestedProvider,
+        input.retryableFailureCount,
+        input.latestFailureDetail,
+      )
       || input.retryableFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS
     );
 }
@@ -167,6 +231,11 @@ export function shouldFailoverGrokSubscriptionToApi(input: {
     && (
       input.previousProviderFailover
       || isGrokSubscriptionTerminalFailure(input.latestFailureDetail)
+      || shouldLeaveUnreachableSubscriptionRelay(
+        input.requestedProvider,
+        input.retryableFailureCount,
+        input.latestFailureDetail,
+      )
       || input.retryableFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS
     );
 }
