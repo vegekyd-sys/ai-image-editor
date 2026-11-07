@@ -113,8 +113,21 @@ export function getAudioModelCapability(model?: string | null): AudioModelCapabi
   }
 }
 
+/**
+ * Suno V6 BGM is switched off by default (2026-11-07): its `duration` is only a
+ * soft target (slow styles asked for 15s came back at 90+ seconds), which is not
+ * acceptable for video beds. All audio uses Seed Audio until a music model with
+ * reliable length control is available. Set SUNO_BGM_ENABLED=true (and
+ * SUNOAPI_KEY) to route instrumental BGM to Suno again.
+ */
+export function isSunoBgmEnabled(): boolean {
+  return process.env.SUNO_BGM_ENABLED?.trim().toLowerCase() === 'true' && isSunoConfigured()
+}
+
+/** Models the Agent may currently be routed to. */
 export function listAudioModelCapabilities(): AudioModelCapability[] {
   return Object.values(AUDIO_MODEL_CAPABILITIES)
+    .filter(capability => capability.id !== SUNO_MUSIC_MODEL_ID || isSunoBgmEnabled())
 }
 
 export interface AudioRouteInput {
@@ -143,6 +156,7 @@ export function isInstrumentalBgmRequest(input: AudioRouteInput): boolean {
 
 /**
  * Decide which audio model serves a request.
+ * - Suno disabled (default): every request, including an explicit Suno request, uses Seed Audio;
  * - explicit model: honored, Suno is rejected outside instrumental BGM;
  * - auto: instrumental BGM -> Suno V6 (falls back to Seed Audio), everything else -> Seed Audio.
  */
@@ -150,14 +164,14 @@ export function resolveAudioRoute(input: AudioRouteInput): AudioRoute | { error:
   const explicit = input.model && input.model !== 'auto' ? normalizeAudioModelId(input.model) : null
   const bgm = isInstrumentalBgmRequest(input)
   if (explicit === SUNO_MUSIC_MODEL_ID) {
+    if (!isSunoBgmEnabled()) return { modelId: SEED_AUDIO_MODEL_ID, reason: 'Suno V6 is disabled; using Seed Audio' }
     if (!bgm) {
       return { error: 'Suno V6 only generates instrumental background music without audio or image references. Use the default Seed Audio model for speech, vocals, sound design, mixed soundtracks, or conditioned audio.' }
     }
-    if (!isSunoConfigured()) return { error: 'Suno V6 is not configured (SUNOAPI_KEY is missing).' }
     return { modelId: SUNO_MUSIC_MODEL_ID, fallbackModelId: SEED_AUDIO_MODEL_ID, reason: 'explicit Suno V6 request' }
   }
   if (explicit) return { modelId: explicit, reason: 'explicit model request' }
-  if (bgm && isSunoConfigured()) {
+  if (bgm && isSunoBgmEnabled()) {
     return { modelId: SUNO_MUSIC_MODEL_ID, fallbackModelId: SEED_AUDIO_MODEL_ID, reason: 'instrumental background music' }
   }
   return { modelId: SEED_AUDIO_MODEL_ID, reason: 'default Seed Audio' }

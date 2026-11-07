@@ -42,7 +42,7 @@ describe('audio model capabilities', () => {
     expect(text).toContain('evolink-seed-audio')
     expect(text).not.toContain('volcengine-seed-tts')
     expect(text).toContain('default=wav/48000Hz')
-    expect(text).toContain('suno-v6 (Suno V6)')
-    expect(text).toContain('2 takes per generation')
+    // Suno V6 BGM is off by default, so the Agent only sees Seed Audio.
+    expect(text).not.toContain('suno-v6')
   })
 })

@@ -595,7 +595,7 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
   );
 
   // ── Unified audio generation ─────────────────────────────────────────────
-  // Both tools call the shared router: instrumental BGM -> Suno V6, everything else -> Seed Audio.
+  // Both tools call the shared router (`resolveAudioRoute`). Suno V6 BGM is switched off, so every request uses Seed Audio.
 
   const formatAudioResultForMcp = (result: CreateAudioResult): string => {
     if (!result.success) return result.message;
@@ -648,16 +648,16 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
 
 Mixing: when one deliverable needs speech together with music, one call with kind=mixed (Seed Audio) that directs the music inside it is paid once and keeps voice and music balanced together.
 
-Routing is automatic. kind=music instrumental background music (no audio or image references) uses Suno V6: 10-360 seconds, one generation returns 2 takes (the first is the default). Everything else uses Seed Audio 1.0: narration, dialogue, multilingual speech, songs with vocals (instrumental=false), ambience, sound effects, and mixed soundtracks, up to 120 seconds.
+All audio uses Seed Audio 1.0: narration, dialogue, multilingual speech, instrumental music, songs with vocals (instrumental=false), ambience, sound effects, and mixed soundtracks, up to 120 seconds.
 
-For Seed Audio, use a compact playback-order timeline. Use kind=translation with exactly one MP3/WAV audio reference and target_language to translate speech while retaining the speaker's voice and performance. Prompts are limited to 1,250 characters (1,000 for Suno music). You may provide up to 3 audio references or 1 image reference, but never both. Bind ordinary audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the Seed Audio production-master default; Suno returns MP3.`,
+Use a compact playback-order timeline. Use kind=translation with exactly one MP3/WAV audio reference and target_language to translate speech while retaining the speaker's voice and performance. Prompts are limited to 1,250 characters. You may provide up to 3 audio references or 1 image reference, but never both. Bind ordinary audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the production-master default.`,
     {
       kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed', 'translation']).optional(),
-      instrumental: z.boolean().optional().describe('kind=music only. Default true (Suno V6 BGM); false requests sung vocals on Seed Audio.'),
-      prompt: z.string().max(1250).optional().describe('Complete timeline-directed production brief. For Suno music: genre, mood, instruments, tempo, energy arc, ending (max 1,000 characters). Optional only for kind=translation.'),
+      instrumental: z.boolean().optional().describe('kind=music only. Default true (instrumental background music); false requests sung vocals.'),
+      prompt: z.string().max(1250).optional().describe('Complete timeline-directed production brief. Optional only for kind=translation.'),
       target_language: z.string().optional().describe('Required for kind=translation.'),
       translated_script: z.string().optional().describe('Optional exact target-language script. Omit to translate all speech in audio_references[0] directly.'),
-      duration_seconds: z.number().positive().max(360).optional().describe('Target duration in seconds: 10-360 for Suno music, up to 120 for Seed Audio.'),
+      duration_seconds: z.number().positive().max(120).optional().describe('Target duration in seconds, up to 120. Also state the length in the prompt.'),
       audio_references: z.array(z.string()).max(3).optional().describe('Public HTTPS audio URLs or provider preset voice IDs, bound as @audio1..@audio3 in the prompt.'),
       image_urls: z.array(z.string().url()).max(1).optional().describe('At most one public HTTPS image URL; mutually exclusive with audio_references.'),
       speech_rate: z.number().min(0.5).max(2).optional(),
@@ -667,7 +667,7 @@ For Seed Audio, use a compact playback-order timeline. Use kind=translation with
       sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional(),
       callback_url: z.string().url().optional().describe('Optional HTTPS callback URL (Seed Audio only).'),
       title: z.string().optional(),
-      model: z.enum(['auto', 'evolink-seed-audio', 'suno-v6']).optional().describe('Omit for automatic routing.'),
+      model: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Omit for automatic routing.'),
     },
     async (params) => runAudioTool('create_audio', {
       prompt: params.prompt,
@@ -695,8 +695,7 @@ For Seed Audio, use a compact playback-order timeline. Use kind=translation with
     'makaron_create_music',
     `Generate background music. Shortcut for makaron_create_audio with kind=music; waits for the provider and returns completed audio URLs.
 
-- Default: instrumental background music via Suno V6, 10-360 seconds, 2 takes per generation (the first is the default).
-- instrumental=false (sung vocals) uses Seed Audio, up to 120 seconds.
+- Generated by Seed Audio, up to 120 seconds. Default is instrumental; instrumental=false adds sung vocals.
 - Best for a deliverable whose soundtrack is music alone. When the same piece also needs narration or dialogue, makaron_create_audio with kind=mixed generates voice and music together in one call.
 - Prompt: genre, mood, instruments, tempo, energy arc, and ending (e.g. "gentle piano, warm strings, cinematic, slow build, soft ending"). No artist names.
 - Style: optional extra genre/mood tags (e.g. "lo-fi, ambient, chill").`,
@@ -704,9 +703,9 @@ For Seed Audio, use a compact playback-order timeline. Use kind=translation with
       prompt: z.string().max(1000).describe('Music description: genre, mood, instruments, tempo, energy arc, mix role, and ending.'),
       instrumental: z.boolean().optional().describe('Instrumental only, no vocals (default: true)'),
       style: z.string().optional().describe('Extra genre/mood tags (e.g. "lo-fi, ambient")'),
-      duration_seconds: z.number().positive().max(360).optional().describe('Target length: 10-360 seconds for instrumental music, up to 120 with vocals.'),
-      format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional().describe('Seed Audio only; Suno returns MP3.'),
-      sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional().describe('Seed Audio only.'),
+      duration_seconds: z.number().positive().max(120).optional().describe('Target length in seconds, up to 120.'),
+      format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional().describe('Output format (default wav).'),
+      sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional().describe('Output sample rate (default 48000).'),
     },
     async (params) => runAudioTool('create_music', {
       kind: 'music',
@@ -721,7 +720,7 @@ For Seed Audio, use a compact playback-order timeline. Use kind=translation with
 
   server.tool(
     'makaron_get_music_status',
-    `Re-read a Suno music task by ID. makaron_create_music already waits and returns final URLs, so this is only needed to recover URLs for an earlier Suno task ID.`,
+    `Re-read an earlier Suno music task by ID (legacy tasks only). makaron_create_music waits and returns final URLs, so new requests never need this.`,
     {
       taskId: z.string().describe('Task ID from makaron_create_music'),
     },

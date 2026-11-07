@@ -13,9 +13,9 @@ Audio transforms videos from "animated slideshows" into compelling content. Musi
 | **Pixabay Music** (pixabay.com/music/) | Free | Royalty-free, no attribution | All use cases - recommended default |
 | Artlist | $10/mo | Unlimited commercial | Professional/client work |
 | Epidemic Sound | $13/mo | Unlimited commercial | High-volume content |
-| Makaron `generate_audio` `kind: "music"` (Suno V6) | Per generation | Generated, 2 takes | Custom instrumental BGM fitted to the video length (10-360s) |
+| Makaron `generate_audio` `kind: "music"` (Seed Audio) | Per second | Generated | Custom instrumental BGM fitted to the video length (up to 120s) |
 
-**Do NOT synthesize music in composition code** (e.g., oscillators or WebAudio tones). The results are consistently too quiet, repetitive, and low-quality. Use a real track, or generate instrumental BGM with `generate_audio` `kind: "music"` (Suno V6) and use the returned default take URL.
+**Do NOT synthesize music in composition code** (e.g., oscillators or WebAudio tones). The results are consistently too quiet, repetitive, and low-quality. Use a real track, or generate instrumental BGM with `generate_audio` `kind: "music"` and use the returned audio URL.
 
 ### Music Selection by Creative Direction
 
