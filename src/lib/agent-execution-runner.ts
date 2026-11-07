@@ -30,6 +30,7 @@ import {
   isConfirmedExecutionLeaseLoss,
   isSafeToEnterSubscriptionApiFallback,
   MAX_SAME_PROVIDER_ATTEMPTS,
+  noteSubscriptionRelayAttempt,
   shouldFailoverCodexSubscriptionToApi,
   shouldFailoverGrokSubscriptionToApi,
   shouldFailoverAzureGPT56ToOpenRouter,
@@ -1088,6 +1089,7 @@ export async function runAgentExecutionAttempt(
         .maybeSingle();
       if (completionError) throw new Error(`Failed to finalize Agent execution: ${completionError.message}`);
       if (completedRun) {
+        noteSubscriptionRelayAttempt(resolvedModel.provider, { reachable: true });
         await finishAttempt(admin, attemptId, 'completed', {
           input_tokens: inputTokens,
           output_tokens: outputTokens,
@@ -1135,6 +1137,10 @@ export async function runAgentExecutionAttempt(
           : `第 ${claim.attempt_no} 个执行片段已保存，服务器正在继续...`,
       });
       await writer.flush();
+      noteSubscriptionRelayAttempt(resolvedModel.provider, {
+        terminalDetail: terminal?.checkpoint?.errorDetail,
+        reachable: attemptHadVisibleOutput || inputTokens > 0 || outputTokens > 0,
+      });
       await finishAttempt(admin, attemptId, 'handed_off', {
         input_tokens: inputTokens,
         output_tokens: outputTokens,
