@@ -30,6 +30,12 @@ export function seededMediaPrices(): MediaPrice[] {
       return { id, kind, model_id, resolution, operation, output_usd_per_second, video_reference_usd_per_second, input_usd_per_second: 0, input_usd_per_image: 0, free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true, updated_at: '2026-10-22T00:00:00Z' }
     })
   for (const price of additions) if(price.id === 'video:fal-h3-max:1080p:generate') price.input_tokens_per_video_second=7459.2
+  // Gemini Omni 1.2 guarded UPDATE: (resolution, old 1.1 seed rate, new rate).
+  for (const file of readdirSync('supabase/migrations').filter(f => f.endsWith('_google_omni_12_pricing.sql'))) {
+    for (const [, resolution, oldRate, newRate] of readFileSync('supabase/migrations/' + file, 'utf8').matchAll(/\('(\w+)', ([\d.]+), ([\d.]+)\)/g)) {
+      for (const price of existing) if (price.model_id === 'google-omni' && price.resolution === resolution && price.output_usd_per_second === Number(oldRate)) price.output_usd_per_second = Number(newRate)
+    }
+  }
   const suno = readdirSync('supabase/migrations').filter(file => file.endsWith('_suno_v6_music_pricing.sql'))
     .flatMap(file => readFileSync('supabase/migrations/' + file, 'utf8').split('\n').filter(line => line.startsWith("('audio:suno-v6:")))
     .map(line => {
