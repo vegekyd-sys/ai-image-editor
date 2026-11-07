@@ -808,6 +808,7 @@ try {
     assert.match(videoResult.stdout, /native 768p default/);
     assert.match(videoResult.stdout, /wan-3\.0-prime\s+Faster Wan 3\.0 tier/);
     assert.match(videoResult.stdout, /sync-lipsync-v3 Exactly one video plus one MP3\/WAV/);
+    assert.match(videoResult.stdout, /google-omni\s+Gemini Omni 1\.2 Flash: 3–15s/);
     assert.doesNotMatch(videoResult.stdout, /--operation <mode>/);
     assert.match(videoResult.stdout, /2k/);
   }

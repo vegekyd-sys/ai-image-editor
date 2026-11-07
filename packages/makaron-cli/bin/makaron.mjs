@@ -77,6 +77,20 @@ const MINIMAX_H3_MAX_VIDEO_SIDE = 5760;
 const MULEROUTER_WAN_MAX_VIDEO_SIDE = 4096;
 const MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE = 100 * 1024 * 1024;
 
+// Provider version shown next to a model id, so users know which release runs.
+const VIDEO_MODEL_LABELS = {
+  'google-omni': 'Gemini Omni 1.2 Flash',
+  'kling-4': 'Kling 4.0',
+  'kling-4-flash': 'Kling 4.0 Flash',
+  'fal-h3-max': 'FAL H3 Max',
+  'minimax-h3-max': 'H3 Max Turbo',
+  'grok': 'Grok Imagine Video 1.5',
+};
+function describeVideoModel(id) {
+  const label = VIDEO_MODEL_LABELS[String(id)];
+  return label ? `${id} (${label})` : String(id);
+}
+
 function warnLegacyModelFlag(replacement) {
   process.stderr.write(`⚠️  --model is deprecated here; use ${replacement}.\n`);
 }
@@ -687,7 +701,7 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
         case 'tool_call':
           process.stderr.write(`\n🔧 ${event.tool}`);
           if (event.input?.editPrompt) process.stderr.write(`\n   editPrompt: ${event.input.editPrompt}`);
-          if (event.input?.model) process.stderr.write(`\n   model: ${event.input.model}`);
+          if (event.input?.model) process.stderr.write(`\n   model: ${describeVideoModel(event.input.model)}`);
           if (event.input?.skill) process.stderr.write(`\n   skill: ${event.input.skill}`);
           if (event.input?.description) process.stderr.write(`: ${event.input.description.substring(0, 80)}`);
           process.stderr.write('\n');
@@ -829,7 +843,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
           case 'tool_call':
             process.stderr.write(`\n🔧 ${ev.data?.tool || ''}`);
             if (ev.data?.input?.editPrompt) process.stderr.write(`\n   editPrompt: ${ev.data.input.editPrompt}`);
-            if (ev.data?.input?.model) process.stderr.write(`\n   model: ${ev.data.input.model}`);
+            if (ev.data?.input?.model) process.stderr.write(`\n   model: ${describeVideoModel(ev.data.input.model)}`);
             if (ev.data?.input?.description) process.stderr.write(`: ${ev.data.input.description.substring(0, 80)}`);
             process.stderr.write('\n');
             break;
@@ -2131,7 +2145,7 @@ Generation options:
   --duration <seconds>      Output duration supported by the selected model.
   --video-resolution <res> auto, 480p, 720p, 768p, 1080p, 2k, or 4k.
   --aspect <ratio>          9:16, 16:9, 1:1, or another supported ratio.
-  --video-operation <mode> generate, edit, or extend (Seedance 2.5 / Grok); Kling 4 / Kling 4 Flash support generate/edit.
+  --video-operation <mode> generate, edit, or extend (Seedance 2.5 / Grok / Gemini Omni 1.2); Kling 4 / Kling 4 Flash support generate/edit.
   --extend-direction <dir> forward or backward.
   --output-format <format>  mp4 or mov.
   --generated-audio        Ask the provider to generate audio.
@@ -2146,6 +2160,9 @@ Recent model choices:
                  Native edit preserves source audio; default for video retake.
   kling-4-flash  Kling 4.0 Flash: faster, lower-cost Kling 4.0 with the same inputs and edit route;
                  3–20s, 720p only, video inputs <=20s total.
+  google-omni    Gemini Omni 1.2 Flash: 3–15s text/image/video with native audio, multi-speaker
+                 dialogue and lip-sync; edit (source <=15s) or extend (+3–10s, up to 30s);
+                 360p/720p, upscaled 1080p/4k.
   fal-h3-max     FAL H3 Max (default, 768p) reference-to-video: images, videos and audio;
                  integer 5–15s, 480p/768p/1080p, default 768p. Reference inputs cost extra.
   minimax-h3-max  fal H3 Turbo faster-than-real-time T2V or one-start-image I2V;
@@ -2179,6 +2196,7 @@ function printVideoHelp() {
   video create --script "..." --video-model seedance-2.5     4-30s multimodal generation/edit/extend
   video create --script "..." --video-model kling-4          Kling 4.0, 3-30s, 720p/1080p
   video create --script "..." --video-model kling-4-flash    Kling 4.0 Flash, faster/lower cost, 3-20s 720p
+  video create --script "..." --video-model google-omni      Gemini Omni 1.2 Flash, 3-15s with dialogue
   video create --script "..." --video <file|url> --video-model grok --video-operation extend
                                                                Edit or extend one MP4 with Grok
   video create --script "..." --video <url> --audio <url> --video-model sync-lipsync-v3
@@ -3390,6 +3408,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         ? 'wan-3.0-prime'
       : ['kling4', 'kling-4.0', 'kling 4.0', 'kling 4'].includes(String(videoModel).toLowerCase()) ? 'kling-4'
       : ['kling4-flash', 'kling-4.0-flash', 'kling 4.0 flash', 'kling 4 flash'].includes(String(videoModel).toLowerCase()) ? 'kling-4-flash'
+      : ['omni', 'gemini-omni', 'gemini-omni-1.2', 'gemini-omni-1.2-flash', 'omni-1.2', 'gemini omni', 'gemini omni 1.2'].includes(String(videoModel).toLowerCase()) ? 'google-omni'
         : (videoModel || 'fal-h3-max');
     const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco'].includes(selectedVideoModel);
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
@@ -3511,7 +3530,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       audioUrls.push(uploaded);
     }
     // Standalone MCP tool (no project timeline write)
-    process.stderr.write('🎬 Submitting video...\n');
+    process.stderr.write(`🎬 Submitting video (${describeVideoModel(selectedVideoModel)})...\n`);
     const resolvedOperation = inferredOperation;
     const vArgs = isSyncLipsync
       ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
