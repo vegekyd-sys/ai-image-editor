@@ -126,17 +126,33 @@ CODEX_SUBSCRIPTION_RELAY_URL=https://<relay-host>/
 CODEX_SUBSCRIPTION_RELAY_SECRET=<same random HMAC secret>
 ```
 
-The temporary Cloudflare quick tunnel used for Preview can change after a
-restart. Before Production, replace it with a dedicated named tunnel and stable
-hostname, then repeat the same owner, quota, streaming, and API fallback gates.
+### Fixed endpoint (since 2026-11-07)
 
-Until then, a rotated tunnel leaves `.env.local` pointing at a dead host while
-Vercel already has the new one. `npm run dev` now probes the relay URLs first
-(`scripts/check-local-relays.mjs`) and prints a warning; `npm run env:sync-relays`
-copies the current relay values from Vercel Preview into `.env.local`. At
-runtime, a relay that cannot be reached at all (TLS/DNS/refused) moves to the
-API backup after one retry and is skipped for 3 minutes per server process,
-instead of spending the full five-attempt same-provider budget on every run.
+The relay is reached at `https://codex-relay.tianyi.live` through the dedicated
+named Cloudflare tunnel `makaron-codex-relay`, the same pattern as
+`grok-relay.tianyi.live`. Do not revert to a `trycloudflare.com` quick tunnel:
+its URL rotated on every restart, which left `.env.local` (and any environment
+not redeployed) pointing at a dead host.
+
+- The relay itself runs on V (`makaron-codex-relay.service`, loopback 25984).
+  `cloudflared-makaron-codex-relay.service` runs as the same `makaron-codex`
+  account with `/srv/vlab/makaron-codex-relay/state/cloudflared.yml`
+  (template: `services/codex-subscription-relay/cloudflared.example.yml`).
+  The tunnel credential `state/cloudflared.json` is owner-only; never print it.
+- The tunnel and its DNS record were created on VLab, which holds the
+  `tianyi.live` origin certificate (`cloudflared tunnel create` /
+  `tunnel route dns`). Restarting the relay or the connector does not change
+  the hostname, so no env update is needed after a restart.
+- Verify with `/healthz`, an unsigned POST (must be 401), and
+  `npm run smoke:codex-subscription` with `CODEX_SUBSCRIPTION_SMOKE_MODEL`
+  set to a GPT model.
+
+As a safety net, `npm run dev` still probes the relay URLs first
+(`scripts/check-local-relays.mjs`), and `npm run env:sync-relays` copies the
+current relay values from Vercel Preview into `.env.local`. At runtime, a relay
+that cannot be reached at all (TLS/DNS/refused) moves to the API backup after
+one retry and is skipped for 3 minutes per server process, instead of spending
+the full five-attempt same-provider budget on every run.
 
 ## Admin allowlist management
 

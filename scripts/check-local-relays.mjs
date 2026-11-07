@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Local dev preflight for subscription relays (Codex / Grok).
 //
-// Why: the Codex relay is exposed through a Cloudflare quick tunnel whose URL
-// rotates on restart. Vercel env gets the new URL, but `.env.local` keeps the
+// Why: the Codex relay used to be exposed through a Cloudflare quick tunnel whose URL
+// rotated on restart (fixed at codex-relay.tianyi.live since 2026-11-07). Vercel env got the new URL, but `.env.local` keeps the
 // old one, so every local Agent turn burns several durable attempts on a dead
 // host before falling back. This script makes that drift visible at `npm run dev`
 // and can copy the current relay values from Vercel into `.env.local`.
@@ -75,7 +75,7 @@ async function check() {
   console.warn('[relay-check] Subscription relay unreachable from .env.local:');
   for (const result of dead) console.warn(`  - ${result.key} → ${host(result.url)}  (${result.reason})`);
   console.warn('  Agent turns on this model will be slow until the URL is fixed (the server');
-  console.warn('  retries once, then uses the API backup). Quick tunnels rotate on restart;');
+  console.warn('  retries once, then uses the API backup). If Vercel has a newer value,');
   console.warn('  copy the current values from Vercel with:');
   console.warn('    npm run env:sync-relays');
   console.warn(`${bar}\n`);

@@ -1,5 +1,5 @@
 [Unit]
-Description=Cloudflare quick tunnel for Makaron Codex relay preview
+Description=Stable Cloudflare tunnel for Makaron Codex relay (codex-relay.tianyi.live)
 After=network-online.target makaron-codex-relay.service
 Wants=network-online.target makaron-codex-relay.service
 
@@ -7,7 +7,7 @@ Wants=network-online.target makaron-codex-relay.service
 Type=simple
 User=makaron-codex
 Group=makaron-codex
-ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate --protocol http2 --url http://127.0.0.1:25984
+ExecStart=/usr/bin/cloudflared tunnel --config /srv/vlab/makaron-codex-relay/state/cloudflared.yml --no-autoupdate --protocol http2 run
 Restart=always
 RestartSec=5
 TimeoutStopSec=20

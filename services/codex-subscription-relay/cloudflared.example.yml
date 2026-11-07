@@ -1,0 +1,7 @@
+# Dedicated named tunnel `makaron-codex-relay`; keep its credential JSON owner-only.
+tunnel: REPLACE_WITH_DEDICATED_TUNNEL_UUID
+credentials-file: /srv/vlab/makaron-codex-relay/state/cloudflared.json
+ingress:
+  - hostname: codex-relay.tianyi.live
+    service: http://127.0.0.1:25984
+  - service: http_status:404
