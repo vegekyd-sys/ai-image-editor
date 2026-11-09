@@ -76,6 +76,19 @@
   - App 首页启动“照片变视频”模板（未指定模型）：日志为 `template skill photo-to-video-2 video model fal-h3-max (template default)`，成片 768×1344、15.1 秒、有音轨。
   - CLI `chat --skill <同一模板>`：同样走 fal-h3-max，扣 165 credits。
 
+## 上线记录（2026-11-09 16:45 CST）
+
+- 应用：dev `817dff6a` 经 `npm run release:prod` 上线（完整测试 391 个文件 / 2862 个用例、CLI 测试、build 全部通过）。之后 www.makaron.app 切到 main 的 git 生产构建 `ai-image-editor-4nv0ax70w`（同一提交），`/api/health` 13/13 正常；`origin/main` 与 `origin/dev` 都是 `817dff6a`。共享 dev 别名改为指向 Preview `ai-image-editor-6c1jj18nd`（同一提交）。
+- 更新日志：`changelog.klingFlashDefault`（2026-11-09，四语）。
+- CLI：`makaron-cli@0.17.16` 已发布，npm `latest` = 0.17.16，shasum `63b39a99…`。`release:cli:verify` 通过（9 个文件一致、9 个入口可发现），全新安装后 `video create --help` 把 Kling 4.0 Flash 标为默认。
+- 线上回归（仓库内 CLI 0.17.16 → www.makaron.app）：
+
+| 场景 | 选中的模型 | 结果 |
+|---|---|---|
+| 竖版人像 + 5s chat，不指定模型 | `kling-4-flash` | 94 credits，720×1280、5s，已转存 cdn |
+| `chat --skill` 照片变视频模板 | `fal-h3-max` | 161 credits，1344×768、10s，已转存 cdn。Agent 先生成了一张横版起始图，H3 按该图出了横屏 |
+| `video create` 不指定模型 | `kling-4-flash` | 完成 |
+
 ## 遗留
 
 - Retake 的小尺寸源视频对 Kling 仍会被拒（会回退到 Seedance），可把自动放大接到 Retake。是否把 Retake 默认也换成 Flash 需另行决定。
