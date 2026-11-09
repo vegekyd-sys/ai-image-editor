@@ -4,6 +4,7 @@ import type { SkillContext, SkillResult } from './index';
 import { ProviderImageInputError } from '../provider-image-preflight';
 import { FalImage25RequestError } from '../models/fal-image25';
 import { NanoBanana21RequestError } from '../models/nano-banana-21';
+import { Seedream55RequestError } from '../models/seedream55';
 import { WanImageRequestError } from '../models/wan-image';
 import { MidjourneyRequestError, type MidjourneyRequest, type MidjourneyTask } from '../midjourney';
 import { ImageCapabilityError, planImageGeneration } from '../image-model-capabilities';
@@ -11,6 +12,7 @@ import { ImageCapabilityError, planImageGeneration } from '../image-model-capabi
 export interface EditImageInput extends ImageGenerationOptions {
   editPrompt: string;
   midjourney?: Omit<MidjourneyRequest, 'prompt' | 'aspectRatio' | 'imageUrls'>;
+  onSeedream55Receipt?: import('../models/types').GenerateImageRequest['onSeedream55Receipt'];
   onMidjourneyReceipt?: (task: MidjourneyTask, request: MidjourneyRequest) => Promise<void>;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   aspectRatio?: string;
@@ -60,7 +62,7 @@ export async function editImage(
     references, prompt: finalPrompt, model: requestedModel, category: skill,
     aspectRatio, imageResolution, background, isNsfw,
     imageQuality: input.imageQuality, imageReasoningEffort: input.imageReasoningEffort, outputFormat: input.outputFormat, frameCount: input.frameCount, frameDurationMs: input.frameDurationMs, gifFrameSize: input.gifFrameSize,
-    midjourney: input.midjourney, onMidjourneyReceipt: input.onMidjourneyReceipt,
+    onSeedream55Receipt: input.onSeedream55Receipt, midjourney: input.midjourney, onMidjourneyReceipt: input.onMidjourneyReceipt,
     thinkingEffort: 'minimal' as const,
   };
   try {
@@ -74,7 +76,7 @@ export async function editImage(
     if (adjustments.length) message += ` ${adjustments.join(' ')}`;
     return { success: true, message, image: result.image, images: result.images, taskId: result.taskId, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage };
   } catch (error) {
-    if (error instanceof MidjourneyRequestError) return { success: false, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
+    if (error instanceof MidjourneyRequestError || error instanceof Seedream55RequestError) return { success: false, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
     if (error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
       return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
     }
