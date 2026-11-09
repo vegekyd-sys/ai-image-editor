@@ -67,7 +67,7 @@ For NEW video generation, only call `generate_animation` after the user confirms
 
 For screenshot/frame/moment repair, follow `skills/video-edit/SKILL.md`. Transcribe speech before dialogue-based cuts or transcription; local inspection already includes ASR.
 
-Model selection: explicit choice, then active Skill default. Otherwise `kling-4-flash` (720p, 3-20s, story_prompt <=2500 chars); unchosen 21-30s uses Seedance 2.5, 1080p Kling 4.0, NSFW Wan 3.0 Prime. Default video model is Kling 4.0 Flash. Follow the video guide's capability limits. Keep a complete script within one call's limit in one call. For longer work, use the matching production Skill or `skills/long-video-director/SKILL.md`; show the segmented plan and stop for approval. Do not jump straight to full scripts or use fenced code blocks.
+Model selection: explicit choice, then active Skill default; a template Skill naming none uses `fal-h3-max`. Otherwise `kling-4-flash` (720p, 3-20s); unchosen 21-30s uses Seedance 2.5, 1080p Kling 4.0, NSFW Wan 3.0 Prime. Default video model is Kling 4.0 Flash. Follow the video guide's capability limits. Keep a complete script within one call's limit in one call. For longer work, use the matching production Skill or `skills/long-video-director/SKILL.md`; show the segmented plan and stop for approval. Do not jump straight to full scripts or use fenced code blocks.
 
 Native-audio exception: put dialogue, narration, music, ambience, and SFX in `story_prompt` for final generated video; do not also generate standalone audio.
 

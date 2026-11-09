@@ -12,6 +12,7 @@ import { createVideoValidationReporter } from '@/lib/video-submission-validation
 import { preserveOptionalToolFields } from '@/lib/agent-tool-schema';
 import { calculateMediaQuote, videoPriceId, type VideoQuoteInput } from '@/lib/billing/media-pricing';
 import { seededMediaPrices } from './media-prices';
+import { applyTemplateVideoModel } from '@/lib/template-skill-video-model';
 
 // Execute the real factory without booting every unrelated media SDK. Only
 // external effects are injected; script validation, routing and pricing are real.
@@ -29,6 +30,7 @@ const upscaleCode = ts.transpileModule(upscaleFactory.getText(parsed), {
 }).outputText;
 
 export function generateAnimationHarness(kind: 'generate' | 'upscale' = 'generate') {
+  const templateVideo: { current: { skillName: string; model: string; explicit: boolean } | undefined } = { current: undefined };
   const rows: Array<Record<string, any>> = [
     { id: 'original', type: 'image' }, { id: 'generated', type: 'image' },
   ];
@@ -65,6 +67,8 @@ export function generateAnimationHarness(kind: 'generate' | 'upscale' = 'generat
     },
     isInsufficientCreditsError: () => false,
     isGrokSubscriptionAllowedUser: async () => false,
+    applyTemplateVideoModel,
+    resolveTemplateSkillVideoModel: vi.fn(async () => templateVideo.current),
     console: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
     require: (name: string) => {
       if (name === './video-harness') return { validateVideoScript };
@@ -80,7 +84,7 @@ export function generateAnimationHarness(kind: 'generate' | 'upscale' = 'generat
   const create = vm.runInContext(`${code}\n${upscaleCode}\n${kind === 'upscale' ? 'createUpscaleVideoTool' : 'createGenerateAnimationTool'}`, context);
   const tool = create({ ctx, serializeVideoSubmission: (operation: () => unknown) => operation() });
   preserveOptionalToolFields({ generate_animation: tool }, 'codex-subscription');
-  return { tool, ctx, rows, db, insert, createVideo, requireCredits, deductFixedCredits, refundCredits, probeVideoMetadataFromUrl };
+  return { tool, ctx, rows, db, insert, createVideo, requireCredits, deductFixedCredits, refundCredits, probeVideoMetadataFromUrl, templateVideo };
 }
 
 // Reduced from the observed four failing calls: every unused optional field was

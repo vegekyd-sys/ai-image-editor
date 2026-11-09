@@ -18,6 +18,7 @@ import { createInspectedRetakeVideoTool } from './agent-retake-tool';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL, planRetake, validateRetakeRange } from './video-retake-contract';
 import { signRetakeInspection, verifyRetakeInspection, resolveRetakeInspectionReceipt, retakeInspectionScope, retakeOutputTime, retakeInspectionProofPath } from './video-retake-inspection';
 import { RETAKE_SCENE_READING, retakePromptPlanning } from './video-retake-prompt-planning';
+import { applyTemplateVideoModel, resolveTemplateSkillVideoModel, skillNameFromSkillPath } from './template-skill-video-model';
 import { GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS, GOOGLE_OMNI_MAX_EXTEND_SECONDS, getVideoModelRetirementError, getVideoModelCapability, isKling4FamilyModel, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
 import {
@@ -241,6 +242,12 @@ export interface AgentContext {
   videoModel?: VideoModel;
   /** User/app selected video resolution. Defaults to auto. */
   videoResolution?: import('@/types').VideoResolution;
+  /** Template Skill named by a verified home template launch. */
+  skillLaunchSkillName?: string;
+  /** Skill named by a `[Active skill: NAME]` prefix on the current request. */
+  activeSkillName?: string;
+  /** Skills whose SKILL.md was read in this run, in read order. */
+  readSkillNames?: string[];
   /** True when the app video selector is in automatic mode. */
   videoAuto?: boolean;
   /** Project-scoped audio references imported through CLI/app music infrastructure. Not Timeline Media Index. */
@@ -1746,12 +1753,25 @@ function createGenerateAnimationTool(
             })
           : story_prompt;
         const requestedModel = normalizeVideoModelId(model);
+        // Template Skills that never named a video model stay on FAL H3 Max.
+        const templateVideo = replication_contract || forceUpscale || requestedModel === 'sync-lipsync-v3'
+          ? undefined
+          : await resolveTemplateSkillVideoModel({
+            supabase: ctx.supabase,
+            userId: ctx.userId,
+            candidateSkillNames: [ctx.skillLaunchSkillName, ctx.activeSkillName, ...(ctx.readSkillNames || [])].filter((name): name is string => !!name),
+          }).catch(() => undefined);
+        if (templateVideo) console.log(`[generate_animation] template skill ${templateVideo.skillName} video model ${templateVideo.model}${templateVideo.explicit ? ' (skill-specified)' : ' (template default)'}`);
         const replicationAwareToolModel = replication_contract
           ? resolveVideoReplicationModelId(model)
-          : model;
+          : applyTemplateVideoModel(model, templateVideo?.model);
+        const templateSwitchedModel = !replication_contract && replicationAwareToolModel !== model;
         const replicationAwareToolResolution = replication_contract
           ? resolveVideoReplicationResolution(video_resolution)
-          : video_resolution;
+          : templateSwitchedModel && video_resolution && video_resolution !== 'auto'
+            && !(getVideoModelCapability(replicationAwareToolModel).supportedResolutions as string[] | undefined)?.includes(video_resolution)
+            ? 'auto'
+            : video_resolution;
         const selectedVideoRoute = forceUpscale || requestedModel === 'sync-lipsync-v3'
           ? { model: requestedModel, resolution: video_resolution ?? 'auto', locked: false }
           : resolveAgentVideoSelection({
@@ -4317,6 +4337,8 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
         const result = await workspace.readFile(filePath, ctx.supabase, ctx.userId);
         if (!result) return { error: `File not found: ${filePath}` };
+        const readSkillName = skillNameFromSkillPath(filePath);
+        if (readSkillName && !(ctx.readSkillNames ??= []).includes(readSkillName)) ctx.readSkillNames.push(readSkillName);
 
         const bundlePaths = evolvingSkillBundlePaths(filePath);
         let componentContents: Record<string, string> | undefined;

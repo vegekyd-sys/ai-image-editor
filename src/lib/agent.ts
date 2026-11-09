@@ -1,3 +1,4 @@
+import { activeSkillNameFromPrompt } from './template-skill-video-model';
 import { isOpenAIDirectFallbackError, isOpenAIQuotaExhausted, markOpenAIDirectExhausted, refreshOpenAIDirectBudget } from './openai-direct';
 import { streamText } from 'ai';
 import { initializeAgentSnapshotUrls } from './agent-media-index';
@@ -344,6 +345,8 @@ export async function* runMakaronAgent(
     videoModel: options?.videoModel as VideoModel | undefined,
     videoResolution: options?.videoResolution,
     videoAuto: options?.videoAuto,
+    skillLaunchSkillName: options?.skillLaunchContext?.skillName,
+    activeSkillName: activeSkillNameFromPrompt(prompt),
     audioAttachments: options?.audioAttachments,
     preferredModel: options?.preferredModel,
     snapshotImages: initializeAgentSnapshotUrls(options?.snapshotImages, currentImage),
