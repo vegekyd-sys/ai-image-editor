@@ -34,7 +34,8 @@ describe('Kling 4.0 candidate contract', () => {
     })
   })
   it.each([
-    { input: { prompt: '', images: [], duration: 2 }, message: 'Kling 4.0 prompt must contain 1–2500 characters.' },
+    { input: { prompt: '', images: [], duration: 2 }, message: 'Kling 4.0 prompt must not be empty.' },
+    { input: { prompt: 'x'.repeat(2501), images: [] }, message: 'Kling 4.0 prompts are limited to 2500 characters, but this story_prompt has 2501.' },
     { input: { prompt: 'hello', images: ['file:///private.png'] }, message: 'Kling 4.0 requires accessible HTTP(S) media URLs.' },
     { input: { prompt: 'hello', images: [], operation: 'edit' }, message: 'Kling 4.0 accepts 10 images and 5 reference videos; editing requires exactly one video.' },
     { input: { prompt: '<<<video_2>>>', images: [], videos: ['https://example.org/source.mp4'] }, message: 'Kling 4.0 prompt references a missing input.' },
@@ -183,7 +184,7 @@ describe('Kling 4.0 Flash (EvoLink, checked 2026-11-06)', () => {
     expect(() => buildKling4Payload({ model: 'kling-4-flash', prompt: 'Go', images: [], duration: 21 })).toThrow('Kling 4.0 Flash duration must be an integer from 3 to 20 seconds.')
     expect(() => buildKling4Payload({ model: 'kling-4-flash', prompt: 'Go', images: [], resolution: '1080p' })).toThrow('Kling 4.0 Flash supports 720p.')
     expect(buildKling4Payload({ model: 'kling-4-flash', prompt: 'Go', images: [], duration: 20 })).toMatchObject({ model: 'kling-v4-flash-text-to-video', duration: 20 })
-    expect(validateVideoModelRequest({ model: 'kling-4-flash', outputDuration: 25 })).toBe('Kling 4.0 Flash output must be an integer from 3 to 20 seconds.')
+    expect(validateVideoModelRequest({ model: 'kling-4-flash', outputDuration: 25 })).toMatch(/^Kling 4\.0 Flash output must be an integer from 3 to 20 seconds\. If the user did not choose Kling 4\.0 Flash, use seedance-2\.5/)
     expect(validateVideoModelRequest({ model: 'kling-4-flash', resolution: '1080p' })).toMatch(/resolution/i)
     expect(validateVideoModelRequest({ model: 'kling-4-flash', outputDuration: 20 })).toBeNull()
     expect(validateVideoModelRequest({ model: 'kling-4', outputDuration: 25 })).toBeNull()

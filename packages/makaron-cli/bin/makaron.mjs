@@ -2158,12 +2158,12 @@ Generation options:
 Recent model choices:
   kling-4       Kling 4.0 standard: native text/image/video references, 3–30s, 720p/1080p.
                  Native edit preserves source audio; default for video retake.
-  kling-4-flash  Kling 4.0 Flash: faster, lower-cost Kling 4.0 with the same inputs and edit route;
-                 3–20s, 720p only, video inputs <=20s total.
+  kling-4-flash  Kling 4.0 Flash (default): faster Kling 4.0 with the same inputs and edit route;
+                 3–20s, 720p only, video inputs <=20s total, script <=2500 characters.
   google-omni    Gemini Omni 1.2 Flash: 3–15s text/image/video with native audio, multi-speaker
                  dialogue and lip-sync; edit (source <=15s) or extend (+3–10s, up to 30s);
                  360p/720p, upscaled 1080p/4k.
-  fal-h3-max     FAL H3 Max (default, 768p) reference-to-video: images, videos and audio;
+  fal-h3-max     FAL H3 Max (768p) reference-to-video: images, videos and audio;
                  integer 5–15s, 480p/768p/1080p, default 768p. Reference inputs cost extra.
   minimax-h3-max  fal H3 Turbo faster-than-real-time T2V or one-start-image I2V;
                   5/10/15s; native 768p default or 480p; no video/audio/multi-image references.
@@ -2195,7 +2195,7 @@ function printVideoHelp() {
   video create --script "..." --video-model wan-3.0-prime    Fast Wan tier, up to 4k
   video create --script "..." --video-model seedance-2.5     4-30s multimodal generation/edit/extend
   video create --script "..." --video-model kling-4          Kling 4.0, 3-30s, 720p/1080p
-  video create --script "..." --video-model kling-4-flash    Kling 4.0 Flash, faster/lower cost, 3-20s 720p
+  video create --script "..." --video-model kling-4-flash    Kling 4.0 Flash (default), 3-20s 720p
   video create --script "..." --video-model google-omni      Gemini Omni 1.2 Flash, 3-15s with dialogue
   video create --script "..." --video <file|url> --video-model grok --video-operation extend
                                                                Edit or extend one MP4 with Grok
@@ -3409,7 +3409,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       : ['kling4', 'kling-4.0', 'kling 4.0', 'kling 4'].includes(String(videoModel).toLowerCase()) ? 'kling-4'
       : ['kling4-flash', 'kling-4.0-flash', 'kling 4.0 flash', 'kling 4 flash'].includes(String(videoModel).toLowerCase()) ? 'kling-4-flash'
       : ['omni', 'gemini-omni', 'gemini-omni-1.2', 'gemini-omni-1.2-flash', 'omni-1.2', 'gemini omni', 'gemini omni 1.2'].includes(String(videoModel).toLowerCase()) ? 'google-omni'
-        : (videoModel || 'fal-h3-max');
+        : (videoModel || (duration != null && duration > 20 ? 'seedance-2.5' : 'kling-4-flash'));
     const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco'].includes(selectedVideoModel);
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
@@ -3432,6 +3432,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (isKling4 && (images.length > 10 || videos.length > 5 || audios.length)) { console.error(`${kling4Label} accepts at most 10 images and 5 videos, with no audio references.`); process.exit(1); }
     if (isKling4 && duration != null && (!Number.isInteger(duration) || duration < 3 || duration > kling4MaxSeconds)) { console.error(`${kling4Label} output duration must be an integer from 3 to ${kling4MaxSeconds} seconds.`); process.exit(1); }
     if (isKling4Flash && videoResolution && !['auto', '720p'].includes(videoResolution.toLowerCase())) { console.error('Kling 4.0 Flash supports 720p only.'); process.exit(1); }
+    if (isKling4 && script.length > 2500) { console.error(`${kling4Label} scripts are limited to 2500 characters (this one has ${script.length}). Shorten the script, or choose another model with --video-model.`); process.exit(1); }
     if (isFalReference && (images.length > 9 || videos.length > 3 || audios.length > 3 || images.length + videos.length + audios.length > 12)) { console.error('FAL H3 Max accepts at most 9 images, 3 videos, 3 audios, 12 total.'); process.exit(1); }
     if (isFalReference && duration != null && (!Number.isInteger(duration) || duration < 5 || duration > 15)) { console.error('FAL H3 Max output duration must be an integer from 5 to 15 seconds.'); process.exit(1); }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }

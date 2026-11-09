@@ -13,6 +13,8 @@ export interface VideoModelCapability {
   supportsVideoReference: boolean
   supportsBaseVideoEdit: boolean
   longVideoChunkSeconds: number
+  /** Provider hard limit on the final prompt, in JavaScript string length. */
+  maxPromptCharacters?: number
   estimatedCostPerSecondUsd?: number
   estimatedInputCostUsdPerImage?: number
   freeImageReferences?: number
@@ -76,7 +78,9 @@ export interface VideoReferenceMeta {
   fileSizeBytes?: number | null
 }
 
-const DEFAULT_MODEL_ID = 'fal-h3-max'
+// Chosen 2026-11-09 after a 12-case blind review of real user requests:
+// best quality (avg rank 1.92 of 4) at ~64s median generation time.
+const DEFAULT_MODEL_ID = 'kling-4-flash'
 export const DEFAULT_VIDEO_REPLICATION_MODEL_ID = 'wan-3.0-prime'
 export const DEFAULT_VIDEO_REPLICATION_RESOLUTION: VideoResolution = '720p'
 
@@ -85,7 +89,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     id: 'kling-4', label: 'Kling 4.0', minOutputDuration: 3, maxOutputDuration: 30,
     maxReferenceVideoDuration: 30, supportsVideoReference: true, supportsBaseVideoEdit: true,
     referenceVideoSize: { maxFileSizeMb: 200, minWidth: 720, minHeight: 720, maxWidth: 2160, maxHeight: 2160, description: 'MP4/MOV, 720–2160px per side, 24–60fps, 3–30s total, <=200MB per clip' },
-    defaultImageWorkflow: 'reference-to-video', longVideoChunkSeconds: 30,
+    defaultImageWorkflow: 'reference-to-video', longVideoChunkSeconds: 30, maxPromptCharacters: 2500,
     maxImageReferences: 10, maxVideoReferences: 5, maxAudioReferences: 0, maxTotalReferences: 15,
     supportedResolutions: ['720p', '1080p'], defaultResolution: '720p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '21:9'],
@@ -98,7 +102,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     id: 'kling-4-flash', label: 'Kling 4.0 Flash', minOutputDuration: 3, maxOutputDuration: 20,
     maxReferenceVideoDuration: 20, supportsVideoReference: true, supportsBaseVideoEdit: true,
     referenceVideoSize: { maxFileSizeMb: 200, minWidth: 720, minHeight: 720, maxWidth: 2160, maxHeight: 2160, description: 'MP4/MOV, 720–2160px per side, 24–60fps, 3–20s total, <=200MB per clip' },
-    defaultImageWorkflow: 'reference-to-video', longVideoChunkSeconds: 20,
+    defaultImageWorkflow: 'reference-to-video', longVideoChunkSeconds: 20, maxPromptCharacters: 2500,
     maxImageReferences: 10, maxVideoReferences: 5, maxAudioReferences: 0, maxTotalReferences: 15,
     supportedResolutions: ['720p'], defaultResolution: '720p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '21:9'],
@@ -1120,7 +1124,7 @@ export function validateVideoModelRequest(options: {
   if (retirementError) return retirementError
   if (isKling4FamilyModel(normalizedModel)) {
     const { label, maxOutputDuration: max } = capability
-    if (options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 3 || options.outputDuration > max)) return `${label} output must be an integer from 3 to ${max} seconds.`
+    if (options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 3 || options.outputDuration > max)) return `${label} output must be an integer from 3 to ${max} seconds.${capability.id === 'kling-4-flash' ? ' If the user did not choose Kling 4.0 Flash, use seedance-2.5 for a 21-30s single generation; if they chose Flash, split into segments of 20s or less.' : ''}`
     if (options.operation === 'edit' && (options.videoReferenceCount ?? 0) !== 1) return `${label} editing requires exactly one source video.`
     if (options.referenceVideoMetas?.some(meta => (meta.durationSec ?? 0) < 3)) return `${label} reference videos must each be at least 3 seconds.`
   }

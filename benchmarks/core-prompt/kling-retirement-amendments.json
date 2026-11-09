@@ -1,5 +1,5 @@
 {
-  "reason": "The frozen refactor baseline remains unchanged. Both layered and legacy runtime prompts must honor retirement and the current Kling 4.0 Kling 4.0 Flash, and Gemini Omni 1.2 contracts; rollback is not permission to advertise retired APIs.",
+  "reason": "The frozen refactor baseline remains unchanged. Both layered and legacy runtime prompts must honor retirement and the current Kling 4.0 Kling 4.0 Flash, and Gemini Omni 1.2 contracts; rollback is not permission to advertise retired APIs. 2026-11-09 user decision after a four-model blind review of real requests: Kling 4.0 Flash is the default video model (3-20s, 720p, prompt <=2500 chars); without an explicit model 21-30s goes to Seedance 2.5 and 1080p to Kling 4.0.",
   "replacements": [
     [
       "Kling 5-15s",
@@ -19,7 +19,7 @@
     ],
     [
       "A non-NSFW direct 16-30 second request defaults to Seedance 2.5.",
-      "Only when no model is explicitly selected, a non-NSFW direct 16-30 second request defaults to Seedance 2.5. Explicit Kling 4.0 requests up to 30 seconds stay on Kling 4.0 in one call; do not split, shorten, or substitute based on legacy Kling limits."
+      "Only when no model is explicitly selected, a non-NSFW direct 21-30 second request defaults to Seedance 2.5. Explicit Kling 4.0 requests up to 30 seconds stay on Kling 4.0 in one call; do not split, shorten, or substitute based on legacy Kling limits."
     ],
     [
       "Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented.",
@@ -52,6 +52,30 @@
     [
       "default 10s, preserve continuity, save a new snapshot; Google results can repeat to 40s.",
       "default 10s, preserve continuity, save a new snapshot; Google results can repeat to 30s. `video_operation: \"edit\"` on a Google result is a follow-up edit turn: describe only the change."
+    ],
+    [
+      "Default model is FAL H3 Max (`fal-h3-max`) at 768p.",
+      "Default model is Kling 4.0 Flash (`kling-4-flash`) at 720p for 3-20s; keep its story_prompt within 2500 characters, media markers included."
+    ],
+    [
+      "Use `seedance-2.5` for a non-NSFW single 16-30 second generation",
+      "Use Kling 4.0 (`kling-4`) when the user wants 1080p and chose no model. Use `seedance-2.5` for a non-NSFW single 21-30 second generation"
+    ],
+    [
+      "overrides the 16-30 second Seedance 2.5 route",
+      "overrides the 21-30 second Seedance 2.5 route"
+    ],
+    [
+      "Default video model is FAL H3 Max (`fal-h3-max`) 768p. A non-NSFW direct 16-30 second request defaults to `seedance-2.5`;",
+      "Default video model is Kling 4.0 Flash (`kling-4-flash`) 720p, 3-20s; keep its story_prompt within 2500 characters. Without an explicit model, a non-NSFW direct 21-30 second request defaults to `seedance-2.5` and a 1080p request to `kling-4`;"
+    ],
+    [
+      "FAL H3 Max supports native text-to-video.",
+      "Kling 4.0 Flash supports native text-to-video."
+    ],
+    [
+      "call `generate_animation` with `fal-h3-max` (or the explicitly selected model)",
+      "call `generate_animation` with `kling-4-flash` (or the explicitly selected model)"
     ]
   ]
 }

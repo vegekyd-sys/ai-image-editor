@@ -254,7 +254,7 @@ describe('agent prompt policy guards', () => {
     const createVideo = read('src/lib/skills/create-video.ts')
 
     expect(agent).toContain('Hard duration range: a single SeeDance 2.0 script/call must be 4-15s; SeeDance 2.5 must be 4-30s')
-    expect(agent).toContain('A non-NSFW direct 16-30 second request defaults to `seedance-2.5`')
+    expect(agent).toContain('a non-NSFW direct 21-30 second request defaults to `seedance-2.5`')
     expect(agent).toContain('any NSFW/adult-explicit video request defaults to `wan-3.0-prime` instead')
     expect(agent).toContain('just as NSFW image requests use Qwen')
     expect(agent).toContain('If requested/source duration is shorter than the model minimum, use the minimum')
@@ -279,7 +279,7 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('The whole title + every `Shot N (Xs):` line + `Style:` line must be submitted together')
     expect(animate).toContain('Do not submit only a single shot or a single line from the script')
     expect(animate).toContain('Multiple shots are normal inside one 15s video')
-    expect(animate).toContain('exactly 16-30s and selects Seedance 2.5')
+    expect(animate).toContain('If the request is 21-30s with no explicit model, or the user asks for 16-30s and selects Seedance 2.5')
     expect(animate).toContain('## Seedance 2.5 Longer-Form Direction (16-30s)')
     expect(animate).toContain('Do not write a 15s idea and stretch it to 30s')
     expect(animate).toContain('**16-20s:** usually 4-6 distinct shots')
@@ -319,7 +319,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Seedance 2.5 is 4-30 seconds; Wan 3.0 is 2-30 seconds')
     expect(agentTs).toContain('An NSFW/adult-explicit video request defaults to Wan 3.0 Prime')
     expect(agentTs).toContain('analogous to choosing Qwen for NSFW image requests')
-    expect(agentTs).toContain('overrides the 16-30 second Seedance 2.5 route')
+    expect(agentTs).toContain('overrides the 21-30 second Seedance 2.5 route')
     expect(agentTs).toContain('reference-video duration + requested output duration <= 30 seconds')
     expect(agentTs).toContain('Kling 4.0 is 3-30 seconds')
     expect(agentTs).toContain("If a complete script fits the selected model's single-call limit, submit it as one video generation call")
@@ -415,8 +415,8 @@ describe('agent prompt policy guards', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('Default video model is FAL H3 Max')
-    expect(agent).toContain('`fal-h3-max`')
+    expect(agent).toContain('Default video model is Kling 4.0 Flash')
+    expect(agent).toContain('`kling-4-flash`')
     expect(agent).not.toContain('app selector')
     expect(agent).not.toContain('app selection')
     expect(agentTs).toContain('resolveAgentVideoSelection')
@@ -426,7 +426,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('const replicationAwareToolResolution = replication_contract')
     expect(agentTs).toContain('toolResolution: replicationAwareToolResolution')
     expect(agentTs).toContain('resolveVideoReplicationResolution(selectedVideoRoute.resolution)')
-    expect(agentTs).toContain('Default model is FAL H3 Max')
+    expect(agentTs).toContain('Default model is Kling 4.0 Flash')
   })
 
   it('uses path-based composition patching instead of full currentDesign code injection', () => {

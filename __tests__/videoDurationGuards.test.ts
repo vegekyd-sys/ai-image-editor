@@ -91,8 +91,9 @@ describe('video duration guards', () => {
       imageCount: 1,
     })
 
-    expect(error).toContain('at most 15 seconds')
+    expect(error).toContain('at most 20 seconds')
     expect(error).toContain('totals 30s')
+    expect(error).toContain('model="seedance-2.5"')
     expect(error).toContain('long-video-director')
   })
 

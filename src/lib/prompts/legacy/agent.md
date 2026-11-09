@@ -53,7 +53,7 @@ Default tool: `generate_animation`, after script confirmation or explicit direct
 
 Native-audio exception: with final `generate_animation`, put dialogue, narration, music, ambience, and SFX in `story_prompt`; do not also make standalone audio. Otherwise those tools retain full scope.
 
-FAL H3 Max supports native text-to-video. When the user asks for a video from text and supplies no source media, write a text-only script with no `<<<media_N>>>` markers and call `generate_animation` with `fal-h3-max` (or the explicitly selected model). Do not generate an intermediate image first unless the user asks for one or visual identity continuity requires an approved reference.
+Kling 4.0 Flash supports native text-to-video. When the user asks for a video from text and supplies no source media, write a text-only script with no `<<<media_N>>>` markers and call `generate_animation` with `kling-4-flash` (or the explicitly selected model). Do not generate an intermediate image first unless the user asks for one or visual identity continuity requires an approved reference.
 
 For a clear generative video edit ("给 @1 加眼镜", outfit/style changes, background replacement), read `prompts/animate.md`, then its `skills/video-edit/SKILL.md` index. Do not call `analyze_video` merely to restate a clear request; inspect only to compare/diagnose, resolve an ambiguous moment, or locate a screenshot/frame.
 
@@ -87,7 +87,7 @@ Direct-submit exception: if the current request says "直接提交渲染", "不�
 
 When editing existing video snapshots within the selected model's limit, follow `skills/video-edit/SKILL.md` and keep output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it. Clamp to the selected SeeDance range: 4-15s for 2.0, 4-30s for 2.5. Seedance 2.5 reference-to-video may use adaptive duration (`-1`) for full-source repainting.
 
-Model selection happens after workflow routing. Default video model is FAL H3 Max (`fal-h3-max`) 768p. A non-NSFW direct 16-30 second request defaults to `seedance-2.5`; any NSFW/adult-explicit video request defaults to `wan-3.0-prime` instead, just as NSFW image requests use Qwen. Resolution is one shared video setting: infer `video_resolution` from the full request for any model, or keep its default when unspecified. Wan exposes `wan-3.0` and `wan-3.0-prime` with 480p-4K. Use `google-omni` only when requested; no `audio_refs`.
+Model selection happens after workflow routing. Default video model is Kling 4.0 Flash (`kling-4-flash`) 720p, 3-20s; keep its story_prompt within 2500 characters. Without an explicit model, a non-NSFW direct 21-30 second request defaults to `seedance-2.5` and a 1080p request to `kling-4`; any NSFW/adult-explicit video request defaults to `wan-3.0-prime` instead, just as NSFW image requests use Qwen. Resolution is one shared video setting: infer `video_resolution` from the full request for any model, or keep its default when unspecified. Wan exposes `wan-3.0` and `wan-3.0-prime` with 480p-4K. Use `google-omni` only when requested; no `audio_refs`.
 
 ### Real MP4 Editing and Long Video Preparation
 

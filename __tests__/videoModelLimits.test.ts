@@ -95,9 +95,10 @@ describe('video model reference limits', () => {
     })).toBe('Sync Lipsync v3 does not support image references.')
   })
 
-  it('defaults video generation to SeeDance 2.0 Fast', () => {
-    expect(getDefaultVideoModelId()).toBe('fal-h3-max')
-    expect(normalizeVideoModelId()).toBe('fal-h3-max')
+  it('defaults video generation to Kling 4.0 Flash', () => {
+    expect(getDefaultVideoModelId()).toBe('kling-4-flash')
+    expect(normalizeVideoModelId()).toBe('kling-4-flash')
+    expect(normalizeVideoResolution(undefined, 'auto')).toBe('720p')
     expect(normalizeVideoModelId('seedance')).toBe('seedance')
     expect(normalizeVideoModelId('seedance-fast')).toBe('seedance-fast')
     expect(normalizeVideoModelId('seedance-2.0-mini')).toBe('seedance-mini')

@@ -258,6 +258,75 @@ function prepareWan30References(options: {
   return { prompt, images: referencedImages };
 }
 
+/**
+ * Kling 4 reads `<<<image_N>>>` and `<<<video_N>>>` as two separate input lists.
+ * Timeline markers are one shared `<<<media_N>>>` namespace, so a marker that
+ * points at a video snapshot must become a video marker, not an image marker.
+ */
+export function prepareKling4References(options: {
+  prompt: string;
+  images: string[];
+  videoUrls: string[];
+  operation?: VideoGenerationOperation;
+}): { prompt: string; images: string[] } {
+  const refs = [...new Set(
+    Array.from(options.prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), match => Number(match[1]))
+  )];
+  const mediaTags = new Map<number, string>();
+  const referencedImages: string[] = [];
+  const usedVideos = new Set<number>(
+    Array.from(options.prompt.matchAll(/<<<video_(\d+)>>>/gi), match => Number(match[1])),
+  );
+  let videoIndex = 0;
+
+  for (const ref of refs) {
+    const image = options.images[ref - 1];
+    if (image?.startsWith('http')) {
+      referencedImages.push(image);
+      mediaTags.set(ref, `<<<image_${referencedImages.length}>>>`);
+    } else if (videoIndex < options.videoUrls.length) {
+      while (usedVideos.has(videoIndex + 1) && videoIndex < options.videoUrls.length) videoIndex += 1;
+      if (videoIndex >= options.videoUrls.length) continue;
+      videoIndex += 1;
+      usedVideos.add(videoIndex);
+      mediaTags.set(ref, `<<<video_${videoIndex}>>>`);
+    }
+  }
+
+  let prompt = options.prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (marker, rawIndex) => {
+    return mediaTags.get(Number(rawIndex)) || marker;
+  });
+  const unreferenced = options.videoUrls
+    .map((_, index) => index + 1)
+    .filter(index => !usedVideos.has(index));
+  if (unreferenced.length) {
+    prompt = options.operation === 'edit'
+      ? `Edit ${unreferenced.map(index => `<<<video_${index}>>>`).join(', ')}: ${prompt}`
+      : `${prompt}\nUse ${unreferenced.map(index => `<<<video_${index}>>>`).join(', ')} as motion, camera, and visual-style references.`;
+  }
+
+  return { prompt, images: referencedImages };
+}
+
+/** Pick Kling's closest supported ratio from the first referenced image. */
+async function inferKling4ImageAspectRatio(provider: string, images: string[]): Promise<string | undefined> {
+  const first = images.find(image => image?.startsWith('http'));
+  if (!first) return undefined;
+  try {
+    const [{ default: sharp }, { readProviderImage }] = await Promise.all([
+      import('sharp'),
+      import('../provider-image-preflight'),
+    ]);
+    const meta = await sharp(await readProviderImage(first, 30 * 1024 * 1024), { limitInputPixels: 64_000_000 }).metadata();
+    const width = meta.orientation && meta.orientation >= 5 ? meta.height : meta.width;
+    const height = meta.orientation && meta.orientation >= 5 ? meta.width : meta.height;
+    return resolveClosestSupportedAspectRatio(provider, width, height);
+  } catch (error) {
+    console.warn(`[create_video] could not infer ${provider} aspect ratio from the first image:`, error instanceof Error ? error.message : error);
+    return undefined;
+  }
+}
+
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
   const retirementError = getVideoModelRetirementError(input.videoModel);
   if (retirementError || input.motionControl) return { success: false, retryable: false, message: retirementError || RETIRED_KLING_MESSAGE };
@@ -386,6 +455,15 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       });
       filteredImages = prepared.images;
       finalPrompt = prepared.prompt;
+    } else if (isKling4Family) {
+      const prepared = prepareKling4References({
+        prompt: script,
+        images,
+        videoUrls: providerVideoUrls,
+        operation: videoOperation,
+      });
+      filteredImages = prepared.images;
+      finalPrompt = prepared.prompt;
     } else if (isWan30 || provider === 'fal-h3-max') {
       const prepared = prepareWan30References({
         prompt: script,
@@ -501,6 +579,11 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       providerAspectRatio = 'adaptive';
     }
     if (route.provider === 'fal-sync') providerAspectRatio = undefined;
+    // EvoLink Kling defaults to 16:9 when aspect_ratio is omitted. Follow the
+    // first reference image instead, so a portrait photo stays portrait.
+    if (isKling4Family && !providerAspectRatio && videoOperation !== 'edit' && filteredImages.length > 0) {
+      providerAspectRatio = await inferKling4ImageAspectRatio(provider, filteredImages);
+    }
     console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images${resolvedImageWorkflow ? `, imageWorkflow=${resolvedImageWorkflow}` : ''}, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}${hasAudioReference ? `, audio=${audioUrls?.length}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 

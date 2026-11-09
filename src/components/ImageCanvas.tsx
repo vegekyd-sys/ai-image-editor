@@ -169,6 +169,8 @@ export default function ImageCanvas({
     ? t('canvas.remotionExportUsuallyTakes')
     : normalizeVideoModelId(videoModel) === 'fal-h3-max'
       ? t('canvas.falH3MaxUsuallyTakes')
+      : normalizeVideoModelId(videoModel) === 'kling-4-flash'
+      ? t('canvas.kling4FlashUsuallyTakes')
       : (isFastVideoRenderModel(videoModel)
         ? t('canvas.grokUsuallyTakes')
         : t('canvas.usuallyTakes'));

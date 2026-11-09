@@ -45,18 +45,25 @@ export function validateVideoScript(opts: {
   if (resolutionError) return resolutionError
   const aspectRatioError = validateVideoAspectRatioRequest({ model, aspectRatio })
   if (aspectRatioError) return aspectRatioError
+  if (capability.maxPromptCharacters && prompt.length > capability.maxPromptCharacters) {
+    return `${capability.label} prompts are limited to ${capability.maxPromptCharacters} characters, but this story_prompt has ${prompt.length}. Rewrite it once to ${capability.maxPromptCharacters} characters or fewer: keep the title, every shot with its timing, all spoken lines and every media marker; remove repeated style notes and adjective lists. Keep the same model.`
+  }
+  // Flash is the app default; 21-30s defaults belong to Seedance 2.5 unless the user chose Flash.
+  const flashDurationHint = capability.id === 'kling-4-flash'
+    ? ' If the user did not choose Kling 4.0 Flash, resubmit this 21-30s request as one model="seedance-2.5" generation instead of splitting it.'
+    : ''
   const parsedDuration = parseTotalDuration(prompt)
   if (parsedDuration != null && parsedDuration < capability.minOutputDuration) {
     return `A single ${capability.label} video generation script must be at least ${capability.minOutputDuration} seconds, but this script totals ${parsedDuration}s. Extend it to a compact ${capability.minOutputDuration}s script and set duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`
   }
   if (parsedDuration != null && parsedDuration > capability.maxOutputDuration) {
-    return `A single video generation script can be at most ${capability.maxOutputDuration} seconds, but this script totals ${parsedDuration}s. Use long-video-director to split it into self-contained segments of ${capability.longVideoChunkSeconds}s or less, and do not submit one long script.`
+    return `A single video generation script can be at most ${capability.maxOutputDuration} seconds, but this script totals ${parsedDuration}s. Use long-video-director to split it into self-contained segments of ${capability.longVideoChunkSeconds}s or less, and do not submit one long script.${flashDurationHint}`
   }
   if (!providerManagedAdaptiveDuration && duration != null && duration < capability.minOutputDuration) {
     return `${capability.label} video generation duration must be at least ${capability.minOutputDuration} seconds, but duration=${duration}. Use duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`
   }
   if (!providerManagedAdaptiveDuration && duration != null && duration > capability.maxOutputDuration) {
-    return `${capability.label} video generation duration must be ${capability.maxOutputDuration} seconds or less, but duration=${duration}.`
+    return `${capability.label} video generation duration must be ${capability.maxOutputDuration} seconds or less, but duration=${duration}.${flashDurationHint}`
   }
   if (
     !providerManagedAdaptiveDuration
