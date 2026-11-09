@@ -273,7 +273,7 @@ export async function upscaleSmallProviderVideoReferences(options: {
   userId: string
   projectId: string
   urls: string[]
-  metas: Array<{ width?: number | null; height?: number | null; fileSizeBytes?: number | null }>
+  metas: Array<{ durationSec?: number | null; width?: number | null; height?: number | null; fileSizeBytes?: number | null }>
   minShortSide: number
   maxLongSide: number
 }): Promise<{ urls: string[]; metas: typeof options.metas; upscaled: number }> {

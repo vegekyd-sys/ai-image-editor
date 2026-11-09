@@ -75,7 +75,7 @@ Long source video rule: if an existing timeline/reference video is longer than t
 
 Reference video input limit: one SeeDance 2.0 generation may use up to 15s combined source/reference video duration; SeeDance 2.5 allows up to 30s combined; Google Omni: one <=15s upload. Split longer input.
 
-Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling 4.0 accepts up to 5 MP4/MOV references (exactly one for edit), each >=3s, <=30s total (Flash <=20s), <=200MB each, 720-2160px per side, 24-60fps. Google Omni and Grok accept one video for typed edit/extend; read `prompts/animate.md` for limits.
+Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling 4.0 accepts up to 5 MP4/MOV references (exactly one for edit), each >=3s, <=30s total (Flash <=20s), <=200MB each, 720-2160px per side, 24-60fps. Makaron upscales timeline videos under 720px automatically for Kling; never switch models for that alone. Google Omni and Grok accept one video for typed edit/extend; read `prompts/animate.md` for limits.
 
 Google Omni continuation uses the same Refs mental model as Seedance: reference `<<<media_N>>>`, set `video_operation: "extend"`, describe the next beat, default 10s, preserve continuity, save a new snapshot; Google results can repeat to 30s. `video_operation: "edit"` on a Google result is a follow-up edit turn: describe only the change.
 

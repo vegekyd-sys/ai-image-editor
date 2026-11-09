@@ -13,7 +13,7 @@ vi.mock('../src/lib/provider-image-preflight', async importOriginal => ({
 
 import { createVideo, prepareKling4References } from '../src/lib/skills/create-video'
 import { validateVideoScript } from '../src/lib/video-harness'
-import { getDefaultVideoModelId, resolveAgentVideoSelection } from '../src/lib/video-model-capabilities'
+import { getDefaultVideoModelId, resolveAgentVideoSelection, validateVideoModelRequest } from '../src/lib/video-model-capabilities'
 
 const png = (width: number, height: number) => sharp({ create: { width, height, channels: 3, background: '#888' } }).png().toBuffer()
 
@@ -113,5 +113,12 @@ describe('Kling 4.0 Flash as the default video model', () => {
   it('points an unchosen 21-30s request at Seedance 2.5 instead of splitting', () => {
     expect(validateVideoScript({ prompt: 'One take', imageCount: 0, model: 'kling-4-flash', duration: 25 }))
       .toContain('resubmit this 21-30s request as one model="seedance-2.5" generation')
+  })
+
+  it('only rejects a measured Kling reference clip shorter than 3 seconds', () => {
+    const base = { model: 'kling-4-flash', hasVideoReference: true, videoReferenceCount: 1 }
+    expect(validateVideoModelRequest({ ...base, referenceVideoMetas: [{ width: 720, height: 1280 }] })).toBeNull()
+    expect(validateVideoModelRequest({ ...base, referenceVideoMetas: [{ durationSec: 8, width: 720, height: 1280 }] })).toBeNull()
+    expect(validateVideoModelRequest({ ...base, referenceVideoMetas: [{ durationSec: 2, width: 720, height: 1280 }] })).toContain('at least 3 seconds')
   })
 })

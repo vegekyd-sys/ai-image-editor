@@ -1837,7 +1837,7 @@ function createGenerateAnimationTool(
           let googleOmniPreviousInteractionId: string | undefined;
           const videoRefIndices = new Set<number>();
           let totalVideoRefDuration = 0;
-          const referenceVideoMetas: Array<{ width?: number | null; height?: number | null; fileSizeBytes?: number | null }> = [];
+          const referenceVideoMetas: Array<{ durationSec?: number | null; width?: number | null; height?: number | null; fileSizeBytes?: number | null }> = [];
           if (ctx.supabase && ctx.projectId) {
             const { data: dbSnaps } = await ctx.supabase
               .from('snapshots')
@@ -1863,6 +1863,7 @@ function createGenerateAnimationTool(
                     googleOmniPreviousInteractionId = sourceTaskId.slice('google-omni-'.length);
                   }
                   referenceVideoMetas.push({
+                    durationSec: Number(meta?.duration) > 0 ? Number(meta?.duration) : null,
                     width: Number.isFinite(Number(meta?.width)) ? Number(meta?.width) : null,
                     height: Number.isFinite(Number(meta?.height)) ? Number(meta?.height) : null,
                     fileSizeBytes: Number.isFinite(Number(meta?.fileSizeBytes)) ? Number(meta?.fileSizeBytes) : null,

@@ -1126,7 +1126,8 @@ export function validateVideoModelRequest(options: {
     const { label, maxOutputDuration: max } = capability
     if (options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 3 || options.outputDuration > max)) return `${label} output must be an integer from 3 to ${max} seconds.${capability.id === 'kling-4-flash' ? ' If the user did not choose Kling 4.0 Flash, use seedance-2.5 for a 21-30s single generation; if they chose Flash, split into segments of 20s or less.' : ''}`
     if (options.operation === 'edit' && (options.videoReferenceCount ?? 0) !== 1) return `${label} editing requires exactly one source video.`
-    if (options.referenceVideoMetas?.some(meta => (meta.durationSec ?? 0) < 3)) return `${label} reference videos must each be at least 3 seconds.`
+    // Unknown duration is measured later (create-video probes before billing); only reject a measured short clip.
+    if (options.referenceVideoMetas?.some(meta => meta.durationSec != null && meta.durationSec < 3)) return `${label} reference videos must each be at least 3 seconds.`
   }
   const resolutionError = validateVideoResolutionRequest({
     model: options.model,

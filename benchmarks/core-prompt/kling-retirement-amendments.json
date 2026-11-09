@@ -76,6 +76,14 @@
     [
       "call `generate_animation` with `fal-h3-max` (or the explicitly selected model)",
       "call `generate_animation` with `kling-4-flash` (or the explicitly selected model)"
+    ],
+    [
+      "<=200MB each, 720-2160px per side, 24-60fps. Google Omni",
+      "<=200MB each, 720-2160px per side, 24-60fps. Makaron upscales timeline videos under 720px automatically for Kling; never switch models for that alone. Google Omni"
+    ],
+    [
+      "Kling 4.0 Flash: same, but <=20s combined.",
+      "Kling 4.0 Flash: same, but <=20s combined. Makaron upscales timeline videos under 720px automatically for Kling; never switch models for that alone."
     ]
   ]
 }

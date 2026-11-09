@@ -163,7 +163,7 @@
     {
       "id": "core-31",
       "text": "Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K. Google Omni and Grok accept one video for typed edit/extend; read `prompts/animate.md` for limits.",
-      "amendment": "Retire Kling O3 and use the verified Kling 4.0 3-30s and Kling 4.0 Flash 3-20s output and reference contracts; explicit model selection must not be shortened or replaced.",
+      "amendment": "Retire Kling O3 and use the verified Kling 4.0 3-30s and Kling 4.0 Flash 3-20s output and reference contracts; explicit model selection must not be shortened or replaced. 2026-11-09: timeline videos under 720px are upscaled for Kling; do not switch models for size alone.",
       "owner": "video"
     },
     {

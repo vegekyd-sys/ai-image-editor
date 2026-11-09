@@ -46,8 +46,8 @@
   },
   "core-31": {
     "baselineSha256": "944d597d2a8707774f3ccbb567c3e25b0b184035636921009f06ae132392e420",
-    "replacement": "Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling 4.0 accepts up to 5 MP4/MOV references (exactly one for edit), each >=3s, <=30s total (Flash <=20s), <=200MB each, 720-2160px per side, 24-60fps. Google Omni and Grok accept one video for typed edit/extend; read `prompts/animate.md` for limits.",
-    "reason": "Retire Kling O3 and use the verified Kling 4.0 3-30s and Kling 4.0 Flash 3-20s output and reference contracts; explicit model selection must not be shortened or replaced."
+    "replacement": "Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling 4.0 accepts up to 5 MP4/MOV references (exactly one for edit), each >=3s, <=30s total (Flash <=20s), <=200MB each, 720-2160px per side, 24-60fps. Makaron upscales timeline videos under 720px automatically for Kling; never switch models for that alone. Google Omni and Grok accept one video for typed edit/extend; read `prompts/animate.md` for limits.",
+    "reason": "Retire Kling O3 and use the verified Kling 4.0 3-30s and Kling 4.0 Flash 3-20s output and reference contracts; explicit model selection must not be shortened or replaced. 2026-11-09: timeline videos under 720px are upscaled for Kling; do not switch models for size alone."
   },
   "core-30": {
     "baselineSha256": "3f5c2db6c9ed4c894522c154b10133da9d72d3c7c50cd9ab80661230f45dcd0c",
