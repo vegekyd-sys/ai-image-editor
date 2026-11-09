@@ -1,0 +1,592 @@
+Bytedance Seedream V5.5 Edit API Documentation - WaveSpeedAI
+Introduction
+Getting Started
+Overview
+Get Started with Web
+Get Started with API
+API Authentication
+Browse Models
+Ways to Use
+Web Interface
+Image Generator
+Video Generator
+Desktop App
+WaveSpeed CLI
+MCP Server
+Python SDK
+JavaScript SDK
+ComfyUI Integration
+N8N Integration
+REST API
+Core Concepts
+How WaveSpeedAI Works
+What are Models
+What are Predictions
+How to Use Webhooks
+How to Use Streaming
+Advanced Features
+How to Upload Files
+Synchronous Mode
+Base64 Output
+LoRA Training & Usage
+Examples
+How to Generate an Image
+How to Create Video from Image
+How to Generate Audio
+How to Create a Digital Human
+Complete Workflow Tutorial
+LLM Service
+Overview
+Quick Start
+Prompt Caching
+Connect Coding Agents
+Supported LLM Models
+Best Practices
+How to Choose the Right Model
+How to Write Better Prompts
+How to Reduce Costs
+Pricing & Billing
+How Pricing Works
+Payment Methods
+Monthly Auto-Recharge Limit
+Account Levels & Rate Limits
+Refund Policy
+API Reference
+Submit Task
+Get Result
+Delete Task
+Upload Files API
+List Models
+Check Balance
+Check Usage
+Check Billings
+Pricing
+Predictions
+Streaming Endpoints
+Verify Webhooks
+Error Codes
+Errors, Retries and Timeouts
+Policies
+Content Policy
+Data Retention Policy
+Commercial Use Policy
+Terms of Service
+Privacy Policy
+Help
+FAQ
+Troubleshooting Guide
+Contact Support
+Light
+On This Page
+Playground
+Features
+Why Choose This?
+Parameters
+How to Use
+Pricing
+Example Costs
+Best Use Cases
+Pro Tips
+Related Models
+Authentication
+API Endpoints
+Submit Task & Query Result
+Parameters
+Task Submission Parameters
+Request Parameters
+Response Parameters
+Result Request Parameters
+Result Response Parameters
+Scroll to top
+Bytedance Seedream V5.5 Edit API Documentation
+Bytedance Seedream V5.5 Edit API Documentation
+Browse all models
+/
+Bytedance
+←
+Bytedance Seedream V5.5
+Bytedance Seedream V5.5 Layer Decomposition
+→
+Playground
+Try it on WaveSpeedAI!
+Seedream 5.5 Edit by ByteDance edits and generates images from single-image or multi-reference inputs, supporting up to 10 reference images, consistent multi-turn edits, native transparent-background output, and 1K, 1.5K, 2K and 3K output tiers. Ready-to-use REST inference API, best performance, no coldstarts, affordable pricing.
+Features
+Seedream 5.5 Edit
+edits and composes images from one or several reference images. It is designed to preserve unedited areas across repeated edits, supports output up to 3K, and can return a result with a transparent background.
+Why Choose This?
+Consistent edits
+Built to preserve unedited areas, so you can refine an image over several rounds.
+Multi-image reference editing
+Use up to 10 reference images for complex edits, compositions, and visual guidance.
+Natural language editing
+Describe the desired edit in plain text and let the model transform the input images accordingly.
+Native transparent background
+Set
+background
+to
+transparent
+to extract a subject onto a transparent PNG. The inputs do not need an alpha channel.
+Flexible resolution tiers up to 3K
+Choose
+1k
+or
+1.5k
+for lower-cost edits,
+2k
+for higher-resolution output, or
+3k
+(about 8 megapixels, e.g. 3840×2160 at 16:9) for the most detail.
+PNG by default
+Output is PNG unless you ask for
+jpeg
+.
+Parameters
+Parameter
+Required
+Description
+prompt
+Yes
+Text description of the desired edit.
+images
+Yes
+Reference image URLs or Base64 strings. Supports up to 10 images.
+aspect_ratio
+No
+Output aspect ratio:
+1:1
+,
+1:2
+,
+2:1
+,
+1:3
+,
+3:1
+,
+2:3
+,
+3:2
+,
+3:4
+,
+4:3
+,
+4:5
+,
+5:4
+,
+9:16
+,
+16:9
+,
+9:21
+, or
+21:9
+. Leave empty to keep the aspect ratio of the first input image.
+resolution
+No
+Output resolution tier:
+1k
+,
+1.5k
+,
+2k
+, or
+3k
+. Default:
+1k
+.
+output_format
+No
+Output format:
+png
+(default) or
+jpeg
+.
+background
+No
+auto
+(default),
+transparent
+, or
+opaque
+.
+transparent
+returns an image with an alpha channel and needs
+png
+.
+How to Use
+Upload reference images
+— Provide one or more images to guide the edit.
+Write your prompt
+— Describe what should change and what should stay the same.
+Choose aspect ratio
+— Select an aspect ratio, or leave it empty to keep the first input image’s shape.
+Choose resolution
+— Use
+1k
+or
+1.5k
+for lower-cost edits,
+2k
+for higher-resolution output, or
+3k
+for print and large displays.
+Choose background
+— Use
+transparent
+to extract a subject or make a cut-out.
+Submit
+— Generate the final edited image.
+Pricing
+Pricing is the output price of the selected resolution plus
+$0.008
+for each input image.
+Resolution
+Output Price
+1k
+$0.02
+1.5k
+$0.02
+2k
+$0.027
+3k
+$0.054
+Example Costs
+Resolution
+Input Images
+Cost
+1k
+1
+$0.028
+1k
+2
+$0.036
+1k
+10
+$0.10
+1.5k
+1
+$0.028
+1.5k
+2
+$0.036
+1.5k
+10
+$0.10
+2k
+1
+$0.035
+2k
+2
+$0.043
+2k
+10
+$0.107
+3k
+1
+$0.062
+3k
+2
+$0.070
+3k
+10
+$0.134
+Best Use Cases
+Single-image editing
+— Edit one source image with natural-language instructions.
+Multi-round refinement
+— Refine an image through repeated edits while aiming to preserve unedited areas.
+Subject extraction
+— Cut a person, product, or object out onto a transparent background.
+Multi-reference composition
+— Use multiple images to guide complex edits and visual combinations.
+Product image editing
+— Refine product visuals, backgrounds, styles, and presentation.
+Pro Tips
+Describe both what should change and what should remain unchanged.
+Use multiple reference images when identity, product details, or style consistency matters.
+For a cut-out, describe the subject to keep and set
+background
+to
+transparent
+.
+Choose
+1k
+or
+1.5k
+for iteration and
+2k
+or
+3k
+for the final render.
+Related Models
+Seedream 5.5
+— Generate images from text prompts.
+Seedream 5.5 Layer Decomposition
+— Split an image into a base image and transparent layers.
+Seedream V5.0 Pro Edit
+— The previous Pro edit model.
+Authentication
+For authentication details, please refer to the
+Authentication Guide
+.
+API Endpoints
+Submit Task & Query Result
+cURL / HTTP
+Node.js
+Python
+Copy
+set -euo pipefail
+
+export WAVESPEED_API_KEY="your-api-key"
+
+REQUEST_BODY=$(cat <<'JSON'
+{
+  "prompt": "A cinematic ocean wave at sunrise, highly detailed",
+  "images": [
+    "https://interactive-examples.mdn.mozilla.net/media/cc0-images/painted-hand-298-332.jpg"
+  ],
+  "aspect_ratio": "1:1",
+  "resolution": "1k",
+  "output_format": "png",
+  "background": "auto"
+}
+JSON
+)
+
+# 1. Submit the prediction once. Never retry this request automatically:
+# a retry after an unclear failure can create a second, billed task.
+CHECK='The task may already exist. Check History or the predictions list before submitting again.'
+if ! SUBMIT_RESPONSE=$(curl --silent --show-error --fail-with-body \
+  --connect-timeout 10 --max-time 60 \
+  -X POST "https://api.wavespeed.ai/api/v3/bytedance/seedream-v5.5/edit" \
+  -H "Authorization: Bearer ${WAVESPEED_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d "${REQUEST_BODY}"); then
+  printf 'Submit failed. %s\n' "${CHECK}" >&2
+  exit 1
+fi
+
+TASK=$(printf '%s' "${SUBMIT_RESPONSE}" | jq 'if type == "object" and has("data") then .data else . end')
+PREDICTION_ID=$(printf '%s' "${TASK}" | jq -r '.id // empty')
+if [ -z "${PREDICTION_ID}" ]; then
+  printf 'Submission response did not contain a prediction id. %s\n' "${CHECK}" >&2
+  exit 1
+fi
+RESULT_URL="https://api.wavespeed.ai/api/v3/predictions/${PREDICTION_ID}/result"
+
+# 2. Poll until the prediction reaches a final status.
+BODY_FILE=$(mktemp)
+trap 'rm -f "${BODY_FILE}"' EXIT
+while true; do
+  # Transient errors (429, 5xx) are retried, honoring Retry-After.
+  HTTP_CODE=$(curl --silent --show-error --fail-with-body \
+    --connect-timeout 10 --max-time 60 --retry 5 --retry-delay 2 \
+    --output "${BODY_FILE}" --write-out '%{http_code}' \
+    "${RESULT_URL}" \
+    -H "Authorization: Bearer ${WAVESPEED_API_KEY}" || true)
+  case "${HTTP_CODE}" in
+    2??) ;;
+    000|429|5??)  # dropped connection or temporary error: keep polling
+      printf 'Task %s: HTTP %s, polling again in 10s\n' "${PREDICTION_ID}" "${HTTP_CODE}" >&2
+      sleep 10; continue ;;
+    *) printf 'Task %s: HTTP %s\n' "${PREDICTION_ID}" "${HTTP_CODE}" >&2
+      cat "${BODY_FILE}" >&2; exit 1 ;;
+  esac
+  RESULT=$(jq 'if type == "object" and has("data") then .data else . end' "${BODY_FILE}")
+  STATUS=$(printf '%s' "${RESULT}" | jq -r '.status // empty')
+
+  case "${STATUS}" in
+    completed) printf '%s\n' "${RESULT}" | jq '.outputs'; break ;;
+    failed|cancelled|timeout|deleted)
+      printf 'Task %s ended with status %s\n' "${PREDICTION_ID}" "${STATUS}" >&2
+      printf '%s\n' "${RESULT}" | jq . >&2; exit 1 ;;
+    *) sleep 2 ;;
+  esac
+done
+Retry temporary errors only while polling, never the submit request.
+Errors, retries and timeouts
+Parameters
+Task Submission Parameters
+Request Parameters
+Parameter
+Type
+Required
+Default
+Range
+Description
+prompt
+string
+Yes
+-
+The positive prompt for the generation.
+images
+array<string>
+Yes
+-
+0 ~ 10 items
+The images to edit. A maximum of 10 reference images can be uploaded.
+aspect_ratio
+string
+No
+-
+1:1, 
+1:2, 
+2:1, 
+1:3, 
+3:1, 
+2:3, 
+3:2, 
+3:4, 
+4:3, 
+4:5, 
+5:4, 
+9:16, 
+16:9, 
+9:21, 
+21:9
+The aspect ratio of the generated image. If not specified, it is determined automatically from the input image.
+resolution
+string
+No
+1k
+1k, 
+1.5k, 
+2k, 
+3k
+The output resolution tier. 1k and 1.5k cost the same; 2k is higher; 3k (about 8 megapixels, e.g. 3840x2160 at 16:9) is the highest.
+output_format
+string
+No
+png
+jpeg, 
+png
+The format of the output image. PNG is the default; a transparent background needs PNG.
+background
+string
+No
+auto
+auto, 
+transparent, 
+opaque
+Whether the image has a transparent background. 'auto' lets the model decide from your prompt and output format; 'transparent' returns an image with an alpha channel (needs output_format png); 'opaque' always returns a solid background.
+Every model also accepts the global request options
+enable_sync_mode
+and
+enable_base64_output
+; see their pages for details.
+Response Parameters
+Parameter
+Type
+Description
+code
+integer
+HTTP status code (e.g., 200 for success)
+message
+string
+Status message (e.g., “success”)
+data.id
+string
+Unique identifier for the prediction, Task Id
+data.model
+string
+Model ID used for the prediction
+data.outputs
+array
+Output values, usually URL strings; some models return text strings or structured result objects (empty when status is not
+completed
+)
+data.urls
+object
+Object containing related API endpoints
+data.status
+string
+Task status.
+completed
+is successful;
+failed
+,
+cancelled
+,
+timeout
+, and
+deleted
+are failure terminal statuses.
+data.created_at
+string
+ISO timestamp of when the request was created (e.g., “2023-04-01T12:34:56.789Z”)
+data.error
+string
+Error message (empty if no error occurred)
+data.timings
+object
+Object containing timing details
+data.timings.inference
+integer
+Inference time in milliseconds
+Result Request Parameters
+Parameter
+Type
+Required
+Default
+Description
+id
+string
+Yes
+-
+Task ID
+Result Response Parameters
+Parameter
+Type
+Description
+code
+integer
+HTTP status code (e.g., 200 for success)
+message
+string
+Status message (e.g., “success”)
+data
+object
+The prediction data object containing all details
+data.id
+string
+Unique identifier for the prediction
+data.model
+string
+Model ID used for the prediction
+data.outputs
+array<string | object>
+Array of generated outputs (empty when status is not completed). Items are usually URL strings, but may be text strings or structured result objects, depending on the model.
+data.urls
+object
+Object containing related API endpoints
+data.status
+string
+Status:
+completed
+is successful;
+failed
+,
+cancelled
+,
+timeout
+, and
+deleted
+are failure terminal statuses
+data.created_at
+string
+ISO timestamp of when the request was created
+data.error
+string
+Error message (empty if no error occurred)
+data.timings
+object
+Object containing timing details
+data.timings.inference
+integer
+Inference time in milliseconds
+Overview
+©
+2026
+WaveSpeedAI. All rights reserved.
