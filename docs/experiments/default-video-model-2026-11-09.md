@@ -51,6 +51,31 @@
 
 验收合计花费约 2,170 credits，其中 B、B2、B3、B4 是排查路由时多花的。图形界面未在本地登录检查：模型选择器排序、默认选中和生成时间提示只有单测和 i18n 检查覆盖。
 
+## 模板 Skill 保留 FAL H3 Max（2026-11-09 追加需求）
+
+用户要求：没有明确指定模型的模板 Skill，继续用 `fal-h3-max`。
+
+- 模板的定义：从首页模板市场安装的 Skill，即 `workspace_files` 里 `marketplace_id` 不为空。内置 Skill（如 multi-angle-video）不在此列。
+- 识别本轮是否在用模板，三种来源按优先级：
+  1. 首页可信模板启动的 `skillLaunchContext.skillName`
+  2. 请求开头的 `[Active skill: NAME]`
+  3. 本轮 Agent `read_file` 读过的 `skills/NAME/SKILL.md`
+- “明确指定”的判断（`parseSkillExplicitVideoModel`），按以下顺序取第一个已上线的视频模型：
+  1. 元数据 `modelPreference` 里第一个视频模型
+  2. front-matter 的 `model` / `videoModel`
+  3. 正文里的 `model: "<id>"`、`model=<id>` 或 `--video-model <id>`
+
+  正文里只是顺带提到模型名不算；图片模型和已下线的 Kling O3 会被跳过。
+- 线上 165 个启用中的模板：116 个没有指定（走 H3 Max）；49 个有指定，各走各的：seedance 14、grok 9、fal-h3-max 7、minimax-h3-max 7、minimax-h3 5、wan-3.0 4、wan-3.0-prime 2、seedance-mini 1。
+- 运行时的处理（`applyTemplateVideoModel`）：
+  - 在 App 的“自动”模式下，Agent 没传模型、或传的是全局默认 Kling Flash 时，换成模板模型。
+  - Agent 主动选的其他模型（21–30 秒、NSFW、复刻）保留不动；用户手动锁定的模型也保留。
+  - 换成 H3 Max 时，如果分辨率不受支持（例如 720p），会改回自动（768p）。
+- 提示词：在核心路由、animate.md 和可信模板启动指令里都写明了这条规则。
+- 验收：
+  - App 首页启动“照片变视频”模板（未指定模型）：日志为 `template skill photo-to-video-2 video model fal-h3-max (template default)`，成片 768×1344、15.1 秒、有音轨。
+  - CLI `chat --skill <同一模板>`：同样走 fal-h3-max，扣 165 credits。
+
 ## 遗留
 
 - Retake 的小尺寸源视频对 Kling 仍会被拒（会回退到 Seedance），可把自动放大接到 Retake。是否把 Retake 默认也换成 Flash 需另行决定。
