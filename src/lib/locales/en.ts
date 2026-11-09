@@ -773,6 +773,8 @@ const en = {
   'model.qwen.desc': 'Best face preservation. Handles NSFW content.',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': 'Independent 1–3 image editor with bold, high-resolution results.',
+  'model.seedream55.name': 'Seedream 5.5',
+  'model.seedream55.desc': 'Candidate: native transparent PNG, up to 10 inputs',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',
   'model.image26Flare.desc': 'Default image model with animated GIF',
   'model.image26Sunburst.name': 'GPT Image 2.6 Sunburst',

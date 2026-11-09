@@ -76,7 +76,7 @@ export const seedream55Backend: ModelBackend = {
     if (!key) throw new Seedream55RequestError('WAVESPEED_API_KEY is not configured; nothing was submitted.');
     const { model, body, costUsd } = buildSeedream55Request(req);
     // Reject inaccessible or corrupt references before a paid POST. Do not flatten input alpha.
-    for (const source of 'images' in body ? body.images : []) {
+    for (const source of body.images ?? []) {
       await sharp(await readProviderImage(source, 30 * 1024 * 1024), { limitInputPixels: 64_000_000 }).metadata();
     }
     const started = Date.now();

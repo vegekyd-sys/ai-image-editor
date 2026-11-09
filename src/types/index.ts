@@ -93,6 +93,8 @@ export interface PhotoMetadata {
     prompt: string;
     model: string;
     inputImages?: string[];
+    provider?: string;
+    providerModel?: string;
     promptKind?: 'submitted' | 'brief';
     imageQuality?: import('@/lib/models/types').ImageQuality;
     imageReasoningEffort?: import('@/lib/models/types').ImageReasoningEffort;

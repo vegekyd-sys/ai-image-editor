@@ -1,3 +1,4 @@
+import { estimateSeedream55Credits } from './models/seedream55';
 import { estimateGptImageCredits } from './models/gpt-image-quote';
 import { validatePrimaryVideoFraming } from './composition-video-framing';
 import { mediaContentTypeOrBinary } from './media-content-type';
@@ -1403,11 +1404,11 @@ function createGenerateImageTool(
         isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
         imageQuality: z.enum(['auto', 'low', 'medium', 'high']).optional().describe('GPT Image 2.6 rendering quality. Default low; choose higher when the user asks for more visual detail.'),
       imageReasoningEffort: z.enum(['low', 'medium', 'high']).optional().describe('GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high.'),
-      outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).optional().describe('Default PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
+      outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).optional().describe('Default PNG. Seedream 5.5 supports PNG/JPEG only, transparent PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
       frameCount: z.number().int().min(2).max(16).optional().describe('GIF frames 2–16, default 9. Frames share one native sheet: square frames are 960px up to 9 frames, 816px for 10–12, 720px for 13–16. Plan holds by repeating poses; see skills/gif-maker/SKILL.md.'),
       frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).optional().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
       gifFrameSize: z.enum(['sticker', 'full']).optional().describe('GIF frame canvas. sticker = ~512px frames, about half the cost and faster: use for chat stickers, 表情包, emoji/reaction memes. full (default) = largest native frames for GIFs viewed large.'),
-      imageResolution: z.string().optional().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Use larger tiers only when requested. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
+      imageResolution: z.string().optional().describe('Output resolution preference, 1K/2K/4K, or Seedream 5.5 1K/1.5K/2K/3K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Use larger tiers only when requested. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background preference. Set "transparent" for transparent/no background, background removal, 抠图/抠像/去背景 or reusable alpha assets. Also pass media_index for source-image cutout. Conflicts are resolved to deliver an image; see the capability table.'),
         midjourney: z.object({
@@ -1484,6 +1485,11 @@ function createGenerateImageTool(
         const imageInputCount = (imagePlan.request.image ? 1 : 0) + (imagePlan.request.references?.length ?? 0);
         if (ctx.userId && await isBillingEnabled()) {
           let requiredCredits = 0;
+          if (billingModel === 'seedream-5.5') {
+            const rate = await getTokenRate(billingModel);
+            if (!rate || rate.model_id !== billingModel || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Seedream 5.5 pricing is not configured.', error: 'pricing_unavailable' };
+            requiredCredits = estimateSeedream55Credits({ ...imagePlan.request, imageInputCount }, rate.markup);
+          }
           if (billingModel === 'mj-v8.2') {
             const rate = await getTokenRate('mj-v8.2');
             if (!rate || rate.model_id !== 'mj-v8.2' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Midjourney pricing is not configured.', error: 'pricing_unavailable' };
@@ -1501,7 +1507,7 @@ function createGenerateImageTool(
             if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Selected GPT Image pricing is not configured.', error: 'pricing_unavailable' };
             requiredCredits = estimateGptImageCredits({ ...imagePlan.request, imageInputCount }, rate.markup);
           }
-          if (billingModel && billingModel !== 'gemini-2.1' && billingModel !== 'mj-v8.2' && !isFalGptImage(billingModel)) {
+          if (billingModel && billingModel !== 'seedream-5.5' && billingModel !== 'gemini-2.1' && billingModel !== 'mj-v8.2' && !isFalGptImage(billingModel)) {
             const toolName = resolveToolName('edit_image', billingModel, imageInputCount);
             const price = await getToolPrice(toolName);
             if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {
@@ -1526,9 +1532,16 @@ function createGenerateImageTool(
               const saved = await writeFile(receiptPath, JSON.stringify({ model: task.model, taskId: task.taskId, status: task.status, brief: editPrompt, request, createdAt: new Date().toISOString() }), ctx.supabase, ctx.userId!, 'application/json');
               if (!saved.success) throw new Error('Receipt persistence failed');
             } : undefined;
+        const onSeedream55Receipt = billingModel === 'seedream-5.5' && ctx.supabase && ctx.userId
+          ? async (receipt: import('./models/seedream55').Seedream55Receipt) => {
+              const { writeFile } = await import('./workspace');
+              receiptPath = `${ctx.projectId}/seedream55/${receipt.taskId}.json`;
+              const saved = await writeFile(receiptPath, JSON.stringify({ ...receipt, createdAt: new Date().toISOString(), resolution: imagePlan.request.imageResolution ?? '1K', inputCount: imageInputCount }), ctx.supabase!, ctx.userId!, 'application/json');
+              if (!saved.success) throw new Error('Receipt persistence failed');
+            } : undefined;
         const imageStartedAt = Date.now();
         const skillResult = await editImage(
-          { editPrompt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { editPrompt, onSeedream55Receipt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           {
             currentImage: editTarget,
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
@@ -1567,6 +1580,8 @@ function createGenerateImageTool(
           id: skillResult.taskId || crypto.randomUUID(),
           prompt: mjGeneration?.prompt || editPrompt,
           model: skillResult.usedModel || billingModel,
+          provider: skillResult.provider,
+          ...(billingModel === 'seedream-5.5' ? { providerModel: `bytedance/seedream-v5.5${imageInputCount ? '/edit' : ''}` } : {}),
           imageQuality: imagePlan.request.imageQuality, imageReasoningEffort: imagePlan.request.imageReasoningEffort, outputFormat: imagePlan.request.outputFormat, frameCount: imagePlan.request.frameCount, frameDurationMs: imagePlan.request.frameDurationMs, gifFrameSize: imagePlan.request.gifFrameSize,
           inputImages: [editTarget, ...resolvedRefs].filter((url): url is string => Boolean(url?.startsWith('http'))),
         };
