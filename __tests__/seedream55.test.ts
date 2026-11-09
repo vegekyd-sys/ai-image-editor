@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 const state = vi.hoisted(() => ({ read: vi.fn() }));
-vi.mock('@/lib/provider-image-preflight', () => ({ readProviderImage: state.read }));
+vi.mock('@/lib/provider-image-preflight', async original => ({ ...await original<typeof import('@/lib/provider-image-preflight')>(), readProviderImage: state.read }));
 import { buildSeedream55Request, estimateSeedream55Credits, querySeedream55Task, seedream55Backend, seedream55CostUsd } from '@/lib/models/seedream55';
 import { DEFAULT_IMAGE_MODEL, planImageGeneration } from '@/lib/image-model-capabilities';
 import { editImage } from '@/lib/skills/edit-image';
