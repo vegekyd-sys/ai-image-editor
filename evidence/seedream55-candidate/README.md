@@ -10,4 +10,4 @@
 - `qa/`：深浅底、边缘、局部差异、真实候选选择器截图与验证日志。
 - 原始媒体文件保持生成后字节未改；`fixed-edit-source.png` 是两模型必须共同使用的编辑原图。
 
-Seedream 官方公开生成/编辑文档在本轮核对，正文提取保存在 `wavespeed-*.txt`。fal 全目录审计见 `fal-catalog-audit.json`。原始私有服务回执仅保留本机 `/tmp/seedream55-private-receipts`，未提交。
+Seedream 官方公开生成/编辑文档在本轮核对，事实合同摘要保存在 `provider-contract.json`。fal 全目录审计见 `fal-catalog-audit.json`。原始私有服务回执仅保留本机 `/tmp/seedream55-private-receipts`，未提交。
