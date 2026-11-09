@@ -1303,6 +1303,16 @@ try {
     assert.equal(invalid.code, 1);
     assert.match(invalid.stderr, /3 to 30/);
     assert.equal(requests.length, afterValid);
+    // Default model: Kling 4.0 Flash; an unchosen 21-30s request goes to Seedance 2.5.
+    await expectSuccess(['video', 'create', '--script', 'A paper boat drifts at dawn', '--duration', '8']);
+    assert.equal(requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params.arguments.videoModel, 'kling-4-flash');
+    await expectSuccess(['video', 'create', '--script', 'A paper boat drifts at dawn', '--duration', '25']);
+    assert.equal(requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params.arguments.videoModel, 'seedance-2.5');
+    const beforeLong = requests.length;
+    const longScript = await runCli(['video', 'create', '--script', 'x'.repeat(2501), '--duration', '5']);
+    assert.equal(longScript.code, 1);
+    assert.match(longScript.stderr, /limited to 2500 characters/);
+    assert.equal(requests.length, beforeLong);
   }
   {
     const result = await expectSuccess(['video', 'create', '--script', 'A neon one-person studio wakes at dawn', '--duration', '5', '--video-model', 'seedance-fast']);

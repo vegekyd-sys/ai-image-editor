@@ -107,6 +107,7 @@
     {
       "id": "core-21",
       "text": "FAL H3 Max supports native text-to-video. When the user asks for a video from text and supplies no source media, write a text-only script with no `<<<media_N>>>` markers and call `generate_animation` with `fal-h3-max` (or the explicitly selected model). Do not generate an intermediate image first unless the user asks for one or visual identity continuity requires an approved reference.",
+      "amendment": "2026-11-09 user decision after a four-model blind review of real requests: Kling 4.0 Flash replaces FAL H3 Max as the default video model; 21-30s defaults to Seedance 2.5 and 1080p to Kling 4.0 when no model is chosen.",
       "owner": "video"
     },
     {
@@ -162,7 +163,7 @@
     {
       "id": "core-31",
       "text": "Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K. Google Omni and Grok accept one video for typed edit/extend; read `prompts/animate.md` for limits.",
-      "amendment": "Retire Kling O3 and use the verified Kling 4.0 3-30s and Kling 4.0 Flash 3-20s output and reference contracts; explicit model selection must not be shortened or replaced.",
+      "amendment": "Retire Kling O3 and use the verified Kling 4.0 3-30s and Kling 4.0 Flash 3-20s output and reference contracts; explicit model selection must not be shortened or replaced. 2026-11-09: timeline videos under 720px are upscaled for Kling; do not switch models for size alone.",
       "owner": "video"
     },
     {
@@ -195,6 +196,7 @@
     {
       "id": "core-37",
       "text": "Model selection happens after workflow routing. Default video model is FAL H3 Max (`fal-h3-max`) 768p. A non-NSFW direct 16-30 second request defaults to `seedance-2.5`; any NSFW/adult-explicit video request defaults to `wan-3.0-prime` instead, just as NSFW image requests use Qwen. Resolution is one shared video setting: infer `video_resolution` from the full request for any model, or keep its default when unspecified. Wan exposes `wan-3.0` and `wan-3.0-prime` with 480p-4K. Use `google-omni` only when requested; no `audio_refs`.",
+      "amendment": "2026-11-09 user decision after a four-model blind review of real requests: Kling 4.0 Flash replaces FAL H3 Max as the default video model; 21-30s defaults to Seedance 2.5 and 1080p to Kling 4.0 when no model is chosen.",
       "owner": "video"
     },
     {

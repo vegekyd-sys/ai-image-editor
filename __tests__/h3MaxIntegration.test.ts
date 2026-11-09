@@ -16,13 +16,13 @@ describe('FAL H3 Max product integration', () => {
     expect(normalizeVideoModelId(alias)).toBe('minimax-h3-max')
     expect(resolveVideoProviderModel({ model: alias, imageReferenceCount: 1 })).toBe('minimax/h3-max-turbo/image-to-video')
   })
-  it('defaults an unspecified request to Max 768p while respecting explicit selections', async () => {
-    expect(getDefaultVideoModelId()).toBe('fal-h3-max')
-    expect(normalizeVideoResolution(undefined, 'auto')).toBe('768p')
-    expect(resolveAgentVideoSelection({})).toEqual({ model: 'fal-h3-max', resolution: 'auto', locked: false })
+  it('keeps Max 768p for explicit selections after the Kling 4.0 Flash default switch', async () => {
+    expect(getDefaultVideoModelId()).toBe('kling-4-flash')
+    expect(normalizeVideoResolution('fal-h3-max', 'auto')).toBe('768p')
+    expect(resolveAgentVideoSelection({})).toEqual({ model: 'kling-4-flash', resolution: 'auto', locked: false })
     expect(resolveAgentVideoSelection({ toolModel: 'minimax-h3-max' })).toMatchObject({ model: 'minimax-h3-max', locked: false })
     expect(resolveAgentVideoSelection({ appModel: 'seedance-fast', appAuto: false, toolModel: 'fal-h3-max' })).toMatchObject({ model: 'seedance-fast', locked: true })
-    const result = await createVideo({ script: 'A red book slowly opens', images: [], duration: 5 })
+    const result = await createVideo({ videoModel: 'fal-h3-max', script: 'A red book slowly opens', images: [], duration: 5 })
     expect(result).toMatchObject({ success: true, videoModel: 'fal-h3-max', providerModel: 'minimax/h3-max/text-to-video' })
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ resolution: '768p', duration: 5 }))
   })

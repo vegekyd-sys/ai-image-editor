@@ -141,10 +141,10 @@ describe('agent media scenario matrix', () => {
     expect(remotion).toContain('never reference outer `props`')
   })
 
-  it('keeps video generation default on FAL H3 Max while separating standard SeeDance', () => {
-    expect(agent).toContain('Default video model is FAL H3 Max')
+  it('keeps video generation default on Kling 4.0 Flash while separating standard SeeDance', () => {
+    expect(agent).toContain('Default video model is Kling 4.0 Flash')
     expect(animate).toContain("Default model behavior: respect the user/app model selection first, then the active Skill's workflow-specific default")
-    expect(animate).toContain('Otherwise use FAL H3 Max')
+    expect(animate).toContain('Otherwise use Kling 4.0 Flash')
     expect(animate).toContain('Treat `seedance-fast` and standard `seedance` as separate models')
     expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px')
     expect(ffmpegSkill).toContain('Default video model, higher quality')
@@ -155,7 +155,7 @@ describe('agent media scenario matrix', () => {
   })
 
   it('keeps native default text-to-video reachable without generating an intermediate image', () => {
-    expect(agent).toContain('FAL H3 Max supports native text-to-video')
+    expect(agent).toContain('Kling 4.0 Flash supports native text-to-video')
     expect(agent).toContain('Do not generate an intermediate image first')
     expect(animate).toContain('Zero images can use native SeeDance or Wan 3.0 text-to-video')
     expect(animate).toContain('do not call `generate_image` first')

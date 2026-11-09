@@ -11,6 +11,12 @@ import { getVideoModelCapability, resolveVideoProviderModel } from './video-mode
 
 export type Kling4Model = 'kling-4' | 'kling-4-flash'
 
+export const KLING4_MAX_PROMPT_CHARACTERS = 2500
+
+export function kling4PromptTooLongMessage(label: string, length: number): string {
+  return `${label} prompts are limited to ${KLING4_MAX_PROMPT_CHARACTERS} characters, but this story_prompt has ${length}. No video was submitted. Rewrite it once to ${KLING4_MAX_PROMPT_CHARACTERS} characters or fewer: keep the title, every shot with its timing, all spoken lines and every media marker; remove repeated style notes and adjective lists. Keep the same model.`
+}
+
 export interface Kling4Input {
   /** Defaults to Kling 4.0. Never switched to the other variant on failure. */
   model?: Kling4Model
@@ -29,7 +35,8 @@ export function buildKling4Payload(input: Kling4Input): Record<string, unknown> 
   const videos = input.videos ?? []
   const edit = input.operation === 'edit'
   const duration = input.duration ?? (edit ? 'auto' : 5)
-  if (!input.prompt.trim() || input.prompt.length > 2500) throw new Error(`${label} prompt must contain 1–2500 characters.`)
+  if (!input.prompt.trim()) throw new Error(`${label} prompt must not be empty.`)
+  if (input.prompt.length > KLING4_MAX_PROMPT_CHARACTERS) throw new Error(kling4PromptTooLongMessage(label, input.prompt.length))
   if (duration !== 'auto' && (!Number.isInteger(duration) || duration < 3 || duration > maxDuration)) throw new Error(`${label} duration must be an integer from 3 to ${maxDuration} seconds.`)
   if (input.images.length > 10 || videos.length > 5 || (edit && videos.length !== 1)) throw new Error(`${label} accepts 10 images and 5 reference videos; editing requires exactly one video.`)
   if ([...input.images, ...videos].some(url => !/^https?:\/\//.test(url))) throw new Error(`${label} requires accessible HTTP(S) media URLs.`)

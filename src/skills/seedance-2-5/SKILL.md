@@ -22,8 +22,8 @@ metadata:
 # Seedance 2.5
 
 Use `generate_animation` with `model: "seedance-2.5"` for its longer duration,
-higher reference limits, or edit/extend capabilities. A non-NSFW direct 16-30
-second request uses this model by default, but NSFW/adult-explicit intent has
+higher reference limits, or edit/extend capabilities. A non-NSFW direct 21-30
+second request with no explicit model uses this model by default, but NSFW/adult-explicit intent has
 higher priority and defaults to Wan 3.0 Prime instead.
 
 ## Provider contract

@@ -23,11 +23,11 @@ metadata:
 
 Use `generate_animation` with `model: "wan-3.0-prime"` by default when the
 video request is NSFW/adult-explicit. The Agent must make this semantic choice
-itself; NSFW routing overrides the normal 16-30 second Seedance 2.5 duration
+itself; NSFW routing overrides the normal 21-30 second Seedance 2.5 duration
 default. Wan exposes `wan-3.0` and
 `wan-3.0-prime`; there is no separate Pro product model. Pass output resolution
 through the same shared `video_resolution` field used by every video service.
-Keep the app default on `fal-h3-max` for other requests.
+Keep the app default on `kling-4-flash` for other requests.
 
 ## Provider contract
 

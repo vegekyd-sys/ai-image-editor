@@ -46,8 +46,8 @@
   },
   "core-31": {
     "baselineSha256": "944d597d2a8707774f3ccbb567c3e25b0b184035636921009f06ae132392e420",
-    "replacement": "Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling 4.0 accepts up to 5 MP4/MOV references (exactly one for edit), each >=3s, <=30s total (Flash <=20s), <=200MB each, 720-2160px per side, 24-60fps. Google Omni and Grok accept one video for typed edit/extend; read `prompts/animate.md` for limits.",
-    "reason": "Retire Kling O3 and use the verified Kling 4.0 3-30s and Kling 4.0 Flash 3-20s output and reference contracts; explicit model selection must not be shortened or replaced."
+    "replacement": "Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling 4.0 accepts up to 5 MP4/MOV references (exactly one for edit), each >=3s, <=30s total (Flash <=20s), <=200MB each, 720-2160px per side, 24-60fps. Makaron upscales timeline videos under 720px automatically for Kling; never switch models for that alone. Google Omni and Grok accept one video for typed edit/extend; read `prompts/animate.md` for limits.",
+    "reason": "Retire Kling O3 and use the verified Kling 4.0 3-30s and Kling 4.0 Flash 3-20s output and reference contracts; explicit model selection must not be shortened or replaced. 2026-11-09: timeline videos under 720px are upscaled for Kling; do not switch models for size alone."
   },
   "core-30": {
     "baselineSha256": "3f5c2db6c9ed4c894522c154b10133da9d72d3c7c50cd9ab80661230f45dcd0c",
@@ -58,5 +58,15 @@
     "baselineSha256": "c01e2477a26857aeadf5dad991c7a8889b91790b40ca8cdde18fa2197645e684",
     "reason": "Gemini Omni 1.2 Flash: 3-15s generation, <=15s source upload, follow-up edits in the same Google interaction, and 30s cumulative extension (checked 2026-11-07).",
     "replacement": "Google Omni continuation uses the same Refs mental model as Seedance: reference `<<<media_N>>>`, set `video_operation: \"extend\"`, describe the next beat, default 10s, preserve continuity, save a new snapshot; Google results can repeat to 30s. `video_operation: \"edit\"` on a Google result is a follow-up edit turn: describe only the change."
+  },
+  "core-21": {
+    "baselineSha256": "a437e203483fc47eb05e9d8f149883a756fab359f81fb88919add73342a1253f",
+    "reason": "2026-11-09 user decision after a four-model blind review of real requests: Kling 4.0 Flash replaces FAL H3 Max as the default video model; 21-30s defaults to Seedance 2.5 and 1080p to Kling 4.0 when no model is chosen.",
+    "replacement": "Kling 4.0 Flash supports native text-to-video. When the user asks for a video from text and supplies no source media, write a text-only script with no `<<<media_N>>>` markers and call `generate_animation` with `kling-4-flash` (or the explicitly selected model). Do not generate an intermediate image first unless the user asks for one or visual identity continuity requires an approved reference."
+  },
+  "core-37": {
+    "baselineSha256": "d659a59aef33d1aa48c2b7c6fae2abfcd650c4c9919c2f2b3dde827d12fed0bb",
+    "reason": "2026-11-09 user decision after a four-model blind review of real requests: Kling 4.0 Flash replaces FAL H3 Max as the default video model; 21-30s defaults to Seedance 2.5 and 1080p to Kling 4.0 when no model is chosen.",
+    "replacement": "Model selection happens after workflow routing. Default video model is Kling 4.0 Flash (`kling-4-flash`) 720p, 3-20s; keep its story_prompt within 2500 characters. Without an explicit model, a non-NSFW direct 21-30 second request defaults to `seedance-2.5` and a 1080p request to `kling-4`; any NSFW/adult-explicit video request defaults to `wan-3.0-prime` instead, just as NSFW image requests use Qwen. Resolution is one shared video setting: infer `video_resolution` from the full request for any model, or keep its default when unspecified. Wan exposes `wan-3.0` and `wan-3.0-prime` with 480p-4K. Use `google-omni` only when requested; no `audio_refs`."
   }
 }

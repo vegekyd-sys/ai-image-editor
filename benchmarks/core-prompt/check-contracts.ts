@@ -35,8 +35,8 @@ async function main() {
  const activeVideoDescription=currentKlingContract(baseline.toolDescriptions.video).replace(
   'reference-to-video at 480p/768p (default',
   'reference-to-video at 480p/768p/1080p (default').replace(
-  'Use `seedance-2.5` for a non-NSFW single 16-30 second generation',
-  'Use `seedance-2.5-eco` for a non-NSFW single 16-30 second generation');
+  'Use `seedance-2.5` for a non-NSFW single 21-30 second generation',
+  'Use `seedance-2.5-eco` for a non-NSFW single 21-30 second generation');
  assert.ok(video.includes(activeVideoDescription));
  assert.ok(coding.includes(baseline.toolDescriptions.coding));
  assert.ok(coding.includes(baseline.workspaceAuthoring));

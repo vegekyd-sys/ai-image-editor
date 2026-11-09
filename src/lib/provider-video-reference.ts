@@ -88,7 +88,7 @@ function formatMegabytes(bytes: number): string {
 
 async function transcodeVideoBufferToProviderMp4(
   buffer: Buffer<ArrayBufferLike>,
-  options: { toneMapHdr: boolean },
+  options: { toneMapHdr: boolean; minShortSide?: number },
 ): Promise<Buffer<ArrayBufferLike>> {
   const [{ execFile }, { promises: fs }, { tmpdir }, path, { promisify }, { findFfmpeg }] = await Promise.all([
     import('child_process'),
@@ -106,9 +106,14 @@ async function transcodeVideoBufferToProviderMp4(
   try {
     await fs.writeFile(inputPath, buffer)
     const ffmpeg = await findFfmpeg()
-    const videoFilter = options.toneMapHdr
+    const baseFilter = options.toneMapHdr
       ? 'zscale=t=linear:npl=100,format=gbrpf32le,tonemap=tonemap=hable:desat=0,zscale=p=bt709:t=bt709:m=bt709:r=tv,format=yuv420p'
       : 'format=yuv420p'
+    // Upscale the short side only, keeping the aspect ratio and even dimensions.
+    const min = options.minShortSide
+    const videoFilter = min
+      ? `scale='if(lte(iw,ih),max(${min},iw),-2)':'if(lte(iw,ih),-2,max(${min},ih))':flags=lanczos,${baseFilter}`
+      : baseFilter
     await execFileAsync(ffmpeg, [
       '-hide_banner',
       '-y',
@@ -256,4 +261,40 @@ export async function prepareProviderVideoReferences(options: ProviderVideoRefer
   }
 
   return { urls, normalized }
+}
+
+/**
+ * Kling 4 rejects reference/source videos whose width or height is under 720px.
+ * Upscale only those clips (short side -> minShortSide) and keep the rest as-is.
+ * Returns the provider URLs plus the updated dimensions for validation.
+ */
+export async function upscaleSmallProviderVideoReferences(options: {
+  supabase: SupabaseClient
+  userId: string
+  projectId: string
+  urls: string[]
+  metas: Array<{ durationSec?: number | null; width?: number | null; height?: number | null; fileSizeBytes?: number | null }>
+  minShortSide: number
+  maxLongSide: number
+}): Promise<{ urls: string[]; metas: typeof options.metas; upscaled: number }> {
+  const urls = [...options.urls]
+  const metas = options.metas.map(meta => ({ ...meta }))
+  let upscaled = 0
+  for (let i = 0; i < urls.length; i++) {
+    const width = Number(metas[i]?.width), height = Number(metas[i]?.height)
+    if (!(width > 0 && height > 0) || Math.min(width, height) >= options.minShortSide) continue
+    const scale = options.minShortSide / Math.min(width, height)
+    const nextWidth = Math.round(width * scale / 2) * 2, nextHeight = Math.round(height * scale / 2) * 2
+    if (Math.max(nextWidth, nextHeight) > options.maxLongSide) continue // aspect too extreme; let validation explain it
+    const startedAt = Date.now()
+    const buffer = await fetchVideoReference(urls[i])
+    const toneMapHdr = await providerVideoBufferNeedsSdrToneMap(buffer).catch(() => false)
+    const mp4 = await transcodeVideoBufferToProviderMp4(buffer, { toneMapHdr, minShortSide: options.minShortSide })
+    if (mp4.length > MAX_REFERENCE_BYTES) throw new Error(`Upscaled provider reference video is too large (${formatMegabytes(mp4.length)}).`)
+    urls[i] = await uploadProviderReference(options.supabase, options.userId, options.projectId, mp4)
+    metas[i] = { ...metas[i], width: nextWidth, height: nextHeight, fileSizeBytes: mp4.length }
+    upscaled++
+    console.log(`[provider-video] upscaled ${width}x${height} reference to ${nextWidth}x${nextHeight} in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`)
+  }
+  return { urls, metas, upscaled }
 }
