@@ -11,7 +11,7 @@ vi.mock('@/lib/billing/credits', () => ({
   deductByTokens: state.tokenDebit,
   recordSubscriptionUsage: vi.fn(),
 }));
-vi.mock('@/lib/billing/token-rates', () => ({ getTokenRate: async (model_id: string) => ({ model_id, markup: 2 }) }));
+vi.mock('@/lib/billing/token-rates', async original => ({ ...await original<typeof import('@/lib/billing/token-rates')>(), getTokenRate: async (model_id: string) => ({ model_id, markup: 2 }) }));
 vi.mock('@/lib/billing/pricing', () => ({
   getToolPrice: async () => ({ credits: 3, isFree: false }),
   resolveToolName: (_tool: string, model: string) => `generate_image_${model}`,
