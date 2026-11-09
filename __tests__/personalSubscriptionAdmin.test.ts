@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   readDb: vi.fn(), saveDb: vi.fn(), codexRead: vi.fn(), grokRead: vi.fn(),
-  codexWrite: vi.fn(), grokWrite: vi.fn(), eligible: vi.fn(),
+  codexWrite: vi.fn(), grokWrite: vi.fn(), eligible: vi.fn(), googleEligible: vi.fn(), googleRead: vi.fn(), googleWrite: vi.fn(),
 }));
 vi.mock('@/lib/codex-subscription-allowlist', async importOriginal => ({
   ...await importOriginal<typeof import('@/lib/codex-subscription-allowlist')>(),
   getDynamicCodexSubscriptionAllowedUserIds: mocks.readDb,
   getCodexSubscriptionEligibleUserIds: mocks.eligible,
+  getGeminiSubscriptionEligibleUserIds: mocks.googleEligible,
   saveDynamicCodexSubscriptionAllowedUserIds: mocks.saveDb,
 }));
 vi.mock('@/lib/codex-subscription', () => ({
@@ -19,12 +20,20 @@ vi.mock('@/lib/grok-subscription', () => ({
   readGrokSubscriptionRelayAllowlist: mocks.grokRead,
   syncGrokSubscriptionRelayAllowlist: mocks.grokWrite,
 }));
+vi.mock('@/lib/gemini-video-subscription', () => ({
+  geminiRelayConfig: () => ({ owner: 'google-owner' }),
+  readGeminiSubscriptionRelayAllowlist: mocks.googleRead, syncGeminiSubscriptionRelayAllowlist: mocks.googleWrite,
+}));
 import { getPersonalPlanSyncStatus, syncCodexAdminAllowlist, updatePersonalSubscriptionAllowlist } from '@/lib/personal-subscription-admin';
 
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv('CODEX_SUBSCRIPTION_OWNER_USER_ID', 'owner');
   vi.stubEnv('GROK_SUBSCRIPTION_OWNER_USER_ID', 'owner');
+  vi.stubEnv('GEMINI_VIDEO_RELAY_ENABLED', 'false');
+  mocks.googleEligible.mockImplementation(async (ids: string[]) => ids.filter(id => id === 'owner'));
+  mocks.googleRead.mockResolvedValue(['old-google-admin']);
+  mocks.googleWrite.mockResolvedValue(undefined);
   mocks.readDb.mockResolvedValue(['owner', 'existing']);
   mocks.eligible.mockImplementation(async (ids: string[]) => [...ids, 'admin-only']);
   mocks.codexRead.mockResolvedValue(['owner', 'existing', 'admin-only']);
@@ -102,10 +111,10 @@ describe('one personal-plan roster, two independently synchronized relays', () =
 
   it('reports synced, pending, and unreachable independently without conflating quotas', async () => {
     expect(await getPersonalPlanSyncStatus(['existing', 'owner']))
-      .toEqual({ codex: 'synced', grok: 'pending' });
+      .toEqual({ codex: 'synced', grok: 'pending', gemini: 'disabled' });
     mocks.grokRead.mockRejectedValueOnce(new Error('offline'));
     expect(await getPersonalPlanSyncStatus(['owner', 'existing']))
-      .toEqual({ codex: 'synced', grok: 'unavailable' });
+      .toEqual({ codex: 'synced', grok: 'unavailable', gemini: 'disabled' });
   });
 
   it('syncs new admins to Codex without changing Grok or shared membership', async () => {
@@ -120,5 +129,30 @@ describe('one personal-plan roster, two independently synchronized relays', () =
     await expect(updatePersonalSubscriptionAllowlist(() => Array.from({ length: 100 }, (_, i) => `user-${i}`)))
       .rejects.toThrow('100 accounts');
     expect(mocks.codexWrite).not.toHaveBeenCalled();
+  });
+});
+
+describe('Google uses the same control page with its administrator subset', () => {
+  it('syncs only listed admins and never grants an unlisted admin or a listed ordinary member', async () => {
+    vi.stubEnv('GEMINI_VIDEO_RELAY_ENABLED', 'true');
+    await updatePersonalSubscriptionAllowlist(ids => [...ids, 'ordinary-new']);
+    expect(mocks.googleWrite).toHaveBeenCalledExactlyOnceWith(['owner'], 'google-owner');
+    expect(mocks.grokWrite).toHaveBeenCalledExactlyOnceWith(['owner','existing','ordinary-new'], 'owner');
+  });
+  it('compensates all three actual snapshots if Google times out after a possibly-applied update', async () => {
+    vi.stubEnv('GEMINI_VIDEO_RELAY_ENABLED', 'true');
+    mocks.googleWrite.mockRejectedValueOnce(new Error('Google timeout'));
+    await expect(updatePersonalSubscriptionAllowlist(ids => [...ids,'ordinary'])).rejects.toThrow('Google timeout');
+    expect(mocks.googleWrite).toHaveBeenLastCalledWith(['old-google-admin'],'google-owner');
+    expect(mocks.grokWrite).toHaveBeenLastCalledWith(['owner'],'owner');
+    expect(mocks.codexWrite).toHaveBeenLastCalledWith(['owner','existing','admin-only'],'owner');
+    expect(mocks.saveDb).not.toHaveBeenCalled();
+  });
+  it('reconciles admin role changes without modifying the shared or Grok lists', async () => {
+    vi.stubEnv('GEMINI_VIDEO_RELAY_ENABLED','true');
+    await syncCodexAdminAllowlist();
+    expect(mocks.googleWrite).toHaveBeenCalledWith(['owner'],'google-owner');
+    expect(mocks.grokWrite).not.toHaveBeenCalled();
+    expect(mocks.saveDb).not.toHaveBeenCalled();
   });
 });

@@ -84,6 +84,7 @@ export interface McpServerOptions {
     usage?: { inputTokens: number; outputTokens: number; modelId: string; cacheReadTokens?: number; providerCostUsd?: number; provider?: string },
     meta?: {
       videoDurationSec?: number
+      prechargedCredits?: number
       imageCount?: number
       videoModel?: string
       videoResolution?: string
@@ -526,7 +527,7 @@ IMPORTANT:
         });
 
         if (result.success) {
-          await options?.onToolComplete?.('makaron_analyze_video', result.usedModel, Date.now() - t0, result.usage);
+          await options?.onToolComplete?.('makaron_analyze_video', result.usedModel, Date.now() - t0, result.usage, { prechargedCredits: result.creditsCharged });
         }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\n${result.analysis}`

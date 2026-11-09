@@ -91,6 +91,7 @@ marketing/meta-ads/
 !/scripts/smoke-gpt56-agent.ts
 !/scripts/smoke-gpt56-cache.ts
 !/scripts/smoke-codex-subscription.ts
+!/scripts/check-gemini-video-relay.ts
 !/scripts/smoke-volcengine-asr-project.ts
 !/scripts/smoke-vast-retirement.ts
 !/scripts/smoke-preview-vast-cutover.ts
