@@ -1,3 +1,4 @@
+import { estimateSeedream55Credits } from '@/lib/models/seedream55';
 import { estimateGptImageCredits } from '@/lib/models/gpt-image-quote';
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
@@ -30,7 +31,7 @@ function setup(provider = 'azure') {
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
   const ctx = { preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined, isNsfw: false };
   const context = vm.createContext({
-    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, resolveModelChain, getTokenRate, estimateGptImageCredits,
+    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, resolveModelChain, getTokenRate, estimateGptImageCredits, estimateSeedream55Credits,
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration,
     validateImageIndex: (images: string[], index: number) => images[index - 1] ? { idx: index - 1 } : { error: 'Invalid media index' }, getToolPrice, isBillingEnabled,
     resolveToolName,
@@ -311,5 +312,26 @@ describe('Midjourney Agent batch billing and timeline', () => {
     ctx.snapshotImages = ['https://example.com/photo.png'];
     expect(await tool.execute({ editPrompt: 'remove background', media_index: 1 })).toMatchObject({ success: false });
     expect(editImage).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('Seedream 5.5 Agent billing integration', () => {
+  it('blocks missing exact candidate pricing before any paid call', async () => {
+    const {tool,ctx,getTokenRate,editImage}=setup();ctx.preferredModel='seedream-5.5';
+    getTokenRate.mockResolvedValue(null);
+    expect(await tool.execute({editPrompt:'Only edit the hat'})).toMatchObject({success:false,error:'pricing_unavailable'});
+    expect(editImage).not.toHaveBeenCalled();
+  });
+  it('quotes both inputs, settles fixed provider tariff once, and persists provider identity', async () => {
+    const {tool,ctx,getTokenRate,editImage,requireCredits,deductByTokens,deductCredits}=setup();ctx.preferredModel='seedream-5.5';
+    ctx.snapshotImages=['https://example.com/base.png','https://example.com/ref.png'];
+    getTokenRate.mockResolvedValue({model_id:'seedream-5.5',markup:2,is_active:true});
+    editImage.mockResolvedValue({success:true,image:'data:image/png;base64,YQ==',usedModel:'seedream-5.5',provider:'wavespeed',taskId:'seedream-task',usage:{modelId:'seedream-5.5',inputTokens:0,outputTokens:0,providerCostUsd:0.036}});
+    expect((await tool.execute({editPrompt:'Only edit the hat',media_index:1,reference_media_indices:[2],imageResolution:'1K',outputFormat:'png'})).success).toBe(true);
+    expect(requireCredits).toHaveBeenCalledWith('test-user',8);
+    expect(deductByTokens).toHaveBeenCalledExactlyOnceWith('test-user','generate_image','seedream-5.5',0,0,undefined,undefined,undefined,0.036);
+    expect(deductCredits).not.toHaveBeenCalled();
+    expect((ctx as any).generatedImageMetadata.get(0).imageGeneration).toMatchObject({model:'seedream-5.5',provider:'wavespeed',providerModel:'bytedance/seedream-v5.5/edit'});
   });
 });

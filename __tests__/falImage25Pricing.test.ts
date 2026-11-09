@@ -20,5 +20,7 @@ describe('Image 2.5 pricing', () => {
     expect(await getTokenRate('gpt-image-2.6-sunburst')).toBeNull();
     expect(providerCostToCredits(0.0063, 2)).toBe(2);
     expect(providerCostToCredits(0.0145, 2)).toBe(3);
+    expect(providerCostToCredits(0.07, 2)).toBe(14);
+    expect(providerCostToCredits(0.070001, 2)).toBe(15);
   });
 });

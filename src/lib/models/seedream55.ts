@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { providerCostToCredits } from '../billing/token-rates';
 import { validateImageModelRequest } from '../image-model-capabilities';
 import { readProviderImage } from '../provider-image-preflight';
 import type { GenerateImageRequest, ModelBackend } from './types';
@@ -27,7 +28,7 @@ export function seedream55CostUsd(resolution = '1K', inputCount = 0): number {
 }
 export function estimateSeedream55Credits(options: { imageResolution?: string; imageInputCount?: number }, markup: number): number {
   if (!Number.isFinite(markup) || markup <= 0) throw new Error('Invalid Seedream 5.5 markup');
-  return Math.ceil(seedream55CostUsd(options.imageResolution, options.imageInputCount) * markup / 0.01);
+  return providerCostToCredits(seedream55CostUsd(options.imageResolution, options.imageInputCount), markup);
 }
 export function buildSeedream55Request(req: GenerateImageRequest) {
   validateImageModelRequest(req, SEEDREAM55_MODEL);

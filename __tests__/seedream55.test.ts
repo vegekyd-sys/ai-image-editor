@@ -39,6 +39,7 @@ describe('Seedream 5.5 explicit candidate', () => {
   it('prices every native tier plus every input; credit rounding matches final tariff', () => {
     expect(['1K', '1.5K', '2K', '3K'].map(tier => seedream55CostUsd(tier))).toEqual([0.02, 0.02, 0.027, 0.054]);
     expect(seedream55CostUsd('3K', 10)).toBe(0.134);
+    expect(estimateSeedream55Credits({ imageResolution: '3K', imageInputCount: 2 }, 2)).toBe(14);
     expect(estimateSeedream55Credits({ imageResolution: '2K', imageInputCount: 2 }, 2)).toBe(9);
     expect(() => seedream55CostUsd('4K')).toThrow();
     expect(() => estimateSeedream55Credits({}, 0)).toThrow();
