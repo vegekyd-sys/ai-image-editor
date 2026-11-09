@@ -51,6 +51,8 @@ beforeEach(() => {
 describe('R16–R19: MCP HTTP → shared image Skill → selected provider → billing', () => {
   it.each([
     [{}, 'gpt-image-2.6-flare', 6],
+    [{ model: 'seedream-5.5', outputFormat: 'png', background: 'transparent' }, 'seedream-5.5', 4],
+    [{ model: 'seedream-5.5', imageResolution: '3K' }, 'seedream-5.5', 11],
     [{ model: 'gpt-image-2.6-flare' }, 'gpt-image-2.6-flare', 6],
     [{ model: 'gpt-image-2.6-sunburst', background: 'transparent' }, 'gpt-image-2.6-sunburst', 6],
     [{ aspectRatio: '8:1' }, 'gemini-2.1', 7],
