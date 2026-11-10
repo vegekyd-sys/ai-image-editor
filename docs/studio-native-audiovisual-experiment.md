@@ -111,7 +111,7 @@ ASR 会把 hood、four-eighty 等误识别；独立视频审阅确认尺寸发�
 新生成前按当前授权确认实验范围和实际模型报价，不把失败预留当作实扣。
 
 ```sh
-npx vitest run __tests__/studioNativeAudio.test.ts __tests__/studioRun.test.ts
+pnpm exec vitest run __tests__/studioNativeAudio.test.ts __tests__/studioRun.test.ts
 node --import tsx benchmarks/studio-native-audiovisual/verify-media.ts .tmp/native-media-acceptance
 # cases.example.json 替换为真实参考 URL，放入私有目录的 cases.json。
 # diagnosis.json 提供测试账号 userId、所属 projectId 及 jobs: []。

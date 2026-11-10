@@ -2,9 +2,9 @@
 /**
  * Quick Kling video generation from image + prompt + optional reference video
  * Usage:
- *   npx tsx scripts/run-kling.ts <image-path> "<prompt>"
- *   npx tsx scripts/run-kling.ts <image-path> "<prompt>" --video <ref-video-path>
- *   npx tsx scripts/run-kling.ts --poll <task-id>
+ *   pnpm exec tsx scripts/run-kling.ts <image-path> "<prompt>"
+ *   pnpm exec tsx scripts/run-kling.ts <image-path> "<prompt>" --video <ref-video-path>
+ *   pnpm exec tsx scripts/run-kling.ts --poll <task-id>
  */
 import jwt from 'jsonwebtoken'
 import * as fs from 'fs'
@@ -60,7 +60,7 @@ async function main() {
   const imgPath = args[0]
   const prompt = args[1]
   if (!imgPath || !prompt) {
-    console.error('Usage:\n  npx tsx scripts/run-kling.ts <image> "<prompt>" [--video <ref.mp4>]\n  npx tsx scripts/run-kling.ts --poll <task-id>')
+    console.error('Usage:\n  pnpm exec tsx scripts/run-kling.ts <image> "<prompt>" [--video <ref.mp4>]\n  pnpm exec tsx scripts/run-kling.ts --poll <task-id>')
     process.exit(1)
   }
 

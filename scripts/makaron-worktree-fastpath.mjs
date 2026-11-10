@@ -170,7 +170,7 @@ function createWorktree() {
   run('git', ['worktree', 'add', '-b', branch, worktreePath, base], { stdio: 'inherit' });
   linkNodeModules(worktreePath);
   console.log(`created lightweight worktree: ${worktreePath}`);
-  console.log('Commit the feature, then use `npm run runner:test -- <commit>` for full local validation.');
+  console.log('Commit the feature, then use `pnpm run runner:test -- <commit>` for full local validation.');
 }
 
 function cleanupCandidates() {

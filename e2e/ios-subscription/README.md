@@ -10,7 +10,7 @@ Runs the subscribe-before-register flow against an isolated local stack:
 Run from the repository root:
 
 ```bash
-npm run e2e:ios-subscription
+pnpm run e2e:ios-subscription
 ```
 
 The command erases only the Simulator named `Makaron iOS Subscription E2E`,

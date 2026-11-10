@@ -167,7 +167,7 @@ async function main() {
   const { key, id: keyId } = await generateApiKey(userId, 'remotion-materialize-e2e')
   const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'remotion-materialize-e2e-'))
   const projectIds: string[] = []
-  const server = remoteBaseUrl ? null : spawn('npx', ['next', 'dev', '--webpack', '-H', '127.0.0.1', '-p', String(port)], {
+  const server = remoteBaseUrl ? null : spawn('pnpm', ['exec', 'next', 'dev', '--webpack', '-H', '127.0.0.1', '-p', String(port)], {
     env: {
       ...process.env,
       MAKARON_APP_URL: baseUrl,

@@ -6,7 +6,7 @@ on:
       - 'src/**'
       - '__tests__/**'
       - 'package.json'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
       - 'vitest.config.ts'
       - '.github/workflows/app-ci.yml'
   workflow_dispatch:
@@ -19,10 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npx tsc --noEmit
-      - run: npx vitest run __tests__/createProjectUpload.test.ts
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm exec vitest run __tests__/createProjectUpload.test.ts

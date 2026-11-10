@@ -1,7 +1,7 @@
-diff --git a/node_modules/@remotion/web-renderer/dist/esm/index.mjs b/node_modules/@remotion/web-renderer/dist/esm/index.mjs
+diff --git a/dist/esm/index.mjs b/dist/esm/index.mjs
 index fcbfdbc..15c09c0 100644
---- a/node_modules/@remotion/web-renderer/dist/esm/index.mjs
-+++ b/node_modules/@remotion/web-renderer/dist/esm/index.mjs
+--- a/dist/esm/index.mjs
++++ b/dist/esm/index.mjs
 @@ -2608,6 +2608,9 @@ var hasRotateCssValue = (style) => {
  var hasScaleCssValue = (style) => {
    return style.scale !== "none" && style.scale !== "";

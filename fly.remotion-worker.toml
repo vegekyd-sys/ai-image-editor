@@ -5,7 +5,7 @@ primary_region = "sin"
   dockerfile = "Dockerfile.remotion-worker"
 
 [processes]
-  worker = "npm run worker:remotion-export"
+  worker = "pnpm run worker:remotion-export"
 
 [env]
   NODE_ENV = "production"

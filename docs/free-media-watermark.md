@@ -585,13 +585,13 @@ Reuse the isolated Supabase/Mailpit fixture at API port 55321. No resets or prod
 database access. The harness rejects an unknown server/build on port 3002.
 
 ```sh
-npx tsx e2e/free-media.ts --serve
-npx tsx e2e/free-media.ts
-MAKARON_LIVE_PROVIDER_ENV=/path/to/provider.env npx tsx e2e/free-media.ts --live --serve
-MAKARON_LIVE_PROVIDER_ENV=/path/to/provider.env npx tsx e2e/free-media.ts --live --reuse-server
-npx tsx e2e/free-media.ts --save-only --reuse-server
-npx tsx e2e/free-media.ts --save-only --payments-only --reuse-server
-MAKARON_E2E_VIDEO_SOURCE=/path/to/provider-original.mp4 npx tsx e2e/free-media.ts --save-only --reuse-server
+pnpm exec tsx e2e/free-media.ts --serve
+pnpm exec tsx e2e/free-media.ts
+MAKARON_LIVE_PROVIDER_ENV=/path/to/provider.env pnpm exec tsx e2e/free-media.ts --live --serve
+MAKARON_LIVE_PROVIDER_ENV=/path/to/provider.env pnpm exec tsx e2e/free-media.ts --live --reuse-server
+pnpm exec tsx e2e/free-media.ts --save-only --reuse-server
+pnpm exec tsx e2e/free-media.ts --save-only --payments-only --reuse-server
+MAKARON_E2E_VIDEO_SOURCE=/path/to/provider-original.mp4 pnpm exec tsx e2e/free-media.ts --save-only --reuse-server
 ```
 
 The harness exercises actual email/OTP signup and welcome grants, clean provider

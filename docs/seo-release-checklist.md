@@ -29,9 +29,9 @@ detail UI flows depend on that route shape. Skill SEO pages live under `/skill/{
 Run from repo root:
 
 ```bash
-npx tsc --noEmit
-npm run lint
-npm run build
+pnpm exec tsc --noEmit
+pnpm run lint
+pnpm run build
 ```
 
 Expected:
@@ -50,7 +50,7 @@ curl -sSI "$BASE_URL/makaron" | sed -n '1,20p'
 curl -sS "$BASE_URL/makaron" | rg '<title>|canonical|og:title|application/ld\\+json|<h1'
 curl -sS "$BASE_URL/robots.txt"
 curl -sS "$BASE_URL/sitemap.xml" | rg '<loc>' | sed -n '1,40p'
-npm run check:seo -- "$BASE_URL"
+pnpm run check:seo -- "$BASE_URL"
 ```
 
 Expected:
@@ -59,7 +59,7 @@ Expected:
 - `/makaron` has title, canonical, OG title, JSON-LD, and H1
 - `robots.txt` allows `/makaron`, `/agent`, `/home`, `/use-cases/`, and `/releases/`
 - `sitemap.xml` contains `/makaron` and the use-case pages
-- `npm run check:seo -- "$BASE_URL"` exits 0
+- `pnpm run check:seo -- "$BASE_URL"` exits 0
 
 ## Google Search Console
 

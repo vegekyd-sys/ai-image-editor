@@ -4,7 +4,7 @@
 // Why: the Codex relay used to be exposed through a Cloudflare quick tunnel whose URL
 // rotated on restart (fixed at codex-relay.tianyi.live since 2026-11-07). Vercel env got the new URL, but `.env.local` keeps the
 // old one, so every local Agent turn burns several durable attempts on a dead
-// host before falling back. This script makes that drift visible at `npm run dev`
+// host before falling back. This script makes that drift visible at `pnpm run dev`
 // and can copy the current relay values from Vercel into `.env.local`.
 //
 //   node scripts/check-local-relays.mjs          # probe, warn only (never fails dev)
@@ -77,7 +77,7 @@ async function check() {
   console.warn('  Agent turns on this model will be slow until the URL is fixed (the server');
   console.warn('  retries once, then uses the API backup). If Vercel has a newer value,');
   console.warn('  copy the current values from Vercel with:');
-  console.warn('    npm run env:sync-relays');
+  console.warn('    pnpm run env:sync-relays');
   console.warn(`${bar}\n`);
   return dead.length;
 }
@@ -141,6 +141,6 @@ function sync() {
 if (args.has('--sync')) {
   sync();
 } else {
-  // Never block `npm run dev`; the warning is the point.
+  // Never block `pnpm run dev`; the warning is the point.
   await check().catch((error) => console.warn(`[relay-check] skipped: ${error?.message || error}`));
 }

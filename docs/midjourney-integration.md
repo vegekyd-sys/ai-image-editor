@@ -61,7 +61,7 @@ Midjourney 生成氛围、场景、光影和视觉方向；需要明确文字、
 node --import tsx tools/midjourney-trial.ts submit test-results/mj/example request.json --env /absolute/path/to/.env.local
 node --import tsx tools/midjourney-trial.ts status test-results/mj/example --env /absolute/path/to/.env.local
 node --import tsx tools/midjourney-trial.ts download test-results/mj/example --env /absolute/path/to/.env.local
-npx vitest run __tests__/midjourney.test.ts
+pnpm exec vitest run __tests__/midjourney.test.ts
 ```
 
 参考 URL、供应商结果链接与本地收据保留在忽略的 `test-results/`，不加入共享文档或 Git。输出 URL 会过期，正式项目必须保存到 Makaron 永久存储。

@@ -29,7 +29,7 @@ function sha256(content) {
 function ensureFile(file, content) {
   if (checkOnly) {
     if (!existsSync(file) || readFileSync(file, 'utf8') !== content) {
-      throw new Error(`${path.relative(root, file)} is stale; run npm run build:agent-discovery`)
+      throw new Error(`${path.relative(root, file)} is stale; run pnpm run build:agent-discovery`)
     }
     return
   }
@@ -58,7 +58,7 @@ function ensureDirectory(source, target) {
       sourceFiles.size !== targetFiles.size
       || [...sourceFiles].some(([file, content]) => !targetFiles.get(file)?.equals(content))
     ) {
-      throw new Error(`${path.relative(root, target)} is stale; run npm run build:agent-discovery`)
+      throw new Error(`${path.relative(root, target)} is stale; run pnpm run build:agent-discovery`)
     }
     return
   }

@@ -21,9 +21,9 @@ function detectLanIp() {
 
 function usage() {
   console.log(`Usage:
-  npm run ios:local
-  npm run ios:local -- --url http://192.168.1.10:3001
-  npm run ios:prod
+  pnpm run ios:local
+  pnpm run ios:local -- --url http://192.168.1.10:3001
+  pnpm run ios:prod
 
 The local command patches ios/App/App/capacitor.config.json for Xcode Debug runs.
 Release/source config remains capacitor.config.ts.`);
@@ -36,7 +36,7 @@ if (args.includes('--help') || args.includes('-h')) {
 }
 
 if (!fs.existsSync(configPath)) {
-  console.error(`Missing ${configPath}. Run npx cap sync ios first.`);
+  console.error(`Missing ${configPath}. Run pnpm exec cap sync ios first.`);
   process.exit(1);
 }
 
@@ -80,6 +80,6 @@ config.server.allowNavigation = Array.from(new Set([
 fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
 console.log(`iOS Debug WebView will load: ${config.server.url}`);
-console.log('For stable phone acceptance, run: npm run build && npm run start:ios');
-console.log('For active development with Fast Refresh, run: npm run dev:ios');
+console.log('For stable phone acceptance, run: pnpm run build && pnpm run start:ios');
+console.log('For active development with Fast Refresh, run: pnpm run dev:ios');
 console.log('Then open ios/App/App.xcworkspace in Xcode and Run on your iPhone.');

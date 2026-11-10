@@ -29,7 +29,8 @@ describe('lightweight worktree and fixed runner workflow', () => {
     expect(source).toContain("['.env.local', '.env.production']")
     expect(source).toContain("resolve(devPath, '.vercel', 'project.json')")
     expect(source).toContain("resolve(path, '.next')")
-    expect(source).toContain('package-lock.json differs from dev')
+    expect(source).toContain('differs from dev; installing disposable runner-local dependencies')
+    expect(source).toContain("run('pnpm', ['install', '--frozen-lockfile']")
   })
 
   it('blocks Production outside the clean canonical dev worktree', () => {
