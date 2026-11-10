@@ -39,7 +39,7 @@ were isolated fixtures (40 credits), not production ledger acceptance. Provider
 generation is real and may incur its normal charge. Test duration was 19.90s,
 including Agent, provider, polling and decode inspection; not inference latency.
 
-Run local regression: `npm test -- __tests__/videoSubmissionIntent.test.ts`.
+Run local regression: `pnpm test -- __tests__/videoSubmissionIntent.test.ts`.
 The `.live.test.ts` is skipped by default. To intentionally run one paid smoke,
 load server credentials and set `MAKARON_VIDEO_INTENT_LIVE=1` and
 `MAKARON_VIDEO_INTENT_PROJECT_ID` to the authorized two-image test project.

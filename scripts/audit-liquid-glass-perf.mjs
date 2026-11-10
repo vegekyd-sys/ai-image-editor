@@ -75,7 +75,7 @@ function printHelp() {
   console.log(`Makaron Liquid Glass performance audit
 
 Usage:
-  npm run audit:glass -- [options]
+  pnpm run audit:glass -- [options]
 
 Options:
   --base-url <url>          Default: ${DEFAULT_BASE_URL}
@@ -90,9 +90,9 @@ Options:
   --json                    Print full JSON report
 
 Recommended:
-  npm run build
-  PORT=3027 npm run start
-  npm run audit:glass -- --base-url=http://localhost:3027 --project-id=<id> --strict
+  pnpm run build
+  PORT=3027 pnpm run start
+  pnpm run audit:glass -- --base-url=http://localhost:3027 --project-id=<id> --strict
 `)
 }
 

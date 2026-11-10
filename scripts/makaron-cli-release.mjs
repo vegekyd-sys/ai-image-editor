@@ -51,7 +51,7 @@ async function main(){
   assert(args.includes('--prepare')||args.includes('--verify'),'Use --prepare [--base <commit>] or --verify --tarball <inspected.tgz> [--report <json>]');
   const pkg=packageContract();
   const checks=args.includes('--prepare')?['check:skill-sync','test:skill-sync','test:cli','lint:agent-docs']:['check:skill-sync'];
-  for(const check of checks)run('npm',['run',check],{stdio:'inherit'});
+  for(const check of checks)run('pnpm',['run',check],{stdio:'inherit'});
   if(args.includes('--prepare')){
     const out=value('--out')?path.resolve(value('--out')):fs.mkdtempSync(path.join(os.tmpdir(),'makaron-cli-release-'));
     fs.mkdirSync(out,{recursive:true});

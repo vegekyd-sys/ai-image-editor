@@ -3,10 +3,10 @@
  * Video → Kling Prompt → Home Page Template
  *
  * Usage:
- *   npx tsx scripts/video-to-template.ts --url "https://douyin.com/xxx"
- *   npx tsx scripts/video-to-template.ts --file ./video.mp4
- *   npx tsx scripts/video-to-template.ts --image ./frame1.jpg --image ./frame2.jpg
- *   npx tsx scripts/video-to-template.ts --file ./video.mp4 --model gemini-3.1-pro
+ *   pnpm exec tsx scripts/video-to-template.ts --url "https://douyin.com/xxx"
+ *   pnpm exec tsx scripts/video-to-template.ts --file ./video.mp4
+ *   pnpm exec tsx scripts/video-to-template.ts --image ./frame1.jpg --image ./frame2.jpg
+ *   pnpm exec tsx scripts/video-to-template.ts --file ./video.mp4 --model gemini-3.1-pro
  */
 
 import { GoogleGenAI } from '@google/genai'
@@ -46,9 +46,9 @@ function parseArgs() {
       case '--help':
         console.log(`
 Usage:
-  npx tsx scripts/video-to-template.ts --url <video-url>
-  npx tsx scripts/video-to-template.ts --file <path.mp4>
-  npx tsx scripts/video-to-template.ts --image <path.jpg> [--image <path2.jpg>]
+  pnpm exec tsx scripts/video-to-template.ts --url <video-url>
+  pnpm exec tsx scripts/video-to-template.ts --file <path.mp4>
+  pnpm exec tsx scripts/video-to-template.ts --image <path.jpg> [--image <path2.jpg>]
 
 Options:
   --url <url>       Download video from URL (uses yt-dlp)

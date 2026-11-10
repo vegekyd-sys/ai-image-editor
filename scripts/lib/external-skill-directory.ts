@@ -50,7 +50,7 @@ export function syncDirectory(root: string, check = false) {
   const ensure = (relative: string, content: string) => {
     const file = path.join(root, relative);
     if (check) {
-      if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== content) throw new Error(`${relative} is stale; run npm run build:skill-sync`);
+      if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== content) throw new Error(`${relative} is stale; run pnpm run build:skill-sync`);
     } else { fs.mkdirSync(path.dirname(file), {recursive: true}); fs.writeFileSync(file, content); }
   };
   ensure(CATALOG, JSON.stringify(catalog, null, 2)+'\n');

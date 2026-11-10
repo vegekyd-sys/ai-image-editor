@@ -65,18 +65,18 @@ async function healthCheck() {
 }
 
 function localCheck() {
-  run('npm', ['run', 'check:skill-sync']);
-  run('npx', ['tsc', '--noEmit']);
-  run('npm', ['run', 'test']);
-  run('npm', ['run', 'test:cli']);
+  run('pnpm', ['run', 'check:skill-sync']);
+  run('pnpm', ['exec', 'tsc', '--noEmit']);
+  run('pnpm', ['run', 'test']);
+  run('pnpm', ['run', 'test:cli']);
   const nodeModulesPath = resolve(root, 'node_modules');
   const hasSharedNodeModules = existsSync(nodeModulesPath)
     && lstatSync(nodeModulesPath).isSymbolicLink();
   if (hasSharedNodeModules) {
     console.log('\nShared worktree node_modules detected; using webpack because Turbopack rejects links outside the worktree root.');
-    run('npm', ['run', 'build', '--', '--webpack']);
+    run('pnpm', ['run', 'build', '--', '--webpack']);
   } else {
-    run('npm', ['run', 'build']);
+    run('pnpm', ['run', 'build']);
   }
 }
 
@@ -84,7 +84,7 @@ try {
   if (has('--help') || has('-h')) {
     usage();
   } else if (has('--cli')) {
-    run('npm', ['run', 'release:cli:prepare']);
+    run('pnpm', ['run', 'release:cli:prepare']);
   } else if (has('--local')) {
     localCheck();
   } else if (has('--health')) {

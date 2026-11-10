@@ -65,9 +65,9 @@ old membership. Preserve persisted relay allowlist files during rollback.
 
 ## Local verification
 
-- `npx vitest run`: membership failures, both-owner protection, admin auth,
+- `pnpm exec vitest run`: membership failures, both-owner protection, admin auth,
   compensation and repair, dynamic Grok routing, four-language UI, and real local
   HTTP control of both relays with temporary state files (no upstream generation).
-- `npx tsc --noEmit` and `npm run lint`.
+- `pnpm exec tsc --noEmit` and `pnpm run lint`.
 - Browser acceptance uses a signed-in admin at the worktree's local URL. Do not
   bypass sign-in or modify shared membership merely to obtain a screenshot.

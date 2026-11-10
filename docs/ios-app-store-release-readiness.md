@@ -214,9 +214,9 @@ Run from repo root:
 
 ```bash
 git status --short
-npm run release:check -- --local
-npm run test:ios
-npm run build
+pnpm run release:check -- --local
+pnpm run test:ios
+pnpm run build
 ```
 
 Then deploy production web:

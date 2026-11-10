@@ -45,7 +45,7 @@ prime_photo_library() {
   xcrun simctl terminate "$SIMULATOR_ID" com.apple.mobileslideshow >/dev/null 2>&1 || true
 }
 
-for command_name in curl docker npx npm rg xcodebuild xcrun; do
+for command_name in curl docker npx pnpm rg xcodebuild xcrun; do
   command -v "$command_name" >/dev/null || {
     printf 'Missing required command: %s\n' "$command_name" >&2
     exit 1
@@ -73,7 +73,7 @@ if ! curl -fsS "$E2E_ORIGIN/api/e2e/skill-fixture" >/dev/null 2>&1; then
   NEXT_PUBLIC_SUPABASE_URL="$API_URL" \
   NEXT_PUBLIC_SUPABASE_ANON_KEY="$ANON_KEY" \
   SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
-  npm run dev -- -H 127.0.0.1 -p 3002 >"$ARTIFACT_DIR/next-server.log" 2>&1 &
+  pnpm run dev -- -H 127.0.0.1 -p 3002 >"$ARTIFACT_DIR/next-server.log" 2>&1 &
   SERVER_PID=$!
 elif ! curl -fsS "$E2E_ORIGIN/api/home-skills" | rg -q 'E2E Ending Spirit'; then
   printf 'Port 3002 is occupied by a server that is not using the isolated E2E Supabase project.\n' >&2
@@ -106,7 +106,7 @@ fi
 
 # Make the test entry self-contained. A prior real-device build may point the
 # WebView at a Preview deployment; E2E must always compile against loopback.
-npm run ios:local -- --url "$E2E_ORIGIN"
+pnpm run ios:local -- --url "$E2E_ORIGIN"
 if ! rg -q -F "\"url\": \"$E2E_ORIGIN\"" ios/App/App/capacitor.config.json; then
   printf 'The iOS E2E WebView URL was not written correctly.\n' >&2
   exit 1

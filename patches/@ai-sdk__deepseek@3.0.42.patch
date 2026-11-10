@@ -1,6 +1,6 @@
-diff --git a/node_modules/@ai-sdk/deepseek/src/chat/convert-to-deepseek-chat-messages.ts b/node_modules/@ai-sdk/deepseek/src/chat/convert-to-deepseek-chat-messages.ts
---- a/node_modules/@ai-sdk/deepseek/src/chat/convert-to-deepseek-chat-messages.ts
-+++ b/node_modules/@ai-sdk/deepseek/src/chat/convert-to-deepseek-chat-messages.ts
+diff --git a/src/chat/convert-to-deepseek-chat-messages.ts b/src/chat/convert-to-deepseek-chat-messages.ts
+--- a/src/chat/convert-to-deepseek-chat-messages.ts
++++ b/src/chat/convert-to-deepseek-chat-messages.ts
 @@ -45,7 +45,7 @@
    messages: DeepSeekChatPrompt;
    warnings: Array<SharedV4Warning>;
@@ -10,9 +10,9 @@ diff --git a/node_modules/@ai-sdk/deepseek/src/chat/convert-to-deepseek-chat-mes
    const messages: DeepSeekChatPrompt = [];
    const warnings: Array<SharedV4Warning> = [];
  
-diff --git a/node_modules/@ai-sdk/deepseek/src/chat/deepseek-chat-language-model.ts b/node_modules/@ai-sdk/deepseek/src/chat/deepseek-chat-language-model.ts
---- a/node_modules/@ai-sdk/deepseek/src/chat/deepseek-chat-language-model.ts
-+++ b/node_modules/@ai-sdk/deepseek/src/chat/deepseek-chat-language-model.ts
+diff --git a/src/chat/deepseek-chat-language-model.ts b/src/chat/deepseek-chat-language-model.ts
+--- a/src/chat/deepseek-chat-language-model.ts
++++ b/src/chat/deepseek-chat-language-model.ts
 @@ -322,7 +322,7 @@
        thinking?.type !== 'disabled' &&
        (thinking != null ||
@@ -22,9 +22,9 @@ diff --git a/node_modules/@ai-sdk/deepseek/src/chat/deepseek-chat-language-model
  
      if (isThinkingEnabled && temperature != null) {
        allWarnings.push({
-diff --git a/node_modules/@ai-sdk/deepseek/dist/index.js b/node_modules/@ai-sdk/deepseek/dist/index.js
---- a/node_modules/@ai-sdk/deepseek/dist/index.js
-+++ b/node_modules/@ai-sdk/deepseek/dist/index.js
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
 @@ -137,7 +137,7 @@
    supportsStructuredOutputs = false
  }) {

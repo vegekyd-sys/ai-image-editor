@@ -67,7 +67,7 @@ unchanged.
 - `ios/App/App/capacitor.config.json`
   - Generated/synced iOS config.
   - During local device testing it may point to `http://192.168.1.10:3001`.
-  - Before Archive/TestFlight/App Store, run `npm run ios:prod` and sync.
+  - Before Archive/TestFlight/App Store, run `pnpm run ios:prod` and sync.
 
 - `src/lib/native-app.ts`
   - Source of truth for detecting Makaron iOS app shell.
@@ -114,8 +114,8 @@ cd /Users/tianyicai/ai-image-editor-ios-migration
 Build the web app and serve it on the LAN for the iPhone:
 
 ```bash
-npm run build
-npm run start:ios
+pnpm run build
+pnpm run start:ios
 ```
 
 Local iPhone URL currently expected by the debug app:
@@ -128,15 +128,15 @@ If `ios/App/App/capacitor.config.json` needs to be pointed back to the local
 server:
 
 ```bash
-IOS_DEV_SERVER_URL=http://192.168.1.10:3001 npm run ios:local
-npx cap sync ios
+IOS_DEV_SERVER_URL=http://192.168.1.10:3001 pnpm run ios:local
+pnpm exec cap sync ios
 ```
 
 Before production archive:
 
 ```bash
-npm run ios:prod
-npx cap sync ios
+pnpm run ios:prod
+pnpm exec cap sync ios
 ```
 
 ## Verification Commands
@@ -144,10 +144,10 @@ npx cap sync ios
 Run these before committing iOS navigation or shell changes:
 
 ```bash
-npm run test:ios
-npx eslint src/app/home/page.tsx src/app/projects/page.tsx src/components/Editor.tsx src/components/ProjectEditorContainer.tsx __tests__/iosAppStoreReadiness.test.ts
+pnpm run test:ios
+pnpm exec eslint src/app/home/page.tsx src/app/projects/page.tsx src/components/Editor.tsx src/components/ProjectEditorContainer.tsx __tests__/iosAppStoreReadiness.test.ts
 git diff --check
-npm run build
+pnpm run build
 ```
 
 Expected note: `src/app/home/page.tsx` currently has pre-existing lint warnings.
@@ -197,7 +197,7 @@ iOS binary release:
 
 - Required for native shell, icon, launch screen, permission strings, Capacitor
   plugin/config, or App Store metadata changes.
-- Run `npm run ios:prod && npx cap sync ios`.
+- Run `pnpm run ios:prod && pnpm exec cap sync ios`.
 - Open Xcode, build on device once, then Archive and upload to TestFlight.
 
 The correct mental model is: one shared product codebase, separate Web and iOS

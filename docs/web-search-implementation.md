@@ -46,9 +46,9 @@ Azure 模型输入输出继续按 token 计费，每次搜索事务另外记为 
 ## 验证
 
 ```bash
-npx vitest run __tests__/azureOpenAIResponses.test.ts __tests__/agentModels.test.ts __tests__/agentCallbacks.test.ts __tests__/agentDualWriter.test.ts
-npx tsc --noEmit
-npm run build
+pnpm exec vitest run __tests__/azureOpenAIResponses.test.ts __tests__/agentModels.test.ts __tests__/agentCallbacks.test.ts __tests__/agentDualWriter.test.ts
+pnpm exec tsc --noEmit
+pnpm run build
 ```
 
 上线前建议分别用 Terra、Sol、Luna 提问一个当天可验证的问题，确认：触发 `web_search`、正文带引用、来源标签可打开、usage log 记录搜索事务。
