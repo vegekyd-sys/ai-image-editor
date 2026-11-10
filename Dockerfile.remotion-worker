@@ -35,7 +35,7 @@ ENV REMOTION_BROWSER_LAUNCH_TIMEOUT_MS=90000
 
 # pnpm comes from package.json "packageManager" via Corepack (bundled with Node 24).
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches ./patches
 COPY plugins/capacitor-meta-app-events ./plugins/capacitor-meta-app-events
 RUN corepack enable && corepack install

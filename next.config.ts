@@ -1,23 +1,5 @@
 import type { NextConfig } from "next";
 
-// @aws-sdk/checksums requires @aws-crypto/crc32c, but the trace misses it, so it
-// is included explicitly. Globs name pnpm's real package directories
-// (node_modules/.pnpm/<pkg>@<ver>/node_modules/**). A glob through a top-level
-// symlink such as ./node_modules/@smithy/** copies the same files again under
-// every symlinked path, which pushed functions past Vercel's 250 MB limit.
-// Each entry keeps the package plus the symlinks it resolves its dependencies
-// through. The list is the runtime closure of @aws-crypto/crc32c.
-const CRC32C_RUNTIME_INCLUDES = [
-  '@aws-crypto+crc32c',
-  '@aws-crypto+util',
-  '@aws-sdk+types',
-  '@smithy+types',
-  '@smithy+util-utf8',
-  '@smithy+util-buffer-from',
-  '@smithy+is-array-buffer',
-  'tslib',
-].map(pkg => `./node_modules/.pnpm/${pkg}@*/node_modules/**`);
-
 const nextConfig: NextConfig = {
   devIndicators: false,
   async headers() {
@@ -93,10 +75,15 @@ const nextConfig: NextConfig = {
     ...Object.fromEntries([
       '/api/agent', '/api/agent/**', '/api/animate', '/api/animate/**',
       '/api/video-snapshot', '/api/video-snapshot/**', '/api/cron/video-poll', '/api/mcp',
-    ].map(route => [route, ['./node_modules/.pnpm/ffmpeg-static@*/node_modules/ffmpeg-static/**']])),
+    ].map(route => [route, ['./node_modules/ffmpeg-static/**']])),
     // S3 is also loaded by export, materialize, snapshot polling, and cron routes.
     // Keep its checksum runtime in every API bundle, including re-exported handlers.
-    '/api/**': CRC32C_RUNTIME_INCLUDES,
+    '/api/**': [
+      './node_modules/@aws-crypto/**',
+      './node_modules/@aws-sdk/types/**',
+      './node_modules/@smithy/**',
+      './node_modules/tslib/**',
+    ],
   },
   turbopack: {
     // Keep media class identities together across lazy imports and encoder registration.
