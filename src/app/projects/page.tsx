@@ -682,15 +682,26 @@ function ProjectsPageInner() {
   }, [useIOSInlineProjectNavigation, activeIOSProjectId])
 
   // Measure input box height → set photo slot width = height (square)
+  // The composer mounts after the page's loading state, so re-check on every
+  // render until the box exists (a mount-only effect would miss it and leave
+  // the slot at its 80px default). Like home, lock to the first height so the
+  // slot does not grow while the textarea expands.
+  const slotObservedRef = useRef<{ el: HTMLDivElement; ro: ResizeObserver } | null>(null)
   useEffect(() => {
     const el = inputBoxRef.current
-    if (!el) return
+    if (!el || slotObservedRef.current?.el === el) return
+    slotObservedRef.current?.ro.disconnect()
+    let measured = false
     const ro = new ResizeObserver(([entry]) => {
-      setPhotoSlotWidth(Math.round(entry.contentRect.height))
+      const h = Math.round(entry.contentRect.height)
+      if (measured || h <= 0) return
+      measured = true
+      setPhotoSlotWidth(h)
     })
     ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+    slotObservedRef.current = { el, ro }
+  })
+  useEffect(() => () => slotObservedRef.current?.ro.disconnect(), [])
 
   // Phase 2: Async IndexedDB cache (cross-session persistence, no auth dependency)
   useEffect(() => {
