@@ -281,19 +281,19 @@ function status() {
 
 function test() {
   const path = prepareRef(args[1]);
-  run('pnpm', ['run', 'release:check', '--', '--local'], { cwd: path });
+  run('pnpm', ['run', 'release:check', '--local'], { cwd: path });
 }
 
 function dev() {
   const path = prepareRef(args[1]);
   const port = argValue('--port', '3039');
-  run('pnpm', ['run', 'dev', '--', '--port', port], { cwd: path });
+  run('pnpm', ['run', 'dev', '--port', port], { cwd: path });
 }
 
 function preview() {
   const path = prepareRef(args[1]);
   if (!has('--skip-check')) {
-    run('pnpm', ['run', 'release:check', '--', '--local'], { cwd: path });
+    run('pnpm', ['run', 'release:check', '--local'], { cwd: path });
   }
   run('npx', ['vercel'], { cwd: path });
 }
