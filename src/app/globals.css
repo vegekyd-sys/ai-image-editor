@@ -1785,7 +1785,9 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
   background: transparent !important;
   box-shadow: none !important;
   color: rgba(255,255,255,0.52);
-  font: 500 0.75rem/1 inherit;
+  font-weight: 500;
+  font-size: 0.875rem;
+  line-height: 1;
   font-family: inherit;
   letter-spacing: 0.02em;
   white-space: nowrap;
