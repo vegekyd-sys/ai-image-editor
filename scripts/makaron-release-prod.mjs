@@ -61,9 +61,9 @@ try {
   if (args.includes('--check-only')) {
     console.log('Check-only mode: no tests or deployment were started.');
   } else {
-    run('pnpm', ['run', 'release:check', '--', '--local']);
+    run('pnpm', ['run', 'release:check', '--local']);
     run('npx', ['vercel', '--prod']);
-    run('pnpm', ['run', 'release:check', '--', '--health']);
+    run('pnpm', ['run', 'release:check', '--health']);
   }
 } catch (error) {
   console.error(`\nproduction release blocked: ${error.message}`);

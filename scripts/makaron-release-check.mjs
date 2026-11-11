@@ -74,7 +74,7 @@ function localCheck() {
     && lstatSync(nodeModulesPath).isSymbolicLink();
   if (hasSharedNodeModules) {
     console.log('\nShared worktree node_modules detected; using webpack because Turbopack rejects links outside the worktree root.');
-    run('pnpm', ['run', 'build', '--', '--webpack']);
+    run('pnpm', ['run', 'build', '--webpack']);
   } else {
     run('pnpm', ['run', 'build']);
   }
