@@ -1343,7 +1343,7 @@ function ProjectsPageInner() {
           </div>
 
           {/* Create input: shared component */}
-          <div style={{ marginTop: '32px', width: '100%', padding: '0 16px', maxWidth: '480px' }}>
+          <div className="mkr-composer-lg" style={{ marginTop: '32px' }}>
             <CreateInputBox
               input={createInput}
               slotWidth={photoSlotWidth}
