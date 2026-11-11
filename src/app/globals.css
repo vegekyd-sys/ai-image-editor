@@ -1786,7 +1786,6 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
   box-shadow: none !important;
   color: rgba(255,255,255,0.52);
   font-weight: 500;
-  font-size: 0.875rem;
   line-height: 1;
   font-family: inherit;
   letter-spacing: 0.02em;
@@ -1835,6 +1834,7 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
    540px on phones, taller 16px textarea, 24px radius. */
 .mkr-composer-lg { width: 100%; max-width: calc(580px + 32px); padding: 0 16px; }
 .mkr-composer-lg > div { border-radius: 24px !important; }
+.mkr-composer-lg .mkr-action-cluster { font-size: 14px; } /* home inherits 14px here */
 .mkr-composer-lg textarea { min-height: 78px !important; padding-top: 18px !important; font-size: 16px !important; line-height: 1.65; }
 @media (max-width: 767px) {
   .mkr-composer-lg { max-width: calc(540px + 48px); padding: 0 24px; }
