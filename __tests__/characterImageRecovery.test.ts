@@ -5,6 +5,7 @@ import { getBackend } from '@/lib/models';
 import { generateImage } from '@/lib/model-router';
 import { ImageProviderRefusalError } from '@/lib/models/image-provider-refusal';
 import type { GenerateImageRequest } from '@/lib/models/types';
+import sharp from 'sharp';
 
 const primary = vi.fn();
 const alternate = vi.fn();
@@ -53,9 +54,18 @@ describe('bounded character recovery after an independently assessed harmless re
     expect((await generateImage(request({ outputFormat: 'png' }))).model).toBe('gemini-2.1');
     expect(alternate).toHaveBeenCalledWith(expect.objectContaining({ outputFormat: undefined }));
   });
-  it('does not publish a different file format after an explicit PNG request', async () => {
-    alternate.mockResolvedValue({ image: 'data:image/jpeg;base64,ready' });
-    await expect(generateImage(request({ outputFormat: 'png' }))).rejects.toThrow('requested image');
+  it('losslessly encodes the decoded JPEG pixels as PNG when the provider chooses JPEG', async () => {
+    const jpeg = await sharp({ create: { width: 16, height: 16, channels: 3, background: 'red' } }).jpeg().toBuffer();
+    alternate.mockResolvedValue({ image: `data:image/jpeg;base64,${jpeg.toString('base64')}` });
+    const result = await generateImage(request({ outputFormat: 'png' }));
+    expect(result.image).toMatch(/^data:image\/png;base64,/);
+    const png = Buffer.from(result.image!.split(',')[1], 'base64');
+    expect(await sharp(png).raw().toBuffer()).toEqual(await sharp(jpeg).raw().toBuffer());
+    expect(primary).toHaveBeenCalledOnce(); expect(alternate).toHaveBeenCalledOnce();
+  });
+  it('does not retry if an alternate image cannot be decoded for PNG conversion', async () => {
+    alternate.mockResolvedValue({ image: 'data:image/jpeg;base64,cmVhZHk=' });
+    await expect(generateImage(request({ outputFormat: 'png' }))).rejects.toThrow();
     expect(primary).toHaveBeenCalledOnce(); expect(alternate).toHaveBeenCalledOnce();
   });
   it('checks the alternate price/balance and stops without another submission on denial', async () => {

@@ -17,7 +17,8 @@ export function planCharacterImageRecovery(req: GenerateImageRequest): GenerateI
   if (req.benignCharacterContent !== true || req.isNsfw || req.model !== 'gpt-image-2.6-flare'
     || req.imageQuality || req.imageReasoningEffort || (req.outputFormat && req.outputFormat !== 'png')
     || req.background === 'transparent' || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) return;
-  // Nano's native PNG is compatible; its API has no output_format parameter.
+  // Nano has no output_format control. Explicit PNG is encoded after decoding;
+  // other explicit formats remain excluded rather than silently substituted.
   const next = { ...req, model: 'gemini-2.1', outputFormat: undefined };
   if (getImageRequestConflicts(next, getImageModelCapability('gemini-2.1')).length) return;
   return next;
@@ -51,10 +52,19 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
         console.info('[image-recovery]', { fromModel: model, toModel: 'gemini-2.1', provider: error.provider, providerCode: error.providerCode, rejectedRequestId: error.requestId, rejectedCostUsd: 'unknown' });
         // Execute the one alternate directly: its failure cannot recurse or fan out.
         const result = await alternate.generate(recovery);
-        if (!result?.image || (request.outputFormat === 'png' && !result.image.startsWith('data:image/png;base64,'))) {
+        if (!result?.image) {
           throw new Error('Image recovery did not deliver the requested image. Do not retry automatically.');
         }
-        return { ...result, model: 'gemini-2.1', fallbackUsed: true, adjustments: [...adjustments, ...(result.adjustments ?? [])],
+        let image = result.image;
+        if (request.outputFormat === 'png' && !image.startsWith('data:image/png;base64,')) {
+          const raster = /^data:image\/(?:jpeg|webp);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(image);
+          if (!raster) throw new Error('Image recovery returned an unsupported raster. Do not retry automatically.');
+          const { default: sharp } = await import('sharp');
+          const png = await sharp(Buffer.from(raster[1], 'base64'), { failOn: 'error', limitInputPixels: 40_000_000 }).png().toBuffer();
+          if (png.length > 50 * 1024 * 1024) throw new Error('Image recovery PNG exceeds the image size limit. Do not retry automatically.');
+          image = `data:image/png;base64,${png.toString('base64')}`;
+        }
+        return { ...result, image, model: 'gemini-2.1', fallbackUsed: true, adjustments: [...adjustments, ...(result.adjustments ?? [])],
           provider: result.provider ?? result.usage?.provider,
           recovery: { fromModel: model, provider: error.provider, providerCode: error.providerCode, rejectedRequestId: error.requestId } };
       }
