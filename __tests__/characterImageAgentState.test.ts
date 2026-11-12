@@ -57,3 +57,15 @@ it.each([false, true])('stores only the delivered model tuning, recovered=%j', a
   });
   expect(ctx.isNsfw).toBe(false);
 });
+
+
+it('requires an independent character assessment before an Agent image submission', () => {
+  const ctx: AgentContext = { projectId: 'isolated-test', currentImage: '', explicitMediaIndices: [], generatedImages: [], snapshotImages: [], currentSnapshotIndex: -1 };
+  const tool = createTools(ctx, { spec: { provider: 'test', supportsImageInput: true } } as any).generate_image;
+  const schema = tool.inputSchema as { safeParse: (input: unknown) => { success: boolean } };
+  expect(schema.safeParse({ editPrompt: 'Mario versus Pikachu poster' }).success).toBe(false);
+  expect(schema.safeParse({ editPrompt: 'Mario versus Pikachu poster', benignCharacterContent: true }).success).toBe(true);
+  expect(schema.safeParse({ editPrompt: 'A plain red cup', benignCharacterContent: false }).success).toBe(true);
+  expect(schema.safeParse({ editPrompt: 'Neutral cloth', isNsfw: true, benignCharacterContent: false }).success).toBe(true);
+  expect(state.backend).not.toHaveBeenCalled();
+});
