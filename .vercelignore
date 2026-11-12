@@ -62,3 +62,45 @@ docs/experiments/
 docs/research/
 docs/ops/
 docs/meta-swipe-runs/
+
+# Match directory entries themselves as well as their contents. With only
+# `dir/` or `dir/**`, CLI 50's archive walker can retain an empty directory
+# entry; tar-fs then recursively adds its ignored contents back to the upload.
+/testcase
+/testcase old
+/testcases
+/evidence
+/test-results
+/test-output
+/__tests__
+/.claude
+/.codex
+/.next
+/.playwright-mcp
+/.playwright-cli
+/.tmp
+/.remotion-bundle
+/.remotion-bundle-local
+/.artifacts
+/artifacts
+/outputs
+/output
+/tmp
+/screenshots
+/mcp-output
+/app-store-assets
+/marketing
+/ios
+/build
+/benchmarks
+/makaron-intro
+/e2e
+
+# prebuild needs only the generated Chinese CLI entry from internal docs.
+/docs/*
+!/docs/agent-guidance
+/docs/agent-guidance/*
+!/docs/agent-guidance/makaron-cli-entry.zh.md
+
+# Built-in skills read these source-backed assets at runtime.
+!src/skills/*/assets/**
