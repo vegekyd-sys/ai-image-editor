@@ -702,7 +702,9 @@ export default function RemotionRenderer({
           renderPoster={posterImage ? () => (
             <img src={posterImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : undefined}
-          showPosterWhenUnplayed={!!posterImage}
+          // The canvas already shows a loading poster until compilation finishes.
+          // Keeping the Player poster until first play hides a paused 3D seek.
+          showPosterWhenUnplayed={!!posterImage && !usesThreeCanvas(design.code)}
           showPosterWhenBuffering={false}
           posterFillMode="player-size"
           bufferStateDelayInMilliseconds={0}
