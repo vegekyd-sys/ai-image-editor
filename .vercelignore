@@ -55,9 +55,9 @@ testcases/
 
 # Local evaluation, promotional video sources, and internal operational records.
 # Keep docs/agent-guidance: prebuild reads the generated Chinese CLI entry.
-benchmarks/
-makaron-intro/
-e2e/
+/benchmarks/
+/makaron-intro/
+/e2e/
 docs/experiments/
 docs/research/
 docs/ops/
@@ -104,3 +104,4 @@ docs/meta-swipe-runs/
 
 # Built-in skills read these source-backed assets at runtime.
 !src/skills/*/assets/**
+!public/skills/**
