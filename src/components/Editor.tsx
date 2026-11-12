@@ -77,6 +77,7 @@ function isPreviewGenerationStatus(status: string): boolean {
 
 interface EditorProps {
   projectId?: string;
+  initialSnapshotId?: string | null;
   initialSnapshots?: Snapshot[];
   initialMessages?: Message[];
   pendingImage?: string;  // legacy single-image (unused, kept for compat)
@@ -128,6 +129,7 @@ function shouldMergeFreshVideoMeta(current?: VideoMeta, fresh?: VideoMeta): bool
 
 export default function Editor({
   projectId,
+  initialSnapshotId,
   initialSnapshots,
   initialMessages,
   pendingImage,
@@ -677,6 +679,19 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }
     prevTimelineLen.current = timeline.length;
   }
+
+  // Open a linked composition directly, even when its snapshot arrives after
+  // the cached timeline. Once selected, let the viewer navigate normally.
+  const openedSnapshotLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialSnapshotId) { openedSnapshotLink.current = null; return; }
+    if (openedSnapshotLink.current === initialSnapshotId) return;
+    const index = snapshots.findIndex(s => s.id === initialSnapshotId);
+    if (index < 0) return;
+    openedSnapshotLink.current = initialSnapshotId;
+    setViewIndex(timelineFromSnap(index, draftParentIndex));
+    setViewMode('gui');
+  }, [initialSnapshotId, snapshots, draftParentIndex]);
 
   // Auto-clear pending notification when user navigates to the target snapshot
   useEffect(() => {

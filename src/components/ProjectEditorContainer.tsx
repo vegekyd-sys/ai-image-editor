@@ -29,6 +29,7 @@ import { useLocale } from '@/lib/i18n'
 
 interface ProjectEditorContainerProps {
   projectId: string
+  initialSnapshotId?: string | null
   className?: string
   loadingClassName?: string
   onBack?: () => void
@@ -126,6 +127,7 @@ export function EditorLoadingShell() {
 
 export default function ProjectEditorContainer({
   projectId,
+  initialSnapshotId,
   className = 'h-dvh w-full',
   loadingClassName = 'h-dvh flex items-center justify-center relative z-[1]',
   onBack,
@@ -485,6 +487,7 @@ export default function ProjectEditorContainer({
     <div className={className}>
       <Editor
         projectId={projectId}
+        initialSnapshotId={initialSnapshotId}
         initialSnapshots={initialSnapshots ?? []}
         initialMessages={initialMessages ?? []}
         pendingImages={!readOnly ? (pendingImages ?? undefined) : undefined}
