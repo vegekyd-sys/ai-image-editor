@@ -1,0 +1,106 @@
+{
+  "full-scene-seedream": {
+    "size": [
+      1024,
+      1024
+    ],
+    "mode": "RGB",
+    "format": "PNG",
+    "sha256": "984e7fba2d61fdc3fa34abcd865cf16ccdc419d501b992361fdeb67484e1c60c",
+    "alphaMin": 255,
+    "zeroAlphaRatio": 0.0,
+    "partialAlphaRatio": 0.0
+  },
+  "full-scene-gpt": {
+    "size": [
+      1024,
+      1024
+    ],
+    "mode": "RGB",
+    "format": "PNG",
+    "sha256": "e5e35e52ba327e708e3101a0d2c2ad98971e3da6dbcb8cf897d8b8c5959f6e14",
+    "alphaMin": 255,
+    "zeroAlphaRatio": 0.0,
+    "partialAlphaRatio": 0.0
+  },
+  "native-alpha-seedream": {
+    "size": [
+      1024,
+      1024
+    ],
+    "mode": "RGBA",
+    "format": "PNG",
+    "sha256": "b3440e941be1e5cb261ed2d8a63f5c660ac8fa3326a815ef98b70972c22935cf",
+    "alphaMin": 0,
+    "zeroAlphaRatio": 0.7735195159912109,
+    "partialAlphaRatio": 0.006184577941894531
+  },
+  "native-alpha-gpt": {
+    "size": [
+      1024,
+      1024
+    ],
+    "mode": "RGBA",
+    "format": "PNG",
+    "sha256": "74a1a0233e22131c691d561fe555b92f2de499a903d7f71e0faec4d2eff44f8f",
+    "alphaMin": 0,
+    "zeroAlphaRatio": 0.5627222061157227,
+    "partialAlphaRatio": 0.43727779388427734
+  },
+  "local-hat-edit-seedream": {
+    "size": [
+      1024,
+      1024
+    ],
+    "mode": "RGB",
+    "format": "PNG",
+    "sha256": "09518d9829ff66fbcb2c3a71f766c64cc79f3107afe4ecf5d8cbc38b14d1efb2",
+    "alphaMin": 255,
+    "zeroAlphaRatio": 0.0,
+    "partialAlphaRatio": 0.0
+  },
+  "local-hat-edit-gpt": {
+    "size": [
+      1024,
+      1024
+    ],
+    "mode": "RGB",
+    "format": "PNG",
+    "sha256": "48f2869c9908b06580d1af94ddf6c1f28400d119a8d2db08ae3d87670d42e37e",
+    "alphaMin": 255,
+    "zeroAlphaRatio": 0.0,
+    "partialAlphaRatio": 0.0
+  },
+  "preservation-seedream": {
+    "editRegion": [
+      710,
+      290,
+      989,
+      477
+    ],
+    "outsidePixelCount": 996403,
+    "outsideMae": 0.7011684361983388,
+    "outsideRmse": 1.7533219920331804,
+    "outsideExactPixelsRatio": 0.4017531059220014,
+    "outsideWithin8RgbRatio": 0.9991348881928296,
+    "outsideChangedAbove16RgbRatio": 0.00034925627482052944,
+    "insideMae": 29.764009481277032,
+    "note": "Fixed rectangular exclusion; no alignment, resize or color normalization."
+  },
+  "preservation-gpt": {
+    "editRegion": [
+      710,
+      290,
+      989,
+      477
+    ],
+    "outsidePixelCount": 996403,
+    "outsideMae": 3.250991148494468,
+    "outsideRmse": 6.2907657233165875,
+    "outsideExactPixelsRatio": 0.004935753906802769,
+    "outsideWithin8RgbRatio": 0.8762438491253037,
+    "outsideChangedAbove16RgbRatio": 0.03740554775527573,
+    "insideMae": 30.20925893980922,
+    "note": "Fixed rectangular exclusion; no alignment, resize or color normalization."
+  }
+}
