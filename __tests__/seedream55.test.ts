@@ -62,6 +62,12 @@ describe('Seedream 5.5 explicit candidate', () => {
     await expect(seedream55Backend.generate({ prompt: 'scene', signal: AbortSignal.abort() })).rejects.toThrow('nothing was submitted');
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it('reports a known pre-submission input read failure instead of an unknown paid outcome', async () => {
+    state.read.mockRejectedValue(new Error('upstream transport failure'));
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    await expect(seedream55Backend.generate({ prompt: 'edit', image: 'https://example.com/unavailable.png' })).rejects.toThrow('nothing was submitted');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it('persists a terminal provider failure and keeps its original task ID without a second POST', async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(Response.json(task('processing'))).mockResolvedValueOnce(Response.json({ ...task('failed'), results: [], error: { code: 'content_policy_violation' } }));
     vi.stubGlobal('fetch', fetcher);

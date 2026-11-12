@@ -19,7 +19,9 @@ const source = readFileSync('src/lib/agent-tools.ts', 'utf8');
 const parsed = ts.createSourceFile('agent-tools.ts', source, ts.ScriptTarget.Latest, true);
 const factory = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'createGenerateImageTool');
 if (!factory) throw new Error('Missing generate_image factory');
-const code = ts.transpileModule(factory.getText(parsed), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+const formatter = parsed.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'formatGeneratedImageForModel');
+if (!formatter) throw new Error('Missing image tool model-output formatter');
+const code = ts.transpileModule(formatter.getText(parsed) + '\n' + factory.getText(parsed), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
 
 function setup(provider = 'azure') {
   const editImage = vi.fn().mockResolvedValue({ success: true, image: 'data:image/jpeg;base64,YQ==', usedModel: 'wan2.7-image', provider: 'dashscope' });

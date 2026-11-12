@@ -95,7 +95,12 @@ export const seedream55Backend: ModelBackend = {
     if (!key) throw new Seedream55RequestError('EVOLINK_API_KEY is not configured; nothing was submitted.');
     const { model, body, costUsd } = buildSeedream55Request(req);
     for (const source of body.image_urls ?? []) {
-      const meta = await sharp(await readProviderImage(source, 30 * 1024 * 1024), { limitInputPixels: 36_000_000 }).metadata();
+      let meta: sharp.Metadata;
+      try {
+        meta = await sharp(await readProviderImage(source, 30 * 1024 * 1024), { limitInputPixels: 36_000_000 }).metadata();
+      } catch {
+        throw new Seedream55RequestError('Input could not be downloaded or decoded within the 30MB/36MP limit; nothing was submitted.');
+      }
       if (!['png', 'jpeg', 'webp'].includes(meta.format ?? '')) throw new Seedream55RequestError('Input format must be PNG, JPEG or WebP; nothing was submitted.');
       const width = meta.width ?? 0, height = meta.height ?? 0;
       if (width <= 14 || height <= 14 || width * height > 36_000_000 || width / height < 1 / 16 || width / height > 16 || (meta.pages ?? 1) !== 1) {
