@@ -8,7 +8,6 @@ Call `read_file('prompts/image.md')` for complex edits, references, restoration,
 - `reference_media_indices` sends extra timeline snapshots named by `editPrompt`.
 - `image_refs` is only for workspace asset provider URLs, not timeline snapshots.
 - `skill` labels general intent; omit it for precise manual instructions.
-- For harmless nonsexual artwork featuring recognizable fictional characters, assess the request and supplied images independently and set `benignCharacterContent: true`. The executor can recover a terminal Flare refusal once using a compatible Nano Banana 2.1 request. Omit for unsafe/uncertain content, NSFW or a user insisting on only one model. Keep the user's character and intent; do not disguise names or reinterpret a refusal as NSFW. Do not retry outside the executor.
 - For background removal/cutout, 去背景/抠图/抠像, or transparent PNG/sticker/overlay/alpha output, set `background: "transparent"`; wording alone is insufficient.
 - Existing-image cutout: pass its `media_index`; with no source, omit `media_index` for transparent text-to-image.
 - Pure cutout: omit `aspectRatio` to preserve the source canvas. If the user requests a new transparent layout (e.g. six stickers on 16:9), pass it; the requested layout wins.

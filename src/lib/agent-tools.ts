@@ -1398,7 +1398,7 @@ function createGenerateImageTool(
       description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}` + '\nRetake camera/content keyframes: use retake_source after inspect_retake to edit an actual source frame, rather than a video poster or contact sheet. The returned image is a visual checkpoint for H3 middle-frame control or an explicitly requested boundary-attribute correction. For a boundary correction use the corresponding inspected selected opening/closing source time; retain that exact composition and action phase except the requested correction. Read its actual pixels and verify the requested camera/content and action phase before passing its mediaIndex to retake_video.',
       inputSchema: z.object({
         retake_source: z.object({media_index:z.number().int().positive(),start:z.number().nonnegative(),end:z.number().positive(),source_time:z.number().nonnegative(),inspection_id:z.string(),model:z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL)}).optional().describe('Generate a Retake keyframe from a real inspected video frame inside start/end, in original-source seconds. Use the exact inspect_retake receipt. Omit ordinary media_index/reference_media_indices; the actual video frame supplies identity, pose, environment and motion phase. Write editPrompt as the requested new view/content while retaining that phase.'),
-        editPrompt: z.string().describe('For mj-v8.2, pass the original natural-language user brief verbatim; its adapter handles MJ scene conversion, so do not append source-preservation instructions. For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
+        editPrompt: z.string().describe('For mj-v8.2, pass the original natural-language user brief verbatim; its adapter handles MJ scene conversion, so do not append source-preservation instructions. For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. Preserve requested fictional-character names and identity; do not disguise them as unnamed lookalikes. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
         isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
@@ -1539,6 +1539,19 @@ function createGenerateImageTool(
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
           },
         );
+        // Reuse the existing terminal-tool contract: the model must not start
+        // another paid workflow after the bounded character attempt fails.
+        // This is a result for this input, not a project/NSFW state mutation.
+        if (!skillResult.success && benignCharacterContent === true && !ctx.isNsfw) return {
+          success: false, terminal: true, errorCode: 'image_character_recovery_exhausted',
+          message: skillResult.message,
+          userMessage: {
+            zh: '这次没能生成这张图片。可以调整描述后再试。',
+            'zh-Hant': '這次未能產生這張圖片。可以調整描述後再試。',
+            en: 'This image could not be generated. You can adjust the description and try again.',
+            ja: '今回は画像を生成できませんでした。説明を調整して、もう一度お試しください。',
+          },
+        };
         // Bill for image generation (separate from Agent LLM tokens)
         if (skillResult.usage) {
           const { deductByTokens } = await import('./billing/credits');
