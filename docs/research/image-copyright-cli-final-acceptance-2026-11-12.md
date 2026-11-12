@@ -4,6 +4,23 @@
 
 **当前修订：已按用户要求撤销额外 CLI 开关、help/README 和版本更新，整个 `packages/makaron-cli` 恢复至任务前的 0.17.16。服务端 Agent 自动判断、受限恢复与 NSFW 状态隔离逻辑保持不变。下面的 0.17.17/直接工具恢复记录属于历史候选，不是当前 CLI 用法。**
 
+### 本地用户验收发现的 Auto 参数回归（2026-11-13）
+
+用户在本地 3039 请求“我希望马里奥大战皮卡丘 一张很有意思的海报图”。精确 run 回执显示 Agent 自动填写了 `imageQuality=high`、`benignCharacterContent=true`，Flare 返回已完成拒绝；恢复筛选却把 GPT 专属调优当成不可替换的交付合同，所以没有提交 Nano。
+
+修复保留 Auto 的来源：Auto 下只在既有良性角色拒绝恢复中移除 GPT 专属 quality/reasoning，使用 Nano 原生设置并在工具结果记录调整；首轮 GPT 参数保留。显式模型调优、透明、格式、GIF、参考图和画布限制仍按原兼容合同处理。普通图片和 NSFW 路径保持原来的计划请求；没有新增 CLI 参数或版本更新。
+
+使用本机原有全局 CLI 0.17.9，全部经 `makaron chat --project auto -b --json`、`responses get --wait --json` 与 `--events`：
+
+| 用例 | run | 结果 |
+|---|---|---|
+| 用户原话 | `b3f4e308-7444-4f99-b76e-82641a304961` | Flare → Nano 2.1 成功；64 秒；一次生图工具、一张图；图片 11 credits + 推理 1 credit |
+| 原主题 + Auto、imageQuality=high | `510ec4f4-2bf2-4518-9cdf-951f1e2dbe34` | Agent 确认传入 high，Flare → Nano 2.1 成功；85 秒；一次生图工具、一张图；图片 8 credits + 推理 2 credits |
+
+两条 NSFW 事件均为 0。Nano 的供应商回执分别为 $0.054468、$0.0378975；Flare 拒绝没有返回费用，不算作免费。两张海报已取回并检查实际画面，Mario、Pikachu 与对决海报标题可辨识。95 项恢复/参考图/普通图片/NSFW/MCP/供应商回归通过，TypeScript 与定点 ESLint 通过。自查确认没有扩大重试次数、没有改变拒绝以外未知结果的处理、首轮质量参数未被提前丢弃，CLI 目录仍与任务前一致。
+
+另外观察到用户浏览器中的回复重复；服务端事件各一份，刷新后重复消失。本次未修改前端回放代码，不将这一独立显示问题声称为已修复。验收回执与产物暂存 `/tmp/image-refusal-ui-incident/`。
+
 ### CLI 撤销后的回归验收（2026-11-13）
 
 - `packages/makaron-cli` 与任务前 `fbc7daac` 无差异；额外开关、help/README、对应 smoke 用例以及四处版本元数据均已恢复，仓库 CLI 为 0.17.16。服务端 `src` 相对 `8864bbbf` 无差异。
