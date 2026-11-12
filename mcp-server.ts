@@ -1,5 +1,5 @@
 // .md files are handled by md-loader.cjs (preloaded via --require flag)
-// Run with: npx tsx --require ./md-loader.cjs mcp-server.ts [--stdio]
+// Run with: pnpm exec tsx --require ./md-loader.cjs mcp-server.ts [--stdio]
 
 import { config } from 'dotenv';
 import { join } from 'path';

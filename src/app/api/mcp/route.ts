@@ -72,6 +72,7 @@ async function handleMcp(req: Request): Promise<Response> {
   const server = createMakaronMcpServer({
     returnImageContent: true,
     userId: auth.userId,
+    imageSignal: req.signal,
     submitVideo: auth.type === 'user' ? (input, toolName) => submitMcpVideo(input, { userId: auth.userId!, apiKeyId: auth.keyId!, toolName }) : undefined,
     onVideoStatus: auth.type === 'user' ? (taskId, status, queryFailed) => settleMcpVideoStatus(auth.userId!, taskId, status, queryFailed) : undefined,
     // Pre-check: ensure user has enough credits

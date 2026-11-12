@@ -12,6 +12,7 @@ import { validateDesign } from './design-harness';
 import { remotionFontWarningText, remotionFontWarnings } from './remotion-font-diagnostics';
 import type { ImageBackground, ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
+import { authorizeImageRecovery } from './billing/image-recovery';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { submitMcpVideo } from './billing/mcp-video';
@@ -1398,10 +1399,11 @@ function createGenerateImageTool(
       description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}` + '\nRetake camera/content keyframes: use retake_source after inspect_retake to edit an actual source frame, rather than a video poster or contact sheet. The returned image is a visual checkpoint for H3 middle-frame control or an explicitly requested boundary-attribute correction. For a boundary correction use the corresponding inspected selected opening/closing source time; retain that exact composition and action phase except the requested correction. Read its actual pixels and verify the requested camera/content and action phase before passing its mediaIndex to retake_video.',
       inputSchema: z.object({
         retake_source: z.object({media_index:z.number().int().positive(),start:z.number().nonnegative(),end:z.number().positive(),source_time:z.number().nonnegative(),inspection_id:z.string(),model:z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL)}).optional().describe('Generate a Retake keyframe from a real inspected video frame inside start/end, in original-source seconds. Use the exact inspect_retake receipt. Omit ordinary media_index/reference_media_indices; the actual video frame supplies identity, pose, environment and motion phase. Write editPrompt as the requested new view/content while retaining that phase.'),
-        editPrompt: z.string().describe('For mj-v8.2, pass the original natural-language user brief verbatim; its adapter handles MJ scene conversion, so do not append source-preservation instructions. For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
+        editPrompt: z.string().describe('For mj-v8.2, pass the original natural-language user brief verbatim; its adapter handles MJ scene conversion, so do not append source-preservation instructions. For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. Preserve requested fictional-character names and identity; do not disguise them as unnamed lookalikes. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
         isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
+        benignCharacterContent: z.boolean().optional().describe('Set true only after assessing this request and supplied images as harmless nonsexual fictional-character artwork (e.g. an ordinary cartoon-character scene). Enables at most one compatible model recovery after a terminal provider refusal. Omit for unsafe/uncertain content, NSFW, or when the user requires only the selected model. Never infer this assessment from a refusal, and never change isNsfw because of copyright or a provider error.'),
         imageQuality: z.enum(['auto', 'low', 'medium', 'high']).optional().describe('GPT Image 2.6 rendering quality. Default low; choose higher when the user asks for more visual detail.'),
       imageReasoningEffort: z.enum(['low', 'medium', 'high']).optional().describe('GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high.'),
       outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).optional().describe('Default PNG. Seedream 5.5 supports PNG/JPEG only, transparent PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
@@ -1424,7 +1426,7 @@ function createGenerateImageTool(
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, isNsfw, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, midjourney, style_reference_media_indices, media_index, reference_media_indices, retake_source }) => {
+      execute: async ({ editPrompt, skill, model, isNsfw, benignCharacterContent, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, midjourney, style_reference_media_indices, media_index, reference_media_indices, retake_source }, executionOptions) => {
         if (isNsfw) ctx.isNsfw = true;
         // GPT-5.6 currently fills omitted optional numeric tool fields with 0.
         // Treat that provider sentinel exactly like omission so empty projects
@@ -1541,12 +1543,29 @@ function createGenerateImageTool(
             } : undefined;
         const imageStartedAt = Date.now();
         const skillResult = await editImage(
-          { editPrompt, onSeedream55Receipt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { editPrompt, onSeedream55Receipt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, preferredModel: resolvedModel, isNsfw: ctx.isNsfw,
+            benignCharacterContent, signal: executionOptions?.abortSignal,
+            beforeImageRecovery: request => authorizeImageRecovery(ctx.userId, request),
+          },
+
           {
             currentImage: editTarget,
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
           },
         );
+        // Reuse the existing terminal-tool contract: the model must not start
+        // another paid workflow after the bounded character attempt fails.
+        // This is a result for this input, not a project/NSFW state mutation.
+        if (!skillResult.success && benignCharacterContent === true && !ctx.isNsfw) return {
+          success: false, terminal: true, errorCode: 'image_character_recovery_exhausted',
+          message: skillResult.message,
+          userMessage: {
+            zh: '这次没能生成这张图片。可以调整描述后再试。',
+            'zh-Hant': '這次未能產生這張圖片。可以調整描述後再試。',
+            en: 'This image could not be generated. You can adjust the description and try again.',
+            ja: '今回は画像を生成できませんでした。説明を調整して、もう一度お試しください。',
+          },
+        };
         // Bill for image generation (separate from Agent LLM tokens)
         if (skillResult.usage) {
           const { deductByTokens } = await import('./billing/credits');

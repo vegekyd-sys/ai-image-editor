@@ -25,11 +25,11 @@ The external source-range handoff is the approved CLI change for `0.13.5`. Keep 
 
 Before deploying the website discovery surfaces:
 
-1. Run `npm run build:agent-discovery`.
-2. Run `npm run check:agent-discovery`.
-3. Run `npm run lint:agent-docs`.
-4. Run `npm run test:cli` and `npm test`.
-5. Run `npm run lint` and `npm run build`.
+1. Run `pnpm run build:agent-discovery`.
+2. Run `pnpm run check:agent-discovery`.
+3. Run `pnpm run lint:agent-docs`.
+4. Run `pnpm run test:cli` and `pnpm test`.
+5. Run `pnpm run lint` and `pnpm run build`.
 6. On a preview deployment, verify `GET` and `HEAD` return `200` for `/llms.txt`, `/skill.md`, the discovery index, and the canonical Makaron Skill URL without cookies.
 7. Install from the preview origin in a clean temporary agent environment and run one real image workflow before production release.
 

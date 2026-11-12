@@ -107,7 +107,7 @@ if (reuseServer) {
 } else try { await fetch(`${base}/api/e2e/skill-fixture`); throw new Error('Port 3002 is occupied; refusing to reuse an unknown build') }
 catch (e) { if (!(e instanceof TypeError)) throw e }
 const log = openSync(path.join(artifacts, 'next.log'), 'a')
-const server = reuseServer ? undefined : spawn('npm', ['run', 'dev', '--', '-H', '127.0.0.1', '-p', '3002'], {
+const server = reuseServer ? undefined : spawn('pnpm', ['run', 'dev', '--', '-H', '127.0.0.1', '-p', '3002'], {
   cwd: root, detached: true, stdio: ['ignore', log, log], env: {
     NODE_ENV: 'development', PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, LANG: process.env.LANG,
     ...providerEnv,

@@ -53,9 +53,9 @@ function printHelp() {
   console.log(`Makaron agent run audit
 
 Usage:
-  npm run audit:run -- --project <project-id>
-  npm run audit:run -- --run <run-id>
-  npm run audit:run -- --project <project-id> --json
+  pnpm run audit:run -- --project <project-id>
+  pnpm run audit:run -- --run <run-id>
+  pnpm run audit:run -- --project <project-id> --json
 
 Options:
   --project, --project-id   Audit all recent runs for a project

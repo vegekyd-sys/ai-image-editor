@@ -17,15 +17,15 @@ Before changing or shipping anything, write down:
 Run the narrowest reliable gate first, then broaden only as needed:
 
 ```bash
-npx tsc --noEmit
-npm run test
-npm run test:cli
-npm run build
+pnpm exec tsc --noEmit
+pnpm run test
+pnpm run test:cli
+pnpm run build
 ```
 
-`npm run lint` is useful for new errors, but this repo can have existing warnings. Do not let unrelated lint noise replace targeted tests, build, and smoke evidence.
+`pnpm run lint` is useful for new errors, but this repo can have existing warnings. Do not let unrelated lint noise replace targeted tests, build, and smoke evidence.
 
-`npm run build` runs `scripts/check-server-runtime.mjs` in its `postbuild` gate.
+`pnpm run build` runs `scripts/check-server-runtime.mjs` in its `postbuild` gate.
 It checks the actual Next API file traces for the executable CRC32C entry, not
 just its package.json. This covers Agent, video polling, materialize, Remotion,
 and their cron handlers. A missing runtime blocks both local and Vercel builds.
@@ -56,14 +56,14 @@ Feature worktrees stay lightweight and do not create their own Next.js runtime
 cache. Test committed feature refs and deploy Preview from the fixed runner:
 
 ```bash
-npm run runner:test -- <commit>
-npm run runner:preview -- <commit>
+pnpm run runner:test -- <commit>
+pnpm run runner:preview -- <commit>
 ```
 
 Production is only released from the clean canonical `dev` worktree:
 
 ```bash
-npm run release:prod
+pnpm run release:prod
 ```
 
 See `docs/worktree-runtime-runner.md` for setup, dependency-lock behavior, and
@@ -109,16 +109,16 @@ Before publishing:
 - Compare the npm package contents with the accepted repository package. Equal version numbers alone do not prove parity.
 - Update CLI behavior, help, README, and canonical `packages/makaron-cli/skills/makaron/SKILL.md` as applicable. Keep unaccepted feature branches out of the package.
 - Bump and align `package.json`, `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, and `evals/agent-discovery.json`.
-- Run `npm run build:agent-discovery` and `npm run check:agent-discovery` when Skill contents change; inspect the actual tarball, including references and plugin metadata.
+- Run `pnpm run build:agent-discovery` and `pnpm run check:agent-discovery` when Skill contents change; inspect the actual tarball, including references and plugin metadata.
 - Release any required production API before the npm package that depends on it. Reuse authorization for the agreed release scope; a request to prepare without publishing still takes precedence.
 
 ```bash
-npm run build:skill-sync
+pnpm run build:skill-sync
 # 内部 Skill / 路由源变化时，先执行已授权的受控预检；不会生成媒体
-npm run test:skill-routing -- --live --env <已有私密环境文件>
-npm run release:cli:prepare -- --base <合入前提交> --out <临时目录>
+pnpm run test:skill-routing -- --live --env <已有私密环境文件>
+pnpm run release:cli:prepare -- --base <合入前提交> --out <临时目录>
 npm publish <prepared.json 指定的.tgz> --access public --tag latest --ignore-scripts
-npm run release:cli:verify -- --tarball <同一个.tgz> --report <验收.json>
+pnpm run release:cli:verify -- --tarball <同一个.tgz> --report <验收.json>
 ```
 
 目录来源、自动生成范围、CI 与正文/元数据变更的发布规则见 [Skill 同步机制](agent-guidance/makaron-skill-sync.md)。普通 CI 只检查已提交的路由回执，不调用模型。

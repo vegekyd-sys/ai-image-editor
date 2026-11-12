@@ -36,10 +36,11 @@ Contract:
   - The fixed runner reuses one .next cache across committed refs.
   - The runner symlinks ignored local env files and copies Vercel project identity
     from the canonical dev worktree.
-  - When package-lock.json matches dev, the runner shares dev node_modules.
-    When it differs, the runner installs a local disposable node_modules.
+  - When pnpm-lock.yaml matches dev, the runner shares dev node_modules.
+    When it differs, the runner installs a disposable node_modules with
+    pnpm install --frozen-lockfile (npm ci for pre-pnpm refs).
   - test and preview require a committed ref and a clean runner.
-  - preview deploys a Vercel Preview only. Production uses npm run release:prod.
+  - preview deploys a Vercel Preview only. Production uses pnpm run release:prod.
 `);
 }
 
@@ -140,11 +141,12 @@ function ensureDependencies(path, devPath) {
     throw new Error(`Canonical dev node_modules is missing: ${shared}`);
   }
 
-  const runnerLock = resolve(path, 'package-lock.json');
-  const devLock = resolve(devPath, 'package-lock.json');
-  const locksMatch = existsSync(runnerLock)
-    && existsSync(devLock)
-    && hashFile(runnerLock) === hashFile(devLock);
+  const runnerLock = dependencyLock(path);
+  const devLock = dependencyLock(devPath);
+  const locksMatch = runnerLock
+    && devLock
+    && runnerLock.name === devLock.name
+    && hashFile(runnerLock.path) === hashFile(devLock.path);
 
   if (locksMatch) {
     if (existsSync(target) && !lstatSync(target).isSymbolicLink()) {
@@ -152,22 +154,35 @@ function ensureDependencies(path, devPath) {
       rmSync(target, { recursive: true, force: true });
     }
     ensureSymlink(shared, target);
-    resetBuildCacheOnDependencyChange(path, `shared:${hashFile(devLock)}`);
+    resetBuildCacheOnDependencyChange(path, `shared:${hashFile(devLock.path)}`);
     return 'shared';
   }
 
   if (isSymlink(target)) {
     unlinkSync(target);
   }
-  const marker = resolve(target, '.makaron-package-lock.sha256');
-  const expectedHash = existsSync(runnerLock) ? hashFile(runnerLock) : 'missing';
-  if (!existsSync(target) || !existsSync(marker) || readFileSync(marker, 'utf8').trim() !== expectedHash) {
-    console.log('package-lock.json differs from dev; installing disposable runner-local dependencies.');
-    run('npm', ['ci'], { cwd: path });
-    writeFileSync(marker, `${expectedHash}\n`);
+  const marker = resolve(target, '.makaron-dependency-lock.sha256');
+  // The manager prefix makes a pnpm <-> npm switch (e.g. testing a pre-migration
+  // ref) wipe the disposable install instead of mixing two node_modules layouts.
+  const expected = runnerLock ? `${runnerLock.manager}:${hashFile(runnerLock.path)}` : 'missing';
+  if (!existsSync(target) || !existsSync(marker) || readFileSync(marker, 'utf8').trim() !== expected) {
+    console.log(`${runnerLock?.name || 'dependency lock'} differs from dev; installing disposable runner-local dependencies.`);
+    rmSync(target, { recursive: true, force: true });
+    if (runnerLock?.manager === 'npm') run('npm', ['ci'], { cwd: path });
+    else run('pnpm', ['install', '--frozen-lockfile'], { cwd: path });
+    writeFileSync(marker, `${expected}\n`);
   }
-  resetBuildCacheOnDependencyChange(path, `local:${expectedHash}`);
+  resetBuildCacheOnDependencyChange(path, `local:${expected}`);
   return 'local';
+}
+
+/** pnpm-lock.yaml since the pnpm migration; package-lock.json for older refs. */
+function dependencyLock(root) {
+  for (const [name, manager] of [['pnpm-lock.yaml', 'pnpm'], ['package-lock.json', 'npm']]) {
+    const lockPath = resolve(root, name);
+    if (existsSync(lockPath)) return { name, manager, path: lockPath };
+  }
+  return null;
 }
 
 function isSymlink(path) {
@@ -266,19 +281,19 @@ function status() {
 
 function test() {
   const path = prepareRef(args[1]);
-  run('npm', ['run', 'release:check', '--', '--local'], { cwd: path });
+  run('pnpm', ['run', 'release:check', '--local'], { cwd: path });
 }
 
 function dev() {
   const path = prepareRef(args[1]);
   const port = argValue('--port', '3039');
-  run('npm', ['run', 'dev', '--', '--port', port], { cwd: path });
+  run('pnpm', ['run', 'dev', '--port', port], { cwd: path });
 }
 
 function preview() {
   const path = prepareRef(args[1]);
   if (!has('--skip-check')) {
-    run('npm', ['run', 'release:check', '--', '--local'], { cwd: path });
+    run('pnpm', ['run', 'release:check', '--local'], { cwd: path });
   }
   run('npx', ['vercel'], { cwd: path });
 }

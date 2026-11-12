@@ -1,5 +1,6 @@
 import { generateImage } from '../model-router';
-import type { ImageBackground, ImageGenerationOptions } from '../models/types';
+import type { GenerateImageRequest, ImageBackground, ImageGenerationOptions } from '../models/types';
+import { ImageProviderRefusalError } from '../models/image-provider-refusal';
 import type { SkillContext, SkillResult } from './index';
 import { ProviderImageInputError } from '../provider-image-preflight';
 import { FalImage25RequestError } from '../models/fal-image25';
@@ -23,6 +24,10 @@ export interface EditImageInput extends ImageGenerationOptions {
   preferredModel?: string;
   /** Main Agent assessment routes directly to Spicy. */
   isNsfw?: boolean;
+  benignCharacterContent?: boolean;
+  beforeImageRecovery?: (request: GenerateImageRequest) => Promise<boolean>;
+  signal?: AbortSignal;
+  deadlineMs?: number;
 }
 
 export async function editImage(
@@ -61,6 +66,7 @@ export async function editImage(
     image: references ? undefined : ctx.currentImage,
     references, prompt: finalPrompt, model: requestedModel, category: skill,
     aspectRatio, imageResolution, background, isNsfw,
+    benignCharacterContent: input.benignCharacterContent, beforeImageRecovery: input.beforeImageRecovery, signal: input.signal, deadlineMs: input.deadlineMs,
     imageQuality: input.imageQuality, imageReasoningEffort: input.imageReasoningEffort, outputFormat: input.outputFormat, frameCount: input.frameCount, frameDurationMs: input.frameDurationMs, gifFrameSize: input.gifFrameSize,
     onSeedream55Receipt: input.onSeedream55Receipt, midjourney: input.midjourney, onMidjourneyReceipt: input.onMidjourneyReceipt,
     thinkingEffort: 'minimal' as const,
@@ -68,16 +74,22 @@ export async function editImage(
   try {
     // Validate before a supplier call; the same resolver is used by billing preflight.
     const plan = planImageGeneration(request);
-    const result = await generateImage(plan.request);
+    // Character recovery needs the original Auto choice to distinguish inferred
+    // GPT tuning from an explicit model contract. All other routes keep their plan.
+    const autoCharacter = input.benignCharacterContent === true && !isNsfw
+      && (!requestedModel || requestedModel === 'auto');
+    const result = await generateImage(autoCharacter ? request : plan.request);
     if (!result.image) return { success: false, message: 'Image generation returned no image. Do not retry automatically.' };
     console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s model=${result.model} provider=${result.provider ?? 'default'}`);
     let message = result.images?.length ? `${result.images.length} candidate images generated successfully; keep all candidates in the timeline. Task: ${result.taskId}.` : 'Image generated successfully.';
     const adjustments = [...new Set([...plan.adjustments, ...(result.adjustments ?? [])])];
     if (adjustments.length) message += ` ${adjustments.join(' ')}`;
-    return { success: true, message, image: result.image, images: result.images, taskId: result.taskId, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage };
+    if (result.fallbackUsed) message += ` Generated with ${result.model} after a completed provider refusal; do not repeat the generation.`;
+    return { success: true, message, image: result.image, images: result.images, taskId: result.taskId, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage, recovery: result.recovery };
   } catch (error) {
     if (error instanceof MidjourneyRequestError || error instanceof Seedream55RequestError) return { success: false, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
-    if (error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
+    if (error instanceof ImageProviderRefusalError || error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
+
       return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
     }
     // A paid outcome can be unknown: preserve a durable failure, never fan out or resubmit.

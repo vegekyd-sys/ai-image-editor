@@ -71,7 +71,7 @@ if (process.argv.includes('--write')) {
   assertStartupArchitecture();
   const actual = existsSync(generatedPath) ? readFileSync(generatedPath, 'utf8') : '';
   if (actual !== expected) {
-    throw new Error('Built-in Skill manifest is stale. Run: npm run build:agent-startup-manifest');
+    throw new Error('Built-in Skill manifest is stale. Run: pnpm run build:agent-startup-manifest');
   }
   console.log('Agent startup contract passed: manifest-only Skill loading, no duplicate full Skill reads.');
 }

@@ -104,7 +104,7 @@ Lambda export must use bundles built from the same source revision. Provision a
 new isolated Lambda site with:
 
 ```bash
-npm run ops:remotion-lambda-provision -- --site-name <site-name>
+pnpm run ops:remotion-lambda-provision -- --site-name <site-name>
 ```
 
 Set the returned URL as `REMOTION_LAMBDA_SERVE_URL` in the target environment.
@@ -115,8 +115,8 @@ when the Remotion runtime changes.
 ## Acceptance
 
 ```bash
-npm test -- --run __tests__/openMontageFullMigration.test.ts
-npm test -- --run __tests__/studioRun.test.ts __tests__/agentDualWriter.test.ts
+pnpm test -- --run __tests__/openMontageFullMigration.test.ts
+pnpm test -- --run __tests__/studioRun.test.ts __tests__/agentDualWriter.test.ts
 
 MAKARON_URL=http://localhost:3039 \
   node packages/makaron-cli/bin/makaron.mjs \

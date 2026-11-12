@@ -76,6 +76,7 @@ export interface McpServerOptions {
   onVideoStatus?: (taskId: string, status: string, queryFailed?: boolean) => Promise<void>;
   /** Authenticated Makaron owner for private subscription relay routing. */
   userId?: string;
+  imageSignal?: AbortSignal;
   /** Called after each tool completes successfully. Used for billing. */
   onToolComplete?: (
     toolName: string,
@@ -116,13 +117,14 @@ ${formatImageCapabilitiesForAgent()}
 
 When skill is set, the caller reads the skill prompt and supplies its instructions in editPrompt.
 Input image can be a local file path (stdio), URL, or base64 data URL. Omit image for text-to-image generation.
-Generation timing varies; report actual completion. No automatic retry or model switch after a failed/unknown submission.`,
+Generation timing varies; report actual completion. Unknown submissions are never repeated. An independently assessed benign-character request may use one compatible alternate after a terminal provider refusal; callers must not add retries.`,
     {
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback. For ordinary edits, use specific English editing instructions'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
       model: z.string().nullish().describe('Explicit image model preference; otherwise omit for Auto. Unknown IDs use Auto, Flare first. See the generated Image Model Capability table.'),
       isNsfw: z.boolean().nullish().describe('Caller/Agent-assessed NSFW input; routes directly to Qwen Spicy.'),
+      benignCharacterContent: z.boolean().nullish().describe('True only for independently assessed harmless nonsexual fictional-character artwork, including all supplied images. Enables one compatible alternate after a terminal refusal. Omit for unsafe/uncertain content, NSFW or a user requiring only one model. A refusal does not establish copyright or NSFW.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.6 support up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
       imageQuality: z.enum(['auto', 'low', 'medium', 'high']).nullish().describe('GPT Image 2.6 rendering quality. Default low; choose higher when the user asks for more visual detail.'),
       imageReasoningEffort: z.enum(['low', 'medium', 'high']).nullish().describe('GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high.'),
@@ -165,6 +167,11 @@ Generation timing varies; report actual completion. No automatic retry or model 
             skill: params.skill ?? undefined,
             preferredModel: params.model ?? undefined,
             isNsfw: params.isNsfw ?? undefined,
+            benignCharacterContent: params.benignCharacterContent ?? undefined,
+            signal: options?.imageSignal,
+            beforeImageRecovery: async request => !options?.onToolStart || (await options.onToolStart('makaron_edit_image', request.model, {
+              imageInputCount: (request.image ? 1 : 0) + (request.references?.length ?? 0), imageResolution: request.imageResolution,
+            })).allowed,
             aspectRatio: params.aspectRatio ?? undefined,
             imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, gifFrameSize: params.gifFrameSize ?? undefined,
             imageResolution: params.imageResolution ?? undefined,

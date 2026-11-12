@@ -194,6 +194,19 @@ describe('GPT Image 2.6 provider order', () => {
     await expect(createImage26Backend('gpt-image-2.6-flare').generate({ prompt: 'x' })).rejects.toThrow('content checker');
     expect(falGenerate).not.toHaveBeenCalled();
   });
+
+  it.each(['network', 'server'])('never submits to fal after an unknown %s outcome', async mode => {
+    vi.stubGlobal('fetch', mode === 'network' ? vi.fn().mockRejectedValue(new Error('connection reset'))
+      : vi.fn().mockResolvedValue(Response.json({ error: { code: 'server_error' } }, { status: 500 })));
+    await expect(createImage26Backend('gpt-image-2.6-flare').generate({ prompt: 'Scene', benignCharacterContent: true })).rejects.toThrow('outcome is unknown');
+    expect(falGenerate).not.toHaveBeenCalled();
+  });
+  it.each(['network', 'server'])('preserves ordinary-image supplier failover on %s', async mode => {
+    vi.stubGlobal('fetch', mode === 'network' ? vi.fn().mockRejectedValue(new Error('connection reset'))
+      : vi.fn().mockResolvedValue(Response.json({ error: { code: 'server_error' } }, { status: 500 })));
+    expect((await createImage26Backend('gpt-image-2.6-flare').generate({ prompt: 'A ceramic mug' })).provider).toBe('fal');
+    expect(falGenerate).toHaveBeenCalledOnce();
+  });
 });
 
 describe('Agent usage ledger', () => {

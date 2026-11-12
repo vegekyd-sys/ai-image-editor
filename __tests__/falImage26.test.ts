@@ -3,6 +3,7 @@ import sharp from 'sharp';
 import { buildFalImage25Request, checkFalImage25Response, createFalImage25Backend } from '@/lib/models/fal-image25';
 import { DEFAULT_IMAGE_MODEL, getImageModelCapability, planImageGeneration } from '@/lib/image-model-capabilities';
 import { FAL_IMAGE26_IDS, IMAGE_MODEL_IDS, isFalGptImage, isFalImage25 } from '@/lib/models/types';
+import { ImageProviderRefusalError } from '@/lib/models/image-provider-refusal';
 
 beforeEach(() => vi.stubEnv('FAL_KEY', 'test-key'));
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
@@ -36,6 +37,21 @@ describe('native GIF sheet regression from real failed chat requests', () => {
 });
 
 describe('GPT Image 2.6 upgrade', () => {
+  it('retains a terminal fal refusal and its accepted receipt without read retries or another POST', async () => {
+    const model = FAL_IMAGE26_IDS[0];
+    const endpoint = buildFalImage25Request({ prompt: 'Pikachu' }, model).endpoint;
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(Response.json({ prices: [{ endpoint_id: endpoint, unit: 'units', unit_price: 1, currency: 'USD' }] }))
+      .mockResolvedValueOnce(Response.json({ request_id: 'accepted-refusal' }))
+      .mockResolvedValueOnce(Response.json({ status: 'COMPLETED' }))
+      .mockResolvedValueOnce(Response.json({ detail: [{ type: 'content_policy_violation' }] }, { status: 422 }));
+    vi.stubGlobal('fetch', fetcher);
+    const failure = await createFalImage25Backend(model).generate({ prompt: 'Pikachu' }).catch(e => e);
+    expect(failure).toBeInstanceOf(ImageProviderRefusalError);
+    expect(failure.requestId).toBe('accepted-refusal');
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
   it('keeps Auto and old provider selection separate from explicit 2.6', () => {
     expect(DEFAULT_IMAGE_MODEL).toBe('gpt-image-2.6-flare');
     expect(planImageGeneration({ prompt: 'A product photo' }).model).toBe(DEFAULT_IMAGE_MODEL);

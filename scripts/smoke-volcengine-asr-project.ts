@@ -8,7 +8,7 @@ config({ path: '.env.local' })
 async function main() {
   const projectId = process.argv[2]?.trim()
   if (!projectId) {
-    throw new Error('Usage: npx tsx scripts/smoke-volcengine-asr-project.ts <project-id>')
+    throw new Error('Usage: pnpm exec tsx scripts/smoke-volcengine-asr-project.ts <project-id>')
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()

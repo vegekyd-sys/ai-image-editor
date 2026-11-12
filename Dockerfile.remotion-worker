@@ -33,12 +33,17 @@ ENV REMOTION_BROWSER_EXECUTABLE=/usr/bin/chromium
 ENV REMOTION_CHROME_MODE=chrome-for-testing
 ENV REMOTION_BROWSER_LAUNCH_TIMEOUT_MS=90000
 
-COPY package.json package-lock.json ./
+# pnpm comes from package.json "packageManager" via Corepack (bundled with Node 24).
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+COPY package.json pnpm-lock.yaml .npmrc ./
 COPY patches ./patches
-RUN npm ci --include=dev
+COPY plugins/capacitor-meta-app-events ./plugins/capacitor-meta-app-events
+RUN corepack enable && corepack install
+# NODE_ENV=production would skip devDependencies (tsx runs the worker), so override it here.
+RUN NODE_ENV=development pnpm install --frozen-lockfile
 
 COPY . .
 
 RUN mkdir -p /data/media-cache /data/renders /data/remotion-bundle
 
-CMD ["npm", "run", "worker:remotion-export"]
+CMD ["pnpm", "run", "worker:remotion-export"]

@@ -92,8 +92,8 @@ scripts/                 Ops, release, SEO, billing, and testing scripts
 ## Local Development
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -101,11 +101,11 @@ Open [http://localhost:3000](http://localhost:3000).
 Common commands:
 
 ```bash
-npm run lint
-npm run test
-npm run test:cli
-npm run check:seo
-npm run build
+pnpm run lint
+pnpm run test
+pnpm run test:cli
+pnpm run check:seo
+pnpm run build
 ```
 
 For mock-only local work, set `MOCK_AI=true` in `.env.local`. For real media generation, configure the provider keys used by the route you are testing.

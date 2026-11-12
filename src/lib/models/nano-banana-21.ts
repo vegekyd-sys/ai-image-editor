@@ -63,7 +63,7 @@ export const nanoBanana21Backend: ModelBackend = {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(240000),
+        signal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(240000)]) : AbortSignal.timeout(240000),
         redirect: 'error',
       });
       status = response.status;

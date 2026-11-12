@@ -54,6 +54,6 @@ System fonts include Noto Sans CJK, Noto Color Emoji, Liberation, and DejaVu.
 - concatenate generated chunks into a final MP4
 - add overlays/subtitles and create web-compatible `faststart` files
 
-Create a new snapshot with `npm run snapshot:media`, set the resulting ID as
+Create a new snapshot with `pnpm run snapshot:media`, set the resulting ID as
 `MEDIA_SANDBOX_SNAPSHOT_ID`, then run the real Sandbox and `makaron chat` smoke
 before promoting the ID to Production.

@@ -104,9 +104,9 @@ order by created_at;
 - PGlite 隔离 SQL：执行实际迁移和既有余额 RPC，验证 no-overdraft 回滚、幂等退款/重放、owner 隔离、终态不倒退、RLS/服务端专属权限。使用内存数据库，不接触共享 Supabase；它不替代真实多连接 PostgreSQL 压力测试。
 
 ```bash
-npm test
-npx tsc --noEmit --incremental false
-npm run lint
+pnpm test
+pnpm exec tsc --noEmit --incremental false
+pnpm run lint
 PGLITE_MODULE=/absolute/path/to/@electric-sql/pglite/dist/index.js node scripts/test-media-pricing-db.mjs
 ```
 

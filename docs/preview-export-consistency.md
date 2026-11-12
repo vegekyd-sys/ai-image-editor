@@ -50,11 +50,11 @@ style: {
 
 ### 2. @remotion/web-renderer patch
 
-原版 web-renderer 的 canvas drawing 只读 `style.transform`/`style.scale`/`style.rotate`，**漏了 `style.translate`**。我们通过 `patches/@remotion+web-renderer+4.0.527.patch` 补上了 translate 支持，包括新版的 transform style cache 与 reset/restore 路径。
+原版 web-renderer 的 canvas drawing 只读 `style.transform`/`style.scale`/`style.rotate`，**漏了 `style.translate`**。我们通过 `patches/@remotion__web-renderer@4.0.527.patch` 补上了 translate 支持，包括新版的 transform style cache 与 reset/restore 路径。
 
 **升级 @remotion/web-renderer 时必须：**
 1. 检查新版是否已支持 `style.translate`
-2. 如果没有，重新生成 patch：`npx patch-package @remotion/web-renderer --patch-dir patches`
+2. 如果没有，用 pnpm 重新生成 patch：`pnpm patch @remotion/web-renderer@<新版本>`，在它给出的临时目录里改好后执行 `pnpm patch-commit <临时目录>`（会更新 `package.json` 的 `pnpm.patchedDependencies` 和 `patches/`），再删掉旧版本的 patch 条目
 3. 验证 `/moveable-test` demo 页面导出是否正确
 
 ### 3. DesignOverlay.applyStoredOffsets
@@ -102,7 +102,7 @@ style: {
 | `src/lib/evalRemotionJSX.ts` | Proxy 注入 translate/scale + HOC wrapper |
 | `src/components/DesignOverlay.tsx` | 预览时 applyStoredOffsets + 交互（drag/scale/pinch）|
 | `src/components/RemotionRenderer.tsx` | captureDesignPoster / exportDesignVideo 调用 |
-| `patches/@remotion+web-renderer+4.0.527.patch` | web-renderer translate 支持 |
+| `patches/@remotion__web-renderer@4.0.527.patch` | web-renderer translate 支持 |
 | `src/app/moveable-test/page.tsx` | 验证 demo |
 
 ## Lambda 横向重影回归

@@ -84,6 +84,11 @@ describe('editImage reference contract', () => {
     }));
   });
 
+  it('preserves Auto selection for character recovery without dropping first-attempt quality', async () => {
+    await editImage({ editPrompt: 'Mario versus Pikachu poster', benignCharacterContent: true, imageQuality: 'high', aspectRatio: '2:3' }, {});
+    expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({ model: undefined, benignCharacterContent: true, imageQuality: 'high', aspectRatio: '2:3' }));
+  });
+
   it('normalizes legacy Image 2 and preserves the original user prompt', async () => {
     const prompt = '给这个键盘设计一个高级的信息丰富的电商详情页';
     await editImage({ editPrompt: prompt, preferredModel: 'openai' }, {});

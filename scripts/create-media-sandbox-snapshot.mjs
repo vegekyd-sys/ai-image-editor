@@ -2,7 +2,7 @@
  * Create the dedicated disposable Node media executor base image.
  *
  * Run:
- *   npm run snapshot:media
+ *   pnpm run snapshot:media
  *
  * The printed snapshot ID belongs in MEDIA_SANDBOX_SNAPSHOT_ID. Do not use
  * REMOTION_SNAPSHOT_ID here: Remotion and open Agent code have independent

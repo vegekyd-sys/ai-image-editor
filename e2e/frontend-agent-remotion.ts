@@ -315,7 +315,7 @@ async function main() {
   const { key, id: keyId } = await generateApiKey(userId, 'frontend-agent-remotion-e2e')
   const projectIds: string[] = []
   let browser: Browser | null = null
-  const server = spawn('npx', ['next', 'dev', '--webpack', '-H', '127.0.0.1', '-p', String(port)], {
+  const server = spawn('pnpm', ['exec', 'next', 'dev', '--webpack', '-H', '127.0.0.1', '-p', String(port)], {
     env: {
       ...process.env,
       MAKARON_APP_URL: baseUrl,

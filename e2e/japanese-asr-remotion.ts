@@ -214,7 +214,7 @@ function Design(props) {
 async function main() {
   const projectId = process.argv[2]?.trim()
   if (!projectId) {
-    throw new Error('Usage: npx tsx e2e/japanese-asr-remotion.ts <project-id>')
+    throw new Error('Usage: pnpm exec tsx e2e/japanese-asr-remotion.ts <project-id>')
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
