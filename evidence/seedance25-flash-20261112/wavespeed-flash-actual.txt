@@ -1,0 +1,430 @@
+Seedance 2.5 Flash on WaveSpeedAI: Specs, Access, and When to Use It
+Explore
+Pricing
+Enterprise
+Resources
+AI Generator
+Affiliate
+Download App
+Inspiration
+Documentation
+Blog
+Contact Sales
+Be a Creator
+Support
+Github
+English
+Deutsch
+Español
+Français
+Português
+Русский
+Indonesian
+日本語
+한국어
+简体中文
+繁體中文
+Try Free
+English
+Deutsch
+Español
+Français
+Português
+Русский
+Indonesian
+日本語
+한국어
+简体中文
+繁體中文
+Try Free
+Explore
+Pricing
+Enterprise
+Resources
+AI Generator
+Download App
+Documentation
+Contact Sales
+Support
+Affiliate
+Inspiration
+Blog
+Be a Creator
+Github
+← Blog
+/
+News & Insights
+Seedance 2.5 Flash on WaveSpeedAI: Specs, Access, and When to Use It
+Seedance 2.5 Flash, ByteDance's faster Seedance 2.5 tier announced on November 12, 2026, is available on WaveSpeedAI. Here is what was announced, how to call it, and when to use Flash or Seedance 2.5.
+By
+WaveSpeedAI
+Nov 12, 2026
+Updated
+Nov 12, 2026
+9 min read
+#seedance-2-5-flash
+#seedance-2-5
+#seedance
+#bytedance
+#ai-video-generation
+Seedance 2.5 Flash is a new, faster tier of ByteDance’s Seedance 2.5 video model. ByteDance’s Volcano Engine announced it on November 12, 2026, as the model closest in quality to Seedance 2.5, with generation speed doubled and a lower price.
+Seedance 2.5 Flash is available on WaveSpeedAI.
+Start from the
+Seedance 2.5 Flash page
+, or go straight to
+text-to-video
+,
+image-to-video
+,
+reference-to-video
+or
+video-edit
+. This post covers what ByteDance announced, how to use Flash on WaveSpeedAI, and how to choose between Flash and Seedance 2.5.
+What Did ByteDance Announce?
+According to ByteDance’s announcement as reported by
+IT之家
+and
+PANews
+:
+Speed:
+generation is twice as fast as Seedance 2.5.
+Price:
+lower than Seedance 2.5, by about a third at 720p text-to-video and image-to-video.
+Quality:
+overall better than the previous flagship, Seedance 2.0, with strong instruction following, physical motion and audio, and support for video editing.
+Output:
+up to 30 seconds per video, at 480p or 720p.
+Inputs:
+up to 10 images, 5 videos and 5 audio clips per request.
+Positioning:
+built for high-volume work such as testing ad creative and producing regular footage, while Seedance 2.5 stays the choice for the highest audio-visual quality, Draft mode, 1080p and 4K.
+BytePlus’s Lumina
+preview page
+describes Flash as a speed-focused addition to the Seedance family, with international access, API and pricing still to be confirmed.
+Announced vs. Still Open at a Glance
+Question
+Status
+Is Flash announced?
+Yes, November 12, 2026
+What is it for?
+Faster, lower-cost generation for high-volume work
+Speed
+Announced as 2x Seedance 2.5; no independent measurements yet
+Clip length and resolution
+Up to 30 seconds; 480p and 720p
+Inputs
+Up to 10 images, 5 videos, 5 audio clips; video editing supported
+ByteDance API
+Scheduled for Volcano Ark on November 15
+Available on WaveSpeedAI
+Yes: text-to-video, image-to-video, reference-to-video and video-edit
+What Should You Not Assume?
+Announcement numbers are a starting point, not a test result:
+That ByteDance’s “2x faster” holds for your prompts.
+Speed depends on duration, resolution, references and queue time. Measure on your own shots.
+That Flash matches Seedance 2.5 on every feature.
+Flash tops out at 720p, so 1080p and 4K work still belongs to Seedance 2.5. Check duration, references, audio and editing one by one when you test it.
+That a lower price means a lower project cost.
+What matters is the cost of an accepted result, including the takes you throw away.
+That “Flash” means the same thing as “Fast”, “Mini” or “Turbo”.
+These are different tiers with different limits. Compare them by their published settings, not by their names.
+How Do You Use Flash on WaveSpeedAI?
+Flash has four endpoints, all listed on the
+Seedance 2.5 Flash page
+. Text-to-video, image-to-video and reference-to-video generate 4 to 30 second clips at 480p or 720p (default 720p) with synchronized audio on by default; video-edit follows the length of the input video:
+Endpoint
+What it does
+text-to-video
+Prompt in, clip out. Optional reference images, videos and audio.
+image-to-video
+Animates a start image, with an optional last frame.
+reference-to-video
+Up to 10 reference images, 5 reference videos and 5 reference audios, cited in the prompt as
+@Image 1
+,
+@Video 1
+,
+@Audio 1
+.
+video-edit
+Changes an existing video from a prompt while keeping its subject, composition and motion.
+Aspect ratios are 16:9, 9:16, 4:3, 3:4, 1:1 and 21:9 for text-to-video and reference-to-video. Billing is per second of generated video and depends on resolution; see each model page for current prices.
+curl
+-X
+POST
+"https://api.wavespeed.ai/api/v3/bytedance/seedance-2.5-flash/text-to-video"
+\
+-H
+"Authorization: Bearer
+$WAVESPEED_API_KEY
+"
+\
+-H
+"Content-Type: application/json"
+\
+-d
+'{"prompt": "A ginger cat pounces on a ball of yarn on a sunlit wooden floor. Low eye-level shot, warm afternoon light, soft ambient room tone.", "resolution": "720p", "duration": 5}'
+curl
+"https://api.wavespeed.ai/api/v3/predictions/<id>/result"
+\
+-H
+"Authorization: Bearer
+$WAVESPEED_API_KEY
+"
+What Else Can You Use on WaveSpeedAI?
+These other Seedance models are live too, all with native audio generated together with the picture:
+Model
+Good for
+Output
+Seedance 2.5 Flash
+Fast iteration and high-volume clips
+4 to 30 seconds, 480p or 720p
+Seedance 2.5 Turbo
+A faster, more affordable Seedance 2.5 tier for everyday iteration
+4 to 30 seconds, 720p or 1080p
+Seedance 2.5
+Final shots and the full feature set
+4 to 30 seconds, 480p to 4K
+Seedance 2.0 Fast
+and
+Seedance 2.0 Mini
+Lower-cost drafts on the previous generation
+See each model page
+Seedance 2.5 Turbo is another faster tier, with 720p and 1080p output. It takes the same inputs as Seedance 2.5 text-to-video: a prompt, up to 30 reference images, up to 10 reference videos and up to 10 reference audios, six aspect ratios from 9:16 to 21:9, and audio on by default. There is also an
+image-to-video Turbo
+model that starts from a first frame and optionally ends on a last frame.
+Billing is per second of generated video and depends on resolution, with no subscription. Current prices are on each model page and on the
+Seedance 2.5 API page
+. If you prefer the browser, the
+AI Video Generator
+runs the same models without code.
+A Draft-Then-Final Workflow
+Flash is aimed at a simple way of working: iterate cheaply, then render the keeper once.
+Draft on Flash.
+Use Seedance 2.5 Flash at 480p or 720p with a short duration to settle the idea: framing, action, camera move and sound.
+Change one thing per take.
+Compare a static camera against a slow push-in, or two lighting setups. One variable per take makes the choice obvious.
+Lock the prompt and references.
+Once a take works, stop editing the prompt.
+Render the final once.
+For 1080p or 4K delivery, send the same prompt and references to Seedance 2.5. If 720p is enough, the Flash take is already your final.
+The request is the same for both steps. Only the model ID and the resolution change:
+MODEL
+=
+"bytedance/seedance-2.5-flash/text-to-video"
+# 1080p/4K final: bytedance/seedance-2.5/text-to-video
+curl
+-X
+POST
+"https://api.wavespeed.ai/api/v3/
+$MODEL
+"
+\
+-H
+"Authorization: Bearer
+$WAVESPEED_API_KEY
+"
+\
+-H
+"Content-Type: application/json"
+\
+-d
+'{"prompt": "A ceramic mug on a pale wooden table by a window. A hand places a spoon beside it. Slow push-in, soft morning light from the left.", "aspect_ratio": "16:9", "resolution": "720p", "duration": 5}'
+curl
+"https://api.wavespeed.ai/api/v3/predictions/<id>/result"
+\
+-H
+"Authorization: Bearer
+$WAVESPEED_API_KEY
+"
+For prompt structure, see the
+Seedance 2.5 prompt guide
+.
+How to Test Flash Against Your Current Model
+Keep the model ID configurable.
+If the model is a setting and not a hardcoded string, switching to Flash is a one-line change.
+Save a small test set.
+Pick 10 to 20 prompts that look like your real work: a product shot, a dialogue scene, a fast action shot, a scene with several characters. Keep the reference files with them.
+Record a baseline.
+For each prompt, note the time from request to result, the cost, and whether the take was usable on your current model. Without those numbers you cannot tell what Flash improves.
+Write down your acceptance checks.
+Subject stays consistent, the action completes, the framing is stable, the last frame is usable. Score every model against the same list.
+How to Judge Flash
+Run the same test set on Flash and on the model you use now, with matching duration, resolution and references wherever both support them. Then compare three numbers:
+Time to a usable clip
+, including queue time and retries, not only generation time.
+Usable-output rate
+: clips that pass every check divided by clips generated.
+Cost per accepted clip
+: total spend divided by the clips you would actually ship.
+A model that is twice as fast but needs twice as many takes has not saved anything. Use several representative shots, not one favorable example.
+FAQ
+Is Seedance 2.5 Flash released?
+It was announced by ByteDance on November 12, 2026, and is rolling out on ByteDance’s own apps and partner platforms. Its API is scheduled to open on Volcano Ark on November 15.
+Is Seedance 2.5 Flash available on WaveSpeedAI?
+Yes. Seedance 2.5 Flash text-to-video, image-to-video, reference-to-video and video-edit are available, alongside Seedance 2.5, Seedance 2.5 Turbo, Seedance 2.0, Seedance 2.0 Fast and Seedance 2.0 Mini.
+How is Flash different from Seedance 2.5?
+ByteDance positions Flash as twice as fast and lower in price, with 480p and 720p output, while Seedance 2.5 keeps 1080p, 4K and Draft mode for the highest-quality work.
+Will Seedance 2.5 Flash be cheaper than Seedance 2.5?
+ByteDance says Flash is priced lower, and on WaveSpeedAI Flash is priced below Seedance 2.5 at the same resolution. Check each model page for current prices, compare at the same duration and resolution, and count the takes you discard.
+Is Seedance 2.5 Turbo the same as Seedance 2.5 Flash?
+No. Seedance 2.5 Turbo is a faster, more affordable Seedance 2.5 tier with 720p and 1080p output. Flash is a separate model with 480p and 720p output.
+What is the fastest way to use Seedance today?
+Draft with
+Seedance 2.5 Turbo
+at 720p, then render the final take with
+Seedance 2.5
+at 1080p or 4K.
+Details about Seedance 2.5 Flash come from ByteDance’s announcement as reported by news outlets and may change. Recheck the official documentation and the model pages before planning production work around it.
+Related posts:
+Seedance 3.0 rumors: what to expect
+Seedance 2.5 prompt guide
+Share
+Related Articles
+Seedance 3.0 Rumors: Native Audio-Video Sync, Multi-Shot Storytelling, and What to Expect
+2026-11-04
+Seedream 5.5: What to Expect, and How to Get Ready
+2026-10-29
+AI Lip Sync Dialogue Scenes with Seedance 2.5: Prompts and Settings
+2026-10-25
+How to Make an AI Short Drama with Seedance 2.5, Wan 3.0 and Kling 4.0
+2026-10-25
+How to Keep the Same Character Across AI Video Shots
+2026-10-25
+Vertical 9:16 AI Video Settings for Shorts and Reels
+2026-10-25
+On this page
+What Did ByteDance Announce?
+Announced vs. Still Open at a Glance
+What Should You Not Assume?
+How Do You Use Flash on WaveSpeedAI?
+What Else Can You Use on WaveSpeedAI?
+A Draft-Then-Final Workflow
+How to Test Flash Against Your Current Model
+How to Judge Flash
+FAQ
+AI Generators
+AI Image Generator
+Nano Banana, Seedream & more
+AI Video Generator
+Wan, Seedance, Kling & more
+Free & Fast
+More on WaveSpeed
+AI Cinema Studio
+Cinematic shots, camera control
+AI Influencer Studio
+One consistent AI persona
+AI Chat
+Create images & videos in chat
+Free Tools
+In your browser, no upload
+Ready to Experience Lightning-Fast AI Generation?
+Try AI Generator
+Explore Models
+API Documentation
+24/7 API Status ↗
+Learn More
+Home
+Dashboard
+Explore
+History
+Pricing
+Enterprise
+About Us
+Contact
+Legal
+Terms of Service
+Privacy Policy
+Acceptable Use Policy
+Official Channels
+Official Apps
+Third-Party Licenses
+Resources
+Image Generator
+Video Generator
+AI Cinema Studio
+AI Influencer Studio
+AI Chat
+Showcase
+Avatar Generator
+Audio Generator
+3D Generator
+AI Tools
+AI Apps
+Free Tools
+Retake
+Desktop App
+CLI / MCP
+LLM API
+Documentation
+Integrations
+Blog
+Contact Sales
+Support
+Affiliate
+APIs
+Studios
+Alternatives
+llms.txt
+Models
+Seedance 2.5 API
+Wan 3.0 API
+Kling 4.0 API
+MiniMax H3 API
+Seedream 5 API
+Nano Banana 2.1 API
+GPT Image 2.5 API
+GPT Image 2 API
+Nano Banana 2 API
+Nano Banana Pro API
+Veo 3.1 API
+FLUX 3 API
+Qwen Image 3.0 API
+Grok Imagine Video 1.5 API
+Happy Horse 1.1 API
+Happy Horse 1.0 API
+Wan 2.7 API
+Seedance 2.0 API
+Kling 3.0 API
+Kling Omni O3 API
+Vidu Q4 API
+Seedream 4.5 API
+Qwen Image API
+Grok Imagine Video API
+Flux 2 Klein API
+Hunyuan3D API
+InfiniteTalk API
+Hailuo 2.3 API
+Kling 3.0 Motion Control API
+Tools
+Text to Video
+Image to Video
+Reference to Video
+First and Last Frame Video
+Text to Image
+Image Editing
+Video Edit
+Video Extend
+Motion Control Models
+Avatar Lipsync Models
+Swap Anything
+Remove Anything
+Enhance Videos
+Upscale Image
+LoRA Generation
+Speech Generation
+Generate Music
+Audio for Video
+Speech to Text
+3D Creation
+Best Video Models
+Best Image Models
+Object Detection and Segmentation
+Content Detection Models
+Training Tools
+© 2026 WAVESPEED
+TOP
+We use cookies to improve your experience and analyze website traffic.
+Learn more
+Reject
+Accept

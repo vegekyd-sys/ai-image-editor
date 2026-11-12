@@ -1,0 +1,128 @@
+{
+  "id": "B-20261112-seedance25-flash",
+  "vendor": "ByteDance / BytePlus",
+  "model": "Seedance 2.5 Flash",
+  "canonical_model": "Seedance 2.5 Flash 261115",
+  "capability": "video generation",
+  "dedup_key": "ByteDance / BytePlus|Seedance 2.5 Flash 261115|video generation",
+  "discovered_at": "2026-11-12T12:15:52.366397+00:00",
+  "classification": "B",
+  "reason": "WaveSpeed now publishes EARLY ACCESS Flash API contracts with account concurrency1, exact IDs and prices. BytePlus native API still opens Nov15 14:00UTC+8; EvoLink still ComingSoon. Missing WaveSpeed key/account access blocks live integration validation; no new procurement/account or placeholder routing.",
+  "status": "awaiting_existing_provider_or_account_confirmation",
+  "last_checked_at": "2026-11-12T17:23:25.530456+00:00",
+  "model_id": "dreamina-seedance-2-5-flash-261115",
+  "original_post_url": "https://x.com/EvoLinkAi/status/2120901936333386006",
+  "original_post_time": "2026-11-12T15:30:00Z",
+  "model_release_time": null,
+  "scheduled_api_release_time": "2026-11-15T06:00:00Z",
+  "official_announcement": "https://ai.byteplus.com/ark/region:ap-southeast-1/docs/create-video-generation-task-api.md",
+  "api_docs": [
+    "https://wavespeed.ai/models/bytedance/seedance-2.5-flash/text-to-video",
+    "https://wavespeed.ai/models/bytedance/seedance-2.5-flash/image-to-video",
+    "https://wavespeed.ai/models/bytedance/seedance-2.5-flash/reference-to-video",
+    "https://wavespeed.ai/models/bytedance/seedance-2.5-flash/video-edit",
+    "https://ai.byteplus.com/ark/region:ap-southeast-1/docs/create-video-generation-task-api.md"
+  ],
+  "pricing": {
+    "official_provider": "BytePlus",
+    "unit": "USD per million generated-video tokens",
+    "without_video_input": 7,
+    "with_video_input": 4.3,
+    "reference_5s_16_9_without_video_usd": {
+      "480p": 0.34,
+      "720p": 0.76
+    },
+    "actual_makaron_cost": null
+  },
+  "input_output_limits": {
+    "resolutions": [
+      "480p",
+      "720p"
+    ],
+    "duration_generate_seconds": [
+      4,
+      30
+    ],
+    "reference_limits_from_official_BytePlus_posts": {
+      "images": 10,
+      "videos": 5,
+      "audios": 5
+    },
+    "not_inherited": "Do not copy ordinary2.5 30/10/10 references, native1080p/4K, draft or extend support"
+  },
+  "API_documented": true,
+  "account_access": "Existing EvoLink account has no Flash. WaveSpeed key absent in project configuration; no generation call.",
+  "account_visible": false,
+  "product_available": "announced; scheduled API/online release 2026-11-15 14:00 UTC+8",
+  "licensing": "BytePlus contractual access not yet established for this model/account",
+  "makaron_value": "Potential faster, lower-cost native video iteration; exact speed and output quality require matched real media tests",
+  "integration_authorized": true,
+  "authorization": {
+    "user_request": "你看下seedance 2.5 flash发布了 你开个独立的worktree接入下",
+    "recorded_at": "2026-11-12T12:15:52.366397+00:00",
+    "scope": "isolated candidate integration; no default change, merge, deployment or publish"
+  },
+  "worktree": "/Users/tianyicai/.codex/worktrees/seedance25-flash/ai-image-editor",
+  "branch": "codex/seedance25-flash",
+  "evidence_path": "/Users/tianyicai/.codex/worktrees/seedance25-flash/ai-image-editor/evidence/seedance25-flash-20261112",
+  "report_path": "/Users/tianyicai/.codex/worktrees/seedance25-flash/ai-image-editor/docs/research/seedance25-flash-20261112.md",
+  "code_ready": false,
+  "live_verified": false,
+  "merged": false,
+  "deployed": false,
+  "expense_usd": 0,
+  "product_priority": {
+    "level": "P1-awaiting-API",
+    "next_step": "Recheck exact Flash API contract, price and existing provider account access; reuse authorized worktree when callable"
+  },
+  "integration_check": {
+    "base_dev": "fbc7daac8abf9dae4fd71ffc69304a8e6cae5b18",
+    "already_integrated": false,
+    "existing_worktrees_checked": true,
+    "open_PRs_checked": true
+  },
+  "commit": "d3e229ae",
+  "last_user_report_prepared_at": "2026-11-12T12:16:17.533850+00:00",
+  "last_recheck_attempted_at": "2026-11-12T17:23:25.530456+00:00",
+  "contract_recheck_evidence": "/Users/tianyicai/Documents/Codex/makaron-model-radar/runs/20261112T171004Z/candidate-contract-rechecks.json",
+  "model_recheck_coverage_status": "body_reviewed_window_partial",
+  "availability_by_provider": {
+    "BytePlus": "scheduled_2026-11-15T06:00:00Z",
+    "EvoLink": "coming_soon_no_account_model_id",
+    "WaveSpeed": "EARLY_ACCESS documented; one concurrent task per account, key absent"
+  },
+  "model_ids_by_provider": {
+    "BytePlus": [
+      "dreamina-seedance-2-5-flash-261115"
+    ],
+    "WaveSpeed": [
+      "bytedance/seedance-2.5-flash/text-to-video",
+      "bytedance/seedance-2.5-flash/image-to-video",
+      "bytedance/seedance-2.5-flash/reference-to-video",
+      "bytedance/seedance-2.5-flash/video-edit"
+    ]
+  },
+  "updated_evidence_path": "/Users/tianyicai/Documents/Codex/makaron-model-radar/runs/20261112T171004Z",
+  "manufacturer_quoted_post_time": "2026-11-12T06:09:32Z",
+  "manufacturer_thread_reply_url": "https://x.com/BytePlusGlobal/status/2120760894657589454",
+  "wavespeed_pricing": {
+    "currency": "USD",
+    "without_video_input_per_output_second": {
+      "480p": 0.12,
+      "720p": 0.24
+    },
+    "with_video_input_per_input_and_output_second": {
+      "480p": 0.075,
+      "720p": 0.15
+    },
+    "video_edit_per_source_second_including_input_and_output": {
+      "480p": 0.15,
+      "720p": 0.3
+    },
+    "duration_rounding": "Generation whole seconds4-30. Input video minimum2s each, combined capped30s and rounded up. Edit source rounded up with4s min and30s max.",
+    "early_access_concurrency_per_account": 1,
+    "5s_720p_no_video_input": 1.2,
+    "actual_spend": 0
+  },
+  "pricing_source": "/Users/tianyicai/Documents/Codex/makaron-model-radar/runs/20261112T171004Z/wavespeed-flash-contract-fetch.json"
+}
