@@ -16,4 +16,5 @@ export interface SkillResult {
   contentBlocked?: boolean;    // Gemini refused content (NSFW) — caller should set isNsfw flag
   usage?: TokenUsage;             // token usage for billing
   provider?: string;              // provider that actually produced the image
+  recovery?: import('../models/types').GenerateImageResult['recovery'];
 }

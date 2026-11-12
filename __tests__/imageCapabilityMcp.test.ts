@@ -27,6 +27,7 @@ vi.mock('@/lib/skills/get-music-status', () => ({ getMusicStatus: vi.fn() }));
 vi.mock('fs', async original => ({ ...await original<typeof import('fs')>(), mkdirSync: () => { throw new Error('serverless'); }, writeFileSync: () => { throw new Error('serverless'); } }));
 
 import { POST } from '@/app/api/mcp/route';
+import { ImageProviderRefusalError } from '@/lib/models/image-provider-refusal';
 
 async function callImage(args: Record<string, unknown>) {
   const response = await POST(new Request('http://localhost/api/mcp', {
@@ -116,4 +117,29 @@ it('MCP preserves all MJ candidates and charges the batch once', async () => {
   expect(state.requireCredits).toHaveBeenCalledWith('test-user', 18);
   expect(state.tokenDebit).toHaveBeenCalledTimes(1);
   expect(state.debit).not.toHaveBeenCalled();
+});
+
+it('MCP keeps one logical result/debit after a character refusal and preflights Nano separately', async () => {
+  state.generate.mockImplementation(async req => {
+    if (req.model === 'gpt-image-2.6-flare') throw new ImageProviderRefusalError('openai', 'moderation_blocked');
+    return { image: 'data:image/png;base64,YQ==', provider: 'openrouter', usage: { modelId: 'google/gemini-nano-banana-2.1', inputTokens: 10, outputTokens: 20, providerCostUsd: 0.036 } };
+  });
+  const { response, payload } = await callImage({ benignCharacterContent: true });
+  expect(payload.result.isError).not.toBe(true);
+  expect(payload.result.content[0].text).toContain('model: gemini-2.1');
+  expect(state.requireCredits).toHaveBeenCalledTimes(2);
+  expect(state.requireCredits).toHaveBeenLastCalledWith('test-user', 7);
+  expect(state.generate).toHaveBeenCalledTimes(2);
+  expect(state.tokenDebit).toHaveBeenCalledTimes(1);
+  expect(state.debit).not.toHaveBeenCalled();
+  expect(response.headers.get('X-Credits-Charged')).toBe('7');
+});
+
+it('MCP does not fund the alternate from the first model balance check alone', async () => {
+  state.generate.mockRejectedValue(new ImageProviderRefusalError('openai', 'moderation_blocked'));
+  state.requireCredits.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false });
+  const { payload } = await callImage({ benignCharacterContent: true });
+  expect(payload.result.isError).toBe(true);
+  expect(state.generate).toHaveBeenCalledOnce();
+  expect(state.tokenDebit).not.toHaveBeenCalled();
 });

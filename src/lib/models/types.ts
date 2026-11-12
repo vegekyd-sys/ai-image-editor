@@ -31,6 +31,16 @@ export interface GenerateImageRequest extends ImageGenerationOptions {
   /** Persist accepted MJ receipt before polling; server-side only. */
   onMidjourneyReceipt?: (task: import('../midjourney').MidjourneyTask, request: import('../midjourney').MidjourneyRequest) => Promise<void>;
   isNsfw?: boolean;         // project-level NSFW flag — skip Gemini entirely when true
+  /** Independent caller assessment: harmless nonsexual fictional-character artwork.
+   * Omit for harmful/uncertain content or a user requiring only one model.
+   * Never inferred from a provider error; never changes isNsfw.
+   */
+  benignCharacterContent?: boolean;
+  /** Server-only preflight for the separately priced recovery. */
+  beforeImageRecovery?: (request: GenerateImageRequest) => Promise<boolean>;
+  /** Server-only cancellation and absolute deadline shared by both submissions. */
+  signal?: AbortSignal;
+  deadlineMs?: number;
 
 }
 
@@ -54,6 +64,7 @@ export interface GenerateImageResult {
   contentBlocked?: boolean; // Gemini refused content (NSFW) — caller should set isNsfw flag
   usage?: TokenUsage;       // token usage for billing (available for Gemini/OpenRouter)
   provider?: string;        // provider that actually produced the image
+  recovery?: { fromModel: ModelId; provider: string; providerCode: string; rejectedRequestId?: string };
 }
 
 export interface ModelBackend {

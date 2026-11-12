@@ -11,6 +11,7 @@ import { validateDesign } from './design-harness';
 import { remotionFontWarningText, remotionFontWarnings } from './remotion-font-diagnostics';
 import type { ImageBackground, ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
+import { authorizeImageRecovery } from './billing/image-recovery';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { submitMcpVideo } from './billing/mcp-video';
@@ -1401,6 +1402,7 @@ function createGenerateImageTool(
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
         isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
+        benignCharacterContent: z.boolean().optional().describe('Set true only after assessing this request and supplied images as harmless nonsexual fictional-character artwork (e.g. an ordinary cartoon-character scene). Enables at most one compatible model recovery after a terminal provider refusal. Omit for unsafe/uncertain content, NSFW, or when the user requires only the selected model. Never infer this assessment from a refusal, and never change isNsfw because of copyright or a provider error.'),
         imageQuality: z.enum(['auto', 'low', 'medium', 'high']).optional().describe('GPT Image 2.6 rendering quality. Default low; choose higher when the user asks for more visual detail.'),
       imageReasoningEffort: z.enum(['low', 'medium', 'high']).optional().describe('GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high.'),
       outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).optional().describe('Default PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
@@ -1423,7 +1425,7 @@ function createGenerateImageTool(
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
-      execute: async ({ editPrompt, skill, model, isNsfw, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, midjourney, style_reference_media_indices, media_index, reference_media_indices, retake_source }) => {
+      execute: async ({ editPrompt, skill, model, isNsfw, benignCharacterContent, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, midjourney, style_reference_media_indices, media_index, reference_media_indices, retake_source }, executionOptions) => {
         if (isNsfw) ctx.isNsfw = true;
         // GPT-5.6 currently fills omitted optional numeric tool fields with 0.
         // Treat that provider sentinel exactly like omission so empty projects
@@ -1528,7 +1530,10 @@ function createGenerateImageTool(
             } : undefined;
         const imageStartedAt = Date.now();
         const skillResult = await editImage(
-          { editPrompt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
+          { editPrompt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, preferredModel: resolvedModel, isNsfw: ctx.isNsfw,
+            benignCharacterContent, signal: executionOptions?.abortSignal,
+            beforeImageRecovery: request => authorizeImageRecovery(ctx.userId, request),
+          },
           {
             currentImage: editTarget,
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,

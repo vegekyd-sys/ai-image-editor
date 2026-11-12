@@ -2,6 +2,7 @@ import { buildFalImage25Request, createFalImage25Backend, FalImage25RequestError
 import { preserveGptImageOutput } from './gpt-image-output';
 import { fitTransparentResultToAspectRatio, fitTransparentResultToSourceCanvas } from './transparent-source-canvas';
 import type { FalGptImageId, GenerateImageRequest, ModelBackend } from './types';
+import { ImageProviderRefusalError } from './image-provider-refusal';
 import {
   getOpenAIDirectApiKey,
   image26UsageCostUsd,
@@ -18,7 +19,7 @@ import {
 
 type Image26Id = Extract<FalGptImageId, 'gpt-image-2.6-flare' | 'gpt-image-2.6-sunburst'>;
 
-/** OpenAI refused before producing an image for a reason another supplier can serve (quota, auth, outage). */
+/** OpenAI declined on quota/auth/availability before a known accepted generation. */
 export class OpenAIImageFallbackError extends Error {}
 
 /**
@@ -84,11 +85,13 @@ export function createOpenAIImage26Backend(model: Image26Id): ModelBackend {
           method: 'POST',
           headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(300_000),
+          signal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(300_000)]) : AbortSignal.timeout(300_000),
           redirect: 'error',
         });
       } catch (error) {
-        // Network failure before a response: OpenAI never accepted the job, safe to use fal.
+        // The new character recovery cannot compound an unknown submission.
+        // Ordinary requests retain their existing supplier availability policy.
+        if (req.benignCharacterContent && !req.isNsfw) throw new FalImage25RequestError('OpenAI request outcome is unknown. Do not retry automatically or switch suppliers.');
         throw new OpenAIImageFallbackError(`OpenAI request did not reach the API: ${error instanceof Error ? error.message : String(error)}`);
       }
       const requestId = response.headers.get('x-request-id') ?? undefined;
@@ -97,8 +100,10 @@ export function createOpenAIImage26Backend(model: Image26Id): ModelBackend {
         const code = data.error?.code ?? '';
         const detail = `${response.status} ${code} ${data.error?.message ?? ''}`.trim();
         if (isOpenAIQuotaExhausted(detail)) await markOpenAIDirectExhausted(detail);
+        if (response.status >= 500 && req.benignCharacterContent && !req.isNsfw) throw new FalImage25RequestError('OpenAI request outcome is unknown. Do not retry automatically or switch suppliers.');
         if (/moderation|content_policy|safety/i.test(`${code} ${data.error?.type ?? ''}`)) {
-          throw new FalImage25RequestError('The provider content checker rejected this request. It may concern the input image, prompt or generated result; the provider did not specify which. Do not retry automatically or switch models to bypass the rejection.');
+          if (code === 'moderation_blocked' && [400, 403, 422].includes(response.status)) throw new ImageProviderRefusalError('openai', code, requestId);
+          throw new FalImage25RequestError('The provider content checker rejected this request. Do not retry automatically or switch models.');
         }
         if (response.status === 401 || response.status === 403 || response.status === 429 || response.status >= 500 || isOpenAIQuotaExhausted(detail)) {
           throw new OpenAIImageFallbackError(`OpenAI unavailable (${detail.slice(0, 200)})`);
@@ -140,8 +145,10 @@ export function createOpenAIImage26Backend(model: Image26Id): ModelBackend {
 /**
  * GPT Image 2.6: the owner's direct OpenAI key first while its monthly budget
  * lasts, fal otherwise. Only refusals that never produced an image (quota,
- * auth, rate limit, outage) move to fal; validation and content-policy
- * rejections are returned as-is so a model or supplier switch never bypasses them.
+ * auth, rate limit, outage) move to fal as before. Character-recovery requests
+ * stop on unknown network/5xx outcomes rather than compounding them.
+ * Validation and content rejections propagate to the shared router, which owns
+ * the separately gated character recovery and never infers NSFW from a refusal.
  */
 export function createImage26Backend(model: Image26Id): ModelBackend {
   const openai = createOpenAIImage26Backend(model);

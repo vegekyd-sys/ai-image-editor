@@ -4,6 +4,7 @@ import type { GenerateImageRequest, ModelBackend } from './types';
 import { preserveGptImageOutput } from './gpt-image-output';
 import { normalizeOpenAIImageOutput } from './openai-image-output';
 import { parseImageDataUrl } from './image-data-url';
+import { ImageProviderRefusalError } from './image-provider-refusal';
 import { fitTransparentResultToAspectRatio, fitTransparentResultToSourceCanvas } from './transparent-source-canvas';
 
 import type { FalGptImageId } from './types';
@@ -14,7 +15,7 @@ export async function readFalImage25<T>(operation: () => Promise<T>, signal?: Ab
   for (let attempt = 0; ; attempt++) {
     try { return await operation(); }
     catch (error) {
-      if (error instanceof FalImage25RequestError || signal?.aborted || attempt >= 2) throw error;
+      if (error instanceof FalImage25RequestError || error instanceof ImageProviderRefusalError || signal?.aborted || attempt >= 2) throw error;
       await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
     }
   }
@@ -22,8 +23,8 @@ export async function readFalImage25<T>(operation: () => Promise<T>, signal?: Ab
 
 export function checkFalImage25Response(response: Response, data?: { detail?: { type?: string; loc?: (string | number)[]; msg?: string }[] }): void {
   if (response.ok) return;
-  if (data?.detail?.some(item => item.type === 'content_policy_violation')) {
-    throw new FalImage25RequestError('The provider content checker rejected this request. It may concern the input image, prompt or generated result; the provider did not specify which. Do not retry automatically or switch models to bypass the rejection.');
+  if ([400, 403, 422].includes(response.status) && data?.detail?.some(item => item.type === 'content_policy_violation')) {
+    throw new ImageProviderRefusalError('fal', 'content_policy_violation');
   }
   if (response.status === 429 || response.status >= 500) throw new Error(`Temporary provider response HTTP ${response.status}`);
   // Keep actionable parameter validation without echoing source URLs, prompt text or credentials.
@@ -150,7 +151,7 @@ export function createFalImage25Backend(model: FalGptImageId): ModelBackend {
       let stage = 'submission';
       try {
         // A single paid POST. Only poll the accepted request; never resubmit on timeout.
-        const submission = await fetch(`https://queue.fal.run/${endpoint}`, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(30000), redirect: 'error' });
+        const submission = await fetch(`https://queue.fal.run/${endpoint}`, { method: 'POST', headers, body: JSON.stringify(body), signal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000), redirect: 'error' });
         const task = await submission.json().catch(() => null);
         checkFalImage25Response(submission, task);
         if (typeof task?.request_id !== 'string' || !/^[a-z0-9-]{1,100}$/i.test(task.request_id)) throw new Error('Submission outcome unknown.');
@@ -160,7 +161,7 @@ export function createFalImage25Backend(model: FalGptImageId): ModelBackend {
         const acceptedUrl = new URL(task.response_url ?? `https://queue.fal.run/openai/gpt-image-${image26 ? '2.6' : '2.5'}/requests/${requestId}`);
         if (acceptedUrl.protocol !== 'https:' || acceptedUrl.hostname !== 'queue.fal.run' || acceptedUrl.username || acceptedUrl.password || acceptedUrl.search || ![`/openai/gpt-image-${image26 ? '2.6' : '2.5'}/requests/${requestId}`, `/${endpoint}/requests/${requestId}`].includes(acceptedUrl.pathname)) throw new Error('Unexpected accepted result URL.');
         const resultUrl = acceptedUrl.href;
-        const signal = AbortSignal.timeout(240000);
+        const signal = req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(240000)]) : AbortSignal.timeout(240000);
         stage = 'status';
         while (true) {
           const status = await readFalImage25(async () => {
@@ -210,6 +211,7 @@ export function createFalImage25Backend(model: FalGptImageId): ModelBackend {
         // fal supplies cost, not token counts. Do not invent token telemetry.
         return { image, taskId: requestId, provider: 'fal', usage: { modelId: model, inputTokens: 0, outputTokens: 0, provider: 'fal', providerCostUsd: cost } };
       } catch (error) {
+        if (error instanceof ImageProviderRefusalError) throw new ImageProviderRefusalError('fal', error.providerCode, requestId);
         console.warn(`[${model}] stage=${stage} request=${requestId ?? 'unknown'} errorType=${error instanceof Error ? error.name : 'unknown'}${error instanceof RangeError && error.message === 'Maximum call stack size exceeded' ? ' errorCode=stack_overflow' : ''}`);
         const reason = error instanceof FalImage25RequestError ? error.message : `The request did not complete successfully during ${stage}.`;
         throw new FalImage25RequestError(`${label}: ${reason}${requestId ? ` Request: ${requestId}.` : ''} No automatic retry; inspect the provider request before resubmitting.`);

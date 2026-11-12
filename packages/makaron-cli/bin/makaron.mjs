@@ -2086,6 +2086,8 @@ Options:
   --skill <id>              enhance, creative, wild, or captions.
   --image-resolution <id>  1K, 2K, or 4K; Auto chooses Nano Banana 2.1.
   --nsfw                  Route NSFW directly to Qwen Spicy.
+  --benign-character      Independently assessed harmless, nonsexual fictional-character artwork;
+                          allow one compatible alternate after a terminal Flare refusal.
   --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
   --background <mode>       auto, opaque, or transparent.
   --quality <tier>          auto, low, medium, high (2.6; default low).
@@ -3235,6 +3237,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
     else if (args[i] === '--aspect' && args[i + 1]) editArgs.aspectRatio = args[++i];
     else if (args[i] === '--nsfw') editArgs.isNsfw = true;
+    else if (args[i] === '--benign-character') editArgs.benignCharacterContent = true;
     else if (args[i] === '--background' && args[i + 1]) {
       const background = args[++i];
       if (!['auto', 'opaque', 'transparent'].includes(background)) {
