@@ -1,0 +1,32 @@
+{
+  "measuredAt": "2026-10-20T13:44:00Z",
+  "workerVersion": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+  "client": "Codex in-app browser using the editor shared download module through a local harness",
+  "scope": "Same browser and resource, serial requests; no competing benchmark. Product editor UI and native iPhone save were not manually exercised in this round.",
+  "results": [
+    {
+      "label": "candidate-single",
+      "seconds": 18.903,
+      "requests": 1,
+      "rangeRequests": 0,
+      "bytes": 142048671,
+      "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121"
+    },
+    {
+      "label": "candidate-parallel",
+      "seconds": 18.6596,
+      "requests": 35,
+      "rangeRequests": 35,
+      "bytes": 142048671,
+      "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121"
+    },
+    {
+      "label": "source-single",
+      "seconds": 19.2152,
+      "requests": 1,
+      "rangeRequests": 0,
+      "bytes": 142048671,
+      "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121"
+    }
+  ]
+}

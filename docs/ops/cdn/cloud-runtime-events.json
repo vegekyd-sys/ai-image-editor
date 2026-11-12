@@ -1,0 +1,1390 @@
+{
+  "capturedAt": "2026-10-20T13:47:35.261406+00:00",
+  "note": "Source URLs, headers and credentials omitted. responseBytes is declared body length, not billed egress. completedBytes confirms successful replica write. Successful client downloads are checked separately.",
+  "invocations": [
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 2020,
+      "wallMs": 24943,
+      "outcome": "exceededCpu",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 142048671,
+          "range": false
+        }
+      ],
+      "exceptionNames": [
+        "Error",
+        "Error",
+        "Error"
+      ]
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 2020,
+      "wallMs": 12922,
+      "outcome": "exceededCpu",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 142048671,
+          "range": false
+        }
+      ],
+      "exceptionNames": [
+        "Error",
+        "Error",
+        "Error"
+      ]
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 4,
+      "wallMs": 210,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "GET",
+          "status": 206,
+          "responseBytes": 35512167,
+          "range": true
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 9,
+      "wallMs": 22742,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "GET",
+          "status": 206,
+          "responseBytes": 35512168,
+          "range": true
+        },
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 142048671,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 8,
+      "wallMs": 23559,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "GET",
+          "status": 206,
+          "responseBytes": 35512168,
+          "range": true
+        },
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 142048671,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 14,
+      "wallMs": 25529,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "GET",
+          "status": 206,
+          "responseBytes": 35512168,
+          "range": true
+        },
+        {
+          "event": "media-origin",
+          "key": "6bb42a0839206b37",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 142048671,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 1160,
+      "wallMs": 9816,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "b3d5118d6b5d8cbb",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "b3d5118d6b5d8cbb",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 19726445,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 10,
+      "wallMs": 379,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "b3d5118d6b5d8cbb",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 4,
+      "wallMs": 196,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "b3d5118d6b5d8cbb",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 9,
+      "wallMs": 235,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "b3d5118d6b5d8cbb",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 2,
+      "wallMs": 148,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "b3d5118d6b5d8cbb",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "30aab9be-e817-440d-886b-27984050e177",
+      "cpuMs": 2,
+      "wallMs": 151,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "b3d5118d6b5d8cbb",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 19,
+      "wallMs": 30896,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 142048671,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 142048671,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 2,
+      "wallMs": 118,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "2677ae45228a9c04",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 6,
+      "wallMs": 11143,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 3,
+      "wallMs": 383,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 10,
+      "wallMs": 13867,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 6,
+      "wallMs": 15315,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 11,
+      "wallMs": 14553,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 18,
+      "wallMs": 6999,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "843dfd78973cf2ac",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "843dfd78973cf2ac",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 19726445,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "843dfd78973cf2ac",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 19726445,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 5,
+      "wallMs": 177,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "843dfd78973cf2ac",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 3,
+      "wallMs": 103,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "843dfd78973cf2ac",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 3,
+      "wallMs": 114,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "843dfd78973cf2ac",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 3,
+      "wallMs": 91,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "843dfd78973cf2ac",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "4869c199-ff74-4053-a6bc-9997b1e85dd6",
+      "cpuMs": 2,
+      "wallMs": 51,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "843dfd78973cf2ac",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 14,
+      "wallMs": 3915,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "ab2d7b6927f62778",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "ab2d7b6927f62778",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 35642735,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "ab2d7b6927f62778",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 35642735,
+          "range": false
+        },
+        {
+          "event": "media-replica",
+          "key": "ab2d7b6927f62778",
+          "completedBytes": 35642735
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 7,
+      "wallMs": 4584,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "c4f3c06d172f5cc0",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "c4f3c06d172f5cc0",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 46635423,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "c4f3c06d172f5cc0",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 46635423,
+          "range": false
+        },
+        {
+          "event": "media-replica",
+          "key": "c4f3c06d172f5cc0",
+          "completedBytes": 46635423
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 13,
+      "wallMs": 4571,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "12d97d53d7874e91",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "12d97d53d7874e91",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 53969381,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "12d97d53d7874e91",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 53969381,
+          "range": false
+        },
+        {
+          "event": "media-replica",
+          "key": "12d97d53d7874e91",
+          "completedBytes": 53969381
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 4,
+      "wallMs": 2323,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "843dfd78973cf2ac",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 10,
+      "wallMs": 7581,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "f8b7f6632925f853",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "f8b7f6632925f853",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 28804727,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "f8b7f6632925f853",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 28804727,
+          "range": false
+        },
+        {
+          "event": "media-replica",
+          "key": "f8b7f6632925f853",
+          "completedBytes": 28804727
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 6,
+      "wallMs": 3146,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "ae7857bdf6b667c6",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "ae7857bdf6b667c6",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 43381554,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "ae7857bdf6b667c6",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 43381554,
+          "range": false
+        },
+        {
+          "event": "media-replica",
+          "key": "ae7857bdf6b667c6",
+          "completedBytes": 43381554
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 14,
+      "wallMs": 10267,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "cf603e2a759ca500",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "cf603e2a759ca500",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 60588417,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "cf603e2a759ca500",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 60588417,
+          "range": false
+        },
+        {
+          "event": "media-replica",
+          "key": "cf603e2a759ca500",
+          "completedBytes": 60588417
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 5,
+      "wallMs": 11400,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 5,
+      "wallMs": 3555,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "96f04b4e1a4ca991",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "96f04b4e1a4ca991",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 58283510,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "96f04b4e1a4ca991",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 58283510,
+          "range": false
+        },
+        {
+          "event": "media-replica",
+          "key": "96f04b4e1a4ca991",
+          "completedBytes": 58283510
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 5,
+      "wallMs": 5160,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "a7ecd6b5547d25aa",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "a7ecd6b5547d25aa",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 76534670,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "a7ecd6b5547d25aa",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 76534670,
+          "range": false
+        },
+        {
+          "event": "media-replica",
+          "key": "a7ecd6b5547d25aa",
+          "completedBytes": 76534670
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 6,
+      "wallMs": 1101,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "5e1685ca91efc5e1",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "5e1685ca91efc5e1",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 433683,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "5e1685ca91efc5e1",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 433683,
+          "range": false
+        },
+        {
+          "event": "media-replica",
+          "key": "5e1685ca91efc5e1",
+          "completedBytes": 433683
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 3,
+      "wallMs": 1036,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "5e1685ca91efc5e1",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 7,
+      "wallMs": 210,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "5e1685ca91efc5e1",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 18,
+      "wallMs": 1199,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "2677ae45228a9c04",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "2677ae45228a9c04",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 97559,
+          "range": false
+        },
+        {
+          "event": "media-origin",
+          "key": "2677ae45228a9c04",
+          "method": "GET",
+          "status": 200,
+          "responseBytes": 97559,
+          "range": false
+        },
+        {
+          "event": "media-replica",
+          "key": "2677ae45228a9c04",
+          "completedBytes": 97559
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 4,
+      "wallMs": 487,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "2677ae45228a9c04",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 4,
+      "wallMs": 140,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "2677ae45228a9c04",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 7,
+      "wallMs": 11935,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 2,
+      "wallMs": 291,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 2,
+      "wallMs": 397,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 2,
+      "wallMs": 389,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 4,
+      "wallMs": 487,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 2,
+      "wallMs": 214,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 2,
+      "wallMs": 221,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 2,
+      "wallMs": 251,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 2,
+      "wallMs": 254,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 2,
+      "wallMs": 248,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 3,
+      "wallMs": 209,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 1,
+      "wallMs": 227,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 1,
+      "wallMs": 135,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 2,
+      "wallMs": 136,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 5,
+      "wallMs": 13282,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 1,
+      "wallMs": 110,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 1,
+      "wallMs": 135,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 1,
+      "wallMs": 136,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 1,
+      "wallMs": 128,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 1,
+      "wallMs": 130,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    },
+    {
+      "version": "b9b110ab-73fe-4fde-8a2b-13827b931bff",
+      "cpuMs": 2,
+      "wallMs": 104,
+      "outcome": "ok",
+      "events": [
+        {
+          "event": "media-origin",
+          "key": "9e61ed994e213422",
+          "method": "HEAD",
+          "status": 200,
+          "responseBytes": 0,
+          "range": false
+        }
+      ],
+      "exceptionNames": []
+    }
+  ]
+}

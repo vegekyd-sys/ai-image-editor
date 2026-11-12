@@ -1,0 +1,44 @@
+{
+  "runtime": "Local workerd with local R2 and Cache API, real Supabase origin",
+  "date": "2026-10-20",
+  "speed_claim": false,
+  "image": [
+    {
+      "mode": "source",
+      "status": 200,
+      "bytes": 433683,
+      "sha256": "c17cbc7d788148a2a45ccfbdf6dafce83956382604d3a4c1aff500aed2748722",
+      "cache": null
+    },
+    {
+      "mode": "cold",
+      "status": 200,
+      "bytes": 433683,
+      "sha256": "c17cbc7d788148a2a45ccfbdf6dafce83956382604d3a4c1aff500aed2748722",
+      "cache": "MISS"
+    },
+    {
+      "mode": "warm",
+      "status": 200,
+      "bytes": 433683,
+      "sha256": "c17cbc7d788148a2a45ccfbdf6dafce83956382604d3a4c1aff500aed2748722",
+      "cache": "HIT"
+    }
+  ],
+  "video": {
+    "bytes": 19726445,
+    "sha256": "a393f0c381180afd71392ade7d554d3b250b313336e8bbe411904598e24368d7",
+    "cold": "MISS",
+    "warm": "HIT",
+    "range": {
+      "status": 206,
+      "contentRange": "bytes 100-1099/19726445",
+      "cache": "HIT"
+    },
+    "originResponses": {
+      "HEAD": 3,
+      "GET": 1,
+      "completedGETBytes": 19726445
+    }
+  }
+}

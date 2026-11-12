@@ -1,0 +1,54 @@
+[
+  {
+    "index": 2,
+    "repeat": 1,
+    "mode": "full",
+    "started_unix": 1792492930.294359,
+    "host": "cdn.makaron.app",
+    "path": "/storage/v1/object/public/images/8725d1da-a11b-4948-b38e-524dd64b2440/workspace/96af1ad8-9848-4675-a764-0df144c3b246/media/remotion-waysun-first-gate-9x16-104784aa.mp4",
+    "exit_code": 0,
+    "error": "",
+    "http_code": 200,
+    "time_namelookup": 0.002767,
+    "time_connect": 0.00323,
+    "time_appconnect": 0.267053,
+    "time_starttransfer": 0.408335,
+    "time_total": 20.12677,
+    "size_download": 46635423,
+    "speed_download": 2317084,
+    "headers": {
+      "content-type": "video/mp4",
+      "content-length": "46635423",
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=14400",
+      "cf-cache-status": "HIT",
+      "cf-ray": "a4d76a113c9bdeb7-NRT",
+      "age": "349",
+      "etag": "\"fb138c65b8d0c206ef2576ecbb0e894f-9\"",
+      "access-control-allow-origin": "*"
+    },
+    "expected_bytes": 46635423,
+    "size_matches": true,
+    "sha256": "8e3c4c5c0968fc9fc3c12ede3a8cfd116bd4b94ece61d0aa70282eb4f76f34bd",
+    "probe_exit_code": 0,
+    "media": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "codec_name": "h264",
+          "width": 1080,
+          "height": 1920
+        },
+        {
+          "codec_name": "aac"
+        }
+      ],
+      "format": {
+        "duration": "24.042667",
+        "size": "46635423",
+        "bit_rate": "15517554"
+      }
+    }
+  }
+]
