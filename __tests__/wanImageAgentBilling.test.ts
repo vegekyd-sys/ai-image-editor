@@ -327,11 +327,11 @@ describe('Seedream 5.5 Agent billing integration', () => {
     const {tool,ctx,getTokenRate,editImage,requireCredits,deductByTokens,deductCredits}=setup();ctx.preferredModel='seedream-5.5';
     ctx.snapshotImages=['https://example.com/base.png','https://example.com/ref.png'];
     getTokenRate.mockResolvedValue({model_id:'seedream-5.5',markup:2,is_active:true});
-    editImage.mockResolvedValue({success:true,image:'data:image/png;base64,YQ==',usedModel:'seedream-5.5',provider:'wavespeed',taskId:'seedream-task',usage:{modelId:'seedream-5.5',inputTokens:0,outputTokens:0,providerCostUsd:0.036}});
+    editImage.mockResolvedValue({success:true,image:'data:image/png;base64,YQ==',usedModel:'seedream-5.5',provider:'evolink',taskId:'seedream-task',usage:{modelId:'seedream-5.5',inputTokens:0,outputTokens:0,providerCostUsd:0.0288}});
     expect((await tool.execute({editPrompt:'Only edit the hat',media_index:1,reference_media_indices:[2],imageResolution:'1K',outputFormat:'png'})).success).toBe(true);
-    expect(requireCredits).toHaveBeenCalledWith('test-user',8);
-    expect(deductByTokens).toHaveBeenCalledExactlyOnceWith('test-user','generate_image','seedream-5.5',0,0,undefined,undefined,undefined,0.036);
+    expect(requireCredits).toHaveBeenCalledWith('test-user',6);
+    expect(deductByTokens).toHaveBeenCalledExactlyOnceWith('test-user','generate_image','seedream-5.5',0,0,undefined,undefined,undefined,0.0288);
     expect(deductCredits).not.toHaveBeenCalled();
-    expect((ctx as any).generatedImageMetadata.get(0).imageGeneration).toMatchObject({model:'seedream-5.5',provider:'wavespeed',providerModel:'bytedance/seedream-v5.5/edit'});
+    expect((ctx as any).generatedImageMetadata.get(0).imageGeneration).toMatchObject({model:'seedream-5.5',provider:'evolink',providerModel:'doubao-seedream-5.5'});
   });
 });

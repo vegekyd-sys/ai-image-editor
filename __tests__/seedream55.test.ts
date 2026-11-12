@@ -7,10 +7,10 @@ import { buildSeedream55Request, estimateSeedream55Credits, querySeedream55Task,
 import { DEFAULT_IMAGE_MODEL, planImageGeneration } from '@/lib/image-model-capabilities';
 import { editImage } from '@/lib/skills/edit-image';
 
-const model = 'bytedance/seedream-v5.5';
-const task = (status = 'completed', endpoint = model) => ({ code: 200, data: { id: 'receipt-55', model: endpoint, status, outputs: ['https://images.wavespeed.ai/result.png'] } });
+const model = 'doubao-seedream-5.5';
+const task = (status = 'completed', endpoint = model) => ({ id: 'receipt-55', model: endpoint, status, results: ['https://files.evolink.ai/result.png'] });
 beforeEach(async () => {
-  vi.stubEnv('WAVESPEED_API_KEY', 'test-secret');
+  vi.stubEnv('EVOLINK_API_KEY', 'test-secret');
   state.read.mockReset().mockResolvedValue(await sharp({ create: { width: 32, height: 32, channels: 4, background: { r: 120, g: 30, b: 220, alpha: 0.5 } } }).png().toBuffer());
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
@@ -22,11 +22,11 @@ describe('Seedream 5.5 explicit candidate', () => {
     expect(planImageGeneration({ prompt: 'cutout', model: 'seedream-5.5', outputFormat: 'png', background: 'transparent', imageResolution: '1.5K' }).model).toBe('seedream-5.5');
   });
   it('preserves the original prompt and base/reference order; edit ratio omission stays omitted', () => {
-    const request = buildSeedream55Request({ prompt: 'Only change the hat. 其余保持。', image: 'base', references: [{ url: 'reference', role: 'identity' }] });
-    expect(request.model).toBe(`${model}/edit`);
-    expect(request.body).toEqual({ prompt: 'Only change the hat. 其余保持。', images: ['base', 'reference'], resolution: '1k', output_format: 'png', background: 'auto' });
-    expect(request.costUsd).toBe(0.036);
-    expect(buildSeedream55Request({ prompt: 'new scene' }).body.aspect_ratio).toBe('1:1');
+    const request = buildSeedream55Request({ prompt: 'Only change the hat. 其余保持。', image: 'https://example.com/base.png', references: [{ url: 'https://example.com/reference.png', role: 'identity' }] });
+    expect(request.model).toBe(model);
+    expect(request.body).toEqual({ model, prompt: 'Only change the hat. 其余保持。', image_urls: ['https://example.com/base.png', 'https://example.com/reference.png'], size: 'auto', quality: '1K', prompt_priority: 'standard', output_format: 'png', background: 'auto', watermark: false });
+    expect(request.costUsd).toBe(0.0288);
+    expect(buildSeedream55Request({ prompt: 'new scene' }).body.size).toBe('1:1');
   });
   it.each([
     { outputFormat: 'gif' }, { outputFormat: 'webp' }, { outputFormat: 'svg' },
@@ -37,9 +37,9 @@ describe('Seedream 5.5 explicit candidate', () => {
     expect(() => planImageGeneration({ prompt: 'asset', model: 'seedream-5.5', ...options })).toThrow();
   });
   it('prices every native tier plus every input; credit rounding matches final tariff', () => {
-    expect(['1K', '1.5K', '2K', '3K'].map(tier => seedream55CostUsd(tier))).toEqual([0.02, 0.02, 0.027, 0.054]);
-    expect(seedream55CostUsd('3K', 10)).toBe(0.134);
-    expect(estimateSeedream55Credits({ imageResolution: '3K', imageInputCount: 2 }, 2)).toBe(14);
+    expect(['1K', '1.5K', '2K'].map(tier => seedream55CostUsd(tier))).toEqual([0.016, 0.016, 0.028]);
+    expect(seedream55CostUsd('2K', 10)).toBe(0.092);
+    expect(() => seedream55CostUsd('3K')).toThrow();
     expect(estimateSeedream55Credits({ imageResolution: '2K', imageInputCount: 2 }, 2)).toBe(9);
     expect(() => seedream55CostUsd('4K')).toThrow();
     expect(() => estimateSeedream55Credits({}, 0)).toThrow();
@@ -48,18 +48,18 @@ describe('Seedream 5.5 explicit candidate', () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json(task())); vi.stubGlobal('fetch', fetcher);
     const result = await seedream55Backend.generate({ prompt: 'asset', background: 'transparent' });
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher.mock.calls[0][0]).toBe(`https://api.wavespeed.ai/api/v3/${model}`);
+    expect(fetcher.mock.calls[0][0]).toBe('https://api.evolink.ai/v1/images/generations');
     expect(result.image).toBe(`data:image/png;base64,${(await state.read.mock.results[0].value).toString('base64')}`);
-    expect(result).toMatchObject({ taskId: 'receipt-55', provider: 'wavespeed', usage: { modelId: 'seedream-5.5', providerCostUsd: 0.02 } });
+    expect(result).toMatchObject({ taskId: 'receipt-55', provider: 'evolink', usage: { modelId: 'seedream-5.5', providerCostUsd: 0.016 } });
   });
   it('saves the accepted receipt BEFORE any polling and never follows provider-supplied query URLs', async () => {
     vi.useFakeTimers();
     const events: string[] = [];
-    const fetcher = vi.fn().mockImplementationOnce(async () => { events.push('POST'); return Response.json(task('processing')); }).mockImplementationOnce(async url => { events.push('GET'); expect(url).toBe('https://api.wavespeed.ai/api/v3/predictions/receipt-55/result'); return Response.json(task()); });
+    const fetcher = vi.fn().mockImplementationOnce(async () => { events.push('POST'); return Response.json(task('processing')); }).mockImplementationOnce(async url => { events.push('GET'); expect(url).toBe('https://api.evolink.ai/v1/tasks/receipt-55'); return Response.json(task()); });
     vi.stubGlobal('fetch', fetcher);
     const generating = seedream55Backend.generate({ prompt: 'asset', onSeedream55Receipt: async () => { events.push('saved'); } });
     await vi.runAllTimersAsync(); await generating;
-    expect(events).toEqual(['POST', 'saved', 'GET']);
+    expect(events).toEqual(['POST', 'saved', 'GET', 'saved']);
   });
   it('surfaces the accepted task if persistence fails, without polling or submitting again', async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json(task('processing'))); vi.stubGlobal('fetch', fetcher);
@@ -79,7 +79,7 @@ describe('Seedream 5.5 explicit candidate', () => {
     expect((await querySeedream55Task('receipt-55')).status).toBe('completed');
     expect(fetcher.mock.calls[0][1]).not.toHaveProperty('method', 'POST');
     await expect(querySeedream55Task('../other')).rejects.toThrow('Invalid task ID');
-    fetcher.mockResolvedValue(Response.json({ code: 200, data: { ...task().data, id: 'someone-else' } }));
+    fetcher.mockResolvedValue(Response.json({ ...task(), id: 'someone-else' }));
     await expect(querySeedream55Task('receipt-55')).rejects.toThrow('mismatched');
   });
   it('refuses a painted opaque PNG for transparent output, and keeps its recoverable ID', async () => {
@@ -94,7 +94,7 @@ describe('Seedream 5.5 explicit candidate', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
   it('does not submit when credentials are absent', async () => {
-    vi.stubEnv('WAVESPEED_API_KEY', ''); const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    vi.stubEnv('EVOLINK_API_KEY', ''); const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
     expect(seedream55Backend.canHandle({ prompt: 'asset' })).toBe(false);
     await expect(editImage({ editPrompt: 'asset', preferredModel: 'seedream-5.5' }, {})).resolves.toMatchObject({ success: false });
     expect(fetcher).not.toHaveBeenCalled();
