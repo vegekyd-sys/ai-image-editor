@@ -6,7 +6,7 @@ export class ImageProviderRefusalError extends Error {
     public readonly providerCode: string,
     public readonly requestId?: string,
   ) {
-    super('The provider content checker rejected this request. Do not retry automatically; only the bounded benign-character recovery policy may select another compatible model.');
+    super('The provider content checker rejected this request. Do not retry automatically, rewrite the prompt to evade it, or switch models.');
     this.name = 'ImageProviderRefusalError';
   }
 }

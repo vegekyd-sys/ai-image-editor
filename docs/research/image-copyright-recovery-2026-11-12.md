@@ -2,6 +2,8 @@
 
 日期：2026-11-12。当前已完成独立供应商实测和本地候选实现，未发布。原始研究基线 `fbc7daac`，工作分支 `codex/image-refusal-recovery`。所有真实图片测试只使用公开虚构角色描述，不读写生产项目、会话或 NSFW 状态；候选验收的应用成本账本也替换成内存桩。
 
+后续新增角色测试及真实 CLI → Agent → 图片交付/计费验收见 [最终验收报告](image-copyright-cli-final-acceptance-2026-11-12.md)。后续 CLI 使用专用测试项目、真实鉴权/持久化/计费，和本页早期供应商直连实验分开记录。
+
 ## 实测结果与最终实现
 
 固定两条英文描述：单只皮卡丘坐在花园木桌上拿苹果；皮卡丘、妙蛙种子、小火龙、杰尼龟在湖边野餐。每条描述、每个模型独立测 3 次。Flare 使用 direct OpenAI，1K、low、high complexity；2.1 使用 OpenRouter `/images`、1K；老版 Nano Banana 2 使用 OpenRouter chat completions、minimal reasoning，保持当前经典适配器的 system prompt。两种 Nano API 的实际调用合同并非完全相同。
@@ -28,10 +30,10 @@ Flare 7 次拒绝（含候选验收）均为 `moderation_blocked`，没有给出
 - Agent/MCP 工具增加独立的 `benignCharacterContent` 语义判断：仅当调用方事先确认请求和所有输入图均为普通、非色情、无害的虚构角色创作时设置。不能从供应商拒绝反推该判断；用户要求只用一个模型时不设置。
 - NSFW 判断、单向保持逻辑、Spicy 路由、历史 `contentBlocked` 兼容逻辑均未改动。`isNsfw=true` 优先于新字段；新链路不设置 `contentBlocked`，不改写 NSFW 项目/会话状态。
 - 仅对 Flare 的结构化终态拒绝尝试一个 Nano 2.1；普通错误、空输出、超时/未知结果、图片已生成后的解码/保存/结算错误不重生。备用失败也不再重试。
-- 备用保留 prompt、源图、参考图及顺序、比例与分辨率；透明、GIF/SVG、JPEG/WebP 显式格式、显式质量/推理档位等无法等价满足的要求不切换。原生 PNG 可切换并检查实际输出 MIME。超过 14 张输入也不切换。
-- 恢复在一次共享工具调用内完成，中间不返回失败给 Agent；现有生成中状态持续到最终结果，不额外新增界面文案。
+- 备用保留 prompt、源图、参考图及顺序、比例与分辨率；透明、GIF/SVG、JPEG/WebP 显式格式、显式质量/推理档位等无法等价满足的要求不切换。明确要求 PNG 时，将备用 JPEG/WebP 的解码像素无损编码成 PNG。超过 14 张输入也不切换。
+- 恢复在一次共享工具调用内完成，中间不返回失败给 Agent；生成中状态持续到最终结果，耗尽时通过现有 terminal 合同提供四语言友好说明。
 - 新增备用提交前的独立价格/余额预检；只结算最终成功结果一次，按最终模型现有费率，不承诺固定在原模型估价内。拒绝成本保留未知，不宣称免费。270 秒总预算、取消信号和提交前剩余至少 30 秒的检查限制恢复。
-- 收紧 direct OpenAI 的网络异常和 5xx：结果未知时不转 fal，避免原有供应商 fallback 误触发重复付费。
+- 仅在新增角色恢复路径中收紧 direct OpenAI 的网络异常和 5xx：结果未知时不转 fal。普通图片原有的供应商故障切换保持原样。
 
 实施范围是主 Agent/CUI、共享 `editImage` 与 MCP；CLI chat 走同一 Agent，直接 MCP 调用需提供独立语义判断。现有 GUI Tips Preview 的独立 Nano → Spicy 链路未改动，未对其宣称新的恢复行为。没有新增数据库迁移、完整跨进程恢复或重连幂等合同，仍复用现有 Agent 工具守卫；备用前价格预检也沿用现有估算，最终按供应商实际 usage 结算。
 
