@@ -127,6 +127,9 @@ importers:
       '@remotion/renderer':
         specifier: 4.0.527
         version: 4.0.527(patch_hash=6e7963671e8bd5725d526c3e6d766420d338a2f74f47998802e3606fdb2bf4ad)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      '@remotion/three':
+        specifier: 4.0.527
+        version: 4.0.527(@react-three/fiber@9.5.0(@types/react@19.2.13)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(three@0.183.2))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(remotion@4.0.527(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(three@0.183.2)
       '@remotion/vercel':
         specifier: 4.0.527
         version: 4.0.527(@vercel/sandbox@1.9.3)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -1521,6 +1524,15 @@ packages:
         optional: true
       '@remotion/whisper-webgpu':
         optional: true
+
+  '@remotion/three@4.0.527':
+    resolution: {integrity: sha512-K/IrMWPJ5ld2aD3JjWnWBxnuib4inVgcHvM08iW40e8kY3dvhyqhj3BpqaRlzdis3vM3F+xNINByvNIXr2BTDA==}
+    peerDependencies:
+      '@react-three/fiber': '>=8.0.0'
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
+      remotion: 4.0.527
+      three: '>=0.137.0'
 
   '@remotion/timeline-utils@4.0.527':
     resolution: {integrity: sha512-Ifv2idMnQgGHfKS86nzLQ6H1bPYarZlqir+NJWAvjTcMHIRiyj9bKEJV/nu+y7mWpl3NhNsGRTXRmHuXoUx09A==}
@@ -7718,6 +7730,14 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  '@remotion/three@4.0.527(@react-three/fiber@9.5.0(@types/react@19.2.13)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(three@0.183.2))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(remotion@4.0.527(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(three@0.183.2)':
+    dependencies:
+      '@react-three/fiber': 9.5.0(@types/react@19.2.13)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(three@0.183.2)
+      react: 19.2.3
+      react-dom: 19.2.3(react@19.2.3)
+      remotion: 4.0.527(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      three: 0.183.2
 
   '@remotion/timeline-utils@4.0.527(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:

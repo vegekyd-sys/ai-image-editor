@@ -21,8 +21,16 @@ describe('Remotion Lambda runtime marker', () => {
       fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION,
       editableRuntimeVersion: REMOTION_EDITABLE_RUNTIME_VERSION,
       remotionVersion: REMOTION_VERSION,
+      threeCanvasVersion: 1,
     });
     expect(() => assertRemotionRuntimeMarker(marker, serveUrl)).not.toThrow();
+  });
+
+  it('requires the ThreeCanvas ABI only for compositions using it', () => {
+    const legacy = { ...marker, threeCanvasVersion: undefined };
+    expect(() => assertRemotionRuntimeMarker(legacy, serveUrl)).not.toThrow();
+    expect(() => assertRemotionRuntimeMarker(legacy, serveUrl, true)).toThrow('ThreeCanvas');
+    expect(() => assertRemotionRuntimeMarker(marker, serveUrl, true)).not.toThrow();
   });
 
   it('rejects the legacy font-only marker that lacks the editable runtime ABI', () => {

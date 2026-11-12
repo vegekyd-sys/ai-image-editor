@@ -41,6 +41,25 @@ Remote image/video URLs in `props` are preferred and do not make the payload mea
 
 Do not use this prompt for static posters, infographics, e-commerce pages, or ordinary layout images unless the user explicitly asks for editable code or animation.
 
+## Spatial shots and motion references
+
+Use the injected `ThreeCanvas` and `THREE` when depth, occlusion, parallax, or camera movement helps the viewer understand the shot. Mix a 3D subject with editable Remotion text outside the canvas when useful. Agent chooses geometry, materials, lighting, framing, timing and which shots benefit. For example, inside Composition:
+
+```jsx
+const frame = useCurrentFrame();
+const { width, height } = useVideoConfig();
+return <ThreeCanvas width={width} height={height} camera={{ position: [0, 0, 5] }}>
+  <ambientLight intensity={0.7} />
+  <directionalLight position={[3, 4, 5]} intensity={2} />
+  <mesh rotation={[0.25, frame / 50, 0]}>
+    <boxGeometry args={[2, 1, 1]} />
+    <meshStandardMaterial color="#dd6928" />
+  </mesh>
+</ThreeCanvas>;
+```
+
+Canvas width and height are pixels. Size geometry, lights and camera paths in consistent world units. Check the first, closest and final poses for clipping and camera direction. Drive every transform, shader uniform and camera move from the composition frame so seeking directly reproduces the pose. A child component inside the canvas can use the injected `useThree` hook to access the active camera. Use `layout="none"` for Sequences inside ThreeCanvas. Prefer the supplied canvas capture settings. For a video-model reference, render a clean plate with the requested camera path, subject action and timing. Preview representative poses, publish the reviewed draft, then use `materialize_media` and wait for the completed video timeline entry. Use that video's Media Index in a reference-capable model workflow when generation is requested.
+
 ## Canvas Aspect Contract
 
 The user's explicit output aspect owns the Remotion canvas, even when every source video has a different aspect. For example, landscape footage requested as a 9:16 TikTok must return `width: 1080, height: 1920`; pass `target_aspect_ratio: "9:16"` on every `run_code` execution or patch. Preserve the footage proportions with `contain` and an intentional background (same-source blur or brand fill); crop only when authorized. A canvas mismatch is repaired in the saved composition, not by switching to FFmpeg.

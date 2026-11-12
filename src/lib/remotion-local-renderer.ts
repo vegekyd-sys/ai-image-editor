@@ -1,3 +1,4 @@
+import { remotionChromiumOptions } from './remotion-gl'
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync, mkdirSync, promises as fs } from 'node:fs'
 import http from 'node:http'
@@ -250,10 +251,7 @@ export async function renderDesignVideoLocal(
   const concurrency = resolveLocalConcurrency(options.concurrency ?? process.env.REMOTION_LOCAL_CONCURRENCY)
   const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE || undefined
   const chromeMode = resolveChromeMode(browserExecutable)
-  const chromiumOptions = {
-    gl: null,
-    disableWebSecurity: true,
-  }
+  const chromiumOptions = remotionChromiumOptions(design.code)
 
   const resolvedDesign = await localizeVideos(design, cacheDir, mediaServerPort)
   const serveUrl = await getBundleUrl()
@@ -348,10 +346,7 @@ export async function renderDesignFrameLocal(
   const mediaServerPort = options.mediaServerPort || Number(process.env.REMOTION_LOCAL_MEDIA_PORT || 5123)
   const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE || undefined
   const chromeMode = resolveChromeMode(browserExecutable)
-  const chromiumOptions = {
-    gl: null,
-    disableWebSecurity: true,
-  }
+  const chromiumOptions = remotionChromiumOptions(design.code)
 
   const resolvedDesign = await localizeVideos(design, cacheDir, mediaServerPort)
   const serveUrl = await getBundleUrl()

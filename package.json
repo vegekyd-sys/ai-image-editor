@@ -105,6 +105,7 @@
     "@remotion/paths": "4.0.527",
     "@remotion/player": "4.0.527",
     "@remotion/renderer": "4.0.527",
+    "@remotion/three": "4.0.527",
     "@remotion/vercel": "4.0.527",
     "@remotion/web-renderer": "4.0.527",
     "@supabase/ssr": "^0.8.0",

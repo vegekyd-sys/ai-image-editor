@@ -44,7 +44,7 @@ export function isDirectRemotionCompositionSource(code: string): boolean {
 
 // Common names made available through DynamicDesign's open runtime scope.
 export const DYNAMIC_DESIGN_SCOPE_NAMES = [
-  'React', 'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'THREE',
+  'React', 'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'THREE', 'ThreeCanvas', 'useThree',
   'Composition', 'AbsoluteFill', 'Audio', 'Video', 'OffthreadVideo', 'Sequence',
   'Series', 'Img', 'IFrame', 'Folder', 'Still', 'Freeze', 'Loop',
   'Html5Audio', 'Html5Video', 'AnimatedImage', 'useCurrentFrame', 'useVideoConfig',

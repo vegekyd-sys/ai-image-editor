@@ -1,3 +1,4 @@
+import { remotionChromiumOptions, usesThreeCanvas } from './remotion-gl'
 import { randomUUID } from 'node:crypto'
 import { VERSION as REMOTION_VERSION } from 'remotion/version'
 import type { DesignPayload } from '@/types'
@@ -157,10 +158,14 @@ const runtimeMarkerCache = new Map<string, Promise<void>>()
 export function assertRemotionRuntimeMarker(
   marker: unknown,
   serveUrl: string,
+  needsThreeCanvas = false,
 ): void {
   const value = marker && typeof marker === 'object'
     ? marker as Record<string, unknown>
     : {}
+  if (needsThreeCanvas && value.threeCanvasVersion !== 1) {
+    throw new Error('Remotion render site lacks ThreeCanvas support. Deploy the matching render bundle before exporting this composition.')
+  }
   if (value.runtimeVersion !== REMOTION_FONT_RUNTIME_VERSION
     || value.fontCatalogVersion !== REMOTION_FONT_CATALOG_VERSION
     || value.editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION
@@ -173,9 +178,10 @@ export function assertRemotionRuntimeMarker(
   }
 }
 
-async function assertPinnedRemotionRuntime(serveUrl: string): Promise<void> {
+async function assertPinnedRemotionRuntime(serveUrl: string, needsThreeCanvas: boolean): Promise<void> {
   const markerUrl = new URL('public/remotion-runtime.json', serveUrl).href
-  let pending = runtimeMarkerCache.get(markerUrl)
+  const cacheKey = needsThreeCanvas ? markerUrl + '#three' : markerUrl
+  let pending = runtimeMarkerCache.get(cacheKey)
   if (!pending) {
     pending = (async () => {
       const response = await fetch(markerUrl, { cache: 'no-store' })
@@ -185,14 +191,14 @@ async function assertPinnedRemotionRuntime(serveUrl: string): Promise<void> {
           + 'Deploy the current Remotion runtime and update REMOTION_LAMBDA_SERVE_URL.',
         )
       }
-      assertRemotionRuntimeMarker(await response.json(), serveUrl)
+      assertRemotionRuntimeMarker(await response.json(), serveUrl, needsThreeCanvas)
     })()
-    runtimeMarkerCache.set(markerUrl, pending)
+    runtimeMarkerCache.set(cacheKey, pending)
   }
   try {
     await pending
   } catch (error) {
-    runtimeMarkerCache.delete(markerUrl)
+    runtimeMarkerCache.delete(cacheKey)
     throw error
   }
 }
@@ -512,7 +518,7 @@ export async function renderDesignVideoLambdaToUrl(
   const functionName = lambdaEnv('REMOTION_LAMBDA_FUNCTION_NAME')
   const rendererFunctionName = readEnv('REMOTION_LAMBDA_RENDERER_FUNCTION_NAME')
   const serveUrl = lambdaEnv('REMOTION_LAMBDA_SERVE_URL')
-  await assertPinnedRemotionRuntime(serveUrl)
+  await assertPinnedRemotionRuntime(serveUrl, usesThreeCanvas(design.code))
   const fps = design.animation?.fps || 30
   const dur = design.animation?.durationInSeconds || 1 / fps
   const durationInFrames = Math.max(1, Math.round(fps * dur))
@@ -587,7 +593,7 @@ export async function renderDesignVideoLambdaToUrl(
         framesPerLambda,
         concurrency,
         concurrencyPerLambda: readPositiveInteger(readEnv('REMOTION_LAMBDA_CONCURRENCY_PER_LAMBDA'), 1),
-        chromiumOptions: { disableWebSecurity: true, gl: null },
+        chromiumOptions: remotionChromiumOptions(design.code),
         muted: !hasAudioSources,
         audioCodec: hasAudioSources ? 'aac' : null,
         jpegQuality,

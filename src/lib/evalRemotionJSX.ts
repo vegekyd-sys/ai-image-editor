@@ -21,7 +21,7 @@ import * as Remotion from 'remotion';
 import { Audio, Video } from '@remotion/media';
 import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
-import * as THREE from 'three';
+import { threeScope, threeModules } from '../remotion/three-canvas';
 import { buildRemotionEvaluatorBody } from './remotion-code-normalization';
 import {
   createEditableReactRuntime,
@@ -825,6 +825,7 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
 /** All Remotion APIs available to Agent's React code — open scope, no artificial limits */
 const REMOTION_SCOPE: Record<string, unknown> = {
   React, useState, useEffect, useCallback, useMemo, useRef,
+  ...threeScope,
   ...Remotion,
   ...RemotionPaths,
   ...RemotionNoise,
@@ -1017,7 +1018,7 @@ export function evalRemotionJSX(
       '@remotion/media': { ...mediaNamespace, default: mediaNamespace, __esModule: true },
       '@remotion/paths': { ...pathsNamespace, default: pathsNamespace, __esModule: true },
       '@remotion/noise': { ...noiseNamespace, default: noiseNamespace, __esModule: true },
-      three: { ...THREE, default: THREE, __esModule: true },
+      ...threeModules,
     };
     const localRequire = (id: string) => {
       if (id in modules) return modules[id];

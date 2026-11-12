@@ -3,6 +3,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
+import { usesThreeCanvas } from '@/lib/remotion-gl';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
 import type { DesignPayload } from '@/types';
@@ -799,6 +800,7 @@ async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls:
 
 /** Detect pure video-wrapper design (only <Video>/<OffthreadVideo> inside <AbsoluteFill>, no overlays) */
 function extractSingleVideoUrl(code: string): string | null {
+  if (usesThreeCanvas(code)) return null;
   const videoMatches = code.match(/<(?:Video|OffthreadVideo)\s[^>]*src=["']([^"']+)["']/g);
   if (!videoMatches || videoMatches.length !== 1) return null;
   const srcMatch = videoMatches[0].match(/src=["']([^"']+)["']/);

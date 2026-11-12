@@ -34,12 +34,14 @@ import {
   buildLegacySceneRegistry,
   findSceneMediaElement,
 } from '@/lib/editor/scene-registry';
+import { usesThreeCanvas } from '@/lib/remotion-gl';
 
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
 const VIDEO_SENTINEL = '__VIDEO__';
 
 function isSimpleVideoWrapper(code: string): boolean {
+  if (usesThreeCanvas(code)) return false;
   if (!/<(?:Video|OffthreadVideo)\s/.test(code)) return false;
   if (/<Img\s/.test(code) || /<Audio\s/.test(code) || /<Text[\s>]/.test(code)) return false;
   if (/trimBefore|trimAfter|startFrom|endAt/.test(code)) return false;

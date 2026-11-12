@@ -10,7 +10,7 @@ import * as Remotion from 'remotion';
 import { Audio as MediaAudio, Video as MediaVideo } from '@remotion/media';
 import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
-import * as THREE from 'three';
+import { threeScope, threeModules } from './three-canvas';
 import { transform as sucraseTransform } from 'sucrase';
 // Keep the Remotion entrypoint independently bundleable. The standalone
 // Remotion bundler does not inherit Next.js' `@/` alias.
@@ -45,7 +45,7 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
   const preferredVideo = useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : mediaVideo;
   const scope: Record<string, unknown> = {
     React, useState, useEffect, useCallback, useMemo, useRef,
-    THREE,
+    ...threeScope,
     ...Remotion,
     ...RemotionPaths,
     ...RemotionNoise,
@@ -137,7 +137,7 @@ export function compileDynamicDesignComponent(
       '@remotion/media': mediaModule,
       '@remotion/paths': { ...pathsNamespace, default: pathsNamespace, __esModule: true },
       '@remotion/noise': { ...noiseNamespace, default: noiseNamespace, __esModule: true },
-      three: { ...THREE, default: THREE, __esModule: true },
+      ...threeModules,
     };
     const localRequire = (id: string) => {
       if (id in modules) return modules[id];

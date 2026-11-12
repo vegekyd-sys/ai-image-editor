@@ -5,6 +5,7 @@
  * Unscoped operations, failures and cancellations stop their VM immediately.
  */
 
+import { remotionChromiumOptions } from './remotion-gl';
 import { createHash, randomUUID } from 'node:crypto';
 import { after } from 'next/server';
 import { PreviewSessionCache } from './remotion-preview-session';
@@ -261,7 +262,7 @@ export async function renderDesignFrames(
           mediaCacheSizeInBytes: null,
           offthreadVideoThreads: null,
           licenseKey: null,
-          chromiumOptions: { disableWebSecurity: true, gl: null },
+          chromiumOptions: remotionChromiumOptions(design.code),
           frame: Math.min(frame, durationInFrames - 1),
           output: outputFile,
           timeoutInMilliseconds: 30000,
@@ -391,7 +392,7 @@ export async function renderDesignVideo(
         outputFile,
         codec: 'h264',
         imageFormat: 'jpeg',
-        chromiumOptions: { disableWebSecurity: true, gl: null },
+        chromiumOptions: remotionChromiumOptions(design.code),
         scale,
         crf: 23,
         x264Preset: 'veryfast',
