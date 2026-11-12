@@ -1585,7 +1585,8 @@ function createGenerateImageTool(
           id: skillResult.taskId || crypto.randomUUID(),
           prompt: mjGeneration?.prompt || editPrompt,
           model: skillResult.usedModel || billingModel,
-          imageQuality: imagePlan.request.imageQuality, imageReasoningEffort: imagePlan.request.imageReasoningEffort, outputFormat: imagePlan.request.outputFormat, frameCount: imagePlan.request.frameCount, frameDurationMs: imagePlan.request.frameDurationMs, gifFrameSize: imagePlan.request.gifFrameSize,
+          // Recovery uses Nano native tuning, not the refused GPT tuning.
+          imageQuality: skillResult.recovery ? undefined : imagePlan.request.imageQuality, imageReasoningEffort: skillResult.recovery ? undefined : imagePlan.request.imageReasoningEffort, outputFormat: imagePlan.request.outputFormat, frameCount: imagePlan.request.frameCount, frameDurationMs: imagePlan.request.frameDurationMs, gifFrameSize: imagePlan.request.gifFrameSize,
           inputImages: [editTarget, ...resolvedRefs].filter((url): url is string => Boolean(url?.startsWith('http'))),
         };
         const mediaIndices: number[] = [];
