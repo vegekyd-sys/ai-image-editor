@@ -2084,7 +2084,7 @@ Options:
   --ref <file|url>          Additional reference image. Repeatable; model-specific limit (Nano Banana 2.1: 14 total inputs).
   --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.6-flare, gpt-image-2.6-sunburst, wan2.7-image, mj-v8.2, or seedream-5.5. Legacy qwen maps to qwen-spicy.
   --skill <id>              enhance, creative, wild, or captions.
-  --image-resolution <id>  1K, 2K, or 4K; Seedream 5.5 also offers 1.5K and 3K. Auto remains Flare-first.
+  --image-resolution <id>  1K, 2K, or 4K; Seedream 5.5 supports 1K, 1.5K and 2K. Auto remains Flare-first.
   --nsfw                  Route NSFW directly to Qwen Spicy.
   --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
   --background <mode>       auto, opaque, or transparent.

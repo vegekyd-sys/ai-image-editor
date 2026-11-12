@@ -79,9 +79,9 @@ const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
   'seedream-5.5': {
     id: 'seedream-5.5', label: 'Seedream 5.5', maxInputImages: 10,
     aspectRatio: { kind: 'enum', values: [...STANDARD_RATIOS, '1:2', '2:1', '1:3', '3:1', '9:21'] },
-    resolutions: ['1K', '1.5K', '2K', '3K'], supportsTransparency: true, supportsNsfw: false,
-    promptMode: 'context', provider: 'wavespeed',
-    notes: 'Explicit candidate only; never Auto. WaveSpeed bytedance/seedream-v5.5, /edit when any input exists; up to 10 ordered inputs including the base. PNG (default) or JPEG, native transparent PNG; no quality/reasoning/GIF/SVG controls. Default 1K. Editing without a ratio keeps the first input shape; tier does not promise exact pixel dimensions. One paid submission only; preserve task receipt and query the same task on failure/timeout. No provider/model fallback. Published output tariff $0.02/$0.02/$0.027/$0.054 for 1K/1.5K/2K/3K, plus $0.008 per input; invoice and real quality/latency not yet verified.',
+    resolutions: ['1K', '1.5K', '2K'], supportsTransparency: true, supportsNsfw: false,
+    promptMode: 'context', provider: 'evolink',
+    notes: 'Explicit candidate only; never Auto. EvoLink doubao-seedream-5.5 for text-to-image and editing; up to 10 ordered HTTPS inputs including the base. PNG (default) or JPEG, native transparent PNG; no quality/reasoning/GIF/SVG controls. 1K/1.5K/2K; square outputs 1024/1536/2048 respectively, default 1K. No 3K. One paid submission only; save the accepted receipt and query the same task on failure/timeout. No provider/model fallback. Published output tariff $0.016/$0.016/$0.028 for 1K/1.5K/2K, plus $0.0064 per input. prompt_priority=standard only.',
   },
   'wan2.7-image': {
     id: 'wan2.7-image', label: 'Wan 2.7 Image', maxInputImages: 9,
