@@ -632,6 +632,8 @@ function formatGeneratedImageForModel(output: unknown): string {
     : `A public image URL may not be available in this same tool result yet because upload happens asynchronously.`;
   return [
     `Image generated successfully and added to the timeline as ${marker}.`,
+    ...(typeof record.usedModel === 'string' ? [`Actual image model: ${record.usedModel}; provider: ${String(record.provider ?? 'unknown')}${record.providerModel ? `; provider model: ${String(record.providerModel)}` : ''}. Report this actual route.`] : []),
+    ...(typeof record.taskId === 'string' ? [`Provider request/task: ${record.taskId}.`] : []),
     urlLine,
     `For Remotion composition run_code, use ${imageUrl ? 'the resolved URL' : marker} directly in props/code; run_code resolves Media Index markers before rendering.`,
     `Do not call list_files or write_file(fromWorkspaceOutputs) to find this generated image. It is timeline media, not a workspace file output.`,
@@ -1654,6 +1656,8 @@ function createGenerateImageTool(
           ...(mediaIndex ? { mediaIndex } : {}),
           ...(imageUrl?.startsWith('http') ? { imageUrl } : {}),
           provider: skillResult.provider,
+          usedModel: skillResult.usedModel,
+          ...(skillResult.usedModel === 'seedream-5.5' ? { providerModel: 'doubao-seedream-5.5' } : {}),
           contentBlocked: skillResult.contentBlocked,
         };
       },
