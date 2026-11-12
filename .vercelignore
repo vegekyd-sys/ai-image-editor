@@ -52,3 +52,13 @@ marketing/**
 # Regression fixtures and provider receipts are local review evidence, not app assets.
 evidence/
 testcases/
+
+# Local evaluation, promotional video sources, and internal operational records.
+# Keep docs/agent-guidance: prebuild reads the generated Chinese CLI entry.
+benchmarks/
+makaron-intro/
+e2e/
+docs/experiments/
+docs/research/
+docs/ops/
+docs/meta-swipe-runs/

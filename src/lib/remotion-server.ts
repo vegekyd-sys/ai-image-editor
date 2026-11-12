@@ -197,7 +197,7 @@ export async function renderDesignFrames(
 ): Promise<Buffer[]> {
   options.signal?.throwIfAborted();
   if (!frames.length) return [];
-  if (readEnv('REMOTION_RENDERER') === 'local') {
+  if (process.env.MAKARON_BUNDLE_LOCAL_RENDERER !== '0' && readEnv('REMOTION_RENDERER') === 'local') {
     const { renderDesignFrameLocal } = await import('@/lib/remotion-local-renderer');
     const buffers: Buffer[] = [];
     for (const frame of frames) {
@@ -341,7 +341,7 @@ export async function renderDesignVideo(
     return renderDesignVideoLambda(design, options);
   }
 
-  if (readEnv('REMOTION_RENDERER') === 'local') {
+  if (process.env.MAKARON_BUNDLE_LOCAL_RENDERER !== '0' && readEnv('REMOTION_RENDERER') === 'local') {
     const { renderDesignVideoLocal } = await import('@/lib/remotion-local-renderer');
     return renderDesignVideoLocal(design, {
       ...options,

@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  // Inline a build-time constant so both bundlers can remove the local-only
+  // import graph from Sandbox/Lambda deployments. Local Next and CLI workers
+  // keep it, as does an explicitly configured Vercel local renderer.
+  env: {
+    MAKARON_BUNDLE_LOCAL_RENDERER:
+      process.env.VERCEL === '1' && process.env.REMOTION_RENDERER?.trim() !== 'local' ? '0' : '1',
+  },
   async headers() {
     return [
       {
@@ -68,6 +75,12 @@ const nextConfig: NextConfig = {
       './test-results/**',
       './app-store-assets/**',
       './marketing/**',
+      './evidence/**',
+      './testcases/**',
+      './benchmarks/**',
+      './makaron-intro/**',
+      './docs/**',
+      './e2e/**',
     ],
   },
   outputFileTracingIncludes: {
