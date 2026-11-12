@@ -311,6 +311,8 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.characterImageRecovery.title': 'キャラクター画像の生成がよりスムーズに',
+  'changelog.characterImageRecovery.item1': '通常のカートゥーンキャラクター画像の生成が一時的にブロックされた場合、利用可能な別のモデルを自動で試し、制作の中断を減らします。',
   'changelog.fasterMediaDelivery.title': "画像と動画の読み込みが高速に",
   'changelog.fasterMediaDelivery.item1': "プロジェクト内の画像と動画をグローバルなエッジキャッシュから配信するようになり、表示・シーク・ダウンロードがより速くなりました。",
   'changelog.fasterMediaDelivery.item2': "同じ素材を繰り返し再生・書き出ししても毎回オリジンに取りに行かず、より安定して動作します。",

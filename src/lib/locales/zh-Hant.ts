@@ -317,6 +317,8 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.characterImageRecovery.title': '角色圖片生成更順暢',
+  'changelog.characterImageRecovery.item1': '創作一般卡通角色圖片時，遇到偶發生成攔截會自動嘗試其他可用模型，減少創作中斷。',
   'changelog.fasterMediaDelivery.title': "圖片和影片載入更快",
   'changelog.fasterMediaDelivery.item1': "作品中的圖片和影片改由全球邊緣快取分發，開啟、拖動進度條和下載都更快。",
   'changelog.fasterMediaDelivery.item2': "同一份素材重複播放或匯出時不再重複回源，體驗更穩定。",

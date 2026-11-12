@@ -275,6 +275,8 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.characterImageRecovery.title': '角色图片生成更顺畅',
+  'changelog.characterImageRecovery.item1': '创作普通卡通角色图片时，遇到偶发生成拦截会自动尝试其他可用模型，减少创作中断。',
   'changelog.fasterMediaDelivery.title': "图片和视频加载更快",
   'changelog.fasterMediaDelivery.item1': "作品里的图片和视频改由全球边缘缓存分发，打开、拖动进度条和下载都更快。",
   'changelog.fasterMediaDelivery.item2': "同一份素材反复播放或导出时不再重复回源，体验更稳定。",

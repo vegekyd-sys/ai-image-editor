@@ -275,6 +275,8 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.characterImageRecovery.title': 'Smoother character image generation',
+  'changelog.characterImageRecovery.item1': 'When an ordinary cartoon character image is unexpectedly blocked, Makaron automatically tries another available model to reduce interruptions.',
   'changelog.fasterMediaDelivery.title': "Faster image and video loading",
   'changelog.fasterMediaDelivery.item1': "Images and videos in your projects are now served from a global edge cache, so opening, seeking, and downloading are faster.",
   'changelog.fasterMediaDelivery.item2': "Media you play or export repeatedly no longer goes back to the origin each time, for a steadier experience.",
