@@ -49,6 +49,7 @@ Sharp libvips 16.657 MB、src 8.767 MB、Next chunk 8.363 MB；没有本地编�
 
 - Vitest：395 个文件通过，2 个跳过；2,921 项测试通过，2 项跳过。含云端预算/目录排除、渲染生命周期/隔离、视频导出、固定和任意字体、匿名字体读取。
 - TypeScript 无报错；变更文件 ESLint 无报错。
+- CLI smoke/upload 套件通过，包含 60 MB 分析、500 MB 分块上传、恢复、非法 offset、大小/供应商/元数据限制和存储拒绝；CLI 本轮无代码或版本变化。
 - 本地原入口 `renderDesignFrame`/`renderDesignVideo` 配置 local，实际生成 JPG 和 640×360、30 fps、2.000 秒 H.264；帧图中文字正常。总计 28.808 秒，其中视频渲染 10.443 秒。它与云端测试不是相同创作稿，不能用作逐像素一致性结论。
 - 独立 Preview 实际 Agent 项目，经事件确认调用 `run_code → preview_frame → publish_draft → materialize_media`，完成可编辑稿和 MP4。无图片/视频/音乐模型调用，Agent 净计费 2 credits。
 - 下载云端 MP4 用 ffprobe 确认为 H.264、640×360、30 fps、2.000 秒；实际查看抽帧，中文衬线标题、英文副标题、移动圆点可见。
