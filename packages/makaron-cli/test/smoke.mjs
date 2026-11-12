@@ -1251,14 +1251,6 @@ try {
     await expectSuccess(['edit', '--nsfw', 'Sensitive artwork.']);
     request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
     assert.equal(request.body.params.arguments.isNsfw, true);
-    await expectSuccess(['edit', '--benign-character', 'A cheerful fictional character.']);
-    request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
-    assert.equal(request.body.params.arguments.benignCharacterContent, true);
-    assert.equal(request.body.params.arguments.isNsfw, undefined);
-    await expectSuccess(['edit', '--benign-character', '--nsfw', 'NSFW routing precedence fixture.']);
-    request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
-    assert.equal(request.body.params.arguments.benignCharacterContent, true);
-    assert.equal(request.body.params.arguments.isNsfw, true);
     await expectSuccess(['edit', '--image-model', 'future-image-id', '--background', 'transparent', '--aspect', '8:1', 'A banner.']);
     request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
     assert.equal(request.body.params.arguments.model, 'future-image-id');

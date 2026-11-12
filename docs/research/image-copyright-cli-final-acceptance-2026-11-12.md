@@ -2,6 +2,17 @@
 
 日期：2026-11-12。分支：`codex/image-refusal-recovery`。范围：新增角色供应商对比、真实 Makaron CLI 全链路验收、普通图片隔离验证和代码自查。生产和 npm 发布不在本次本地验收范围内。
 
+**当前修订：已按用户要求撤销额外 CLI 开关、help/README 和版本更新，整个 `packages/makaron-cli` 恢复至任务前的 0.17.16。服务端 Agent 自动判断、受限恢复与 NSFW 状态隔离逻辑保持不变。下面的 0.17.17/直接工具恢复记录属于历史候选，不是当前 CLI 用法。**
+
+### CLI 撤销后的回归验收（2026-11-13）
+
+- `packages/makaron-cli` 与任务前 `fbc7daac` 无差异；额外开关、help/README、对应 smoke 用例以及四处版本元数据均已恢复，仓库 CLI 为 0.17.16。服务端 `src` 相对 `8864bbbf` 无差异。
+- 使用恢复后的 0.17.16 CLI，普通 `chat` 发起马里奥图片请求，没有额外开启参数；服务端 Flare → Nano 2.1 自动恢复，89 秒完成，一次生图工具调用、一张图、一笔图片收费（8 credits，另 1 推理 credit），NSFW 事件 0。
+- 原有 `edit --nsfw` 用中性红色布料描述实测，直接 Qwen Spicy，3 credits，实际 1024×1024 PNG 完整解码通过。
+- 85 项服务端恢复/普通图片/NSFW 隔离回归、CLI smoke/upload、Skill build/check 均通过。原有 `--nsfw` help 保留，新增开关已不在 CLI help 中。
+- 本机全局 CLI 仍为原有 0.17.9，未安装或升级；使用它只读查询上述 run 成功。原 0.17.17 本地候选没有发布 npm，已撤销版本更新，不需要新 CLI 发行。
+- 新回执保留于本 worktree 的 `test-output/image-copyright-cli-final-20261112/cli-rollback-acceptance.json`，真实 NSFW 路由测试产物为同目录 `nsfw-cli-rollback.png`。
+
 ## 扩展角色实测
 
 固定普通非色情角色插画描述，每条描述、每模型独立测两次。首轮拒绝后，分别另测一次同模型和一次跨模型；分支交替顺序，不混淆角色名或改写提示词。两个分支是比较实验，不是一条生产恢复链。
@@ -21,7 +32,7 @@
 
 比较器：`scripts/image-copyright-benchmark.mjs --generate --extended`，老版另加 `--classic`。本地忽略证据在本 worktree 的 `test-output/image-copyright-extended-20261112/` 和 `test-output/image-copyright-extended-classic-20261112/`。12 张产物已逐张查看，角色与请求主题可辨识。
 
-## 真实 CLI 最终验收
+## 首轮真实 CLI 验收记录（历史候选）
 
 生图入口全部使用真实 Makaron CLI，未用供应商直连接口代替：
 
@@ -29,7 +40,7 @@
 - `edit` 验证直接生图、恢复、原图抠图、文件格式与 NSFW 路由。
 - `project media --json`、`usage --project --json`、`responses list`、`credits` 查询实际产物和计费。
 
-后端是本机专用 runtime（端口 3039），使用真实供应商、应用鉴权、专用测试项目、持久化和计费。原有项目的数据未修改。CLI 使用打包后全新目录安装的 **0.17.17 候选包**；没有发布 npm 或部署 Production。
+后端是本机专用 runtime（端口 3039），使用真实供应商、应用鉴权、专用测试项目、持久化和计费。原有项目的数据未修改。当时使用打包后全新目录安装的 **0.17.17 候选包**，该候选后已撤销；没有发布 npm 或部署 Production。
 
 | 用例 | 实际观察 |
 |---|---|
@@ -66,11 +77,11 @@ CLI 图片与推理费用分别核对；不能把 9 credits 全部称为图片�
 
 ## 本地复验入口
 
-使用 dev 仓库中的 CLI，或本地已检查的 0.17.17 包；全局已安装旧版 CLI 的 chat 也可调用新后端，但直接 edit 的新参数需要候选 CLI。
+使用原有 0.17.16 CLI 即可，自动恢复由服务端 Agent 判断；不需要额外开启参数。
 
 ```bash
 MAKARON_URL=http://localhost:3039 node packages/makaron-cli/bin/makaron.mjs chat --project auto "画一张马里奥在花园里拿着苹果的插画，1:1，默认模型，直接生成"
-MAKARON_URL=http://localhost:3039 node packages/makaron-cli/bin/makaron.mjs edit --benign-character --output-format png --out mario.png "Mario sitting on a garden bench holding a red apple, square illustration"
+MAKARON_URL=http://localhost:3039 node packages/makaron-cli/bin/makaron.mjs edit --out cup.png "A plain red ceramic cup on a white studio background"
 ```
 
 另测普通商品照、原图透明抠图，并在角色拒绝后继续一条普通图片请求。米老鼠/蜘蛛侠仍可能被多个模型拒绝；预期是尝试受限、如实说明、状态不污染，而不是保证出图。
