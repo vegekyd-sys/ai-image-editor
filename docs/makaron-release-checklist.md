@@ -32,6 +32,22 @@ and their cron handlers. A missing runtime blocks both local and Vercel builds.
 After release, probe the affected API routes as well as `/api/health`: health
 can pass while a different function fails to load its server dependencies.
 
+Cloud builds also check every API trace against a 220 MB budget and reject
+local Remotion compiler dependencies. `next.config.ts` inlines
+`MAKARON_BUNDLE_LOCAL_RENDERER=0` only for Vercel builds whose selected backend
+is not `local`. Local Next, CLI workers, and an explicitly selected local
+backend keep the original renderer. This constant is derived automatically;
+no new shared environment variable is required. Changing the deployment's
+renderer backend requires a fresh build.
+
+Keep the bare directory exclusions in `.vercelignore`. CLI 50 archive uploads
+can retain directory entries that only match `dir/` or `dir/**`, after which
+tar recursively includes ignored children. Ordinary file uploads avoid that
+recursion and reuse Vercel's content hashes. Build-time inputs such as the
+Chinese CLI entry and runtime Skill assets must remain in the upload.
+Use `node scripts/measure-deployment-footprint.mjs` after a build to inspect
+the largest API file traces; trace bytes are not the final function ZIP size.
+
 For new model/provider work, add these checks:
 
 - Dedicated task id namespace or route prefix when the provider has distinct polling/status behavior.
