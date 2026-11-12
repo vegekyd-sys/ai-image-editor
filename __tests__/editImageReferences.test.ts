@@ -84,9 +84,9 @@ describe('editImage reference contract', () => {
     }));
   });
 
-  it('preserves Auto selection for character recovery without dropping first-attempt quality', async () => {
+  it('passes the independent character assessment without dropping first-attempt quality', async () => {
     await editImage({ editPrompt: 'Mario versus Pikachu poster', benignCharacterContent: true, imageQuality: 'high', aspectRatio: '2:3' }, {});
-    expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({ model: undefined, benignCharacterContent: true, imageQuality: 'high', aspectRatio: '2:3' }));
+    expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-image-2.6-flare', benignCharacterContent: true, imageQuality: 'high', aspectRatio: '2:3' }));
   });
 
   it('normalizes legacy Image 2 and preserves the original user prompt', async () => {

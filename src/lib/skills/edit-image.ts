@@ -72,11 +72,7 @@ export async function editImage(
   try {
     // Validate before a supplier call; the same resolver is used by billing preflight.
     const plan = planImageGeneration(request);
-    // Character recovery needs the original Auto choice to distinguish inferred
-    // GPT tuning from an explicit model contract. All other routes keep their plan.
-    const autoCharacter = input.benignCharacterContent === true && !isNsfw
-      && (!requestedModel || requestedModel === 'auto');
-    const result = await generateImage(autoCharacter ? request : plan.request);
+    const result = await generateImage(plan.request);
     if (!result.image) return { success: false, message: 'Image generation returned no image. Do not retry automatically.' };
     console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s model=${result.model} provider=${result.provider ?? 'default'}`);
     let message = result.images?.length ? `${result.images.length} candidate images generated successfully; keep all candidates in the timeline. Task: ${result.taskId}.` : 'Image generated successfully.';
