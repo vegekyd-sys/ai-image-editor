@@ -73,6 +73,12 @@ async function handleMcp(req: Request): Promise<Response> {
     returnImageContent: true,
     userId: auth.userId,
     imageSignal: req.signal,
+    onSeedream55Receipt: auth.type === 'user' ? async receipt => {
+      const { writeFile } = await import('@/lib/workspace');
+      const { getSupabaseAdmin } = await import('@/lib/supabase/service');
+      const saved = await writeFile(`seedream55/${receipt.taskId}.json`, JSON.stringify({ ...receipt, updatedAt: new Date().toISOString() }), getSupabaseAdmin(), auth.userId!, 'application/json');
+      if (!saved.success) throw new Error('Seedream receipt persistence failed');
+    } : undefined,
     submitVideo: auth.type === 'user' ? (input, toolName) => submitMcpVideo(input, { userId: auth.userId!, apiKeyId: auth.keyId!, toolName }) : undefined,
     onVideoStatus: auth.type === 'user' ? (taskId, status, queryFailed) => settleMcpVideoStatus(auth.userId!, taskId, status, queryFailed) : undefined,
     // Pre-check: ensure user has enough credits

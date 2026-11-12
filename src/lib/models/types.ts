@@ -30,7 +30,7 @@ export interface GenerateImageRequest extends ImageGenerationOptions {
   midjourney?: Omit<import('../midjourney').MidjourneyRequest, 'prompt' | 'aspectRatio' | 'imageUrls'>;
   /** Persist accepted MJ receipt before polling; server-side only. */
   onMidjourneyReceipt?: (task: import('../midjourney').MidjourneyTask, request: import('../midjourney').MidjourneyRequest) => Promise<void>;
-  /** Persist accepted WaveSpeed receipt before polling; server-side only. */
+  /** Persist accepted EvoLink receipt before polling; server-side only. */
   onSeedream55Receipt?: (receipt: import('./seedream55').Seedream55Receipt) => Promise<void>;
   isNsfw?: boolean;         // project-level NSFW flag — skip Gemini entirely when true
   /** Independent caller assessment: harmless nonsexual fictional-character artwork.

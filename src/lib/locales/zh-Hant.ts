@@ -992,7 +992,7 @@ const zhHant = {
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '獨立的 1–3 圖編輯模型，變化大膽並保留高解析度。',
   'model.seedream55.name': 'Seedream 5.5',
-  'model.seedream55.desc': '候選：原生透明 PNG，最多 10 張參考圖',
+  'model.seedream55.desc': '原生透明 PNG、局部編輯，最多 10 張輸入圖',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',
   'model.image26Flare.desc': '預設圖片模型，支援 GIF 動畫',
   'model.image26Sunburst.name': 'GPT Image 2.6 Sunburst',

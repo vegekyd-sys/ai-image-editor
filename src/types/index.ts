@@ -95,6 +95,9 @@ export interface PhotoMetadata {
     inputImages?: string[];
     provider?: string;
     providerModel?: string;
+    imageResolution?: string;
+    aspectRatio?: string;
+    background?: import('@/lib/models/types').ImageBackground;
     promptKind?: 'submitted' | 'brief';
     imageQuality?: import('@/lib/models/types').ImageQuality;
     imageReasoningEffort?: import('@/lib/models/types').ImageReasoningEffort;

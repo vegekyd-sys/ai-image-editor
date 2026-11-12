@@ -3214,11 +3214,16 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 } else if (command === 'edit') {
   const { headers, baseUrl } = getAuth();
   const editArgs = {};
+  let editSourceFile;
+  const editReferenceFiles = [];
   const mjArgs = {};
   const promptParts = [];
   let outputPath = null;
   for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--image' && args[i + 1]) editArgs.image = imageToArg(args[++i]);
+    if (args[i] === '--image' && args[i + 1]) {
+      editSourceFile = args[++i];
+      editArgs.image = imageToArg(editSourceFile);
+    }
     else if (args[i] === '--image-model' && args[i + 1]) editArgs.model = args[++i];
     else if (args[i] === '--model' && args[i + 1]) {
       warnLegacyModelFlag('--image-model');
@@ -3227,7 +3232,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else if (args[i] === '--skill' && args[i + 1]) editArgs.skill = args[++i];
     else if (args[i] === '--ref' && args[i + 1]) {
       editArgs.referenceImages = editArgs.referenceImages || [];
-      editArgs.referenceImages.push(imageToArg(args[++i]));
+      const reference = args[++i];
+      editReferenceFiles.push(reference);
+      editArgs.referenceImages.push(imageToArg(reference));
     }
     else if (args[i] === '--image-resolution' && args[i + 1]) {
       const resolution = args[++i];
@@ -3287,6 +3294,16 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   }
   editArgs.editPrompt = promptParts.join(' ');
   if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|wan2.7-image|mj-v8.2|seedream-5.5] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (editArgs.model === 'seedream-5.5') {
+    const sources = [...(editSourceFile ? [editSourceFile] : []), ...editReferenceFiles];
+    if (sources.length > 10) { console.error('Seedream 5.5 accepts at most 10 inputs including the base.'); process.exit(1); }
+    const localFiles = sources.filter(source => !isHttpUrl(source));
+    const uploaded = localFiles.length ? await uploadImageFilesViaSignedUrl(baseUrl, headers, undefined, localFiles) : [];
+    const byPath = new Map(localFiles.map((source, index) => [source, uploaded[index]]));
+    const publicSource = source => isHttpUrl(source) ? source : byPath.get(source);
+    if (editSourceFile) editArgs.image = publicSource(editSourceFile);
+    if (editReferenceFiles.length) editArgs.referenceImages = editReferenceFiles.map(publicSource);
+  }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);

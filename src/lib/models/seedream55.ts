@@ -14,6 +14,7 @@ export interface Seedream55Receipt {
   model: string;
   status: string;
   providerCreditsReserved?: number;
+  providerCreditsUsed?: number;
 }
 export class Seedream55RequestError extends Error {
   constructor(message: string, public readonly taskId?: string) {
@@ -54,27 +55,29 @@ function safeReason(value: unknown): string {
   return typeof value === 'string' ? value.replace(/https?:\/\/\S+|data:\S+|Bearer\s+\S+/gi, '[redacted]').slice(0, 400) : '';
 }
 function parseTask(data: unknown, expectedId?: string): Seedream55Receipt & { outputs: string[]; failure?: string } {
-  const task = data as { id?: unknown; model?: unknown; status?: unknown; results?: unknown; error?: { code?: unknown; message?: unknown }; usage?: { credits_reserved?: number } } | null;
+  const task = data as { id?: unknown; model?: unknown; status?: unknown; results?: unknown; error?: { code?: unknown; message?: unknown }; usage?: { credits_reserved?: number; credits_used?: number } } | null;
   if (!task || !validTaskId(task.id) || (expectedId && task.id !== expectedId) || task.model !== SEEDREAM55_PROVIDER_MODEL
     || !['pending', 'processing', 'completed', 'failed', 'cancelled'].includes(String(task.status))) {
     throw new Seedream55RequestError('Invalid or mismatched provider receipt; the paid outcome may be unknown.', expectedId);
   }
   return { taskId: task.id, provider: 'evolink', model: task.model, status: String(task.status),
     ...(Number.isFinite(task.usage?.credits_reserved) ? { providerCreditsReserved: task.usage!.credits_reserved } : {}),
+    ...(Number.isFinite(task.usage?.credits_used) ? { providerCreditsUsed: task.usage!.credits_used } : {}),
     outputs: Array.isArray(task.results) ? task.results.filter((v): v is string => typeof v === 'string') : [],
     ...(task.error ? { failure: `${safeReason(task.error.code)} ${safeReason(task.error.message)}`.trim() } : {}),
   };
 }
 
 /** GET only. Transient query failures may retry; paid submissions never do. */
-export async function querySeedream55Task(taskId: string): Promise<ReturnType<typeof parseTask>> {
+export async function querySeedream55Task(taskId: string, signal?: AbortSignal): Promise<ReturnType<typeof parseTask>> {
   if (!validTaskId(taskId)) throw new Seedream55RequestError('Invalid task ID; no request sent.');
   const key = process.env.EVOLINK_API_KEY?.trim();
   if (!key) throw new Seedream55RequestError('EVOLINK_API_KEY is not configured.', taskId);
   for (let attempt = 0; ; attempt++) {
     let response: Response;
-    try { response = await fetch(`${API}/tasks/${taskId}`, { headers: { Authorization: `Bearer ${key}` }, redirect: 'error', signal: AbortSignal.timeout(20_000) }); }
+    try { response = await fetch(`${API}/tasks/${taskId}`, { headers: { Authorization: `Bearer ${key}` }, redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : AbortSignal.timeout(20_000) }); }
     catch {
+      if (signal?.aborted) throw new Seedream55RequestError('Task query cancelled; retain and query this task before a new request.', taskId);
       if (attempt < 2) { await new Promise(resolve => setTimeout(resolve, 1000)); continue; }
       throw new Seedream55RequestError('Task query transport failed; the task may still be running.', taskId);
     }
@@ -92,9 +95,14 @@ export const seedream55Backend: ModelBackend = {
     if (!key) throw new Seedream55RequestError('EVOLINK_API_KEY is not configured; nothing was submitted.');
     const { model, body, costUsd } = buildSeedream55Request(req);
     for (const source of body.image_urls ?? []) {
-      const meta = await sharp(await readProviderImage(source, 30 * 1024 * 1024), { limitInputPixels: 64_000_000 }).metadata();
+      const meta = await sharp(await readProviderImage(source, 30 * 1024 * 1024), { limitInputPixels: 36_000_000 }).metadata();
       if (!['png', 'jpeg', 'webp'].includes(meta.format ?? '')) throw new Seedream55RequestError('Input format must be PNG, JPEG or WebP; nothing was submitted.');
+      const width = meta.width ?? 0, height = meta.height ?? 0;
+      if (width <= 14 || height <= 14 || width * height > 36_000_000 || width / height < 1 / 16 || width / height > 16 || (meta.pages ?? 1) !== 1) {
+        throw new Seedream55RequestError('Each input must be a still image, dimensions >14px, at most 36MP and ratio 1:16–16:1; nothing was submitted.');
+      }
     }
+    if (req.signal?.aborted || (req.deadlineMs !== undefined && Date.now() >= req.deadlineMs)) throw new Seedream55RequestError('Request cancelled before submission; nothing was submitted.');
     const started = Date.now();
     let response: Response;
     try {
@@ -105,15 +113,18 @@ export const seedream55Backend: ModelBackend = {
     if (!response.ok) throw new Seedream55RequestError(`Submission HTTP ${response.status}: ${safeReason(payload?.error?.code)} ${safeReason(payload?.error?.message)}`.trim(), recoverableId);
     let task = parseTask(payload, recoverableId);
     const saveReceipt = async () => {
-      try { await req.onSeedream55Receipt?.({ taskId: task.taskId, provider: task.provider, model: task.model, status: task.status, providerCreditsReserved: task.providerCreditsReserved }); }
+      try { await req.onSeedream55Receipt?.({ taskId: task.taskId, provider: task.provider, model: task.model, status: task.status, providerCreditsReserved: task.providerCreditsReserved, providerCreditsUsed: task.providerCreditsUsed }); }
       catch { throw new Seedream55RequestError('Accepted task receipt could not be saved; polling stopped to retain recovery state.', task.taskId); }
     };
     await saveReceipt();
     while (task.status !== 'completed') {
-      if (['failed', 'cancelled'].includes(task.status)) throw new Seedream55RequestError(`Provider task ended: ${task.status}. ${task.failure ?? ''}`, task.taskId);
-      if (Date.now() - started > 240_000 || req.signal?.aborted) throw new Seedream55RequestError('Polling deadline reached; the paid task may still be running.', task.taskId);
+      if (['failed', 'cancelled'].includes(task.status)) {
+        await saveReceipt();
+        throw new Seedream55RequestError(`Provider task ended: ${task.status}. ${task.failure ?? ''}`, task.taskId);
+      }
+      if (Date.now() - started > 240_000 || req.signal?.aborted || (req.deadlineMs !== undefined && Date.now() >= req.deadlineMs)) throw new Seedream55RequestError('Polling deadline reached; the paid task may still be running.', task.taskId);
       await new Promise(resolve => setTimeout(resolve, 2000));
-      task = await querySeedream55Task(task.taskId);
+      task = await querySeedream55Task(task.taskId, req.signal);
     }
     await saveReceipt();
     if (task.outputs.length !== 1) throw new Seedream55RequestError('Expected exactly one completed image.', task.taskId);

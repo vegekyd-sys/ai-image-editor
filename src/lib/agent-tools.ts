@@ -1601,6 +1601,9 @@ function createGenerateImageTool(
           model: skillResult.usedModel || billingModel,
           provider: skillResult.provider,
           ...(billingModel === 'seedream-5.5' ? { providerModel: 'doubao-seedream-5.5' } : {}),
+          imageResolution: imagePlan.request.imageResolution,
+          aspectRatio: imagePlan.request.aspectRatio,
+          background: imagePlan.request.background,
           imageQuality: imagePlan.request.imageQuality, imageReasoningEffort: imagePlan.request.imageReasoningEffort, outputFormat: imagePlan.request.outputFormat, frameCount: imagePlan.request.frameCount, frameDurationMs: imagePlan.request.frameDurationMs, gifFrameSize: imagePlan.request.gifFrameSize,
           inputImages: [editTarget, ...resolvedRefs].filter((url): url is string => Boolean(url?.startsWith('http'))),
         };

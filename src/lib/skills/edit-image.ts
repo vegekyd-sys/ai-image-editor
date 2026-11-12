@@ -87,7 +87,7 @@ export async function editImage(
     if (result.fallbackUsed) message += ` Generated with ${result.model} after a completed provider refusal; do not repeat the generation.`;
     return { success: true, message, image: result.image, images: result.images, taskId: result.taskId, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage, recovery: result.recovery };
   } catch (error) {
-    if (error instanceof MidjourneyRequestError || error instanceof Seedream55RequestError) return { success: false, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
+    if (error instanceof MidjourneyRequestError || error instanceof Seedream55RequestError) return { success: false, taskId: error.taskId, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
     if (error instanceof ImageProviderRefusalError || error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
 
       return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };

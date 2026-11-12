@@ -70,6 +70,8 @@ function formatResult(image: string, message: string, prefix: string, saveToDisk
 }
 
 export interface McpServerOptions {
+  /** HTTP user workspace receipt; saved before polling an accepted Seedream task. */
+  onSeedream55Receipt?: import('../lib/models/types').GenerateImageRequest['onSeedream55Receipt'];
   /** HTTP clients receive original media bytes; stdio may save to disk. */
   returnImageContent?: boolean;
   submitVideo?: (input: CreateVideoInput, toolName: string) => Promise<CreateVideoResult>;
@@ -116,7 +118,7 @@ export function createMakaronMcpServer(options?: McpServerOptions) {
 ${formatImageCapabilitiesForAgent()}
 
 When skill is set, the caller reads the skill prompt and supplies its instructions in editPrompt.
-Input image can be a local file path (stdio), URL, or base64 data URL. Omit image for text-to-image generation.
+Input image can be a local file path (stdio), URL, or base64 data URL. Seedream 5.5 requires uploaded public HTTPS originals (the CLI uploads local files automatically). Omit image for text-to-image generation.
 Generation timing varies; report actual completion. Unknown submissions are never repeated. An independently assessed benign-character request may use one compatible alternate after a terminal provider refusal; callers must not add retries.`,
     {
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
@@ -169,6 +171,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
             isNsfw: params.isNsfw ?? undefined,
             benignCharacterContent: params.benignCharacterContent ?? undefined,
             signal: options?.imageSignal,
+            onSeedream55Receipt: options?.onSeedream55Receipt,
             beforeImageRecovery: async request => !options?.onToolStart || (await options.onToolStart('makaron_edit_image', request.model, {
               imageInputCount: (request.image ? 1 : 0) + (request.references?.length ?? 0), imageResolution: request.imageResolution,
             })).allowed,
@@ -185,9 +188,10 @@ Generation timing varies; report actual completion. Unknown submissions are neve
         }
         // Bill after success
         await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage, { imageInputCount });
-        const msg = result.usedModel
+        const receiptInfo = result.usedModel === 'seedream-5.5' && result.taskId ? ` Provider: evolink; provider model: doubao-seedream-5.5; task: ${result.taskId}.` : '';
+        const msg = (result.usedModel
           ? `${result.message} (model: ${result.usedModel})`
-          : result.message;
+          : result.message) + receiptInfo;
         const images = result.images ?? [result.image];
         if (images.length === 1) return formatResult(result.image, msg, 'edit', !options?.returnImageContent);
         // Preserve every candidate; one onToolComplete call bills the whole batch once.

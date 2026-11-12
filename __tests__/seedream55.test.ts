@@ -43,6 +43,38 @@ describe('Seedream 5.5 explicit candidate', () => {
     expect(estimateSeedream55Credits({ imageResolution: '2K', imageInputCount: 2 }, 2)).toBe(9);
     expect(() => seedream55CostUsd('4K')).toThrow();
     expect(() => estimateSeedream55Credits({}, 0)).toThrow();
+    expect(estimateSeedream55Credits({ imageInputCount: 0 }, 2)).toBe(4);
+    expect(estimateSeedream55Credits({ imageInputCount: 1 }, 2)).toBe(5);
+    expect(estimateSeedream55Credits({ imageInputCount: 10 }, 2)).toBe(16);
+    expect(estimateSeedream55Credits({ imageInputCount: 10, imageResolution: '2K' }, 2)).toBe(19);
+  });
+  it('rejects undocumented ratio presets before a provider request', () => {
+    expect(() => buildSeedream55Request({ prompt: 'scene', aspectRatio: '1:2' })).toThrow('aspectRatio');
+  });
+  it('rejects a too-small source before the paid POST', async () => {
+    state.read.mockResolvedValue(await sharp({ create: { width: 14, height: 32, channels: 3, background: 'red' } }).png().toBuffer());
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    await expect(seedream55Backend.generate({ prompt: 'edit', image: 'https://example.com/tiny.png' })).rejects.toThrow('dimensions >14px');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('does not submit a request already cancelled by the caller', async () => {
+    const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher);
+    await expect(seedream55Backend.generate({ prompt: 'scene', signal: AbortSignal.abort() })).rejects.toThrow('nothing was submitted');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('persists a terminal provider failure and keeps its original task ID without a second POST', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json(task('processing'))).mockResolvedValueOnce(Response.json({ ...task('failed'), results: [], error: { code: 'content_policy_violation' } }));
+    vi.stubGlobal('fetch', fetcher);
+    const receipts: string[] = [];
+    await expect(seedream55Backend.generate({ prompt: 'scene', onSeedream55Receipt: async receipt => { receipts.push(receipt.status); } })).rejects.toThrow('receipt-55');
+    expect(receipts).toEqual(['processing', 'failed']);
+    expect(fetcher.mock.calls.filter(call => call[1]?.method === 'POST')).toHaveLength(1);
+  });
+  it('preserves requested JPEG bytes instead of returning mislabeled PNG', async () => {
+    const bytes = await sharp({ create: { width: 32, height: 32, channels: 3, background: 'red' } }).jpeg().toBuffer();
+    state.read.mockResolvedValue(bytes); vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(task())));
+    const result = await seedream55Backend.generate({ prompt: 'scene', outputFormat: 'jpeg', background: 'opaque' });
+    expect(result.image).toBe(`data:image/jpeg;base64,${bytes.toString('base64')}`);
   });
   it('submits exactly once and returns native PNG bytes, actual endpoint identity and tariff', async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json(task())); vi.stubGlobal('fetch', fetcher);

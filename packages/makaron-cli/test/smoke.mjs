@@ -1200,6 +1200,14 @@ try {
     assert.equal(request.body.params.arguments.background, 'transparent');
     assert.equal(request.body.params.arguments.outputFormat, 'png');
   }
+  {
+    const before = requests.filter(r => r.pathname === '/api/storage/upload-url').length;
+    await expectSuccess(['edit', '--image-model', 'seedream-5.5', '--image', tinyImagePath, '--ref', tinyImagePath, '--out', path.join(tmpHome, 'seedream-local.png'), 'preserve both originals']);
+    const request = requests.filter(r => r.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.image, 'https://cdn.example/uploaded-image.jpg');
+    assert.deepEqual(request.body.params.arguments.referenceImages, ['https://cdn.example/uploaded-image.jpg']);
+    assert.equal(requests.filter(r => r.pathname === '/api/storage/upload-url').length - before, 2);
+  }
   for (const format of ['gif', 'svg']) {
     const out = path.join(tmpHome, `format-${format}.png`);
     await expectSuccess(['edit', '--image-model', 'gpt-image-2.6-flare', '--quality', 'medium', '--image-reasoning', 'high', '--output-format', format, '--out', out, 'format transport fixture']);
