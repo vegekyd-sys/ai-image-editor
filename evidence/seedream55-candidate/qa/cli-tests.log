@@ -1,0 +1,5 @@
+
+> makaron-cli@0.17.16 test
+> node test/smoke.mjs && node test/upload.mjs
+
+CLI upload tests passed: 60MB analysis, 500MB chunked chat, chunk recovery, invalid offsets, size/provider/metadata limits, storage rejection, help.

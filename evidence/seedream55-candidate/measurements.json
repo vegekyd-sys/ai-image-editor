@@ -1,0 +1,63 @@
+{
+  "full-scene": {
+    "size": [
+      1024,
+      1024
+    ],
+    "format": "PNG",
+    "mode": "RGB",
+    "hasAlpha": false,
+    "alphaMin": 255,
+    "alphaMax": 255,
+    "zeroAlphaRatio": 0.0,
+    "partialAlphaRatio": 0.0,
+    "opaqueRatio": 1.0,
+    "sha256": "bbd9051dad42a91ab512b9b1ade7b2582e69545331fa02a0cbe6415fe44bb9fa"
+  },
+  "native-alpha": {
+    "size": [
+      1024,
+      1024
+    ],
+    "format": "PNG",
+    "mode": "RGBA",
+    "hasAlpha": true,
+    "alphaMin": 0,
+    "alphaMax": 254,
+    "zeroAlphaRatio": 0.611933708190918,
+    "partialAlphaRatio": 0.38806629180908203,
+    "opaqueRatio": 0.0,
+    "sha256": "e2b298578bf1e409e7ab791d700c6e470a54f4f9651183d010bcf96386a2236f"
+  },
+  "local-hat-edit": {
+    "size": [
+      1024,
+      1024
+    ],
+    "format": "PNG",
+    "mode": "RGB",
+    "hasAlpha": false,
+    "alphaMin": 255,
+    "alphaMax": 255,
+    "zeroAlphaRatio": 0.0,
+    "partialAlphaRatio": 0.0,
+    "opaqueRatio": 1.0,
+    "sha256": "ce9e597114c2654be7743450b3cd5cc86f9cbb586eea4c7c6d58c8d1ba9a1e7d"
+  },
+  "preservation": {
+    "editRegion": [
+      710,
+      290,
+      989,
+      477
+    ],
+    "outsidePixelCount": 996403,
+    "outsideMae": 2.6227507009379405,
+    "outsideRmse": 5.1845601050505,
+    "outsideExactPixelsRatio": 0.017447759591249726,
+    "outsideWithin8RgbRatio": 0.8741713945060382,
+    "outsideChangedAbove16RgbRatio": 0.0316006676013621,
+    "insideMae": 28.773822986346705,
+    "note": "No alignment, resizing or color normalization; excludes a fixed rectangular hat region, not a perfect segmentation."
+  }
+}

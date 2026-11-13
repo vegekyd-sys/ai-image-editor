@@ -18,7 +18,7 @@ export function isPublicImageAddress(address: string): boolean {
 }
 
 /** DNS is validated on the actual socket lookup, preventing DNS rebinding. No redirects or credentials. */
-export async function readProviderImage(source: string, limit: number, options?: { falAsset?: boolean; evolinkAsset?: boolean; muleAsset?: boolean; xaiAsset?: boolean; mediaType?: 'video' }): Promise<Buffer> {
+export async function readProviderImage(source: string, limit: number, options?: { falAsset?: boolean; evolinkAsset?: boolean; muleAsset?: boolean; xaiAsset?: boolean; wavespeedAsset?: boolean; mediaType?: 'video' }): Promise<Buffer> {
   if (source.startsWith('data:')) {
     const match = /^data:image\/(?:jpeg|jpg|png|webp|bmp);base64,([A-Za-z0-9+/=\r\n]+)$/.exec(source);
     if (!match || Buffer.byteLength(match[1], 'base64') > limit) throw new Error('Invalid image data');
@@ -32,6 +32,7 @@ export async function readProviderImage(source: string, limit: number, options?:
     || (options?.falAsset === true && (host === 'fal.media' || host.endsWith('.fal.media')))
     || (options?.evolinkAsset === true && host === 'files.evolink.ai')
     || (options?.muleAsset === true && host === 'mule-router-assets.muleusercontent.com')
+    || (options?.wavespeedAsset === true && (host === 'wavespeed.ai' || host.endsWith('.wavespeed.ai')))
     || (options?.xaiAsset === true && host === 'vidgen.x.ai');
   if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')
     || (isIP(host) && !isPublicImageAddress(host))) throw new Error('Not a public HTTPS image');

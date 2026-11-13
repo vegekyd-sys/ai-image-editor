@@ -275,6 +275,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.seedream55.title': "Seedream 5.5 is here",
+  'changelog.seedream55.item1': "Create images with Seedream 5.5 using text, multiple references, or an existing image.",
+  'changelog.seedream55.item2': "Keep your subject while refining styling, scenery, and lighting, or create transparent PNG assets.",
   'changelog.characterImageRecovery.title': 'Smoother character image generation',
   'changelog.characterImageRecovery.item1': 'When an ordinary cartoon character image is unexpectedly blocked, Makaron automatically tries another available model to reduce interruptions.',
   'changelog.fasterMediaDelivery.title': "Faster image and video loading",
@@ -775,6 +778,8 @@ const en = {
   'model.qwen.desc': 'Best face preservation. Handles NSFW content.',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': 'Independent 1–3 image editor with bold, high-resolution results.',
+  'model.seedream55.name': 'Seedream 5.5',
+  'model.seedream55.desc': 'Native transparent PNG, local editing, up to 10 inputs',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',
   'model.image26Flare.desc': 'Default image model with animated GIF',
   'model.image26Sunburst.name': 'GPT Image 2.6 Sunburst',

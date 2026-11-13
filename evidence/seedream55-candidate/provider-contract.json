@@ -1,0 +1,60 @@
+{
+  "checkedAtChinaDate": "2026-11-10",
+  "provider": "wavespeed",
+  "sources": [
+    "https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedream-v5.5",
+    "https://wavespeed.ai/docs/docs-api/bytedance/bytedance-seedream-v5.5-edit"
+  ],
+  "models": [
+    "bytedance/seedream-v5.5",
+    "bytedance/seedream-v5.5/edit"
+  ],
+  "parameters": {
+    "prompt": "required",
+    "images": "edit only, max 10 ordered inputs",
+    "resolution": [
+      "1k",
+      "1.5k",
+      "2k",
+      "3k"
+    ],
+    "output_format": [
+      "png",
+      "jpeg"
+    ],
+    "background": [
+      "auto",
+      "transparent",
+      "opaque"
+    ],
+    "transparentRequires": "png",
+    "aspect_ratio": [
+      "1:1",
+      "1:2",
+      "2:1",
+      "1:3",
+      "3:1",
+      "2:3",
+      "3:2",
+      "3:4",
+      "4:3",
+      "4:5",
+      "5:4",
+      "9:16",
+      "16:9",
+      "9:21",
+      "21:9"
+    ],
+    "omittedEditRatio": "preserve first input ratio"
+  },
+  "tariffUsd": {
+    "output": {
+      "1k": 0.02,
+      "1.5k": 0.02,
+      "2k": 0.027,
+      "3k": 0.054
+    },
+    "perInput": 0.008
+  },
+  "liveVerified": false
+}

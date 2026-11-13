@@ -52,6 +52,7 @@ export async function getTokenRate(modelId: string): Promise<TokenRate | null> {
   if (/^(?:google\/)?gemini-nano-banana-2\.1(?::text)?$/.test(modelId)) return null
   // New image variants require their own active row, never the legacy Image 2 prefix.
   if (/^(?:openai\/)?gpt-image-2\.[56](?:-|$)/.test(modelId)) return null
+  if (modelId === 'seedream-5.5') return null
   if (modelId === 'mj-v8.2') return null
   // Strip inference profile prefix (e.g. "us.anthropic.xxx" or "global.anthropic.xxx" -> "anthropic.xxx") and retry
   const stripped = modelId.replace(/^(us|eu|ap|global)\./i, '')
@@ -109,5 +110,7 @@ export function tokensToCredits(
 
 export function providerCostToCredits(providerCostUsd: number, markup: number): number {
   if (!Number.isFinite(providerCostUsd) || providerCostUsd <= 0) return 0
-  return Math.ceil(providerCostUsd * markup / CREDIT_VALUE)
+  const raw = providerCostUsd * markup / CREDIT_VALUE
+  // Avoid an extra credit when a fixed tariff lands just above an integer in binary floating point.
+  return Math.ceil(raw - Number.EPSILON * Math.max(1, Math.abs(raw)))
 }

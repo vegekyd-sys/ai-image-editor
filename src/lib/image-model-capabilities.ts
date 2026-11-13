@@ -76,6 +76,13 @@ const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
     supportsTransparency: false, supportsNsfw: false, promptMode: 'scene', provider: 'evolink',
     notes: 'Explicit creative generation only. Fast returns 4 candidates; Draft returns 24 small drafts; HD returns 4 regenerated candidates, not lossless upscaling. 2K means native HD, approximate size, ratio <=4:1/1:4. Pass the original natural-language brief; the adapter prepares the concise scene prompt. Omit media_index: no precise source edit, alpha cutout, strict identity or Edit Model. Generic references are image prompts (loose inspiration); use midjourney style references for appearance. Do not switch to MJ for required edits. No automatic fallback or paid resubmission.',
   },
+  'seedream-5.5': {
+    id: 'seedream-5.5', label: 'Seedream 5.5', maxInputImages: 10,
+    aspectRatio: { kind: 'enum', values: [...STANDARD_RATIOS, '9:21'] },
+    resolutions: ['1K', '1.5K', '2K'], supportsTransparency: true, supportsNsfw: false,
+    promptMode: 'context', provider: 'evolink',
+    notes: 'Explicit candidate only; never Auto. EvoLink doubao-seedream-5.5 for text-to-image and editing; up to 10 ordered HTTPS inputs including the base. PNG (default) or JPEG, native transparent PNG; no quality/reasoning/GIF/SVG controls. 1K/1.5K/2K; square outputs 1024/1536/2048 respectively, default 1K. No 3K. One paid submission only; save the accepted receipt and query the same task on failure/timeout. No provider/model fallback. Published output tariff $0.016/$0.016/$0.028 for 1K/1.5K/2K, plus $0.0064 per input. prompt_priority=standard only.',
+  },
   'wan2.7-image': {
     id: 'wan2.7-image', label: 'Wan 2.7 Image', maxInputImages: 9,
     aspectRatio: { kind: 'range', min: 1 / 8, max: 8 },
@@ -120,7 +127,7 @@ export function getImageRequestConflicts(req: GenerateImageRequest, capability: 
   const conflicts: string[] = [];
   const format = req.outputFormat ?? 'png';
   const is26 = capability.id.startsWith('gpt-image-2.6-');
-  if ((req.outputFormat || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) && !is26) conflicts.push('explicit image format/quality/reasoning controls require GPT Image 2.6');
+  if (((req.outputFormat && !(capability.id === 'seedream-5.5' && ['png', 'jpeg'].includes(req.outputFormat))) || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) && !is26) conflicts.push('explicit image format/quality/reasoning controls require GPT Image 2.6');
   if (!['png', 'jpeg', 'webp', 'gif', 'svg'].includes(format)) conflicts.push('unsupported outputFormat');
   if (format === 'svg' && (req.image || req.references?.length)) conflicts.push('SVG supports text-to-image only; omit source and references');
   if (req.background === 'transparent' && format === 'jpeg') conflicts.push('JPEG cannot preserve transparency');
@@ -212,6 +219,11 @@ export function planImageGeneration(req: GenerateImageRequest): ImageGenerationP
     const selected = resolveImageModel(req.model, req.background) ?? DEFAULT_IMAGE_MODEL;
     validateImageModelRequest(req, selected);
     return { model: selected, request: { ...req, model: selected }, adjustments: [] };
+  }
+  // Candidate requests are exact: do not silently change the paid experiment's model or inputs.
+  if (normalized === 'seedream-5.5') {
+    validateImageModelRequest(req, normalized);
+    return { model: normalized, request: { ...req, model: normalized }, adjustments: [] };
   }
   // Explicit batch generation has a different editing contract. Never silently reroute it.
   if (normalized === 'mj-v8.2') {

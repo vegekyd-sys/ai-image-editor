@@ -70,6 +70,8 @@ function formatResult(image: string, message: string, prefix: string, saveToDisk
 }
 
 export interface McpServerOptions {
+  /** HTTP user workspace receipt; saved before polling an accepted Seedream task. */
+  onSeedream55Receipt?: import('../lib/models/types').GenerateImageRequest['onSeedream55Receipt'];
   /** HTTP clients receive original media bytes; stdio may save to disk. */
   returnImageContent?: boolean;
   submitVideo?: (input: CreateVideoInput, toolName: string) => Promise<CreateVideoResult>;
@@ -116,7 +118,7 @@ export function createMakaronMcpServer(options?: McpServerOptions) {
 ${formatImageCapabilitiesForAgent()}
 
 When skill is set, the caller reads the skill prompt and supplies its instructions in editPrompt.
-Input image can be a local file path (stdio), URL, or base64 data URL. Omit image for text-to-image generation.
+Input image can be a local file path (stdio), URL, or base64 data URL. Seedream 5.5 requires uploaded public HTTPS originals (the CLI uploads local files automatically). Omit image for text-to-image generation.
 Generation timing varies; report actual completion. Unknown submissions are never repeated. An independently assessed benign-character request may use one compatible alternate after a terminal provider refusal; callers must not add retries.`,
     {
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
@@ -128,11 +130,11 @@ Generation timing varies; report actual completion. Unknown submissions are neve
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.6 support up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
       imageQuality: z.enum(['auto', 'low', 'medium', 'high']).nullish().describe('GPT Image 2.6 rendering quality. Default low; choose higher when the user asks for more visual detail.'),
       imageReasoningEffort: z.enum(['low', 'medium', 'high']).nullish().describe('GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high.'),
-      outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).nullish().describe('Default PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
+      outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).nullish().describe('Default PNG. Seedream 5.5 supports PNG/JPEG only, transparent PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
       frameCount: z.number().int().min(2).max(16).nullish().describe('GIF frames 2–16, default 9. Square frames are 960px up to 9 frames, 816px for 10–12, 720px for 13–16.'),
       frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).nullish().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
       gifFrameSize: z.enum(['sticker', 'full']).nullish().describe('GIF frame canvas: sticker ~512px frames (about half cost, for chat stickers/memes), full largest frames (default).'),
-      imageResolution: z.string().nullish().describe('Output resolution preference, normally 1K/2K/4K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
+      imageResolution: z.string().nullish().describe('Output resolution preference, 1K/2K/4K, or Seedream 5.5 1K/1.5K/2K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
       midjourney: z.object({
         speed: z.enum(['fast', 'draft']).optional(), quality: z.enum(['standard', 'hd']).optional(),
         styleReferences: z.array(z.string()).max(20).optional(), styleWeight: z.number().int().min(0).max(1000).optional(),
@@ -169,6 +171,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
             isNsfw: params.isNsfw ?? undefined,
             benignCharacterContent: params.benignCharacterContent ?? undefined,
             signal: options?.imageSignal,
+            onSeedream55Receipt: options?.onSeedream55Receipt,
             beforeImageRecovery: async request => !options?.onToolStart || (await options.onToolStart('makaron_edit_image', request.model, {
               imageInputCount: (request.image ? 1 : 0) + (request.references?.length ?? 0), imageResolution: request.imageResolution,
             })).allowed,
@@ -185,9 +188,10 @@ Generation timing varies; report actual completion. Unknown submissions are neve
         }
         // Bill after success
         await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage, { imageInputCount });
-        const msg = result.usedModel
+        const receiptInfo = result.usedModel === 'seedream-5.5' && result.taskId ? ` Provider: evolink; provider model: doubao-seedream-5.5; task: ${result.taskId}.` : '';
+        const msg = (result.usedModel
           ? `${result.message} (model: ${result.usedModel})`
-          : result.message;
+          : result.message) + receiptInfo;
         const images = result.images ?? [result.image];
         if (images.length === 1) return formatResult(result.image, msg, 'edit', !options?.returnImageContent);
         // Preserve every candidate; one onToolComplete call bills the whole batch once.

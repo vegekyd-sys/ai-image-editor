@@ -275,6 +275,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.seedream55.title': "Seedream 5.5 上线",
+  'changelog.seedream55.item1': "新增 Seedream 5.5 图片模型，支持文字生图、多图参考和原图编辑。",
+  'changelog.seedream55.item2': "保持人物与画面主体，逐步调整造型、场景和光影；也能生成透明 PNG 素材。",
   'changelog.characterImageRecovery.title': '角色图片生成更顺畅',
   'changelog.characterImageRecovery.item1': '创作普通卡通角色图片时，遇到偶发生成拦截会自动尝试其他可用模型，减少创作中断。',
   'changelog.fasterMediaDelivery.title': "图片和视频加载更快",
@@ -775,6 +778,8 @@ const zh = {
   'model.qwen.desc': '人脸保真最佳，可处理 NSFW 内容。',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '独立的 1–3 图编辑模型，变化大胆并保留高分辨率。',
+  'model.seedream55.name': 'Seedream 5.5',
+  'model.seedream55.desc': '原生透明 PNG、局部编辑，最多 10 张输入图',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',
   'model.image26Flare.desc': '默认图片模型，支持 GIF 动画',
   'model.image26Sunburst.name': 'GPT Image 2.6 Sunburst',

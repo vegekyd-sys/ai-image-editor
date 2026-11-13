@@ -5,6 +5,7 @@ import { geminiLiteBackend } from './gemini-lite';
 import { qwenSpicyBackend } from './qwen-spicy';
 import { createImage26Backend } from './openai-image26';
 import { midjourneyBackend } from './midjourney';
+import { seedream55Backend } from './seedream55';
 import { wanImageBackend } from './wan-image';
 
 const backends: Map<ModelId, ModelBackend> = new Map([
@@ -17,6 +18,7 @@ const backends: Map<ModelId, ModelBackend> = new Map([
   ['gpt-image-2.6-sunburst', createImage26Backend('gpt-image-2.6-sunburst')],
   ['wan2.7-image', wanImageBackend],
   ['mj-v8.2', midjourneyBackend],
+  ['seedream-5.5', seedream55Backend],
 ]);
 
 export function getBackend(id: ModelId): ModelBackend | undefined {

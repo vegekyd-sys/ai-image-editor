@@ -1,0 +1,910 @@
+{
+  "candidate": "B-20261109-seedream55",
+  "checkedAt": "2026-11-12T18:22:16.176Z",
+  "scope": "local candidate; no merge/deploy/default/shared-rate changes",
+  "pricingFixture": {
+    "scope": "read-side only in local candidate Node process",
+    "sharedDatabaseMutation": false,
+    "rate": {
+      "model_id": "seedream-5.5",
+      "display_name": "Seedream 5.5 candidate (isolated test fixture)",
+      "input_per_1m": 0,
+      "output_per_1m": 0,
+      "markup": 2,
+      "is_active": true
+    }
+  },
+  "projects": [
+    {
+      "group": "mascot",
+      "privateVerified": true
+    },
+    {
+      "group": "pokemon",
+      "privateVerified": true
+    }
+  ],
+  "rows": [
+    {
+      "case": "mascot-full-scene-gpt",
+      "group": "mascot",
+      "promptCase": "full-scene",
+      "runId": "c61454cd-844b-440b-83e9-1d518c26d0fc",
+      "status": "completed",
+      "runWallSeconds": 29,
+      "delivery": "ready",
+      "generateImageCalls": 1,
+      "promptVerbatim": true,
+      "toolSettings": [
+        {
+          "model": "gpt-image-2.6-flare",
+          "background": "opaque",
+          "aspectRatio": "1:1",
+          "imageQuality": "low",
+          "outputFormat": "png",
+          "imageResolution": "1K",
+          "imageReasoningEffort": "high",
+          "benignCharacterContent": false
+        }
+      ],
+      "usage": {
+        "credits": 9,
+        "entries": [
+          {
+            "tool_name": "generate_image",
+            "model": "gpt-image-2.6-flare",
+            "calls": 1,
+            "credits": 8,
+            "input_tokens": 0,
+            "output_tokens": 0
+          },
+          {
+            "tool_name": "agent",
+            "model": "deepseek/deepseek-flash",
+            "calls": 1,
+            "credits": 1,
+            "input_tokens": 3668,
+            "output_tokens": 554
+          }
+        ]
+      },
+      "images": [
+        {
+          "snapshotId": "77bc9584-9ddd-4457-bfab-f4bf761e41d1",
+          "file": "mascot-full-scene-gpt.png",
+          "provider": "openai",
+          "providerModel": "gpt-image-2.6-flare",
+          "requestId": "req_4c1f0e820fca404099b30ee3a08665c3",
+          "metadataModel": "gpt-image-2.6-flare",
+          "persistedPromptMatches": true,
+          "inputCount": 1,
+          "inputSha256": [
+            "70074b05c59b9b74040c36485823fb84f8eb73579fc3fc35f87db708e98c9993"
+          ],
+          "expectedSourceSha256": "70074b05c59b9b74040c36485823fb84f8eb73579fc3fc35f87db708e98c9993",
+          "inputsMatchFrozenSource": true,
+          "persistedOutputSha256": "e5e35e52ba327e708e3101a0d2c2ad98971e3da6dbcb8cf897d8b8c5959f6e14",
+          "persistedMatchesDownloaded": true,
+          "alphaPersisted": false,
+          "backgroundPersisted": null,
+          "imageQuality": "low",
+          "imageReasoningEffort": "high",
+          "openaiSpend": {
+            "kind": "image",
+            "model": "gpt-image-2.6-flare",
+            "usd": 0.038303,
+            "input_tokens": 1795,
+            "output_tokens": 824,
+            "request_id": "req_4c1f0e820fca404099b30ee3a08665c3",
+            "detail": "png 1024x1024 q=low"
+          },
+          "providerProcessingAndDownloadMs": 10299
+        }
+      ]
+    },
+    {
+      "case": "mascot-full-scene-seedream",
+      "group": "mascot",
+      "promptCase": "full-scene",
+      "runId": "085272dd-d739-4e0c-bbb6-5e72b10dbd1c",
+      "status": "completed",
+      "runWallSeconds": 52,
+      "delivery": "ready",
+      "generateImageCalls": 1,
+      "promptVerbatim": true,
+      "toolSettings": [
+        {
+          "model": "seedream-5.5",
+          "isNsfw": false,
+          "background": "opaque",
+          "aspectRatio": "1:1",
+          "outputFormat": "png",
+          "imageResolution": "1K"
+        }
+      ],
+      "usage": {
+        "credits": 6,
+        "entries": [
+          {
+            "tool_name": "generate_image",
+            "model": "seedream-5.5",
+            "calls": 1,
+            "credits": 5,
+            "input_tokens": 0,
+            "output_tokens": 0
+          },
+          {
+            "tool_name": "agent",
+            "model": "deepseek/deepseek-flash",
+            "calls": 1,
+            "credits": 1,
+            "input_tokens": 28864,
+            "output_tokens": 569
+          }
+        ]
+      },
+      "images": [
+        {
+          "snapshotId": "74e3935f-5d98-4211-8342-ac57e3f41cad",
+          "file": "mascot-full-scene-seedream.png",
+          "provider": "evolink",
+          "providerModel": "doubao-seedream-5.5",
+          "requestId": "task-unified-1794507092-5zoz8gu1",
+          "metadataModel": "seedream-5.5",
+          "persistedPromptMatches": true,
+          "inputCount": 1,
+          "inputSha256": [
+            "70074b05c59b9b74040c36485823fb84f8eb73579fc3fc35f87db708e98c9993"
+          ],
+          "expectedSourceSha256": "70074b05c59b9b74040c36485823fb84f8eb73579fc3fc35f87db708e98c9993",
+          "inputsMatchFrozenSource": true,
+          "persistedOutputSha256": "984e7fba2d61fdc3fa34abcd865cf16ccdc419d501b992361fdeb67484e1c60c",
+          "persistedMatchesDownloaded": true,
+          "alphaPersisted": false,
+          "backgroundPersisted": null,
+          "imageQuality": null,
+          "imageReasoningEffort": null,
+          "openaiSpend": null,
+          "providerProcessingAndDownloadMs": 27086,
+          "publishedTariffUsd": 0.0224
+        }
+      ]
+    },
+    {
+      "case": "mascot-local-hat-edit-gpt",
+      "group": "mascot",
+      "promptCase": "local-hat-edit",
+      "runId": "744470bf-c030-451d-a2fa-17a028285722",
+      "status": "completed",
+      "runWallSeconds": 38,
+      "delivery": "ready",
+      "generateImageCalls": 1,
+      "promptVerbatim": true,
+      "toolSettings": [
+        {
+          "model": "gpt-image-2.6-flare",
+          "background": "opaque",
+          "aspectRatio": "1:1",
+          "imageQuality": "low",
+          "outputFormat": "png",
+          "imageResolution": "1K",
+          "imageReasoningEffort": "high",
+          "benignCharacterContent": false
+        }
+      ],
+      "usage": {
+        "credits": 8,
+        "entries": [
+          {
+            "tool_name": "generate_image",
+            "model": "gpt-image-2.6-flare",
+            "calls": 1,
+            "credits": 7,
+            "input_tokens": 0,
+            "output_tokens": 0
+          },
+          {
+            "tool_name": "agent",
+            "model": "deepseek/deepseek-flash",
+            "calls": 1,
+            "credits": 1,
+            "input_tokens": 3290,
+            "output_tokens": 491
+          }
+        ]
+      },
+      "images": [
+        {
+          "snapshotId": "97197203-885b-4dfb-ac20-62ebb811a70f",
+          "file": "mascot-local-hat-edit-gpt.png",
+          "provider": "openai",
+          "providerModel": "gpt-image-2.6-flare",
+          "requestId": "req_81175025ff7345ddafd7e61987aca887",
+          "metadataModel": "gpt-image-2.6-flare",
+          "persistedPromptMatches": true,
+          "inputCount": 1,
+          "inputSha256": [
+            "bbd9051dad42a91ab512b9b1ade7b2582e69545331fa02a0cbe6415fe44bb9fa"
+          ],
+          "expectedSourceSha256": "bbd9051dad42a91ab512b9b1ade7b2582e69545331fa02a0cbe6415fe44bb9fa",
+          "inputsMatchFrozenSource": true,
+          "persistedOutputSha256": "48f2869c9908b06580d1af94ddf6c1f28400d119a8d2db08ae3d87670d42e37e",
+          "persistedMatchesDownloaded": true,
+          "alphaPersisted": false,
+          "backgroundPersisted": null,
+          "imageQuality": "low",
+          "imageReasoningEffort": "high",
+          "openaiSpend": {
+            "kind": "image",
+            "model": "gpt-image-2.6-flare",
+            "usd": 0.033722,
+            "input_tokens": 1186,
+            "output_tokens": 824,
+            "request_id": "req_81175025ff7345ddafd7e61987aca887",
+            "detail": "png 1024x1024 q=low"
+          },
+          "providerProcessingAndDownloadMs": 8700
+        }
+      ]
+    },
+    {
+      "case": "mascot-local-hat-edit-seedream",
+      "group": "mascot",
+      "promptCase": "local-hat-edit",
+      "runId": "ecacc56c-2e04-4958-b77e-723ea9d9b4e4",
+      "status": "completed",
+      "runWallSeconds": 48,
+      "delivery": "ready",
+      "generateImageCalls": 1,
+      "promptVerbatim": true,
+      "toolSettings": [
+        {
+          "model": "seedream-5.5",
+          "background": "opaque",
+          "aspectRatio": "1:1",
+          "outputFormat": "png",
+          "imageResolution": "1K"
+        }
+      ],
+      "usage": {
+        "credits": 6,
+        "entries": [
+          {
+            "tool_name": "generate_image",
+            "model": "seedream-5.5",
+            "calls": 1,
+            "credits": 5,
+            "input_tokens": 0,
+            "output_tokens": 0
+          },
+          {
+            "tool_name": "agent",
+            "model": "deepseek/deepseek-flash",
+            "calls": 1,
+            "credits": 1,
+            "input_tokens": 3423,
+            "output_tokens": 465
+          }
+        ]
+      },
+      "images": [
+        {
+          "snapshotId": "aee7ecb5-8037-48c3-be1b-6b9ff0e18e55",
+          "file": "mascot-local-hat-edit-seedream.png",
+          "provider": "evolink",
+          "providerModel": "doubao-seedream-5.5",
+          "requestId": "task-unified-1794507332-n97bezcc",
+          "metadataModel": "seedream-5.5",
+          "persistedPromptMatches": true,
+          "inputCount": 1,
+          "inputSha256": [
+            "bbd9051dad42a91ab512b9b1ade7b2582e69545331fa02a0cbe6415fe44bb9fa"
+          ],
+          "expectedSourceSha256": "bbd9051dad42a91ab512b9b1ade7b2582e69545331fa02a0cbe6415fe44bb9fa",
+          "inputsMatchFrozenSource": true,
+          "persistedOutputSha256": "09518d9829ff66fbcb2c3a71f766c64cc79f3107afe4ecf5d8cbc38b14d1efb2",
+          "persistedMatchesDownloaded": true,
+          "alphaPersisted": false,
+          "backgroundPersisted": null,
+          "imageQuality": null,
+          "imageReasoningEffort": null,
+          "openaiSpend": null,
+          "providerProcessingAndDownloadMs": 22617,
+          "publishedTariffUsd": 0.0224
+        }
+      ]
+    },
+    {
+      "case": "mascot-native-alpha-gpt",
+      "group": "mascot",
+      "promptCase": "native-alpha",
+      "runId": "d8594e08-91e0-4453-80eb-1f3073d0f4d1",
+      "status": "completed",
+      "runWallSeconds": 31,
+      "delivery": "ready",
+      "generateImageCalls": 1,
+      "promptVerbatim": true,
+      "toolSettings": [
+        {
+          "model": "gpt-image-2.6-flare",
+          "background": "transparent",
+          "aspectRatio": "1:1",
+          "imageQuality": "low",
+          "outputFormat": "png",
+          "imageResolution": "1K",
+          "imageReasoningEffort": "high",
+          "benignCharacterContent": false
+        }
+      ],
+      "usage": {
+        "credits": 9,
+        "entries": [
+          {
+            "tool_name": "generate_image",
+            "model": "gpt-image-2.6-flare",
+            "calls": 1,
+            "credits": 8,
+            "input_tokens": 0,
+            "output_tokens": 0
+          },
+          {
+            "tool_name": "agent",
+            "model": "deepseek/deepseek-flash",
+            "calls": 1,
+            "credits": 1,
+            "input_tokens": 3892,
+            "output_tokens": 592
+          }
+        ]
+      },
+      "images": [
+        {
+          "snapshotId": "73ca78fd-c96c-457b-9478-5e3d170e73f0",
+          "file": "mascot-native-alpha-gpt.png",
+          "provider": "openai",
+          "providerModel": "gpt-image-2.6-flare",
+          "requestId": "req_b9ab963359144f819bfc54237af7ae1f",
+          "metadataModel": "gpt-image-2.6-flare",
+          "persistedPromptMatches": true,
+          "inputCount": 1,
+          "inputSha256": [
+            "70074b05c59b9b74040c36485823fb84f8eb73579fc3fc35f87db708e98c9993"
+          ],
+          "expectedSourceSha256": "70074b05c59b9b74040c36485823fb84f8eb73579fc3fc35f87db708e98c9993",
+          "inputsMatchFrozenSource": true,
+          "persistedOutputSha256": "74a1a0233e22131c691d561fe555b92f2de499a903d7f71e0faec4d2eff44f8f",
+          "persistedMatchesDownloaded": true,
+          "alphaPersisted": true,
+          "backgroundPersisted": "transparent",
+          "imageQuality": "low",
+          "imageReasoningEffort": "high",
+          "openaiSpend": {
+            "kind": "image",
+            "model": "gpt-image-2.6-flare",
+            "usd": 0.038398,
+            "input_tokens": 1814,
+            "output_tokens": 824,
+            "request_id": "req_b9ab963359144f819bfc54237af7ae1f",
+            "detail": "png 1024x1024 q=low"
+          },
+          "providerProcessingAndDownloadMs": 12885
+        }
+      ]
+    },
+    {
+      "case": "mascot-native-alpha-seedream",
+      "group": "mascot",
+      "promptCase": "native-alpha",
+      "runId": "5d9bee9b-5aa2-4414-8759-8f98e9277810",
+      "status": "completed",
+      "runWallSeconds": 43,
+      "delivery": "ready",
+      "generateImageCalls": 1,
+      "promptVerbatim": true,
+      "toolSettings": [
+        {
+          "model": "seedream-5.5",
+          "background": "transparent",
+          "aspectRatio": "1:1",
+          "outputFormat": "png",
+          "imageResolution": "1K"
+        }
+      ],
+      "usage": {
+        "credits": 6,
+        "entries": [
+          {
+            "tool_name": "generate_image",
+            "model": "seedream-5.5",
+            "calls": 1,
+            "credits": 5,
+            "input_tokens": 0,
+            "output_tokens": 0
+          },
+          {
+            "tool_name": "agent",
+            "model": "deepseek/deepseek-flash",
+            "calls": 1,
+            "credits": 1,
+            "input_tokens": 3850,
+            "output_tokens": 509
+          }
+        ]
+      },
+      "images": [
+        {
+          "snapshotId": "563a7e57-45de-49ff-a37b-a5c5b0a4bcba",
+          "file": "mascot-native-alpha-seedream.png",
+          "provider": "evolink",
+          "providerModel": "doubao-seedream-5.5",
+          "requestId": "task-unified-1794507230-j3av80cs",
+          "metadataModel": "seedream-5.5",
+          "persistedPromptMatches": true,
+          "inputCount": 1,
+          "inputSha256": [
+            "70074b05c59b9b74040c36485823fb84f8eb73579fc3fc35f87db708e98c9993"
+          ],
+          "expectedSourceSha256": "70074b05c59b9b74040c36485823fb84f8eb73579fc3fc35f87db708e98c9993",
+          "inputsMatchFrozenSource": true,
+          "persistedOutputSha256": "b3440e941be1e5cb261ed2d8a63f5c660ac8fa3326a815ef98b70972c22935cf",
+          "persistedMatchesDownloaded": true,
+          "alphaPersisted": true,
+          "backgroundPersisted": "transparent",
+          "imageQuality": null,
+          "imageReasoningEffort": null,
+          "openaiSpend": null,
+          "providerProcessingAndDownloadMs": 23274,
+          "publishedTariffUsd": 0.0224
+        }
+      ]
+    },
+    {
+      "case": "pokemon-full-scene-gpt",
+      "group": "pokemon",
+      "promptCase": "full-scene",
+      "runId": "7f8a929d-b61a-4161-8603-48ae4b633c11",
+      "status": "completed",
+      "runWallSeconds": 20,
+      "delivery": "none",
+      "generateImageCalls": 1,
+      "promptVerbatim": true,
+      "toolSettings": [
+        {
+          "model": "gpt-image-2.6-flare",
+          "isNsfw": false,
+          "background": "opaque",
+          "aspectRatio": "1:1",
+          "imageQuality": "low",
+          "outputFormat": "png",
+          "imageResolution": "1K",
+          "imageReasoningEffort": "high"
+        }
+      ],
+      "usage": {
+        "credits": 1,
+        "entries": [
+          {
+            "tool_name": "agent",
+            "model": "deepseek/deepseek-flash",
+            "calls": 1,
+            "credits": 1,
+            "input_tokens": 27470,
+            "output_tokens": 583
+          }
+        ]
+      },
+      "images": [],
+      "failureEvidence": {
+        "agentText": "正在按指定参数提交这一次图像生成。图像生成失败，已停止（未重试、未换模型）。\n\n供应商内容检查器拒绝了这次请求，返回原文：\n\"Image generation failed: The provider content checker rejected this request. Do not retry automatically, rewrite the prompt to evade it, or switch models.\"\n\n- 模型：gpt-image-2.6-flare；参数：png / 1K / 1:1 / opaque / quality low / reasoning high\n- 纯文生图，未传任何 media_index 或参考图\n- 未使用 Auto 或其他备用模型，未做恢复重试\n\n按你的要求，此评测项到此为止；如需继续，请给出新的指令。",
+        "toolResults": [
+          {
+            "tool": "generate_image",
+            "omitted": [],
+            "inputChars": 1190,
+            "toolCallId": "call_00_5iRIOqPkFbIA9fTbEeTt3886",
+            "outputChars": 292
+          }
+        ]
+      }
+    },
+    {
+      "case": "pokemon-full-scene-seedream",
+      "group": "pokemon",
+      "promptCase": "full-scene",
+      "runId": "d6a2637c-4a33-415b-92b9-7f98705cf21e",
+      "status": "completed",
+      "runWallSeconds": 30,
+      "delivery": "none",
+      "generateImageCalls": 1,
+      "promptVerbatim": true,
+      "toolSettings": [
+        {
+          "model": "seedream-5.5",
+          "isNsfw": false,
+          "background": "opaque",
+          "aspectRatio": "1:1",
+          "outputFormat": "png",
+          "imageResolution": "1K"
+        }
+      ],
+      "usage": {
+        "credits": 1,
+        "entries": [
+          {
+            "tool_name": "agent",
+            "model": "deepseek/deepseek-flash",
+            "calls": 1,
+            "credits": 1,
+            "input_tokens": 2336,
+            "output_tokens": 621
+          }
+        ]
+      },
+      "images": [],
+      "failureEvidence": {
+        "agentText": "正在按 Seedream 5.5 指定参数提交这一次生成。Seedream 5.5 这次提交失败，已停止（未重试、未换模型）。\n\n失败原文：\n\"Seedream 5.5: Provider task ended: failed. content_policy_violation May violate third-party content rights. Please check for brand logos, trademarks, or copyrighted IP characters.\"\n\n- 任务 ID：`task-unified-1794507179-zh3cxv9p`（回执已存 `[private project]/seedream55/task-unified-1794507179-zh3cxv9p.json`）\n- 参数：png / 1K / 1:1 / opaque，未传 imageQuality 与 imageReasoningEffort\n- 纯文生图，未传任何 timeline 图或参考图\n- 未使用 Auto、备用模型或恢复重试\n\n该评测项按规定终止。",
+        "toolResults": [
+          {
+            "tool": "generate_image",
+            "omitted": [],
+            "inputChars": 1132,
+            "toolCallId": "call_00_xpfYhncJ6ynltJGEYIZD4902",
+            "outputChars": 609
+          }
+        ]
+      }
+    },
+    {
+      "case": "pokemon-native-alpha-gpt",
+      "group": "pokemon",
+      "promptCase": "native-alpha",
+      "runId": "37b44029-8510-46e3-a034-bbdf90f96ae7",
+      "status": "completed",
+      "runWallSeconds": 19,
+      "delivery": "none",
+      "generateImageCalls": 1,
+      "promptVerbatim": true,
+      "toolSettings": [
+        {
+          "model": "gpt-image-2.6-flare",
+          "isNsfw": false,
+          "background": "transparent",
+          "aspectRatio": "1:1",
+          "imageQuality": "low",
+          "outputFormat": "png",
+          "imageResolution": "1K",
+          "imageReasoningEffort": "high"
+        }
+      ],
+      "usage": {
+        "credits": 1,
+        "entries": [
+          {
+            "tool_name": "agent",
+            "model": "deepseek/deepseek-flash",
+            "calls": 1,
+            "credits": 1,
+            "input_tokens": 2394,
+            "output_tokens": 531
+          }
+        ]
+      },
+      "images": [],
+      "failureEvidence": {
+        "agentText": "按指定的 gpt-image-2.6-flare 参数（透明背景）提交这一次生成。gpt-image-2.6-flare 透明背景这次失败，已按要求停止，没有重试，也没有换用其他模型。\n\n失败原文：\n“Image generation failed: The provider content checker rejected this request. Do not retry automatically, rewrite the prompt to evade it, or switch models.”\n\n- 参数：png / 1K / 1:1 / transparent / quality low / reasoning high\n- 只做文生图：没有传入 media_index，也没有传入参考图；没有调用 run_code、去背景或其他生成器\n\n本次评测项结束。",
+        "toolResults": [
+          {
+            "tool": "generate_image",
+            "omitted": [],
+            "inputChars": 1177,
+            "toolCallId": "call_00_ET_vgoS7s0QiqG3uYD8FWez4794",
+            "outputChars": 292
+          }
+        ]
+      }
+    },
+    {
+      "case": "pokemon-native-alpha-seedream",
+      "group": "pokemon",
+      "promptCase": "native-alpha",
+      "runId": "eaa638e0-88e2-4305-9f36-d1b38eecf5fb",
+      "status": "completed",
+      "runWallSeconds": 36,
+      "delivery": "none",
+      "generateImageCalls": 1,
+      "promptVerbatim": true,
+      "toolSettings": [
+        {
+          "model": "seedream-5.5",
+          "isNsfw": false,
+          "background": "transparent",
+          "aspectRatio": "1:1",
+          "outputFormat": "png",
+          "imageResolution": "1K"
+        }
+      ],
+      "usage": {
+        "credits": 1,
+        "entries": [
+          {
+            "tool_name": "agent",
+            "model": "deepseek/deepseek-flash",
+            "calls": 1,
+            "credits": 1,
+            "input_tokens": 2626,
+            "output_tokens": 698
+          }
+        ]
+      },
+      "images": [],
+      "failureEvidence": {
+        "agentText": "按指定参数（透明背景）提交这一次 Seedream 5.5 生成。Seedream 5.5 透明背景这次同样失败，已按规则停止，没有重试，也没有更换模型。\n\n失败原文：\n\"Seedream 5.5: Provider task ended: failed. content_policy_violation May violate third-party content rights. Please check for brand logos, trademarks, or copyrighted IP characters.\"\n\n- 任务 ID：`task-unified-1794507216-x64pog52`，回执已保存到 `[private project]/seedream55/task-unified-1794507216-x64pog52.json`\n- 参数：png / 1K / 1:1 / transparent；因为 Seedream 不支持，未传 imageQuality 和 imageReasoningEffort\n- 只输入了文本提示词，没有传入任何 timeline 或参考图，也未调用 run_code、去背景或其他生成器\n\n这次失败同样源于版权 IP 内容检查；这次评测任务到此结束。",
+        "toolResults": [
+          {
+            "tool": "generate_image",
+            "omitted": [],
+            "inputChars": 1119,
+            "toolCallId": "call_00_P0oyhGuPCHuK6qX0p33v7985",
+            "outputChars": 609
+          }
+        ]
+      }
+    }
+  ],
+  "evolinkTasks": [
+    {
+      "taskId": "task-unified-1794507230-j3av80cs",
+      "httpStatus": 200,
+      "model": "doubao-seedream-5.5",
+      "status": "completed",
+      "usage": {
+        "billable_input_images": 1,
+        "cost": {
+          "credits": 1.5232,
+          "usd": 0.023,
+          "cny": 0.153
+        },
+        "credits_used": 1.5232,
+        "generated_images": 1,
+        "input_images": 1,
+        "output_pixels": 1048576,
+        "output_tier": "1K"
+      },
+      "taskInfo": {
+        "can_cancel": false
+      },
+      "created": 1794507230
+    },
+    {
+      "taskId": "task-unified-1794507216-x64pog52",
+      "httpStatus": 200,
+      "model": "doubao-seedream-5.5",
+      "status": "failed",
+      "taskInfo": {
+        "can_cancel": false
+      },
+      "error": {
+        "code": "content_policy_violation",
+        "message": "May violate third-party content rights.\nPlease check for brand logos, trademarks, or copyrighted IP characters.\nTips: Remove logos, trademarks, and copyrighted characters."
+      },
+      "created": 1794507217
+    },
+    {
+      "taskId": "task-unified-1794507179-zh3cxv9p",
+      "httpStatus": 200,
+      "model": "doubao-seedream-5.5",
+      "status": "failed",
+      "taskInfo": {
+        "can_cancel": false
+      },
+      "error": {
+        "code": "content_policy_violation",
+        "message": "May violate third-party content rights.\nPlease check for brand logos, trademarks, or copyrighted IP characters.\nTips: Remove logos, trademarks, and copyrighted characters."
+      },
+      "created": 1794507180
+    },
+    {
+      "taskId": "task-unified-1794507092-5zoz8gu1",
+      "httpStatus": 200,
+      "model": "doubao-seedream-5.5",
+      "status": "completed",
+      "usage": {
+        "billable_input_images": 1,
+        "cost": {
+          "credits": 1.5232,
+          "usd": 0.023,
+          "cny": 0.153
+        },
+        "credits_used": 1.5232,
+        "generated_images": 1,
+        "input_images": 1,
+        "output_pixels": 1048576,
+        "output_tier": "1K"
+      },
+      "taskInfo": {
+        "can_cancel": false
+      },
+      "created": 1794507093
+    },
+    {
+      "taskId": "task-unified-1794507332-n97bezcc",
+      "httpStatus": 200,
+      "model": "doubao-seedream-5.5",
+      "status": "completed",
+      "usage": {
+        "billable_input_images": 1,
+        "cost": {
+          "credits": 1.5232,
+          "usd": 0.023,
+          "cny": 0.153
+        },
+        "credits_used": 1.5232,
+        "generated_images": 1,
+        "input_images": 1,
+        "output_pixels": 1048576,
+        "output_tier": "1K"
+      },
+      "taskInfo": {
+        "can_cancel": false
+      },
+      "created": 1794507333
+    }
+  ],
+  "openaiSpend": [
+    {
+      "kind": "image",
+      "model": "gpt-image-2.6-flare",
+      "usd": 0.038303,
+      "input_tokens": 1795,
+      "output_tokens": 824,
+      "request_id": "req_4c1f0e820fca404099b30ee3a08665c3",
+      "detail": "png 1024x1024 q=low"
+    },
+    {
+      "kind": "image",
+      "model": "gpt-image-2.6-flare",
+      "usd": 0.038398,
+      "input_tokens": 1814,
+      "output_tokens": 824,
+      "request_id": "req_b9ab963359144f819bfc54237af7ae1f",
+      "detail": "png 1024x1024 q=low"
+    },
+    {
+      "kind": "image",
+      "model": "gpt-image-2.6-flare",
+      "usd": 0.033722,
+      "input_tokens": 1186,
+      "output_tokens": 824,
+      "request_id": "req_81175025ff7345ddafd7e61987aca887",
+      "detail": "png 1024x1024 q=low"
+    }
+  ],
+  "totalProductCredits": 48,
+  "budget": {
+    "carryForwardConservativeUsd": 0.275951,
+    "newProductCredits": 48,
+    "newProductCreditValueUsd": 0.48,
+    "newSuccessfulSupplierCostPublishedOrLedgerUsd": 0.17762299999999998,
+    "newEvolinkReportedRoundedUsd": 0.069,
+    "newEvolinkCreditsUsed": 4.5696,
+    "remainingUnknown": "Routing-only preflight supplier cost not settled in product ledger; failed generation supplier billing not proven by absence of product image charge.",
+    "targetUsd": 5,
+    "ceilingUsd": 10,
+    "noMorePaidSubmissionsPlanned": true,
+    "routingPreflightEstimatedUsd": 0.01793376,
+    "routingPreflightRate": {
+      "model_id": "deepseek/deepseek-flash",
+      "display_name": "DeepSeek V4.1 Flash 1017",
+      "input_per_1m": 0.3,
+      "output_per_1m": 1.2,
+      "markup": 2,
+      "is_active": true,
+      "updated_at": "2026-09-10T10:16:21.579593+00:00",
+      "cache_read_per_1m": 0.006,
+      "cache_write_per_1m": 0
+    },
+    "cumulativeProductPlusPreflightEstimatedUsd": 0.77388476
+  },
+  "providerSubmissions": [
+    {
+      "at": "2026-11-12T18:13:49.798Z",
+      "providerHost": "api.evolink.ai",
+      "path": "/v1/images/generations",
+      "model": "doubao-seedream-5.5",
+      "httpStatus": 200,
+      "requestId": "20261113021350181353908xvY1Q3xO",
+      "taskId": "task-unified-1794507230-j3av80cs",
+      "errorCode": null
+    },
+    {
+      "at": "2026-11-12T18:13:35.785Z",
+      "providerHost": "api.evolink.ai",
+      "path": "/v1/images/generations",
+      "model": "doubao-seedream-5.5",
+      "httpStatus": 200,
+      "requestId": "20261113021336743696670OyCproo2",
+      "taskId": "task-unified-1794507216-x64pog52",
+      "errorCode": null
+    },
+    {
+      "at": "2026-11-12T18:14:45.959Z",
+      "providerHost": "api.openai.com",
+      "path": "/v1/images/edits",
+      "model": "gpt-image-2.6-flare",
+      "httpStatus": 200,
+      "requestId": "req_b9ab963359144f819bfc54237af7ae1f",
+      "taskId": null,
+      "errorCode": null
+    },
+    {
+      "at": "2026-11-12T18:13:07.919Z",
+      "providerHost": "api.openai.com",
+      "path": "/v1/images/edits",
+      "model": "gpt-image-2.6-flare",
+      "httpStatus": 200,
+      "requestId": "req_4c1f0e820fca404099b30ee3a08665c3",
+      "taskId": null,
+      "errorCode": null
+    },
+    {
+      "at": "2026-11-12T18:16:36.477Z",
+      "providerHost": "api.openai.com",
+      "path": "/v1/images/edits",
+      "model": "gpt-image-2.6-flare",
+      "httpStatus": 200,
+      "requestId": "req_81175025ff7345ddafd7e61987aca887",
+      "taskId": null,
+      "errorCode": null
+    },
+    {
+      "at": "2026-11-12T18:14:15.076Z",
+      "providerHost": "api.openai.com",
+      "path": "/v1/images/generations",
+      "model": "gpt-image-2.6-flare",
+      "httpStatus": 400,
+      "requestId": "req_9f6505e2ffc440479683ea7decac6e59",
+      "taskId": null,
+      "errorCode": "moderation_blocked"
+    },
+    {
+      "at": "2026-11-12T18:12:59.213Z",
+      "providerHost": "api.evolink.ai",
+      "path": "/v1/images/generations",
+      "model": "doubao-seedream-5.5",
+      "httpStatus": 200,
+      "requestId": "20261113021259784799761ydcBYYZp",
+      "taskId": "task-unified-1794507179-zh3cxv9p",
+      "errorCode": null
+    },
+    {
+      "at": "2026-11-12T18:11:31.986Z",
+      "providerHost": "api.evolink.ai",
+      "path": "/v1/images/generations",
+      "model": "doubao-seedream-5.5",
+      "httpStatus": 200,
+      "requestId": "20261113021132937276067aye6xudq",
+      "taskId": "task-unified-1794507092-5zoz8gu1",
+      "errorCode": null
+    },
+    {
+      "at": "2026-11-12T18:11:55.746Z",
+      "providerHost": "api.openai.com",
+      "path": "/v1/images/generations",
+      "model": "gpt-image-2.6-flare",
+      "httpStatus": 400,
+      "requestId": "req_afa362f31cac4637804ba5b94d6d97f7",
+      "taskId": null,
+      "errorCode": "moderation_blocked"
+    },
+    {
+      "at": "2026-11-12T18:15:31.485Z",
+      "providerHost": "api.evolink.ai",
+      "path": "/v1/images/generations",
+      "model": "doubao-seedream-5.5",
+      "httpStatus": 200,
+      "requestId": "20261113021532468401046f94OCiiU",
+      "taskId": "task-unified-1794507332-n97bezcc",
+      "errorCode": null
+    }
+  ]
+}
