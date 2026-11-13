@@ -1303,8 +1303,11 @@ try {
     const flashRetake=requests.filter(r=>r.pathname==='/api/mcp').at(-1).body.params;
     assert.equal(flashRetake.arguments.model,'seedance-2.5-flash');
     assert.equal(flashRetake.arguments.video_resolution,'480p');
+    await expectSuccess(['video','create','--script','Flash full duration','--duration','30','--video-model','seedance-2.5-flash']);
     const beforeFlashReject=requests.length;
     await expectFailure(['video','retake','--video','https://cdn.example/source.mp4','--start','1','--end','2','--prompt','Flash retake','--model','seedance-2.5-flash','--video-resolution','1080p']);
+    assert.equal(requests.length,beforeFlashReject);
+    await expectFailure(['video','create','--script','Flash too long','--duration','31','--video-model','seedance-2.5-flash']);
     assert.equal(requests.length,beforeFlashReject);
     await expectSuccess(['video', 'retake', '--video', 'https://cdn.example/source.mp4', '--start', '2.5', '--end', '4.2', '--prompt', 'Use multiple camera angles', '--json']);
     assert.equal(requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params.arguments.model, 'kling-4');
