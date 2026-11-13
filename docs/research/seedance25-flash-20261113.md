@@ -1,13 +1,13 @@
 # Seedance 2.5 Flash 候选接入与实测
 
-2026-11-13，稳定候选 ID：`B-20261112-seedance25-flash`。用户已授权独立接入；现有 EvoLink 账号可见四个精确路由，因此从 B 升为 A。没有改变默认模型、合入、部署、发布 npm 或修改共享配置。
+2026-11-13，稳定候选 ID：`B-20261112-seedance25-flash`。用户已授权独立接入；现有 EvoLink 账号可见四个精确路由，因此从 B 升为 A。没有改变默认模型、合入、部署或发布 npm。后续为完成候选验收，仅新增共享库 Flash 专属四条计费行，原有价格行逐行核对未变。
 
 ## 交付边界
 
 - Worktree：`/Users/tianyicai/.codex/worktrees/seedance25-flash/ai-image-editor`；分支 `codex/seedance25-flash`。
 - 现场 fetch 的 `origin/dev` 基线：`8e1b556340b134d878f42563d55bfdb60eb29179`。保留并重放此前两次文档核查提交，复用原 managed worktree，没有重建或覆盖其他任务。
 - 代码接入提交：`0121eed1`。后续文档/CLI help/测试补充见本分支最新提交。
-- 阶段：`code_ready`，供应商模块真实生成已验证。**不是完整产品 `live_verified`，也不是 `ready_for_review` 的端到端验收通过。**
+- 阶段更新见下方“独立 thread 产品验收”。早期仅供应商模块验证的阶段保留在原始证据中。
 - 本地候选服务：`http://localhost:3047`，由隔离 runtime `/Users/tianyicai/.codex/runtimes/seedance25-flash-acceptance` 运行；没有占用共享 Preview alias。
 - 可播放报告：`evidence/seedance25-flash-20261113/report.html`，本机 `http://localhost:3048/report.html`。完整请求、输出、测量、像素证据在同目录。
 
@@ -51,7 +51,7 @@
 
 单样本参考对照中 Flash 约快 9.1%，报价低 13.0%；不是稳定延迟承诺，也不能据此宣布质量更好。普通 2.5 使用既有 adaptive 参数，Flash 省略比例后默认 16:9；实测输出均 854×480。时间从提交前到轮询完成并下载，包含网络、排队及 8 秒轮询粒度。
 
-6个任务全部完成；供应商回执媒体合计 $3.70，受控路由预检约 $0.0082，本轮约 $3.71，低于既有 $5 目标。没有账户余额查询、采购、充值或重复POST。各视频轨道、SHA256、总费用与播放检查以 `measurements.json` / HTML 为准。所有 POST 均保留原 task ID；结果未知时只查询原任务，没有自动重提。
+原6个供应商模块任务全部完成；这6条回执媒体合计 $3.70，首轮受控路由预检约 $0.0082，小计约 $3.71。独立 thread 新增产品样例费用单列于下节，共用原session额度。没有账户余额查询、采购、充值或重复POST。各视频轨道、SHA256、总费用与播放检查以 `measurements.json` / HTML 为准。所有 POST 均保留原 task ID；结果未知时只查询原任务，没有自动重提。
 
 ## 验证与待办
 
@@ -59,6 +59,25 @@
 - TypeScript、ESLint 对应模块、CLI smoke/upload、四语 i18n 检查通过；CLI 新增首次/尾帧与编辑参数传输、非法 extend 零网络提交回归。
 - `build:skill-sync`、`check:skill-sync` 通过。旧路由证据过期后已执行 3 项受控真实 Agent 路由预检，所有非 read_file 工具拦截，媒体/生产操作为 0。
 - 四语真实 ModelSelector 组件通过内置浏览器像素及 480p/720p 交互检查；组件 harness 明确标注不是完整编辑器生成验收。
-- 已用真实本地 CLI 请求 Flash，因共享数据库缺少 `video:seedance-2.5-flash:480p:generate` 计费行而在供应商 POST 前拦截。只读查询确认计费行数 0。**没有修改共享计费配置来绕过此边界。**
+- 历史阻塞：早期真实本地 CLI 请求 Flash，因共享数据库缺少 `video:seedance-2.5-flash:480p:generate` 计费行而在供应商 POST 前拦截。只读查询确认计费行数 0。此时未修改价格。后续依用户“完成接入”的授权补齐四条 Flash 独立价格，未绕过预检。
 - 真实生成样例另经 CLI 导入专用项目并重读媒体列表（1张参考图+6条视频），持久化证据单列；这是输出保存验证，不能称为 CLI 原生生成成功。内置浏览器的完整编辑器仍需本地登录。
-- 发布前仍需获准应用计费迁移，跑实际 Makaron chat/GUI/CLI 生成 → 扣费/退款 → 保存/重开全链路。30 秒及最大参考数仅做边界测试，音频参考尚无真实生成样例。
+- 候选计费数据已增量设置。SQL迁移文件保留 `ON CONFLICT DO NOTHING`，实际通过Data API设置等价数据，未伪造迁移历史。30秒及最大参考数仅做边界测试，音频参考尚无真实生成样例。
+
+## 独立 thread 产品验收（本次续做）
+
+- 独立 thread：`01a1d3c6-4ecc-7f23-973a-18b1cf2bea43`，复用原 managed worktree/分支。业务提交 `bfb0eba2`，隔离 runtime 已更新到该提交；报告服务3048保持可播放。
+- 真实 `makaron chat --project ...` 发起：run `aa61a685-d972-4a07-b55a-18bb3452c96c`，精确供应商任务 `task-unified-1794554842-g5p2o602`，回执模型 `seedance-2.5-flash-reference-to-video`，实际854×480、24fps、4.064秒、带音轨。专用项目自动持久化原始媒体，实际Chrome编辑器播放至结尾，并在干净URL重开后再次播放至结尾。
+- 真实独立 `makaron video create`：任务 `task-unified-1794555107-86shyc9b`，精确模型 `seedance-2.5-flash-text-to-video`，已完成并经CLI返回URL、下载原文件、ffprobe核验。新增 `--request-id` 参数；同一UUID、同一请求重放返回原任务，数据库只有一次96积分扣费。没有第二次供应商POST。
+- 两条产品样例供应商任务回执各$0.48，应用各96积分。`product-billing-acceptance.json`记录真实扣费与退款检查：在真实DB建立测试预留，模拟供应商提交前明确拒绝，重复终结退款两次仍只退96，净扣费0；这不是伪称真实供应商失败。
+- Flash Agent扣费改为完整payload与音频时长校验后的回调；校验拒绝零扣费，供应商明确拒绝退一次。POST结果不明保留扣费且阻止重试；供应商已受理但保存失败时保留原task ID、不错误退款，后续对原任务与Agent run做恢复。没有新建计费系统。
+- 新增5项Agent边界测试，含校验零扣费、精确报价、明确拒绝退款、未知POST不退款和保存失败保留task。最新相关6文件71项通过（与先前148项部分重叠，不相加）；TypeScript通过，ESLint零错误、1条既有未使用locale警告；CLI smoke/upload通过。
+- `build:skill-sync`已通过。因Agent工具源码变更，旧路由证据按指纹判定过期；已重新跑3项受控真实路由预检并通过 `check:skill-sync`，所有非read_file工具被拦截，媒体/项目写入0。保留先前检查失败记录。
+- 内置浏览器在本独立thread不可用，GUI验收使用Chrome。初次本地会话只有访客视图；通过既有验收账号的正常Supabase登录恢复，凭据不写入报告。未新增账号、密码或权限。
+- 费用完整性：供应商任务级回执与应用积分分开报告，未查询余额或账户账单。原有自动Tips入口观察到额外预览任务，未将其虚构成Flash费用；总账/发票未对账。
+- [费用横向对照](seedance25-flash-price-comparison-20261113.md)。默认视频模型仍为Kling 4.0 Flash，默认图片仍为GPT Image 2.6 Flare；没有合入、生产/Preview部署、npm发布或共享alias/env修改。
+
+### GUI直接发起的最终任务
+
+最新代码下在真实编辑器手动选择Flash 480p并发送请求，创建任务 `task-unified-1794555872-wytzkn54` / snapshot `ccec8d6c-ff25-494e-b28c-896a3d080501`。供应商GET确认精确路由为`seedance-2.5-flash-reference-to-video`；产品正确预留96积分，报价$0.48。2026-11-13 07:56:41 UTC实际查询仍是processing/95%，从受理已超过12分钟，未返回输出或失败。只查询原task，没有重提、退款或模型替换；不能把这条GUI发起的最终验收写成通过。前一条chat生成的视频已在GUI播放和重开通过。
+
+本次续做最新9文件98项相关测试通过，CLI smoke/upload、npm pack dry-run、TypeScript和Skill同步通过；未发布npm。已确认的8条完成媒体任务（原6+chat+独立CLI）回执合计$4.66；GUI原任务另有$0.48报价/96积分预留，尚不能当最终账单。产品Agent和素材分析另11积分；额外受控路由预检只记录token量、未编造实际USD账单。总账未对账。所有模型样例均在原授权session的$10上限内推进，没有重复申请预算。
