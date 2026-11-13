@@ -64,7 +64,7 @@ describe('Layerize lifecycle and billing ownership', () => {
     await Promise.all([getLayerize(owner, jobId), getLayerize(owner, jobId)]);
     const result = await getLayerize(owner, jobId);
     expect(result).toMatchObject({ status: 'completed', credits: 8, snapshotId: jobId, projectUrl: `https://www.makaron.app/projects/${projectId}` });
-    expect(h.submit).toHaveBeenCalledTimes(1); expect(h.render).toHaveBeenCalledTimes(1);
+    expect(h.submit).toHaveBeenCalledTimes(1); expect(h.render).not.toHaveBeenCalled();
     expect(h.debits.size).toBe(1);
     expect(h.debits.get(jobId)).toMatchObject({ p_model: 'seedream-5.5-layerize', p_source: 'cli', p_project_id: projectId, p_quote: { credits: 8, supplierCostUsd: .0384 } });
     expect(h.rpc.mock.calls.filter(([name]) => name === 'finish_mcp_video_submission').every(([, args]) => args.p_state === 'completed')).toBe(true);
@@ -76,7 +76,7 @@ describe('Layerize lifecycle and billing ownership', () => {
     design.props._pos_layer_1 = { x: 50, y: 30 }; h.files.set(path, JSON.stringify(design));
     const result = await getLayerize(owner, jobId);
     expect(result.design?.props?._pos_layer_1).toEqual({ x: 50, y: 30 });
-    expect(h.render).toHaveBeenCalledTimes(1); expect(h.debits.size).toBe(1);
+    expect(h.render).not.toHaveBeenCalled(); expect(h.debits.size).toBe(1);
   });
   it('failed or uncertain provider jobs never auto resubmit or debit', async () => {
     h.submit.mockRejectedValue(new LayerizeProviderError('unknown', true));
@@ -141,4 +141,13 @@ describe('Layerize lifecycle and billing ownership', () => {
     expect(h.debits.size).toBe(1);
   });
 
+});
+it('keeps native OCR text on the pinned-font Remotion poster path', async () => {
+  const task = await h.query();
+  task.result_data[1].text_recognition = {lines:[{bounding_box:{absolute:[5,8,25,28]},runs:[{text:'HELLO',style:{similar_font_family:'Arial',foreground_color:'#000000'}}]}]};
+  h.query.mockReset().mockResolvedValue(task);
+  await startLayerize(owner, jobId, {...input,editableText:true});
+  const result=await getLayerize(owner,jobId);
+  expect(result.status).toBe('completed'); expect(h.render).toHaveBeenCalledOnce();
+  expect(result.design?.editables?.some(field=>field.type==='text')).toBe(true);
 });

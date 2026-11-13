@@ -1791,6 +1791,18 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }
   }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
 
+  const autoLayerSubmitRef = useRef(false);
+  const handleAutoLayerize = async () => {
+    if (isAgentActive || autoLayerSubmitRef.current || gateInteraction()) return;
+    const index = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
+    const snapshot = index == null ? undefined : snapshotsRef.current[index];
+    if (!snapshot || snapshot.design || snapshot.type === 'video') return;
+    autoLayerSubmitRef.current = true;
+    try {
+      await handleAgentRequest(t('design.autoLayerPrompt', index! + 1), undefined, undefined, { displayText: t('design.autoLayer') });
+    } finally { autoLayerSubmitRef.current = false; }
+  };
+
   // Abort the current agent request and discard its partial response
   const handleAgentAbort = useCallback(() => {
     agentAbortRef.current.abort();
@@ -4066,6 +4078,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 <AgentStatusBar
                   statusText={agentStatus}
                   isActive={isAgentActive}
+                  onAutoLayerize={!readOnly && !isViewingDesign && !isViewingVideo && !isViewingDraft && !annotationMode ? handleAutoLayerize : undefined}
                   onOpenChat={videoRetakeSelection ? () => handleVideoRetake(videoRetakeSelection.anim, videoRetakeSelection.start, videoRetakeSelection.end) : openCUI}
                   chatActionLabel={videoRetakeSelection ? t('video.retakeEdit') : undefined}
                   selectionText={videoRetakeSelection ? t('video.retakeStatusHint', String(Number(videoRetakeSelection.start.toFixed(1))), String(Number(videoRetakeSelection.end.toFixed(1)))) : undefined}

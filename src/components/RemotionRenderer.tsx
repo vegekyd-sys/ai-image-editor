@@ -364,6 +364,7 @@ interface RemotionRendererProps {
   mode?: 'fill' | 'inline';
   hideControls?: boolean;
   posterImage?: string;
+  showPlaybackPoster?: boolean;
   onLoading?: (loading: boolean) => void;
   onContainerRef?: (el: HTMLDivElement | null) => void;
   onPlayerRef?: (ref: PlayerRef | null) => void;
@@ -378,6 +379,7 @@ export default function RemotionRenderer({
   mode = 'inline',
   hideControls,
   posterImage,
+  showPlaybackPoster = true,
   onLoading,
   onContainerRef,
   onPlayerRef,
@@ -688,7 +690,7 @@ export default function RemotionRenderer({
     return previewFallback;
   }
 
-  if (!Component) return null;
+  if (!Component) return posterImage ? <img src={posterImage} alt="" className="h-full w-full object-contain" /> : null;
 
   const isFill = mode === 'fill';
 
@@ -723,7 +725,7 @@ export default function RemotionRenderer({
           renderPoster={posterImage ? () => (
             <img src={posterImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : undefined}
-          showPosterWhenUnplayed={!!posterImage}
+          showPosterWhenUnplayed={!isStill && showPlaybackPoster && !!posterImage}
           showPosterWhenBuffering={false}
           posterFillMode="player-size"
           bufferStateDelayInMilliseconds={0}

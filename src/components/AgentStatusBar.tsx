@@ -11,6 +11,7 @@ interface AgentStatusBarProps {
   selectionText?: string;
   isActive: boolean;
   onOpenChat: () => void;
+  onAutoLayerize?: () => void;
   isViewingDraft?: boolean;
   hideChat?: boolean;
   onAnimate?: () => void;
@@ -20,7 +21,7 @@ interface AgentStatusBarProps {
   onSeeNotification?: () => void;
 }
 
-export default function AgentStatusBar({ statusText, chatActionLabel, selectionText, isActive, onOpenChat, isViewingDraft, hideChat, notification, onSeeNotification }: AgentStatusBarProps) {
+export default function AgentStatusBar({ statusText, chatActionLabel, selectionText, isActive, onOpenChat, onAutoLayerize, isViewingDraft, hideChat, notification, onSeeNotification }: AgentStatusBarProps) {
   const { t } = useLocale();
   // Determine dot color and breathe speed based on state
   const isGeneratingImages = PREVIEW_STATUS_PREFIXES.some((prefix) => statusText.startsWith(prefix));
@@ -90,6 +91,14 @@ export default function AgentStatusBar({ statusText, chatActionLabel, selectionT
             {notification.text.includes('Top up') ? 'Top Up' : 'See'}
           </button>
         )}
+
+        {onAutoLayerize && <button type="button" data-testid="auto-layerize" disabled={isActive}
+          onClick={event => { event.stopPropagation(); onAutoLayerize(); }}
+          className="mkr-liquid-pill flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-[12px] font-medium text-pink-200/90 transition-opacity active:opacity-70 disabled:opacity-35"
+          title={t('design.autoLayerHint')}>
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg>
+          {t('design.autoLayer')}
+        </button>}
 
         {/* Chat button (hidden on desktop where CUI panel is always visible) */}
         {!hideChat && (

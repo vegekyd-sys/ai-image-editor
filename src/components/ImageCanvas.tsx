@@ -267,7 +267,7 @@ export default function ImageCanvas({
   const remotionFrameRef = useRef(0);
   const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
   const pendingRemotionPlayRef = useRef(false);
-  const [remotionLoading, setRemotionLoading] = useState(false); // true while RemotionRenderer is initializing (fetching images/fonts/audio)
+  const [remotionLoading, setRemotionLoading] = useState(true); // true while RemotionRenderer is initializing (fetching images/fonts/audio)
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
@@ -331,6 +331,13 @@ export default function ImageCanvas({
     return () => ro.disconnect();
   }, [updateImageRect]);
 
+  const editableGestureClaimed = useRef(false);
+  const claimEditableGesture = useCallback(() => {
+    editableGestureClaimed.current = true;
+    swiping.current = false;
+    skipClick.current = true;
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+  }, []);
   const SWIPE_THRESHOLD = 40;
 
   const clearLongPress = useCallback(() => {
@@ -342,7 +349,9 @@ export default function ImageCanvas({
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
-    if (selectedEditableId) return; // Design Editor mode — all canvas gestures disabled
+    if ((e.target as Element).closest?.('.moveable-control')) { claimEditableGesture(); return; }
+    if (e.touches.length === 1) editableGestureClaimed.current = false;
+    if (selectedEditableId && e.touches.length > 1) { claimEditableGesture(); return; }
     if (e.touches.length === 2) {
       // Pinch start — skip for video entry and long content
       if (isVideoEntry || isLongContent) return;
@@ -372,18 +381,18 @@ export default function ImageCanvas({
 
     // Long press detection — skip for video entry and animated designs
     const hasAnimation = !!currentDesign?.animation;
-    if (previousImage && !isVideoEntry && !hasAnimation) {
+    if (previousImage && !currentDesign && !isVideoEntry && !hasAnimation) {
       clearLongPress();
       longPressTimer.current = setTimeout(() => {
         setIsComparing(true);
         swiping.current = false;
       }, 200);
     }
-  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, currentIndex, currentDesign, selectedEditableId]);
+  }, [timeline.length, scale, previousImage, clearLongPress, isVideoEntry, annotationMode, currentIndex, currentDesign, selectedEditableId, claimEditableGesture]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
-    if (selectedEditableId) return;
+    if (editableGestureClaimed.current || (selectedEditableId && e.touches.length > 1)) return;
     if (e.touches.length === 2 && isPinching.current) {
       // Pinch move
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -442,7 +451,7 @@ export default function ImageCanvas({
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
-    if (selectedEditableId) return;
+    if (editableGestureClaimed.current) { editableGestureClaimed.current = false; swiping.current = false; clearLongPress(); return; }
     clearLongPress();
 
     // End pull-down gesture
@@ -493,7 +502,7 @@ export default function ImageCanvas({
 
     // Double tap detection
     const now = Date.now();
-    if (now - lastTapTime.current < 300 && e.changedTouches.length === 1) {
+    if (!currentDesign && now - lastTapTime.current < 300 && e.changedTouches.length === 1) {
       lastTapTime.current = 0;
       setScale(1);
       setTranslate({ x: 0, y: 0 });
@@ -525,7 +534,7 @@ export default function ImageCanvas({
         setAnimDir(null);
       }, 150);
     }
-  }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress, annotationMode, onPullDownEnd, selectedEditableId]);
+  }, [currentIndex, timeline.length, onIndexChange, isComparing, clearLongPress, annotationMode, onPullDownEnd, selectedEditableId, currentDesign]);
 
   const handleClick = useCallback(() => {
     if (selectedEditableId) return; // Design Editor mode — handled by design container onClick
@@ -1571,7 +1580,8 @@ export default function ImageCanvas({
               snapshotId={designSnapshotId}
               mode={isLongDesign ? 'inline' : 'fill'}
               hideControls
-              posterImage={currentDesign?.animation && !selectedEditableId ? displayImage : undefined}
+              posterImage={displayImage || undefined}
+              showPlaybackPoster={!selectedEditableId}
               onLoading={setRemotionLoading}
               onError={(err) => console.error('[canvas design]', err)}
               onContainerRef={setDesignContainerEl}
@@ -1592,7 +1602,7 @@ export default function ImageCanvas({
             />
 
             {/* Poster fallback while RemotionRenderer is loading (fetching images/fonts/audio) */}
-            {remotionLoading && displayImage && !selectedEditableId && (
+            {remotionLoading && displayImage && (
               <img
                 src={displayImage}
                 alt="poster"
@@ -1675,6 +1685,8 @@ export default function ImageCanvas({
             {/* Editable design overlay */}
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
               <DesignOverlay
+                touchGestures={!isDesktop}
+                onGestureStart={claimEditableGesture}
                 containerEl={designContainerEl}
                 interactionEl={designInteractionEl}
                 editables={editableFields}

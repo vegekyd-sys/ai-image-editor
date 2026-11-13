@@ -1,4 +1,9 @@
 const en = {
+
+  "design.autoLayer": "Auto layers",
+  "design.autoLayerHint": "Split this image into independently editable layers",
+  "design.touchHint": "Hold to move · Pinch to resize · Swipe for versions",
+  "design.autoLayerPrompt": (index: number) => `Automatically split @${index} into editable layers, preserving the original appearance and occlusion. Make subjects and background independently editable. Preserve raster text appearance; native text conversion is not needed. Publish the layered result directly to the canvas without generating another image.`,
   "design.editingElement": (label: string) => `Editing: ${label}`,
   "design.clearSelection": "Clear selection",
   "design.saveBeforeEditFailed": "Changes have not been saved. Please try again shortly.",

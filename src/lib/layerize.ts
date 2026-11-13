@@ -13,6 +13,7 @@ import { publishDesignSnapshot } from './publish-design';
 import { validateDesign } from './design-harness';
 import type { DesignPayload } from '@/types';
 import { prepareLayerizeSource } from './layerize-source';
+import { renderLayerizeRasterPoster } from './layerize-poster';
 import { inferLayerizeStack } from './layerize-reconstruction';
 
 export interface LayerizeOwner { userId: string; projectId: string; origin: string; attribution?: BillingAttribution }
@@ -150,11 +151,15 @@ async function permanent(owner: LayerizeOwner, path: string, data: string | Buff
   return file.storageUrl;
 }
 async function mapLayers<T, R>(items: T[], operation: (item: T) => Promise<R>): Promise<R[]> {
-  const output: R[] = [];
-  for (let i = 0; i < items.length; i += 4) output.push(...await Promise.all(items.slice(i, i + 4).map(operation)));
+  const output = new Array<R>(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(4, items.length) }, async () => {
+    for (;;) { const index = next++; if (index >= items.length) return; output[index] = await operation(items[index]); }
+  }));
   return output;
 }
 async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: LayerizeProviderTask) {
+  const deliveryStarted = Date.now();
   const rows = [...(task.result_data ?? [])].sort((a, b) => a.z_index - b.z_index);
   if (rows.length < 2 || rows.length > job.input.maxOutputs! || rows[0].z_index !== 0 || new Set(rows.map(r => r.z_index)).size !== rows.length || rows.some(r => !Number.isInteger(r.z_index) || r.z_index < 0)) throw new Error('Provider output inventory does not satisfy the layer contract.');
   const decoded = await mapLayers(rows, async row => {
@@ -193,16 +198,24 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
   await permanent(owner, manifestPath, JSON.stringify(manifest), 'application/json');
   const design = buildLayerizeDesign(manifest, job.input.editableText);
   const invalid = validateDesign(design); if (invalid) throw new Error(`Design validation failed: ${invalid}`);
-  const { renderDesignFrame } = await import('./remotion-server');
-  const signal = AbortSignal.timeout(120_000);
-  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const posterStarted = Date.now();
   let poster: Buffer;
-  try {
-    poster = await Promise.race([
-      renderDesignFrame(design, 0, { signal, sandboxScope: `${owner.userId}:${owner.projectId}` }),
-      new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('Design preview timed out; recover this same task.')), 120_000); }),
-    ]);
-  } finally { if (timeout) clearTimeout(timeout); }
+  if (design.editables?.every(field => field.type === 'image')) {
+    // Raster Layerize results already contain everything needed for the exact
+    // initial composition. Native OCR text still uses the pinned-font renderer.
+    poster = await renderLayerizeRasterPoster(manifest, new Map(decoded.map(item => [item.row.z_index, item.bytes])));
+  } else {
+    const { renderDesignFrame } = await import('./remotion-server');
+    const signal = AbortSignal.timeout(120_000);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      poster = await Promise.race([
+        renderDesignFrame(design, 0, { signal, sandboxScope: `${owner.userId}:${owner.projectId}` }),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Design preview timed out; recover this same task.')), 120_000); }),
+      ]);
+    } finally { if (timer) clearTimeout(timer); }
+  }
+  console.info('[layerize-delivery]', JSON.stringify({ jobId: job.id, stage: 'poster', renderer: design.editables?.every(field => field.type === 'image') ? 'raster' : 'remotion', elapsedMs: Date.now() - posterStarted, layers: layers.length }));
   const posterUrl = await permanent(owner, `${owner.projectId}/layerize/${job.id}/poster.jpg`, poster, 'image/jpeg');
   const credits = await chargeCompletedProviderTask({ id: job.id, userId: owner.userId, model: LAYERIZE_MODEL, tool: 'decompose_image',
     fingerprint: job.fingerprint, taskId: task.id, supplierCostUsd, credits: providerCostToCredits(supplierCostUsd, job.markup), attribution: job.attribution });
@@ -211,6 +224,7 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
   job.status = 'completed'; job.snapshotId = published.snapshotId; job.designPath = published.designPath;
   job.posterUrl = published.posterUrl; job.manifestPath = manifestPath; job.credits = credits; job.error = undefined;
   await save(owner, job);
+  console.info('[layerize-delivery]', JSON.stringify({ jobId: job.id, stage: 'published', elapsedMs: Date.now() - deliveryStarted, layers: layers.length }));
   return { ...response(owner, job), design, newlyPublished: true };
 }
 

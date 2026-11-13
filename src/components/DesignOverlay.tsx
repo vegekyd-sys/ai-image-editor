@@ -17,9 +17,12 @@ import {
   readEditableRuntimeId,
 } from '@/lib/editor/scene-registry';
 import { editableMediaImage, warmEditableAlpha, pickPaintedEditable } from '@/lib/editor/editable-image-alpha';
+import { createEditableTouchHold, editableLabelPosition } from '@/lib/editor/editable-touch-hold';
 import EditableSelectionTint from './EditableSelectionTint';
 
 interface DesignOverlayProps {
+  touchGestures?: boolean;
+  onGestureStart?: () => void;
   containerEl: HTMLDivElement | null;
   interactionEl: HTMLDivElement | null;
   editables: EditableField[];
@@ -70,6 +73,8 @@ function readCssPair(value: string): { x: number; y: number } | null {
 }
 
 export default function DesignOverlay({
+  touchGestures = false,
+  onGestureStart,
   containerEl,
   interactionEl,
   editables,
@@ -237,6 +242,8 @@ export default function DesignOverlay({
   onStartEditRef.current = onStartEdit;
   const selectedFieldIdRef = useRef(selectedFieldId);
   selectedFieldIdRef.current = selectedFieldId;
+  const onGestureStartRef = useRef(onGestureStart);
+  onGestureStartRef.current = onGestureStart;
   const onCanvasTapRef = useRef(onCanvasTap);
   onCanvasTapRef.current = onCanvasTap;
 
@@ -323,6 +330,7 @@ export default function DesignOverlay({
     const handlePointerUp = (e: PointerEvent) => {
       if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
       if (!gesture || gesture.pointerId !== e.pointerId) return;
+      if (interactionEl.dataset.editableGesture) { gesture = null; lastCompletedTap = null; return; }
       const completedGesture = gesture;
       gesture = null;
       const intent = resolveEditablePointerIntent({
@@ -435,11 +443,21 @@ export default function DesignOverlay({
       return true;
     };
 
+    let pendingTouch: { target: HTMLElement; x: number; y: number } | null = null;
+    const hold = createEditableTouchHold(pointerId => {
+      const point = pendingTouch; pendingTouch = null;
+      if (!point || !startDrag(point.target, point.x, point.y, 'touch')) return;
+      if (interactionEl) interactionEl.dataset.editableGesture = 'drag';
+      onGestureStartRef.current?.();
+      try { point.target.setPointerCapture(pointerId); } catch { /* best effort */ }
+    });
     const onPointerDown = (e: PointerEvent) => {
-      const targetEl = e.target as HTMLElement | null;
-      if (!startDrag(targetEl, e.clientX, e.clientY, e.pointerType)) return;
-      try { targetEl?.setPointerCapture?.(e.pointerId); } catch { /* best effort */ }
-      e.preventDefault();
+      if (e.pointerType !== 'touch') return;
+      if (pendingTouch || dragState || e.isPrimary === false) { hold.cancel(); pendingTouch = null; return; }
+      const target = e.target as HTMLElement | null;
+      if (!target || target.closest('.moveable-control') || pickEditable(e.clientX, e.clientY) !== selectedFieldIdRef.current) return;
+      pendingTouch = { target, x: e.clientX, y: e.clientY };
+      hold.start(e.pointerId, e.clientX, e.clientY);
     };
 
     const updateDrag = (clientX: number, clientY: number) => {
@@ -459,6 +477,7 @@ export default function DesignOverlay({
     };
 
     const onPointerMove = (e: PointerEvent) => {
+      hold.move(e.pointerId, e.clientX, e.clientY);
       if (!dragState) return;
       pendingDragPoint = { x: e.clientX, y: e.clientY };
       if (!dragRaf) dragRaf = requestAnimationFrame(flushDrag);
@@ -466,6 +485,8 @@ export default function DesignOverlay({
     };
 
     const finishDrag = () => {
+      hold.cancel(); pendingTouch = null;
+      if (interactionEl) delete interactionEl.dataset.editableGesture;
       if (!dragState) return;
       if (dragRaf) {
         cancelAnimationFrame(dragRaf);
@@ -494,9 +515,11 @@ export default function DesignOverlay({
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', finishDrag);
       window.removeEventListener('pointercancel', finishDrag);
+      hold.cancel();
+      if (interactionEl) delete interactionEl.dataset.editableGesture;
       if (dragRaf) cancelAnimationFrame(dragRaf);
     };
-  }, [containerEl, measure, onUpdateProp, props, pickEditable]);
+  }, [containerEl, interactionEl, measure, onUpdateProp, props, pickEditable]);
 
   // ── Container-level pinch-to-scale ──
   // Single implementation: works regardless of where fingers land.
@@ -512,6 +535,8 @@ export default function DesignOverlay({
     const onTouchStart = (e: TouchEvent) => {
       if (!selectedFieldIdRef.current || e.touches.length !== 2) return;
       const sc = props[`_scale_${selectedFieldIdRef.current}`] as { w: number; h: number } | undefined;
+      onGestureStartRef.current?.();
+      if (interactionEl) interactionEl.dataset.editableGesture = 'scale';
       pinchRef.current = {
         startDist: getDist(e.touches),
         baseW: sc?.w ?? 1,
@@ -544,6 +569,7 @@ export default function DesignOverlay({
 
     const onTouchEnd = () => {
       if (!pinchRef.current) return;
+      if (interactionEl) delete interactionEl.dataset.editableGesture;
       const fieldId = selectedFieldIdRef.current;
       pinchRef.current = null;
       isDraggingRef.current = false;
@@ -570,7 +596,7 @@ export default function DesignOverlay({
       containerEl.removeEventListener('touchend', onTouchEnd);
       containerEl.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [containerEl, props, onUpdateProp]);
+  }, [containerEl, interactionEl, props, onUpdateProp]);
 
   const selectedRect = rects.find(r => r.id === selectedFieldId && r.domEl.isConnected);
 
@@ -587,10 +613,11 @@ export default function DesignOverlay({
         if (!field) return null;
         return (
           <div
+            data-editable-label={selectedFieldId}
             className="absolute px-1.5 py-0.5 text-[10px] font-medium rounded-sm whitespace-nowrap pointer-events-none"
             style={{
-              left: selectedRect.left,
-              top: selectedRect.top - 20,
+              ...editableLabelPosition(selectedRect, overlayRef.current?.clientWidth || 0, overlayRef.current?.clientHeight || 0),
+              overflow: 'hidden', textOverflow: 'ellipsis',
               backgroundColor: 'rgb(217,70,239)',
               color: 'white',
             }}
@@ -608,9 +635,10 @@ export default function DesignOverlay({
             target={selectedRect.domEl}
             rootContainer={containerEl ?? undefined}
             useAccuratePosition={true}
-            draggable={true}
-            dragArea={true}
-            passDragArea={false}
+            draggable={!touchGestures}
+            dragArea={!touchGestures}
+            passDragArea={touchGestures}
+            preventDefault={false}
             scalable={true}
             keepRatio={true}
             renderDirections={['nw', 'ne', 'sw', 'se']}
@@ -634,6 +662,8 @@ export default function DesignOverlay({
             elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
             /* ── Drag ── */
             onDragStart={(event) => {
+              if (touchGestures && event.inputEvent?.type?.startsWith('touch')) { event.stopDrag(); return false; }
+              onGestureStartRef.current?.();
               const input = event.inputEvent;
               const point = input?.touches?.[0] || input;
               if (typeof point?.clientX === 'number' && pickEditable(point.clientX, point.clientY) !== selectedFieldId) {
@@ -668,6 +698,7 @@ export default function DesignOverlay({
             }}
             /* ── Scale (desktop handle drag only) ── */
             onScaleStart={({ set }) => {
+              onGestureStartRef.current?.();
               isDraggingRef.current = true;
               setIsDragging(true);
               dragDomElRef.current = selectedRect.domEl;

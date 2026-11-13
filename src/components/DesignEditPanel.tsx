@@ -121,7 +121,7 @@ export default function DesignEditPanel({
   );
 
   return (
-    <PillCarousel toolbar={toolbar} isDesktop={isDesktop}>
+    <PillCarousel toolbar={<div className="flex flex-col items-center gap-1">{toolbar}{!isDesktop && selectedFieldId && <p data-testid="editable-touch-hint" className="px-2 pb-1 text-center text-[10px] text-white/40">{t('design.touchHint')}</p>}</div>} isDesktop={isDesktop}>
       {fields.map((field) => {
         const isSelected = selectedFieldId === field.id;
         const value = String(props[field.propKey] ?? '');
