@@ -1328,7 +1328,7 @@ export async function* runMakaronAgent(
         }
 
         // Composition output handling — emit design SSE with published flag.
-        if (toolName === 'run_code' || toolName === 'write_file' || toolName === 'publish_draft') {
+        if (toolName === 'run_code' || toolName === 'write_file' || toolName === 'publish_draft' || toolName === 'decompose_image' || toolName === 'get_layerize_status') {
           // Design output stored in ctx.__pendingDesign → emit as SSE event
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {
@@ -1353,12 +1353,14 @@ export async function* runMakaronAgent(
               sourceDesignPath,
               published,
               previewUrl,
+              prePublished: (ctx as any).__pendingDesignAlreadyPersisted === true,
             };
             if (published) {
               finalStepDeliveredArtifact = true;
               attemptDeliveredArtifact = true;
             }
             (ctx as any).__pendingDesign = null;
+            (ctx as any).__pendingDesignAlreadyPersisted = undefined;
             (ctx as any).__pendingDesignPublished = undefined;
             (ctx as any).__pendingDesignSnapshotId = undefined;
             (ctx as any).__pendingDesignSourcePath = undefined;

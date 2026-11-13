@@ -1,0 +1,19 @@
+# Layerize 候选接入
+
+CUI `decompose_image` / `get_layerize_status`、CLI `makaron layerize` / `layerize status` 与 `/api/layerize` 使用同一服务。供应商为现有 EvoLink 账号，精确 ID `doubao-seedream-5.5-layerize`；计费 SKU `seedream-5.5-layerize`。独立异步任务，不在普通单图模型选择器或 Auto 中注册。
+
+输入一张已上传的 HTTPS PNG/JPEG 原图，尺寸 >14px，最多 30MB/36MP、比例 1:16–16:1。最大输出数 2–100（包含背景，默认8），quality=auto/1K/1.5K/2K。不接受单图模型的 size/aspect/crop_layers 参数。
+
+输出按 z_index 排序，背景为0。独立 PNG 按背景坐标系中的 absolute bbox 放回画布；不能将图层自身的像素尺寸当作位置。每层有独立 source prop、标准 image EditableField；复用 DesignPayload、Img、Proxy、DesignOverlay、web-renderer、保存与导出。GUI 当前支持图片图层拖动、缩放。默认保留 PNG 文字；显式 editable_text 将有效 OCR 行变为普通 text editable，支持 GUI 修改内容，字体为相似字体，不能保证与原图完全一致。缺失或无效 OCR 保留 PNG。原图、PNG 图层和 manifest 均保留。无新图层编辑器或渲染服务。
+
+发布前必须持久化所有资源并通过现有 design-harness，调用现有 renderDesignFrame 得到 poster，再写快照。Agent 与此工具复用 publishDesignSnapshot；已发布设计后续 CUI 事件只关联消息，不覆盖 GUI 编辑后的 props 或已有 message_id。App、CLI chat 和独立 CLI 均返回 projectUrl。
+
+每个任务单独计费：$0.0064 输入 + 每张实际输出（包括背景）≤2,610,000像素 $0.016，否则 $0.028。完整费用乘精确 token_rates.markup 后只取整一次，1 credit=$0.01。默认 markup=2，五张低档输出共 $0.0864 →18 credits。Agent 推理另计。候选价格迁移只在隔离 PostgreSQL 验证，不写共享库；缺少精确启用价格行会在供应商提交前拒绝。
+
+供应商提交前按 n 个最高档输出检查最大余额；产品在输出已下载、校验并准备好 poster 后按实际产物扣费。复用已有原子任务扣费 RPC（历史名称含 mcp_video），仅写 reserved→completed，绝不进入 submitted，因此不进入视频轮询 cron。相同 UUID/fingerprint 只扣一次，失败或未知任务不扣产品图片费。供应商已发生的费用与产品 credits 分开审计。
+
+workspace_files 的唯一(user_id,path)行在付费 POST 前声明任务；同 requestId 参数冲突拒绝，传输未知不重发。任务归属始终验证 project.user_id，不能通过任意供应商 taskId 查询或接管他人结果。GET 只恢复原任务。完成发布用可恢复租约互斥；存储或扣费中断可重查原 job。编辑后的 canonical design 不重写；不确定的提交需要查供应商历史后人工处理，不应新建任务重试。
+
+候选验收使用本地 App 与 CLI，未合入、push、部署或发布 NPM。真实测试证据保存在工作区外的验收目录。
+
+官方合同：[EvoLink Layerize API](https://evolink.ai/docs/en/api-manual/image-series/seedream-5.5/seedream-5.5-layerize-image-generate)。

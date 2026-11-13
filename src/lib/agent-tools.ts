@@ -372,7 +372,7 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render' | 'composition'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string }  // Agent React composition for browser rendering
+  | { type: 'render' | 'composition'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string; prePublished?: boolean }  // Agent React composition for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | {
       type: 'context_compaction';
@@ -1392,6 +1392,58 @@ interface AgentToolFactoryScope {
   locale?: string;
   durableVisionBridge: boolean;
   serializeVideoSubmission: SerializeVideoSubmission;
+}
+
+function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = false) {
+  const schema = statusOnly
+    ? z.object({ job_id: z.string().uuid().describe('The existing Layerize job ID. Query it instead of creating another paid task.') })
+    : z.object({
+      media_index: z.number().int().positive().describe('Image in the current Media Index to split into layers.'),
+      prompt: z.string().optional().describe('Optional elements/regions to separate; preserve the user request.'),
+      max_outputs: z.number().int().min(2).max(100).default(8).describe('Maximum output images INCLUDING the background; affects maximum funds required. Default 8.'),
+      quality: z.enum(['auto', '1K', '1.5K', '2K']).default('auto'),
+      editable_text: z.boolean().default(false).describe('Use OCR as normal editable design text when the user wants GUI text changes. Similar fonts may change typography; false preserves raster text appearance.'),
+      request_id: z.string().uuid().optional().describe('Reuse the original job ID after interruption; never make another provider submission to recover a result.'),
+    });
+  return tool({
+    description: statusOnly
+      ? 'Query/recover an existing image layer decomposition. Downloads/publishes the original task, never generates another image or charges twice.'
+      : 'Split an existing image into editable design layers using Seedream 5.5 Layerize. For 拆图/拆层/分离背景或元素, use this tool instead of generate_image or writing a new renderer. It preserves transparent PNGs, coordinates and ordering, then publishes ONE normal Makaron design using the existing GUI editor. Users can move/scale image layers; editable_text enables OCR text editing with approximate fonts. Returns a Makaron project edit URL for App/CLI users. No additional run_code/publish_draft is required. Actual outputs are billed once; each layer and the background have a supplier fee. Never automatically repeat a failed or uncertain submission.',
+    inputSchema: schema,
+    execute: async (raw: any) => {
+      if (!ctx.userId || !ctx.supabase) return { success: false, error: 'An authenticated project is required.' };
+      try {
+        const layerize = await import('./layerize');
+        const owner = { userId: ctx.userId, projectId: ctx.projectId,
+          origin: process.env.MAKARON_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.makaron.app' };
+        let id = raw.job_id;
+        if (!statusOnly) {
+          const index = validateImageIndex(ctx.snapshotImages, raw.media_index);
+          if (index.error) return { success: false, error: index.error };
+          const input = { imageUrl: ctx.snapshotImages[index.idx], prompt: raw.prompt,
+            maxOutputs: raw.max_outputs, quality: raw.quality, editableText: raw.editable_text };
+          id = raw.request_id || stableDraftPromotionSnapshotId({ projectId: ctx.projectId,
+            agentRunId: ctx.agentRunId || ctx.execution?.runId, designPath: 'layerize:' + JSON.stringify(input) });
+          const started = await layerize.startLayerize(owner, id, input);
+          if (['failed', 'uncertain'].includes(started.status)) return { success: false, ...started };
+        }
+        const result = await layerize.waitLayerize(owner, id);
+        if (result.status === 'completed' && result.design) {
+          (ctx as any).__pendingDesign = result.design;
+          (ctx as any).__pendingDesignPublished = true;
+          (ctx as any).__pendingDesignSnapshotId = result.snapshotId;
+          (ctx as any).__pendingDesignSourcePath = result.designPath;
+          (ctx as any).__pendingDesignAlreadyPersisted = true;
+          (ctx as any).__runCodeDrafts = [{ previewUrl: result.posterUrl }];
+          (ctx as any).__lastDesignPayload = result.design;
+          (ctx as any).__lastSavedDraftPath = result.designPath;
+        }
+        const { design: _design, ...publicResult } = result;
+        return { success: result.status === 'completed', ...publicResult };
+      } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Layer decomposition did not complete. Query the same job.' }; }
+    },
+    toModelOutput: ({ output }: { output: any }) => ({ type: 'content' as const, value: [{ type: 'text' as const, text: JSON.stringify(output) + '\nReturn the projectUrl as the Makaron GUI edit link. A completed result is already a published design; do not regenerate, call run_code, or publish again. If pending, query get_layerize_status with jobId.' }] }),
+  });
 }
 
 function createGenerateImageTool(
@@ -5692,6 +5744,8 @@ export function createTools(ctx: AgentContext, runtime: AgentModelRuntime, local
 const tools = preserveOptionalToolFields({
     ...getAgentProviderTools(runtime),
     generate_image: createGenerateImageTool(scope),
+    decompose_image: createDecomposeImageTool(scope),
+    get_layerize_status: createDecomposeImageTool(scope, true),
 
     generate_animation: createGenerateAnimationTool(scope),
     inspect_retake: createInspectRetakeTool(scope),
