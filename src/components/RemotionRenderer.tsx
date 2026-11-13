@@ -392,6 +392,8 @@ export default function RemotionRenderer({
   const reportContextRef = useRef({ projectId, snapshotId });
   const designPropsRef = useRef(design.props || {});
   const inputPropImageCacheRef = useRef(new Map<string, string>());
+  const inputPropImageUrlsRef = useRef(new Set<string>());
+  const inputPropImageCacheMountedRef = useRef(true);
   onErrorRef.current = onError;
   reportContextRef.current = { projectId, snapshotId };
   designPropsRef.current = design.props || {};
@@ -536,8 +538,13 @@ export default function RemotionRenderer({
           { recovered: true, resourceUrl },
         ),
       ) as Record<string, unknown>;
+      if (inputPropImageCacheMountedRef.current) {
+        newBlobUrls.forEach(url => inputPropImageUrlsRef.current.add(url));
+      }
       if (cancelled) {
-        discardNewBlobUrls();
+        // A newer props effect may already have borrowed these cached URLs.
+        // The mounted Player owns them until unmount, even if this request lost.
+        if (!inputPropImageCacheMountedRef.current) discardNewBlobUrls();
         return;
       }
       setInputProps(resolved);
@@ -547,9 +554,15 @@ export default function RemotionRenderer({
     };
   }, [design.props]);
 
-  useEffect(() => () => {
-    inputPropImageCacheRef.current.forEach(url => URL.revokeObjectURL(url));
-    inputPropImageCacheRef.current.clear();
+  useEffect(() => {
+    inputPropImageCacheMountedRef.current = true;
+    return () => {
+      inputPropImageCacheMountedRef.current = false;
+      new Set([...inputPropImageCacheRef.current.values(), ...inputPropImageUrlsRef.current])
+        .forEach(url => URL.revokeObjectURL(url));
+      inputPropImageCacheRef.current.clear();
+      inputPropImageUrlsRef.current.clear();
+    };
   }, []);
 
   // Expose container and player refs to parent
