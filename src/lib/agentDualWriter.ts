@@ -416,6 +416,7 @@ export class AgentDualWriter {
 
       case 'animation_task':
       case 'video_snapshot':
+      case 'focus_snapshot':
       case 'image_analyzed':
       case 'nsfw_detected': {
         await this.flushContent();

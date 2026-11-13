@@ -1,4 +1,15 @@
 const en = {
+  "design.layers": (n: number) => `${n} layers · front first`,
+  "design.editables": (n: number) => `${n} editables`,
+  "design.layerForward": "Bring forward",
+  "design.layerBackward": "Send backward",
+  "design.layerDelete": "Delete layer",
+  "design.layerRestore": "Restore deleted layer",
+  "design.trim": "Trim",
+  "design.moveScale": "Move / scale",
+  "design.edit": "Edit",
+
+
   "mjLab.back": "Back to Makaron",
   "mjLab.eyebrow": "Local trial · Midjourney V8.2",
   "image.candidates": "Candidate images",

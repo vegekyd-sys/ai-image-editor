@@ -1,4 +1,15 @@
 const zh = {
+  "design.layers": (n: number) => `${n} 个图层 · 从上到下`,
+  "design.editables": (n: number) => `${n} 个可编辑元素`,
+  "design.layerForward": "上移一层",
+  "design.layerBackward": "下移一层",
+  "design.layerDelete": "删除图层",
+  "design.layerRestore": "恢复已删图层",
+  "design.trim": "裁剪",
+  "design.moveScale": "移动 / 缩放",
+  "design.edit": "编辑",
+
+
   "mjLab.back": "返回 Makaron",
   "mjLab.eyebrow": "本地试用 · Midjourney V8.2",
   "image.candidates": "候选图",

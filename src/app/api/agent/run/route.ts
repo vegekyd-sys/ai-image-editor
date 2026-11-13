@@ -321,6 +321,7 @@ export async function POST(req: NextRequest) {
       let terminalError: Extract<import('@/lib/agent').AgentStreamEvent, { type: 'error' }> | null = null;
       try {
         for await (const event of runMakaronAgent(ctx.fullPrompt, ctx.snapshotImages[ctx.currentSnapshotIndex] || '', projectId, {
+          deliverySurface: billingSource === 'app' ? 'app' : 'external',
           locale,
           preferredModel,
           agentModel: requestedAgentModel,

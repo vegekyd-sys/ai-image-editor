@@ -3,12 +3,16 @@
 import { useRef, useEffect, useCallback } from 'react';
 import type { EditableField } from '@/types';
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
+import { useLocale } from '@/lib/i18n';
+import { ArrowUp, ArrowDown, Trash2, Undo2 } from 'lucide-react';
+import { readDesignLayerState, changeDesignLayer, DESIGN_LAYER_STATE_PROP } from '@/lib/editor/design-layer-state';
 import PillCarousel from '@/components/PillCarousel';
 
 interface DesignEditPanelProps {
   editables?: EditableField[];
   props?: Record<string, unknown>;
-  onUpdateProp: (key: string, value: string) => void;
+  onUpdateProp: (key: string, value: unknown) => void;
+  layered?: boolean;
   selectedFieldId: string | null;
   onSelectField: (id: string | null) => void;
   onStartEdit: (fieldId: string) => void;
@@ -19,10 +23,24 @@ export default function DesignEditPanel({
   editables = [],
   props = {},
   selectedFieldId,
+  onUpdateProp,
+  layered = false,
   onSelectField,
   onStartEdit,
   isDesktop,
 }: DesignEditPanelProps) {
+  const { t } = useLocale();
+  const layerState = readDesignLayerState(editables, props);
+  const fields = layered
+    ? [...editables].sort((a, b) => layerState.order.indexOf(b.id) - layerState.order.indexOf(a.id)).filter(field => !layerState.deleted.includes(field.id))
+    : editables;
+  const activeOrder = layerState.order.filter(id => !layerState.deleted.includes(id));
+  const selectedIndex = selectedFieldId ? activeOrder.indexOf(selectedFieldId) : -1;
+  const changeLayer = (id: string, action: 'forward' | 'backward' | 'delete' | 'restore') => {
+    onUpdateProp(DESIGN_LAYER_STATE_PROP, changeDesignLayer(layerState, id, action));
+    if (action === 'delete') onSelectField(null);
+    if (action === 'restore') onSelectField(id);
+  };
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const { isDragging } = useHorizontalScroll(!!isDesktop);
 
@@ -46,28 +64,43 @@ export default function DesignEditPanel({
   }, [selectedFieldId]);
 
   const toolbar = (
-    <div className="flex items-center gap-1.5 animate-pop-in">
-      <span className="text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.28)' }}>
-        Design
+    <div className="flex items-center gap-2 animate-pop-in">
+      <span className="text-[11px] text-white/50">
+        {t(layered ? 'design.layers' : 'design.editables', fields.length)}
       </span>
-      <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
-        · {editables.length} editable{editables.length !== 1 ? 's' : ''}
-      </span>
+      {layered && <>
+        {([
+          ['forward', 'design.layerForward', ArrowUp, selectedIndex < 0 || selectedIndex === activeOrder.length - 1],
+          ['backward', 'design.layerBackward', ArrowDown, selectedIndex <= 0],
+          ['delete', 'design.layerDelete', Trash2, selectedIndex < 0],
+        ] as const).map(([action, label, Icon, disabled]) => (
+          <button key={action} type="button" title={t(label)} aria-label={t(label)} disabled={disabled}
+            onClick={() => selectedFieldId && changeLayer(selectedFieldId, action)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/75 hover:bg-white/10 disabled:opacity-25 disabled:cursor-default">
+            <Icon size={16} />
+          </button>
+        ))}
+        <button type="button" title={t('design.layerRestore')} aria-label={t('design.layerRestore')} disabled={!layerState.deleted.length}
+          onClick={() => changeLayer(layerState.deleted[layerState.deleted.length - 1], 'restore')}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/75 hover:bg-white/10 disabled:opacity-25 disabled:cursor-default">
+          <Undo2 size={16} />
+        </button>
+      </>}
     </div>
   );
 
   return (
     <PillCarousel toolbar={toolbar} isDesktop={isDesktop}>
-      {editables.map((field) => {
+      {fields.map((field) => {
         const isSelected = selectedFieldId === field.id;
         const value = String(props[field.propKey] ?? '');
         const canOpenEditor = field.type === 'text' || field.type === 'video';
         const showEditButton = isSelected && canOpenEditor;
         const icon = field.type === 'video' ? '▶' : field.type === 'image' ? '▧' : 'T';
         const valuePreview = field.type === 'video'
-          ? 'Trim'
+          ? t('design.trim')
           : field.type === 'image'
-            ? 'Move / scale'
+            ? t('design.moveScale')
             : value;
 
         return (
@@ -90,6 +123,11 @@ export default function DesignEditPanel({
               style={{
                 background: isSelected ? 'linear-gradient(145deg, rgba(217,70,239,0.14), rgba(12,12,16,0.46))' : 'linear-gradient(145deg, rgba(217,70,239,0.075), rgba(12,12,16,0.42))',
               }}
+              role="button"
+              tabIndex={0}
+              aria-label={field.label}
+              aria-pressed={isSelected}
+              onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleCardClick(field); } }}
               onClick={() => handleCardClick(field)}
             >
               <div
@@ -140,7 +178,7 @@ export default function DesignEditPanel({
                     <path d="m15 5 4 4" />
                   </svg>
                   <span className="text-fuchsia-200 text-[10px] font-semibold tracking-wide leading-tight text-center relative z-10 whitespace-nowrap">
-                    Edit
+                    {t('design.edit')}
                   </span>
                 </button>
               )}

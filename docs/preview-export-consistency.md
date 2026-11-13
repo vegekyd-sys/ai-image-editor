@@ -157,3 +157,7 @@ Range 探测使用 64 KiB 窗口合并相邻 box 读取，避免带 ftyp/uuid/fr
 本次应用与渲染站点必须使用同一候选版本，独立站点地址通过单次部署或验收进程环境传入，不能拿旧渲染站点验收新应用。普通客户端默认不改变生产配置。
 
 本机 renderer 与 Sandbox/export 共享 `collectPreviewMediaSources` 和 URL token 替换逻辑，包含 Scene 无扩展名的签名媒体端点。本机也先缓存源文件，再交给解码器，不能把远程下载时间算进浏览器每帧的 28 秒等待期限；缓存只改渲染副本，原始源地址、剪辑范围和画布保持原样。
+
+### Layerize 图层顺序与删除（候选）
+
+`props._layerState` 保存 bottom-to-top `order` 和 `deleted`。DesignEditPanel、画布选区与共享 Editable React runtime 使用同一状态：Proxy 重排真实兄弟节点，并对删除元素返回 null，web-renderer 按同样 DOM 顺序绘制。素材不删除，可在原面板恢复；不依赖 z-index 或只隐藏选区。旧 Layerize manifest 首次编辑时补齐属性，原文字、位移和缩放保持不变。客户端按设计串行保存，避免连续排序/删除的慢 PUT 后写覆盖。运行时标记提升至 r7；未构建、部署新的独立 Lambda bundle，旧 bundle 仍由版本门禁阻止使用。

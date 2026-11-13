@@ -1,5 +1,6 @@
 'use client'
 
+import { queueEditableSave } from '@/lib/editor/editable-save-queue';
 import { useRef, useCallback } from 'react'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
@@ -359,7 +360,7 @@ export function useProject(projectId: string, userId: string) {
     snapshotId: string,
     design: import('@/types').DesignPayload,
     options: { propsOnly?: boolean; revision?: number } = {},
-  ) => {
+  ) => queueEditableSave(`${projectId}:${snapshotId}`, async () => {
     const response = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/snapshots/${encodeURIComponent(snapshotId)}/design`,
       {
@@ -388,7 +389,7 @@ export function useProject(projectId: string, userId: string) {
         cached.title,
       )
     }
-  }, [projectId])
+  }), [projectId])
 
   const saveMessage = useCallback((message: Message) => {
     Promise.resolve().then(async () => {

@@ -269,6 +269,7 @@ const ANALYSIS_PROMPT_VIDEO_TEMPLATE = (mediaIndex: number) =>
   `[System: User just uploaded a video at <<<media_${mediaIndex}>>>. Analyze it and describe the content.]\nDescribe this video in 2-3 sentences — duration, key subjects/actions, mood. Be conversational. No preamble.`;
 
 export interface RunMakaronAgentOptions {
+  deliverySurface?: 'app' | 'external';
   analysisOnly?: boolean;
   analysisContext?: 'initial' | 'post-edit';
   isVideoAnalysis?: boolean;
@@ -335,6 +336,7 @@ export async function* runMakaronAgent(
     options?.codexSubscriptionAllowed,
   );
   const ctx: AgentContext = {
+    deliverySurface: options?.deliverySurface,
     studioResumeAuthorized: options?.studioResumeAuthorized,
     abortSignal: options?.abortSignal,
     corePromptMode,
@@ -1327,6 +1329,12 @@ export async function* runMakaronAgent(
           if (wsUrl) {
             yield { type: 'preview_frame_captured' as const, workspaceUrl: wsUrl };
           }
+        }
+
+        const layerizeResult = toolOutput as { status?: string; snapshotId?: string } | undefined;
+        if ((toolName === 'decompose_image' || toolName === 'get_layerize_status')
+          && layerizeResult?.status === 'completed' && typeof layerizeResult.snapshotId === 'string') {
+          yield { type: 'focus_snapshot', snapshotId: layerizeResult.snapshotId };
         }
 
         // Composition output handling — emit design SSE with published flag.

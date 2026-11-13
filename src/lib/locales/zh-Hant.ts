@@ -4,6 +4,16 @@ import type { TranslationDictionary } from './index';
 const zhHant = {
 
   ...zh,
+  "design.layers": (n: number) => `${n} 個圖層 · 從上到下`,
+  "design.editables": (n: number) => `${n} 個可編輯元素`,
+  "design.layerForward": "上移一層",
+  "design.layerBackward": "下移一層",
+  "design.layerDelete": "刪除圖層",
+  "design.layerRestore": "復原已刪圖層",
+  "design.trim": "裁剪",
+  "design.moveScale": "移動 / 縮放",
+  "design.edit": "編輯",
+
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': '文字生成與圖/影片參考，3–30 秒；影片編輯保留原聲。',
   'model.kling4Flash.name': 'Kling 4.0 Flash',

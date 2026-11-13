@@ -97,6 +97,7 @@ import {
   translate,
 } from './locales';
 import { stableDraftPromotionSnapshotId } from './draft-promotion';
+import { layerizeModelOutput } from './layerize-delivery';
 import { sourceRangeFromVideoMeta } from './media-source-range';
 import { materializeSeedAudioReference } from './seed-audio-reference';
 import { resolveAudioRefs } from './audio-reference-resolver';
@@ -219,6 +220,7 @@ function modelFileContent(base64Data: string, mediaType: string) {
 // ---------------------------------------------------------------------------
 
 export interface AgentContext {
+  deliverySurface?: 'app' | 'external';
   abortSignal?: AbortSignal;
   studioResumeAuthorized?: boolean;
   /** Pinned with the system prompt for this invocation, including model retries. */
@@ -372,6 +374,7 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
+  | { type: 'focus_snapshot'; snapshotId: string }
   | { type: 'render' | 'composition'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string; prePublished?: boolean }  // Agent React composition for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | {
@@ -1408,7 +1411,7 @@ function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = f
   return tool({
     description: statusOnly
       ? 'Query/recover an existing image layer decomposition. Downloads/publishes the original task, never generates another image or charges twice.'
-      : 'Split an existing image into editable design layers using Seedream 5.5 Layerize. For 拆图/拆层/分离背景或元素, use this tool instead of generate_image or writing a new renderer. It preserves transparent PNGs, coordinates and ordering, then publishes ONE normal Makaron design using the existing GUI editor. Users can move/scale image layers; editable_text enables OCR text editing with approximate fonts. Returns a Makaron project edit URL for App/CLI users. No additional run_code/publish_draft is required. Actual outputs are billed once; each layer and the background have a supplier fee. Never automatically repeat a failed or uncertain submission.',
+      : 'Split an existing image into editable design layers using Seedream 5.5 Layerize. For 拆图/拆层/分离背景或元素, use this tool instead of generate_image or writing a new renderer. It preserves transparent PNGs, coordinates and ordering, then publishes ONE normal Makaron design using the existing GUI editor. Users can move/scale image layers; editable_text enables OCR text editing with approximate fonts. The App displays the result directly; external clients receive a Makaron edit URL. No additional run_code/publish_draft is required. Actual outputs are billed once; each layer and the background have a supplier fee. Never automatically repeat a failed or uncertain submission.',
     inputSchema: schema,
     execute: async (raw: any) => {
       if (!ctx.userId || !ctx.supabase) return { success: false, error: 'An authenticated project is required.' };
@@ -1442,7 +1445,7 @@ function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = f
         return { success: result.status === 'completed', ...publicResult };
       } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Layer decomposition did not complete. Query the same job.' }; }
     },
-    toModelOutput: ({ output }: { output: any }) => ({ type: 'content' as const, value: [{ type: 'text' as const, text: JSON.stringify(output) + '\nReturn the projectUrl as the Makaron GUI edit link. A completed result is already a published design; do not regenerate, call run_code, or publish again. If pending, query get_layerize_status with jobId.' }] }),
+    toModelOutput: ({ output }: { output: any }) => ({ type: 'content' as const, value: [{ type: 'text' as const, text: layerizeModelOutput(output, ctx.deliverySurface) }] }),
   });
 }
 

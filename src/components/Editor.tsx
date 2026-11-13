@@ -18,6 +18,7 @@ import ShareButton from '@/components/ShareButton';
 import SaveMediaDialog from '@/components/SaveMediaDialog';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
+import { readDesignLayerState, hasDesignLayers } from '@/lib/editor/design-layer-state';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/babel-status';
@@ -627,8 +628,11 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Design editable: current snapshot has a design with editables
   const currentDesignSnap = snapshots[currentSnapIndex];
   const isViewingDesign = contentType === 'design';
-  const currentDesignEditables = currentDesignSnap?.design?.editables ?? [];
+  const allDesignEditables = currentDesignSnap?.design?.editables ?? [];
   const currentDesignProps = (currentDesignSnap?.design?.props || {}) as Record<string, unknown>;
+  const isLayeredDesign = hasDesignLayers(currentDesignSnap?.design);
+  const designLayerState = readDesignLayerState(allDesignEditables, currentDesignProps);
+  const currentDesignEditables = allDesignEditables.filter(field => !designLayerState.deleted.includes(field.id));
   const editingDesignField = editingDesignFieldId
     ? currentDesignEditables.find(f => f.id === editingDesignFieldId) ?? null
     : null;
@@ -1684,6 +1688,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     const { callbacks: agentCallbacks, setCurrentMsgId } = makeAgentCallbacks({
       projectId: projectId!,
       setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+      onFocusSnapshot: (snapshotId) => {
+        const index = snapshotsRef.current.findIndex(snapshot => snapshot.id === snapshotId);
+        if (index >= 0) { setViewIndex(timelineFromSnap(index, draftParentIndexRef.current)); setViewMode('gui'); }
+      },
       setDesignDraftParent: (idx) => {
         if (idx !== null) {
           // Design draft: clear any active tips draft (mutually exclusive)
@@ -1798,6 +1806,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
       projectId: projectId ?? '',
       setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+      onFocusSnapshot: (snapshotId) => {
+        const index = snapshotsRef.current.findIndex(snapshot => snapshot.id === snapshotId);
+        if (index >= 0) { setViewIndex(timelineFromSnap(index, draftParentIndexRef.current)); setViewMode('gui'); }
+      },
       setDesignDraftParent: (idx) => {
         if (idx !== null) {
           setActiveDraftType('design');
@@ -3174,7 +3186,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     if (!Number.isFinite(measuredHeight) || measuredHeight <= 0) return;
 
     const expandHeight = (design: DesignPayload): DesignPayload | null => {
-      if (design.animation) return null;
+      if (design.animation || hasDesignLayers(design)) return null;
       const nextHeight = Math.min(measuredHeight, 20000);
       if (nextHeight <= design.height + 12) return null;
       return { ...design, height: nextHeight };
@@ -4103,11 +4115,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       />
                     </DesignEditorFrame>
                   </div>
-                ) : isViewingDesign && currentDesignEditables.length > 0 ? (
+                ) : isViewingDesign && (currentDesignEditables.length > 0 || isLayeredDesign) ? (
                   <DesignEditPanel
-                    editables={visibleEditableIds.length > 0
+                    editables={isLayeredDesign ? allDesignEditables : visibleEditableIds.length > 0
                       ? currentDesignEditables.filter(f => visibleEditableIds.includes(f.id))
                       : currentDesignEditables}
+                    layered={isLayeredDesign}
                     props={currentDesignProps}
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     selectedFieldId={selectedEditableFieldId}

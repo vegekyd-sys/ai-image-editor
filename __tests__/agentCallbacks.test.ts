@@ -270,6 +270,18 @@ describe('makeAgentCallbacks', () => {
     });
   });
 
+  describe('onFocusSnapshot', () => {
+    it('focuses the existing design without replacing edited props or publishing it again', () => {
+      const focus = vi.fn();
+      const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: focus });
+      callbacks.onFocusSnapshot?.('existing-design');
+      expect(focus).toHaveBeenCalledWith('existing-design');
+      expect(ctx.setPendingDesign).not.toHaveBeenCalled();
+      expect(ctx.setSnapshots).not.toHaveBeenCalled();
+      expect(ctx.onSaveSnapshot).not.toHaveBeenCalled();
+    });
+  });
+
   describe('onRender', () => {
     it('published render triggers pendingDesign with snapshotId', () => {
       const { callbacks } = makeAgentCallbacks(ctx);

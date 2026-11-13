@@ -4,9 +4,9 @@ CUI `decompose_image` / `get_layerize_status`、CLI `makaron layerize` / `layeri
 
 输入一张已上传的 HTTPS PNG/JPEG 原图，尺寸 >14px，最多 30MB/36MP、比例 1:16–16:1。最大输出数 2–100（包含背景，默认8），quality=auto/1K/1.5K/2K。不接受单图模型的 size/aspect/crop_layers 参数。
 
-输出按 z_index 排序，背景为0。独立 PNG 按背景坐标系中的 absolute bbox 放回画布；不能将图层自身的像素尺寸当作位置。每层有独立 source prop、标准 image EditableField，组件入口使用 Composition，field.id 与 propKey 一致以满足现有 React Proxy 的媒体所有权合同；复用 DesignPayload、Img、Proxy、DesignOverlay、web-renderer、保存与导出。GUI 当前支持图片图层拖动、缩放。默认保留 PNG 文字；显式 editable_text 将有效 OCR 行变为普通 text editable，支持 GUI 修改内容，字体为相似字体，不能保证与原图完全一致。缺失或无效 OCR 保留 PNG。原图、PNG 图层和 manifest 均保留。无新图层编辑器或渲染服务。
+输出按 z_index 排序，背景为0。独立 PNG 按背景坐标系中的 absolute bbox 放回画布；不能将图层自身的像素尺寸当作位置。每层有独立 source prop、标准 image EditableField，组件入口使用 Composition，field.id 与 propKey 一致以满足现有 React Proxy 的媒体所有权合同；复用 DesignPayload、Img、Proxy、DesignOverlay、web-renderer、保存与导出。GUI 支持图片图层拖动、缩放，以及全部拆层元素（含 OCR 文字）的上移一层、下移一层、删除和恢复。现有 DesignEditPanel 从上到下显示图层；`props._layerState` 一次保存完整的底到顶顺序与删除列表，保留源文件和位置以支持重开后恢复。共享 React Proxy 调整真实子节点顺序、移除已删节点，Preview 与 web-renderer 导出共用同一合同，不用仅 GUI 生效的 z-index。旧 manifest 设计在第一次编辑时补齐该属性。拆层沿用原图固定画布，窗口尺寸变化或移动图层不触发长图内容自适应增高。同一设计的客户端保存串行执行，避免先前的慢请求后写覆盖删除状态。默认保留 PNG 文字；显式 editable_text 将有效 OCR 行变为普通 text editable，支持 GUI 修改内容，字体为相似字体，不能保证与原图完全一致。缺失或无效 OCR 保留 PNG。原图、PNG 图层和 manifest 均保留。无新图层编辑器或渲染服务。
 
-发布前必须持久化所有资源并通过现有 design-harness，调用现有 renderDesignFrame 得到 poster，再写快照。Agent 与此工具复用 publishDesignSnapshot；已发布设计后续 CUI 事件只关联消息，不覆盖 GUI 编辑后的 props 或已有 message_id。App、CLI chat 和独立 CLI 均返回 projectUrl。
+发布前必须持久化所有资源并通过现有 design-harness，调用现有 renderDesignFrame 得到 poster，再写快照。Agent 与此工具复用 publishDesignSnapshot；已发布设计后续 CUI 事件只关联消息，不覆盖 GUI 编辑后的 props 或已有 message_id。App 在当前页面直接定位可编辑结果，完成回复简短、不重复展示项目链接。完成任务重查只发 `focus_snapshot` 导航事件，不重发 render，不覆盖 GUI props 或 message_id；SSE 和事件重连均处理该导航事件。CLI chat 和独立 CLI 继续交付 projectUrl；JSON 保留完整恢复回执，普通完成反馈不展示 jobId 或 workspace 路径。
 
 每个任务单独计费：$0.0064 输入 + 每张实际输出（包括背景）≤2,610,000像素 $0.016，否则 $0.028。完整费用乘精确 token_rates.markup 后只取整一次，1 credit=$0.01。默认 markup=2，五张低档输出共 $0.0864 →18 credits。Agent 推理另计。候选价格迁移只在隔离 PostgreSQL 验证，不写共享库；缺少精确启用价格行会在供应商提交前拒绝。
 

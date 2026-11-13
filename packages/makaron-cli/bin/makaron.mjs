@@ -2220,7 +2220,7 @@ function printLayerizeHelp() {
   --request-id <uuid>     Reuse the original request after interruption
   --no-wait               Return the job and Makaron editing URL immediately
 
-Returns a normal Makaron design. Open projectUrl to move/scale image layers or edit
+Returns a normal Makaron design. Open projectUrl to move/scale, reorder, delete/restore layers or edit
 recognized text. Charges actual output images once; query the same job to recover.
 Chat alternative: makaron chat --project auto --image poster.png "拆成图层，文字可编辑"
 `);
@@ -2275,8 +2275,8 @@ async function runLayerize(args) {
   }
   if (options['--json']) console.log(JSON.stringify(result));
   else {
-    console.log(`${result.status}: ${result.projectUrl}`);
-    console.log(`Job: ${result.jobId}${result.credits !== undefined ? `; credits: ${result.credits}` : ''}`);
+    console.log(`${result.status === 'completed' ? 'Layers ready. Edit in Makaron' : result.status}: ${result.projectUrl}`);
+    if (result.status !== 'completed') console.log(`Job: ${result.jobId}`);
     if (result.message) console.log(result.message);
     if (result.status !== 'completed') console.log(`Resume: makaron layerize status ${jobId} --project ${projectId}`);
   }

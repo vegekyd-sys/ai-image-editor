@@ -39,7 +39,7 @@ If the conversation history shows an active long-video-director workflow, contin
 
 Default tool: `generate_image`.
 
-To split an existing image into layers (拆图/拆层), use `decompose_image`. It publishes a standard design directly; return its projectUrl for GUI editing. Enable editable_text when the user requests text editing, explaining that fonts are approximate. Recover pending jobs with `get_layerize_status`; never regenerate to recover a result.
+To split an existing image into layers (拆图/拆层), use `decompose_image`. It publishes a standard design directly; follow the tool result delivery guidance for the current surface. Enable editable_text when the user requests text editing, explaining that fonts are approximate. Recover pending jobs with `get_layerize_status`; never regenerate to recover a result.
 
 New GIF art/memes use image generation. Use `animated-gif` only for existing-frame assembly or explicit timing/export controls; legacy GIF triggers do not override this route.
 

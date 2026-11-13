@@ -45,6 +45,7 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
     const style = { position: 'absolute', left, top, width: right - left, height: bottom - top, objectFit: 'fill' };
     elements.push(`<Img data-editable=${JSON.stringify(id)} src={props.${key}} style={${JSON.stringify(style)}} />`);
   }
+  props._layerState = { order: editables.map(field => field.id), deleted: [] };
   return {
     width: manifest.width, height: manifest.height, props, editables,
     code: `import React from 'react';\nimport {AbsoluteFill, Img} from 'remotion';\nexport default function Composition(props) { return <AbsoluteFill style={{backgroundColor:'transparent'}}>${elements.join('\n')}</AbsoluteFill>; }`,

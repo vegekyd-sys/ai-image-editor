@@ -45,6 +45,8 @@ export interface AgentCallbackContext {
   viewIndexRef: { current: number };
   pendingNavigateToVideoRef?: { current: boolean };
 
+  onFocusSnapshot?: (snapshotId: string) => void;
+
   // Callback functions (from Editor)
   cacheImage: (key: string, data: string) => void;
 
@@ -487,6 +489,8 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     onCoding: () => {
       if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = ctx.t('editor.agentCoding');
     },
+
+    onFocusSnapshot: (snapshotId) => ctx.onFocusSnapshot?.(snapshotId),
 
     onRender: (design) => {
       const published = (design as Record<string, unknown>).published === true;

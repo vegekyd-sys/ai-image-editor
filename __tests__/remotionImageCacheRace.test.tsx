@@ -38,3 +38,19 @@ it('releases image URLs that finish loading after Player unmount', async () => {
   await act(async () => { pending[0](new Response('late', { headers: { 'content-type': 'image/png' } })); });
   expect(revoke).toHaveBeenCalledWith('blob:late-image');
 });
+
+it('keeps decomposed source canvas fixed while flow-layout designs can still grow', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ faces: [] })));
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, right: 100, bottom: 200, width: 100, height: 200, toJSON: () => ({}) });
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(200);
+  const flowSize = vi.fn(), layerSize = vi.fn();
+  const design = { width: 100, height: 100, code: 'function Composition() { return null }', props: {} };
+  const flow = render(<RemotionRenderer design={design} onContentSize={flowSize} />);
+  await waitFor(() => expect(flowSize).toHaveBeenCalledWith(expect.objectContaining({ height: 200 })));
+  flow.unmount();
+  const layered = render(<RemotionRenderer design={{ ...design, props: { _layerState: { order: [], deleted: [] } } }} onContentSize={layerSize} />);
+  await waitFor(() => expect(layered.getByTestId('inputs')).toBeTruthy());
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
+  expect(layerSize).not.toHaveBeenCalled();
+  layered.unmount();
+});

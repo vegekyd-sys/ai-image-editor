@@ -1,6 +1,16 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  "design.layers": (n: number) => `${n} レイヤー · 前面から`,
+  "design.editables": (n: number) => `${n} 個の編集可能な要素`,
+  "design.layerForward": "一つ前面へ",
+  "design.layerBackward": "一つ背面へ",
+  "design.layerDelete": "レイヤーを削除",
+  "design.layerRestore": "削除したレイヤーを復元",
+  "design.trim": "トリミング",
+  "design.moveScale": "移動 / 拡大縮小",
+  "design.edit": "編集",
+
   "mjLab.back": "Makaron に戻る",
   "mjLab.eyebrow": "ローカル試用 · Midjourney V8.2",
   "image.candidates": "候補画像",

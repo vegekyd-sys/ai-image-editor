@@ -25,6 +25,7 @@ export interface AgentStreamCallbacks {
   onReasoning?: (text: string) => void;
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
+  onFocusSnapshot?: (snapshotId: string) => void;
   onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; published?: boolean; previewUrl?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
@@ -99,6 +100,7 @@ function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: Agen
     case 'new_turn': callbacks.onNewTurn?.(data.messageId); break;
     case 'tool_call': callbacks.onToolCall?.(String(data.tool || ''), data.input || {}, data.images); break;
     case 'image': callbacks.onImage?.(data.imageUrl || '', data.usedModel, data.snapshotId, data.imageUrl, data.metadata); break;
+    case 'focus_snapshot': callbacks.onFocusSnapshot?.(data.snapshotId); break;
     case 'render':
     case 'design': callbacks.onRender?.(data as Parameters<NonNullable<AgentStreamCallbacks['onRender']>>[0]); break;
     case 'animation_task': callbacks.onAnimationTask?.(data.taskId, data.prompt || '', data.imageUrls, data.model); break;
@@ -370,6 +372,7 @@ async function streamAgentAttempt(
           case 'code_stream':
             callbacks.onCodeStream?.(event.text, !!event.done);
             break;
+          case 'focus_snapshot': callbacks.onFocusSnapshot?.(event.snapshotId); break;
           case 'design': // backward compat — fall through to 'render'
           case 'render':
             callbacks.onRender?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; published?: boolean });

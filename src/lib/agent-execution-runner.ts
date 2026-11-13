@@ -870,6 +870,7 @@ export async function runAgentExecutionAttempt(
         attemptImage,
         run.project_id,
         {
+          deliverySurface: billingAttributionFromRunMetadata(run.metadata, { runId: run.id }).source === 'app' ? 'app' : 'external',
           locale: request.locale,
           preferredModel: request.preferredModel as any,
           agentModel: effectiveAgentModel,
