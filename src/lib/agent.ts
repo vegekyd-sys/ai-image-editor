@@ -298,6 +298,7 @@ export interface RunMakaronAgentOptions {
   codexSubscriptionAllowed?: boolean;
   currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } };
   currentDesignPath?: string;
+  selectedElement?: import("./editor/element-edit").SelectedElement;
   history?: ModelMessage[];
   timelineVersion?: number;
   perf?: AgentPerf;
@@ -360,6 +361,7 @@ export async function* runMakaronAgent(
     userId: options?.userId,
     timelineVersion: options?.timelineVersion,
     currentDesignPath: options?.currentDesignPath,
+    selectedElement: options?.selectedElement,
     execution: options?.execution,
     agentRunId: options?.agentRunId || options?.execution?.runId,
   };
@@ -441,7 +443,10 @@ export async function* runMakaronAgent(
     const textOnlyVisionNote = animImages?.length && !runtime.spec.supportsImageInput
       ? '\n\n[Selected Agent model is text-only. Use analyze_image on the relevant Media Index entries before making image-dependent decisions.]'
       : '';
-    userContent = analysisOnly ? analysisPrompt : (designInjection + prompt + textOnlyVisionNote);
+    const selectedElementNote = options?.selectedElement
+      ? `\n[User-selected Editable element] snapshotId=${options.selectedElement.snapshotId}; fieldId=${options.selectedElement.fieldId}. For an edit to this selection use inspect_element and edit_element. Move/scale use transform, editable text uses text, appearance/replacement uses content with the actual original asset. A hat attached to a baby is a subregion edit, never a scale of the whole baby. Preview the returned draft and publish_draft. Do not reconstruct the composition or reset stored transforms. If the user explicitly refers to another media index, ignore this selection and follow that explicit reference.\n`
+      : '';
+    userContent = analysisOnly ? analysisPrompt : (designInjection + selectedElementNote + prompt + textOnlyVisionNote);
   }
 
   // Build system prompt. Lightweight modes must stay small: they power
@@ -1358,6 +1363,8 @@ export async function* runMakaronAgent(
               animation: pendingDesign.animation,
               editables: pendingDesign.editables,
               fontSubstitutions: pendingDesign.fontSubstitutions,
+              elementEdit: pendingDesign.elementEdit,
+              __makaronEditableRevision: pendingDesign.__makaronEditableRevision,
               description: pendingDesign.description,
               snapshotId,
               sourceDesignPath,

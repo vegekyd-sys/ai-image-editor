@@ -11,6 +11,8 @@ export interface EditableField {
 }
 
 export interface DesignPayload {
+  __makaronEditableRevision?: number;
+  elementEdit?: import("@/lib/editor/element-edit").ElementEditReceipt;
   /** Explicit inset treatment; otherwise source-led compositions use primary footage. */
   videoLayout?: 'primary' | 'inset';
   code: string;

@@ -223,7 +223,7 @@ export class AgentDualWriter {
           }
           const eventEditables = (event as Record<string, unknown>).editables;
           const eventFontSubstitutions = (event as Record<string, unknown>).fontSubstitutions;
-          const persistedDesign = {
+          const persistedDesign: Record<string, unknown> & { code: string; width: number; height: number } = {
             ...(sourceDesign || {}),
             // publish_draft emits the normalized, validated composition. Keep
             // source-only metadata, but never replace the compiled manifest
@@ -267,6 +267,7 @@ export class AgentDualWriter {
             ...(designDesc ? { description: designDesc } : {}),
             ...((event as any).previewUrl ? { previewUrl: (event as any).previewUrl } : {}),
             ...((event as any).prePublished === true ? { prePublished: true } : {}),
+            ...(persistedDesign.elementEdit ? { elementEdit: persistedDesign.elementEdit, __makaronEditableRevision: persistedDesign.__makaronEditableRevision } : {}),
             published: true,
           });
 

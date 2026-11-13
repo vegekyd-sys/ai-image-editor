@@ -1,4 +1,7 @@
 const zh = {
+  "design.editingElement": (label: string) => `正在编辑：${label}`,
+  "design.clearSelection": "取消选中",
+  "design.saveBeforeEditFailed": "修改尚未保存，请稍后重试。",
   "design.undo": "撤销",
   "design.redo": "重做",
   "design.history": "操作记录",

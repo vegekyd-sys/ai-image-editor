@@ -5,6 +5,8 @@ import type { DesignPayload } from '@/types';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 import { appendSnapshotDedupeVideo } from '@/lib/video-snapshot-dedupe';
+import { rebaseElementEdit } from './editor/element-edit';
+import { historyUnsetProps } from './editor/design-edit-history';
 import { serializeCompletionActions } from '@/lib/artifact-actions';
 
 /**
@@ -525,6 +527,21 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
 
     onRender: (design) => {
       const published = (design as Record<string, unknown>).published === true;
+      if (published && design.elementEdit) {
+        const source = ctx.snapshotsRef.current.find(snapshot => snapshot.id === design.elementEdit?.sourceSnapshotId)?.design;
+        if (source && (source.__makaronEditableRevision || 0) > (design.__makaronEditableRevision || 0)) {
+          try {
+            design = { ...design, ...rebaseElementEdit(design, source) };
+            const revision = Math.max(Date.now(), (source.__makaronEditableRevision || 0) + 1);
+            design.__makaronEditableRevision = revision;
+            const snapshotId = (design as Record<string, unknown>).snapshotId;
+            if (snapshotId) void fetch(`/api/projects/${encodeURIComponent(ctx.projectId)}/snapshots/${encodeURIComponent(String(snapshotId))}/design`, {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ props: design.props || {}, revision, unsetProps: historyUnsetProps(design.props || {}) }),
+            }).then(response => { if (!response.ok) throw new Error('Element edit rebase could not be saved'); }).catch(error => console.error('[element-edit]', error));
+          } catch (error) { console.warn('[element-edit] concurrent source conflict', error); }
+        }
+      }
       const previewUrl = (design as Record<string, unknown>).previewUrl as string | undefined;
       console.log(`🎨 [agent] render received (published=${published}): ${design.width}x${design.height}, code ${design.code.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
       setStatus(ctx.t('status.renderingDesign'));
@@ -540,14 +557,14 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         const snapshotId = (design as Record<string, unknown>).snapshotId as string | undefined;
         if (snapshotId && previewUrl) {
           const existing = ctx.snapshotsRef.current.find(snapshot => snapshot.id === snapshotId);
-          const saved: Snapshot = existing ? { ...existing, design: existing.design || design } : {
+          const saved: Snapshot = existing ? { ...existing, design: design.elementEdit ? design : existing.design || design } : {
             id: snapshotId, image: previewUrl, imageUrl: previewUrl, tips: [], messageId: currentMsgId,
             design, designPath: (design as Record<string, unknown>).sourceDesignPath as string | undefined,
             description: (design as Record<string, unknown>).description as string || '[composition]',
           };
-          if (!existing || !existing.design) {
+          if (!existing || !existing.design || design.elementEdit) {
             const merge = (prev: Snapshot[]) => prev.some(item => item.id === snapshotId)
-              ? prev.map(item => item.id === snapshotId && !item.design ? { ...item, design } : item)
+              ? prev.map(item => item.id === snapshotId && (!item.design || design.elementEdit) ? { ...item, design } : item)
               : [...prev, saved];
             ctx.snapshotsRef.current = merge(ctx.snapshotsRef.current);
             ctx.setSnapshots(merge);

@@ -2,8 +2,12 @@ import zh from './zh';
 import type { TranslationDictionary } from './index';
 
 const zhHant = {
-
   ...zh,
+  "design.editingElement": (label: string) => `正在編輯：${label}`,
+  "design.clearSelection": "取消選取",
+  "design.saveBeforeEditFailed": "修改尚未儲存，請稍後重試。",
+
+
   "design.undo": "復原",
   "design.redo": "重做",
   "design.history": "操作記錄",

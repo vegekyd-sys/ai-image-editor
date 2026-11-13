@@ -42,6 +42,8 @@ export function createPersistedEditableDesign(value: unknown): DesignPayload {
   }
 
   return {
+    ...(isRecord(value.elementEdit) ? { elementEdit: value.elementEdit as unknown as DesignPayload['elementEdit'] } : {}),
+    ...(typeof value.__makaronEditableRevision === 'number' ? { __makaronEditableRevision: value.__makaronEditableRevision } : {}),
     code: value.code,
     width: value.width,
     height: value.height,

@@ -320,6 +320,9 @@ export default function Editor({
   }, []);
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
+  const selectedElementRef = useRef<import("@/lib/editor/element-edit").SelectedElement | undefined>(undefined);
+  const flushDesignSaveRef = useRef<() => Promise<void>>(async () => {});
+  const designSavePromiseRef = useRef<Promise<void>>(Promise.resolve());
   // Design editable state
   const [selectedEditableFieldId, _setSelectedEditableFieldId] = useState<string | null>(null);
   const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
@@ -341,6 +344,9 @@ export default function Editor({
     });
   }, []);
   const setSelectedEditableFieldId = useCallback((id: string | null) => {
+    const index = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
+    const snapshot = index == null ? undefined : snapshotsRef.current[index];
+    selectedElementRef.current = id && snapshot?.design ? { snapshotId: snapshot.id, fieldId: id } : undefined;
     _setSelectedEditableFieldId(id);
     if (!id) setEditingDesignFieldId(null); // deselect also closes editor
   }, []);
@@ -642,6 +648,9 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const currentDesignProps = (currentDesignSnap?.design?.props || {}) as Record<string, unknown>;
   const designLayerState = readDesignLayerState(allDesignEditables, currentDesignProps);
   const currentDesignEditables = allDesignEditables.filter(field => !designLayerState.deleted.includes(field.id));
+  useEffect(() => {
+    if (selectedElementRef.current?.snapshotId !== currentDesignSnap?.id) setSelectedEditableFieldId(null);
+  }, [currentDesignSnap?.id, setSelectedEditableFieldId]);
   const editingDesignField = editingDesignFieldId
     ? currentDesignEditables.find(f => f.id === editingDesignFieldId) ?? null
     : null;
@@ -1580,6 +1589,9 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   // Agent request: route user message through Makaron Agent
   const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayText?: string; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number; turnMediaSnapshotIds?: string[]; skillLaunchContext?: SkillLaunchContext }) => {
+    const selectionForRequest = selectedElementRef.current;
+    try { await flushDesignSaveRef.current(); }
+    catch { setAgentStatus(t('design.saveBeforeEditFailed')); return; }
     const userVisibleText = options?.displayText ?? stripAgentInternalContextForDisplay(text);
     // Freeze the selected LLM at submit time. Upload waits below must not let a
     // later selector change mutate an already-submitted request.
@@ -1767,7 +1779,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, ...(hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}), currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0, turnMediaSnapshotIds },
+        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, ...(hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}), currentSnapshotIndex: contextSnapshotIndex, ...(!overrideImage && selectionForRequest?.snapshotId === snapshotsRef.current[contextSnapshotIndex]?.id && !/@[1-9]\d*/.test(text) ? { selectedElement: selectionForRequest } : {}), isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0, turnMediaSnapshotIds },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -3133,22 +3145,27 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     revision: number;
   } | null>(null);
   const designSaveRevisionRef = useRef(0);
-  const flushPendingDesignSave = useCallback(() => {
+  const flushPendingDesignSave = useCallback((): Promise<void> => {
     if (designPropsSaveTimer.current) {
       clearTimeout(designPropsSaveTimer.current);
       designPropsSaveTimer.current = null;
     }
     const pending = pendingDesignSaveRef.current;
     pendingDesignSaveRef.current = null;
-    if (!pending || !onSaveDesignProps) return;
-    void Promise.resolve(onSaveDesignProps(
+    if (!pending || !onSaveDesignProps) return designSavePromiseRef.current;
+    const saving = Promise.resolve(onSaveDesignProps(
       pending.snapshotId,
       pending.design,
       { propsOnly: true, revision: pending.revision },
     )).catch((error) => {
-      console.error('[design] prop persistence failed', error);
+      if (!pendingDesignSaveRef.current) pendingDesignSaveRef.current = pending;
+      throw error;
     });
+    designSavePromiseRef.current = saving;
+    void saving.catch(error => console.error('[design] prop persistence failed', error));
+    return saving;
   }, [onSaveDesignProps]);
+  flushDesignSaveRef.current = flushPendingDesignSave;
 
   useEffect(() => {
     window.addEventListener('pagehide', flushPendingDesignSave);
@@ -3503,6 +3520,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     isAgentActive,
     agentStatus,
     currentImage: currentDisplayImage,
+    selectedElement: selectedEditableFieldId && currentDesignEditables.find(f => f.id === selectedEditableFieldId) ? { label: currentDesignEditables.find(f => f.id === selectedEditableFieldId)!.label } : undefined,
+    onClearSelectedElement: () => setSelectedEditableFieldId(null),
     onSendMessage: handleCuiSend,
     onAbort: handleAgentAbort,
     onInputBarHeight: (h: number) => { cuiInputBarH.current = h; },

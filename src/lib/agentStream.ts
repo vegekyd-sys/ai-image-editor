@@ -26,7 +26,7 @@ export interface AgentStreamCallbacks {
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
   onFocusSnapshot?: (snapshotId: string) => void;
-  onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; sourceDesignPath?: string; published?: boolean; prePublished?: boolean; previewUrl?: string }) => void;
+  onRender?: (design: { elementEdit?: import('./editor/element-edit').ElementEditReceipt; __makaronEditableRevision?: number; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; sourceDesignPath?: string; published?: boolean; prePublished?: boolean; previewUrl?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
   /** SSE/network ended while the server-side run may still be alive. */
@@ -55,6 +55,9 @@ export async function streamAgent(
     skillLaunchContext?: SkillLaunchContext;
     snapshotImages?: string[];
     currentSnapshotIndex?: number;
+    selectedElement?: import("./editor/element-edit").SelectedElement;
+    currentDesign?: import("@/types").DesignPayload;
+    currentDesignPath?: string;
     isNsfw?: boolean;
     hasAnnotation?: boolean;
     isDraft?: boolean;
@@ -131,6 +134,7 @@ async function streamDurableAgent(
       videoAuto: body.videoAuto,
       skillLaunchContext: body.skillLaunchContext,
       currentSnapshotIndex: body.currentSnapshotIndex,
+      selectedElement: body.selectedElement,
       hasAnnotation: body.hasAnnotation,
       isDraft: body.isDraft,
       referenceImageCount: body.referenceImageCount,

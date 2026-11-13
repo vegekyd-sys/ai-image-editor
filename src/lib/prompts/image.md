@@ -193,11 +193,9 @@ Omit this line if the user explicitly requested text or captions.
 
 ## Using Reference Images
 
-- Images in the snapshot timeline, `<<<media_1>>>`, `<<<media_2>>>`, and so on: use `media_index` to edit, `reference_media_indices` to reference. Never use `image_refs` for these.
-- Images not in the timeline, such as workspace skill assets or files from `list_files`: use `image_refs` with provider URLs returned for those assets.
-- Example: `list_files('skills/my-skill/assets/')` gives asset entries. Pass their provider URLs to `image_refs`.
-- `image_refs` works for text-to-image too. No `media_index` is needed. Just pass references and a prompt.
-- `image_refs` are not remembered between tool calls. If you need the same references again, pass them again.
+- Images in the snapshot timeline: use `media_index` to edit and `reference_media_indices` for extra references.
+- For an element the user clicked on an Editable composition, use `inspect_element` and `edit_element`. This sends its exact saved source asset and preserves stored transforms and layer order.
+- Workspace URLs are not accepted as a `generate_image` source argument. Do not invent an `image_refs` parameter or omit the source when an edit is required.
 
 ## Context Mode for model='gpt-image-2.6-flare'
 

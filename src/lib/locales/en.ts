@@ -1,4 +1,7 @@
 const en = {
+  "design.editingElement": (label: string) => `Editing: ${label}`,
+  "design.clearSelection": "Clear selection",
+  "design.saveBeforeEditFailed": "Changes have not been saved. Please try again shortly.",
   "design.undo": "Undo",
   "design.redo": "Redo",
   "design.history": "Edit history",

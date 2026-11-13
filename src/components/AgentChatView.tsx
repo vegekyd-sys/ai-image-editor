@@ -552,6 +552,8 @@ interface AgentChatViewProps {
   currentImage?: string;
   onSendMessage: (text: string, attachedImages?: string[], attachedVideos?: { url: string; duration: number; width: number; height: number; poster: string }[]) => void;
   onAbort?: () => void;
+  selectedElement?: { label: string };
+  onClearSelectedElement?: () => void;
   onBack: () => void;
   onPipTap: (rect: DOMRect) => void;
   onImageTap: (messageId: string, rect?: DOMRect, imgSrc?: string, snapshotId?: string) => void;
@@ -612,6 +614,8 @@ export default function AgentChatView({
   currentImage,
   onSendMessage,
   onAbort,
+  selectedElement,
+  onClearSelectedElement,
   onBack,
   onPipTap,
   onImageTap,
@@ -1821,6 +1825,10 @@ export default function AgentChatView({
             {onClearRetake && <button type="button" onClick={onClearRetake} aria-label={t('video.retakeClearSelection')} className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/5 hover:text-white/70">
               <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m6 6 12 12M6 18 18 6" /></svg>
             </button>}
+          </div>}
+          {selectedElement && <div data-testid="chat-selected-element" className="flex items-center gap-2 px-3 pt-2.5 text-xs text-pink-200">
+            <span className="min-w-0 truncate rounded-full bg-pink-300/10 px-3 py-1">{t('design.editingElement', selectedElement.label)}</span>
+            <button type="button" onClick={onClearSelectedElement} aria-label={t('design.clearSelection')} className="px-2 py-1">×</button>
           </div>}
           {/* Row 1: Textarea */}
           <textarea
