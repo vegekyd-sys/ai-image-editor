@@ -1,5 +1,20 @@
 import type { DesignPayload, EditableField } from '@/types';
 
+const LAYERIZE_CODE_START = "import React from 'react';\nimport {AbsoluteFill, Img} from 'remotion';\nexport default function Composition(props) { return <AbsoluteFill style={{backgroundColor:'transparent'}}>";
+const LAYERIZE_CODE_END = '</AbsoluteFill>; }';
+
+/** Recognize the image-only generated composition, including existing saved drafts.
+ * Editable labels/history are UI metadata and must not trigger font downloads.
+ * Any native text or authored composition continues through the pinned font path.
+ */
+export function isRasterLayerizeDesign(design: DesignPayload): boolean {
+  if (design.animation || !design.editables?.length || !design.editables.every(field => field.type === 'image')) return false;
+  if (!design.code.startsWith(LAYERIZE_CODE_START) || !design.code.endsWith(LAYERIZE_CODE_END)) return false;
+  const body = design.code.slice(LAYERIZE_CODE_START.length, -LAYERIZE_CODE_END.length);
+  const images = /<Img data-editable="layer_\d+" src=\{props\.layer_\d+\} style=\{\{[^{}<>]*\}\} \/>/g;
+  return (body.match(images)?.length ?? 0) > 0 && !body.replace(images, '').trim();
+}
+
 export interface LayerizeLayer {
   z: number;
   url: string;
@@ -54,7 +69,7 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
   props._canvasSizing = 'fixed';
   return {
     width: manifest.width, height: manifest.height, props, editables,
-    code: `import React from 'react';\nimport {AbsoluteFill, Img} from 'remotion';\nexport default function Composition(props) { return <AbsoluteFill style={{backgroundColor:'transparent'}}>${elements.join('\n')}</AbsoluteFill>; }`,
+    code: `${LAYERIZE_CODE_START}${elements.join('\n')}${LAYERIZE_CODE_END}`,
   };
 }
 

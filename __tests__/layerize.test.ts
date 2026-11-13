@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { transform } from 'sucrase';
 import { createEditableReactRuntime } from '@/lib/editor/editable-react-runtime';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildLayerizeDesign, layerizeSupplierCost, type LayerizeManifest } from '@/lib/layerize-design';
+import { buildLayerizeDesign, isRasterLayerizeDesign, layerizeSupplierCost, type LayerizeManifest } from '@/lib/layerize-design';
 import { layerizeRequest, submitLayerize, queryLayerize } from '@/lib/layerize-provider';
 import { validateDesign } from '@/lib/design-harness';
 import { providerCostToCredits } from '@/lib/billing/token-rates';
@@ -16,6 +16,14 @@ const manifest: LayerizeManifest = { version: 1, taskId: 'task-one', width: 1000
 ] };
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 describe('Layerize standard design contract', () => {
+  it('recognizes image-only saved layers without skipping fonts for native text or authored content', () => {
+    const raster = buildLayerizeDesign(manifest);
+    expect(isRasterLayerizeDesign({ ...raster, props: { ...raster.props, _editHistory: { label: '红色礼帽' } } })).toBe(true);
+    expect(isRasterLayerizeDesign(buildLayerizeDesign(manifest, true))).toBe(false);
+    expect(isRasterLayerizeDesign({ ...raster, code: raster.code.replace('</AbsoluteFill>', '<div>Keep my font</div></AbsoluteFill>') })).toBe(false);
+    expect(isRasterLayerizeDesign({ ...raster, code: 'function Design(){return <div>Text with image editables</div>}' })).toBe(false);
+    expect(isRasterLayerizeDesign({ ...raster, animation: { fps: 30, durationInSeconds: 2 } })).toBe(false);
+  });
   it('uses base-coordinate bounds and independent properties in z order, never raster dimensions for placement', () => {
     const design = buildLayerizeDesign(manifest);
     expect(design.editables?.map(item => item.id)).toEqual(['layer_0', 'layer_1', 'layer_2']);

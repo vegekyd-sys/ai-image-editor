@@ -7,7 +7,21 @@ vi.mock('@/lib/i18n', () => ({ useLocale: () => ({ t: (key: string) => key }) })
 vi.mock('@/lib/evalRemotionJSX', () => ({ preloadBabel: async () => {}, evalRemotionJSX: () => (props: any) => <div data-editable="body" data-testid="inputs">{JSON.stringify(props)}</div> }));
 vi.mock('@/remotion/font-catalog', async original => ({ ...await original<any>(), prepareRemotionFontCodeFromBundledCatalog: () => ({ code: '', defaultFontFamily: 'Inter' }), prepareAndLoadRemotionFontsWithTiming: async () => ({ prepared: { code: '', defaultFontFamily: 'Inter' }, timing: {} }), validateRemotionFontManifest: (value: unknown) => value }));
 import RemotionRenderer from '@/components/RemotionRenderer';
+import { buildLayerizeDesign, type LayerizeManifest } from '@/lib/layerize-design';
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it('makes image-only layers editable without downloading fonts for Chinese history labels, retaining native text fonts', async () => {
+  const fetcher = vi.fn(async () => Response.json({ faces: [] }));
+  vi.stubGlobal('fetch', fetcher);
+  const manifest: LayerizeManifest = { version: 1, taskId: 'fonts', width: 100, height: 100, sourceSha256: 'source', supplierCostUsd: .03, layers: [{ z: 0, url: 'data:image/png;base64,aA==', width: 100, height: 100, bounds: [0, 0, 100, 100], name: '背景', text: { lines: [{ text: '真正的文字', bounds: [0, 0, 90, 30], font: 'Noto Sans SC', color: '#000', bold: false, italic: false }] } }] };
+  const raster = buildLayerizeDesign(manifest);
+  const onLoading = vi.fn();
+  const view = render(<RemotionRenderer design={{ ...raster, props: { ...raster.props, _editHistory: { label: '红色礼帽' } } }} snapshotId="raster" onLoading={onLoading} />);
+  await waitFor(() => expect(onLoading.mock.calls.at(-1)).toEqual([false]));
+  expect(fetcher).not.toHaveBeenCalled();
+  view.rerender(<RemotionRenderer design={buildLayerizeDesign(manifest, true)} snapshotId="text" onLoading={onLoading} />);
+  await waitFor(() => expect(fetcher).toHaveBeenCalledWith('/api/remotion/fonts', expect.objectContaining({ method: 'POST' })));
+  view.unmount();
+});
 it('keeps the loading poster until both compilation and the new snapshot images are ready', async () => {
   const pending: Array<(value: Response) => void> = [];
   vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:ready');

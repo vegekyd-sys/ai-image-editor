@@ -5,6 +5,7 @@ import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import { isFixedCanvasDesign } from '@/lib/editor/design-layer-state';
+import { isRasterLayerizeDesign } from '@/lib/layerize-design';
 import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
 import type { DesignPayload } from '@/types';
 import {
@@ -180,6 +181,14 @@ async function compileBrowserDesign(
   props: Record<string, unknown>,
   source: BrowserRemotionFontTiming['source'],
 ): Promise<React.ComponentType<Record<string, unknown>>> {
+  if (isRasterLayerizeDesign(design)) {
+    const Component = evalRemotionJSX(code, {
+      editableTransformMode: 'proxy',
+      videoRuntime: source === 'player' ? 'preview' : 'render',
+    });
+    if (!Component) throw new Error('Failed to compile design code');
+    return Component;
+  }
   const manifest = await resolveBrowserFontManifest(design, code, props);
   const { prepared, timing } = await prepareAndLoadRemotionFontsWithTiming({
     code,
