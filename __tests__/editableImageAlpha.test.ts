@@ -31,7 +31,7 @@ beforeEach(() => {
         return { data: new Uint8ClampedArray((pixels.get(drawn) ?? []).flatMap(a => [0, 0, 0, a])) };
       },
     } as unknown as CanvasRenderingContext2D;
-  } as typeof HTMLCanvasElement.prototype.getContext);
+  } as unknown as typeof HTMLCanvasElement.prototype.getContext);
 });
 
 afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
