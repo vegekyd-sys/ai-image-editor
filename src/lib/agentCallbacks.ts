@@ -54,6 +54,7 @@ export interface AgentCallbackContext {
 
   fetchTipsForSnapshot: (...args: any[]) => void;
   onSaveMessage?: (message: Message) => void;
+  onSaveDesignProps?: (snapshotId: string, design: DesignPayload, options: { propsOnly: boolean; revision: number }) => void | Promise<void>;
   onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void | Promise<void>;
   onUpdateDescription?: (snapId: string, desc: string) => void;
   triggerProjectNaming?: (text: string) => void;
@@ -535,10 +536,15 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
             const revision = Math.max(Date.now(), (source.__makaronEditableRevision || 0) + 1);
             design.__makaronEditableRevision = revision;
             const snapshotId = (design as Record<string, unknown>).snapshotId;
-            if (snapshotId) void fetch(`/api/projects/${encodeURIComponent(ctx.projectId)}/snapshots/${encodeURIComponent(String(snapshotId))}/design`, {
-              method: 'PUT', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ props: design.props || {}, revision, unsetProps: historyUnsetProps(design.props || {}) }),
-            }).then(response => { if (!response.ok) throw new Error('Element edit rebase could not be saved'); }).catch(error => console.error('[element-edit]', error));
+            if (snapshotId) {
+              const saving = ctx.onSaveDesignProps
+                ? Promise.resolve(ctx.onSaveDesignProps(String(snapshotId), design, { propsOnly: true, revision }))
+                : fetch(`/api/projects/${encodeURIComponent(ctx.projectId)}/snapshots/${encodeURIComponent(String(snapshotId))}/design`, {
+                  method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ props: design.props || {}, revision, unsetProps: historyUnsetProps(design.props || {}) }),
+                }).then(response => { if (!response.ok) throw new Error('Element edit rebase could not be saved'); });
+              void saving.catch(error => { console.error('[element-edit]', error); setStatus(ctx.t('design.saveBeforeEditFailed')); });
+            }
           } catch (error) { console.warn('[element-edit] concurrent source conflict', error); }
         }
       }
