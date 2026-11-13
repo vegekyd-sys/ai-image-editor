@@ -15,6 +15,7 @@ import {
   selectNativeVisionImages,
   type NativeVisionImageInput,
 } from './agent-image-analysis';
+import { prepareAgentImageTransport } from './agent-image-transport';
 import type { DesignPayload, Tip } from '@/types';
 import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
@@ -448,9 +449,24 @@ export async function buildPromptContext(
     result.data ?? [], options.turnMediaCount, options.turnMediaSnapshotIds,
     supabase, userId, options.supportsImageInput === true,
   ));
+  const imageTransportPromise = snapshotsPromise.then(result => {
+    if (options.agentModelId !== 'deepseek-flash' || !options.supportsImageInput) return [];
+    const items = result.data ?? [];
+    return prepareAgentImageTransport(selectNativeVisionImages(items, {
+      supportsImageInput: true,
+      currentSnapshotIndex: options.currentSnapshotIndex ?? Math.max(0, items.length - 1),
+      explicitMediaIndices: resolveExplicitTurnMediaIndices({
+        totalMediaCount: items.length,
+        userMessage: options.executionRunId ? `${options.executionObjective || ''}\n${userMessage}` : userMessage,
+        turnMediaCount: options.turnMediaCount, referenceImageCount, uploadedVideoCount,
+      }),
+      turnMediaCount: options.turnMediaCount, turnMediaSnapshotIds: options.turnMediaSnapshotIds,
+    }));
+  });
+  void imageTransportPromise.catch(() => {});
   // Another context query may reject before this concurrent read completes.
   void mediaEvidencePromise.catch(() => {});
-  const [snapshotsRes, messages, toolHistory, musicRes, recoverableDraft, recoverableRunRes, studioRuns, executionSnapshotRes, executionRunRes, projectCompactionRes, verifiedTurnMediaEvidence] = await Promise.all([
+  const [snapshotsRes, messages, toolHistory, musicRes, recoverableDraft, recoverableRunRes, studioRuns, executionSnapshotRes, executionRunRes, projectCompactionRes, verifiedTurnMediaEvidence, preparedImages] = await Promise.all([
     snapshotsPromise,
     loadAllVisibleMessages(supabase, projectId),
     loadAllToolHistory(supabase, projectId, userId),
@@ -477,6 +493,7 @@ export async function buildPromptContext(
     executionRunPromise,
     projectCompactionPromise,
     mediaEvidencePromise,
+    imageTransportPromise,
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
@@ -534,13 +551,14 @@ export async function buildPromptContext(
     options.turnMediaSnapshotIds,
   ).map(({ mediaIndex }) => mediaIndex);
   const explicitMediaIndices = [...new Set([...turnMediaIndices, ...resolvedMediaIndices])];
+  const preparedByIndex = new Map(preparedImages.map(image => [image.mediaIndex, image.source]));
   const nativeVisionImages = selectNativeVisionImages(snapshots, {
     supportsImageInput: options.supportsImageInput === true,
     currentSnapshotIndex,
     explicitMediaIndices,
     turnMediaCount: options.turnMediaCount,
     turnMediaSnapshotIds: options.turnMediaSnapshotIds,
-  });
+  }).map(image => ({ ...image, source: preparedByIndex.get(image.mediaIndex) || image.source }));
   const priorSnapshot = executionSnapshotRes.data?.content
     ? normalizeExecutionSnapshot(executionSnapshotRes.data.content, {
         objective: executionObjective,
