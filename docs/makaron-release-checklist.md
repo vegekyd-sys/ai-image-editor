@@ -68,6 +68,16 @@ For model launches, the common production failure is a missing live env var, not
 
 ## Deploy
 
+All sessions must use ordinary file-based incremental uploads for both Preview
+and Production. Do not add `--archive=tgz` or another `--archive` option to the
+standard commands. Vercel hashes files and reuses unchanged content; full server
+trace size is not the amount transferred for each release. Only use an archive
+for an explicitly approved exceptional case, not as a default or a speed fix.
+
+Incremental upload changes transport only. Keep the complete build/release
+checks, runtime packaging gates, deployed commit/alias verification, actual
+affected user-flow acceptance, environment parity and rollback readiness.
+
 Feature worktrees stay lightweight and do not create their own Next.js runtime
 cache. Test committed feature refs and deploy Preview from the fixed runner:
 
@@ -81,6 +91,12 @@ Production is only released from the clean canonical `dev` worktree:
 ```bash
 pnpm run release:prod
 ```
+
+The maintained runner and production scripts already invoke Vercel without
+archive flags. Preserve that behavior; do not replace them with an unchecked
+manual upload. A direct Preview invocation, when needed for an isolated
+experiment, is `vercel deploy --yes --skip-domain` without `--archive` and must
+retain the applicable gates and acceptance evidence.
 
 See `docs/worktree-runtime-runner.md` for setup, dependency-lock behavior, and
 the complete worktree-to-release contract.
