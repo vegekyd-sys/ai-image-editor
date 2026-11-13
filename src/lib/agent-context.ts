@@ -450,7 +450,7 @@ export async function buildPromptContext(
     supabase, userId, options.supportsImageInput === true,
   ));
   const imageTransportPromise = snapshotsPromise.then(result => {
-    if (options.agentModelId !== 'deepseek-flash' || !options.supportsImageInput) return [];
+    if (options.agentModelId !== 'deepseek-flash' || !options.supportsImageInput || options.hasAnnotation || options.isDraft) return [];
     const items = result.data ?? [];
     return prepareAgentImageTransport(selectNativeVisionImages(items, {
       supportsImageInput: true,
@@ -551,14 +551,14 @@ export async function buildPromptContext(
     options.turnMediaSnapshotIds,
   ).map(({ mediaIndex }) => mediaIndex);
   const explicitMediaIndices = [...new Set([...turnMediaIndices, ...resolvedMediaIndices])];
-  const preparedByIndex = new Map(preparedImages.map(image => [image.mediaIndex, image.source]));
+  const preparedByIndex = new Map(preparedImages.map(image => [image.mediaIndex, image]));
   const nativeVisionImages = selectNativeVisionImages(snapshots, {
     supportsImageInput: options.supportsImageInput === true,
     currentSnapshotIndex,
     explicitMediaIndices,
     turnMediaCount: options.turnMediaCount,
     turnMediaSnapshotIds: options.turnMediaSnapshotIds,
-  }).map(image => ({ ...image, source: preparedByIndex.get(image.mediaIndex) || image.source }));
+  }).map(image => preparedByIndex.get(image.mediaIndex) || image);
   const priorSnapshot = executionSnapshotRes.data?.content
     ? normalizeExecutionSnapshot(executionSnapshotRes.data.content, {
         objective: executionObjective,

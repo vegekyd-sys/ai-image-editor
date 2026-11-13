@@ -28,7 +28,7 @@ export async function prepareAgentImageTransport(
   const pending = new Map<string, Promise<string>>();
   let batchBytes = 0;
   return Promise.all(images.map(async (image) => {
-    if (!isOwnedImage(image.source)) return image;
+    if (image.transportPrepared || !isOwnedImage(image.source)) return image;
     let prepared = pending.get(image.source);
     if (!prepared && pending.size < MAX_IMAGES) {
       prepared = (async () => {
@@ -67,6 +67,6 @@ export async function prepareAgentImageTransport(
       pending.set(image.source, prepared);
     }
     const source = await prepared;
-    return source && source !== image.source ? { ...image, source } : image;
+    return prepared ? { ...image, source: source || image.source, transportPrepared: true as const } : image;
   }));
 }

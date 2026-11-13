@@ -12,7 +12,7 @@ describe('Agent original image transport', () => {
     vi.stubGlobal('fetch', fetchMock);
     const input = [{ source: url, mediaIndex: 3 }, { source: url, mediaIndex: 7 }];
     const result = await prepareAgentImageTransport(input);
-    expect(result).toEqual(input.map(item => ({ ...item, source: `data:image/png;base64,${Buffer.from(bytes).toString('base64')}` })));
+    expect(result).toEqual(input.map(item => ({ ...item, source: `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`, transportPrepared: true })));
     expect(input[0].source).toBe(url);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await prepareAgentImageTransport(input);
@@ -28,7 +28,7 @@ describe('Agent original image transport', () => {
 
   it.each([503, 404])('preserves provider URL fallback for HTTP %s', async status => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status })));
-    expect(await prepareAgentImageTransport([{ source: url }])).toEqual([{ source: url }]);
+    expect(await prepareAgentImageTransport([{ source: url }])).toEqual([{ source: url, transportPrepared: true }]);
   });
 
   it('bounds the actual stream even when Content-Length is missing', async () => {
@@ -36,14 +36,16 @@ describe('Agent original image transport', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream({
       start(controller) { controller.enqueue(new Uint8Array(8 * 1024 * 1024 + 1)); }, cancel,
     }), { headers: { 'content-type': 'image/png' } })));
-    expect(await prepareAgentImageTransport([{ source: url }])).toEqual([{ source: url }]);
+    expect(await prepareAgentImageTransport([{ source: url }])).toEqual([{ source: url, transportPrepared: true }]);
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
   it('never follows redirects and falls back on download rejection', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => { throw new Error('redirect or timeout'); });
     vi.stubGlobal('fetch', fetchMock);
-    expect(await prepareAgentImageTransport([{ source: url }])).toEqual([{ source: url }]);
+    expect(await prepareAgentImageTransport([{ source: url }])).toEqual([{ source: url, transportPrepared: true }]);
+    await prepareAgentImageTransport([{ source: url, transportPrepared: true }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: 'error', signal: expect.any(AbortSignal) });
   });
 });
