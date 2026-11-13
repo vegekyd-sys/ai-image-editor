@@ -48,16 +48,17 @@ export function mergePersistedEditableProps(
   persistedValue: unknown,
   propsValue: unknown,
   revision: number,
+  unsetProps: unknown = [],
 ): DesignPayload & Record<string, unknown> & { __makaronEditableRevision: number } {
   if (!isRecord(propsValue)) throw new Error('Invalid design props');
   const persisted = createPersistedEditableDesign(persistedValue);
+  if (!Array.isArray(unsetProps) || unsetProps.length > 256 || unsetProps.some(key => typeof key !== 'string' || ['__proto__', 'prototype', 'constructor'].includes(key))) throw new Error('Invalid removed design properties');
+  const props = { ...(persisted.props || {}), ...propsValue };
+  for (const key of unsetProps) if (!Object.hasOwn(propsValue, key)) delete props[key];
   return {
     ...(isRecord(persistedValue) ? persistedValue : {}),
     ...persisted,
-    props: {
-      ...(persisted.props || {}),
-      ...propsValue,
-    },
+    props,
     __makaronEditableRevision: revision,
   };
 }

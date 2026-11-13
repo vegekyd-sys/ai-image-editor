@@ -1692,6 +1692,7 @@ export default function ImageCanvas({
                 onVisibleFieldsChange={onVisibleEditableFields}
                 filterVisibleFields={Boolean(currentDesign?.animation)}
                 playerRef={designPlayerRef}
+                allowCanvasCoverSelection={!currentDesign?.animation}
               />
             )}
           </div>

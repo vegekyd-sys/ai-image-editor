@@ -18,7 +18,8 @@ import ShareButton from '@/components/ShareButton';
 import SaveMediaDialog from '@/components/SaveMediaDialog';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
-import { readDesignLayerState, hasDesignLayers } from '@/lib/editor/design-layer-state';
+import { readDesignLayerState, isFixedCanvasDesign } from '@/lib/editor/design-layer-state';
+import { recordDesignEdit, readDesignEditHistory, seekDesignEditHistory, type DesignEditKind } from '@/lib/editor/design-edit-history';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/babel-status';
@@ -323,7 +324,7 @@ export default function Editor({
   const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
   // Mobile keyboard offset for text editor panel
   const editorKbInset = useVisualViewportInset(!isDesktop && Boolean(editingDesignFieldId));
-  const [visibleEditableIds, _setVisibleEditableIds] = useState<string[]>([]);
+  const [, _setVisibleEditableIds] = useState<string[]>([]);
   const handleVisibleEditableFields = useCallback((ids: string[]) => {
     _setVisibleEditableIds(prev => {
       if (prev.length === ids.length && prev.every((id, i) => id === ids[i])) return prev;
@@ -630,7 +631,6 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const isViewingDesign = contentType === 'design';
   const allDesignEditables = currentDesignSnap?.design?.editables ?? [];
   const currentDesignProps = (currentDesignSnap?.design?.props || {}) as Record<string, unknown>;
-  const isLayeredDesign = hasDesignLayers(currentDesignSnap?.design);
   const designLayerState = readDesignLayerState(allDesignEditables, currentDesignProps);
   const currentDesignEditables = allDesignEditables.filter(field => !designLayerState.deleted.includes(field.id));
   const editingDesignField = editingDesignFieldId
@@ -1174,7 +1174,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     previewMode: 'full' | 'none' = 'full',
     autoPreviewCategory?: string,
   ) => {
-    if (readOnly || hasDesignLayers(snapshotsRef.current.find(snap => snap.id === snapshotId)?.design)) return;
+    if (readOnly || isFixedCanvasDesign(snapshotsRef.current.find(snap => snap.id === snapshotId)?.design)) return;
     tipsFetchCountRef.current++;
     setIsTipsFetching(true);
     setFailedCategories(new Set());
@@ -3110,7 +3110,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       });
       cacheImage(`snap:${snap.id}`, posterDataUrl);
       // Tips for still designs
-      if (!snap.design?.animation && !hasDesignLayers(snap.design)) {
+      if (!snap.design?.animation && !isFixedCanvasDesign(snap.design)) {
         fetchTipsForSnapshot(snap.id, posterDataUrl, 'none');
       }
     }
@@ -3149,7 +3149,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     };
   }, [flushPendingDesignSave]);
 
-  const handleDesignPropUpdate = useCallback((key: string, value: unknown) => {
+  const commitDesignProps = useCallback((props: Record<string, unknown>) => {
     const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
     if (snapIdx == null) return;
     const current = snapshotsRef.current[snapIdx];
@@ -3157,7 +3157,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
     const design = {
       ...current.design,
-      props: { ...current.design.props, [key]: value },
+      props,
     };
     const updated = snapshotsRef.current.map((snapshot, index) => (
       index === snapIdx ? { ...snapshot, design } : snapshot
@@ -3169,6 +3169,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       Date.now(),
       designSaveRevisionRef.current + 1,
     );
+    if (pendingDesignSaveRef.current && pendingDesignSaveRef.current.snapshotId !== current.id) flushPendingDesignSave();
     pendingDesignSaveRef.current = {
       snapshotId: current.id,
       design,
@@ -3178,13 +3179,55 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     designPropsSaveTimer.current = setTimeout(flushPendingDesignSave, 500);
   }, [viewIndex, draftParentIndex, flushPendingDesignSave]);
 
+  const handleDesignPropUpdate = useCallback((key: string, value: unknown) => {
+    const index = snapFromTimeline(viewIndex, draftParentIndex);
+    const design = index == null ? undefined : snapshotsRef.current[index]?.design;
+    if (!design) return;
+    const props = design.props || {}, fields = design.editables || [];
+    let field = fields.find(field => field.propKey === key || key === `_pos_${field.id}` || key === `_scale_${field.id}`);
+    let kind: DesignEditKind | undefined;
+    if (key === '_layerState') {
+      const old = readDesignLayerState(fields, props), next = readDesignLayerState(fields, { ...props, [key]: value });
+      const deleted = next.deleted.find(id => !old.deleted.includes(id)), restored = old.deleted.find(id => !next.deleted.includes(id));
+      kind = deleted ? 'delete' : restored ? 'restore' : 'reorder';
+      field = fields.find(field => field.id === (deleted || restored || selectedEditableFieldId));
+    } else if (field?.propKey === key) kind = field.type === 'text' ? 'text' : 'media';
+    const next = recordDesignEdit(props, key, value, { kind, fieldId: field?.id, label: field?.label });
+    if (next !== props) commitDesignProps(next);
+  }, [viewIndex, draftParentIndex, selectedEditableFieldId, commitDesignProps]);
+
+  const handleDesignHistorySeek = useCallback((cursor: number) => {
+    const index = snapFromTimeline(viewIndex, draftParentIndex);
+    const design = index == null ? undefined : snapshotsRef.current[index]?.design;
+    if (!design) return;
+    const props = design.props || {}, next = seekDesignEditHistory(props, cursor);
+    if (next !== props) commitDesignProps(next);
+  }, [viewIndex, draftParentIndex, commitDesignProps]);
+
+  useEffect(() => {
+    if (readOnly || !isViewingDesign) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || (event.target as Element)?.closest?.('input, textarea, [contenteditable="true"]')) return;
+      const undo = event.key.toLowerCase() === 'z' && !event.shiftKey;
+      const redo = (event.key.toLowerCase() === 'z' && event.shiftKey) || event.key.toLowerCase() === 'y';
+      if (!undo && !redo) return;
+      const index = snapFromTimeline(viewIndex, draftParentIndex);
+      const props = index == null ? {} : snapshotsRef.current[index]?.design?.props || {};
+      const history = readDesignEditHistory(props);
+      if ((undo && history.cursor === 0) || (redo && history.cursor === history.entries.length)) return;
+      event.preventDefault(); handleDesignHistorySeek(history.cursor + (undo ? -1 : 1));
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [readOnly, isViewingDesign, viewIndex, draftParentIndex, handleDesignHistorySeek]);
+
   const designSizeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleDesignContentSize = useCallback((size: { width: number; height: number; source: 'editables' | 'scroll' }) => {
     const measuredHeight = Math.ceil(size.height);
     if (!Number.isFinite(measuredHeight) || measuredHeight <= 0) return;
 
     const expandHeight = (design: DesignPayload): DesignPayload | null => {
-      if (design.animation || hasDesignLayers(design)) return null;
+      if (design.animation || isFixedCanvasDesign(design)) return null;
       const nextHeight = Math.min(measuredHeight, 20000);
       if (nextHeight <= design.height + 12) return null;
       return { ...design, height: nextHeight };
@@ -4113,12 +4156,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       />
                     </DesignEditorFrame>
                   </div>
-                ) : isViewingDesign && (currentDesignEditables.length > 0 || isLayeredDesign) ? (
+                ) : isViewingDesign && allDesignEditables.length > 0 ? (
                   <DesignEditPanel
-                    editables={isLayeredDesign ? allDesignEditables : visibleEditableIds.length > 0
-                      ? currentDesignEditables.filter(f => visibleEditableIds.includes(f.id))
-                      : currentDesignEditables}
-                    layered={isLayeredDesign}
+                    editables={allDesignEditables}
+                    onHistorySeek={handleDesignHistorySeek}
                     props={currentDesignProps}
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     selectedFieldId={selectedEditableFieldId}

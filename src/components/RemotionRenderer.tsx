@@ -4,7 +4,7 @@ import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
-import { hasDesignLayers } from '@/lib/editor/design-layer-state';
+import { isFixedCanvasDesign } from '@/lib/editor/design-layer-state';
 import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
 import type { DesignPayload } from '@/types';
 import {
@@ -588,7 +588,7 @@ export default function RemotionRenderer({
   // Static long designs are easy for the Agent to under-size. Measure the
   // rendered editable layer in the browser and let the parent expand height.
   useEffect(() => {
-    if (!Component || design.animation || hasDesignLayers(design) || !onContentSize) return;
+    if (!Component || design.animation || isFixedCanvasDesign(design) || !onContentSize) return;
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let raf1 = 0;

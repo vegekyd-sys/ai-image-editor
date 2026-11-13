@@ -67,7 +67,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       if (revision < currentRevision) {
         return NextResponse.json({ ok: true, staleIgnored: true });
       }
-      persisted = mergePersistedEditableProps(currentValue, body.props, revision);
+      persisted = mergePersistedEditableProps(currentValue, body.props, revision, body.unsetProps);
     }
 
     const result = await workspace.writeFile(

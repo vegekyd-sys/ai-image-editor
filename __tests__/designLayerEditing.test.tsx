@@ -12,6 +12,7 @@ import { queueEditableSave } from '@/lib/editor/editable-save-queue';
 import { layerizeModelOutput } from '@/lib/layerize-delivery';
 import DesignEditPanel from '@/components/DesignEditPanel';
 import { LocaleProvider } from '@/lib/i18n';
+import { recordDesignEdit } from '@/lib/editor/design-edit-history';
 
 const design = buildLayerizeDesign({ version: 1, taskId: 'original', width: 100, height: 100, sourceSha256: 'hash', supplierCostUsd: .1,
   layers: [0, 1, 2].map(z => ({ z, url: `https://example.com/${z}.png`, width: 100, height: 100, bounds: [0, 0, 100, 100], name: `Layer ${z}` })) });
@@ -27,6 +28,33 @@ function renderDesign(props: Record<string, unknown>, mode: 'proxy' | 'registry'
 }
 
 describe('Layerize layer editing', () => {
+  it('offers the same controls and history for ordinary text/image editables', () => {
+    const generic = [{ id: 'hero', propKey: 'hero', type: 'image' as const, label: 'Hero' }, { id: 'title', propKey: 'title', type: 'text' as const, label: 'Title' }];
+    const props = recordDesignEdit({ title: 'Hello', hero: 'https://example.com/photo.png' }, '_pos_hero', { x: 20, y: 10 }, { kind: 'move', label: 'Hero' });
+    const seek = vi.fn(), update = vi.fn();
+    const { getByRole, getByText } = render(<LocaleProvider initialLocale="en"><DesignEditPanel editables={generic} props={props} selectedFieldId="hero" onUpdateProp={update} onSelectField={vi.fn()} onStartEdit={vi.fn()} onHistorySeek={seek} /></LocaleProvider>);
+    fireEvent.click(getByRole('button', { name: 'Delete element' }));
+    expect(update).toHaveBeenCalledWith('_layerState', expect.objectContaining({ deleted: ['hero'] }));
+    fireEvent.click(getByRole('button', { name: 'Undo', exact: true }));
+    expect(seek).toHaveBeenCalledWith(0);
+    fireEvent.click(getByRole('button', { name: 'Edit history', exact: true }));
+    expect(getByRole('dialog', { name: 'Edit history' })).toBeTruthy();
+    expect(getByText('Move · Hero')).toBeTruthy();
+  });
+
+  it('keeps flex layout slots while ordinary editable paint order changes', () => {
+    const runtime = createEditableReactRuntime(React, 'video');
+    const exports: any = {};
+    const code = `import React from 'react'; export default function Composition(props) { return <div style={{display:'flex',flexDirection:'column'}}><div data-editable="title" style={{height:40}}>{props.title}</div><img data-editable="hero" src={props.hero} style={{height:80}} /></div>; }`;
+    new Function('require', 'exports', transform(code, { transforms: ['jsx', 'imports'] }).code)((name: string) => runtime.React, exports);
+    const Component = runtime.wrap(exports.default, 'proxy');
+    const html = renderToStaticMarkup(<Component title="Hello" hero="https://example.com/a.png" _layerState={{ order: ['hero', 'title'], deleted: [], stacking: true }} />);
+    const root = document.createElement('div'); root.innerHTML = html;
+    const children = root.querySelector('div')!.children;
+    expect(children[0].getAttribute('data-editable')).toBe('hero');
+    expect((children[0] as HTMLElement).style.order).toBe('1');
+    expect((children[1] as HTMLElement).style.order).toBe('0');
+  });
   it('normalizes old designs and malformed orders without losing a layer', () => {
     expect(readDesignLayerState(fields, {})).toEqual({ order: ['layer_0', 'layer_1', 'layer_2'], deleted: [] });
     expect(readDesignLayerState(fields, { _layerState: { order: ['unknown', 'layer_2', 'layer_2'], deleted: ['layer_1', 'unknown'] } })).toEqual({ order: ['layer_2', 'layer_0', 'layer_1'], deleted: ['layer_1'] });
@@ -55,12 +83,12 @@ describe('Layerize layer editing', () => {
   }
   it('keeps delete/restore accessible after every layer is removed', () => {
     const update = vi.fn(), select = vi.fn();
-    const { getByRole, rerender } = render(<LocaleProvider initialLocale="en"><DesignEditPanel layered editables={fields} props={design.props} selectedFieldId="layer_1" onUpdateProp={update} onSelectField={select} onStartEdit={vi.fn()} /></LocaleProvider>);
-    fireEvent.click(getByRole('button', { name: 'Delete layer' }));
+    const { getByRole, rerender } = render(<LocaleProvider initialLocale="en"><DesignEditPanel editables={fields} props={design.props} selectedFieldId="layer_1" onUpdateProp={update} onSelectField={select} onStartEdit={vi.fn()} /></LocaleProvider>);
+    fireEvent.click(getByRole('button', { name: 'Delete element' }));
     expect(update).toHaveBeenCalledWith('_layerState', { order: ['layer_0', 'layer_1', 'layer_2'], deleted: ['layer_1'] });
     expect(select).toHaveBeenCalledWith(null);
-    rerender(<LocaleProvider initialLocale="en"><DesignEditPanel layered editables={fields} props={{ ...design.props, _layerState: { order: fields.map(f => f.id), deleted: fields.map(f => f.id) } }} selectedFieldId={null} onUpdateProp={update} onSelectField={select} onStartEdit={vi.fn()} /></LocaleProvider>);
-    fireEvent.click(getByRole('button', { name: 'Restore deleted layer' }));
+    rerender(<LocaleProvider initialLocale="en"><DesignEditPanel editables={fields} props={{ ...design.props, _layerState: { order: fields.map(f => f.id), deleted: fields.map(f => f.id) } }} selectedFieldId={null} onUpdateProp={update} onSelectField={select} onStartEdit={vi.fn()} /></LocaleProvider>);
+    fireEvent.click(getByRole('button', { name: 'Restore deleted element' }));
     expect(update).toHaveBeenLastCalledWith('_layerState', { order: ['layer_0', 'layer_1', 'layer_2'], deleted: ['layer_0', 'layer_1'] });
   });
 });

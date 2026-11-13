@@ -1,7 +1,7 @@
 import type { DesignPayload, EditableField } from '@/types';
 
 /** Bottom to top. Deleted layers retain their source and position for restoration. */
-export interface DesignLayerState { order: string[]; deleted: string[] }
+export interface DesignLayerState { order: string[]; deleted: string[]; stacking?: boolean }
 export const DESIGN_LAYER_STATE_PROP = '_layerState';
 
 export function readDesignLayerState(fields: EditableField[], props: Record<string, unknown>): DesignLayerState {
@@ -12,6 +12,7 @@ export function readDesignLayerState(fields: EditableField[], props: Record<stri
   return {
     order: [...order, ...ids.filter(id => !order.includes(id))],
     deleted: Array.isArray(raw?.deleted) ? [...new Set(raw.deleted.filter(id => known.has(id)))] : [],
+    ...(raw?.stacking === true ? { stacking: true } : {}),
   };
 }
 
@@ -25,11 +26,16 @@ export function changeDesignLayer(state: DesignLayerState, id: string, action: '
   const order = [...state.order];
   const from = order.indexOf(id), to = order.indexOf(adjacent);
   [order[from], order[to]] = [order[to], order[from]];
-  return { ...state, order };
+  return { ...state, order, stacking: true };
 }
 
 /** Source-image decomposition has a fixed canvas, unlike flow-layout long designs. */
-export function hasDesignLayers(design: DesignPayload | undefined): boolean {
-  return !!design?.props?.[DESIGN_LAYER_STATE_PROP]
-    || !!(design as (DesignPayload & { layerizeManifestPath?: string }) | undefined)?.layerizeManifestPath;
+export function isFixedCanvasDesign(design: DesignPayload | undefined): boolean {
+  if (design?.props?._canvasSizing === 'content') return false;
+  const legacyOrder = (design?.props?.[DESIGN_LAYER_STATE_PROP] as DesignLayerState | undefined)?.order;
+  return design?.props?._canvasSizing === 'fixed'
+    || !!(design as (DesignPayload & { layerizeManifestPath?: string }) | undefined)?.layerizeManifestPath
+    || (Array.isArray(legacyOrder) && legacyOrder.length > 0 && legacyOrder.every(id => typeof id === 'string' && /^layer_\d+(?:_text_\d+)?$/.test(id)));
 }
+
+export const hasDesignLayers = isFixedCanvasDesign;

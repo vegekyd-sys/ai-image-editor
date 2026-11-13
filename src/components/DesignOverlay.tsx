@@ -5,7 +5,6 @@ import Moveable from 'react-moveable';
 import type { EditableField } from '@/types';
 import {
   EDITABLE_POINTER_MOVE_THRESHOLD,
-  findEditableAtPoint,
   isEditableRectMeasurable,
   isEditableCanvasCover,
   resolveEditableEditActivation,
@@ -17,6 +16,8 @@ import {
   closestEditableRuntimeElement,
   readEditableRuntimeId,
 } from '@/lib/editor/scene-registry';
+import { editableMediaImage, warmEditableAlpha, pickPaintedEditable } from '@/lib/editor/editable-image-alpha';
+import EditableSelectionTint from './EditableSelectionTint';
 
 interface DesignOverlayProps {
   containerEl: HTMLDivElement | null;
@@ -31,6 +32,7 @@ interface DesignOverlayProps {
   onVisibleFieldsChange?: (visibleIds: string[]) => void;
   filterVisibleFields?: boolean;
   playerRef?: any;
+  allowCanvasCoverSelection?: boolean;
 }
 
 interface MeasuredRect {
@@ -79,6 +81,7 @@ export default function DesignOverlay({
   onVisibleFieldsChange,
   filterVisibleFields = false,
   playerRef,
+  allowCanvasCoverSelection = false,
 }: DesignOverlayProps) {
   const [rects, setRects] = useState<MeasuredRect[]>([]);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -99,6 +102,7 @@ export default function DesignOverlay({
   const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const dragDomElRef = useRef<HTMLElement | null>(null);
   const dragScaleRef = useRef(1);
+  const pickEditable = useCallback((x: number, y: number) => pickPaintedEditable(rectsRef.current, x, y), []);
 
   // Measure editable elements
   const measure = useCallback(() => {
@@ -124,6 +128,8 @@ export default function DesignOverlay({
     const visibleIds: string[] = [];
     activeInstances.forEach((instance) => {
       const { id, element: el } = instance;
+      const image = editableMediaImage(el);
+      if (image) warmEditableAlpha(image);
       // Fix inline elements — Moveable needs a box model to work correctly
       const htmlEl = el;
       htmlEl.querySelectorAll('img, video').forEach((media) => {
@@ -264,19 +270,12 @@ export default function DesignOverlay({
 
       const directTarget = closestEditableRuntimeElement(eventTarget);
       let id: string | null = null;
-      if (overlayRef.current) {
-        const baseRect = overlayRef.current.getBoundingClientRect();
-        id = findEditableAtPoint(
-          rectsRef.current,
-          e.clientX - baseRect.left,
-          e.clientY - baseRect.top,
-        );
-      }
+      if (overlayRef.current) id = pickEditable(e.clientX, e.clientY);
       id ??= directTarget ? readEditableRuntimeId(directTarget) : null;
       if (id && !editables.some(f => f.id === id)) id = null;
       const hitRect = id ? rectsRef.current.find(rect => rect.id === id) : null;
       const hitTarget = hitRect?.domEl ?? directTarget;
-      const hitIsCanvasCover = Boolean(hitTarget?.hasAttribute('data-editable-canvas-cover'));
+      const hitIsCanvasCover = !allowCanvasCoverSelection && Boolean(hitTarget?.hasAttribute('data-editable-canvas-cover'));
 
       if (e.pointerType === 'touch') {
         activeTouches++;
@@ -304,7 +303,11 @@ export default function DesignOverlay({
       });
       if (intent !== 'select') return;
       if (selectedFieldIdRef.current !== id) {
+        const previous = selectedFieldIdRef.current;
+        selectedFieldIdRef.current = id;
         onSelectFieldRef.current(id);
+        // Do not let the old Moveable target start dragging through its clear pixels.
+        if (previous && directTarget && readEditableRuntimeId(directTarget) === previous) e.stopPropagation();
       }
     };
     const handlePointerMove = (e: PointerEvent) => {
@@ -364,7 +367,7 @@ export default function DesignOverlay({
       interactionEl.removeEventListener('pointercancel', handlePointerCancel, { capture: true });
       interactionEl.removeEventListener('dragstart', handleDragStart);
     };
-  }, [interactionEl, editables]);
+  }, [interactionEl, editables, pickEditable, allowCanvasCoverSelection]);
 
   // Touch-only fallback drag. Desktop/moveable-area drags must stay on Moveable
   // so snap guidelines render during movement.
@@ -407,22 +410,8 @@ export default function DesignOverlay({
       if (targetEl.closest('.moveable-area')) return false;
       if (pointerType !== 'touch') return false;
 
-      const editableTarget = closestEditableRuntimeElement(targetEl);
-      const isSelectedEditable = (
-        editableTarget
-        && readEditableRuntimeId(editableTarget) === fieldId
-      );
-      let isSelectedHit = false;
-      if (!isSelectedEditable && overlayRef.current) {
-        const baseRect = overlayRef.current.getBoundingClientRect();
-        const hitId = findEditableAtPoint(
-          rectsRef.current,
-          clientX - baseRect.left,
-          clientY - baseRect.top,
-        );
-        isSelectedHit = hitId === fieldId;
-      }
-      if (!isSelectedEditable && !isSelectedHit) return false;
+      const isSelectedHit = pickEditable(clientX, clientY) === fieldId;
+      if (!isSelectedHit) return false;
 
       const target = rectsRef.current.find(rect => rect.id === fieldId)?.domEl ?? null;
       if (!target) return false;
@@ -502,7 +491,7 @@ export default function DesignOverlay({
       window.removeEventListener('pointercancel', finishDrag);
       if (dragRaf) cancelAnimationFrame(dragRaf);
     };
-  }, [containerEl, measure, onUpdateProp, props]);
+  }, [containerEl, measure, onUpdateProp, props, pickEditable]);
 
   // ── Container-level pinch-to-scale ──
   // Single implementation: works regardless of where fingers land.
@@ -586,6 +575,7 @@ export default function DesignOverlay({
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 15 }}
     >
+      {selectedRect && <EditableSelectionTint element={selectedRect.domEl} overlay={overlayRef.current} moving={isDragging} />}
       {/* Label tag for selected element — hidden during drag */}
       {selectedRect && selectedFieldId && !isDragging && (() => {
         const field = editables.find(f => f.id === selectedFieldId);
@@ -638,7 +628,13 @@ export default function DesignOverlay({
             verticalGuidelines={overlayRef.current ? [Math.round(overlayRef.current.clientWidth / 2)] : []}
             elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
             /* ── Drag ── */
-            onDragStart={({ set }) => {
+            onDragStart={(event) => {
+              const input = event.inputEvent;
+              const point = input?.touches?.[0] || input;
+              if (typeof point?.clientX === 'number' && pickEditable(point.clientX, point.clientY) !== selectedFieldId) {
+                event.stopDrag(); return false;
+              }
+              const { set } = event;
               isDraggingRef.current = true;
               setIsDragging(true);
               const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
@@ -662,6 +658,8 @@ export default function DesignOverlay({
                   y: baseY + lastEvent.beforeTranslate[1] * s,
                 });
               }
+              isDraggingRef.current = false; setIsDragging(false);
+              requestAnimationFrame(measure);
             }}
             /* ── Scale (desktop handle drag only) ── */
             onScaleStart={({ set }) => {
@@ -684,6 +682,8 @@ export default function DesignOverlay({
                   h: baseH * lastEvent.scale[1],
                 });
               }
+              isDraggingRef.current = false; setIsDragging(false);
+              requestAnimationFrame(measure);
             }}
           />
         </div>

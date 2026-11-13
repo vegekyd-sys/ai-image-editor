@@ -1,12 +1,12 @@
 import { type DesignPayload, type Snapshot } from '@/types';
 import { getOptimizedUrl, getThumbnailUrl } from '@/lib/supabase/storage';
 import { snapFromTimeline } from './timeline-utils';
-import { hasDesignLayers } from './design-layer-state';
+import { isFixedCanvasDesign } from './design-layer-state';
 
 export function shouldAutoFetchSnapshotTips(snapshot: Snapshot | undefined, readOnly = false): boolean {
   return !!snapshot && !readOnly && snapshot.tips.length === 0 && snapshot.type !== 'video'
     && (!snapshot.designPath || !!snapshot.design)
-    && !snapshot.design?.animation && !hasDesignLayers(snapshot.design);
+    && !snapshot.design?.animation && !isFixedCanvasDesign(snapshot.design);
 }
 
 export const VIDEO_TIMELINE_SENTINEL = '__VIDEO__';

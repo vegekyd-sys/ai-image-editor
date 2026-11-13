@@ -1,6 +1,7 @@
 'use client'
 
 import { queueEditableSave } from '@/lib/editor/editable-save-queue';
+import { historyUnsetProps } from '@/lib/editor/design-edit-history';
 import { useRef, useCallback } from 'react'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
@@ -371,7 +372,7 @@ export function useProject(projectId: string, userId: string) {
         credentials: 'same-origin',
         keepalive: options.propsOnly === true,
         body: JSON.stringify(options.propsOnly
-          ? { props: design.props || {}, revision: options.revision }
+          ? { props: design.props || {}, revision: options.revision, unsetProps: historyUnsetProps(design.props || {}) }
           : { design: createPersistedEditableDesign(design) }),
       },
     )
