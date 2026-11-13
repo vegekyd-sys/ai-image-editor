@@ -2425,7 +2425,7 @@ Not sure which built-in skill to use? Start with:
     else if (subtopic === 'skill-categories') console.log('Usage: makaron admin skill-categories [--json|add|update|delete] ...');
     else if (subtopic === 'upload') console.log('Usage: makaron admin upload <local-file> <storage-path>');
     else if (subtopic === 'fetch-skill') console.log('Usage: makaron admin fetch-skill <share-code|url>');
-    else if (subtopic === 'add-credits') console.log('Usage: makaron admin add-credits <email-or-user-id> <credits> [--json]');
+    else if (subtopic === 'add-credits') console.log('Usage: makaron admin add-credits <email-or-user-id-or-api-key> <credits> [--json]');
     else if (subtopic === 'set-admin') console.log('Usage: makaron admin set-admin <email>');
     else console.log(`Admin commands:
   admin skills                         List all marketplace skills
@@ -2438,7 +2438,7 @@ Not sure which built-in skill to use? Start with:
   admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
-  admin add-credits <user> <credits>   Add credits by email or user ID
+  admin add-credits <user> <credits>   Add credits by email, user ID or API key
   admin set-admin <email>              Grant admin access to a user
 `);
   } else if (topic === 'register') {
@@ -3800,17 +3800,25 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const user = args[2]?.trim();
     const credits = Number(args[3]);
     if (!user || !Number.isSafeInteger(credits) || credits <= 0) {
-      console.error('Usage: makaron admin add-credits <email-or-user-id> <credits> [--json]');
+      console.error('Usage: makaron admin add-credits <email-or-user-id-or-api-key> <credits> [--json]');
       console.error('Credits must be a positive integer.');
       process.exit(1);
     }
 
+    const isApiKey = user.startsWith('mk_live_');
     const res = await fetch(`${baseUrl}/api/admin/add-credits`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ email: user, credits }),
+      body: JSON.stringify({ ...(isApiKey ? { apiKey: user } : { email: user }), credits }),
     });
-    const data = await res.json().catch(() => null);
+    const responseText = await res.text();
+    // Never echo the target credential, even if an older server includes it in an error.
+    let data;
+    try {
+      data = JSON.parse(responseText, (_key, value) =>
+        isApiKey && typeof value === 'string' ? value.replaceAll(user, '[redacted API key]') : value);
+    }
+    catch { data = null; }
     if (!res.ok) {
       console.error(`Error ${res.status}:`, data?.error || 'Failed to add credits');
       process.exit(1);
@@ -3818,7 +3826,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (args.includes('--json')) {
       console.log(JSON.stringify(data));
     } else {
-      console.log(`✅ Added ${credits} credits to ${user}. New balance: ${data.newBalance}`);
+      console.log(`✅ Added ${credits} credits to ${isApiKey ? data.userId : user}. New balance: ${data.newBalance}`);
     }
 
   } else {
@@ -3833,7 +3841,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
-  admin add-credits <user> <credits>   Add credits by email or user ID
+  admin add-credits <user> <credits>   Add credits by email, user ID or API key
   admin set-admin <email>              Grant admin access to a user
 `);
   }

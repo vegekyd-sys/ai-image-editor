@@ -624,11 +624,12 @@ Admin commands require an API key with admin privileges. Ask your admin to run `
 
 ### Add credits to a user
 
-Use either the account email address or the Supabase user UUID. Credits must be a positive integer.
+Use the account email address, Supabase user UUID, or full active API key. Credits are added to the owning account (shared by its API keys), and must be a positive integer. Keep `MAKARON_API_KEY` set to your administrator credential; the positional API key identifies the recipient. Full recipient keys are redacted from command output.
 
 ```bash
 npx makaron-cli admin add-credits user@example.com 1000
 npx makaron-cli admin add-credits <user-id> 1000 --json
+npx makaron-cli admin add-credits "$RECIPIENT_API_KEY" 1000 --json
 ```
 
 ### List all marketplace skills
