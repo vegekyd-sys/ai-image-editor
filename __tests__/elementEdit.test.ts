@@ -43,3 +43,12 @@ describe('selected element edit contract', () => {
     expect(parseSelectedElement({ snapshotId: '../elsewhere', fieldId: 'baby' })).toBeUndefined();
   });
 });
+it('preserves every operation in a compound CUI command when rebasing', () => {
+  const receipt = { ...edit({ kind: 'replace', source: 'original.png', url: 'edited.png' }), operations: [
+    { kind: 'transform' as const, dx: 25 }, { kind: 'replace' as const, source: 'original.png', url: 'edited.png' },
+  ] };
+  const result = applyElementEdit(source, receipt);
+  expect(result.props?._pos_baby).toEqual({ x: 56, y: -17 });
+  expect(result.props?.babyImage).toBe('edited.png');
+  expect(seekDesignEditHistory(result.props!, 0)).toMatchObject(source.props!);
+});

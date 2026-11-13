@@ -68,6 +68,7 @@ describe('Agent tool registry contract', () => {
 
     expect(extractSet(source, 'DURABLE_IDEMPOTENT_TOOLS')).toEqual([
       'generate_image',
+      'edit_element',
       'generate_animation',
       'retake_video',
       'upscale_video',

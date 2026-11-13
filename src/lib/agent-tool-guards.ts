@@ -4,6 +4,7 @@ import { refreshMaterializeStatus } from './agent-materialize-status';
 
 export const DURABLE_IDEMPOTENT_TOOLS = new Set([
   'generate_image',
+  'edit_element',
   'generate_animation',
   'retake_video',
   'upscale_video',

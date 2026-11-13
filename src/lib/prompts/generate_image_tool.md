@@ -12,7 +12,7 @@ Call `read_file('prompts/image.md')` for complex edits, references, restoration,
 - Existing-image cutout: pass its `media_index`; with no source, omit `media_index` for transparent text-to-image.
 - Pure cutout: omit `aspectRatio` to preserve the source canvas. If the user requests a new transparent layout (e.g. six stickers on 16:9), pass it; the requested layout wins.
 
-Skill routing is in `agent.md`; read only the selected skill once.
+Skill routing is in `agent.md`; read only the selected skill once. Do not read `prompts/image.md` just to route the skill.
 
 Edit Mode prompt shape for ordinary in-place edits:
 

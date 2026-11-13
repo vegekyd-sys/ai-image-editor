@@ -3604,7 +3604,9 @@ function createInspectElementTool({ ctx, runtime }: AgentToolFactoryScope) {
     inputSchema: z.object({}),
     execute: async () => {
       try {
-        const input = requireElementSelection(ctx), { design, field } = await loadSelectedElement(input);
+        const input = requireElementSelection(ctx), loaded = await loadSelectedElement(input);
+        const previous = (ctx as any).__elementEditReceipt as import('./editor/element-edit').ElementEditReceipt | undefined;
+        const design = previous ? applyElementEdit(loaded.design, previous) : loaded.design, field = loaded.field;
         const source = design.props?.[field.propKey];
         let previewBase64: string | undefined, width: number | undefined, height: number | undefined;
         if (field.type === 'image' && typeof source === 'string' && source) {
@@ -3636,7 +3638,9 @@ function createEditElementTool(scope: AgentToolFactoryScope) {
     }),
     execute: async ({ operation }, executionOptions) => {
       try {
-        const input = requireElementSelection(ctx), original = await loadSelectedElement(input);
+        const input = requireElementSelection(ctx), loaded = await loadSelectedElement(input);
+        const previous = (ctx as any).__elementEditReceipt as import('./editor/element-edit').ElementEditReceipt | undefined;
+        const original = { ...loaded, design: previous ? applyElementEdit(loaded.design, previous) : loaded.design };
         const id = crypto.randomUUID();
         let op: import('./editor/element-edit').ElementOperation;
         if (operation.kind === 'content') {
@@ -3657,15 +3661,16 @@ function createEditElementTool(scope: AgentToolFactoryScope) {
           if (!saved.success || !saved.storageUrl) throw new Error('Generated element could not be saved.');
           // The provider output remains available if the source itself changed concurrently.
           const latest = await loadSelectedElement(input);
-          if (latest.design.props?.[original.field.propKey] !== source) return { success: false, conflict: true, candidateUrl: saved.storageUrl, error: 'The selected image changed during generation. Candidate retained; no composition overwritten.' };
+          if ((previous ? applyElementEdit(latest.design, previous) : latest.design).props?.[original.field.propKey] !== source) return { success: false, conflict: true, candidateUrl: saved.storageUrl, error: 'The selected image changed during generation. Candidate retained; no composition overwritten.' };
           op = { kind: 'replace', url: saved.storageUrl, source };
         } else op = operation;
         const latest = await loadSelectedElement(input);
-        const receipt: import('./editor/element-edit').ElementEditReceipt = { version: 1, id, sourceSnapshotId: input.selection.snapshotId, fieldId: input.selection.fieldId, operation: op };
+        const receipt: import('./editor/element-edit').ElementEditReceipt = { version: 1, id, sourceSnapshotId: input.selection.snapshotId, fieldId: input.selection.fieldId, operation: op, ...(previous ? { operations: [...(previous.operations || [previous.operation]), op] } : {}) };
         const design = { ...applyElementEdit(latest.design, receipt), elementEdit: receipt };
         const path = `${ctx.projectId}/element-edits/${id}.json`;
         const saved = await workspace.writeFile(path, JSON.stringify(design), input.supabase, input.userId, 'application/json');
         if (!saved.success) throw new Error('Element edit could not be saved.');
+        (ctx as any).__elementEditReceipt = receipt;
         (ctx as any).__lastDesignPayload = design;
         (ctx as any).__lastSavedDraftPath = path;
         ((ctx as any).__runCodeDrafts ??= []).push({ design, sourceDesignPath: path });

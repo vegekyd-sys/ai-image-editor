@@ -9,7 +9,7 @@ export type ElementOperation =
   | { kind: 'text'; text: string }
   | { kind: 'replace'; url: string; source: string };
 export interface ElementEditReceipt {
-  version: 1; id: string; sourceSnapshotId: string; fieldId: string; operation: ElementOperation;
+  version: 1; id: string; sourceSnapshotId: string; fieldId: string; operation: ElementOperation; operations?: ElementOperation[];
 }
 export function parseSelectedElement(value: unknown): SelectedElement | undefined {
   if (!value || typeof value !== 'object') return;
@@ -32,6 +32,7 @@ function pair(value: unknown, a: string, b: string, fallback: number): Record<st
 }
 /** Reapply only the requested operation to the latest source. All unrelated properties survive. */
 export function applyElementEdit(design: DesignPayload, receipt: ElementEditReceipt): DesignPayload {
+  if (receipt.operations?.length) return receipt.operations.reduce((current, operation) => applyElementEdit(current, { ...receipt, operation, operations: undefined }), design);
   const field = resolveElement(design, receipt.fieldId), op = receipt.operation;
   let props = design.props || {};
   const record = (key: string, value: unknown, kind: 'move' | 'scale' | 'text' | 'media') => {
