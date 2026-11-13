@@ -1,0 +1,104 @@
+{
+  "candidate": "B-20261109-seedream55",
+  "resumedAtChinaDate": "2026-11-13",
+  "baseline": "7fadfde6cfaf1f25059231f891a999ccafadd711",
+  "reference": "/Users/tianyicai/.codex/skills/makaron-mascot-spark/assets/makaron-spark-pixel-wizard-concepts.png",
+  "cases": [
+    {
+      "id": "full-scene",
+      "prompt": "Use the Makaron Spark + Pixel Wizard reference sheet for brand identity. Spark is Makaron’s creative source and editing signature: magenta/cyan energy that emerges from the product UI and shows transformation. Pixel Wizard is Makaron’s small purple bubble-ghost mascot and the mischievous, slightly scared guide/personification of Spark. Pixel Wizard must actively interact with Spark using his whole squishy body, not simply hold a magic wand. Avoid making Spark just a wand glow. The mascot is a sidekick, not the protagonist. Create one polished square 1024x1024 full-scene campaign illustration. A large floating Makaron editor card is the hero, a magenta/cyan Spark ribbon bursts from its image preview into a luminous creative portal. A small translucent purple bubble-ghost Pixel Wizard with a pixel face and large floppy dark-purple hat is pulled sideways by the ribbon, wrapping his squishy body around it with a mischievous startled expression. His whole body and hat are visible, about 20 percent of the frame. Warm ivory studio background, carefully integrated light and shadows, premium 3D materials, no wand, no additional characters. The only lettering is MAKARON on the card.",
+      "aspectRatio": "1:1",
+      "imageResolution": "1K",
+      "background": "opaque",
+      "modelOptions": {
+        "gpt-image-2.6-flare": {
+          "imageQuality": "low",
+          "imageReasoningEffort": "high"
+        }
+      },
+      "group": "mascot",
+      "source": null
+    },
+    {
+      "id": "native-alpha",
+      "prompt": "Use the Makaron Spark + Pixel Wizard reference sheet for brand identity. Spark is Makaron’s creative source and editing signature: magenta/cyan energy that emerges from the product UI and shows transformation. Pixel Wizard is Makaron’s small purple bubble-ghost mascot and the mischievous, slightly scared guide/personification of Spark. Pixel Wizard must actively interact with Spark using his whole squishy body, not simply hold a magic wand. Avoid making Spark just a wand glow. The mascot is a sidekick, not the protagonist. Create one square 1024x1024 isolated brand asset on a truly transparent background with native alpha, not a checkerboard painted in the image. Show a small floating Makaron editor card, a magenta/cyan translucent Spark ribbon emerging from its preview and turning into an open loop. The full-body translucent purple bubble-ghost Pixel Wizard, with a pixel face and a large floppy dark-purple hat, clings to this ribbon with his whole squishy body and a startled cheeky expression. Keep soft glasslike translucency in the purple body and Spark, delicate semitransparent glow edges, and fully transparent empty space outside the objects. All parts and hat fully inside the canvas with padding, no wand, no extra characters, no text, no floor or solid backdrop.",
+      "aspectRatio": "1:1",
+      "imageResolution": "1K",
+      "background": "transparent",
+      "modelOptions": {
+        "gpt-image-2.6-flare": {
+          "imageQuality": "low",
+          "imageReasoningEffort": "high"
+        }
+      },
+      "group": "mascot",
+      "source": null
+    },
+    {
+      "id": "local-hat-edit",
+      "prompt": "Edit this exact source image locally. Change ONLY the large floppy dark-purple wizard hat on the small purple bubble-ghost on the right into warm tangerine orange, including the crown and brim; retain the same hat shape, pixel edges, folds, material, light and shadow. Do not change the purple body, pixel face, expression, pose, the magenta/cyan Spark ribbon, the MAKARON editor card, its lettering, mountains, portal, ivory background, shadows, camera, composition, or canvas size. Preserve every area outside the hat as faithfully as possible. Do not regenerate the scene, add objects, add text, crop, or resize. Output the complete edited image at 1024x1024.",
+      "source": "../seedream55-candidate/fixed-edit-source.png",
+      "sourceSha256": "bbd9051dad42a91ab512b9b1ade7b2582e69545331fa02a0cbe6415fe44bb9fa",
+      "editRegion": [
+        710,
+        290,
+        989,
+        477
+      ],
+      "aspectRatio": "1:1",
+      "imageResolution": "1K",
+      "background": "opaque",
+      "modelOptions": {
+        "gpt-image-2.6-flare": {
+          "imageQuality": "low",
+          "imageReasoningEffort": "high"
+        }
+      },
+      "group": "mascot"
+    },
+    {
+      "group": "pokemon",
+      "id": "full-scene",
+      "prompt": "Depict exactly two recognizable Pokémon characters, Pikachu and Bulbasaur, in their canonical appearances. Pikachu is a yellow mouse Pokémon with long black-tipped ears, red cheek patches and a lightning-bolt-shaped tail. Bulbasaur is a small green quadruped Pokémon with darker green patches, red eyes and a large plant bulb on its back. Keep the two characters visually distinct and anatomically consistent; no hybrids, substitutions or additional characters. Create a polished, playful 2D cartoon illustration on a square 1024x1024 canvas. Pikachu sits on the left and waves; Bulbasaur stands on the right and smiles. Both characters, all ears, tail and bulb are fully inside the image. A single small bright red rubber ball lies in the lower-left foreground, clearly separated from Pikachu, around x=140,y=820 with radius about 55 pixels. A pale cream tabletop and a soft sky-blue backdrop fill the rest of the scene, with subtle contact shadows. No lettering, logos, watermark or frame.",
+      "background": "opaque",
+      "source": null
+    },
+    {
+      "group": "pokemon",
+      "id": "native-alpha",
+      "prompt": "Depict exactly two recognizable Pokémon characters, Pikachu and Bulbasaur, in their canonical appearances. Pikachu is a yellow mouse Pokémon with long black-tipped ears, red cheek patches and a lightning-bolt-shaped tail. Bulbasaur is a small green quadruped Pokémon with darker green patches, red eyes and a large plant bulb on its back. Keep the two characters visually distinct and anatomically consistent; no hybrids, substitutions or additional characters. Create one isolated square 1024x1024 transparent PNG sticker composition with native alpha. Pikachu on the left reaches its front paw toward Bulbasaur on the right, who reaches a front foot back. Show both characters fully with generous empty padding. Clean hand-drawn cartoon contours, smooth flat colors, subtle soft shading. All empty space around and between the characters is truly transparent; no solid rectangle, no painted checkerboard, no floor, text or watermark. Do not use a background removal tool.",
+      "background": "transparent",
+      "source": null
+    },
+    {
+      "group": "pokemon",
+      "id": "local-edit",
+      "prompt": "Edit this exact fixed source locally. Change ONLY the small red rubber ball in the lower-left foreground to vivid cobalt blue. Keep the same ball size, position, silhouette, highlight and shadow. Preserve Pikachu and Bulbasaur exactly as shown: all faces, expressions, pose, ears, tail, body patches and plant bulb. Preserve the tabletop, sky-blue backdrop, composition, lighting, color balance and 1024x1024 canvas. Do not add objects, substitute characters, crop or redraw unrelated areas. Output the complete edited image.",
+      "background": "opaque",
+      "source": "pokemon-fixed-source.png",
+      "editRegion": "to freeze after seeing shared source"
+    }
+  ],
+  "pairedModels": [
+    "seedream-5.5",
+    "gpt-image-2.6-flare"
+  ],
+  "common": {
+    "aspectRatio": "1:1",
+    "imageResolution": "1K",
+    "outputFormat": "png"
+  },
+  "gpt": {
+    "imageQuality": "low",
+    "imageReasoningEffort": "high"
+  },
+  "seedream": {
+    "provider": "evolink",
+    "providerModel": "doubao-seedream-5.5",
+    "prompt_priority": "standard"
+  },
+  "maxNewImageSubmissions": 12,
+  "budgetCarryForwardConservativeUsd": 0.275951,
+  "budgetTargetUsd": 5,
+  "budgetTotalCeilingUsd": 10
+}

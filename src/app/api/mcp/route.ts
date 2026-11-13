@@ -1,3 +1,4 @@
+import { estimateSeedream55Credits } from '@/lib/models/seedream55';
 import { estimateGptImageCredits } from '@/lib/models/gpt-image-quote';
 import { isFalGptImage } from '@/lib/models/types';
 import { getTokenRate } from '@/lib/billing/token-rates';
@@ -72,11 +73,23 @@ async function handleMcp(req: Request): Promise<Response> {
     returnImageContent: true,
     userId: auth.userId,
     imageSignal: req.signal,
+    onSeedream55Receipt: auth.type === 'user' ? async receipt => {
+      const { writeFile } = await import('@/lib/workspace');
+      const { getSupabaseAdmin } = await import('@/lib/supabase/service');
+      const saved = await writeFile(`seedream55/${receipt.taskId}.json`, JSON.stringify({ ...receipt, updatedAt: new Date().toISOString() }), getSupabaseAdmin(), auth.userId!, 'application/json');
+      if (!saved.success) throw new Error('Seedream receipt persistence failed');
+    } : undefined,
     submitVideo: auth.type === 'user' ? (input, toolName) => submitMcpVideo(input, { userId: auth.userId!, apiKeyId: auth.keyId!, toolName }) : undefined,
     onVideoStatus: auth.type === 'user' ? (taskId, status, queryFailed) => settleMcpVideoStatus(auth.userId!, taskId, status, queryFailed) : undefined,
     // Pre-check: ensure user has enough credits
     onToolStart: auth.type === 'user' ? async (toolName, model, meta) => {
       if (!(await isBillingEnabled())) return { allowed: true };
+      if (toolName === 'makaron_edit_image' && model === 'seedream-5.5') {
+        const rate = await getTokenRate(model);
+        if (!rate || rate.model_id !== model || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Seedream 5.5 pricing is not configured.' };
+        const check = await requireCredits(auth.userId!, estimateSeedream55Credits(meta ?? {}, rate.markup));
+        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
+      }
       if (toolName === 'makaron_edit_image' && model === 'mj-v8.2') {
         const rate = await getTokenRate('mj-v8.2');
         if (!rate || rate.model_id !== 'mj-v8.2' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Midjourney pricing is not configured.' };

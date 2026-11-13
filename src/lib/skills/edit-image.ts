@@ -5,6 +5,7 @@ import type { SkillContext, SkillResult } from './index';
 import { ProviderImageInputError } from '../provider-image-preflight';
 import { FalImage25RequestError } from '../models/fal-image25';
 import { NanoBanana21RequestError } from '../models/nano-banana-21';
+import { Seedream55RequestError } from '../models/seedream55';
 import { WanImageRequestError } from '../models/wan-image';
 import { MidjourneyRequestError, type MidjourneyRequest, type MidjourneyTask } from '../midjourney';
 import { ImageCapabilityError, planImageGeneration } from '../image-model-capabilities';
@@ -12,6 +13,7 @@ import { ImageCapabilityError, planImageGeneration } from '../image-model-capabi
 export interface EditImageInput extends ImageGenerationOptions {
   editPrompt: string;
   midjourney?: Omit<MidjourneyRequest, 'prompt' | 'aspectRatio' | 'imageUrls'>;
+  onSeedream55Receipt?: import('../models/types').GenerateImageRequest['onSeedream55Receipt'];
   onMidjourneyReceipt?: (task: MidjourneyTask, request: MidjourneyRequest) => Promise<void>;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   aspectRatio?: string;
@@ -66,7 +68,7 @@ export async function editImage(
     aspectRatio, imageResolution, background, isNsfw,
     benignCharacterContent: input.benignCharacterContent, beforeImageRecovery: input.beforeImageRecovery, signal: input.signal, deadlineMs: input.deadlineMs,
     imageQuality: input.imageQuality, imageReasoningEffort: input.imageReasoningEffort, outputFormat: input.outputFormat, frameCount: input.frameCount, frameDurationMs: input.frameDurationMs, gifFrameSize: input.gifFrameSize,
-    midjourney: input.midjourney, onMidjourneyReceipt: input.onMidjourneyReceipt,
+    onSeedream55Receipt: input.onSeedream55Receipt, midjourney: input.midjourney, onMidjourneyReceipt: input.onMidjourneyReceipt,
     thinkingEffort: 'minimal' as const,
   };
   try {
@@ -81,8 +83,9 @@ export async function editImage(
     if (result.fallbackUsed) message += ` Generated with ${result.model} after a completed provider refusal; do not repeat the generation.`;
     return { success: true, message, image: result.image, images: result.images, taskId: result.taskId, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage, recovery: result.recovery };
   } catch (error) {
-    if (error instanceof MidjourneyRequestError) return { success: false, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
+    if (error instanceof MidjourneyRequestError || error instanceof Seedream55RequestError) return { success: false, taskId: error.taskId, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
     if (error instanceof ImageProviderRefusalError || error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
+
       return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
     }
     // A paid outcome can be unknown: preserve a durable failure, never fan out or resubmit.

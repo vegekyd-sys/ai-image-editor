@@ -999,6 +999,8 @@ const ja = {
   'model.qwen.desc': '顔の再現性に優れ、NSFWコンテンツにも対応します。',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '1〜3枚の画像編集に対応する独立モデル。大胆な変化と高解像度出力が特長です。',
+  'model.seedream55.name': 'Seedream 5.5',
+  'model.seedream55.desc': '透過 PNG・部分編集、入力画像は最大 10 枚',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',
   'model.image26Flare.desc': '既定の画像モデル。GIF アニメ対応',
   'model.image26Sunburst.name': 'GPT Image 2.6 Sunburst',

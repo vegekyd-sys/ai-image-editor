@@ -775,6 +775,8 @@ const zh = {
   'model.qwen.desc': '人脸保真最佳，可处理 NSFW 内容。',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '独立的 1–3 图编辑模型，变化大胆并保留高分辨率。',
+  'model.seedream55.name': 'Seedream 5.5',
+  'model.seedream55.desc': '原生透明 PNG、局部编辑，最多 10 张输入图',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',
   'model.image26Flare.desc': '默认图片模型，支持 GIF 动画',
   'model.image26Sunburst.name': 'GPT Image 2.6 Sunburst',

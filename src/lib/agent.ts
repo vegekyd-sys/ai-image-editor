@@ -4,6 +4,7 @@ import { streamText } from 'ai';
 import { initializeAgentSnapshotUrls } from './agent-media-index';
 import type { ModelMessage } from 'ai';
 import type { ModelId } from './models/types';
+import { normalizeImageModelId } from './image-model-capabilities';
 import agentPrompt from './prompts/agent.md';
 import webSearchPrompt from './prompts/web-search.md';
 import legacyAgentPrompt from './prompts/legacy/agent.md';
@@ -471,7 +472,11 @@ export async function* runMakaronAgent(
   const webSearchDirective = tools?.web_search
     ? `\n\n${webSearchPrompt}\nCurrent UTC date: ${new Date().toISOString().slice(0, 10)}. Use this date when interpreting recent news and publication dates.`
     : '';
-  const systemPrompt = `${executionSystemPrompt}${languageDirective}${skillLaunchDirective}${webSearchDirective}`;
+  const selectedImageModel = normalizeImageModelId(options?.preferredModel);
+  const imageSelectionDirective = selectedImageModel && !analysisOnly && !tipReactionOnly
+    ? `\n\n[Selected image model: ${selectedImageModel}. This explicit App/CLI selection governs generate_image, overriding default or inferred image models. Use this ID and describe the actual model/provider returned by the tool. Do not claim a different default model was used.]`
+    : '';
+  const systemPrompt = `${executionSystemPrompt}${languageDirective}${skillLaunchDirective}${webSearchDirective}${imageSelectionDirective}`;
   const responseLocale = normalizeLocale(options?.locale, 'en');
   endSystemPrompt?.({ systemChars: systemPrompt.length });
 

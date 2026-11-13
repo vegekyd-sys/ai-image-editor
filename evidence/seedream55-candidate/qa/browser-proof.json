@@ -1,0 +1,13 @@
+{
+  "surface": "Codex in-app browser",
+  "componentHarnessUrl": "http://127.0.0.1:5195",
+  "galleryUrl": "http://127.0.0.1:5196/comparison.html",
+  "selectorUsesActualBranchComponent": true,
+  "selection": "seedream-5.5",
+  "autoDisabledAfterSelection": true,
+  "fourLocaleComponentTests": 4,
+  "galleryImagesLoaded": 6,
+  "relevantConsoleErrors": 0,
+  "fullCandidateAppE2e": false,
+  "reason": "Shared runtime runner is dirty; left unchanged."
+}

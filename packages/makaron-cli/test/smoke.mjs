@@ -796,7 +796,8 @@ try {
     const result = await expectHelp(['edit', '--help'], /--image-model/);
     assert.match(result.stdout, /wan2\.7-image/);
     assert.match(result.stdout, /--image-model/);
-    assert.match(result.stdout, /Transparent output routes strictly to GPT Image 2/);
+    assert.match(result.stdout, /Transparent output defaults to GPT Image 2/);
+    assert.match(result.stdout, /explicit Seedream 5\.5 retains native PNG alpha/);
     assert.match(result.stdout, /--ref <file\|url>\s+Additional reference image/);
     const videoResult = await expectHelp(['video', 'create', '--help'], /--video-model/);
     assert.match(videoResult.stdout, /--video-model/);
@@ -1191,6 +1192,22 @@ try {
     assert.equal(runRequest?.body?.prompt, 'use this reference');
   }
 
+  {
+    await expectSuccess(['edit', '--image-model', 'seedream-5.5', '--image-resolution', '1.5K', '--background', 'transparent', '--output-format', 'png', '--out', path.join(tmpHome, 'seedream55.png'), 'native alpha fixture']);
+    const request = requests.filter(r => r.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.model, 'seedream-5.5');
+    assert.equal(request.body.params.arguments.imageResolution, '1.5K');
+    assert.equal(request.body.params.arguments.background, 'transparent');
+    assert.equal(request.body.params.arguments.outputFormat, 'png');
+  }
+  {
+    const before = requests.filter(r => r.pathname === '/api/storage/upload-url').length;
+    await expectSuccess(['edit', '--image-model', 'seedream-5.5', '--image', tinyImagePath, '--ref', tinyImagePath, '--out', path.join(tmpHome, 'seedream-local.png'), 'preserve both originals']);
+    const request = requests.filter(r => r.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.image, 'https://cdn.example/uploaded-image.jpg');
+    assert.deepEqual(request.body.params.arguments.referenceImages, ['https://cdn.example/uploaded-image.jpg']);
+    assert.equal(requests.filter(r => r.pathname === '/api/storage/upload-url').length - before, 2);
+  }
   for (const format of ['gif', 'svg']) {
     const out = path.join(tmpHome, `format-${format}.png`);
     await expectSuccess(['edit', '--image-model', 'gpt-image-2.6-flare', '--quality', 'medium', '--image-reasoning', 'high', '--output-format', format, '--out', out, 'format transport fixture']);

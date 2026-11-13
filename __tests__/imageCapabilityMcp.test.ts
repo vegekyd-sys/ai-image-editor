@@ -11,7 +11,7 @@ vi.mock('@/lib/billing/credits', () => ({
   deductByTokens: state.tokenDebit,
   recordSubscriptionUsage: vi.fn(),
 }));
-vi.mock('@/lib/billing/token-rates', () => ({ getTokenRate: async (model_id: string) => ({ model_id, markup: 2 }) }));
+vi.mock('@/lib/billing/token-rates', async original => ({ ...await original<typeof import('@/lib/billing/token-rates')>(), getTokenRate: async (model_id: string) => ({ model_id, markup: 2 }) }));
 vi.mock('@/lib/billing/pricing', () => ({
   getToolPrice: async () => ({ credits: 3, isFree: false }),
   resolveToolName: (_tool: string, model: string) => `generate_image_${model}`,
@@ -52,6 +52,8 @@ beforeEach(() => {
 describe('R16–R19: MCP HTTP → shared image Skill → selected provider → billing', () => {
   it.each([
     [{}, 'gpt-image-2.6-flare', 6],
+    [{ model: 'seedream-5.5', outputFormat: 'png', background: 'transparent' }, 'seedream-5.5', 4],
+    [{ model: 'seedream-5.5', imageResolution: '2K' }, 'seedream-5.5', 6],
     [{ model: 'gpt-image-2.6-flare' }, 'gpt-image-2.6-flare', 6],
     [{ model: 'gpt-image-2.6-sunburst', background: 'transparent' }, 'gpt-image-2.6-sunburst', 6],
     [{ aspectRatio: '8:1' }, 'gemini-2.1', 7],

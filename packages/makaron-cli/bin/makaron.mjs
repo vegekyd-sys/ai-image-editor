@@ -2082,9 +2082,9 @@ Usage:
 Options:
   --image <file|url>        Base image to edit. Omit for text-to-image.
   --ref <file|url>          Additional reference image. Repeatable; model-specific limit (Nano Banana 2.1: 14 total inputs).
-  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.6-flare, gpt-image-2.6-sunburst, wan2.7-image, or mj-v8.2. Legacy qwen maps to qwen-spicy.
+  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.6-flare, gpt-image-2.6-sunburst, wan2.7-image, mj-v8.2, or seedream-5.5. Legacy qwen maps to qwen-spicy.
   --skill <id>              enhance, creative, wild, or captions.
-  --image-resolution <id>  1K, 2K, or 4K; Auto chooses Nano Banana 2.1.
+  --image-resolution <id>  1K, 2K, or 4K; Seedream 5.5 supports 1K, 1.5K and 2K. Auto remains Flare-first.
   --nsfw                  Route NSFW directly to Qwen Spicy.
   --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
   --background <mode>       auto, opaque, or transparent.
@@ -2114,7 +2114,7 @@ Notes:
   GIF frames share the pixel budget. No format substitution.
   MJ options require --image-model mj-v8.2; Draft + HD is invalid. Describe the scene
   naturally; the server prepares the English prompt. MJ is generation, not precise editing.
-  Model selection is optional. Transparent output routes strictly to GPT Image 2.6 Flare
+  Model selection is optional. Transparent output defaults to GPT Image 2.6 Flare; explicit Seedream 5.5 retains native PNG alpha
   and fails instead of returning an opaque fallback.
 
 Examples:
@@ -3214,11 +3214,16 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 } else if (command === 'edit') {
   const { headers, baseUrl } = getAuth();
   const editArgs = {};
+  let editSourceFile;
+  const editReferenceFiles = [];
   const mjArgs = {};
   const promptParts = [];
   let outputPath = null;
   for (let i = 1; i < args.length; i++) {
-    if (args[i] === '--image' && args[i + 1]) editArgs.image = imageToArg(args[++i]);
+    if (args[i] === '--image' && args[i + 1]) {
+      editSourceFile = args[++i];
+      editArgs.image = imageToArg(editSourceFile);
+    }
     else if (args[i] === '--image-model' && args[i + 1]) editArgs.model = args[++i];
     else if (args[i] === '--model' && args[i + 1]) {
       warnLegacyModelFlag('--image-model');
@@ -3227,7 +3232,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else if (args[i] === '--skill' && args[i + 1]) editArgs.skill = args[++i];
     else if (args[i] === '--ref' && args[i + 1]) {
       editArgs.referenceImages = editArgs.referenceImages || [];
-      editArgs.referenceImages.push(imageToArg(args[++i]));
+      const reference = args[++i];
+      editReferenceFiles.push(reference);
+      editArgs.referenceImages.push(imageToArg(reference));
     }
     else if (args[i] === '--image-resolution' && args[i + 1]) {
       const resolution = args[++i];
@@ -3286,7 +3293,17 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     editArgs.midjourney = mjArgs;
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|wan2.7-image|mj-v8.2] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|wan2.7-image|mj-v8.2|seedream-5.5] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (editArgs.model === 'seedream-5.5') {
+    const sources = [...(editSourceFile ? [editSourceFile] : []), ...editReferenceFiles];
+    if (sources.length > 10) { console.error('Seedream 5.5 accepts at most 10 inputs including the base.'); process.exit(1); }
+    const localFiles = sources.filter(source => !isHttpUrl(source));
+    const uploaded = localFiles.length ? await uploadImageFilesViaSignedUrl(baseUrl, headers, undefined, localFiles) : [];
+    const byPath = new Map(localFiles.map((source, index) => [source, uploaded[index]]));
+    const publicSource = source => isHttpUrl(source) ? source : byPath.get(source);
+    if (editSourceFile) editArgs.image = publicSource(editSourceFile);
+    if (editReferenceFiles.length) editArgs.referenceImages = editReferenceFiles.map(publicSource);
+  }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);
