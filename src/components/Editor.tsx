@@ -4204,6 +4204,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   </div>
                 ) : isDesignLoading || (isViewingDesign && allDesignEditables.length > 0) ? (
                   <DesignEditPanel
+                    key={currentDesignSnap?.id}
                     loading={isDesignLoading}
                     editables={allDesignEditables}
                     renderedOrder={renderedEditableOrder?.snapshotId === currentDesignSnap?.id ? renderedEditableOrder?.ids : undefined}

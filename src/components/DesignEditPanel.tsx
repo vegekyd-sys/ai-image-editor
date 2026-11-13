@@ -8,6 +8,15 @@ import { readDesignEditHistory } from '@/lib/editor/design-edit-history';
 import { readDesignLayerState, changeDesignLayer, DESIGN_LAYER_STATE_PROP } from '@/lib/editor/design-layer-state';
 import PillCarousel, { EditablePanelSkeleton } from '@/components/PillCarousel';
 import { editableDisplayLabel } from '@/lib/editor/editable-label';
+import { getThumbnailUrl } from '@/lib/supabase/storage';
+
+function EditableThumbnail({ value, icon }: { value: string; icon: string }) {
+  const [failed, setFailed] = useState<string | null>(null);
+  const source = value ? getThumbnailUrl(value, 128, 75, 128, 'contain') : '';
+  return source && failed !== source
+    ? <img src={source} alt="" loading="lazy" draggable={false} onError={() => setFailed(source)} className="h-full w-full object-contain pointer-events-none" />
+    : <span className="text-white/30 text-[20px]">{icon}</span>;
+}
 
 interface DesignEditPanelProps {
   editables?: EditableField[];
@@ -111,7 +120,7 @@ export default function DesignEditPanel({
         {historyOpen && <div role="dialog" aria-label={t('design.history')} className="absolute right-0 bottom-full mb-2 z-50 w-[min(340px,calc(100vw-24px))] max-h-[50vh] overflow-y-auto rounded-xl border border-white/15 bg-zinc-950/95 p-2 shadow-2xl backdrop-blur-xl">
           <div className="px-2 py-1 text-xs text-white/60">{t('design.history')}</div>
           {[{ cursor: 0, label: t('design.historyStart'), time: '' }, ...history.entries.map((entry, index) => ({ cursor: index + 1,
-            label: `${t(`design.history.${entry.kind}`)}${entry.label ? ` · ${entry.label}` : ''}`,
+            label: `${t(`design.history.${entry.kind}`)}${entry.label ? ` · ${editableDisplayLabel({ id: entry.fieldId || '', label: entry.label }, t('design.background'))}` : ''}`,
             time: new Date(entry.at).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) }))].reverse().map(item =>
             <button key={item.cursor} type="button" aria-current={history.cursor === item.cursor ? 'step' : undefined} onClick={() => onHistorySeek?.(item.cursor)}
               className={`flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2 text-left text-xs ${history.cursor === item.cursor ? 'bg-pink-400/15 text-pink-200' : 'text-white/70 hover:bg-white/5'}`}>
@@ -171,7 +180,7 @@ export default function DesignEditPanel({
                 className={`h-full flex-shrink-0 flex items-center justify-center ${isDesktop ? 'w-[64px]' : 'w-[72px]'}`}
                 style={{ background: 'rgba(255,255,255,0.045)' }}
               >
-                <span className="text-white/30 text-[20px]">{icon}</span>
+                {field.type === 'image' ? <EditableThumbnail value={value} icon={icon} /> : <span className="text-white/30 text-[20px]">{icon}</span>}
               </div>
               <div className={`flex-1 min-w-0 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
                 <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
