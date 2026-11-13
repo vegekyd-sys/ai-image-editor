@@ -1,4 +1,4 @@
--- Additive candidate migration. Apply only with authorized release; preserve admin prices.
+-- Additive candidate setup, also safe on release; preserve existing admin prices.
 -- EvoLink rate card observed2026-11-13: https://evolink.ai/seedance-2-5-flash
 -- No video: output seconds x .12/.24. With video: (output+max(ceil(ref),output)) x .075/.15.
 -- Edit:2*ceil(source) x .075/.15. Audio included; no relaxed-filter premium.

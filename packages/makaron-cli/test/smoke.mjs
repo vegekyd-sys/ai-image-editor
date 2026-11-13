@@ -1359,12 +1359,13 @@ try {
   }
 
   {
-    await expectSuccess(['video', 'create', '--script', 'Flash first frame <<<media_1>>>', '--image', 'https://cdn.example/mascot.png', '--duration', '4', '--video-model', 'seedance-2.5-flash', '--image-workflow', 'image-to-video', '--video-resolution', '480p']);
+    await expectSuccess(['video', 'create', '--script', 'Flash first frame <<<media_1>>>', '--image', 'https://cdn.example/mascot.png', '--duration', '4', '--video-model', 'seedance-2.5-flash', '--image-workflow', 'image-to-video', '--video-resolution', '480p', '--request-id', 'a1c9dce2-4265-4c91-a3bb-8f930bc244ad']);
     const req = requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params;
     assert.equal(req.name, 'makaron_create_video');
     assert.equal(req.arguments.videoModel, 'seedance-2.5-flash');
     assert.equal(req.arguments.imageWorkflow, 'image-to-video');
     assert.equal(req.arguments.duration, 4);
+    assert.equal(req.arguments.billingRequestId, 'a1c9dce2-4265-4c91-a3bb-8f930bc244ad');
     await expectSuccess(['video', 'create', '--script', 'Change only the background', '--video', 'https://cdn.example/source.mp4', '--video-model', 'seedance-2.5-flash', '--video-operation', 'edit']);
     const edit = requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params;
     assert.equal(edit.name, 'makaron_create_video');
@@ -1372,6 +1373,8 @@ try {
     assert.equal(edit.arguments.duration, undefined);
     const count = requests.length;
     await expectFailure(['video', 'create', '--script', 'No unsupported mode', '--video-model', 'seedance-2.5-flash', '--video-operation', 'extend']);
+    assert.equal(requests.length, count);
+    await expectFailure(['video', 'create', '--script', 'Invalid request id', '--video-model', 'seedance-2.5-flash', '--request-id', 'invalid']);
     assert.equal(requests.length, count);
   }
 

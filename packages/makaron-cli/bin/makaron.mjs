@@ -2171,6 +2171,7 @@ Recent model choices:
   wan-3.0         Wan standard tier with the same public duration/resolution range.
   seedance-2.5-flash  4-30s; 480p/720p;10 images/5 videos/5 audios; edit follows source.
   --image-workflow <id> Flash: reference-to-video (default) or image-to-video (1-2 first/last frames).
+  --request-id <uuid> Reuse this ID with identical arguments to recover the original billed task.
   seedance-2.5    Defaults to Eco; 4-30s; 1080p default, 720p/2k/4k; multimodal refs.
   seedance-2.5-eco  480p generation → ByteDance Fast; 1080p default, 2k/4k.
   minimax-h3      4-15s; 768p default or 2k; image/video/audio feature refs.
@@ -3387,7 +3388,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const referenceVoices = [];
     let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, videoResolution = undefined, imageWorkflow = undefined, wait = false;
     let keepOriginalSound = false, videoOperation = undefined, extendDirection = undefined, outputFormat = undefined;
-    let generateAudio = undefined, contentFilter = undefined, webSearch = false;
+    let generateAudio = undefined, contentFilter = undefined, webSearch = false, billingRequestId = undefined;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
       else if (args[i] === '--video' && args[i + 1]) videos.push(args[++i]);
@@ -3406,6 +3407,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
       else if (args[i] === '--image-workflow' && args[i + 1]) imageWorkflow = args[++i];
+      else if (args[i] === '--request-id' && args[i + 1]) billingRequestId = args[++i];
       else if (args[i] === '--video-operation' && args[i + 1]) videoOperation = args[++i];
       else if (args[i] === '--extend-direction' && args[i + 1]) extendDirection = args[++i];
       else if (args[i] === '--output-format' && args[i + 1]) outputFormat = args[++i];
@@ -3430,6 +3432,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       : ['kling4-flash', 'kling-4.0-flash', 'kling 4.0 flash', 'kling 4 flash'].includes(String(videoModel).toLowerCase()) ? 'kling-4-flash'
       : ['omni', 'gemini-omni', 'gemini-omni-1.2', 'gemini-omni-1.2-flash', 'omni-1.2', 'gemini omni', 'gemini omni 1.2'].includes(String(videoModel).toLowerCase()) ? 'google-omni'
         : (videoModel || (duration != null && duration > 20 ? 'seedance-2.5' : 'kling-4-flash'));
+    if (billingRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(billingRequestId)) {
+      console.error('--request-id must be a UUID. Reuse it only for the identical submission.'); process.exit(1);
+    }
     const isFlash = selectedVideoModel === 'seedance-2.5-flash';
     const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco'].includes(selectedVideoModel);
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
@@ -3572,6 +3577,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
         : { script, images, videoModel: selectedVideoModel, videoResolution };
     if (imageWorkflow) vArgs.imageWorkflow = imageWorkflow;
+    if (billingRequestId) vArgs.billingRequestId = billingRequestId;
     if (inputVideoMeta?.duration) vArgs.referenceVideoDuration = inputVideoMeta.duration;
     const effectiveDuration = resolvedOperation === 'edit' ? undefined : duration || (inputVideoMeta?.duration ? Math.min(providerMaxDuration, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;

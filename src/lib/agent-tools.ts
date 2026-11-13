@@ -1845,6 +1845,7 @@ function createGenerateAnimationTool(
           return { success: false as const, message: `${videoRoute.label} requires an image or video reference. Use SeeDance, Wan 3.0, Grok Imagine Video, Gemini Omni, MiniMax H3, or MiniMax H3 Max for native text-to-video.` };
         }
         let reservedVideoCredits = 0;
+        let acceptedFlashTaskId: string | undefined;
         const reservationToolName = videoModel === 'grok' ? 'create_video_grok' : 'create_video';
         try {
           const selectedAspectRatio = aspect_ratio;
@@ -2139,7 +2140,7 @@ function createGenerateAnimationTool(
             && await isGrokSubscriptionAllowedUser(ctx.userId);
           if (grokSubscriptionPreferred) {
             createVideoInput.onBeforeGrokApiFallback = reserveGrokApiCredits;
-          } else if ((videoRoute.provider === 'fal-h3-max' || forceUpscale) && ctx.userId) {
+          } else if ((videoRoute.provider === 'fal-h3-max' || videoModel === 'seedance-2.5-flash' || forceUpscale) && ctx.userId) {
             createVideoInput.onBeforeProviderSubmit = async usage => {
               billingQuote = await quoteVideo(usage);
               creditsRequired = billingQuote.credits;
@@ -2168,6 +2169,13 @@ function createGenerateAnimationTool(
 
           if (!skillResult.success || !skillResult.taskId) {
             console.error('[generate_animation] createVideo failed:', skillResult.message);
+            if (videoModel === 'seedance-2.5-flash' && skillResult.submissionUncertain) {
+              // A timeout is not a rejected POST. The durable Agent tool result
+              // and usage row retain the original run and reservation for review.
+              return { ...skillResult, success: false as const, retryable: false as const,
+                errorCode: 'SUBMISSION_UNCERTAIN',
+                message: `${skillResult.message}\nFlash submission is unconfirmed; credits remain reserved. Do not create another paid task. Reconcile this original Agent run before retrying.` };
+            }
             if (reservedVideoCredits > 0 && ctx.userId) {
               await refundCredits(ctx.userId, reservedVideoCredits, reservationToolName);
               reservedVideoCredits = 0;
@@ -2191,6 +2199,7 @@ function createGenerateAnimationTool(
           }
 
           const taskId = skillResult.taskId;
+          if (videoModel === 'seedance-2.5-flash') acceptedFlashTaskId = taskId;
           const actualVideoModel = (skillResult.videoModel || videoModel) as string;
           const actualVideoRoute = resolveVideoGenerationRoute({
             model: actualVideoModel,
@@ -2328,6 +2337,13 @@ function createGenerateAnimationTool(
             message: `Video generation task created with ${actualVideoRoute.label} ${actualVideoRoute.resolution.toUpperCase()}. ${renderTimeMessage} The result will appear here when done.`,
           };
         } catch (e) {
+          if (acceptedFlashTaskId) {
+            // Saving failed after provider acceptance: keep the task receipt
+            // and debit, rather than refunding a job that may still complete.
+            return { success: false as const, taskId: acceptedFlashTaskId, retryable: false as const,
+              errorCode: 'PERSISTENCE_RECONCILIATION_REQUIRED',
+              message: `Flash task ${acceptedFlashTaskId} was accepted but saving failed: ${String(e)}. Query this task and restore its project result; do not submit another paid job.` };
+          }
           if (reservedVideoCredits > 0 && ctx.userId) {
             try {
               await refundCredits(ctx.userId, reservedVideoCredits, reservationToolName);
