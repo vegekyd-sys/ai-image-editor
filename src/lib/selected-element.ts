@@ -23,7 +23,7 @@ export interface ElementRegion { x: number; y: number; width: number; height: nu
 /** Region is in original asset pixels. Outside it is copied from the source, never generated. */
 export async function prepareElementImage(source: string, region?: ElementRegion) {
   const bytes = await readProviderImage(source, 25 * 1024 * 1024);
-  const hasAlpha = Boolean((await sharp(bytes).metadata()).hasAlpha);
+  const hasAlpha = !(await sharp(bytes).stats()).isOpaque;
   const image = await sharp(bytes).rotate().ensureAlpha().png().toBuffer();
   const meta = await sharp(image).metadata();
   const width = meta.width!, height = meta.height!;

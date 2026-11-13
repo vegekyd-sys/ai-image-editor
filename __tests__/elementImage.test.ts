@@ -20,3 +20,7 @@ it('rejects a region outside the source before a provider can be called', async 
   const source = await sharp({ create: { width: 30, height: 40, channels: 4, background: '#00000000' } }).png().toBuffer();
   await expect(prepareElementImage(data(source), { x: 29, y: 0, width: 3, height: 3 })).rejects.toThrow('must fit');
 });
+it('keeps an opaque RGBA photo opaque instead of requesting background removal', async () => {
+  const source = await sharp({ create: { width: 30, height: 40, channels: 4, background: '#335577ff' } }).png().toBuffer();
+  expect((await prepareElementImage(data(source))).hasAlpha).toBe(false);
+});
