@@ -280,6 +280,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.fasterMediaReplies.title': "Faster replies with your media",
+  'changelog.fasterMediaReplies.item1': "The default Agent starts replying sooner in chats with images.",
+  'changelog.fasterMediaReplies.item2': "Get media analysis and creative plans sooner when using images and videos together.",
   'changelog.seedance25Flash.title': "Seedance 2.5 Flash is here",
   'changelog.seedance25Flash.item1': "Create 480p/720p videos from text, first/last frames or references, and edit existing clips with Seedance 2.5 Flash.",
   'changelog.seedance25Flash.item2': "Choose Flash in Retake to redo a selected segment while keeping footage outside it and the full duration. Available on web and CLI.",
