@@ -2139,7 +2139,7 @@ Inputs:
   --voice <preset-id>       Grok preset voice. Repeatable, up to 3.
 
 Generation options:
-  --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5,
+  --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5-flash, seedance-2.5,
                             wan-3.0, wan-3.0-prime, kling-4, kling-4-flash, grok, google-omni,
                             minimax-h3, minimax-h3-max, fal-h3-max, or sync-lipsync-v3.
   --duration <seconds>      Output duration supported by the selected model.

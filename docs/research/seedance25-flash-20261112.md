@@ -2,6 +2,8 @@
 
 2026-11-12；候选 `B-20261112-seedance25-flash`。
 
+> 2026-11-13 更新：EvoLink 已上线，原访问阻塞解除。独立分支的候选代码与真实供应商样例已形成；完整产品验收仍待计费迁移与登录。当前结论见 [11月13日报告](seedance25-flash-20261113.md)，下文保留历史核查，不代表当前仍未开放。
+
 ## 当前结果
 
 用户已授权独立 worktree 接入，未授权合入、上线或更换默认模型。已从现场 fetch 后与 origin/dev 一致的 `fbc7daac8abf9dae4fd71ffc69304a8e6cae5b18` 创建 managed worktree：
