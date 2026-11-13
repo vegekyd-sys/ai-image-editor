@@ -68,7 +68,7 @@ import {
   partitionCompositionMediaRefs,
 } from './agent-media-index';
 import { mergePatchProps } from './patch-props';
-import { parseSelectedElement, applyElementEdit, rebaseElementEdit, type SelectedElement } from './editor/element-edit';
+import { parseSelectedElement, applyElementEdit, rebaseElementEdit, elementLayoutReceipt, type SelectedElement } from './editor/element-edit';
 import { loadSelectedElement, prepareElementImage, finishElementImage } from './selected-element';
 import { persistCompositionDraft } from './composition-draft';
 import {
@@ -3598,6 +3598,10 @@ function requireElementSelection(ctx: AgentContext) {
   if (!selection || !ctx.supabase || !ctx.userId) throw new Error('Select an Editable element on the canvas before using this tool. No generation submitted.');
   return { supabase: ctx.supabase, userId: ctx.userId, projectId: ctx.projectId, selection };
 }
+function currentElementReceipt(ctx: AgentContext): import('./editor/element-edit').ElementEditReceipt | undefined {
+  const receipt = (ctx as any).__elementEditReceipt || (ctx as any).__lastDesignPayload?.elementEdit;
+  return receipt && receipt.agentRunId === ctx.agentRunId && receipt.sourceSnapshotId === ctx.selectedElement?.snapshotId && receipt.fieldId === ctx.selectedElement?.fieldId ? receipt : undefined;
+}
 function createInspectElementTool({ ctx, runtime }: AgentToolFactoryScope) {
   return tool({
     description: 'Inspect the exact user-selected Editable element, resolved from the owned saved composition. Returns its actual asset pixels, source pixel dimensions, type, current position and scale. Inspect before a content edit. Pixel regions are in this ORIGINAL ASSET coordinate system, including transparent margins, not screen or composition coordinates. For a hat attached to a baby layer, identify a region with room for the enlarged hat and enough head context; do not scale the whole baby.',
@@ -3605,13 +3609,13 @@ function createInspectElementTool({ ctx, runtime }: AgentToolFactoryScope) {
     execute: async () => {
       try {
         const input = requireElementSelection(ctx), loaded = await loadSelectedElement(input);
-        const previous = (ctx as any).__elementEditReceipt as import('./editor/element-edit').ElementEditReceipt | undefined;
+        const previous = elementLayoutReceipt(currentElementReceipt(ctx));
         const design = previous ? applyElementEdit(loaded.design, previous) : loaded.design, field = loaded.field;
         const source = design.props?.[field.propKey];
-        let previewBase64: string | undefined, visualDescription: string | undefined, width: number | undefined, height: number | undefined;
+        let hasTransparency: boolean | undefined, previewBase64: string | undefined, visualDescription: string | undefined, width: number | undefined, height: number | undefined;
         if (field.type === 'image' && typeof source === 'string' && source) {
           const prepared = await prepareElementImage(source);
-          width = prepared.width; height = prepared.height;
+          width = prepared.width; height = prepared.height; hasTransparency = prepared.hasAlpha;
           if (!runtime.spec.supportsImageInput) {
             const { analyzeImageContent } = await import('./gemini');
             visualDescription = await analyzeImageContent(source, `Describe this exact selected asset, its contents and transparent margins. Original source dimensions are ${width} by ${height} pixels. Give approximate ORIGINAL-ASSET pixel bounds for visible objects and editable subparts, particularly hats and faces, explicitly flagging coordinate uncertainty.`, ctx.userId);
@@ -3620,7 +3624,7 @@ function createInspectElementTool({ ctx, runtime }: AgentToolFactoryScope) {
           previewBase64 = (await sharp(prepared.image).resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true }).png().toBuffer()).toString('base64');
         }
         (ctx as any).__inspectedElement = { ...input.selection, source };
-        return { success: true, field, value: source, width, height, visualDescription, position: design.props?.[`_pos_${field.id}`], scale: design.props?.[`_scale_${field.id}`], previewBase64 };
+        return { success: true, field, value: source, width, height, hasTransparency, visualDescription, position: design.props?.[`_pos_${field.id}`], scale: design.props?.[`_scale_${field.id}`], previewBase64 };
       } catch (error) { return { success: false, error: String(error) }; }
     },
     toModelOutput: ({ output }: { output: any }) => ({ type: 'content' as const, value: [
@@ -3632,7 +3636,7 @@ function createInspectElementTool({ ctx, runtime }: AgentToolFactoryScope) {
 function createEditElementTool(scope: AgentToolFactoryScope) {
   const { ctx } = scope;
   return tool({
-    description: `Edit ONLY the user-selected Editable element. Transforms use composition-pixel deltas and scale multipliers (1.2 = 20% larger), no image model. Text edits replace editable text directly. Content edits require inspect_element first: the server sends the actual selected source to the existing image-edit/billing pipeline, then preserves positions, scales, layer order and all other properties. For a subpart (hat/glasses within a baby layer), supply a region in ORIGINAL ASSET pixels; only that rectangle may change, all pixels outside are copied unchanged. Include space for enlarged content. Do not scale the baby to enlarge only its hat. A full replacement may omit region but must preserve original canvas and subject framing. This saves a draft; use preview_frame then publish_draft with its exact design_path. Never rebuild the composition or reset offsets to replace one asset.`,
+    description: `Edit ONLY the user-selected Editable element. Transforms use composition-pixel deltas and scale multipliers (1.2 = 20% larger), no image model. Text edits replace editable text directly. Content edits require inspect_element first: the server sends the actual selected source to the existing image-edit/billing pipeline, then preserves positions, scales, layer order and all other properties. For a subpart (hat/glasses within a baby layer), supply a region in ORIGINAL ASSET pixels; only that rectangle may change, all pixels outside are copied unchanged. Include space for enlarged content. Do not scale the baby to enlarge only its hat. A full replacement may omit region but must preserve original canvas and subject framing. Every appearance attempt starts from the saved original, replacing any earlier appearance draft in this turn; include the COMPLETE requested appearance change in its prompt. Earlier explicit transforms are retained. This saves a draft; use preview_frame then publish_draft with its exact design_path. Never rebuild the composition or reset offsets to replace one asset.`,
     inputSchema: z.object({
       operation: z.discriminatedUnion('kind', [
         z.object({ kind: z.literal('transform'), dx: z.number().finite().min(-20000).max(20000).optional(), dy: z.number().finite().min(-20000).max(20000).optional(), scaleX: z.number().min(0.05).max(20).optional(), scaleY: z.number().min(0.05).max(20).optional() }),
@@ -3643,7 +3647,8 @@ function createEditElementTool(scope: AgentToolFactoryScope) {
     execute: async ({ operation }, executionOptions) => {
       try {
         const input = requireElementSelection(ctx), loaded = await loadSelectedElement(input);
-        const previous = (ctx as any).__elementEditReceipt as import('./editor/element-edit').ElementEditReceipt | undefined;
+        const priorReceipt = currentElementReceipt(ctx);
+        const previous = operation.kind === 'content' ? elementLayoutReceipt(priorReceipt) : priorReceipt;
         const original = { ...loaded, design: previous ? applyElementEdit(loaded.design, previous) : loaded.design };
         const id = crypto.randomUUID();
         let op: import('./editor/element-edit').ElementOperation;
@@ -3658,7 +3663,7 @@ function createEditElementTool(scope: AgentToolFactoryScope) {
           const savedInput = await workspace.writeFile(cropPath, prepared.crop, input.supabase, input.userId, 'image/png');
           if (!savedInput.success || !savedInput.storageUrl) throw new Error('Could not prepare the original element for editing.');
           const generator = createGenerateImageTool(scope, { source: savedInput.storageUrl, reference: source });
-          const generated = await generator.execute!({ editPrompt: `${operation.prompt}\nEdit the supplied first image in place. The second image is the original selected element for identity/context only. Preserve the first image's exact canvas, subject position, scale, identity, pose, and transparent padding except the requested change. Do not reframe, zoom or invent a different person.`, outputFormat: 'png', ...(prepared.hasAlpha ? { background: 'transparent' as const } : {}) }, executionOptions) as any;
+          const generated = await generator.execute!({ editPrompt: `${operation.prompt}\nEdit ONLY the supplied FIRST crop in place: ${prepared.box.width} by ${prepared.box.height} pixels, at original-asset x=${prepared.box.left}, y=${prepared.box.top}. The SECOND image is the complete original element for identity/context ONLY, not the output canvas. Return only the edited crop, never copy the whole character or scene from the second image into it. Preserve the crop framing, contact points, pose and identity. ${prepared.hasAlpha ? "Transparent source pixels must remain alpha, never paint a solid backdrop." : "Keep the existing background."} Do not zoom, recenter or invent a different person.`, outputFormat: 'png', aspectRatio: formatAspectRatio(prepared.box.width, prepared.box.height), ...(prepared.hasAlpha ? { background: 'transparent' as const } : {}) }, executionOptions) as any;
           if (!generated.success || !generated.image) return { success: false, error: generated.message || 'Element image generation failed.' };
           const bytes = await finishElementImage(prepared, generated.image);
           const saved = await workspace.writeFile(`${ctx.projectId}/element-edits/${id}.png`, bytes, input.supabase, input.userId, 'image/png');
@@ -3669,7 +3674,7 @@ function createEditElementTool(scope: AgentToolFactoryScope) {
           op = { kind: 'replace', url: saved.storageUrl, source };
         } else op = operation;
         const latest = await loadSelectedElement(input);
-        const receipt: import('./editor/element-edit').ElementEditReceipt = { version: 1, id, sourceSnapshotId: input.selection.snapshotId, fieldId: input.selection.fieldId, operation: op, ...(previous ? { operations: [...(previous.operations || [previous.operation]), op] } : {}) };
+        const receipt: import('./editor/element-edit').ElementEditReceipt = { version: 1, id, agentRunId: ctx.agentRunId, sourceSnapshotId: input.selection.snapshotId, fieldId: input.selection.fieldId, operation: op, ...(previous ? { operations: [...(previous.operations || [previous.operation]), op] } : {}) };
         const design = { ...applyElementEdit(latest.design, receipt), elementEdit: receipt };
         const path = `${ctx.projectId}/element-edits/${id}.json`;
         const saved = await workspace.writeFile(path, JSON.stringify(design), input.supabase, input.userId, 'application/json');
@@ -3713,6 +3718,9 @@ The same Agent Run and design_path resolve to the same Snapshot ID, so a retry o
             return { success: false, error: `Editable composition at ${design_path} is not valid JSON.` };
           }
           let design = rawDesign as unknown as DesignPayload;
+          if (ctx.selectedElement && (!design.elementEdit || design.elementEdit.version !== 1 || design.elementEdit.sourceSnapshotId !== ctx.selectedElement.snapshotId || design.elementEdit.fieldId !== ctx.selectedElement.fieldId)) {
+            return { success: false, error: 'A selected-element request can publish only the exact draft returned by edit_element for this selection.' };
+          }
           if (design.elementEdit) {
             const latest = await loadSelectedElement({ supabase: ctx.supabase, userId: ctx.userId, projectId: ctx.projectId, selection: { snapshotId: design.elementEdit.sourceSnapshotId, fieldId: design.elementEdit.fieldId } });
             design = rebaseElementEdit(design, latest.design);
@@ -5909,6 +5917,12 @@ const tools = preserveOptionalToolFields({
   if (ctx.corePromptMode === 'legacy') {
     tools.generate_animation.description = legacyVideoTool;
     tools.run_code.description = legacyCodingTool;
+  }
+  if (ctx.selectedElement) {
+    // Selection is an execution boundary, not just prompt advice. An unsuccessful
+    // content draft cannot bypass it through run_code or unrelated generation.
+    const allowed = new Set(['inspect_element', 'edit_element', 'preview_frame', 'publish_draft', 'read_file', 'list_files', 'execution_checkpoint', 'analyze_image', 'materialize_media']);
+    return Object.fromEntries(Object.entries(tools).filter(([name]) => allowed.has(name))) as typeof tools;
   }
   return tools;
 }

@@ -9,7 +9,7 @@ export type ElementOperation =
   | { kind: 'text'; text: string }
   | { kind: 'replace'; url: string; source: string };
 export interface ElementEditReceipt {
-  version: 1; id: string; sourceSnapshotId: string; fieldId: string; operation: ElementOperation; operations?: ElementOperation[];
+  version: 1; id: string; agentRunId?: string; sourceSnapshotId: string; fieldId: string; operation: ElementOperation; operations?: ElementOperation[];
 }
 export function parseSelectedElement(value: unknown): SelectedElement | undefined {
   if (!value || typeof value !== 'object') return;
@@ -58,7 +58,16 @@ export function applyElementEdit(design: DesignPayload, receipt: ElementEditRece
 }
 export function rebaseElementEdit(design: DesignPayload, source: DesignPayload): DesignPayload {
   const receipt = design.elementEdit;
-  if (!receipt || receipt.version !== 1 || design.code !== source.code) return design;
+  if (!receipt || receipt.version !== 1) return design;
+  if (design.code !== source.code) throw new Error('The source composition changed during the element edit. Select it again.');
   const result = applyElementEdit(source, receipt);
   return { ...design, ...result, elementEdit: receipt };
+}
+
+/** Appearance retries start from the saved source, retaining explicit layout edits. */
+export function elementLayoutReceipt(receipt: ElementEditReceipt | undefined): ElementEditReceipt | undefined {
+  if (!receipt) return;
+  const operations = (receipt.operations || [receipt.operation]).filter(op => op.kind !== 'replace');
+  if (!operations.length) return;
+  return { ...receipt, operation: operations[operations.length - 1], operations };
 }

@@ -64,3 +64,35 @@ it('retains a generated candidate but refuses to overwrite a concurrently replac
   expect(result.success).toBe(false); expect(result.conflict).toBe(true); expect(result.candidateUrl).toMatch(/\.png$/);
   expect([...saved.keys()].some(path => path.endsWith('.json'))).toBe(false);
 });
+it('revises appearance from the original instead of compounding a rejected generated draft', async () => {
+  const original = state.latest.props.asset;
+  await call('inspect_element');
+  expect((await call('edit_element', { operation: { kind: 'content', prompt: 'first candidate' } })).success).toBe(true);
+  const inspected = await call('inspect_element');
+  expect(inspected.value).toBe(original);
+  const second = await call('edit_element', { operation: { kind: 'content', prompt: 'repair from original, keep the face' } });
+  expect(second.success).toBe(true);
+  const design = JSON.parse(saved.get(second.design_path) as string);
+  expect(design.elementEdit.operation.source).toBe(original);
+  expect(design.elementEdit.operations).toBeUndefined();
+  expect(design.props._editHistory.entries).toHaveLength(1);
+});
+it('restricts a selected request to bounded editing and review tools', () => {
+  const selected = tools();
+  expect(selected).toHaveProperty('edit_element'); expect(selected).toHaveProperty('publish_draft');
+  for (const name of ['run_code', 'write_file', 'write_code_file', 'generate_image', 'generate_animation', 'delete_file']) expect(selected).not.toHaveProperty(name);
+  ctx.selectedElement = undefined;
+  expect(tools()).toHaveProperty('run_code'); expect(tools()).toHaveProperty('generate_image');
+});
+it('recovers explicit transforms from a same-run draft before an appearance edit', async () => {
+  ctx.agentRunId = 'same-run';
+  const moved = await call('edit_element', { operation: { kind: 'transform', dx: 20 } });
+  expect(moved.success).toBe(true);
+  delete (ctx as any).__elementEditReceipt; // A resumed attempt reloads its durable draft.
+  await call('inspect_element');
+  const result = await call('edit_element', { operation: { kind: 'content', prompt: 'replace hat, preserve face' } });
+  expect(result.success).toBe(true);
+  const design = JSON.parse(saved.get(result.design_path) as string);
+  expect(design.props._pos_baby).toEqual({ x: 35, y: 31 });
+  expect(design.elementEdit.operations).toHaveLength(2);
+});

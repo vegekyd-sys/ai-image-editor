@@ -437,14 +437,14 @@ export async function* runMakaronAgent(
     // must pass code_path explicitly in run_code patch mode for persisted compositions.
     const promptHasCompositionPointer = typeof prompt === 'string'
       && (prompt.includes('[Current Composition]') || prompt.includes('[Current composition pointer]'));
-    const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
+    const designInjection = options?.currentDesignPath && !promptHasCompositionPointer && !options.selectedElement
       ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${options.currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
     const textOnlyVisionNote = animImages?.length && !runtime.spec.supportsImageInput
       ? '\n\n[Selected Agent model is text-only. Use analyze_image on the relevant Media Index entries before making image-dependent decisions.]'
       : '';
     const selectedElementNote = options?.selectedElement
-      ? `\n[User-selected Editable element] snapshotId=${options.selectedElement.snapshotId}; fieldId=${options.selectedElement.fieldId}. For an edit to this selection use inspect_element and edit_element. Move/scale use transform, editable text uses text, appearance/replacement uses content with the actual original asset. A hat attached to a baby is a subregion edit, never a scale of the whole baby. Preview the returned draft and publish_draft. Do not reconstruct the composition or reset stored transforms. If the user explicitly refers to another media index, ignore this selection and follow that explicit reference.\n`
+      ? `\n[User-selected Editable element] snapshotId=${options.selectedElement.snapshotId}; fieldId=${options.selectedElement.fieldId}. For an edit to this selection use inspect_element and edit_element. Move/scale use transform, editable text uses text, appearance/replacement uses content with the actual original asset. A hat attached to a baby is a subregion edit, never a scale of the whole baby. Appearance retries always start from the saved original; include the complete requested change. Do not use code or unrelated generation to bypass a failed appearance edit. Preview the returned draft and publish_draft. Do not reconstruct the composition or reset stored transforms. If the user explicitly refers to another media index, ignore this selection and follow that explicit reference.\n`
       : '';
     userContent = analysisOnly ? analysisPrompt : (designInjection + selectedElementNote + prompt + textOnlyVisionNote);
   }
