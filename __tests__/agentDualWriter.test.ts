@@ -349,6 +349,8 @@ describe('AgentDualWriter', () => {
       snapshotId,
       sourceDesignPath: 'project-id/drafts/latest-composition.json',
       published: true,
+      prePublished: true,
+      previewUrl: 'https://storage.example.com/ready-poster.jpg',
     });
 
     expect(upserts).toContainEqual({
@@ -366,6 +368,8 @@ describe('AgentDualWriter', () => {
           snapshotId,
           sourceDesignPath: 'project-id/drafts/latest-composition.json',
           published: true,
+          prePublished: true,
+          previewUrl: 'https://storage.example.com/ready-poster.jpg',
         }),
       }),
     });

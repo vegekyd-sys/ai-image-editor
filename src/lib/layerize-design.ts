@@ -17,6 +17,8 @@ export interface LayerizeManifest {
   sourceSha256: string;
   supplierCostUsd: number;
   layers: LayerizeLayer[];
+  stackOrder?: number[];
+  reconstruction?: { changed: boolean; scoreBefore?: number; scoreAfter?: number; reason?: string };
 }
 
 /** Use the normal DesignPayload/Img/editable ABI, with one independent source prop per layer. */
@@ -24,7 +26,10 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
   const props: Record<string, unknown> = {};
   const editables: EditableField[] = [];
   const elements: string[] = [];
-  for (const layer of [...manifest.layers].sort((a, b) => a.z - b.z)) {
+  const sorted = [...manifest.layers].sort((a, b) => a.z - b.z);
+  const order = manifest.stackOrder;
+  if (order && (order[0] !== 0 || order.length !== sorted.length || new Set(order).size !== sorted.length || order.some(z => !sorted.some(layer => layer.z === z)))) throw new Error('Invalid layer stack inventory');
+  for (const layer of order ? order.map(z => sorted.find(layer => layer.z === z)!) : sorted) {
     if (editableText && layer.text?.lines.length) {
       for (const [index, line] of layer.text.lines.entries()) {
         const id = `layer_${layer.z}_text_${index}`, key = id;

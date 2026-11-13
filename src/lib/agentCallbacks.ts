@@ -490,7 +490,24 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = ctx.t('editor.agentCoding');
     },
 
-    onFocusSnapshot: (snapshotId) => ctx.onFocusSnapshot?.(snapshotId),
+    onFocusSnapshot: (snapshotId) => {
+      if (ctx.snapshotsRef.current.some(snapshot => snapshot.id === snapshotId && snapshot.design)) {
+        ctx.onFocusSnapshot?.(snapshotId);
+        return;
+      }
+      // A completed status query only sends navigation, and may precede render.
+      // Recover the saved result; never publish/capture it again in the browser.
+      void import('./editor/published-snapshot').then(async ({ loadPublishedSnapshot }) => {
+        const snapshot = await loadPublishedSnapshot(ctx.projectId, snapshotId);
+        if (!snapshot) return;
+        const merge = (prev: Snapshot[]) => prev.some(item => item.id === snapshotId)
+          ? prev.map(item => item.id === snapshotId && !item.design ? { ...snapshot, ...item, design: snapshot.design } : item)
+          : [...prev, snapshot];
+        ctx.snapshotsRef.current = merge(ctx.snapshotsRef.current);
+        ctx.setSnapshots(merge);
+        ctx.onFocusSnapshot?.(snapshotId);
+      }).catch(error => console.warn('[design] Published snapshot recovery pending:', error));
+    },
 
     onRender: (design) => {
       const published = (design as Record<string, unknown>).published === true;
@@ -506,6 +523,29 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       }
 
       if (published) {
+        const snapshotId = (design as Record<string, unknown>).snapshotId as string | undefined;
+        if (snapshotId && previewUrl) {
+          const existing = ctx.snapshotsRef.current.find(snapshot => snapshot.id === snapshotId);
+          const saved: Snapshot = existing ? { ...existing, design: existing.design || design } : {
+            id: snapshotId, image: previewUrl, imageUrl: previewUrl, tips: [], messageId: currentMsgId,
+            design, designPath: (design as Record<string, unknown>).sourceDesignPath as string | undefined,
+            description: (design as Record<string, unknown>).description as string || '[composition]',
+          };
+          if (!existing || !existing.design) {
+            const merge = (prev: Snapshot[]) => prev.some(item => item.id === snapshotId)
+              ? prev.map(item => item.id === snapshotId && !item.design ? { ...item, design } : item)
+              : [...prev, saved];
+            ctx.snapshotsRef.current = merge(ctx.snapshotsRef.current);
+            ctx.setSnapshots(merge);
+          }
+          ctx.setDraftDesign?.(null);
+          ctx.setDesignDraftParent?.(null);
+          if (currentMsgId) ctx.setMessages(prev => prev.map(message => message.id === currentMsgId
+            ? { ...message, image: saved.imageUrl || saved.image, design: saved.design || design } : message));
+          ctx.onFocusSnapshot?.(snapshotId);
+          setStatus(ctx.t('status.designCreated'));
+          return;
+        }
         ctx.pendingDesignMsgIdRef.current = currentMsgId;
         ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
         ctx.setDraftDesign?.(null);

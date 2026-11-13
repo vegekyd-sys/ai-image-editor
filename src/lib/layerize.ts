@@ -12,6 +12,8 @@ import { chargeCompletedProviderTask } from './billing/completed-provider-task';
 import { publishDesignSnapshot } from './publish-design';
 import { validateDesign } from './design-harness';
 import type { DesignPayload } from '@/types';
+import { prepareLayerizeSource } from './layerize-source';
+import { inferLayerizeStack } from './layerize-reconstruction';
 
 export interface LayerizeOwner { userId: string; projectId: string; origin: string; attribution?: BillingAttribution }
 export interface LayerizeJob {
@@ -19,6 +21,7 @@ export interface LayerizeJob {
   input: LayerizeInput; fingerprint: string; sourceSha256: string; createdAt: string; updatedAt: string;
   taskId?: string; error?: string; markup: number; attribution: BillingAttribution;
   snapshotId?: string; designPath?: string; posterUrl?: string; manifestPath?: string; credits?: number;
+  providerImageUrl?: string;
 }
 export interface LayerizeResult { jobId: string; projectId: string; status: LayerizeJob['status']; projectUrl: string; taskId?: string; snapshotId?: string; designPath?: string; posterUrl?: string; credits?: number; message?: string; design?: DesignPayload; newlyPublished?: boolean }
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
@@ -99,9 +102,7 @@ export async function startLayerize(owner: LayerizeOwner, id: string, input: Lay
     if (!check.ok) throw new Error(`Insufficient credits for the maximum ${request.n} outputs: need ${maxCredits}, have ${check.balance}.`);
   }
   const source = await readProviderImage(input.imageUrl, 30 * 1024 * 1024);
-  const meta = await sharp(source, { limitInputPixels: 36_000_000 }).metadata();
-  const width = meta.width ?? 0, height = meta.height ?? 0;
-  if (!['png', 'jpeg'].includes(meta.format ?? '') || (meta.pages ?? 1) !== 1 || width <= 14 || height <= 14 || width / height < 1 / 16 || width / height > 16) throw new Error('Use one still PNG/JPEG original, dimensions >14px and at most 30MB/36MP. No task was submitted.');
+  const prepared = await prepareLayerizeSource(source);
   const now = new Date().toISOString();
   const { error } = await getSupabaseAdmin().from('workspace_files').insert({ user_id: owner.userId, path: pathFor(owner.projectId, id), content_type: 'application/json', size_bytes: 0, storage_url: '', updated_at: now });
   if (error?.code === '23505') return response(owner, { id, status: 'preparing' });
@@ -112,7 +113,11 @@ export async function startLayerize(owner: LayerizeOwner, id: string, input: Lay
   await save(owner, job);
   let task: LayerizeProviderTask;
   try {
-    task = await submitLayerize(normalized);
+    if (prepared.normalized) {
+      job.providerImageUrl = await permanent(owner, `${owner.projectId}/layerize/${id}/source-normalized.${prepared.extension}`, prepared.bytes, prepared.contentType);
+      await save(owner, job);
+    }
+    task = await submitLayerize({ ...normalized, imageUrl: job.providerImageUrl || normalized.imageUrl });
   } catch (error) {
     job.status = error instanceof LayerizeProviderError && error.uncertain ? 'uncertain' : 'failed';
     job.error = error instanceof Error ? error.message : 'Submission did not complete. Do not submit again.';
@@ -144,21 +149,24 @@ async function permanent(owner: LayerizeOwner, path: string, data: string | Buff
   if (!file.success || !file.storageUrl) throw new Error('Layer asset persistence pending; recover this task rather than generating again.');
   return file.storageUrl;
 }
+async function mapLayers<T, R>(items: T[], operation: (item: T) => Promise<R>): Promise<R[]> {
+  const output: R[] = [];
+  for (let i = 0; i < items.length; i += 4) output.push(...await Promise.all(items.slice(i, i + 4).map(operation)));
+  return output;
+}
 async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: LayerizeProviderTask) {
   const rows = [...(task.result_data ?? [])].sort((a, b) => a.z_index - b.z_index);
   if (rows.length < 2 || rows.length > job.input.maxOutputs! || rows[0].z_index !== 0 || new Set(rows.map(r => r.z_index)).size !== rows.length || rows.some(r => !Number.isInteger(r.z_index) || r.z_index < 0)) throw new Error('Provider output inventory does not satisfy the layer contract.');
-  const decoded = [];
-  for (const row of rows) {
+  const decoded = await mapLayers(rows, async row => {
     const bytes = await readProviderImage(row.url, 50 * 1024 * 1024, { evolinkAsset: true });
     const image = sharp(bytes, { failOn: 'error', limitInputPixels: 4_624_220 });
     const meta = await image.metadata();
     if (meta.format !== 'png' || !meta.width || !meta.height || (meta.pages ?? 1) !== 1) throw new Error('Layer output is not a valid PNG.');
     if (row.z_index > 0 && (!meta.hasAlpha || (await image.stats()).channels.at(-1)!.min === 255)) throw new Error('Foreground layer did not contain native alpha.');
-    decoded.push({ row, bytes, width: meta.width, height: meta.height });
-  }
+    return { row, bytes, width: meta.width, height: meta.height };
+  });
   const width = decoded[0].width, height = decoded[0].height;
-  const layers: LayerizeLayer[] = [];
-  for (const item of decoded) {
+  const layers: LayerizeLayer[] = await mapLayers(decoded, async item => {
     const { row } = item;
     const url = await permanent(owner, `${owner.projectId}/layerize/${job.id}/layer-${row.z_index}.png`, item.bytes, 'image/png');
     const box = row.z_index === 0 ? [0, 0, width, height] as [number, number, number, number] : bounds(row.bounding_box?.absolute, width, height);
@@ -173,10 +181,14 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
         }) };
       } catch { /* Preserve the original PNG when OCR geometry is incomplete. */ }
     }
-    layers.push(layer);
-  }
+    return layer;
+  });
   const supplierCostUsd = layerizeSupplierCost(layers);
-  const manifest: LayerizeManifest = { version: 1, taskId: task.id, width, height, sourceSha256: job.sourceSha256, supplierCostUsd, layers };
+  const source = await readProviderImage(job.input.imageUrl, 30 * 1024 * 1024);
+  if (sha(source) !== job.sourceSha256) throw new Error('Source image changed; retain this task for reconciliation.');
+  const { order: stackOrder, ...reconstruction } = await inferLayerizeStack(source, width, height,
+    layers.map((layer, index) => ({ ...layer, bytes: decoded[index].bytes })));
+  const manifest: LayerizeManifest = { version: 1, taskId: task.id, width, height, sourceSha256: job.sourceSha256, supplierCostUsd, layers, stackOrder, reconstruction };
   const manifestPath = `${owner.projectId}/layerize/${job.id}/manifest.json`;
   await permanent(owner, manifestPath, JSON.stringify(manifest), 'application/json');
   const design = buildLayerizeDesign(manifest, job.input.editableText);

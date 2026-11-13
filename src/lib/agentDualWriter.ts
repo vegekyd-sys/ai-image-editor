@@ -264,6 +264,9 @@ export class AgentDualWriter {
               ? { fontSubstitutions: persistedDesign.fontSubstitutions }
               : {}),
             ...(sourceDesignPath ? { sourceDesignPath } : {}),
+            ...(designDesc ? { description: designDesc } : {}),
+            ...((event as any).previewUrl ? { previewUrl: (event as any).previewUrl } : {}),
+            ...((event as any).prePublished === true ? { prePublished: true } : {}),
             published: true,
           });
 

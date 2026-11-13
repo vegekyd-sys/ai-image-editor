@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeAgentCallbacks, type AgentCallbackContext } from '@/lib/agentCallbacks';
 import type { Message, Snapshot } from '@/types';
+const recovery = vi.hoisted(() => ({ load: vi.fn() }));
+vi.mock('@/lib/editor/published-snapshot', () => ({ loadPublishedSnapshot: recovery.load }));
 
 function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCallbackContext {
   return {
@@ -49,6 +51,7 @@ describe('makeAgentCallbacks', () => {
 
   beforeEach(() => {
     messages = [];
+    recovery.load.mockReset();
     ctx = createMockContext({
       setMessages: vi.fn((updater: (prev: Message[]) => Message[]) => {
         messages = updater(messages);
@@ -273,6 +276,7 @@ describe('makeAgentCallbacks', () => {
   describe('onFocusSnapshot', () => {
     it('focuses the existing design without replacing edited props or publishing it again', () => {
       const focus = vi.fn();
+      ctx.snapshotsRef.current = [{ id: 'existing-design', design: { code: 'code', width: 10, height: 10 } } as Snapshot];
       const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: focus });
       callbacks.onFocusSnapshot?.('existing-design');
       expect(focus).toHaveBeenCalledWith('existing-design');
@@ -280,9 +284,39 @@ describe('makeAgentCallbacks', () => {
       expect(ctx.setSnapshots).not.toHaveBeenCalled();
       expect(ctx.onSaveSnapshot).not.toHaveBeenCalled();
     });
+
+    it('recovers a missing server result before focusing it without republishing', async () => {
+      const focus = vi.fn();
+      const snapshot = { id: 'saved', image: 'https://example.com/poster.jpg', tips: [], messageId: '' } as Snapshot;
+      recovery.load.mockResolvedValue(snapshot);
+      const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: focus });
+      callbacks.onFocusSnapshot?.('saved');
+      await vi.waitFor(() => expect(focus).toHaveBeenCalledWith('saved'));
+      expect(ctx.snapshotsRef.current).toContain(snapshot);
+      expect(ctx.setPendingDesign).not.toHaveBeenCalled();
+      expect(ctx.onSaveSnapshot).not.toHaveBeenCalled();
+    });
   });
 
   describe('onRender', () => {
+    it('adds the saved poster and design synchronously without browser capture or a second save', () => {
+      const focus = vi.fn();
+      const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: focus });
+      callbacks.onNewTurn?.('msg-saved');
+      const design = { code: 'function D(){}', width: 1080, height: 1350,
+        snapshotId: 'saved', published: true, prePublished: true, previewUrl: 'https://example.com/poster.jpg' };
+      callbacks.onRender?.(design);
+      expect(ctx.snapshotsRef.current[0]).toMatchObject({ id: 'saved', imageUrl: design.previewUrl, design });
+      expect(focus).toHaveBeenCalledWith('saved');
+      expect(ctx.setPendingDesign).not.toHaveBeenCalled();
+      expect(ctx.onSaveSnapshot).not.toHaveBeenCalled();
+      expect(messages[0]).toMatchObject({ image: design.previewUrl, design });
+      // Persisted render replay must preserve GUI layer edits already in memory.
+      ctx.snapshotsRef.current[0].design = { ...design, props: { _pos_layer_1: { x: 30, y: 40 } } };
+      callbacks.onRender?.(design);
+      expect(ctx.snapshotsRef.current).toHaveLength(1);
+      expect(ctx.snapshotsRef.current[0].design?.props).toEqual({ _pos_layer_1: { x: 30, y: 40 } });
+    });
     it('published render triggers pendingDesign with snapshotId', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onNewTurn?.('msg-1');
