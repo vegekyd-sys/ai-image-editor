@@ -275,7 +275,9 @@ export function useProject(projectId: string, userId: string) {
       };
     })
 
-    return { ownerId: projectOwnerId ?? null, isPublic: projectRes.data?.is_public === true, musicRows: musicRes.data ?? [], snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
+    // Hydration owns the internal objects above. Do not mutate snapshots already
+    // handed to React: that hides the update from memoized canvas derivations.
+    return { ownerId: projectOwnerId ?? null, isPublic: projectRes.data?.is_public === true, musicRows: musicRes.data ?? [], snapshots: snapshots.map(snapshot => ({ ...snapshot })), messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
   }, [projectId, userId])
 
   // --- Write ---
