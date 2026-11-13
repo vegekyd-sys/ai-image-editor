@@ -131,10 +131,15 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/api/admin/add-credits') {
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    if (body.apiKey === 'mk_live_missing_fixture') {
+      sendJson(404, { error: `Active API key not found: ${body.apiKey}` });
+      return;
+    }
     sendJson(200, {
       success: true,
       userId: 'user_credit_test',
-      email: body.email,
+      // Deliberately echo the synthetic key to verify client-side output redaction.
+      email: body.email || body.apiKey,
       credits: body.credits,
       newBalance: 1321,
     });
@@ -1488,6 +1493,25 @@ try {
     const data = JSON.parse(result.stdout);
     assert.equal(data.credits, 25);
     assert.equal(data.newBalance, 1321);
+  }
+
+  for (const json of [false, true]) {
+    const targetKey = `mk_live_${'a'.repeat(64)}`;
+    const result = await expectSuccess(['admin', 'add-credits', targetKey, '100', ...(json ? ['--json'] : [])]);
+    const request = requests.filter(req => req.pathname === '/api/admin/add-credits').at(-1);
+    assert.deepEqual(request?.body, { apiKey: targetKey, credits: 100 });
+    assert.ok(!result.stdout.includes(targetKey));
+    assert.ok(!result.stderr.includes(targetKey));
+    if (json) assert.equal(JSON.parse(result.stdout).userId, 'user_credit_test');
+    else assert.match(result.stdout, /Added 100 credits to user_credit_test/);
+  }
+
+  {
+    const targetKey = 'mk_live_missing_fixture';
+    const result = await expectFailure(['admin', 'add-credits', targetKey, '100']);
+    assert.match(result.stderr, /Error 404/);
+    assert.ok(!result.stderr.includes(targetKey));
+    assert.ok(!result.stdout.includes(targetKey));
   }
 
   for (const invalidCredits of ['0', '-1', '1.5', 'not-a-number']) {
