@@ -73,7 +73,14 @@ Turbopack rejects `node_modules` links outside the worktree root.
 ## Deploy A Preview
 
 ```bash
-pnpm run runner:preview -- <commit>
+pnpm run runner:preview <commit>
+```
+
+For an isolated runtime experiment, pass deployment-only overrides without
+changing shared Preview defaults or assigning shared aliases:
+
+```bash
+pnpm run runner:preview <commit> --env REMOTION_SNAPSHOT_ID=<candidate> --env REMOTION_LAMBDA_SERVE_URL=<candidate-site> --skip-domain
 ```
 
 Preview runs local release gates first, then deploys from the fixed runner.
