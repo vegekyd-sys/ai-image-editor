@@ -114,7 +114,7 @@ export function isPaintedEditableHit(element: HTMLElement, x: number, y: number)
   if (!image.complete || !image.naturalWidth) return false;
   const painted = sampleEditableImage(image, x, y);
   const state = cache.get(image.currentSrc || image.src);
-  return painted === true || (painted === null && (!state?.loading || state.failed === true));
+  return painted === true || (painted === null && (Boolean(state?.alpha) || !state?.loading || state.failed === true));
 }
 
 /** Wait for masks at the touched point to decode, including CORS recovery. */

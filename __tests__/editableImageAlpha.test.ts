@@ -75,6 +75,13 @@ describe('painted editable hit testing', () => {
     expect(isPaintedEditableHit(node, 25, 25)).toBe(true);
   });
 
+  it('preserves the rectangular fallback for unsupported 3D transforms after decoding', async () => {
+    const node = image('perspective', [255, 255]);
+    await pendingEditableAlphaAtPoint([{ domEl: node }], 25, 25);
+    vi.stubGlobal('DOMMatrix', class { is2D = false; });
+    expect(isPaintedEditableHit(node, 25, 25)).toBe(true);
+  });
+
   it('waits for a recoverable CORS mask before resolving a touch hit', async () => {
     const front = image('brother', [0, 255]), back = image('baby', [255, 255]);
     unreadable.add(front);
