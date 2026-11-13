@@ -174,7 +174,7 @@ async function buildVerifiedTurnMediaEvidence(
       const analysis = isVideo
         ? await analyzeVideoContent(
             source,
-            'Describe the entire video chronologically for a creative editor. Cover subjects, setting, actions, scene changes, notable text, framing, mood, and the most useful moments. Be concise but specific.',
+            'Describe the entire video chronologically for a creative editor in at most 900 characters. Cover every scene and its useful actions, subjects, setting, notable text, framing, mood, and audio/dialogue. Reserve space for the final scene: explicitly compare the opening and ending. Use compact time ranges and concrete visual facts; no introduction, repetition, or editing recommendations.',
             userId,
           )
         : await analyzeImageContent(
@@ -437,12 +437,21 @@ export async function buildPromptContext(
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-  const [snapshotsRes, messages, toolHistory, musicRes, recoverableDraft, recoverableRunRes, studioRuns, executionSnapshotRes, executionRunRes, projectCompactionRes] = await Promise.all([
+  const snapshotsPromise = Promise.resolve(
     supabase
       .from('snapshots')
       .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
       .eq('project_id', projectId)
-      .order('sort_order', { ascending: true }),
+      .order('sort_order', { ascending: true })
+  );
+  const mediaEvidencePromise = snapshotsPromise.then(result => buildVerifiedTurnMediaEvidence(
+    result.data ?? [], options.turnMediaCount, options.turnMediaSnapshotIds,
+    supabase, userId, options.supportsImageInput === true,
+  ));
+  // Another context query may reject before this concurrent read completes.
+  void mediaEvidencePromise.catch(() => {});
+  const [snapshotsRes, messages, toolHistory, musicRes, recoverableDraft, recoverableRunRes, studioRuns, executionSnapshotRes, executionRunRes, projectCompactionRes, verifiedTurnMediaEvidence] = await Promise.all([
+    snapshotsPromise,
     loadAllVisibleMessages(supabase, projectId),
     loadAllToolHistory(supabase, projectId, userId),
     supabase
@@ -467,21 +476,11 @@ export async function buildPromptContext(
     executionSnapshotPromise,
     executionRunPromise,
     projectCompactionPromise,
+    mediaEvidencePromise,
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
-  // Text-only Agents need Gemini evidence for every medium. Multimodal Agents
-  // inspect still images directly but retain Gemini preflight for raw videos,
-  // which are outside the Agent image-input contract.
-  const verifiedTurnMediaEvidence = await buildVerifiedTurnMediaEvidence(
-    snapshots,
-    options.turnMediaCount,
-    options.turnMediaSnapshotIds,
-    supabase,
-    userId,
-    options.supportsImageInput === true,
-  );
   const originMessage = messages[0];
   const projectAudios: AudioAttachmentContext[] = ((musicRes.data ?? []) as DbProjectMusic[])
     .map((row) => {
