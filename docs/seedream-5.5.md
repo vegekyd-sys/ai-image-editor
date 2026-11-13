@@ -27,7 +27,7 @@ Makaron ID 为 `seedream-5.5`，通过现有 EvoLink 账号调用 `doubao-seedre
 
 App/CLI chat 的 Agent 推理单独计费，直接 CLI edit 没有 chat Agent 费用。生成前检查余额，成功且图片已下载、解码、格式及 alpha 合同通过后才调用一次现有扣费事务，扣费失败不向用户发布新图；供应商拒绝、参数失败、超时不会被当作图片成功扣费。异步结果未知时保留原任务，不自动重试。供应商已消费但本次图片没有交付的支出与产品 credits 分开审计。
 
-必须存在精确、启用、正有限 markup 的 `seedream-5.5` 行；不从其他 Seedream 或 OpenAI 行推测价格。候选迁移为 `supabase/migrations/20261112185220_seedream55_evolink_pricing.sql`，默认 markup=2，token 单价为零（固定 provider USD 路径），不会覆盖已有管理员价格或重新启用停用行。迁移在候选验收中仅应用于隔离 PostgreSQL，不提前写共享数据库。
+必须存在精确、启用、正有限 markup 的 `seedream-5.5` 行；不从其他 Seedream 或 OpenAI 行推测价格。配置迁移为 `supabase/migrations/20261112185220_seedream55_evolink_pricing.sql`，默认 markup=2，token 单价为零（固定 provider USD 路径），不会覆盖已有管理员价格或重新启用停用行。发布时仅为该精确模型补齐价格行，并读取验证；不覆盖已有管理员配置。
 
 ## 回执与保存
 
@@ -39,8 +39,8 @@ App/CLI chat 的 Agent 推理单独计费，直接 CLI edit 没有 chat Agent �
 
 ## 合入与发布前提
 
-1. 用户评审并决定合入候选；本次不合入、不 push、不部署、不发布 NPM。
+1. Seedream 5.5 单独合入 dev；Layerize 保持独立 worktree，不随本次发布。
 2. 正式发布时先核实 EvoLink 价格与账号权限，在选定数据库应用价格迁移，确认精确启用行。缺少该行的部署会在提交前拒绝候选生成。
 3. 按正常发布流程验证 Web 与 CLI/help/README/bundled Skill 同步，并从 registry 全新安装验收；本地 tarball 安装验收不等同于 NPM 已发布。
 
-`doubao-seedream-5.5-layerize` 是多结果分层任务，本轮仅调研与独立小样验证。它不属于此单图后端，不可冒充普通图片模型注册；需另外设计按实际产物数结算、图层 manifest 和可编辑 composition 合同。
+`doubao-seedream-5.5-layerize` 是多结果分层任务，由独立候选维护。它不属于此单图后端，不可冒充普通图片模型注册；其计费、图层 manifest 和可编辑 composition 合同独立验收。

@@ -6,7 +6,7 @@
       "type": "skill-md",
       "description": "Use Makaron CLI to generate AI images, videos, music, and motion designs. Trigger when user needs creative media production — photo editing, video generation, video editing, music composition, or design creation. Requires `npx makaron-cli` and MAKARON_API_KEY env var.",
       "url": "/.well-known/agent-skills/makaron/SKILL.md",
-      "digest": "sha256:f52eef1d580fce2a343ae8a79204885a99b3f683f46fa0683bc65c18e1ac433d"
+      "digest": "sha256:d4b263e2468d5c71e9a4440b3e1993fe2a6fc12e57049fcfd299a8e2703d046c"
     }
   ]
 }

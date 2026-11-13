@@ -275,6 +275,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.seedream55.title': "Seedream 5.5 上线",
+  'changelog.seedream55.item1': "新增 Seedream 5.5 图片模型，支持文字生图、多图参考和原图编辑。",
+  'changelog.seedream55.item2': "保持人物与画面主体，逐步调整造型、场景和光影；也能生成透明 PNG 素材。",
   'changelog.characterImageRecovery.title': '角色图片生成更顺畅',
   'changelog.characterImageRecovery.item1': '创作普通卡通角色图片时，遇到偶发生成拦截会自动尝试其他可用模型，减少创作中断。',
   'changelog.fasterMediaDelivery.title': "图片和视频加载更快",

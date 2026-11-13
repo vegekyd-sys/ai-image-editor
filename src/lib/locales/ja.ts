@@ -311,6 +311,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.seedream55.title': "Seedream 5.5 登場",
+  'changelog.seedream55.item1': "Seedream 5.5 で、テキストからの画像生成、複数画像の参照、元画像の編集ができるようになりました。",
+  'changelog.seedream55.item2': "人物や被写体を保ちながら、服装・背景・光を少しずつ調整。透明 PNG 素材の作成にも対応しています。",
   'changelog.characterImageRecovery.title': 'キャラクター画像の生成がよりスムーズに',
   'changelog.characterImageRecovery.item1': '通常のカートゥーンキャラクター画像の生成が一時的にブロックされた場合、利用可能な別のモデルを自動で試し、制作の中断を減らします。',
   'changelog.fasterMediaDelivery.title': "画像と動画の読み込みが高速に",

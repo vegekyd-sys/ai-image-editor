@@ -275,6 +275,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.seedream55.title': "Seedream 5.5 is here",
+  'changelog.seedream55.item1': "Create images with Seedream 5.5 using text, multiple references, or an existing image.",
+  'changelog.seedream55.item2': "Keep your subject while refining styling, scenery, and lighting, or create transparent PNG assets.",
   'changelog.characterImageRecovery.title': 'Smoother character image generation',
   'changelog.characterImageRecovery.item1': 'When an ordinary cartoon character image is unexpectedly blocked, Makaron automatically tries another available model to reduce interruptions.',
   'changelog.fasterMediaDelivery.title': "Faster image and video loading",
