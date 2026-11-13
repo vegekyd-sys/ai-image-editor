@@ -73,7 +73,7 @@ describe('DesignOverlay moveable guideline regression guards', () => {
     expect(source).toContain("'data-editable-canvas-cover'");
     expect(source).toContain("if (intent === 'canvas-tap') onCanvasTapRef.current?.();");
     expect(canvasSource).toContain('posterImage={currentDesign?.animation && !selectedEditableId ? displayImage : undefined}');
-    expect(canvasSource).toContain('remotionLoading && displayImage && !selectedEditableId');
+    expect(canvasSource).toContain('remotionLoading && displayImage');
     expect(canvasSource).toContain('onCanvasTap={handleDesignCanvasTap}');
     expect(canvasSource).not.toContain('wasPlayingBeforeBufferRef');
     expect(canvasSource).toContain('if (id && remotionRef.current)');
