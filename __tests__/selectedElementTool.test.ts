@@ -21,7 +21,7 @@ beforeEach(async () => {
     supabase: { from: (table: string) => { const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: table === 'projects' ? { user_id: 'owner' } : { design_path: 'code/source.json' } }) }; return query; } } };
 });
 const tools = () => createTools(ctx, { spec: { provider: 'test', supportsImageInput: true } } as any);
-const call = async (name: string, args: any = {}) => (tools()[name].execute as any)(args, {});
+const call = async (name: keyof ReturnType<typeof tools>, args: any = {}) => (tools()[name].execute as any)(args, {});
 it('moves/scales selected elements without submitting or charging an image', async () => {
   const result = await call('edit_element', { operation: { kind: 'transform', dx: 20, scaleX: 2 } });
   expect(result.success).toBe(true);
