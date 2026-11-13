@@ -599,7 +599,11 @@ export default function RemotionRenderer({
       const wrapper = wrapperRef.current;
       if (!wrapper) return;
       const wrapperRect = wrapper.getBoundingClientRect();
-      const scale = wrapperRect.width > 0 ? wrapperRect.width / design.width : 1;
+      // Fill mode letterboxes the composition inside a wider wrapper. Measure
+      // in the actual Player canvas coordinates, not the surrounding viewport.
+      const canvas = wrapper.querySelector<HTMLElement>('.__remotion-player');
+      const canvasRect = canvas?.getBoundingClientRect() ?? wrapperRect;
+      const scale = canvasRect.width > 0 ? canvasRect.width / design.width : 1;
       if (!Number.isFinite(scale) || scale <= 0) return;
 
       let maxBottom = 0;
@@ -608,12 +612,12 @@ export default function RemotionRenderer({
       editables.forEach((el) => {
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 && rect.height <= 0) return;
-        maxBottom = Math.max(maxBottom, (rect.bottom - wrapperRect.top) / scale);
-        maxRight = Math.max(maxRight, (rect.right - wrapperRect.left) / scale);
+        maxBottom = Math.max(maxBottom, (rect.bottom - canvasRect.top) / scale);
+        maxRight = Math.max(maxRight, (rect.right - canvasRect.left) / scale);
       });
 
-      const scrollHeight = wrapper.scrollHeight / scale;
-      const scrollWidth = wrapper.scrollWidth / scale;
+      const scrollHeight = Math.max(canvas?.scrollHeight || 0, wrapper.scrollHeight / scale);
+      const scrollWidth = Math.max(canvas?.scrollWidth || 0, wrapper.scrollWidth / scale);
       const measuredHeight = Math.ceil(Math.max(maxBottom, scrollHeight, design.height));
       const measuredWidth = Math.ceil(Math.max(maxRight, scrollWidth, design.width));
       const source = maxBottom > scrollHeight ? 'editables' : 'scroll';
@@ -629,6 +633,7 @@ export default function RemotionRenderer({
     if (typeof ResizeObserver !== 'undefined' && wrapperRef.current) {
       observer = new ResizeObserver(measure);
       observer.observe(wrapperRef.current);
+      wrapperRef.current.querySelectorAll<HTMLElement>(EDITABLE_RUNTIME_SELECTOR).forEach(element => observer?.observe(element));
     }
 
     return () => {

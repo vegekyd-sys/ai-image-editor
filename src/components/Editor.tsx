@@ -3264,7 +3264,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         const snapId = snap.id;
         designSizeSaveTimer.current = setTimeout(() => {
           console.log('[design] auto-expanded height', snap.design?.height, '→', expanded.height, `(${size.source})`);
-          onSaveDesignProps(snapId, expanded);
+          // Text and transforms can change again during the debounce. A height
+          // save must retain those newer props instead of replaying this frame.
+          const latest = snapshotsRef.current.find(snapshot => snapshot.id === snapId)?.design;
+          if (latest) onSaveDesignProps(snapId, { ...latest, height: Math.max(latest.height, expanded.height) });
         }, 500);
       }
       return updated;

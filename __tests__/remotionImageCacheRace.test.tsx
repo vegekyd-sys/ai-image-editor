@@ -1,10 +1,10 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-vi.mock('@remotion/player', () => ({ Player: ({ component: Component, inputProps }: any) => <Component {...inputProps} /> }));
+vi.mock('@remotion/player', () => ({ Player: ({ component: Component, inputProps }: any) => <div className="__remotion-player"><Component {...inputProps} /></div> }));
 vi.mock('@remotion/web-renderer', () => ({ renderStillOnWeb: vi.fn(), renderMediaOnWeb: vi.fn() }));
 vi.mock('@/lib/i18n', () => ({ useLocale: () => ({ t: (key: string) => key }) }));
-vi.mock('@/lib/evalRemotionJSX', () => ({ preloadBabel: async () => {}, evalRemotionJSX: () => (props: any) => <div data-testid="inputs">{JSON.stringify(props)}</div> }));
+vi.mock('@/lib/evalRemotionJSX', () => ({ preloadBabel: async () => {}, evalRemotionJSX: () => (props: any) => <div data-editable="body" data-testid="inputs">{JSON.stringify(props)}</div> }));
 vi.mock('@/remotion/font-catalog', async original => ({ ...await original<any>(), prepareRemotionFontCodeFromBundledCatalog: () => ({ code: '', defaultFontFamily: 'Inter' }), prepareAndLoadRemotionFontsWithTiming: async () => ({ prepared: { code: '', defaultFontFamily: 'Inter' }, timing: {} }), validateRemotionFontManifest: (value: unknown) => value }));
 import RemotionRenderer from '@/components/RemotionRenderer';
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -53,4 +53,18 @@ it('keeps decomposed source canvas fixed while flow-layout designs can still gro
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 350)); });
   expect(layerSize).not.toHaveBeenCalled();
   layered.unmount();
+});
+
+it('measures overflowing long content in the letterboxed Player canvas coordinates', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ faces: [] })));
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const width = this.classList.contains('__remotion-player') || this.hasAttribute('data-editable') ? 100 : 200;
+    const height = this.hasAttribute('data-editable') ? 320 : 100;
+    return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height, toJSON: () => ({}) };
+  });
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(100);
+  const size = vi.fn();
+  const view = render(<RemotionRenderer design={{ width: 100, height: 100, code: 'function Composition() { return null }', props: {} }} onContentSize={size} />);
+  await waitFor(() => expect(size).toHaveBeenCalledWith(expect.objectContaining({ height: 320 })));
+  view.unmount();
 });
