@@ -76,7 +76,7 @@ function PriceEntry({ price, editing, editingElsewhere, onEdit, onSaved }: {
     </div>
     {editing && <form onSubmit={event => { event.preventDefault(); void save() }} className="mt-5 border-t border-white/10 pt-4">
       <fieldset disabled={busy} className="grid min-w-0 grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-3">
-        {fields.filter(field => field !== 'video_reference_usd_per_second' || price.model_id === 'seedance-2.5').map(field => <label key={field} className="min-w-0 text-xs text-white/65">
+        {fields.filter(field => field !== 'video_reference_usd_per_second' || ['seedance-2.5', 'seedance-2.5-flash'].includes(price.model_id)).map(field => <label key={field} className="min-w-0 text-xs text-white/65">
           {fieldLabel(field)}
           <input type="number" required={field !== 'video_reference_usd_per_second'} min={field === 'unfiltered_multiplier' ? 1 : field === 'markup' || field === 'output_usd_per_second' || field === 'video_reference_usd_per_second' ? 0.000001 : 0}
             step={field === 'free_image_references' ? 1 : 'any'} aria-label={`${price.id} ${fieldLabel(field)}`} value={draft[field] ?? (field === 'video_reference_usd_per_second' ? '' : 0)}

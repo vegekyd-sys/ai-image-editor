@@ -1359,6 +1359,23 @@ try {
   }
 
   {
+    await expectSuccess(['video', 'create', '--script', 'Flash first frame <<<media_1>>>', '--image', 'https://cdn.example/mascot.png', '--duration', '4', '--video-model', 'seedance-2.5-flash', '--image-workflow', 'image-to-video', '--video-resolution', '480p']);
+    const req = requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params;
+    assert.equal(req.name, 'makaron_create_video');
+    assert.equal(req.arguments.videoModel, 'seedance-2.5-flash');
+    assert.equal(req.arguments.imageWorkflow, 'image-to-video');
+    assert.equal(req.arguments.duration, 4);
+    await expectSuccess(['video', 'create', '--script', 'Change only the background', '--video', 'https://cdn.example/source.mp4', '--video-model', 'seedance-2.5-flash', '--video-operation', 'edit']);
+    const edit = requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params;
+    assert.equal(edit.name, 'makaron_create_video');
+    assert.equal(edit.arguments.operation, 'edit');
+    assert.equal(edit.arguments.duration, undefined);
+    const count = requests.length;
+    await expectFailure(['video', 'create', '--script', 'No unsupported mode', '--video-model', 'seedance-2.5-flash', '--video-operation', 'extend']);
+    assert.equal(requests.length, count);
+  }
+
+  {
     const result = await expectSuccess(['video', 'create', '--script', 'Fast Turn\nShot 1 (5s): <<<media_1>>> turns toward camera', '--image', tinyImagePath, '--duration', '5', '--video-model', 'h3-max', '--video-resolution', '768p']);
     assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
     const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);

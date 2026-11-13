@@ -99,15 +99,18 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
     nonNegative(price.video_reference_usd_per_second, 'video reference rate')
     if (price.video_reference_usd_per_second === 0) throw new PricingUnavailableError('Video reference rate must be positive.')
   }
-  const hasVideoReferenceTariff = ['seedance-2.5', 'kling-4', 'kling-4-flash'].includes(price.model_id)
+  if (price.model_id === 'seedance-2.5-flash' && referenceVideoDurationSec > 0 && price.video_reference_usd_per_second == null) throw new PricingUnavailableError('Flash reference-video tariff is not configured.')
+  const hasVideoReferenceTariff = ['seedance-2.5', 'seedance-2.5-flash', 'kling-4', 'kling-4-flash'].includes(price.model_id)
     && referenceVideoDurationSec > 0 && price.video_reference_usd_per_second != null
   // Keep the original input duration in the quote for auditing/settlement.
-  // Kling 4.0 edit rounds the source up; Flash rounds source/reference seconds to nearest.
+  // Kling4 edit and Seedance Flash round up; Kling4 Flash rounds to nearest.
   const billableSourceSeconds = price.model_id === 'kling-4-flash'
     ? Math.round(referenceVideoDurationSec)
-    : price.model_id === 'kling-4' && price.operation === 'edit'
+    : price.model_id === 'seedance-2.5-flash' || price.model_id === 'kling-4' && price.operation === 'edit'
       ? Math.ceil(referenceVideoDurationSec) : referenceVideoDurationSec
-  const supplierCostUsd = hasVideoReferenceTariff
+  const supplierCostUsd = hasVideoReferenceTariff && price.model_id === 'seedance-2.5-flash' && price.operation === 'edit'
+    ? 2 * billableSourceSeconds * price.video_reference_usd_per_second! * multiplier
+    : hasVideoReferenceTariff
     ? (Math.max(billableSourceSeconds, durationSec) + durationSec) * price.video_reference_usd_per_second! * multiplier
     : (
     durationSec * price.output_usd_per_second

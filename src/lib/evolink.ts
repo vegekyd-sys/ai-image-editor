@@ -1,3 +1,4 @@
+import { buildSeedance25FlashPayload } from './seedance25-flash'
 /**
  * Evolink Seedance 2.0 / 2.5 Video API Client
  *
@@ -84,7 +85,10 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
   const model = requestedModel || (hasReferenceMedia
     ? 'seedance-2.0-fast-reference-to-video'
     : 'seedance-2.0-fast-text-to-video')
-  const isSeedance25 = model.startsWith('seedance-2.5-')
+  const isFlash = model.startsWith('seedance-2.5-flash-')
+  const isSeedance25 = model.startsWith('seedance-2.5-') && !isFlash
+  // Validate before fetching images or submitting any paid request.
+  const flashPayload = isFlash ? buildSeedance25FlashPayload({ ...input, model }) : undefined
   const isSeedance = model.startsWith('seedance-')
 
   if (isSeedance25) {
@@ -102,7 +106,7 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
     if (failure) throw new EvolinkInputError(failure)
   }
 
-  const payload: Record<string, unknown> = {
+  const payload: Record<string, unknown> = flashPayload ?? {
     model,
     prompt,
     generate_audio: generateAudio ?? true,
@@ -114,12 +118,15 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
     if (webSearch) payload.model_params = { web_search: true }
   }
 
-  if (images.length > 0) payload.image_urls = images
-  if (videoUrls?.length) payload.video_urls = videoUrls
-  if (audioUrls?.length) payload.audio_urls = audioUrls
-  if (duration != null) payload.duration = duration
-  if (aspectRatio) payload.aspect_ratio = aspectRatio
-  if (quality) payload.quality = quality
+  if (!isFlash) {
+    if (images.length > 0) payload.image_urls = images
+    if (videoUrls?.length) payload.video_urls = videoUrls
+    if (audioUrls?.length) payload.audio_urls = audioUrls
+    if (duration != null) payload.duration = duration
+    if (aspectRatio) payload.aspect_ratio = aspectRatio
+    if (quality) payload.quality = quality
+
+  }
 
   console.log(`[evolink] Creating task: model=${model}, ${images.length} images${videoUrls?.length ? ` + ${videoUrls.length} videos` : ''}${audioUrls?.length ? ` + ${audioUrls.length} audios` : ''}, duration=${duration ?? 'default'}, ratio=${aspectRatio ?? 'default'}`)
 
@@ -133,7 +140,7 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
   })
 
   if (!response.ok) {
-    if ([400, 401, 403, 404, 413, 415, 422, 429].includes(response.status)) {
+    if ([400, 401, 402, 403, 404, 413, 415, 422, 429].includes(response.status)) {
       throw new EvolinkSubmissionError(response.status)
     }
     const errorText = await response.text()
