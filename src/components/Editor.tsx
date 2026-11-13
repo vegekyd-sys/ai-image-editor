@@ -326,6 +326,14 @@ export default function Editor({
   // Mobile keyboard offset for text editor panel
   const editorKbInset = useVisualViewportInset(!isDesktop && Boolean(editingDesignFieldId));
   const [, _setVisibleEditableIds] = useState<string[]>([]);
+  const [renderedEditableOrder, setRenderedEditableOrder] = useState<{ snapshotId: string; ids: string[] } | null>(null);
+  const handleEditableRenderOrder = useCallback((ids: string[]) => {
+    const index = snapFromTimeline(viewIndex, draftParentIndex);
+    const snapshotId = index == null ? undefined : snapshotsRef.current[index]?.id;
+    if (!snapshotId) return;
+    setRenderedEditableOrder(previous => previous?.snapshotId === snapshotId && previous.ids.length === ids.length
+      && previous.ids.every((id, i) => id === ids[i]) ? previous : { snapshotId, ids });
+  }, [viewIndex, draftParentIndex]);
   const handleVisibleEditableFields = useCallback((ids: string[]) => {
     _setVisibleEditableIds(prev => {
       if (prev.length === ids.length && prev.every((id, i) => id === ids[i])) return prev;
@@ -3775,6 +3783,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 onUpdateProp={handleDesignPropUpdate}
                 onStartEditEditable={setEditingDesignFieldId}
                 onVisibleEditableFields={handleVisibleEditableFields}
+                onEditableRenderOrder={handleEditableRenderOrder}
                 onDesignContentSize={handleDesignContentSize}
                 activeTrimFieldId={editingDesignField?.type === 'video' ? editingDesignField.id : null}
               />
@@ -4158,6 +4167,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 ) : isViewingDesign && allDesignEditables.length > 0 ? (
                   <DesignEditPanel
                     editables={allDesignEditables}
+                    renderedOrder={renderedEditableOrder?.snapshotId === currentDesignSnap?.id ? renderedEditableOrder?.ids : undefined}
                     onHistorySeek={handleDesignHistorySeek}
                     props={currentDesignProps}
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}

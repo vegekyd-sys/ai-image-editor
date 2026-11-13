@@ -29,12 +29,13 @@ function renderDesign(props: Record<string, unknown>, mode: 'proxy' | 'registry'
 
 describe('Layerize layer editing', () => {
   it('offers the same controls and history for ordinary text/image editables', () => {
-    const generic = [{ id: 'hero', propKey: 'hero', type: 'image' as const, label: 'Hero' }, { id: 'title', propKey: 'title', type: 'text' as const, label: 'Title' }];
+    // Discovery order may differ from the authored stacking order.
+    const generic = [{ id: 'title', propKey: 'title', type: 'text' as const, label: 'Title' }, { id: 'hero', propKey: 'hero', type: 'image' as const, label: 'Hero' }];
     const props = recordDesignEdit({ title: 'Hello', hero: 'https://example.com/photo.png' }, '_pos_hero', { x: 20, y: 10 }, { kind: 'move', label: 'Hero' });
     const seek = vi.fn(), update = vi.fn();
-    const { getByRole, getByText } = render(<LocaleProvider initialLocale="en"><DesignEditPanel editables={generic} props={props} selectedFieldId="hero" onUpdateProp={update} onSelectField={vi.fn()} onStartEdit={vi.fn()} onHistorySeek={seek} /></LocaleProvider>);
+    const { getByRole, getByText } = render(<LocaleProvider initialLocale="en"><DesignEditPanel editables={generic} renderedOrder={['hero', 'title']} props={props} selectedFieldId="hero" onUpdateProp={update} onSelectField={vi.fn()} onStartEdit={vi.fn()} onHistorySeek={seek} /></LocaleProvider>);
     fireEvent.click(getByRole('button', { name: 'Delete element' }));
-    expect(update).toHaveBeenCalledWith('_layerState', expect.objectContaining({ deleted: ['hero'] }));
+    expect(update).toHaveBeenCalledWith('_layerState', expect.objectContaining({ order: ['hero', 'title'], deleted: ['hero'] }));
     fireEvent.click(getByRole('button', { name: /^Undo$/ }));
     expect(seek).toHaveBeenCalledWith(0);
     fireEvent.click(getByRole('button', { name: /^Edit history$/ }));

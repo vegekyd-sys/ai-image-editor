@@ -4,13 +4,14 @@ import type { DesignPayload, EditableField } from '@/types';
 export interface DesignLayerState { order: string[]; deleted: string[]; stacking?: boolean }
 export const DESIGN_LAYER_STATE_PROP = '_layerState';
 
-export function readDesignLayerState(fields: EditableField[], props: Record<string, unknown>): DesignLayerState {
+export function readDesignLayerState(fields: EditableField[], props: Record<string, unknown>, renderedOrder: string[] = []): DesignLayerState {
   const ids = fields.map(field => field.id);
   const known = new Set(ids);
   const raw = props[DESIGN_LAYER_STATE_PROP] as Partial<DesignLayerState> | undefined;
   const order = Array.isArray(raw?.order) ? [...new Set(raw.order.filter(id => known.has(id)))] : [];
+  const fallback = [...new Set([...renderedOrder.filter(id => known.has(id)), ...ids])];
   return {
-    order: [...order, ...ids.filter(id => !order.includes(id))],
+    order: [...order, ...fallback.filter(id => !order.includes(id))],
     deleted: Array.isArray(raw?.deleted) ? [...new Set(raw.deleted.filter(id => known.has(id)))] : [],
     ...(raw?.stacking === true ? { stacking: true } : {}),
   };

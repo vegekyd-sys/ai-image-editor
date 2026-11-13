@@ -109,6 +109,7 @@ interface ImageCanvasProps {
   onStartEditEditable?: (fieldId: string) => void;
   /** Callback with list of editable field IDs visible at the current frame */
   onVisibleEditableFields?: (visibleIds: string[]) => void;
+  onEditableRenderOrder?: (ids: string[]) => void;
   /** Browser-measured rendered design size, used to expand under-sized static designs */
   onDesignContentSize?: (size: { width: number; height: number; source: 'editables' | 'scroll' }) => void;
   /** Video editable currently opened in the trim editor. */
@@ -153,6 +154,7 @@ export default function ImageCanvas({
   onUpdateProp,
   onStartEditEditable,
   onVisibleEditableFields,
+  onEditableRenderOrder,
   onDesignContentSize,
   activeTrimFieldId,
   hidePlaybackControls = false,
@@ -1690,6 +1692,7 @@ export default function ImageCanvas({
                 onUpdateProp={onUpdateProp}
                 onStartEdit={onStartEditEditable}
                 onVisibleFieldsChange={onVisibleEditableFields}
+                onRenderedOrderChange={onEditableRenderOrder}
                 filterVisibleFields={Boolean(currentDesign?.animation)}
                 playerRef={designPlayerRef}
                 allowCanvasCoverSelection={!currentDesign?.animation}

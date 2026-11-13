@@ -12,6 +12,7 @@ import PillCarousel from '@/components/PillCarousel';
 interface DesignEditPanelProps {
   editables?: EditableField[];
   props?: Record<string, unknown>;
+  renderedOrder?: string[];
   onUpdateProp: (key: string, value: unknown) => void;
   onHistorySeek?: (cursor: number) => void;
   selectedFieldId: string | null;
@@ -23,6 +24,7 @@ interface DesignEditPanelProps {
 export default function DesignEditPanel({
   editables = [],
   props = {},
+  renderedOrder = [],
   selectedFieldId,
   onUpdateProp,
   onHistorySeek,
@@ -34,7 +36,7 @@ export default function DesignEditPanel({
   const [historyOpen, setHistoryOpen] = useState(false);
   const historyRef = useRef<HTMLDivElement>(null);
   const history = readDesignEditHistory(props);
-  const layerState = readDesignLayerState(editables, props);
+  const layerState = readDesignLayerState(editables, props, renderedOrder);
   const fields = [...editables].sort((a, b) => layerState.order.indexOf(b.id) - layerState.order.indexOf(a.id)).filter(field => !layerState.deleted.includes(field.id));
   const activeOrder = layerState.order.filter(id => !layerState.deleted.includes(id));
   const selectedIndex = selectedFieldId ? activeOrder.indexOf(selectedFieldId) : -1;

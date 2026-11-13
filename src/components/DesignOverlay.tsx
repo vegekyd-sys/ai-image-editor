@@ -30,6 +30,7 @@ interface DesignOverlayProps {
   onUpdateProp: (key: string, value: unknown) => void;
   onStartEdit?: (fieldId: string) => void;
   onVisibleFieldsChange?: (visibleIds: string[]) => void;
+  onRenderedOrderChange?: (ids: string[]) => void;
   filterVisibleFields?: boolean;
   playerRef?: any;
   allowCanvasCoverSelection?: boolean;
@@ -79,6 +80,7 @@ export default function DesignOverlay({
   onUpdateProp,
   onStartEdit,
   onVisibleFieldsChange,
+  onRenderedOrderChange,
   filterVisibleFields = false,
   playerRef,
   allowCanvasCoverSelection = false,
@@ -89,6 +91,8 @@ export default function DesignOverlay({
   const rafRef = useRef<number>(0);
   const onVisibleFieldsChangeRef = useRef(onVisibleFieldsChange);
   onVisibleFieldsChangeRef.current = onVisibleFieldsChange;
+  const onRenderedOrderChangeRef = useRef(onRenderedOrderChange);
+  onRenderedOrderChangeRef.current = onRenderedOrderChange;
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const overlayMountedRef = useRef(false);
@@ -164,6 +168,7 @@ export default function DesignOverlay({
     });
     rectsRef.current = newRects;
     setRects(newRects);
+    onRenderedOrderChangeRef.current?.(activeInstances.map(instance => instance.id));
     onVisibleFieldsChangeRef.current?.(visibleIds);
     isMeasuringRef.current = false;
   }, [containerEl, editables, filterVisibleFields, props]);
