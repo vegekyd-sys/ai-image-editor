@@ -5,7 +5,9 @@ const zhHant = {
   ...zh,
   "design.autoLayer": "自動分層",
   "design.autoLayerHint": "將圖片拆成可獨立調整的圖層",
-  "design.touchHint": "長按拖曳 · 雙指縮放 · 左右滑動切換",
+  "design.touchHint": "拖曳 / 縮放 · 取消選取後瀏覽",
+  "design.loadingEditables": "正在載入編輯項目…",
+  "design.background": "背景",
   "design.autoLayerPrompt": (index: number) => `請將 @${index} 自動分層，盡量保留原圖外觀與遮擋關係，讓各個主體與背景可以獨立編輯。保留原有文字外觀，不必轉成原生文字。直接完成分層並發佈至畫布，無需額外生成圖片。`,
 
   "design.editingElement": (label: string) => `正在編輯：${label}`,

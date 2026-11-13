@@ -28,6 +28,23 @@ function renderDesign(props: Record<string, unknown>, mode: 'proxy' | 'registry'
 }
 
 describe('Layerize layer editing', () => {
+  it('reserves a loading carousel before editables arrive, then exposes short names and a clear-selection action', () => {
+    const select = vi.fn();
+    const options = { props: {}, selectedFieldId: null as string | null, onUpdateProp: vi.fn(), onSelectField: select, onStartEdit: vi.fn(), isDesktop: false };
+    const view = render(<LocaleProvider initialLocale="en"><DesignEditPanel {...options} loading /></LocaleProvider>);
+    expect(view.getByRole('status', { name: 'Loading editables…' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Delete element' })).toBeNull();
+    const label = '右手握持的蓝色发光透明胶囊Codex装置，装置金属铭牌印有文字';
+    const fields = [{ id: 'device', propKey: 'device', type: 'image' as const, label }];
+    view.rerender(<LocaleProvider initialLocale="en"><DesignEditPanel {...options} editables={fields} selectedFieldId="device" /></LocaleProvider>);
+    expect(view.queryByRole('status')).toBeNull();
+    expect(view.getByRole('button', { name: 'Codex装置' }).getAttribute('title')).toBe(label);
+    fireEvent.click(view.getByRole('button', { name: 'Codex装置' }));
+    expect(select).toHaveBeenLastCalledWith(null);
+    fireEvent.click(view.getByRole('button', { name: 'Clear selection' }));
+    expect(select).toHaveBeenLastCalledWith(null);
+    expect(fields[0].label).toBe(label);
+  });
   it('offers the same controls and history for ordinary text/image editables', () => {
     // Discovery order may differ from the authored stacking order.
     const generic = [{ id: 'title', propKey: 'title', type: 'text' as const, label: 'Title' }, { id: 'hero', propKey: 'hero', type: 'image' as const, label: 'Hero' }];

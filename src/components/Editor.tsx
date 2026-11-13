@@ -10,6 +10,8 @@ import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimatio
 import ImageCanvas from '@/components/ImageCanvas';
 import { getEditorCanvasKey } from '@/lib/editor/canvas-key';
 import TipsBar from '@/components/TipsBar';
+import { EditablePanelSkeleton } from '@/components/PillCarousel';
+import { editableDisplayLabel } from '@/lib/editor/editable-label';
 import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
@@ -61,7 +63,7 @@ import type { SkillLaunchContext } from '@/lib/skill-launch-context';
 import { stripAgentInternalContextForDisplay } from '@/lib/agent-response-policy';
 
 const AnimateSheet = dynamic(() => import('@/components/AnimateSheet'), { ssr: false });
-const DesignEditPanel = dynamic(() => import('@/components/DesignEditPanel'), { ssr: false });
+const DesignEditPanel = dynamic(() => import('@/components/DesignEditPanel'), { ssr: false, loading: () => <EditablePanelSkeleton /> });
 const DesignFieldEditor = dynamic(() => import('@/components/DesignFieldEditor'), { ssr: false });
 const CameraPanel = dynamic(() => import('@/components/CameraPanel'), { ssr: false });
 
@@ -644,6 +646,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Design editable: current snapshot has a design with editables
   const currentDesignSnap = snapshots[currentSnapIndex];
   const isViewingDesign = contentType === 'design';
+  const isDesignLoading = !isAtDraftSlot && !isViewingVideo && Boolean(currentDesignSnap?.designPath && !currentDesignSnap.design);
   const allDesignEditables = currentDesignSnap?.design?.editables ?? [];
   const currentDesignProps = (currentDesignSnap?.design?.props || {}) as Record<string, unknown>;
   const designLayerState = readDesignLayerState(allDesignEditables, currentDesignProps);
@@ -3532,7 +3535,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     isAgentActive,
     agentStatus,
     currentImage: currentDisplayImage,
-    selectedElement: selectedEditableFieldId && currentDesignEditables.find(f => f.id === selectedEditableFieldId) ? { label: currentDesignEditables.find(f => f.id === selectedEditableFieldId)!.label } : undefined,
+    selectedElement: selectedEditableFieldId && currentDesignEditables.find(f => f.id === selectedEditableFieldId) ? { label: editableDisplayLabel(currentDesignEditables.find(f => f.id === selectedEditableFieldId)!, t('design.background')) } : undefined,
     onClearSelectedElement: () => setSelectedEditableFieldId(null),
     onSendMessage: handleCuiSend,
     onAbort: handleAgentAbort,
@@ -4078,10 +4081,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 <AgentStatusBar
                   statusText={agentStatus}
                   isActive={isAgentActive}
-                  onAutoLayerize={!readOnly && !isViewingDesign && !isViewingVideo && !isViewingDraft && !annotationMode ? handleAutoLayerize : undefined}
+                  onAutoLayerize={!readOnly && !isViewingDesign && !isDesignLoading && !isViewingVideo && !isViewingDraft && !annotationMode ? handleAutoLayerize : undefined}
                   onOpenChat={videoRetakeSelection ? () => handleVideoRetake(videoRetakeSelection.anim, videoRetakeSelection.start, videoRetakeSelection.end) : openCUI}
                   chatActionLabel={videoRetakeSelection ? t('video.retakeEdit') : undefined}
-                  selectionText={videoRetakeSelection ? t('video.retakeStatusHint', String(Number(videoRetakeSelection.start.toFixed(1))), String(Number(videoRetakeSelection.end.toFixed(1)))) : undefined}
+                  selectionText={videoRetakeSelection ? t('video.retakeStatusHint', String(Number(videoRetakeSelection.start.toFixed(1))), String(Number(videoRetakeSelection.end.toFixed(1)))) : !isDesktop && selectedEditableFieldId && !isAgentActive ? t('design.touchHint') : undefined}
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
                   snapshotCount={snapshots.length}
@@ -4199,8 +4202,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       />
                     </DesignEditorFrame>
                   </div>
-                ) : isViewingDesign && allDesignEditables.length > 0 ? (
+                ) : isDesignLoading || (isViewingDesign && allDesignEditables.length > 0) ? (
                   <DesignEditPanel
+                    loading={isDesignLoading}
                     editables={allDesignEditables}
                     renderedOrder={renderedEditableOrder?.snapshotId === currentDesignSnap?.id ? renderedEditableOrder?.ids : undefined}
                     onHistorySeek={handleDesignHistorySeek}

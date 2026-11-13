@@ -2,7 +2,9 @@ const zh = {
 
   "design.autoLayer": "自动分层",
   "design.autoLayerHint": "把图片拆成可以单独调整的图层",
-  "design.touchHint": "长按拖动 · 双指缩放 · 左右滑切换",
+  "design.touchHint": "拖动 / 缩放 · 取消选中后浏览",
+  "design.loadingEditables": "正在加载编辑项…",
+  "design.background": "背景",
   "design.autoLayerPrompt": (index: number) => `请将 @${index} 自动分层，尽量保留原图外观和遮挡关系，让各个主体与背景可以单独编辑。保留原有文字外观，不需要将文字转成原生文本。直接完成分层并发布到画布，无需额外生成一张图片。`,
   "design.editingElement": (label: string) => `正在编辑：${label}`,
   "design.clearSelection": "取消选中",

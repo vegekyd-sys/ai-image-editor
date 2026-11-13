@@ -2,12 +2,12 @@
 
 import { useRef, useEffect, useCallback, useState } from 'react';
 import type { EditableField } from '@/types';
-import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 import { useLocale } from '@/lib/i18n';
-import { ArrowUp, ArrowDown, Trash2, Undo2, Redo2, History, RotateCcw } from 'lucide-react';
+import { ArrowUp, ArrowDown, Trash2, Undo2, Redo2, History, RotateCcw, X } from 'lucide-react';
 import { readDesignEditHistory } from '@/lib/editor/design-edit-history';
 import { readDesignLayerState, changeDesignLayer, DESIGN_LAYER_STATE_PROP } from '@/lib/editor/design-layer-state';
-import PillCarousel from '@/components/PillCarousel';
+import PillCarousel, { EditablePanelSkeleton } from '@/components/PillCarousel';
+import { editableDisplayLabel } from '@/lib/editor/editable-label';
 
 interface DesignEditPanelProps {
   editables?: EditableField[];
@@ -19,6 +19,7 @@ interface DesignEditPanelProps {
   onSelectField: (id: string | null) => void;
   onStartEdit: (fieldId: string) => void;
   isDesktop?: boolean;
+  loading?: boolean;
 }
 
 export default function DesignEditPanel({
@@ -31,6 +32,7 @@ export default function DesignEditPanel({
   onSelectField,
   onStartEdit,
   isDesktop,
+  loading = false,
 }: DesignEditPanelProps) {
   const { t, locale } = useLocale();
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -54,12 +56,10 @@ export default function DesignEditPanel({
     return () => { window.removeEventListener('pointerdown', close); window.removeEventListener('keydown', escape); };
   }, [historyOpen]);
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const { isDragging } = useHorizontalScroll(!!isDesktop);
 
   const handleCardClick = useCallback((field: EditableField) => {
-    if (isDragging) return;
-    onSelectField(field.id);
-  }, [onSelectField, isDragging]);
+    onSelectField(selectedFieldId === field.id ? null : field.id);
+  }, [onSelectField, selectedFieldId]);
 
   // Scroll selected item into view. The selected item's Edit button expands after
   // selection, so repeat once after the width transition starts.
@@ -77,6 +77,8 @@ export default function DesignEditPanel({
 
   const toolbar = (
     <div className="flex items-center gap-1 animate-pop-in">
+      <button type="button" title={t('design.clearSelection')} aria-label={t('design.clearSelection')} disabled={!selectedFieldId}
+        onClick={() => onSelectField(null)} className="flex h-8 w-8 items-center justify-center rounded-lg text-white/75 hover:bg-white/10 disabled:opacity-25"><X size={16}/></button>
       <span className="text-[11px] text-white/50 mr-1 whitespace-nowrap">
         {t('design.editables', fields.length)}
       </span>
@@ -120,9 +122,11 @@ export default function DesignEditPanel({
     </div>
   );
 
+  if (loading) return <EditablePanelSkeleton isDesktop={isDesktop} />;
   return (
-    <PillCarousel toolbar={<div className="flex flex-col items-center gap-1">{toolbar}{!isDesktop && selectedFieldId && <p data-testid="editable-touch-hint" className="px-2 pb-1 text-center text-[10px] text-white/40">{t('design.touchHint')}</p>}</div>} isDesktop={isDesktop}>
+    <PillCarousel toolbar={toolbar} isDesktop={isDesktop}>
       {fields.map((field) => {
+        const label = editableDisplayLabel(field, t('design.background'));
         const isSelected = selectedFieldId === field.id;
         const value = String(props[field.propKey] ?? '');
         const canOpenEditor = field.type === 'text' || field.type === 'video';
@@ -144,7 +148,8 @@ export default function DesignEditPanel({
             className="flex items-stretch flex-shrink-0 animate-tip-in"
           >
             <div
-              className={`mkr-liquid-pill flex items-stretch overflow-hidden border transition-all cursor-pointer active:scale-[0.97] ${isDesktop ? 'w-[176px]' : 'w-[200px]'} ${
+              data-editable-pill={field.id}
+              className={`mkr-liquid-pill flex items-stretch overflow-hidden border transition-all cursor-pointer active:scale-[0.97] ${isDesktop ? 'w-[176px] h-[64px]' : 'w-[200px] h-[72px]'} ${
                 isSelected
                   ? showEditButton
                     ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50 rounded-l-2xl rounded-r-none border-r-0'
@@ -156,20 +161,21 @@ export default function DesignEditPanel({
               }}
               role="button"
               tabIndex={0}
-              aria-label={field.label}
+              aria-label={label}
+              title={field.label}
               aria-pressed={isSelected}
               onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleCardClick(field); } }}
               onClick={() => handleCardClick(field)}
             >
               <div
-                className={`flex-shrink-0 flex items-center justify-center ${isDesktop ? 'w-[64px] h-[64px]' : 'w-[72px] h-[72px]'}`}
+                className={`h-full flex-shrink-0 flex items-center justify-center ${isDesktop ? 'w-[64px]' : 'w-[72px]'}`}
                 style={{ background: 'rgba(255,255,255,0.045)' }}
               >
                 <span className="text-white/30 text-[20px]">{icon}</span>
               </div>
               <div className={`flex-1 min-w-0 flex flex-col justify-center ${isDesktop ? 'px-2 py-1.5' : 'px-2.5 py-2'}`}>
                 <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
-                  {field.label}
+                  {label}
                 </div>
                 <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
                   {valuePreview || '\u00A0'}

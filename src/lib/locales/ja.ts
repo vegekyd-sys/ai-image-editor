@@ -4,7 +4,9 @@ const ja = {
 
   "design.autoLayer": "自動レイヤー分割",
   "design.autoLayerHint": "画像を個別に編集できるレイヤーに分割",
-  "design.touchHint": "長押しで移動 · ピンチで拡縮 · スワイプで切替",
+  "design.touchHint": "ドラッグ / ピンチ · 解除して閲覧",
+  "design.loadingEditables": "編集項目を読み込み中…",
+  "design.background": "背景",
   "design.autoLayerPrompt": (index: number) => `@${index} を自動でレイヤー分割し、元画像の見た目と重なりを保ち、被写体と背景を個別に編集できるようにしてください。文字の見た目を保ち、テキスト要素への変換は不要です。別の画像を生成せず、分割結果をそのままキャンバスに公開してください。`,
   "design.editingElement": (label: string) => `編集中：${label}`,
   "design.clearSelection": "選択を解除",

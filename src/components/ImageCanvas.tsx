@@ -238,11 +238,11 @@ export default function ImageCanvas({
   const timelineDesign = animatedDesigns?.get(currentIndex) || null;
   const currentDesign = activeDraftDesign || timelineDesign;
 
-  // Long content: height/width > 2.5 — disables zoom, enables scroll
+  // Match the inline Design layout threshold, including narrow phone screenshots.
   const isLongContent = (() => {
     const design = currentDesign;
-    if (design) return design.height / design.width > 2.5;
-    if (naturalDims.w && naturalDims.h) return naturalDims.h / naturalDims.w > 2.5;
+    if (design) return design.height / design.width > 2;
+    if (naturalDims.w && naturalDims.h) return naturalDims.h / naturalDims.w > 2;
     return false;
   })();
   const longScrollRef = useRef<HTMLDivElement>(null);
@@ -332,6 +332,7 @@ export default function ImageCanvas({
   }, [updateImageRect]);
 
   const editableGestureClaimed = useRef(false);
+  const touchAxis = useRef<'x' | 'y' | null>(null);
   const claimEditableGesture = useCallback(() => {
     editableGestureClaimed.current = true;
     swiping.current = false;
@@ -350,8 +351,8 @@ export default function ImageCanvas({
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;
     if ((e.target as Element).closest?.('.moveable-control')) { claimEditableGesture(); return; }
-    if (e.touches.length === 1) editableGestureClaimed.current = false;
-    if (selectedEditableId && e.touches.length > 1) { claimEditableGesture(); return; }
+    if (e.touches.length === 1) { editableGestureClaimed.current = false; touchAxis.current = null; }
+    if (selectedEditableId) { claimEditableGesture(); return; }
     if (e.touches.length === 2) {
       // Pinch start — skip for video entry and long content
       if (isVideoEntry || isLongContent) return;
@@ -368,6 +369,7 @@ export default function ImageCanvas({
     const touch = e.touches[0];
     touchStartX.current = touch.clientX;
     touchStartY.current = touch.clientY;
+    lastPanPos.current = { x: touch.clientX, y: touch.clientY };
 
     if (!isVideoEntry && scale > 1) {
       // Pan mode when zoomed (not for video)
@@ -408,6 +410,14 @@ export default function ImageCanvas({
       const touch = e.touches[0];
       const dx = Math.abs(touch.clientX - touchStartX.current);
       const dy = Math.abs(touch.clientY - touchStartY.current);
+      if (!touchAxis.current && Math.max(dx, dy) > 8) touchAxis.current = dx > dy ? 'x' : 'y';
+      if (touchAxis.current === 'y') {
+        swiping.current = false;
+        if (isLongContent && longScrollRef.current) {
+          longScrollRef.current.scrollTop -= touch.clientY - lastPanPos.current.y;
+          lastPanPos.current = { x: touch.clientX, y: touch.clientY };
+        }
+      }
 
       // Cancel long press if moved too much
       if (dx > 10 || dy > 10) {
@@ -419,7 +429,7 @@ export default function ImageCanvas({
       const rawDy = touch.clientY - touchStartY.current;
       const rawDx = Math.abs(touch.clientX - touchStartX.current);
       if (!isPullDown.current && !isPanning.current && !isPinching.current
-        && !isDesktop && !annotationMode && !selectedEditableId
+        && !isDesktop && !annotationMode && !selectedEditableId && !isLongContent
         && scale === 1 && onPullDown
         && rawDy > PULL_ACTIVATE && rawDy > rawDx * 2) {
         isPullDown.current = true;
@@ -447,7 +457,7 @@ export default function ImageCanvas({
         }));
       }
     }
-  }, [scale, isComparing, clearLongPress, annotationMode, isVideoEntry, isDraft, isDesktop, onPullDown, selectedEditableId]);
+  }, [scale, isComparing, clearLongPress, annotationMode, isVideoEntry, isDraft, isDesktop, onPullDown, selectedEditableId, isLongContent]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (annotationMode) return;

@@ -17,7 +17,8 @@ import {
   readEditableRuntimeId,
 } from '@/lib/editor/scene-registry';
 import { editableMediaImage, warmEditableAlpha, pickPaintedEditable } from '@/lib/editor/editable-image-alpha';
-import { createEditableTouchHold, editableLabelPosition } from '@/lib/editor/editable-touch-hold';
+import { editableDisplayLabel, editableLabelPosition } from '@/lib/editor/editable-label';
+import { useLocale } from '@/lib/i18n';
 import EditableSelectionTint from './EditableSelectionTint';
 
 interface DesignOverlayProps {
@@ -90,6 +91,7 @@ export default function DesignOverlay({
   playerRef,
   allowCanvasCoverSelection = false,
 }: DesignOverlayProps) {
+  const { t } = useLocale();
   const [rects, setRects] = useState<MeasuredRect[]>([]);
   const [scrollOffset, setScrollOffset] = useState(0);
   const rectsRef = useRef<MeasuredRect[]>([]);
@@ -313,7 +315,8 @@ export default function DesignOverlay({
         selectedFieldId: selectedFieldIdRef.current,
         moved: false,
       });
-      if (intent !== 'select') return;
+      // Touch taps select on release, so a version swipe cannot also select a layer.
+      if (intent !== 'select' || e.pointerType === 'touch') return;
       if (selectedFieldIdRef.current !== id) {
         const previous = selectedFieldIdRef.current;
         selectedFieldIdRef.current = id;
@@ -342,6 +345,10 @@ export default function DesignOverlay({
       const field = completedGesture.hitFieldId
         ? editables.find(item => item.id === completedGesture.hitFieldId)
         : null;
+      if (e.pointerType === 'touch' && intent === 'select' && field) {
+        selectedFieldIdRef.current = field.id;
+        onSelectFieldRef.current(field.id);
+      }
       const editActivation = resolveEditableEditActivation({
         fieldId: completedGesture.hitFieldId,
         fieldType: field?.type ?? null,
@@ -443,21 +450,14 @@ export default function DesignOverlay({
       return true;
     };
 
-    let pendingTouch: { target: HTMLElement; x: number; y: number } | null = null;
-    const hold = createEditableTouchHold(pointerId => {
-      const point = pendingTouch; pendingTouch = null;
-      if (!point || !startDrag(point.target, point.x, point.y, 'touch')) return;
-      if (interactionEl) interactionEl.dataset.editableGesture = 'drag';
-      onGestureStartRef.current?.();
-      try { point.target.setPointerCapture(pointerId); } catch { /* best effort */ }
-    });
+    let pendingTouch: { target: HTMLElement; x: number; y: number; id: number } | null = null;
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType !== 'touch') return;
-      if (pendingTouch || dragState || e.isPrimary === false) { hold.cancel(); pendingTouch = null; return; }
+      if (e.isPrimary === false) { pendingTouch = null; if (dragState) finishDrag(); return; }
+      if (pendingTouch || dragState) return;
       const target = e.target as HTMLElement | null;
       if (!target || target.closest('.moveable-control') || pickEditable(e.clientX, e.clientY) !== selectedFieldIdRef.current) return;
-      pendingTouch = { target, x: e.clientX, y: e.clientY };
-      hold.start(e.pointerId, e.clientX, e.clientY);
+      pendingTouch = { target, x: e.clientX, y: e.clientY, id: e.pointerId };
     };
 
     const updateDrag = (clientX: number, clientY: number) => {
@@ -477,7 +477,15 @@ export default function DesignOverlay({
     };
 
     const onPointerMove = (e: PointerEvent) => {
-      hold.move(e.pointerId, e.clientX, e.clientY);
+      const point = pendingTouch;
+      if (point?.id === e.pointerId && Math.hypot(e.clientX - point.x, e.clientY - point.y) > EDITABLE_POINTER_MOVE_THRESHOLD) {
+        pendingTouch = null;
+        if (startDrag(point.target, point.x, point.y, 'touch')) {
+          if (interactionEl) interactionEl.dataset.editableGesture = 'drag';
+          onGestureStartRef.current?.();
+          try { point.target.setPointerCapture(e.pointerId); } catch { /* best effort */ }
+        }
+      }
       if (!dragState) return;
       pendingDragPoint = { x: e.clientX, y: e.clientY };
       if (!dragRaf) dragRaf = requestAnimationFrame(flushDrag);
@@ -485,7 +493,7 @@ export default function DesignOverlay({
     };
 
     const finishDrag = () => {
-      hold.cancel(); pendingTouch = null;
+      pendingTouch = null;
       if (interactionEl) delete interactionEl.dataset.editableGesture;
       if (!dragState) return;
       if (dragRaf) {
@@ -515,7 +523,6 @@ export default function DesignOverlay({
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', finishDrag);
       window.removeEventListener('pointercancel', finishDrag);
-      hold.cancel();
       if (interactionEl) delete interactionEl.dataset.editableGesture;
       if (dragRaf) cancelAnimationFrame(dragRaf);
     };
@@ -614,6 +621,7 @@ export default function DesignOverlay({
         return (
           <div
             data-editable-label={selectedFieldId}
+            title={field.label}
             className="absolute px-1.5 py-0.5 text-[10px] font-medium rounded-sm whitespace-nowrap pointer-events-none"
             style={{
               ...editableLabelPosition(selectedRect, overlayRef.current?.clientWidth || 0, overlayRef.current?.clientHeight || 0),
@@ -622,7 +630,7 @@ export default function DesignOverlay({
               color: 'white',
             }}
           >
-            {field.label}
+            {editableDisplayLabel(field, t('design.background'))}
           </div>
         );
       })()}
