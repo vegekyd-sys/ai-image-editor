@@ -39,7 +39,7 @@ afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); vi.unst
 describe('painted editable hit testing', () => {
   it('passes through clear front pixels and preserves painted stacking order', () => {
     const front = image('brother', [0, 255]), back = image('baby', [255, 255]);
-    vi.spyOn(document, 'elementsFromPoint').mockReturnValue([front, back]);
+    Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [front, back] });
     const rects = [{ id: 'brother', domEl: front }, { id: 'baby', domEl: back }];
     expect(pickPaintedEditable(rects, 25, 25)).toBe('baby');
     expect(pickPaintedEditable(rects, 75, 25)).toBe('brother');
@@ -47,13 +47,13 @@ describe('painted editable hit testing', () => {
 
   it('does not restore a rectangular hit when every layer is transparent', () => {
     const node = image('clear', [0, 0]);
-    vi.spyOn(document, 'elementsFromPoint').mockReturnValue([node]);
+    Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [node] });
     expect(pickPaintedEditable([{ id: 'clear', domEl: node }], 25, 25)).toBeNull();
   });
 
   it('allows an explicitly selected rear layer to move under an occluder', () => {
     const front = image('girl', [255, 255]), back = image('rocket', [255, 0]);
-    vi.spyOn(document, 'elementsFromPoint').mockReturnValue([front, back]);
+    Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [front, back] });
     expect(pickPaintedEditable([{ id: 'girl', domEl: front }, { id: 'rocket', domEl: back }], 25, 25)).toBe('girl');
     expect(isPaintedEditableHit(back, 25, 25)).toBe(true);
     expect(isPaintedEditableHit(back, 75, 25)).toBe(false);
@@ -64,7 +64,7 @@ describe('painted editable hit testing', () => {
     unreadable.add(front);
     let recovered: HTMLImageElement;
     vi.stubGlobal('Image', function () { recovered = image('cors-copy', [0, 255]); return recovered; });
-    vi.spyOn(document, 'elementsFromPoint').mockReturnValue([front, back]);
+    Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [front, back] });
     const rects = [{ id: 'brother', domEl: front }, { id: 'baby', domEl: back }];
     const pending = pendingEditableAlphaAtPoint(rects, 25, 25);
     expect(pending).not.toBeNull();
