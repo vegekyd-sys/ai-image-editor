@@ -322,6 +322,8 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.spatialExplainers.title': '用 3D 講清原理',
+  'changelog.spatialExplainers.1': 'Explainer Video 現在可以用真正的 3D 場景解釋空間關係、機械結構與剖面，在專案內預覽、調整並匯出影片。',
   'changelog.seedream55.title': "Seedream 5.5 上線",
   'changelog.seedream55.item1': "新增 Seedream 5.5 圖片模型，支援文字生圖、多圖參考與原圖編輯。",
   'changelog.seedream55.item2': "保留人物與畫面主體，逐步調整造型、場景和光影；也能產生透明 PNG 素材。",

@@ -280,6 +280,8 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.spatialExplainers.title': '用 3D 讲清原理',
+  'changelog.spatialExplainers.1': 'Explainer Video 现在可以用真正的 3D 场景解释空间关系、机械结构和剖面，在项目内预览、调整并导出视频。',
   'changelog.seedream55.title': "Seedream 5.5 上线",
   'changelog.seedream55.item1': "新增 Seedream 5.5 图片模型，支持文字生图、多图参考和原图编辑。",
   'changelog.seedream55.item2': "保持人物与画面主体，逐步调整造型、场景和光影；也能生成透明 PNG 素材。",

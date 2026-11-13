@@ -316,6 +316,8 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.spatialExplainers.title': '3D で仕組みをわかりやすく',
+  'changelog.spatialExplainers.1': 'Explainer Video で実際の 3D シーンを使い、空間の関係や機械の構造、断面を説明できるようになりました。プロジェクト内でプレビューと調整を行い、動画を書き出せます。',
   'changelog.seedream55.title': "Seedream 5.5 登場",
   'changelog.seedream55.item1': "Seedream 5.5 で、テキストからの画像生成、複数画像の参照、元画像の編集ができるようになりました。",
   'changelog.seedream55.item2': "人物や被写体を保ちながら、服装・背景・光を少しずつ調整。透明 PNG 素材の作成にも対応しています。",

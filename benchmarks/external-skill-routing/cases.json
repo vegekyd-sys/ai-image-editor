@@ -16,5 +16,11 @@
     "expected": "explainer-video",
     "media": "No media.",
     "prompt": "做一支30秒中文产品讲解视频，面向第一次使用的用户，有旁白和字幕，讲清这个产品如何工作。"
+  },
+  {
+    "id": "natural-spatial-explainer",
+    "expected": "explainer-video",
+    "media": "No media.",
+    "prompt": "给初中生做30秒月相讲解，用同一套真实3D日地月模型，先太空看光照，再从地球看同一颗月球。交付可编辑讲解片。"
   }
 ]

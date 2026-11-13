@@ -23,7 +23,7 @@ CI 检查当前源文件指纹与 `benchmarks/external-skill-routing/accepted.js
 pnpm run test:skill-routing -- --live --env <已有私密环境文件>
 ```
 
-现有三项实测覆盖长叙事、参考片精确复刻、产品讲解。测试使用实际 Agent prompt、工具 schema 和模型，只允许本地 `read_file` 执行，禁用 provider 执行工具，拦截其余工具。每例最多 5 步、0 重试，用户指令要求在媒体生成前停止；即便模型尝试生成也无法执行。仅有 Agent 推理成本，没有媒体生成或项目写入。它验证路由和规划，不代表完整视频成片验收，也不替代生产 CLI → worker 的全链路测试。
+现有四项实测覆盖长叙事、参考片精确复刻、产品讲解及 3D 空间原理讲解。测试使用实际 Agent prompt、工具 schema 和模型，只允许本地 `read_file` 执行，禁用 provider 执行工具，拦截其余工具。每例最多 5 步、0 重试，用户指令要求在媒体生成前停止；即便模型尝试生成也无法执行。仅有 Agent 推理成本，没有媒体生成或项目写入。它验证路由和规划，不代表完整视频成片验收，也不替代生产 CLI → worker 的全链路测试。
 
 ## CI 与发布
 

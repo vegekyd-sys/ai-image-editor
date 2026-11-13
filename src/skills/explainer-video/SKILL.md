@@ -19,6 +19,15 @@ metadata:
 
 # Explainer Video
 
+## Explain with 3D
+
+For requests to explain with real 3D elements, or when spatial relationships
+carry the idea (moon phases, mechanisms, cutaways), use the authored composition
+route below with frame-driven ThreeCanvas. The same scene should support the
+needed viewpoints. Editable labels sit outside the canvas. A 3D visual style
+alone may still use native generated footage. Let the user choose the topic;
+the moon-phase example is inspiration, not a required template.
+
 Choose the visual carrier before the runtime. Read
 `skills/_shared/native-audiovisual.md` first. Generated scenes within the selected
 model's single-call limit use `prompts/animate.md` and one `generate_animation`

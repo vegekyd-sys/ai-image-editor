@@ -280,6 +280,8 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.spatialExplainers.title': 'Explain ideas with 3D',
+  'changelog.spatialExplainers.1': 'Explainer Video can now explain spatial relationships, mechanisms and cutaways with real 3D scenes. Preview and adjust them in your project, then export a video.',
   'changelog.seedream55.title': "Seedream 5.5 is here",
   'changelog.seedream55.item1': "Create images with Seedream 5.5 using text, multiple references, or an existing image.",
   'changelog.seedream55.item2': "Keep your subject while refining styling, scenery, and lighting, or create transparent PNG assets.",
