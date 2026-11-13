@@ -251,6 +251,11 @@ const en = {
   'auth.resetPassword.success': 'Password updated!',
 
   // Project management
+  'project.empty': 'No projects yet',
+  'project.loadFailed': 'Could not load projects. Projects already shown have been kept.',
+  'project.retry': 'Retry',
+  'project.loadMore': 'Load more projects',
+  'project.loadingMore': 'Loading…',
   'project.untitled': 'Untitled',
   'project.rename': 'Rename',
   'project.delete': 'Delete project',

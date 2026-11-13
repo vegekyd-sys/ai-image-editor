@@ -293,6 +293,11 @@ const zhHant = {
   'privacy.lastUpdated': '最後更新：2026 年 8 月 8 日',
 
   // Project management
+  'project.empty': '還沒有專案',
+  'project.loadFailed': '專案清單暫時載入失敗，已顯示的專案已保留。',
+  'project.retry': '重試',
+  'project.loadMore': '載入更多專案',
+  'project.loadingMore': '正在載入…',
   'project.untitled': '未命名',
   'project.rename': '重新命名',
   'project.delete': '刪除專案',
