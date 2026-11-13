@@ -616,8 +616,11 @@ export default function RemotionRenderer({
         maxRight = Math.max(maxRight, (rect.right - canvasRect.left) / scale);
       });
 
-      const scrollHeight = Math.max(canvas?.scrollHeight || 0, wrapper.scrollHeight / scale);
-      const scrollWidth = Math.max(canvas?.scrollWidth || 0, wrapper.scrollWidth / scale);
+      // Player CSS dimensions are in source units. The outer viewport can
+      // resize before Player updates its scale; dividing that viewport's new
+      // height by the previous scale would repeatedly enlarge the canvas.
+      const scrollHeight = canvas ? canvas.scrollHeight : wrapper.scrollHeight / scale;
+      const scrollWidth = canvas ? canvas.scrollWidth : wrapper.scrollWidth / scale;
       const measuredHeight = Math.ceil(Math.max(maxBottom, scrollHeight, design.height));
       const measuredWidth = Math.ceil(Math.max(maxRight, scrollWidth, design.width));
       const source = maxBottom > scrollHeight ? 'editables' : 'scroll';

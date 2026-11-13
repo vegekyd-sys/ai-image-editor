@@ -68,3 +68,20 @@ it('measures overflowing long content in the letterboxed Player canvas coordinat
   await waitFor(() => expect(size).toHaveBeenCalledWith(expect.objectContaining({ height: 320 })));
   view.unmount();
 });
+
+it('ignores the outer viewport height while Player scale catches up after a resize', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ faces: [] })));
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const width = this.classList.contains('__remotion-player') || this.hasAttribute('data-editable') ? 100 : 200;
+    const height = this.hasAttribute('data-editable') ? 320 : 100;
+    return { x: 0, y: 0, top: 0, left: 0, right: width, bottom: height, width, height, toJSON: () => ({}) };
+  });
+  vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('__remotion-player') ? 340 : 3000;
+  });
+  const size = vi.fn();
+  const view = render(<RemotionRenderer design={{ width: 100, height: 100, code: 'function Composition() { return null }', props: {} }} onContentSize={size} />);
+  await waitFor(() => expect(size).toHaveBeenCalledWith(expect.objectContaining({ height: 340 })));
+  expect(size.mock.calls.every(([value]) => value.height === 340)).toBe(true);
+  view.unmount();
+});
