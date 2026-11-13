@@ -32,7 +32,7 @@ describe('DesignOverlay moveable guideline regression guards', () => {
   });
 
   it('keeps fallback drag from stealing desktop Moveable drag events', () => {
-    expect(source).toContain('if (targetEl.closest(\'.moveable-area\')) return false;');
+    expect(source).toContain('if (targetEl.closest(\'.moveable-area\') && !touchGestures) return false;');
     expect(source).toContain("if (pointerType !== 'touch') return false;");
     expect(source).not.toContain("addEventListener('mousedown'");
     expect(source).not.toContain("addEventListener('mousemove'");

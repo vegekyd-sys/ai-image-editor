@@ -92,6 +92,34 @@ export function sampleEditableImage(image: HTMLImageElement, x: number, y: numbe
   return alpha.data[(py * alpha.width + px) * 4 + 3] > 8;
 }
 
+/** An explicitly selected layer can move through occluding layers, but its own
+ * transparent padding must still pass taps/drags through to visible content. */
+export function isPaintedEditableHit(element: HTMLElement, x: number, y: number): boolean {
+  const r = element.getBoundingClientRect();
+  if (x < r.left || x > r.right || y < r.top || y > r.bottom) return false;
+  const image = editableMediaImage(element);
+  if (!image) return true;
+  if (!image.complete || !image.naturalWidth) return false;
+  const painted = sampleEditableImage(image, x, y);
+  const state = cache.get(image.currentSrc || image.src);
+  return painted === true || (painted === null && (!state?.loading || state.failed === true));
+}
+
+/** Wait only for masks already being recovered through CORS, not every scene asset. */
+export function pendingEditableAlphaAtPoint(rects: Array<{ domEl: HTMLElement }>, x: number, y: number): Promise<void> | null {
+  const pending: Promise<void>[] = [];
+  for (const { domEl } of rects) {
+    const r = domEl.getBoundingClientRect();
+    if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue;
+    const image = editableMediaImage(domEl);
+    if (!image) continue;
+    warmEditableAlpha(image);
+    const state = cache.get(image.currentSrc || image.src);
+    if (state?.loading && !state.alpha && !state.failed) pending.push(state.loading);
+  }
+  return pending.length ? Promise.all(pending).then(() => {}) : null;
+}
+
 export function pickPaintedEditable(rects: Array<{ id: string; domEl: HTMLElement }>, x: number, y: number): string | null {
   const hits = rects.filter(({ domEl }) => { const r = domEl.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; });
   const paintOrder = new Map<string, number>();
@@ -105,5 +133,5 @@ export function pickPaintedEditable(rects: Array<{ id: string; domEl: HTMLElemen
     // Keep un-readable external images selectable rather than inventing alpha.
     if (!image || sampleEditableImage(image, x, y) !== false) return hit.id;
   }
-  return hits[0]?.id ?? null;
+  return null;
 }

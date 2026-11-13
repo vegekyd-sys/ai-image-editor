@@ -16,7 +16,7 @@ import {
   closestEditableRuntimeElement,
   readEditableRuntimeId,
 } from '@/lib/editor/scene-registry';
-import { editableMediaImage, warmEditableAlpha, pickPaintedEditable } from '@/lib/editor/editable-image-alpha';
+import { editableMediaImage, warmEditableAlpha, pickPaintedEditable, isPaintedEditableHit, pendingEditableAlphaAtPoint } from '@/lib/editor/editable-image-alpha';
 import { editableDisplayLabel, editableLabelPosition } from '@/lib/editor/editable-label';
 import { useLocale } from '@/lib/i18n';
 import EditableSelectionTint from './EditableSelectionTint';
@@ -253,6 +253,8 @@ export default function DesignOverlay({
   // canvas playback from competing with one another.
   useEffect(() => {
     if (!interactionEl) return;
+    let disposed = false;
+    let pointerSequence = 0;
     let lastCompletedTap: EditableTapCandidate | null = null;
     let activeTouches = 0;
     let gesture: {
@@ -275,6 +277,7 @@ export default function DesignOverlay({
 
     const handlePointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
+      pointerSequence++;
       const eventTarget = e.target as HTMLElement;
       if (eventTarget.closest?.('button, [data-remotion-seek], .moveable-control')) {
         lastCompletedTap = null;
@@ -285,7 +288,9 @@ export default function DesignOverlay({
       const directTarget = closestEditableRuntimeElement(eventTarget);
       let id: string | null = null;
       if (overlayRef.current) id = pickEditable(e.clientX, e.clientY);
-      id ??= directTarget ? readEditableRuntimeId(directTarget) : null;
+      // A fully transparent image is not a hit, even when native hit testing
+      // reports its rectangular DOM box as the event target.
+      id ??= directTarget && !editableMediaImage(directTarget) ? readEditableRuntimeId(directTarget) : null;
       if (id && !editables.some(f => f.id === id)) id = null;
       const hitRect = id ? rectsRef.current.find(rect => rect.id === id) : null;
       const hitTarget = hitRect?.domEl ?? directTarget;
@@ -336,33 +341,47 @@ export default function DesignOverlay({
       if (interactionEl.dataset.editableGesture) { gesture = null; lastCompletedTap = null; return; }
       const completedGesture = gesture;
       gesture = null;
-      const intent = resolveEditablePointerIntent({
-        hitFieldId: completedGesture.hitFieldId,
-        hitIsCanvasCover: completedGesture.hitIsCanvasCover,
-        selectedFieldId: selectedFieldIdRef.current,
-        moved: completedGesture.moved,
-      });
-      const field = completedGesture.hitFieldId
-        ? editables.find(item => item.id === completedGesture.hitFieldId)
+      const complete = () => {
+        const intent = resolveEditablePointerIntent({
+          hitFieldId: completedGesture.hitFieldId,
+          hitIsCanvasCover: completedGesture.hitIsCanvasCover,
+          selectedFieldId: selectedFieldIdRef.current,
+          moved: completedGesture.moved,
+        });
+        const field = completedGesture.hitFieldId
+          ? editables.find(item => item.id === completedGesture.hitFieldId)
+          : null;
+        if (e.pointerType === 'touch' && intent === 'select' && field) {
+          selectedFieldIdRef.current = field.id;
+          onSelectFieldRef.current(field.id);
+        }
+        const editActivation = resolveEditableEditActivation({
+          fieldId: completedGesture.hitFieldId,
+          fieldType: field?.type ?? null,
+          selectedFieldId: selectedFieldIdRef.current,
+          moved: completedGesture.moved,
+          now: Date.now(),
+          previousTap: lastCompletedTap,
+        });
+        lastCompletedTap = editActivation.nextTap;
+        if (activeTouches <= 1 && editActivation.shouldEdit && completedGesture.hitFieldId) {
+          onStartEditRef.current?.(completedGesture.hitFieldId);
+          return;
+        }
+        if (intent === 'canvas-tap') onCanvasTapRef.current?.();
+      };
+      const pending = !completedGesture.moved && e.pointerType === 'touch'
+        ? pendingEditableAlphaAtPoint(rectsRef.current, completedGesture.startX, completedGesture.startY)
         : null;
-      if (e.pointerType === 'touch' && intent === 'select' && field) {
-        selectedFieldIdRef.current = field.id;
-        onSelectFieldRef.current(field.id);
-      }
-      const editActivation = resolveEditableEditActivation({
-        fieldId: completedGesture.hitFieldId,
-        fieldType: field?.type ?? null,
-        selectedFieldId: selectedFieldIdRef.current,
-        moved: completedGesture.moved,
-        now: Date.now(),
-        previousTap: lastCompletedTap,
+      if (!pending) { complete(); return; }
+      const sequence = pointerSequence;
+      void pending.then(() => {
+        if (disposed || sequence !== pointerSequence) return;
+        completedGesture.hitFieldId = pickEditable(completedGesture.startX, completedGesture.startY);
+        const target = rectsRef.current.find(rect => rect.id === completedGesture.hitFieldId)?.domEl;
+        completedGesture.hitIsCanvasCover = !allowCanvasCoverSelection && Boolean(target?.hasAttribute('data-editable-canvas-cover'));
+        complete();
       });
-      lastCompletedTap = editActivation.nextTap;
-      if (activeTouches <= 1 && editActivation.shouldEdit && completedGesture.hitFieldId) {
-        onStartEditRef.current?.(completedGesture.hitFieldId);
-        return;
-      }
-      if (intent === 'canvas-tap') onCanvasTapRef.current?.();
     };
     const handlePointerCancel = (e: PointerEvent) => {
       if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
@@ -381,6 +400,7 @@ export default function DesignOverlay({
     interactionEl.addEventListener('pointercancel', handlePointerCancel, { capture: true });
     interactionEl.addEventListener('dragstart', handleDragStart);
     return () => {
+      disposed = true;
       interactionEl.removeEventListener('pointerdown', handlePointerDown, { capture: true });
       interactionEl.removeEventListener('pointermove', handlePointerMove, { capture: true });
       interactionEl.removeEventListener('pointerup', handlePointerUp, { capture: true });
@@ -389,8 +409,8 @@ export default function DesignOverlay({
     };
   }, [interactionEl, editables, pickEditable, allowCanvasCoverSelection]);
 
-  // Touch-only fallback drag. Desktop/moveable-area drags must stay on Moveable
-  // so snap guidelines render during movement.
+  // Touch-only fallback drag, including the Moveable selection surface.
+  // Desktop drags stay on Moveable so alignment guidelines remain visible.
   useEffect(() => {
     const overlayEl = overlayRef.current;
     if (!overlayEl || !containerEl) return;
@@ -427,14 +447,11 @@ export default function DesignOverlay({
       const fieldId = selectedFieldIdRef.current;
       if (!fieldId) return false;
       if (!targetEl || targetEl.closest('.moveable-control')) return false;
-      if (targetEl.closest('.moveable-area')) return false;
+      if (targetEl.closest('.moveable-area') && !touchGestures) return false;
       if (pointerType !== 'touch') return false;
 
-      const isSelectedHit = pickEditable(clientX, clientY) === fieldId;
-      if (!isSelectedHit) return false;
-
       const target = rectsRef.current.find(rect => rect.id === fieldId)?.domEl ?? null;
-      if (!target) return false;
+      if (!target || !isPaintedEditableHit(target, clientX, clientY)) return false;
       const offset = readCurrentOffset(target, fieldId);
       dragState = {
         fieldId,
@@ -456,7 +473,8 @@ export default function DesignOverlay({
       if (e.isPrimary === false) { pendingTouch = null; if (dragState) finishDrag(); return; }
       if (pendingTouch || dragState) return;
       const target = e.target as HTMLElement | null;
-      if (!target || target.closest('.moveable-control') || pickEditable(e.clientX, e.clientY) !== selectedFieldIdRef.current) return;
+      const selected = rectsRef.current.find(rect => rect.id === selectedFieldIdRef.current)?.domEl;
+      if (!target || target.closest('.moveable-control') || !selected || !isPaintedEditableHit(selected, e.clientX, e.clientY)) return;
       pendingTouch = { target, x: e.clientX, y: e.clientY, id: e.pointerId };
     };
 
@@ -526,7 +544,7 @@ export default function DesignOverlay({
       if (interactionEl) delete interactionEl.dataset.editableGesture;
       if (dragRaf) cancelAnimationFrame(dragRaf);
     };
-  }, [containerEl, interactionEl, measure, onUpdateProp, props, pickEditable]);
+  }, [containerEl, interactionEl, measure, onUpdateProp, props, touchGestures]);
 
   // ── Container-level pinch-to-scale ──
   // Single implementation: works regardless of where fingers land.
@@ -674,7 +692,7 @@ export default function DesignOverlay({
               onGestureStartRef.current?.();
               const input = event.inputEvent;
               const point = input?.touches?.[0] || input;
-              if (typeof point?.clientX === 'number' && pickEditable(point.clientX, point.clientY) !== selectedFieldId) {
+              if (typeof point?.clientX === 'number' && !isPaintedEditableHit(selectedRect.domEl, point.clientX, point.clientY)) {
                 event.stopDrag(); return false;
               }
               const { set } = event;
