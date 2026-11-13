@@ -88,4 +88,24 @@ describe('new project Tips startup', () => {
     expect(screen.getByTestId('editor').getAttribute('data-tips-status')).toBe('loading');
     expect(screen.queryByRole('button', { name: '重新加载修图建议' })).toBeNull();
   });
+
+  it('leaves cached suggestions ready without starting another request', () => {
+    render(<LocaleProvider initialLocale="zh"><Editor projectId="cached-project" initialSnapshots={[
+      { id: 'cached-image', image: source, messageId: '', tips: [{
+        emoji: '✨', label: '已有建议', desc: '已有建议说明', category: 'enhance',
+        editPrompt: 'Keep the image unchanged.', previewStatus: 'none',
+      }] },
+    ]} /></LocaleProvider>);
+    expect(screen.getByTestId('editor').getAttribute('data-tips-status')).toBe('ready');
+    expect(screen.getByText('已有建议')).toBeTruthy();
+    expect(mocks.compress).not.toHaveBeenCalled();
+  });
+
+  it('releases startup loading if image persistence fails', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mount(vi.fn().mockRejectedValue(new Error('Test persistence failure')));
+    expect(await screen.findByRole('button', { name: '重新加载修图建议' })).toBeTruthy();
+    expect(screen.getByTestId('editor').getAttribute('data-tips-status')).toBe('empty');
+    log.mockRestore();
+  });
 });
