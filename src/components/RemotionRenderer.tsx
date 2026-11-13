@@ -401,6 +401,14 @@ export default function RemotionRenderer({
   reportContextRef.current = { projectId, snapshotId };
   designPropsRef.current = design.props || {};
 
+  const onLoadingRef = useRef(onLoading);
+  onLoadingRef.current = onLoading;
+  const compileLoadingRef = useRef(true);
+  const inputLoadingRef = useRef(true);
+  const inputSnapshotRef = useRef<string | undefined>(undefined);
+  const inputReadyRef = useRef(false);
+  const notifyLoading = useCallback(() => onLoadingRef.current?.(compileLoadingRef.current || inputLoadingRef.current), []);
+
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
   const [inputProps, setInputProps] = useState<Record<string, unknown>>(design.props || {});
   const [compileError, setCompileError] = useState<string | null>(null);
@@ -430,7 +438,8 @@ export default function RemotionRenderer({
   useEffect(() => {
     let cancelled = false;
     const blobUrls: string[] = [];
-    onLoading?.(true);
+    compileLoadingRef.current = true;
+    notifyLoading();
     (async () => {
       try {
         await preloadBabel().catch(() => {});
@@ -494,21 +503,22 @@ export default function RemotionRenderer({
               // deferred component already references those versioned family
               // names, so registering the faces reflows it in place without
               // resetting playback.
-              onLoading?.(false);
+              compileLoadingRef.current = false;
+              notifyLoading();
             });
           }
         }
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
         setComponent(() => comp);
-        if (fontsSettled) onLoading?.(false);
+        if (fontsSettled) { compileLoadingRef.current = false; notifyLoading(); }
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[RemotionRenderer] init failed:', msg);
         setCompileError(msg);
         reportPreviewFailureRef.current('player-init', e, { recovered: false });
-        onLoading?.(false);
+        compileLoadingRef.current = false; inputLoadingRef.current = false; notifyLoading();
       }
     })();
     return () => {
@@ -516,13 +526,14 @@ export default function RemotionRenderer({
       blobUrls.forEach(url => URL.revokeObjectURL(url));
     };
 
-  }, [design.code, design.fontSubstitutions, retryToken]);
+  }, [design.code, design.fontSubstitutions, retryToken, notifyLoading]);
 
   // Editable text/media/transform changes should update Player input props
   // without recompiling the composition, fonts, and code.
   useEffect(() => {
     let cancelled = false;
     const newBlobUrls: string[] = [];
+    if (!inputReadyRef.current || inputSnapshotRef.current !== snapshotId) { inputLoadingRef.current = true; notifyLoading(); }
     const discardNewBlobUrls = () => {
       const discarded = new Set(newBlobUrls);
       inputPropImageCacheRef.current.forEach((blobUrl, sourceUrl) => {
@@ -551,11 +562,13 @@ export default function RemotionRenderer({
         return;
       }
       setInputProps(resolved);
+      inputReadyRef.current = true; inputSnapshotRef.current = snapshotId;
+      inputLoadingRef.current = false; notifyLoading();
     })();
     return () => {
       cancelled = true;
     };
-  }, [design.props]);
+  }, [design.props, snapshotId, notifyLoading]);
 
   useEffect(() => {
     inputPropImageCacheMountedRef.current = true;

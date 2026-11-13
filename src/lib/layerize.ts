@@ -162,18 +162,19 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
   const deliveryStarted = Date.now();
   const rows = [...(task.result_data ?? [])].sort((a, b) => a.z_index - b.z_index);
   if (rows.length < 2 || rows.length > job.input.maxOutputs! || rows[0].z_index !== 0 || new Set(rows.map(r => r.z_index)).size !== rows.length || rows.some(r => !Number.isInteger(r.z_index) || r.z_index < 0)) throw new Error('Provider output inventory does not satisfy the layer contract.');
-  const decoded = await mapLayers(rows, async row => {
+  const [decoded, source] = await Promise.all([mapLayers(rows, async row => {
     const bytes = await readProviderImage(row.url, 50 * 1024 * 1024, { evolinkAsset: true });
     const image = sharp(bytes, { failOn: 'error', limitInputPixels: 4_624_220 });
     const meta = await image.metadata();
     if (meta.format !== 'png' || !meta.width || !meta.height || (meta.pages ?? 1) !== 1) throw new Error('Layer output is not a valid PNG.');
     if (row.z_index > 0 && (!meta.hasAlpha || (await image.stats()).channels.at(-1)!.min === 255)) throw new Error('Foreground layer did not contain native alpha.');
-    return { row, bytes, width: meta.width, height: meta.height };
-  });
+    const url = await permanent(owner, `${owner.projectId}/layerize/${job.id}/layer-${row.z_index}.png`, bytes, 'image/png');
+    return { row, bytes, url, width: meta.width, height: meta.height };
+  }), readProviderImage(job.input.imageUrl, 30 * 1024 * 1024)]);
   const width = decoded[0].width, height = decoded[0].height;
   const layers: LayerizeLayer[] = await mapLayers(decoded, async item => {
     const { row } = item;
-    const url = await permanent(owner, `${owner.projectId}/layerize/${job.id}/layer-${row.z_index}.png`, item.bytes, 'image/png');
+    const url = item.url;
     const box = row.z_index === 0 ? [0, 0, width, height] as [number, number, number, number] : bounds(row.bounding_box?.absolute, width, height);
     const layer: LayerizeLayer = { z: row.z_index, url, width: item.width, height: item.height, bounds: box, name: String(row.name || row.description || `Layer ${row.z_index}`).slice(0, 120) };
     if (row.text_recognition?.lines?.length) {
@@ -189,13 +190,11 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
     return layer;
   });
   const supplierCostUsd = layerizeSupplierCost(layers);
-  const source = await readProviderImage(job.input.imageUrl, 30 * 1024 * 1024);
   if (sha(source) !== job.sourceSha256) throw new Error('Source image changed; retain this task for reconciliation.');
   const { order: stackOrder, ...reconstruction } = await inferLayerizeStack(source, width, height,
     layers.map((layer, index) => ({ ...layer, bytes: decoded[index].bytes })));
   const manifest: LayerizeManifest = { version: 1, taskId: task.id, width, height, sourceSha256: job.sourceSha256, supplierCostUsd, layers, stackOrder, reconstruction };
   const manifestPath = `${owner.projectId}/layerize/${job.id}/manifest.json`;
-  await permanent(owner, manifestPath, JSON.stringify(manifest), 'application/json');
   const design = buildLayerizeDesign(manifest, job.input.editableText);
   const invalid = validateDesign(design); if (invalid) throw new Error(`Design validation failed: ${invalid}`);
   const posterStarted = Date.now();
@@ -216,7 +215,10 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
     } finally { if (timer) clearTimeout(timer); }
   }
   console.info('[layerize-delivery]', JSON.stringify({ jobId: job.id, stage: 'poster', renderer: design.editables?.every(field => field.type === 'image') ? 'raster' : 'remotion', elapsedMs: Date.now() - posterStarted, layers: layers.length }));
-  const posterUrl = await permanent(owner, `${owner.projectId}/layerize/${job.id}/poster.jpg`, poster, 'image/jpeg');
+  const [posterUrl] = await Promise.all([
+    permanent(owner, `${owner.projectId}/layerize/${job.id}/poster.jpg`, poster, 'image/jpeg'),
+    permanent(owner, manifestPath, JSON.stringify(manifest), 'application/json'),
+  ]);
   const credits = await chargeCompletedProviderTask({ id: job.id, userId: owner.userId, model: LAYERIZE_MODEL, tool: 'decompose_image',
     fingerprint: job.fingerprint, taskId: task.id, supplierCostUsd, credits: providerCostToCredits(supplierCostUsd, job.markup), attribution: job.attribution });
   const published = await publishDesignSnapshot({ supabase: getSupabaseAdmin(), userId: owner.userId, projectId: owner.projectId,

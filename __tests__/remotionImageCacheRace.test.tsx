@@ -8,6 +8,29 @@ vi.mock('@/lib/evalRemotionJSX', () => ({ preloadBabel: async () => {}, evalRemo
 vi.mock('@/remotion/font-catalog', async original => ({ ...await original<any>(), prepareRemotionFontCodeFromBundledCatalog: () => ({ code: '', defaultFontFamily: 'Inter' }), prepareAndLoadRemotionFontsWithTiming: async () => ({ prepared: { code: '', defaultFontFamily: 'Inter' }, timing: {} }), validateRemotionFontManifest: (value: unknown) => value }));
 import RemotionRenderer from '@/components/RemotionRenderer';
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it('keeps the loading poster until both compilation and the new snapshot images are ready', async () => {
+  const pending: Array<(value: Response) => void> = [];
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:ready');
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  vi.stubGlobal('fetch', vi.fn((url: string) => url === '/api/remotion/fonts' ? Promise.resolve(Response.json({ faces: [] })) : new Promise<Response>(resolve => pending.push(resolve))));
+  const onLoading = vi.fn();
+  const design = { width: 100, height: 100, code: 'function Composition() { return null }', props: { image: 'https://example.com/first.png' } };
+  const view = render(<RemotionRenderer design={design} snapshotId="first" onLoading={onLoading} />);
+  await waitFor(() => expect(view.getByTestId('inputs')).toBeTruthy());
+  expect(onLoading.mock.calls.at(-1)).toEqual([true]);
+  await act(async () => { pending[0](new Response('first', { headers: { 'content-type': 'image/png' } })); });
+  await waitFor(() => expect(onLoading.mock.calls.at(-1)).toEqual([false]));
+  view.rerender(<RemotionRenderer design={{ ...design, props: { image: 'https://example.com/second.png' } }} snapshotId="second" onLoading={onLoading} />);
+  await waitFor(() => expect(pending).toHaveLength(2));
+  expect(onLoading.mock.calls.at(-1)).toEqual([true]);
+  await act(async () => { pending[1](new Response('second', { headers: { 'content-type': 'image/png' } })); });
+  await waitFor(() => expect(onLoading.mock.calls.at(-1)).toEqual([false]));
+  onLoading.mockClear();
+  view.rerender(<RemotionRenderer design={{ ...design, props: { image: 'https://example.com/second.png', _pos_image: { x: 10, y: 0 } } }} snapshotId="second" onLoading={onLoading} />);
+  await waitFor(() => expect(view.getByTestId('inputs').textContent).toContain('_pos_image'));
+  expect(onLoading).not.toHaveBeenCalledWith(true);
+  view.unmount();
+});
 it('keeps image URLs borrowed by a later props update alive until Player unmount', async () => {
   const pending: Array<(value: Response) => void> = [];
   const create = vi.fn().mockImplementation(() => `blob:preview-${create.mock.calls.length}`);
