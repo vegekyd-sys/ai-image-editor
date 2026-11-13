@@ -18,6 +18,7 @@ import ShareButton from '@/components/ShareButton';
 import SaveMediaDialog from '@/components/SaveMediaDialog';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
+import { useTipsPreparation } from '@/hooks/useTipsPreparation';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/babel-status';
@@ -181,6 +182,10 @@ export default function Editor({
   const [babelStatus, setBabelStatus] = useState<BabelStatus>(getBabelStatus().status);
   useEffect(() => subscribeBabelStatus(() => setBabelStatus(getBabelStatus().status)), []);
   const [isTipsFetching, setIsTipsFetching] = useState(false);
+  const { isStartupPending: isTipsStartupPending, preparingSnapshotIds,
+    beginStartup: beginTipsStartup, finishStartup: finishTipsStartup,
+    prepare: prepareTipsSnapshot } = useTipsPreparation(Boolean(pendingImages?.length));
+  const autoFetchTriggered = useRef<Set<string>>(new Set());
   const [failedCategories, setFailedCategories] = useState<Set<Tip['category']>>(new Set());
   const [viewIndex, setViewIndex] = useState(0);
   const [viewMode, setViewMode] = useState<'gui' | 'cui'>(() => getInitialEditorViewMode({
@@ -662,6 +667,16 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     ? draftParentIndex!
     : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0);
   const currentTips = snapshots[tipsSourceIndex]?.tips ?? [];
+  const tipsSourceSnapshot = snapshots[tipsSourceIndex];
+  // A first attempt is pending before the auto-fetch effect runs. Pending
+  // uploads also wait for persistence/compression before the network request.
+  // Neither state is a completed empty response that needs a retry button.
+  const autoTipsPending = Boolean(!inactive && !pendingImages?.length
+    && tipsSourceSnapshot && tipsSourceSnapshot.type !== 'video'
+    && !tipsSourceSnapshot.design?.animation
+    && !autoFetchTriggered.current.has(tipsSourceSnapshot.id));
+  const isTipsLoading = isTipsFetching || Boolean(tipsSourceSnapshot && currentTips.length === 0
+    && (isTipsStartupPending || preparingSnapshotIds.has(tipsSourceSnapshot.id) || autoTipsPending));
 
   // Auto-jump when timeline grows (commit adds snapshot) or shrinks (draft dismissed)
   const prevTimelineLen = useRef(0);
@@ -1387,18 +1402,19 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   ) => {
     const image = getImageForApi(snap);
     if (!snap || !image) return false;
-    if (image.startsWith('data:')) {
-      compressBase64Image(image, 600_000)
-        .then(img => fetchTipsForSnapshot(snap.id, img, previewMode, autoPreviewCategory))
-        .catch(err => {
+    void prepareTipsSnapshot(snap.id, async () => {
+      let preparedImage = image;
+      if (image.startsWith('data:')) {
+        try {
+          preparedImage = await compressBase64Image(image, 600_000);
+        } catch (err) {
           console.warn('[tips] failed to prepare image for tips retry:', err);
-          fetchTipsForSnapshot(snap.id, image, previewMode, autoPreviewCategory);
-        });
-    } else {
-      fetchTipsForSnapshot(snap.id, image, previewMode, autoPreviewCategory);
-    }
+        }
+      }
+      fetchTipsForSnapshot(snap.id, preparedImage, previewMode, autoPreviewCategory);
+    });
     return true;
-  }, [fetchTipsForSnapshot]);
+  }, [fetchTipsForSnapshot, prepareTipsSnapshot]);
 
   // Retry all failed categories at once
   const retryAllTips = useCallback(() => {
@@ -2438,6 +2454,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     if (!hasImages && !hasVideos && !hasPrompt) return;
     if (initHandled.current) return;
     initHandled.current = true;
+    if (hasImages) beginTipsStartup();
 
     const init = async () => {
       const isMulti = hasImages && pendingImages!.length > 1;
@@ -2498,22 +2515,21 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
       // ── Step 5: Tips (if images exist) ──
       if (hasImages) {
-        const tipsImage = (img: string) =>
-          img.startsWith('http') ? Promise.resolve(img) : compressBase64Image(img, 600_000);
         if (hasPrompt) {
           // Images + prompt: tips for first image only (no auto-preview — user is in CUI)
-          tipsImage(workSnapshots[0].image).then(img => fetchTipsForSnapshot(workSnapshots[0].id, img, 'none'));
+          startTipsFetchForSnapshot(workSnapshots[0], 'none');
         } else if (isMulti) {
           // Multi-image: tips for all, no preview
           for (const snap of workSnapshots) {
             if (snap.type === 'video') continue;
-            tipsImage(snap.image).then(img => fetchTipsForSnapshot(snap.id, img, 'none'));
+            startTipsFetchForSnapshot(snap, 'none');
           }
         } else {
           // Single image: tips with full preview
-          tipsImage(workSnapshots[0].image).then(img => fetchTipsForSnapshot(workSnapshots[0].id, img));
+          startTipsFetchForSnapshot(workSnapshots[0]);
         }
       }
+      finishTipsStartup();
 
       // ── Step 6: First-turn media understanding (no user prompt) ──
       if (!hasPrompt && hasImages && workSnapshots.length === 1 && !hasVideos) {
@@ -2568,13 +2584,15 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       }
     };
 
-    init();
-  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, pendingSkillLaunchContext, pendingAgentRunId, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, addMessage, isDesktop, t]);
+    void init().catch(error => {
+      finishTipsStartup();
+      console.error('Project initialization failed:', error);
+    });
+  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, pendingSkillLaunchContext, pendingAgentRunId, startTipsFetchForSnapshot, beginTipsStartup, finishTipsStartup, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, addMessage, isDesktop, t]);
 
   // Existing project/current timeline item with no tips — auto-fetch once per snapshot.
   // Do not mark a snapshot attempted until it has a usable image; cached projects can
   // briefly hydrate snapshot metadata before image/imageUrl is available.
-  const autoFetchTriggered = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (inactive) return;
     if (pendingImages?.length || isTipsFetching) return;
@@ -3532,7 +3550,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       data-testid="editor"
       role="main"
       aria-label={t('editor.workspace')}
-      data-tips-status={isTipsFetching ? 'loading' : (currentTips.length ? 'ready' : 'empty')}
+      data-tips-status={isTipsLoading ? 'loading' : (currentTips.length ? 'ready' : 'empty')}
       data-tips-count={snapshots.reduce((n, s) => n + (s.tips?.length || 0), 0)}
       data-agent-status={isAgentActive ? 'active' : 'idle'}
       data-snapshot-count={snapshots.length}
@@ -4133,7 +4151,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 ) : (
                   <TipsBar
                     tips={currentTips}
-                    isLoading={isTipsFetching}
+                    isLoading={isTipsLoading}
                     isEditing={isEditing}
                     onTipClick={handleTipInteraction}
                     onTipCommit={() => commitDraft()}
