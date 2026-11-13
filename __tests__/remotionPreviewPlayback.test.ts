@@ -180,8 +180,8 @@ describe('Remotion preview playback contract', () => {
 
     expect(rendererSource).toContain('const designPropsRef = useRef(design.props || {})')
     expect(rendererSource).toContain('designPropsRef.current = design.props || {}')
-    expect(rendererSource).toContain('design.fontSubstitutions, retryToken]')
-    expect(rendererSource).toContain('}, [design.props])')
+    expect(rendererSource).toContain('design.fontSubstitutions, retryToken, notifyLoading]')
+    expect(rendererSource).toContain('}, [design.props, snapshotId, notifyLoading])')
     expect(rendererSource).not.toContain('}, [design.code, design.fontSubstitutions, design.props])')
   })
 
@@ -196,7 +196,7 @@ describe('Remotion preview playback contract', () => {
     expect(rendererSource).toContain('The Player and media nodes stay mounted')
     expect(rendererSource).not.toContain('void fontCompile.then(result => {\n              if (result.component) setComponent')
     expect(rendererSource).toContain('do not present the\n              // interactive preview as ready until the same pinned FontFace')
-    expect(rendererSource).toContain('if (fontsSettled) onLoading?.(false)')
+    expect(rendererSource).toContain('if (fontsSettled) { compileLoadingRef.current = false; notifyLoading(); }')
     expect(rendererSource).toContain('void fontCompile.then(result => {\n              if (cancelled) return;')
     expect(rendererSource).toContain('isRecoverableRemotionPreviewError')
     expect(rendererSource).toContain("reportPreviewFailureRef.current('font-load'")
