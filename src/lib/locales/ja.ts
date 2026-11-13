@@ -316,6 +316,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.seedance25Flash.title': "Seedance 2.5 Flash が登場",
+  'changelog.seedance25Flash.item1': "480p/720pのテキスト生成、開始・終了フレーム、参照素材からの生成、動画編集に対応しました。",
+  'changelog.seedance25Flash.item2': "RetakeでFlashを選び、指定区間だけを作り直せます。区間外の映像と全体の長さを保ち、WebとCLIで利用できます。",
   'changelog.spatialExplainers.title': '3D で仕組みをわかりやすく',
   'changelog.spatialExplainers.1': 'Explainer Video で実際の 3D シーンを使い、空間の関係や機械の構造、断面を説明できるようになりました。プロジェクト内でプレビューと調整を行い、動画を書き出せます。',
   'changelog.seedream55.title': "Seedream 5.5 登場",

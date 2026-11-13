@@ -280,6 +280,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.seedance25Flash.title': "Seedance 2.5 Flash is here",
+  'changelog.seedance25Flash.item1': "Create 480p/720p videos from text, first/last frames or references, and edit existing clips with Seedance 2.5 Flash.",
+  'changelog.seedance25Flash.item2': "Choose Flash in Retake to redo a selected segment while keeping footage outside it and the full duration. Available on web and CLI.",
   'changelog.spatialExplainers.title': 'Explain ideas with 3D',
   'changelog.spatialExplainers.1': 'Explainer Video can now explain spatial relationships, mechanisms and cutaways with real 3D scenes. Preview and adjust them in your project, then export a video.',
   'changelog.seedream55.title': "Seedream 5.5 is here",

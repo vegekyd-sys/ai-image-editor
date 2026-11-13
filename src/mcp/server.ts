@@ -295,22 +295,23 @@ Tips:
 
   server.tool(
     'makaron_retake_video',
-    'Replace a numeric interval in one video and automatically return the complete video. Grok edits selections <=8.5s with source video only, Google Omni edits selections <=15s, and MiniMax H3 rebuilds via video references. These models have no native endpoint locks in Retake. Wan 3.0 Standard/Prime can rebuild the interval via reference-guided generation, without native endpoint locks. Default Kling 4.0 at 720p, source >=3s, original audio only (kling-4-flash: same rules, 720p, lower cost, explicit opt-in); choose another supported model explicitly for generated audio. Original audio and total duration are preserved. Poll makaron_get_video_status with the root taskId; do not submit again to retry delivery. Seconds use the original source timebase.',
+    'Replace a numeric interval in one video and automatically return the complete video. Grok edits selections <=8.5s with source video only, Google Omni edits selections <=15s, and MiniMax H3 rebuilds via video references. These models have no native endpoint locks in Retake. Wan 3.0 Standard/Prime can rebuild the interval via reference-guided generation, without native endpoint locks. Seedance 2.5 Flash: source >=4s, 480p/720p, original or generated selected audio; no exact final/middle-frame locks. Default Kling 4.0 at 720p, source >=3s, original audio only (kling-4-flash: same rules, 720p, lower cost, explicit opt-in); choose another supported model explicitly for generated audio. Original audio and total duration are preserved. Poll makaron_get_video_status with the root taskId; do not submit again to retry delivery. Seconds use the original source timebase.',
     {
       video_url: z.string().url(),
       start: z.number().nonnegative(),
       end: z.number().positive(),
       prompt: z.string().min(1),
       model: z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL),
+      video_resolution: z.enum(['480p','720p','768p','1080p']).optional().describe('Retake output quality; Flash supports480p/720p, default720p.'),
       audio_mode: z.enum(['original','generated']).default('original').describe('original keeps the complete source soundtrack; generated replaces only selected sound with synchronized generated audio.'),
       project_id: z.string().uuid().optional(),
       request_id: z.string().uuid().optional(),
     },
-    async ({ video_url, start, end, prompt, model, audio_mode, project_id, request_id }) => {
+    async ({ video_url, start, end, prompt, model, video_resolution, audio_mode, project_id, request_id }) => {
       try {
         if (!options?.userId || !options.submitVideo) throw new Error('Retake requires authenticated hosted video submission.');
         const result = await options.submitVideo({ images: [], script: prompt, videoUrl: video_url,
-          retake: { start, end, ...(audio_mode === 'generated' ? {audioMode:audio_mode} : {}) }, videoModel: model, projectId: project_id, billingRequestId: request_id,
+          retake: { start, end, ...(audio_mode === 'generated' ? {audioMode:audio_mode} : {}) }, videoModel: model, videoResolution: video_resolution, projectId: project_id, billingRequestId: request_id,
         }, 'makaron_retake_video');
         return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], isError: !result.success };
       } catch (e) {

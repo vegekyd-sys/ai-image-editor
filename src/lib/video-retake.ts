@@ -93,6 +93,10 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     if (input.retake.audioMode && !['original','generated'].includes(input.retake.audioMode)) throw new Error('Choose original or generated audio for local editing.')
     validateRetakeRange(input.retake)
     const model = resolveRetakeModel(input.videoModel)
+    if (model === 'seedance-2.5-flash') {
+      if (input.videoResolution && !['auto','480p','720p'].includes(input.videoResolution)) throw new Error('Seedance 2.5 Flash Retake supports 480p/720p only.')
+      if (input.retake.endFrame) throw new Error('Seedance 2.5 Flash video editing has no exact final-frame control. Use creative image references instead.')
+    }
     if ((model.startsWith('wan-3.0') || ['grok','google-omni','minimax-h3'].includes(model)) && input.retake.endFrame) throw new Error('This Retake model has no exact final-frame control. Choose a compatible model explicitly.');
     if ((model === 'kling-4' || model === 'kling-4-flash') && (input.retake.audioMode === 'generated' || input.retake.endFrame)) throw new Error(`${model === 'kling-4-flash' ? 'Kling 4.0 Flash' : 'Kling 4.0'} Retake preserves source audio and does not accept an exact final-frame control.`);
     const corrected = input.retake.correctedBoundaries
@@ -170,8 +174,8 @@ export async function createVideoRetake(input: CreateVideoInput): Promise<Create
     const useVideoReference = model !== 'fal-h3-max' || (!corrected && !input.retake.endFrame && !input.retake.cameraChange && input.retake.boundaryMode !== 'scene')
     const result = await createVideo({ ...input, retake: undefined, videoUrl: useVideoReference ? contextUrl : undefined, videoUrls: undefined,
       images: [...(boundaryFrames ? [boundaryFrames.startUrl, boundaryFrames.endUrl, ...(boundaryFrames.middle ? [boundaryFrames.middle.imageUrl] : [])] : []), ...referenceImages, ...(model !== 'fal-h3-max' && input.retake.endFrame ? [input.retake.endFrame.imageUrl] : [])], h3RetakeBoundaryFrames: boundaryFrames,
-      script: prompt, duration: model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,
-      aspectRatio, ...(plan.audioMode === 'generated' ? {generateAudio:true, keepOriginalSound:false} : {}),
+      script: prompt, duration: model === 'seedance-2.5-flash' ? undefined : model.startsWith('seedance-2.5') ? -1 : plan.generationDuration,
+      aspectRatio: model === 'seedance-2.5-flash' ? undefined : aspectRatio, ...(plan.audioMode === 'generated' ? {generateAudio:true, keepOriginalSound:false} : {}),
       referenceVideoDuration: useVideoReference ? plan.contextEnd - plan.contextStart : undefined, referenceVideoMetas: undefined,
       videoModel: model, videoResolution: job.resolution as CreateVideoInput['videoResolution'],
       videoOperation: model.startsWith('seedance-2.5') || ['kling-4','kling-4-flash','grok','google-omni'].includes(model) ? 'edit' : 'generate', videoReferType: 'feature',

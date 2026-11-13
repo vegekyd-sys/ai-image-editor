@@ -1299,6 +1299,13 @@ try {
     const request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
     assert.equal(request.body.params.name, 'makaron_retake_video');
     assert.deepEqual(request.body.params.arguments, { model: 'fal-h3-max', video_url: 'https://cdn.example/source.mp4', start: 2.5, end: 4.2, prompt: 'Make the umbrella red' });
+    await expectSuccess(['video','retake','--video','https://cdn.example/source.mp4','--start','1','--end','2','--prompt','Flash retake','--model','seedance-2.5-flash','--video-resolution','480p','--json']);
+    const flashRetake=requests.filter(r=>r.pathname==='/api/mcp').at(-1).body.params;
+    assert.equal(flashRetake.arguments.model,'seedance-2.5-flash');
+    assert.equal(flashRetake.arguments.video_resolution,'480p');
+    const beforeFlashReject=requests.length;
+    await expectFailure(['video','retake','--video','https://cdn.example/source.mp4','--start','1','--end','2','--prompt','Flash retake','--model','seedance-2.5-flash','--video-resolution','1080p']);
+    assert.equal(requests.length,beforeFlashReject);
     await expectSuccess(['video', 'retake', '--video', 'https://cdn.example/source.mp4', '--start', '2.5', '--end', '4.2', '--prompt', 'Use multiple camera angles', '--json']);
     assert.equal(requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params.arguments.model, 'kling-4');
     const count = requests.length;

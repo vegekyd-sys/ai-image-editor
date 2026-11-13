@@ -458,6 +458,8 @@ npx makaron-cli video status <taskId>
 npx makaron-cli video retake --video input.mp4 --start 2 --end 5 --prompt "Make the umbrella red" --project <id> --model seedance-2.5 --wait --json
 ```
 
+Seedance 2.5 Flash Retake: explicitly select `--model seedance-2.5-flash`; source >=4s, selection 0.1–15s, with at least 4s editing context. `--video-resolution 480p|720p` (default 720p); original audio is retained unless `--audio-mode generated` is explicit. No native exact final/middle-frame locks. The edited range is assembled back into the original duration; outside footage stays in place. Keep the request ID and poll the same root task.
+
 Video segment editing also works directly from natural-language chat, without a GUI selection:
 
 ```bash

@@ -280,6 +280,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.seedance25Flash.title': "Seedance 2.5 Flash 上线",
+  'changelog.seedance25Flash.item1': "新增 Seedance 2.5 Flash，支持 480p/720p 文生、首尾帧、参考生成和视频编辑。",
+  'changelog.seedance25Flash.item2': "Retake 可选择 Flash 重做指定片段，保留片段外的画面与总时长；网页和 CLI 同步支持。",
   'changelog.spatialExplainers.title': '用 3D 讲清原理',
   'changelog.spatialExplainers.1': 'Explainer Video 现在可以用真正的 3D 场景解释空间关系、机械结构和剖面，在项目内预览、调整并导出视频。',
   'changelog.seedream55.title': "Seedream 5.5 上线",
