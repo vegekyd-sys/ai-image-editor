@@ -1,8 +1,13 @@
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { transform } from 'sucrase';
+import { createEditableReactRuntime } from '@/lib/editor/editable-react-runtime';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildLayerizeDesign, layerizeSupplierCost, type LayerizeManifest } from '@/lib/layerize-design';
 import { layerizeRequest, submitLayerize, queryLayerize } from '@/lib/layerize-provider';
 import { validateDesign } from '@/lib/design-harness';
 import { providerCostToCredits } from '@/lib/billing/token-rates';
+import { normalizeLoadedDesignManifest } from '@/lib/editor/loaded-design-manifest';
 
 const manifest: LayerizeManifest = { version: 1, taskId: 'task-one', width: 1000, height: 700, sourceSha256: 'hash', supplierCostUsd: .0544, layers: [
   { z: 2, url: 'https://example.com/text.png', width: 1024, height: 1024, bounds: [100, 60, 700, 180], name: 'Title', text: { lines: [{ text: 'HELLO', bounds: [100, 60, 700, 180], font: 'Arial', color: '#123456', bold: true, italic: false }] } },
@@ -16,22 +21,43 @@ describe('Layerize standard design contract', () => {
     expect(design.editables?.map(item => item.id)).toEqual(['layer_0', 'layer_1', 'layer_2']);
     expect(new Set(design.editables?.map(item => item.propKey)).size).toBe(3);
     expect(design.code).toContain('"left":800,"top":450,"width":100,"height":100');
-    expect(design.code.indexOf('props.layer0Src')).toBeLessThan(design.code.indexOf('props.layer1Src'));
+    expect(design.code.indexOf('props.layer_0')).toBeLessThan(design.code.indexOf('props.layer_1'));
     expect(validateDesign(design)).toBeNull();
     expect(design.editables).toHaveLength(3);
     expect(design.editables?.every(item => item.type === 'image')).toBe(true);
+    const loaded = normalizeLoadedDesignManifest(design)!;
+    expect(loaded.editables).toEqual(design.editables);
+    expect(loaded.editables?.map(field => field.propKey)).toEqual(['layer_0', 'layer_1', 'layer_2']);
+    expect(normalizeLoadedDesignManifest(loaded)).toEqual(loaded);
+  });
+  it('keeps every media marker through the production React Proxy and isolates one source/transform change', () => {
+    const design = normalizeLoadedDesignManifest(buildLayerizeDesign(manifest))!;
+    const runtime = createEditableReactRuntime(React, 'video');
+    const exports: any = {};
+    const compiled = transform(design.code, { transforms: ['jsx', 'imports'] }).code;
+    new Function('require', 'exports', compiled)((name: string) => name === 'react' ? runtime.React : { AbsoluteFill: 'div', Img: 'img' }, exports);
+    const Component = runtime.wrap(exports.default, 'proxy');
+    const baseline = renderToStaticMarkup(React.createElement(Component, design.props));
+    expect((baseline.match(/data-editable=/g) || []).length).toBe(3);
+    const changed = renderToStaticMarkup(React.createElement(Component, { ...design.props, layer_1: 'https://example.com/replaced.png', _pos_layer_1: { x: 20, y: 10 }, _scale_layer_1: { w: 1.5, h: 1.5 } }));
+    expect(changed).toContain('https://example.com/replaced.png');
+    expect(changed).toContain('https://example.com/base.png');
+    expect(changed).toContain('https://example.com/text.png');
+    expect(changed).toContain('translate:20px 10px');
+    expect(changed).toContain('scale:1.5');
+    expect((changed.match(/data-editable=/g) || []).length).toBe(3);
   });
   it('explicit text mode uses normal editable text while raster mode keeps original PNG', () => {
     const text = buildLayerizeDesign(manifest, true), raster = buildLayerizeDesign(manifest);
-    expect(text.props?.layer2Text0).toBe('HELLO');
-    expect(text.editables?.at(-1)).toMatchObject({ type: 'text', propKey: 'layer2Text0' });
+    expect(text.props?.layer_2_text_0).toBe('HELLO');
+    expect(text.editables?.at(-1)).toMatchObject({ type: 'text', propKey: 'layer_2_text_0' });
     expect(text.code).toContain('fontFamily');
-    expect(raster.props?.layer2Src).toBe('https://example.com/text.png');
+    expect(raster.props?.layer_2).toBe('https://example.com/text.png');
     expect(validateDesign(text)).toBeNull();
     // Ordinary design properties stay isolated when one layer is changed.
-    text.props = { ...text.props, layer2Text0: 'WORLD', _pos_layer_1: { x: 20, y: 10 } };
-    expect(text.props.layer1Src).toBe('https://example.com/ball.png');
-    expect(text.props.layer0Src).toBe('https://example.com/base.png');
+    text.props = { ...text.props, layer_2_text_0: 'WORLD', _pos_layer_1: { x: 20, y: 10 } };
+    expect(text.props.layer_1).toBe('https://example.com/ball.png');
+    expect(text.props.layer_0).toBe('https://example.com/base.png');
   });
   it('bills actual output inventory including base, handles threshold, rounds the whole task once', () => {
     expect(layerizeSupplierCost([{ width: 2610, height: 1000 }, { width: 2611, height: 1000 }])).toBe(.0504);

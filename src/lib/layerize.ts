@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import sharp from 'sharp';
 import { getSupabaseAdmin } from './supabase/service';
 import * as workspace from './workspace';
@@ -20,23 +20,54 @@ export interface LayerizeJob {
   taskId?: string; error?: string; markup: number; attribution: BillingAttribution;
   snapshotId?: string; designPath?: string; posterUrl?: string; manifestPath?: string; credits?: number;
 }
-export interface LayerizeResult { jobId: string; projectId: string; status: LayerizeJob['status']; projectUrl: string; taskId?: string; snapshotId?: string; designPath?: string; posterUrl?: string; credits?: number; message?: string; design?: DesignPayload }
+export interface LayerizeResult { jobId: string; projectId: string; status: LayerizeJob['status']; projectUrl: string; taskId?: string; snapshotId?: string; designPath?: string; posterUrl?: string; credits?: number; message?: string; design?: DesignPayload; newlyPublished?: boolean }
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 function assertId(id: string) { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) throw new Error('Invalid project/job ID'); }
 const pathFor = (projectId: string, id: string) => `${projectId}/layerize/${id}/job.json`;
+function receiptSignature(owner: LayerizeOwner, job: LayerizeJob) {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error('Task receipt signing is not configured.');
+  // Workspace is user-editable: never trust a modified task, markup or attribution.
+  return createHmac('sha256', key).update(`layerize-v1:${owner.userId}:${owner.projectId}:`).update(JSON.stringify(job)).digest('hex');
+}
 async function ownerCheck(owner: LayerizeOwner) {
   assertId(owner.projectId);
   const { data, error } = await getSupabaseAdmin().from('projects').select('user_id').eq('id', owner.projectId).maybeSingle();
   if (error || data?.user_id !== owner.userId) throw new Error('Layerize project is not accessible.');
 }
+async function readFresh(owner: LayerizeOwner, path: string): Promise<unknown | null> {
+  const admin = getSupabaseAdmin();
+  const index = await admin.from('workspace_files').select('storage_url,updated_at').eq('user_id', owner.userId).eq('path', path).maybeSingle();
+  if (index.error) throw new Error('Task receipt lookup pending; do not resubmit.');
+  if (!index.data?.storage_url) return null;
+  // Receipts are mutable state, unlike media: bypass the workspace size-only mirror/cache.
+  // Derive the server-owned URL instead of fetching a user-editable index URL.
+  const url = new URL(admin.storage.from('images').getPublicUrl(`${owner.userId}/workspace/${path}`).data.publicUrl);
+  // GUI props saves can update Storage without changing the workspace index.
+  url.searchParams.set('receipt_version', `${index.data.updated_at}:${randomUUID()}`);
+  const file = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+  if (!file.ok) throw new Error('Task receipt read pending; do not resubmit.');
+  return file.json();
+}
 async function load(owner: LayerizeOwner, id: string): Promise<LayerizeJob | null> {
   assertId(id);
-  const file = await workspace.readFile(pathFor(owner.projectId, id), getSupabaseAdmin(), owner.userId);
-  return file ? JSON.parse(file.content) as LayerizeJob : null;
+  const stored = await readFresh(owner, pathFor(owner.projectId, id));
+  if (!stored) return null;
+  const { receiptSignature: signature, ...job } = stored as LayerizeJob & { receiptSignature: string };
+  const expected = receiptSignature(owner, job);
+  if (typeof signature !== 'string' || !/^[a-f0-9]{64}$/.test(signature) || !timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'))) throw new Error('Task receipt integrity check failed. Retain the original job; do not submit again.');
+  if (job.id !== id || job.projectId !== owner.projectId) throw new Error('Task receipt identity mismatch');
+  return job;
 }
 async function save(owner: LayerizeOwner, job: LayerizeJob) {
+  if (job.taskId && job.status !== 'completed') {
+    const current = await load(owner, job.id);
+    if (current?.status === 'completed') {
+      Object.assign(job, current); delete job.error; return;
+    }
+  }
   job.updatedAt = new Date().toISOString();
-  const stored = await workspace.writeFile(pathFor(owner.projectId, job.id), JSON.stringify(job), getSupabaseAdmin(), owner.userId, 'application/json');
+  const stored = await workspace.writeFile(pathFor(owner.projectId, job.id), JSON.stringify({ ...job, receiptSignature: receiptSignature(owner, job) }), getSupabaseAdmin(), owner.userId, 'application/json');
   if (!stored.success) throw new Error(`Task receipt persistence pending. Retain job ${job.id}; do not submit again.`);
 }
 function response(owner: LayerizeOwner, job: Pick<LayerizeJob, 'id' | 'status'> & Partial<LayerizeJob>): LayerizeResult {
@@ -57,6 +88,8 @@ export async function startLayerize(owner: LayerizeOwner, id: string, input: Lay
     if (previous.fingerprint !== fingerprint) throw new Error('Layerize request ID already belongs to different parameters.');
     return response(owner, previous);
   }
+  const settled = await getSupabaseAdmin().from('mcp_video_reservations').select('id').eq('id', id).maybeSingle();
+  if (settled.error || settled.data) throw new Error('This task ID needs receipt reconciliation. No new provider submission was made.');
   const rate = await getTokenRate(LAYERIZE_MODEL);
   if (!rate || rate.model_id !== LAYERIZE_MODEL || !Number.isFinite(rate.markup) || rate.markup <= 0) throw new Error('Layerize pricing is not configured. No provider task was submitted.');
   if (!process.env.EVOLINK_API_KEY?.trim()) throw new Error('EvoLink is not configured. No provider task was submitted.');
@@ -149,7 +182,15 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
   const design = buildLayerizeDesign(manifest, job.input.editableText);
   const invalid = validateDesign(design); if (invalid) throw new Error(`Design validation failed: ${invalid}`);
   const { renderDesignFrame } = await import('./remotion-server');
-  const poster = await renderDesignFrame(design, 0, { sandboxScope: `${owner.userId}:${owner.projectId}` });
+  const signal = AbortSignal.timeout(120_000);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let poster: Buffer;
+  try {
+    poster = await Promise.race([
+      renderDesignFrame(design, 0, { signal, sandboxScope: `${owner.userId}:${owner.projectId}` }),
+      new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('Design preview timed out; recover this same task.')), 120_000); }),
+    ]);
+  } finally { if (timeout) clearTimeout(timeout); }
   const posterUrl = await permanent(owner, `${owner.projectId}/layerize/${job.id}/poster.jpg`, poster, 'image/jpeg');
   const credits = await chargeCompletedProviderTask({ id: job.id, userId: owner.userId, model: LAYERIZE_MODEL, tool: 'decompose_image',
     fingerprint: job.fingerprint, taskId: task.id, supplierCostUsd, credits: providerCostToCredits(supplierCostUsd, job.markup), attribution: job.attribution });
@@ -158,7 +199,7 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
   job.status = 'completed'; job.snapshotId = published.snapshotId; job.designPath = published.designPath;
   job.posterUrl = published.posterUrl; job.manifestPath = manifestPath; job.credits = credits; job.error = undefined;
   await save(owner, job);
-  return { ...response(owner, job), design };
+  return { ...response(owner, job), design, newlyPublished: true };
 }
 
 export async function getLayerize(owner: LayerizeOwner, id: string): Promise<LayerizeResult> {
@@ -166,8 +207,8 @@ export async function getLayerize(owner: LayerizeOwner, id: string): Promise<Lay
   const job = await load(owner, id);
   if (!job) throw new Error('Layerize job not found. Use the original project and job ID.');
   if (job.status === 'completed' && job.designPath) {
-    const file = await workspace.readFile(job.designPath, getSupabaseAdmin(), owner.userId);
-    return { ...response(owner, job), ...(file ? { design: JSON.parse(file.content) as DesignPayload } : {}) };
+    const design = await readFresh(owner, job.designPath);
+    return { ...response(owner, job), ...(design ? { design: design as DesignPayload } : {}) };
   }
   if (!job.taskId || job.status === 'failed' || job.status === 'uncertain') return response(owner, job);
   try {
@@ -180,7 +221,10 @@ export async function getLayerize(owner: LayerizeOwner, id: string): Promise<Lay
     // A previous publisher may have finished immediately before its receipt write failed.
     const existing = await getSupabaseAdmin().from('snapshots').select('design_path,image_url').eq('id', job.id).eq('project_id', owner.projectId).maybeSingle();
     if (existing.data?.design_path) {
+      const ledger = await getSupabaseAdmin().from('mcp_video_reservations').select('credits,status,fingerprint,model_id,user_id').eq('id', id).maybeSingle();
+      if (await isBillingEnabled() && (ledger.error || ledger.data?.user_id !== owner.userId || ledger.data?.fingerprint !== job.fingerprint || ledger.data?.model_id !== LAYERIZE_MODEL || ledger.data?.status !== 'completed')) throw new Error('Existing snapshot has no matching settled task. Publication requires reconciliation.');
       job.status = 'completed'; job.snapshotId = job.id; job.designPath = existing.data.design_path; job.posterUrl = existing.data.image_url;
+      job.credits = ledger.data?.credits ?? 0;
       await save(owner, job); return getLayerize(owner, id);
     }
     const lease = await claimPublication(owner, id);

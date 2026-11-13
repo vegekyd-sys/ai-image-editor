@@ -27,7 +27,7 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
   for (const layer of [...manifest.layers].sort((a, b) => a.z - b.z)) {
     if (editableText && layer.text?.lines.length) {
       for (const [index, line] of layer.text.lines.entries()) {
-        const id = `layer_${layer.z}_text_${index}`, key = `layer${layer.z}Text${index}`;
+        const id = `layer_${layer.z}_text_${index}`, key = id;
         props[key] = line.text;
         editables.push({ id, propKey: key, type: 'text', label: `${layer.name} ${index + 1}` });
         const [left, top, right, bottom] = line.bounds;
@@ -38,7 +38,7 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
       }
       continue;
     }
-    const id = `layer_${layer.z}`, key = `layer${layer.z}Src`;
+    const id = `layer_${layer.z}`, key = id;
     props[key] = layer.url;
     editables.push({ id, propKey: key, type: 'image', label: layer.name });
     const [left, top, right, bottom] = layer.bounds;
@@ -47,7 +47,7 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
   }
   return {
     width: manifest.width, height: manifest.height, props, editables,
-    code: `import React from 'react';\nimport {AbsoluteFill, Img} from 'remotion';\nexport default function LayerizedImage(props) { return <AbsoluteFill style={{backgroundColor:'transparent'}}>${elements.join('\n')}</AbsoluteFill>; }`,
+    code: `import React from 'react';\nimport {AbsoluteFill, Img} from 'remotion';\nexport default function Composition(props) { return <AbsoluteFill style={{backgroundColor:'transparent'}}>${elements.join('\n')}</AbsoluteFill>; }`,
   };
 }
 

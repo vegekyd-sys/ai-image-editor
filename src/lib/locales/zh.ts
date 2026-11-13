@@ -971,6 +971,7 @@ const zh = {
   'agent.status.generatingAudio': '生成音频中...',
   'agent.status.understandingRetake': '正在理解选中片段…',
   'agent.status.capturingFrame': (hint: string) => `截帧 ${hint}...`,
+  'agent.status.layerizing': '正在拆分图层...',
   'agent.status.generatingImage': '生成图片中...',
   'agent.status.browsingWorkspace': '浏览工作台...',
   'agent.status.readingFile': (name: string) => `读取 ${name}...`,

@@ -867,6 +867,7 @@ const zhHant = {
   'agent.status.generatingAudio': '正在產生音訊...',
   'agent.status.understandingRetake': '正在理解選取片段…',
   'agent.status.capturingFrame': (hint: string) => `正在擷取 ${hint}...`,
+  'agent.status.layerizing': '正在拆分圖層...',
   'agent.status.generatingImage': '正在產生圖片...',
   'agent.status.browsingWorkspace': '正在瀏覽工作區...',
   'agent.status.readingFile': (name: string) => `正在讀取 ${name}...`,

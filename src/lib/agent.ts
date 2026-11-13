@@ -1065,6 +1065,8 @@ export async function* runMakaronAgent(
           const batch = input.frames?.length ? input.frames.join(', ') : input.timestamps?.length ? input.timestamps.map(value => `${value}s`).join(', ') : '';
           const hint = batch || (input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0');
           yield { type: 'status', text: translate(responseLocale, 'agent.status.capturingFrame', hint) };
+        } else if (event.toolName === 'decompose_image' || event.toolName === 'get_layerize_status') {
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.layerizing') };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingImage') };
         } else if (event.toolName === 'generate_animation' || event.toolName === 'retake_video') {

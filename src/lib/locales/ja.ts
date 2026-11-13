@@ -868,6 +868,7 @@ const ja = {
   'agent.status.generatingAudio': '音声を生成中...',
   'agent.status.understandingRetake': '選択した区間を確認しています…',
   'agent.status.capturingFrame': (hint: string) => `${hint}をキャプチャ中...`,
+  'agent.status.layerizing': '画像をレイヤーに分割中...',
   'agent.status.generatingImage': '画像を生成中...',
   'agent.status.browsingWorkspace': 'ワークスペースを確認中...',
   'agent.status.readingFile': (name: string) => `${name}を読み込み中...`,

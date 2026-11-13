@@ -971,6 +971,7 @@ const en = {
   'agent.status.generatingAudio': 'Generating audio...',
   'agent.status.understandingRetake': 'Understanding the selected segment…',
   'agent.status.capturingFrame': (hint: string) => `Capturing ${hint}...`,
+  'agent.status.layerizing': 'Separating image layers...',
   'agent.status.generatingImage': 'Generating image...',
   'agent.status.browsingWorkspace': 'Browsing workspace...',
   'agent.status.readingFile': (name: string) => `Reading ${name}...`,

@@ -24,9 +24,9 @@ function query(table: string) {
     then: (resolve: any, reject: any) => Promise.resolve(exec()).then(resolve, reject) };
   return chain;
 }
-vi.mock('@/lib/supabase/service', () => ({ getSupabaseAdmin: () => ({ from: query, rpc: h.rpc }) }));
+vi.mock('@/lib/supabase/service', () => ({ getSupabaseAdmin: () => ({ from: query, rpc: h.rpc, storage: { from: () => ({ getPublicUrl: (path: string) => ({ data: { publicUrl: `https://example.com/${path}` } }) }) } }) }));
 vi.mock('@/lib/workspace', () => ({ readFile: async (path: string) => h.files.has(path) ? { content: h.files.get(path) } : null,
-  writeFile: async (path: string, body: string) => { h.files.set(path, body); return { success: true, storageUrl: `https://example.com/${path}` }; } }));
+  writeFile: async (path: string, body: string, _admin: unknown, userId: string) => { h.files.set(path, body); h.tables.get('workspace_files')!.set(`${userId}:${path}`, { user_id: userId, path, storage_url: `https://example.com/${path}`, updated_at: new Date().toISOString() }); return { success: true, storageUrl: `https://example.com/${path}` }; } }));
 vi.mock('@/lib/provider-image-preflight', () => ({ readProviderImage: h.read }));
 vi.mock('@/lib/layerize-provider', async (original) => ({ ...await original<any>(), submitLayerize: h.submit, queryLayerize: h.query }));
 vi.mock('@/lib/billing/token-rates', async original => ({ ...await original<any>(), getTokenRate: h.rate }));
@@ -38,9 +38,11 @@ const projectId = '11111111-1111-4111-8111-111111111111', jobId = '22222222-2222
 const owner = { projectId, userId: 'owner', origin: 'https://www.makaron.app', attribution: { source: 'cli' as const, projectId } };
 const input = { imageUrl: 'https://example.com/source.png', maxOutputs: 6, quality: '1K' as const };
 beforeEach(async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: URL) => new Response(h.files.get(url.pathname.split('/workspace/')[1]) || '{}')));
   vi.stubEnv('EVOLINK_API_KEY', 'test-private-key');
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-signing-key');
   h.files.clear(); h.tables.clear(); h.debits.clear(); h.failPublish = false;
-  for (const table of ['projects', 'workspace_files', 'snapshots']) h.tables.set(table, new Map());
+  for (const table of ['projects', 'workspace_files', 'snapshots', 'mcp_video_reservations']) h.tables.set(table, new Map());
   h.tables.get('projects')!.set(projectId, { id: projectId, user_id: 'owner' });
   h.submit.mockReset().mockResolvedValue({ id: 'task-original', model: 'doubao-seedream-5.5-layerize', status: 'processing' });
   h.query.mockReset().mockResolvedValue({ id: 'task-original', model: 'doubao-seedream-5.5-layerize', status: 'completed', result_data: [
@@ -105,4 +107,38 @@ describe('Layerize lifecycle and billing ownership', () => {
   it('unknown job does not look like an indefinitely preparing job', async () => {
     await expect(getLayerize(owner, jobId)).rejects.toThrow('not found');
   });
+  it('rejects edited workspace receipts before trusting provider IDs or markup', async () => {
+    await startLayerize(owner, jobId, input);
+    const path = `${projectId}/layerize/${jobId}/job.json`;
+    const tampered = JSON.parse(h.files.get(path)!); tampered.markup = .001;
+    h.files.set(path, JSON.stringify(tampered));
+    await expect(getLayerize(owner, jobId)).rejects.toThrow('integrity check failed');
+    expect(h.query).not.toHaveBeenCalled(); expect(h.debits.size).toBe(0);
+  });
+  it('does not trust an unrelated user-created snapshot as proof of billing', async () => {
+    await startLayerize(owner, jobId, input);
+    h.tables.get('snapshots')!.set(jobId, { id: jobId, project_id: projectId, design_path: 'code/unrelated.json' });
+    const result = await getLayerize(owner, jobId);
+    expect(result.status).toBe('processing'); expect(result.message).toContain('no matching settled task');
+    expect(h.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to submit a settled ID when its workspace receipt was removed', async () => {
+    h.tables.get('mcp_video_reservations')!.set(jobId, { id: jobId });
+    await expect(startLayerize(owner, jobId, input)).rejects.toThrow('receipt reconciliation');
+    expect(h.submit).not.toHaveBeenCalled();
+  });
+  it('a late query error cannot regress an already completed receipt', async () => {
+    await startLayerize(owner, jobId, input);
+    const completedTask = await h.query(); let rejectLate: (error: Error) => void = () => {};
+    let started = false;
+    h.query.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectLate = reject; started = true; })).mockResolvedValue(completedTask);
+    const late = getLayerize(owner, jobId); await vi.waitFor(() => expect(started).toBe(true));
+    expect((await getLayerize(owner, jobId)).status).toBe('completed');
+    rejectLate(new Error('late transport failure'));
+    expect((await late).status).toBe('completed');
+    expect((await getLayerize(owner, jobId)).status).toBe('completed');
+    expect(h.debits.size).toBe(1);
+  });
+
 });
