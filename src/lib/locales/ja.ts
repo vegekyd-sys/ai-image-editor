@@ -316,6 +316,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.fasterMediaReplies.title': "素材を使うチャットがもっとスムーズに",
+  'changelog.fasterMediaReplies.item1': "画像付きチャットで、標準の Agent がより早く返答を開始します。",
+  'changelog.fasterMediaReplies.item2': "画像と動画を組み合わせた依頼でも、素材の分析や制作プランをより早く受け取れます。",
   'changelog.seedance25Flash.title': "Seedance 2.5 Flash が登場",
   'changelog.seedance25Flash.item1': "480p/720pのテキスト生成、開始・終了フレーム、参照素材からの生成、動画編集に対応しました。",
   'changelog.seedance25Flash.item2': "RetakeでFlashを選び、指定区間だけを作り直せます。区間外の映像と全体の長さを保ち、WebとCLIで利用できます。",

@@ -882,7 +882,11 @@ export async function runAgentExecutionAttempt(
           snapshotImages: attemptSnapshotImages,
           explicitMediaIndices: ctx.explicitMediaIndices,
           nativeVisionImages: request.image && resolvedModel.supportsImageInput
-            ? [{
+            ? [ctx.nativeVisionImages.find(image => (
+                !request.hasAnnotation && !request.isDraft
+                && image.mediaIndex === attemptCurrentSnapshotIndex + 1
+                && ctx.snapshotImages[attemptCurrentSnapshotIndex] === request.image
+              )) || {
                 source: request.image,
                 ...(!request.hasAnnotation && !request.isDraft
                   ? { mediaIndex: attemptCurrentSnapshotIndex + 1 }

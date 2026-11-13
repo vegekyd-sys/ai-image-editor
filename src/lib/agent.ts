@@ -49,6 +49,7 @@ import {
   buildNativeVisionUserContent,
   type NativeVisionImageInput,
 } from './agent-image-analysis';
+import { prepareAgentImageTransport } from './agent-image-transport';
 import { extractWebSearchSources } from './web-citations';
 import { getTokenRate } from './billing/token-rates';
 import { deepSeekFlashProviderCost, deepSeekFlashTariffMultiplier } from './billing/deepseek-flash-rate';
@@ -422,6 +423,17 @@ export async function* runMakaronAgent(
       ? animImages.map((source) => ({ source }))
       : (options?.nativeVisionImages ?? []);
 
+  // Start CDN reads before system-prompt preparation; preserve full original pixels.
+  const imageTransport = runtime.spec.id === 'deepseek-flash' && !tipReactionOnly && directVisionImages.length
+    ? (() => {
+        const end = perf?.span('prepare_image_transport', { imageCount: directVisionImages.length });
+        return prepareAgentImageTransport(directVisionImages, options?.abortSignal).then(images => {
+          end?.({ inlineCount: images.filter(image => image.source.startsWith('data:')).length });
+          return images;
+        });
+      })()
+    : undefined;
+
   let userContent: any;
   if (directVisionImages.length && runtime.spec.supportsImageInput && !tipReactionOnly) {
     userContent = buildNativeVisionUserContent(
@@ -477,6 +489,9 @@ export async function* runMakaronAgent(
     ? `\n\n[Selected image model: ${selectedImageModel}. This explicit App/CLI selection governs generate_image, overriding default or inferred image models. Use this ID and describe the actual model/provider returned by the tool. Do not claim a different default model was used.]`
     : '';
   const systemPrompt = `${executionSystemPrompt}${languageDirective}${skillLaunchDirective}${webSearchDirective}${imageSelectionDirective}`;
+  if (imageTransport) {
+    userContent = buildNativeVisionUserContent(analysisOnly ? analysisPrompt : prompt, await imageTransport);
+  }
   const responseLocale = normalizeLocale(options?.locale, 'en');
   endSystemPrompt?.({ systemChars: systemPrompt.length });
 

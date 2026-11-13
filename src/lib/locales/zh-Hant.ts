@@ -322,6 +322,9 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.fasterMediaReplies.title': "帶素材聊天，回覆更快",
+  'changelog.fasterMediaReplies.item1': "帶圖片聊天時，預設 Agent 更快開始回覆，減少等待。",
+  'changelog.fasterMediaReplies.item2': "同時使用圖片與影片時，更快收到素材分析與創作方案。",
   'changelog.seedance25Flash.title': "Seedance 2.5 Flash 上線",
   'changelog.seedance25Flash.item1': "新增 Seedance 2.5 Flash，支援 480p/720p 文字生影片、首尾影格、參考生成和影片編輯。",
   'changelog.seedance25Flash.item2': "Retake 可選擇 Flash 重做指定片段，保留片段外的畫面與總時長；網頁和 CLI 同步支援。",
