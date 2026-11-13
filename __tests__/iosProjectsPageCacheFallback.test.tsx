@@ -142,9 +142,17 @@ describe('iOS projects page cache fallback', () => {
     authState.current = { user: null, loading: true };
     router.push.mockClear();
     router.replace.mockClear();
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
-      json: () => Promise.resolve({ skills: [] }),
-    })));
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.startsWith('/api/projects/gallery?id=')) {
+        const project = supabaseState.cardProject;
+        return Promise.resolve({ ok: true, json: async () => ({
+          projects: project ? [{ ...project, snapshots: supabaseState.snapshotRows, snapshotCount: supabaseState.snapshotRows.length }] : [],
+          scannedIds: project ? [project.id] : [], nextCursor: null,
+        }) });
+      }
+      if (url.startsWith('/api/projects/gallery')) return new Promise(() => {});
+      return Promise.resolve({ ok: true, json: async () => ({ skills: [] }) });
+    }));
     clearUserCache();
     supabaseState.projectRowsPromise = null;
     supabaseState.cardProject = null;

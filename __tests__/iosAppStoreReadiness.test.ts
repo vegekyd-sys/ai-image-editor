@@ -324,7 +324,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projects).toContain("readNativeJSONCache<CreditsPayload>('/api/billing/credits')");
     expect(projects).toContain("readNativeJSONCache<SkillsPayload>('/api/skills')");
     expect(projectsListWarm).toContain('warmProjectsListCache');
-    expect(projectsListWarm).toContain('cacheProjectsList(userId, projects)');
+    expect(projectsListWarm).toContain('cacheProjectsList(userId, page.nextCursor');
     expect(imageCache).toContain('PROJECTS_LIST_LOCAL_KEY');
     expect(imageCache).toContain('localStorage.setItem(PROJECTS_LIST_LOCAL_KEY');
     expect(topBar).toContain('warmProjectsListCache(user.id)');
@@ -667,7 +667,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('renderedIOSProjectId');
     expect(projectsPage).toContain('renderedIOSProjectIdRef');
     expect(projectsPage).toContain('projectsRef');
-    expect(projectsPage).toContain('const currentProjects = projectsRef.current');
+    expect(projectsPage).toContain('currentProjects: () => pendingIOSProjectsRefreshRef.current ?? projectsRef.current');
     expect(projectsPage).toContain('loadingProjectsRef');
     expect(projectsPage).toContain('needsInitialProjects');
     expect(projectsPage).toContain('duringFrozenReturn');
@@ -683,7 +683,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('iosProjectScrollYRef');
     expect(projectsPage).toContain('pendingIOSProjectsRefreshRef');
     expect(projectsPage).toContain('iosProjectNavGenerationRef');
-    expect(projectsPage).toContain('projects-fetch-discarded-nav-generation-changed');
+    expect(fs.readFileSync(path.join(root, 'src/hooks/useProjectGallery.ts'), 'utf8')).toContain('if (controller.signal.aborted) return');
     expect(projectsPage).toContain('refreshIOSProjectCard');
     expect(projectsPage).toContain('project-card-refreshed-after-return');
     expect(projectsPage).toContain('projects-background-refresh-requested');

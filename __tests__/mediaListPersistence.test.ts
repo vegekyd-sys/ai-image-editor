@@ -23,14 +23,13 @@ describe('media list persistence and startup performance', () => {
     expect(projectsPage).toContain('projects.slice(0, visibleProjectCount)')
     expect(projectsPage).toContain("rootMargin: '900px 0px'")
     expect(projectsPage).toContain('const coverUrl = lastSnap?.image_url')
-    expect(projectsPage).toContain('id: `cover:${project.id}`')
-    expect(projectsPage).toContain("!snapshot.id.startsWith('cover:')")
+    expect(projectsPage).toContain('project.snapshotCount ?? project.snapshots.length')
   })
 
   it('keeps homepage project warmup thin so media work cannot delay primary controls', () => {
     const warmSource = fs.readFileSync(path.join(root, 'src/lib/projects-list-warm.ts'), 'utf8')
 
-    expect(warmSource).toContain(".select('id, title, cover_url, updated_at, created_at')")
+    expect(warmSource).toContain('fetchProjectGalleryPage()')
     expect(warmSource).toContain('getCachedProjectsListSync')
     expect(warmSource).not.toContain(".from('snapshots')")
     expect(warmSource).not.toContain(".from('project_animations')")

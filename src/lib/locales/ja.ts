@@ -287,6 +287,11 @@ const ja = {
   'privacy.lastUpdated': '最終更新日：2026年8月8日',
 
   // Project management
+  'project.empty': 'プロジェクトはまだありません',
+  'project.loadFailed': 'プロジェクトを読み込めませんでした。表示済みのプロジェクトは保持されています。',
+  'project.retry': '再試行',
+  'project.loadMore': 'プロジェクトをさらに読み込む',
+  'project.loadingMore': '読み込み中…',
   'project.untitled': '無題',
   'project.rename': '名前を変更',
   'project.delete': 'プロジェクトを削除',

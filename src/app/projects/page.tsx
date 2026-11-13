@@ -9,7 +9,9 @@ import { startTransition, useEffect, useState, useRef, useCallback } from 'react
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, getLastProjectsListSync, cacheProjectsList } from '@/lib/imageCache'
+import { useProjectGallery } from '@/hooks/useProjectGallery'
+import { fetchProjectGalleryPage, type GalleryProject } from '@/lib/project-gallery'
+import { getCachedProjectsListSync, getCachedProjectsList, getLastProjectsListSync, cacheProjectsList } from '@/lib/imageCache'
 import { isHeicFile } from '@/lib/imageUtils'
 import { useLocale } from '@/lib/i18n'
 import { getOriginFormatThumbnailUrl, getThumbnailUrl } from '@/lib/supabase/storage'
@@ -31,47 +33,11 @@ const ProjectEditorContainer = dynamic(() => import('@/components/ProjectEditorC
   loading: () => <div className="h-dvh w-full bg-black" aria-label="Loading project" />,
 })
 
-interface ProjectWithSnapshots {
-  id: string
-  title: string
-  cover_url: string | null
-  updated_at: string
-  created_at: string
-  snapshots: { id: string; image_url: string; sort_order: number }[]
-  hasVideo?: boolean
-}
+type ProjectWithSnapshots = GalleryProject
 
 function isProjectCoverImageUrl(url?: string | null): url is string {
   if (!url) return false
   return url !== VIDEO_PLACEHOLDER_IMAGE && !url.endsWith(VIDEO_PLACEHOLDER_IMAGE)
-}
-
-function hasHydratedProjectSnapshots(project?: ProjectWithSnapshots): boolean {
-  return Boolean(
-    project?.snapshots.length
-    && project.snapshots.every((snapshot) => !snapshot.id.startsWith('cover:')),
-  )
-}
-
-function buildQuickProjectList(
-  projectRows: Array<Pick<ProjectWithSnapshots, 'id' | 'title' | 'cover_url' | 'updated_at' | 'created_at'>>,
-  currentProjects: ProjectWithSnapshots[],
-): ProjectWithSnapshots[] {
-  const currentMap = new Map(currentProjects.map((project) => [project.id, project]))
-  return projectRows.flatMap((project) => {
-    const cached = currentMap.get(project.id)
-    const cachedIsFresh = cached?.updated_at === project.updated_at && hasHydratedProjectSnapshots(cached)
-    const coverSnapshot = isProjectCoverImageUrl(project.cover_url)
-      ? [{ id: `cover:${project.id}`, image_url: project.cover_url, sort_order: 0 }]
-      : []
-    const snapshots = cachedIsFresh
-      ? cached.snapshots
-      : coverSnapshot.length > 0
-        ? coverSnapshot
-        : cached?.snapshots ?? []
-    if (snapshots.length === 0) return []
-    return [{ ...project, snapshots, hasVideo: cached?.hasVideo }]
-  })
 }
 
 // Skill type for client-side rendering
@@ -259,6 +225,7 @@ function ProjectsPageInner() {
   const [projectsRefreshNonce, setProjectsRefreshNonce] = useState(0)
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
   const projectsRef = useRef(projects)
+  const projectsOwnerIdRef = useRef<string | null>(null)
   const loadingProjectsRef = useRef(loadingProjects)
   const [activeIOSProjectId, setActiveIOSProjectId] = useState<string | null>(null)
   const [renderedIOSProjectId, setRenderedIOSProjectId] = useState<string | null>(null)
@@ -283,6 +250,14 @@ function ProjectsPageInner() {
   const projectsPageInstanceIdRef = useRef(`projects-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`)
 
   useEffect(() => {
+    if (userId && projectsOwnerIdRef.current && projectsOwnerIdRef.current !== userId) {
+      projectsRef.current = []
+      pendingIOSProjectsRefreshRef.current = null
+      projectsOwnerIdRef.current = userId
+      shownRef.current = false
+      setProjects([])
+      setLoadingProjects(true)
+    }
     const cachedProjects = userId
       ? (getCachedProjectsListSync(userId) as ProjectWithSnapshots[] | null)
       : isMakaronIOSAppShell()
@@ -293,6 +268,7 @@ function ProjectsPageInner() {
 
     startTransition(() => {
       if (cachedProjects) {
+        projectsOwnerIdRef.current = userId ?? getLastProjectsListSync()?.userId ?? null
         projectsRef.current = cachedProjects
         loadingProjectsRef.current = false
         shownRef.current = true
@@ -370,9 +346,23 @@ function ProjectsPageInner() {
     clearPendingIOSProjectsRefreshTimer()
     shownRef.current = true
     logIOSProjectNav('projects-refresh-applied', { count: nextProjects.length, duringFrozenReturn: isFrozenIOSReturn, needsInitialProjects })
+    projectsRef.current = nextProjects
     setProjects(nextProjects)
     setLoadingProjects(false)
   }, [clearPendingIOSProjectsRefreshTimer])
+
+  const gallery = useProjectGallery({
+    userId,
+    refreshKey: projectsRefreshNonce,
+    currentProjects: () => pendingIOSProjectsRefreshRef.current ?? projectsRef.current,
+    responseGeneration: () => iosProjectNavGenerationRef.current,
+    onProjects: (next) => {
+      projectsOwnerIdRef.current = userId!
+      cacheProjectsList(userId!, next)
+      applyProjectsRefresh(next)
+    },
+    onInitialError: () => setLoadingProjects(false),
+  })
 
   const openIOSProject = useCallback((projectId: string) => {
     if (typeof window === 'undefined') return
@@ -411,50 +401,12 @@ function ProjectsPageInner() {
   const refreshIOSProjectCard = useCallback(async (projectId: string) => {
     if (!userId) return
     try {
-      const supabase = createClient()
-      const { data: projectRow, error: projectError } = await supabase
-        .from('projects')
-        .select('id, title, cover_url, updated_at, created_at')
-        .eq('id', projectId)
-        .eq('user_id', userId)
-        .maybeSingle()
-
-      if (projectError) {
-        console.warn('Failed to refresh iOS project card:', projectError)
-        return
-      }
-
-      const [{ data: snapshotRows }, { data: animRows }, { data: videoSnaps }] = await Promise.all([
-        supabase.from('snapshots')
-          .select('id, project_id, image_url, sort_order')
-          .eq('project_id', projectId)
-          .order('sort_order', { ascending: true })
-          .limit(3000),
-        supabase.from('project_animations')
-          .select('project_id')
-          .eq('project_id', projectId)
-          .eq('status', 'completed'),
-        supabase.from('snapshots')
-          .select('project_id')
-          .eq('project_id', projectId)
-          .eq('type', 'video'),
-      ])
-
-      const nextProject = projectRow
-        ? {
-            ...projectRow,
-            snapshots: (snapshotRows ?? []).map((s) => ({
-              id: s.id,
-              image_url: s.image_url,
-              sort_order: s.sort_order,
-            })),
-            hasVideo: Boolean(animRows?.length || videoSnaps?.length),
-          }
-        : null
+      const page = await fetchProjectGalleryPage({ projectId })
+      const nextProject = page.projects[0] ?? null
 
       setProjects((current) => {
         const index = current.findIndex((project) => project.id === projectId)
-        const next = nextProject && nextProject.snapshots.length > 0
+        const next = nextProject
           ? index >= 0
             ? current.map((project) => project.id === projectId ? nextProject : project)
             : [nextProject, ...current]
@@ -465,7 +417,7 @@ function ProjectsPageInner() {
       })
       logIOSProjectNav('project-card-refreshed-after-return', {
         projectId,
-        snapshots: nextProject?.snapshots.length ?? 0,
+        snapshots: nextProject?.snapshotCount ?? 0,
       })
     } catch (err) {
       console.warn('Failed to refresh iOS project card:', err)
@@ -621,20 +573,21 @@ function ProjectsPageInner() {
 
   useEffect(() => {
     const sentinel = projectLoadMoreRef.current
-    if (!sentinel || visibleProjectCount >= projects.length) return
+    if (!sentinel || gallery.failed) return
     if (typeof IntersectionObserver === 'undefined') {
       startTransition(() => setVisibleProjectCount(projects.length))
       return
     }
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return
+      if (gallery.hasMore && !gallery.loading) void gallery.loadMore()
       startTransition(() => {
         setVisibleProjectCount((count) => Math.min(count + PROJECT_CARD_BATCH_SIZE, projects.length))
       })
     }, { rootMargin: '900px 0px' })
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [projects.length, visibleProjectCount])
+  }, [projects.length, visibleProjectCount, gallery.hasMore, gallery.loading, gallery.failed, gallery.loadMore])
 
   useEffect(() => () => {
     clearIOSProjectCloseTimer()
@@ -642,11 +595,11 @@ function ProjectsPageInner() {
   }, [clearIOSProjectCloseTimer, clearPendingIOSProjectsRefreshTimer])
 
   useEffect(() => {
-    if (!useIOSInlineProjectNavigation || typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !userId) return
     const refreshWhenVisible = () => {
       if (document.visibilityState !== 'visible') return
       if (activeIOSProjectIdRef.current) return
-      requestProjectsRefresh('ios-projects-visible')
+      requestProjectsRefresh('projects-visible')
     }
     window.addEventListener('focus', refreshWhenVisible)
     document.addEventListener('visibilitychange', refreshWhenVisible)
@@ -654,7 +607,7 @@ function ProjectsPageInner() {
       window.removeEventListener('focus', refreshWhenVisible)
       document.removeEventListener('visibilitychange', refreshWhenVisible)
     }
-  }, [useIOSInlineProjectNavigation, requestProjectsRefresh])
+  }, [userId, requestProjectsRefresh])
 
   useEffect(() => {
     const overlay = iosProjectOverlayRef.current
@@ -713,167 +666,6 @@ function ProjectsPageInner() {
     })
     return () => { cancelled = true }
   }, [userId, applyProjectsRefresh])
-
-  // Phase 3: Supabase fetch (always runs when user is available, refreshes cache)
-  useEffect(() => {
-    if (!userId) return
-    const supabase = createClient()
-    let cancelled = false
-
-    async function fetchProjects() {
-      try {
-        const fetchNavGeneration = iosProjectNavGenerationRef.current
-        const { data: projectRows, error: pErr } = await supabase
-          .from('projects')
-          .select('id, title, cover_url, updated_at, created_at')
-          .eq('user_id', userId!)
-          .order('created_at', { ascending: false })
-
-        if (cancelled) return
-        if (isMakaronIOSAppShell() && fetchNavGeneration !== iosProjectNavGenerationRef.current && projectsRef.current.length > 0) {
-          logIOSProjectNav('projects-fetch-discarded-nav-generation-changed', {
-            fetchNavGeneration,
-            currentNavGeneration: iosProjectNavGenerationRef.current,
-            phase: 'projects',
-          })
-          return
-        }
-
-        if (pErr || !projectRows) {
-          console.error('Failed to fetch projects:', pErr)
-          if (!shownRef.current) setLoadingProjects(false)
-          return
-        }
-
-        if (projectRows.length === 0) {
-          cacheProjectsList(userId!, [])
-          applyProjectsRefresh([])
-          return
-        }
-
-        // Paint a thin cover_url-backed list immediately. Snapshot counts and
-        // video badges are enriched below without blocking the first gallery.
-        const currentProjects = projectsRef.current
-        const currentMap = new Map(currentProjects.map(p => [p.id, p]))
-        const quickProjects = buildQuickProjectList(projectRows, currentProjects)
-        if (quickProjects.length > 0) {
-          cacheProjectsList(userId!, quickProjects)
-          applyProjectsRefresh(quickProjects)
-        }
-
-        // Fetch all snapshots (incremental optimization based on current displayed projects)
-        const staleIds = projectRows
-          .filter(p => {
-            const cached = currentMap.get(p.id)
-            return !cached || cached.updated_at !== p.updated_at || !hasHydratedProjectSnapshots(cached)
-          })
-          .map(p => p.id)
-
-        const staleSet = new Set(staleIds)
-        const snapshotMap = new Map<string, { id: string; image_url: string; sort_order: number }[]>()
-        for (const [id, p] of currentMap) {
-          if (!staleSet.has(id)) snapshotMap.set(id, p.snapshots)
-        }
-
-        if (staleIds.length > 0) {
-          // Fetch snapshots in parallel batches (Supabase default limit is 1000 rows)
-          const BATCH = 30
-          const batches: string[][] = []
-          for (let i = 0; i < staleIds.length; i += BATCH) batches.push(staleIds.slice(i, i + BATCH))
-          const results = await Promise.all(batches.map(batch =>
-            supabase.from('snapshots')
-              .select('id, project_id, image_url, sort_order')
-              .in('project_id', batch)
-              .order('sort_order', { ascending: true })
-              .limit(3000)
-          ))
-          for (const { data: snapshotRows, error: sErr } of results) {
-            if (sErr) console.error('Failed to fetch snapshots:', sErr)
-            for (const s of snapshotRows ?? []) {
-              const list = snapshotMap.get(s.project_id) ?? []
-              list.push({ id: s.id, image_url: s.image_url, sort_order: s.sort_order })
-              snapshotMap.set(s.project_id, list)
-            }
-          }
-        }
-
-        if (cancelled) return
-        if (isMakaronIOSAppShell() && fetchNavGeneration !== iosProjectNavGenerationRef.current && projectsRef.current.length > 0) {
-          logIOSProjectNav('projects-fetch-discarded-nav-generation-changed', {
-            fetchNavGeneration,
-            currentNavGeneration: iosProjectNavGenerationRef.current,
-            phase: 'snapshots',
-          })
-          return
-        }
-
-        // Fetch which projects have completed videos (v1: project_animations, v2: snapshots with type=video)
-        const projectIds = projectRows.map(p => p.id)
-        const videoProjectIds = new Set<string>()
-        if (projectIds.length > 0) {
-          const [{ data: animRows }, { data: videoSnaps }] = await Promise.all([
-            supabase.from('project_animations').select('project_id').in('project_id', projectIds).eq('status', 'completed'),
-            supabase.from('snapshots').select('project_id').in('project_id', projectIds).eq('type', 'video'),
-          ])
-          if (animRows) for (const row of animRows) videoProjectIds.add(row.project_id)
-          if (videoSnaps) for (const row of videoSnaps) videoProjectIds.add(row.project_id)
-        }
-
-        if (cancelled) return
-        if (isMakaronIOSAppShell() && fetchNavGeneration !== iosProjectNavGenerationRef.current && projectsRef.current.length > 0) {
-          logIOSProjectNav('projects-fetch-discarded-nav-generation-changed', {
-            fetchNavGeneration,
-            currentNavGeneration: iosProjectNavGenerationRef.current,
-            phase: 'videos',
-          })
-          return
-        }
-
-        const result: ProjectWithSnapshots[] = projectRows
-          .map((p) => ({ ...p, snapshots: snapshotMap.get(p.id) ?? [], hasVideo: videoProjectIds.has(p.id) }))
-          .filter((p) => p.snapshots.length > 0)
-
-        // Patch missing image_urls from IndexedDB cache (upload may not have completed)
-        const missingKeys = result.flatMap(p =>
-          p.snapshots.filter(s => !s.image_url).map(s => `snap:${s.id}`)
-        )
-        let displayResult = result
-        if (missingKeys.length > 0) {
-          const cacheMap = await getCachedImages(missingKeys)
-          if (cacheMap.size > 0) {
-            displayResult = result.map(p => ({
-              ...p,
-              snapshots: p.snapshots.map(s => {
-                const cached = !s.image_url ? cacheMap.get(`snap:${s.id}`) : undefined
-                return cached ? { ...s, image_url: cached } : s
-              }),
-            }))
-          }
-        }
-
-        if (cancelled) return
-        if (isMakaronIOSAppShell() && fetchNavGeneration !== iosProjectNavGenerationRef.current && projectsRef.current.length > 0) {
-          logIOSProjectNav('projects-fetch-discarded-nav-generation-changed', {
-            fetchNavGeneration,
-            currentNavGeneration: iosProjectNavGenerationRef.current,
-            phase: 'cache-patch',
-          })
-          return
-        }
-        // Cache clean Supabase data (with URLs, no base64)
-        cacheProjectsList(userId!, result)
-        applyProjectsRefresh(displayResult)
-      } catch (err) {
-        if (cancelled) return
-        console.error('Failed to fetch projects:', err)
-        // Offline: if cache already showed data, stay on it
-        if (!shownRef.current) setLoadingProjects(false)
-      }
-    }
-
-    fetchProjects()
-    return () => { cancelled = true }
-  }, [userId, projectsRefreshNonce, applyProjectsRefresh])
 
   // Fetch credit balance + detect welcome
   useEffect(() => {
@@ -1118,7 +910,7 @@ function ProjectsPageInner() {
     iosRefreshSelfTestStartedRef.current = true
     const supabase = createClient()
     const testSnapshotId = crypto.randomUUID()
-    const startSnapshotCount = project.snapshots.length
+    const startSnapshotCount = project.snapshotCount ?? project.snapshots.length
     const startCardCount = document.querySelectorAll('.mkr-card').length
     const startScrollY = window.scrollY
     const pageInstanceId = projectsPageInstanceIdRef.current
@@ -1168,7 +960,7 @@ function ProjectsPageInner() {
       const card = document.querySelector(`[data-project-id="${project.id}"]`) as HTMLElement | null
       const visibleCards = document.querySelectorAll('.mkr-card').length
       const currentProject = projectsRef.current.find((item) => item.id === project.id)
-      const actualSnapshotCount = currentProject?.snapshots.length ?? 0
+      const actualSnapshotCount = currentProject?.snapshotCount ?? currentProject?.snapshots.length ?? 0
       const domSnapshotCount = Number(card?.dataset.snapshotCount ?? '0')
       const currentPageInstanceId = document.querySelector('.makaron-projects-page')?.getAttribute('data-page-instance')
       const passed = window.location.pathname === '/projects'
@@ -1413,12 +1205,12 @@ function ProjectsPageInner() {
             <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
               <Spinner size={20} />
             </div>
-          ) : projects.length === 0 ? (
+          ) : projects.length === 0 && !gallery.failed ? (
             <p style={{
               textAlign: 'center', padding: '40px 0 80px', margin: 0,
               color: 'rgba(255,255,255,0.2)', fontSize: '0.82rem', letterSpacing: '0.04em',
             }}>
-              No projects yet
+              {t('project.empty')}
             </p>
           ) : (
             <div style={{
@@ -1445,8 +1237,26 @@ function ProjectsPageInner() {
               ))}
             </div>
           )}
-          {visibleProjectCount < projects.length && (
+          {(visibleProjectCount < projects.length || gallery.hasMore) && !gallery.failed && (
             <div ref={projectLoadMoreRef} aria-hidden="true" style={{ height: 1, width: '100%' }} />
+          )}
+          {gallery.failed && (
+            <div role="status" style={{ textAlign: 'center', padding: '20px 16px 100px', color: 'rgba(255,255,255,0.65)' }}>
+              <p>{t('project.loadFailed')}</p>
+              <button type="button" onClick={() => void gallery.loadMore()} style={{ cursor: 'pointer', padding: '8px 16px' }}>
+                {t('project.retry')}
+              </button>
+            </div>
+          )}
+          {gallery.hasMore && !gallery.failed && (
+            <div style={{ textAlign: 'center', padding: '16px 16px 100px' }}>
+              <button type="button" disabled={gallery.loading} onClick={() => {
+                setVisibleProjectCount(count => count + PROJECT_CARD_BATCH_SIZE)
+                void gallery.loadMore()
+              }} style={{ cursor: 'pointer', padding: '8px 16px' }}>
+                {t(gallery.loading ? 'project.loadingMore' : 'project.loadMore')}
+              </button>
+            </div>
           )}
         </div>
         <LiquidGlassNav active="projects" hidden={Boolean(actionSheet || activeIOSProjectId)} />
@@ -1663,11 +1473,11 @@ function ProjectCard({
   onNavigate: (e: React.MouseEvent<HTMLElement>, project: ProjectWithSnapshots) => void
   onWarm?: () => void
 }) {
+  const snapshotCount = project.snapshotCount ?? project.snapshots.length
   // Use last snapshot with a real display image; video placeholders are repaired asynchronously.
   const lastSnap = project.snapshots.filter(s => isProjectCoverImageUrl(s.image_url)).pop()
-  // A synthetic cover snapshot paints the thin warm cache immediately. Once
-  // real snapshots arrive, their newest image wins so a stale cover_url can
-  // never hide a completed edit whose best-effort cover update failed.
+  // The gallery returns the newest real image, independently of a potentially
+  // stale cover_url. Cached editor histories remain compatible during startup.
   const coverUrl = lastSnap?.image_url
     ?? (isProjectCoverImageUrl(project.cover_url) ? project.cover_url : undefined)
   const imageSrc = coverUrl
@@ -1678,7 +1488,7 @@ function ProjectCard({
   const [loadedImageSrc, setLoadedImageSrc] = useState<string | null>(() => (
     useIOSSafeImageUrls ? imageSrc ?? null : null
   ))
-  const loaded = useIOSSafeImageUrls || Boolean(imageSrc && loadedImageSrc === imageSrc)
+  const loaded = !imageSrc || useIOSSafeImageUrls || loadedImageSrc === imageSrc
   const shouldAnimateIn = !useIOSSafeImageUrls && index < 12
 
   const cardStyle: CSSProperties = {
@@ -1706,8 +1516,7 @@ function ProjectCard({
       )}
 
       {/* Full-bleed photo — iOS app avoids transform/WebP thumbnails to keep WKWebView return stable. */}
-      { }
-      <img
+      {imageSrc && <img
         src={imageSrc}
         alt={project.title}
         fetchPriority={index < 4 ? 'high' : undefined}
@@ -1724,7 +1533,7 @@ function ProjectCard({
           WebkitUserSelect: 'none',
         }}
         onLoad={() => setLoadedImageSrc(imageSrc ?? null)}
-      />
+      />}
 
       {/* Bottom gradient overlay */}
       <div style={{
@@ -1759,12 +1568,12 @@ function ProjectCard({
           </div>
         </div>
         {/* Badges row */}
-        {(project.snapshots.length > 1 || project.hasVideo) && (
+        {(snapshotCount > 1 || project.hasVideo) && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: '5px',
             marginTop: '5px',
           }}>
-            {project.snapshots.length > 1 && (
+            {snapshotCount > 1 && (
               <span style={{
                 background: 'rgba(0,0,0,0.5)',
                 backdropFilter: 'blur(4px)',
@@ -1774,7 +1583,7 @@ function ProjectCard({
                 fontWeight: 500,
                 color: 'rgba(255,255,255,0.8)',
               }}>
-                {project.snapshots.length} snaps
+                {snapshotCount} snaps
               </span>
             )}
             {project.hasVideo && (
@@ -1830,7 +1639,7 @@ function ProjectCard({
         tabIndex={0}
         className="mkr-card"
         data-project-id={project.id}
-        data-snapshot-count={project.snapshots.length}
+        data-snapshot-count={snapshotCount}
         onTouchStart={onWarm}
         onPointerEnter={onWarm}
         onClick={(e) => onNavigate(e, project)}
@@ -1849,7 +1658,7 @@ function ProjectCard({
       href={`/projects/${project.id}`}
       className={shouldAnimateIn ? 'mkr-card mkr-row-enter' : 'mkr-card'}
       data-project-id={project.id}
-      data-snapshot-count={project.snapshots.length}
+      data-snapshot-count={snapshotCount}
       onTouchStart={onWarm}
       onPointerEnter={onWarm}
       onClick={(e) => onNavigate(e, project)}

@@ -251,6 +251,11 @@ const zh = {
   'auth.resetPassword.success': '密码已更新！',
 
   // Project management
+  'project.empty': '还没有项目',
+  'project.loadFailed': '项目列表暂时加载失败，已显示的项目已保留。',
+  'project.retry': '重试',
+  'project.loadMore': '加载更多项目',
+  'project.loadingMore': '正在加载…',
   'project.untitled': '未命名',
   'project.rename': '重命名',
   'project.delete': '删除项目',
