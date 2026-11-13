@@ -44,6 +44,9 @@ vi.mock('@/hooks/useAuth', () => ({
   }),
 }));
 
+// Exercise gallery loading independently of the navigation bar's warmup.
+vi.mock('@/lib/projects-list-warm', () => ({ warmProjectsListCache: async () => {} }));
+
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
     from: (table: string) => {
@@ -181,6 +184,49 @@ describe('iOS projects page cache fallback', () => {
     expect(await screen.findByText('Cached Project')).toBeTruthy();
     expect(screen.queryByText('No projects yet')).toBeNull();
     expect(router.replace).not.toHaveBeenCalledWith('/login');
+  });
+
+  it('keeps cached cards on gallery failure and lets Retry recover them', async () => {
+    authState.current = { user: { id: 'user-1' }, loading: false };
+    let requests = 0;
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (!url.startsWith('/api/projects/gallery')) return Promise.resolve({ ok: true, json: async () => ({ skills: [] }) });
+      if (requests++ === 0) return Promise.resolve({ ok: false, status: 503 });
+      return Promise.resolve({ ok: true, json: async () => ({
+        projects: [{ id: 'project-1', title: 'Recovered Project', cover_url: null,
+          created_at: '2026-05-31T00:00:00.000Z', updated_at: '2026-05-31T00:02:00.000Z',
+          snapshots: [{ id: 's-1', image_url: 'https://example.com/image.jpg', sort_order: 0 }], snapshotCount: 8 }],
+        scannedIds: ['project-1'], nextCursor: null,
+      }) });
+    }));
+    render(<ProjectsPage />);
+    expect(await screen.findByText('project.loadFailed')).toBeTruthy();
+    expect(screen.getByText('Cached Project')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'project.retry' }));
+    expect(await screen.findByText('Recovered Project')).toBeTruthy();
+    expect(screen.getByText('8 snaps')).toBeTruthy();
+    expect(screen.queryByText('project.loadFailed')).toBeNull();
+    log.mockRestore();
+  });
+
+  it('continues past an empty first page without claiming that no projects exist', async () => {
+    clearUserCache();
+    authState.current = { user: { id: 'user-1' }, loading: false };
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (!url.startsWith('/api/projects/gallery')) return Promise.resolve({ ok: true, json: async () => ({ skills: [] }) });
+      return Promise.resolve({ ok: true, json: async () => url.includes('cursor=older') ? {
+        projects: [{ id: 'project-old', title: 'Older Media Project', cover_url: null,
+          created_at: '2026-05-31T00:00:00.000Z', updated_at: '2026-05-31T00:02:00.000Z',
+          snapshots: [{ id: 's-1', image_url: 'https://example.com/image.jpg', sort_order: 0 }], snapshotCount: 1 }],
+        scannedIds: ['project-old'], nextCursor: null,
+      } : { projects: [], scannedIds: ['empty-project'], nextCursor: 'older' } });
+    }));
+    render(<ProjectsPage />);
+    const more = await screen.findByRole('button', { name: 'project.loadMore' });
+    expect(screen.queryByText('project.empty')).toBeNull();
+    fireEvent.click(more);
+    expect(await screen.findByText('Older Media Project')).toBeTruthy();
   });
 
   it('hydrates the real projects page without rebuilding when native cache is available', async () => {

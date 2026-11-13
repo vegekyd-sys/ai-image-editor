@@ -1201,7 +1201,7 @@ function ProjectsPageInner() {
             </div>
           )}
 
-          {loadingProjects ? (
+          {loadingProjects || (projects.length === 0 && gallery.hasMore && !gallery.failed) ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
               <Spinner size={20} />
             </div>
