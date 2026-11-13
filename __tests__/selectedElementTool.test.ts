@@ -31,8 +31,9 @@ it('moves/scales selected elements without submitting or charging an image', asy
 });
 it('rejects missing or uninspected selection before billing/provider submission', async () => {
   expect((await call('edit_element', { operation: { kind: 'content', prompt: 'bigger hat' } })).success).toBe(false);
+  const selectedTool = tools().edit_element;
   ctx.selectedElement = undefined;
-  expect((await call('edit_element', { operation: { kind: 'transform', dx: 10 } })).success).toBe(false);
+  expect((await (selectedTool.execute as any)({ operation: { kind: 'transform', dx: 10 } }, {})).success).toBe(false);
   expect(state.backend).not.toHaveBeenCalled(); expect(state.debit).not.toHaveBeenCalled();
 });
 it('sends the original asset as an actual provider input and retains GUI changes made during generation', async () => {
@@ -83,6 +84,7 @@ it('restricts a selected request to bounded editing and review tools', () => {
   for (const name of ['run_code', 'write_file', 'write_code_file', 'generate_image', 'generate_animation', 'delete_file']) expect(selected).not.toHaveProperty(name);
   ctx.selectedElement = undefined;
   expect(tools()).toHaveProperty('run_code'); expect(tools()).toHaveProperty('generate_image');
+  expect(tools()).not.toHaveProperty('edit_element'); expect(tools()).not.toHaveProperty('inspect_element');
 });
 it('recovers explicit transforms from a same-run draft before an appearance edit', async () => {
   ctx.agentRunId = 'same-run';

@@ -5924,7 +5924,9 @@ const tools = preserveOptionalToolFields({
     const allowed = new Set(['inspect_element', 'edit_element', 'preview_frame', 'publish_draft', 'read_file', 'list_files', 'execution_checkpoint', 'analyze_image', 'materialize_media']);
     return Object.fromEntries(Object.entries(tools).filter(([name]) => allowed.has(name))) as typeof tools;
   }
-  return tools;
+  // Ordinary chat/CLI retains its existing surface. Selection-only tools must
+  // not invite an edit without a real canvas target.
+  return Object.fromEntries(Object.entries(tools).filter(([name]) => name !== 'inspect_element' && name !== 'edit_element')) as typeof tools;
 }
 
 /** Keep tool prompt telemetry independent from the Agent runner module. */

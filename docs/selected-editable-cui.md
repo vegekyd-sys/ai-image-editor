@@ -12,6 +12,6 @@
 - 读取 canonical JSON 绕过进程、本地镜像、Next fetch 和可变对象边缘缓存。每次使用短时签名 URL 加唯一查询标识，不记录或返回签名 URL。
 - `edit_element` 纳入现有 durable 幂等和输入版本门禁，付费编辑不因 worker 重试重复提交。发布继续使用真实 poster 与 `publish_draft`。
 
-这次没有改变渲染属性 ABI；继续使用隔离的 r8 runtime，Preview/Export 都读取同一份素材和属性。没有新增 CLI 参数或改变 npm 打包文件：GUI 选中身份通过聊天请求传递，普通 CLI chat 合同保持不变，CLI 仍走原先验收检查。生产及共享 Snapshot 不随此 Preview 晋升。
+这次没有改变渲染属性 ABI；继续使用隔离的 r8 runtime，Preview/Export 都读取同一份素材和属性。没有新增 CLI 参数或改变 npm 打包文件：GUI 选中身份通过聊天请求传递，未选中时不暴露选中专用工具，普通 GUI/CUI 与 CLI chat 的工具合同保持不变，CLI 仍走原先验收检查。生产及共享 Snapshot 不随此 Preview 晋升。
 
 覆盖：`elementEdit`、`elementImage`、`selectedElementTool`、`workspaceFreshEditable`、`agentCallbacks`、`agentStreamAutoResume`；完整发布门禁与实际浏览器/模型验收分别记录。
