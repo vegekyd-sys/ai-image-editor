@@ -1,6 +1,6 @@
 # 首字云端对照：Production vs 独立 Preview（2026-11-13）
 
-Preview：[https://ai-image-editor-dt35bmxhv-vegekyd-sys-projects.vercel.app](https://ai-image-editor-dt35bmxhv-vegekyd-sys-projects.vercel.app)。已 Ready 并验证首页、认证 API 和健康端点；未绑定共享 alias。当前只部署 Preview，未合并或发布生产，也未发布 npm。
+Preview：[https://ai-image-editor-dt35bmxhv-vegekyd-sys-projects.vercel.app](https://ai-image-editor-dt35bmxhv-vegekyd-sys-projects.vercel.app)。已 Ready 并验证首页、认证 API 和健康端点；未绑定共享 alias。此处为上线前的独立 Preview 对照。后续已获用户授权合入并上线，见[发布验收](2026-11-13-media-first-token-release.md)。
 
 ## 结论
 
@@ -8,7 +8,7 @@ Preview：[https://ai-image-editor-dt35bmxhv-vegekyd-sys-projects.vercel.app](ht
 - 纯视频首字 P50 9.48→10.02 秒，约慢 0.54 秒；这轮没有首字收益。完整首流结束中位数为 16.32→11.64 秒，工具重复分析减少，但不能用它替代首字验收。
 - 图片+视频成功首流的 P50 为 20.78→12.42 秒；线上原始首流 5/6 有正文，Preview 为 6/6。线上缺失样本的同一 run 后台最终完成，不用完成时间补首字，也不把成功子集的改善冒充完整组通过。
 
-这组实测以真实 Production 与 Preview 为准，与此前本机数据分开。首字候选对图片有明确的小样本收益；纯视频仍需要进一步优化，整组暂不据此晋升生产。
+这组实测以真实 Production 与 Preview 为准，与此前本机数据分开。首字候选对图片有明确的小样本收益；纯视频仍需要进一步优化，不能把整组结果表述为所有媒体场景首字均有改善。后续发布只在 changelog 描述图片与图片+视频的收益。
 
 ## 版本、环境与方法
 

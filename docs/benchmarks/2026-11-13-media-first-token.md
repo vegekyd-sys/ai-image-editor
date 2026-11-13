@@ -1,6 +1,6 @@
 # 图片、视频首字优化候选（2026-11-13）
 
-独立分支 `codex/media-first-token`。基线 `f1af11e6`；真实 A/B 的候选运行代码 `0d22921a`。后续 `23f7b3e0` 只强化混合媒体并行行为测试。这是本机阶段记录，当时未合并或部署。后续已基于最新生产版本部署独立 Preview，见[云端对照结果](2026-11-13-media-first-token-cloud.md)；未合并或发布生产/npm。
+独立分支 `codex/media-first-token`。基线 `f1af11e6`；真实 A/B 的候选运行代码 `0d22921a`。后续 `23f7b3e0` 只强化混合媒体并行行为测试。这是本机阶段记录，当时未合并或部署。后续已基于最新生产版本部署独立 Preview，见[云端对照结果](2026-11-13-media-first-token-cloud.md)；后续已获用户授权合入并发布生产，见[发布验收](2026-11-13-media-first-token-release.md)。
 
 ## 当前结论
 
