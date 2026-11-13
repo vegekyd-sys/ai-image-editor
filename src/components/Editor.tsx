@@ -20,6 +20,7 @@ import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { readDesignLayerState, isFixedCanvasDesign } from '@/lib/editor/design-layer-state';
 import { recordDesignEdit, readDesignEditHistory, seekDesignEditHistory, type DesignEditKind } from '@/lib/editor/design-edit-history';
+import { mergeHydratedEditableDesign } from '@/lib/editor/editable-persistence';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/babel-status';
@@ -396,7 +397,7 @@ export default function Editor({
         }
         // Merge design/props updates
         if (fresh.design && (!updated.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(updated.design.props)))) {
-          updated = { ...updated, design: fresh.design };
+          updated = { ...updated, design: mergeHydratedEditableDesign(updated.design, fresh.design) };
           changed = true;
         }
         // Merge video state from Supabase over stale project cache.
@@ -3155,9 +3156,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     const current = snapshotsRef.current[snapIdx];
     if (!current?.design) return;
 
+    designSaveRevisionRef.current = Math.max(Date.now(), designSaveRevisionRef.current + 1);
     const design = {
       ...current.design,
       props,
+      __makaronEditableRevision: designSaveRevisionRef.current,
     };
     const updated = snapshotsRef.current.map((snapshot, index) => (
       index === snapIdx ? { ...snapshot, design } : snapshot
@@ -3165,10 +3168,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     snapshotsRef.current = updated;
     setSnapshots(updated);
 
-    designSaveRevisionRef.current = Math.max(
-      Date.now(),
-      designSaveRevisionRef.current + 1,
-    );
     if (pendingDesignSaveRef.current && pendingDesignSaveRef.current.snapshotId !== current.id) flushPendingDesignSave();
     pendingDesignSaveRef.current = {
       snapshotId: current.id,

@@ -4,6 +4,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** A delayed hydration must not replace edits already made in this editor. */
+export function mergeHydratedEditableDesign(current: DesignPayload | undefined, fresh: DesignPayload): DesignPayload {
+  const localRevision = (current as (DesignPayload & { __makaronEditableRevision?: number }) | undefined)?.__makaronEditableRevision || 0;
+  const remoteRevision = (fresh as DesignPayload & { __makaronEditableRevision?: number }).__makaronEditableRevision || 0;
+  if (current?.code === fresh.code && localRevision > remoteRevision) {
+    return { ...fresh, ...current, height: Math.max(current.height, fresh.height) };
+  }
+  return fresh;
+}
+
 export function createPersistedEditableDesign(value: unknown): DesignPayload {
   if (!isRecord(value) || typeof value.code !== 'string' || !value.code.trim()) {
     throw new Error('Invalid design code');

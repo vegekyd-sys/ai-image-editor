@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { recordDesignEdit, readDesignEditHistory, seekDesignEditHistory, historyUnsetProps } from '@/lib/editor/design-edit-history';
-import { mergePersistedEditableProps } from '@/lib/editor/editable-persistence';
+import { mergePersistedEditableProps, mergeHydratedEditableDesign } from '@/lib/editor/editable-persistence';
 import { hasDesignLayers } from '@/lib/editor/design-layer-state';
 import { imagePaintRect } from '@/lib/editor/editable-image-alpha';
 
 describe('shared design edit history', () => {
+  it('keeps recent GUI edits when an earlier hydration finishes late', () => {
+    const fresh = { code: 'function Composition() { return null }', width: 500, height: 800, props: { title: 'Old' } };
+    const current = { ...fresh, props: { title: 'Edited', _pos_title: { x: 12, y: 2 } }, __makaronEditableRevision: 20 };
+    expect(mergeHydratedEditableDesign(current, fresh).props).toEqual(current.props);
+    expect(mergeHydratedEditableDesign(current, { ...fresh, __makaronEditableRevision: 21 } as typeof current).props).toEqual(fresh.props);
+    expect(mergeHydratedEditableDesign(current, { ...fresh, code: 'function Composition() { return "New design" }' }).props).toEqual(fresh.props);
+  });
   it('restores move/resize, deletion, order, and text exactly after a save and reopen', () => {
     let props: Record<string, unknown> = { title: 'Original' };
     props = recordDesignEdit(props, '_pos_title', { x: 40, y: -8 }, { at: 10 });
