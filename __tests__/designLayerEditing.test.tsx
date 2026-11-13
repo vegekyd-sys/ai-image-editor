@@ -35,9 +35,9 @@ describe('Layerize layer editing', () => {
     const { getByRole, getByText } = render(<LocaleProvider initialLocale="en"><DesignEditPanel editables={generic} props={props} selectedFieldId="hero" onUpdateProp={update} onSelectField={vi.fn()} onStartEdit={vi.fn()} onHistorySeek={seek} /></LocaleProvider>);
     fireEvent.click(getByRole('button', { name: 'Delete element' }));
     expect(update).toHaveBeenCalledWith('_layerState', expect.objectContaining({ deleted: ['hero'] }));
-    fireEvent.click(getByRole('button', { name: 'Undo', exact: true }));
+    fireEvent.click(getByRole('button', { name: /^Undo$/ }));
     expect(seek).toHaveBeenCalledWith(0);
-    fireEvent.click(getByRole('button', { name: 'Edit history', exact: true }));
+    fireEvent.click(getByRole('button', { name: /^Edit history$/ }));
     expect(getByRole('dialog', { name: 'Edit history' })).toBeTruthy();
     expect(getByText('Move · Hero')).toBeTruthy();
   });
