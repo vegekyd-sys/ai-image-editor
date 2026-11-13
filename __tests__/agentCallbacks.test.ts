@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeAgentCallbacks, type AgentCallbackContext } from '@/lib/agentCallbacks';
 import type { Message, Snapshot } from '@/types';
+import { timelineFromSnap } from '@/lib/editor/timeline-utils';
 const recovery = vi.hoisted(() => ({ load: vi.fn() }));
 vi.mock('@/lib/editor/published-snapshot', () => ({ loadPublishedSnapshot: recovery.load }));
 
@@ -277,9 +278,13 @@ describe('makeAgentCallbacks', () => {
     it('focuses the existing design without replacing edited props or publishing it again', () => {
       const focus = vi.fn();
       ctx.snapshotsRef.current = [{ id: 'existing-design', design: { code: 'code', width: 10, height: 10 } } as Snapshot];
+      ctx.draftParentIndexRef.current = 0;
+      ctx.viewIndexRef.current = 1;
       const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: focus });
       callbacks.onFocusSnapshot?.('existing-design');
       expect(focus).toHaveBeenCalledWith('existing-design');
+      expect(ctx.draftParentIndexRef.current).toBeNull();
+      expect(ctx.viewIndexRef.current).toBe(0);
       expect(ctx.setPendingDesign).not.toHaveBeenCalled();
       expect(ctx.setSnapshots).not.toHaveBeenCalled();
       expect(ctx.onSaveSnapshot).not.toHaveBeenCalled();
@@ -288,17 +293,39 @@ describe('makeAgentCallbacks', () => {
     it('recovers a missing server result before focusing it without republishing', async () => {
       const focus = vi.fn();
       const snapshot = { id: 'saved', image: 'https://example.com/poster.jpg', tips: [], messageId: '' } as Snapshot;
+      ctx.draftParentIndexRef.current = 0;
       recovery.load.mockResolvedValue(snapshot);
       const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: focus });
       callbacks.onFocusSnapshot?.('saved');
       await vi.waitFor(() => expect(focus).toHaveBeenCalledWith('saved'));
       expect(ctx.snapshotsRef.current).toContain(snapshot);
+      expect(ctx.draftParentIndexRef.current).toBeNull();
       expect(ctx.setPendingDesign).not.toHaveBeenCalled();
       expect(ctx.onSaveSnapshot).not.toHaveBeenCalled();
     });
   });
 
   describe('onRender', () => {
+    it('focuses the published result without the removed virtual draft offset in a batched render', () => {
+      ctx.snapshotsRef.current = ['original', 'existing'].map(id => ({ id, image: 'poster', tips: [], messageId: '' }));
+      ctx.draftParentIndexRef.current = 1;
+      ctx.viewIndexRef.current = 2;
+      let focusedIndex = -1;
+      const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: snapshotId => {
+        const index = ctx.snapshotsRef.current.findIndex(snapshot => snapshot.id === snapshotId);
+        focusedIndex = timelineFromSnap(index, ctx.draftParentIndexRef.current);
+      } });
+      callbacks.onRender?.({ code: 'function D(){}', width: 100, height: 100,
+        snapshotId: 'saved', published: true, previewUrl: 'https://example.com/saved.jpg' });
+      // Removing the draft and appending the snapshot keeps timeline.length at 3,
+      // so the editor's length-change clamp cannot repair an erroneous index 3.
+      expect(ctx.snapshotsRef.current).toHaveLength(3);
+      expect(focusedIndex).toBe(2);
+      expect(ctx.draftParentIndexRef.current).toBeNull();
+      expect(ctx.viewIndexRef.current).toBe(2);
+      expect(ctx.setDesignDraftParent).toHaveBeenCalledWith(null);
+    });
+
     it('adds the saved poster and design synchronously without browser capture or a second save', () => {
       const focus = vi.fn();
       const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: focus });

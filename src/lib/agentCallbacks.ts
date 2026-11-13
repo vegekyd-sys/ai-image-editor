@@ -120,6 +120,20 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     analyzedTextBuf = '';
   };
 
+  const clearPublishedDraft = () => {
+    // React batches the state setters with navigation. Clear the ref now too:
+    // focus must not count a virtual draft slot that this same event removes.
+    ctx.draftParentIndexRef.current = null;
+    ctx.setDraftDesign?.(null);
+    ctx.setDesignDraftParent?.(null);
+  };
+  const focusPublishedSnapshot = (snapshotId: string) => {
+    clearPublishedDraft();
+    const index = ctx.snapshotsRef.current.findIndex(snapshot => snapshot.id === snapshotId);
+    if (index >= 0) ctx.viewIndexRef.current = index;
+    ctx.onFocusSnapshot?.(snapshotId);
+  };
+
   // Tool status minimum display time (2s) — prevents "Thinking" from immediately overriding tool statuses
   const MIN_TOOL_DISPLAY_MS = 2000;
   let toolStatusSetAt = 0;
@@ -492,7 +506,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
 
     onFocusSnapshot: (snapshotId) => {
       if (ctx.snapshotsRef.current.some(snapshot => snapshot.id === snapshotId && snapshot.design)) {
-        ctx.onFocusSnapshot?.(snapshotId);
+        focusPublishedSnapshot(snapshotId);
         return;
       }
       // A completed status query only sends navigation, and may precede render.
@@ -505,7 +519,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
           : [...prev, snapshot];
         ctx.snapshotsRef.current = merge(ctx.snapshotsRef.current);
         ctx.setSnapshots(merge);
-        ctx.onFocusSnapshot?.(snapshotId);
+        focusPublishedSnapshot(snapshotId);
       }).catch(error => console.warn('[design] Published snapshot recovery pending:', error));
     },
 
@@ -538,18 +552,15 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
             ctx.snapshotsRef.current = merge(ctx.snapshotsRef.current);
             ctx.setSnapshots(merge);
           }
-          ctx.setDraftDesign?.(null);
-          ctx.setDesignDraftParent?.(null);
           if (currentMsgId) ctx.setMessages(prev => prev.map(message => message.id === currentMsgId
             ? { ...message, image: saved.imageUrl || saved.image, design: saved.design || design } : message));
-          ctx.onFocusSnapshot?.(snapshotId);
+          focusPublishedSnapshot(snapshotId);
           setStatus(ctx.t('status.designCreated'));
           return;
         }
         ctx.pendingDesignMsgIdRef.current = currentMsgId;
         ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
-        ctx.setDraftDesign?.(null);
-        ctx.setDesignDraftParent?.(null);
+        clearPublishedDraft();
         ctx.setPendingDesign(design);
       } else {
         ctx.setDraftDesign?.(design);
