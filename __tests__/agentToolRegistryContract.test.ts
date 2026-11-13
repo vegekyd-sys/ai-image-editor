@@ -48,6 +48,8 @@ describe('Agent tool registry contract', () => {
       'execution_checkpoint',
       'studio_run',
       'publish_draft',
+      'inspect_element',
+      'edit_element',
       'materialize_media',
       'preview_frame',
       'rotate_camera',

@@ -1,3 +1,4 @@
+import { parseSelectedElement } from '@/lib/editor/element-edit';
 import { refreshOpenAIDirectBudget } from '@/lib/openai-direct';
 import { NextRequest } from 'next/server';
 import type { ModelMessage } from 'ai';
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
             musicReady, musicAudioUrl, currentDesign, currentDesignPath, selectedElement, videoModel, videoResolution, videoAuto,
             headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, turnMediaCount, turnMediaSnapshotIds, audioAttachments,
             skillLaunchContext: rawSkillLaunchContext } = requestBody;
+    if (selectedElement !== undefined && !parseSelectedElement(selectedElement)) return NextResponse.json({ error: 'Invalid selected element' }, { status: 400 });
     perf.mark('request_ready', {
       projectId: projectId || null,
       promptChars: typeof prompt === 'string' ? prompt.length : 0,

@@ -6,13 +6,13 @@ Call `read_file('prompts/image.md')` for complex edits, references, restoration,
 
 - For edits, pass 1-based `media_index`. Omit it for text-to-image; never pass `0`.
 - `reference_media_indices` sends extra timeline snapshots named by `editPrompt`.
-- For a user-selected Editable element use `inspect_element` → `edit_element`; its original asset is resolved by the server. `generate_image` accepts timeline indices, not arbitrary workspace source URLs.
+- Selected Editable: use `inspect_element` → `edit_element` to send its original asset.
 - `skill` labels general intent; omit it for precise manual instructions.
 - For background removal/cutout, 去背景/抠图/抠像, or transparent PNG/sticker/overlay/alpha output, set `background: "transparent"`; wording alone is insufficient.
 - Existing-image cutout: pass its `media_index`; with no source, omit `media_index` for transparent text-to-image.
 - Pure cutout: omit `aspectRatio` to preserve the source canvas. If the user requests a new transparent layout (e.g. six stickers on 16:9), pass it; the requested layout wins.
 
-Skill routing is in `agent.md`; read only the selected skill once. Do not read `prompts/image.md` just to route the skill.
+Skill routing is in `agent.md`; read only the selected skill once.
 
 Edit Mode prompt shape for ordinary in-place edits:
 

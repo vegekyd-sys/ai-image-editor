@@ -105,7 +105,7 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain("read_file('prompts/image.md')")
     expect(generateImageTool).toContain('media_index')
     expect(generateImageTool).toContain('reference_media_indices')
-    expect(generateImageTool).toContain('`image_refs` is only for workspace asset provider URLs')
+    expect(generateImageTool).toContain('`inspect_element` → `edit_element`')
     expect(imageCapabilities).toContain('Context Mode (promptMode=context)')
     expect(imageCapabilities).toContain('pass the user request verbatim')
     expect(imageCapabilities).toContain('set isNsfw=true')

@@ -54,3 +54,13 @@ it('sends the original asset as an actual provider input and retains GUI changes
   expect(design.props._editHistory.entries.at(-1).kind).toBe('media');
   expect(ctx.generatedImages).toHaveLength(0); // A private replacement never pollutes the timeline.
 });
+it('retains a generated candidate but refuses to overwrite a concurrently replaced source', async () => {
+  await call('inspect_element');
+  state.backend.mockImplementation(id => ({ id, canHandle: () => true, generate: async () => {
+    state.latest.props.asset = 'different-source.png';
+    return { image: state.output, provider: 'test', usage: { modelId: id, inputTokens: 1, outputTokens: 2, providerCostUsd: .01 } };
+  } }));
+  const result = await call('edit_element', { operation: { kind: 'content', prompt: 'bigger hat' } });
+  expect(result.success).toBe(false); expect(result.conflict).toBe(true); expect(result.candidateUrl).toMatch(/\.png$/);
+  expect([...saved.keys()].some(path => path.endsWith('.json'))).toBe(false);
+});

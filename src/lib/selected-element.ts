@@ -13,7 +13,7 @@ export async function loadSelectedElement(input: {
   if (project?.user_id !== input.userId) throw new Error('Selected element requires an owned project.');
   const { data: snapshot } = await input.supabase.from('snapshots').select('design_path').eq('project_id', input.projectId).eq('id', input.selection.snapshotId).maybeSingle();
   if (!snapshot?.design_path) throw new Error('Selected composition was not found.');
-  const file = await workspace.readFile(snapshot.design_path, input.supabase, input.userId);
+  const file = await workspace.readFile(snapshot.design_path, input.supabase, input.userId, { fresh: true });
   if (!file) throw new Error('Selected composition could not be read.');
   const design = JSON.parse(file.content) as DesignPayload;
   const field = resolveElement(design, input.selection.fieldId);

@@ -1,3 +1,4 @@
+import { parseSelectedElement } from '@/lib/editor/element-edit';
 import { refreshOpenAIDirectBudget } from '@/lib/openai-direct';
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
@@ -75,6 +76,7 @@ export async function POST(req: NextRequest) {
       clientPersistedUserMessage,
     } = requestBody;
 
+    if (selectedElement !== undefined && !parseSelectedElement(selectedElement)) return NextResponse.json({ error: 'Invalid selected element' }, { status: 400 });
     const endAdmissionPreflight = perf.span('admission_preflight', { projectId: projectId || null });
     const [codexSubscriptionAllowed, skillLaunchContext, activeRun] = await Promise.all([
       isDynamicCodexSubscriptionUserAllowed(userId),
@@ -132,6 +134,7 @@ export async function POST(req: NextRequest) {
     };
 
     const admission = decideAgentRunAdmission(activeRun);
+    if (admission.kind === 'append' && selectedElement) return NextResponse.json({ error: 'Wait for the active edit to finish before editing another selection.' }, { status: 409 });
     if (admission.kind === 'append') {
       await persistHeadlessUserMessage();
       const inputId = await appendAgentRunInput({
