@@ -512,3 +512,22 @@ describe('makeAgentCallbacks', () => {
     });
   });
 });
+it('rebases a published element replacement on GUI edits newer than the server render', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const source = { code: 'same source', width: 512, height: 512, __makaronEditableRevision: 20,
+      editables: [{ id: 'baby', type: 'image' as const, propKey: 'asset', label: 'Baby' }],
+      props: { asset: 'original.png', _pos_baby: { x: 123, y: 45 }, _scale_baby: { w: .5, h: .6 } } };
+    let snapshots: Snapshot[] = [{ id: 'source', image: 'poster', tips: [], messageId: '', design: source }];
+    const ref = { current: snapshots };
+    const ctx = createMockContext({ snapshotsRef: ref, setSnapshots: updater => { snapshots = updater(snapshots); ref.current = snapshots; } });
+    const { callbacks } = makeAgentCallbacks(ctx);
+    callbacks.onRender!({ ...source, __makaronEditableRevision: 10, props: { ...source.props, asset: 'edited.png', _pos_baby: { x: 0, y: 0 } },
+      elementEdit: { version: 1, id: 'edit', sourceSnapshotId: 'source', fieldId: 'baby', operation: { kind: 'replace', source: 'original.png', url: 'edited.png' } },
+      snapshotId: 'published', published: true, previewUrl: 'poster-new', sourceDesignPath: 'code/published.json' });
+    expect(snapshots.find(s => s.id === 'published')?.design?.props).toMatchObject({ asset: 'edited.png', _pos_baby: { x: 123, y: 45 }, _scale_baby: { w: .5, h: .6 } });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).props._pos_baby).toEqual({ x: 123, y: 45 });
+  } finally { vi.unstubAllGlobals(); }
+});

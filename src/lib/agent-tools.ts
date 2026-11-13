@@ -3608,15 +3608,19 @@ function createInspectElementTool({ ctx, runtime }: AgentToolFactoryScope) {
         const previous = (ctx as any).__elementEditReceipt as import('./editor/element-edit').ElementEditReceipt | undefined;
         const design = previous ? applyElementEdit(loaded.design, previous) : loaded.design, field = loaded.field;
         const source = design.props?.[field.propKey];
-        let previewBase64: string | undefined, width: number | undefined, height: number | undefined;
+        let previewBase64: string | undefined, visualDescription: string | undefined, width: number | undefined, height: number | undefined;
         if (field.type === 'image' && typeof source === 'string' && source) {
           const prepared = await prepareElementImage(source);
           width = prepared.width; height = prepared.height;
+          if (!runtime.spec.supportsImageInput) {
+            const { analyzeImageContent } = await import('./gemini');
+            visualDescription = await analyzeImageContent(source, `Describe this exact selected asset, its contents and transparent margins. Original source dimensions are ${width} by ${height} pixels. Give approximate ORIGINAL-ASSET pixel bounds for visible objects and editable subparts, particularly hats and faces, explicitly flagging coordinate uncertainty.`, ctx.userId);
+          }
           const sharp = (await import('sharp')).default;
           previewBase64 = (await sharp(prepared.image).resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true }).png().toBuffer()).toString('base64');
         }
         (ctx as any).__inspectedElement = { ...input.selection, source };
-        return { success: true, field, value: source, width, height, position: design.props?.[`_pos_${field.id}`], scale: design.props?.[`_scale_${field.id}`], previewBase64 };
+        return { success: true, field, value: source, width, height, visualDescription, position: design.props?.[`_pos_${field.id}`], scale: design.props?.[`_scale_${field.id}`], previewBase64 };
       } catch (error) { return { success: false, error: String(error) }; }
     },
     toModelOutput: ({ output }: { output: any }) => ({ type: 'content' as const, value: [

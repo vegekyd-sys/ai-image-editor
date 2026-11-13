@@ -139,3 +139,15 @@ describe('Agent stream ownership', () => {
     expect(onRunId).toHaveBeenLastCalledWith(null);
   });
 });
+it.each([true, false])('retains selected element identity on durable=%j requests', async durable => {
+  const selectedElement = { snapshotId: 'snapshot-source', fieldId: 'avatar' };
+  const fetchMock = durable ? vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ runId: 'run-selected' }), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'completed', agent_status: 'completed', events: [{ seq: 1, type: 'done', data: {} }] }), { status: 200 }))
+    : vi.fn().mockResolvedValueOnce(new Response('data: {"type":"done"}\n\n', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    await streamAgent({ projectId: 'project', image: '', prompt: 'Move it right', durable, selectedElement }, {});
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).selectedElement).toEqual(selectedElement);
+  } finally { vi.unstubAllGlobals(); }
+});

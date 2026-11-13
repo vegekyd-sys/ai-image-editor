@@ -31,7 +31,7 @@ export async function prepareElementImage(source: string, region?: ElementRegion
     : { left: 0, top: 0, width, height };
   if (![box.left, box.top, box.width, box.height].every(Number.isFinite) || box.left < 0 || box.top < 0 || box.width < 1 || box.height < 1 || box.left + box.width > width || box.top + box.height > height) throw new Error(`Region must fit the source asset (${width}×${height} pixels).`);
   const crop = await sharp(image).extract(box).png().toBuffer();
-  return { image, crop, box, width, height, hasAlpha };
+  return { image, crop, box, width, height, hasAlpha, hasRegion: Boolean(region) };
 }
 export async function finishElementImage(prepared: Awaited<ReturnType<typeof prepareElementImage>>, generated: string) {
   const bytes = generated.startsWith('data:') ? Buffer.from(generated.split(',')[1], 'base64')
@@ -42,7 +42,12 @@ export async function finishElementImage(prepared: Awaited<ReturnType<typeof pre
   // outside the requested region. Preserve those bytes exactly, including alpha.
   const pixels = await sharp(prepared.image).ensureAlpha().raw().toBuffer();
   for (let row = 0; row < box.height; row++) {
-    patch.copy(pixels, ((box.top + row) * width + box.left) * 4, row * box.width * 4, (row + 1) * box.width * 4);
+    const feather = prepared.hasRegion ? Math.min(24, Math.floor(Math.min(box.width, box.height) / 20)) : 0;
+    for (let x = 0; x < box.width; x++) {
+      const weight = feather ? Math.min(1, x / feather, row / feather, (box.width - 1 - x) / feather, (box.height - 1 - row) / feather) : 1;
+      const target = ((box.top + row) * width + box.left + x) * 4, from = (row * box.width + x) * 4;
+      for (let channel = 0; channel < 4; channel++) pixels[target + channel] = Math.round(pixels[target + channel] * (1 - weight) + patch[from + channel] * weight);
+    }
   }
   return sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
 }
