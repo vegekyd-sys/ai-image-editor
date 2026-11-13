@@ -23,7 +23,7 @@ import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/babel-status';
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
-import { buildDesignsMap, buildImageTimeline, getInitialEditorViewMode, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { buildDesignsMap, buildImageTimeline, getInitialEditorViewMode, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldAutoFetchSnapshotTips, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
 import { resolveContentType, type RendererContext, type ContentType } from '@/lib/editor/renderer-registry';
 
@@ -1174,6 +1174,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     previewMode: 'full' | 'none' = 'full',
     autoPreviewCategory?: string,
   ) => {
+    if (readOnly || hasDesignLayers(snapshotsRef.current.find(snap => snap.id === snapshotId)?.design)) return;
     tipsFetchCountRef.current++;
     setIsTipsFetching(true);
     setFailedCategories(new Set());
@@ -1290,7 +1291,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     };
 
     categories.forEach(cat => fetchCategory(cat));
-  }, [onUpdateTips, triggerTipsTeaser, handleTipEvent]);
+  }, [onUpdateTips, triggerTipsTeaser, handleTipEvent, readOnly]);
 
   // Retry a single failed category
   const retryFailedCategory = useCallback((category: Tip['category']) => {
@@ -2576,16 +2577,13 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     if (inactive) return;
     if (pendingImages?.length || isTipsFetching) return;
     const snap = snapshots[tipsSourceIndex];
-    if (!snap || snap.tips.length > 0) return;
-    if (snap.type === 'video') return;
-    // Animated design snapshots don't need tips (still designs do)
-    if (snap.design?.animation) return;
+    if (!shouldAutoFetchSnapshotTips(snap, readOnly)) return;
     if (autoFetchTriggered.current.has(snap.id)) return;
     const image = getImageForApi(snap);
     if (!image) return;
     autoFetchTriggered.current.add(snap.id);
     startTipsFetchForSnapshot(snap);
-  }, [snapshots, tipsSourceIndex, pendingImages, isTipsFetching, inactive, startTipsFetchForSnapshot]);
+  }, [snapshots, tipsSourceIndex, pendingImages, isTipsFetching, inactive, readOnly, startTipsFetchForSnapshot]);
 
   // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
 
@@ -3112,7 +3110,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       });
       cacheImage(`snap:${snap.id}`, posterDataUrl);
       // Tips for still designs
-      if (!snap.design?.animation) {
+      if (!snap.design?.animation && !hasDesignLayers(snap.design)) {
         fetchTipsForSnapshot(snap.id, posterDataUrl, 'none');
       }
     }

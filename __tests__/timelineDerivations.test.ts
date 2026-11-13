@@ -8,6 +8,7 @@ import {
   getPreviousImageForCompare,
   getSnapshotTimelineImage,
   shouldShowCanvasPlaceholder,
+  shouldAutoFetchSnapshotTips,
 } from '@/lib/editor/timeline-derivations';
 import type { DesignPayload, Snapshot } from '@/types';
 
@@ -25,6 +26,13 @@ const snap = (id: string, image: string, extra: Partial<Snapshot> = {}): Snapsho
 const design = (code: string): DesignPayload => ({ code, width: 1080, height: 1350 });
 
 describe('editor timeline derivations', () => {
+  it('does not start photo Tips for decomposition results, hydrating designs or read-only viewers', () => {
+    expect(shouldAutoFetchSnapshotTips(snap('photo', storageUrl('photo')))).toBe(true);
+    expect(shouldAutoFetchSnapshotTips(snap('still', storageUrl('still'), { design: design('still') }))).toBe(true);
+    expect(shouldAutoFetchSnapshotTips(snap('layered', storageUrl('layered'), { design: { ...design('layered'), props: { _layerState: { order: ['layer_0'], deleted: [] } } } }))).toBe(false);
+    expect(shouldAutoFetchSnapshotTips(snap('loading', storageUrl('loading'), { designPath: 'code/loading.json' }))).toBe(false);
+    expect(shouldAutoFetchSnapshotTips(snap('readonly', storageUrl('readonly')), true)).toBe(false);
+  });
   it('opens an empty mobile editor in CUI without changing populated or desktop entry', () => {
     expect(getInitialEditorViewMode({ isDesktop: false, hasGuiContent: false })).toBe('cui');
     expect(getInitialEditorViewMode({ isDesktop: false, hasGuiContent: true })).toBe('gui');
