@@ -12,6 +12,7 @@ function image(id: string, alpha: number[]) {
   Object.defineProperties(node, {
     naturalWidth: { value: 2 }, naturalHeight: { value: 1 }, complete: { value: true },
     offsetWidth: { value: 100 }, offsetHeight: { value: 50 },
+    decode: { configurable: true, value: vi.fn().mockResolvedValue(undefined) },
   });
   node.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 100, bottom: 50, width: 100, height: 50, toJSON() {} });
   pixels.set(node, alpha);
@@ -37,26 +38,41 @@ beforeEach(() => {
 afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('painted editable hit testing', () => {
-  it('passes through clear front pixels and preserves painted stacking order', () => {
+  it('passes through clear front pixels and preserves painted stacking order', async () => {
     const front = image('brother', [0, 255]), back = image('baby', [255, 255]);
     Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [front, back] });
     const rects = [{ id: 'brother', domEl: front }, { id: 'baby', domEl: back }];
+    await pendingEditableAlphaAtPoint(rects, 25, 25);
     expect(pickPaintedEditable(rects, 25, 25)).toBe('baby');
     expect(pickPaintedEditable(rects, 75, 25)).toBe('brother');
   });
 
-  it('does not restore a rectangular hit when every layer is transparent', () => {
+  it('does not restore a rectangular hit when every layer is transparent', async () => {
     const node = image('clear', [0, 0]);
     Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [node] });
+    await pendingEditableAlphaAtPoint([{ domEl: node }], 25, 25);
     expect(pickPaintedEditable([{ id: 'clear', domEl: node }], 25, 25)).toBeNull();
   });
 
-  it('allows an explicitly selected rear layer to move under an occluder', () => {
+  it('allows an explicitly selected rear layer to move under an occluder', async () => {
     const front = image('girl', [255, 255]), back = image('rocket', [255, 0]);
     Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [front, back] });
+    await pendingEditableAlphaAtPoint([{ domEl: front }, { domEl: back }], 25, 25);
     expect(pickPaintedEditable([{ id: 'girl', domEl: front }, { id: 'rocket', domEl: back }], 25, 25)).toBe('girl');
     expect(isPaintedEditableHit(back, 25, 25)).toBe(true);
     expect(isPaintedEditableHit(back, 75, 25)).toBe(false);
+  });
+
+  it('waits for image decoding before caching pixels on Safari', async () => {
+    const node = image('rocket', [0, 0]);
+    let finishDecode!: () => void;
+    Object.defineProperty(node, 'decode', { value: () => new Promise<void>(resolve => { finishDecode = () => { pixels.set(node, [255, 255]); resolve(); }; }) });
+    const pending = pendingEditableAlphaAtPoint([{ domEl: node }], 25, 25);
+    expect(pending).not.toBeNull();
+    expect(isPaintedEditableHit(node, 25, 25)).toBe(false);
+    finishDecode();
+    await pending;
+    expect(isPaintedEditableHit(node, 25, 25)).toBe(true);
   });
 
   it('waits for a recoverable CORS mask before resolving a touch hit', async () => {
@@ -69,6 +85,7 @@ describe('painted editable hit testing', () => {
     const pending = pendingEditableAlphaAtPoint(rects, 25, 25);
     expect(pending).not.toBeNull();
     expect(isPaintedEditableHit(front, 25, 25)).toBe(false);
+    await Promise.resolve();
     recovered!.onload!(new Event('load'));
     await pending;
     expect(pickPaintedEditable(rects, 25, 25)).toBe('baby');

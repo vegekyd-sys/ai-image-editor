@@ -25,17 +25,29 @@ function decodeAlpha(image: HTMLImageElement): Alpha {
 
 export function warmEditableAlpha(image: HTMLImageElement): void {
   const src = image.currentSrc || image.src;
-  if (!src || cache.has(src) || !image.complete || !image.naturalWidth) return;
+  if (!src || cache.has(src)) return;
   if (cache.size >= MAX_CACHE) cache.delete(cache.keys().next().value!);
   const entry: { alpha?: Alpha; loading?: Promise<void>; failed?: boolean } = {};
   cache.set(src, entry);
-  try { entry.alpha = decodeAlpha(image); return; } catch { /* Retry with an anonymous CORS image, never credentials. */ }
-  entry.loading = new Promise<void>(resolve => {
-    const readable = new Image(); readable.crossOrigin = 'anonymous';
-    readable.onload = () => { try { entry.alpha = decodeAlpha(readable); } catch { entry.failed = true; } resolve(); };
-    readable.onerror = () => { entry.failed = true; resolve(); };
-    readable.src = src;
-  });
+  entry.loading = (async () => {
+    // Safari can report complete/naturalWidth before drawImage has decoded pixels.
+    // Caching that early read permanently turns a visible layer into an empty mask.
+    try {
+      await image.decode();
+      entry.alpha = decodeAlpha(image);
+      return;
+    } catch { /* Retry with an anonymous CORS image, never credentials. */ }
+    await new Promise<void>(resolve => {
+      const readable = new Image(); readable.crossOrigin = 'anonymous';
+      readable.onload = async () => {
+        try { await readable.decode(); entry.alpha = decodeAlpha(readable); }
+        catch { entry.failed = true; }
+        resolve();
+      };
+      readable.onerror = () => { entry.failed = true; resolve(); };
+      readable.src = src;
+    });
+  })();
 }
 
 /** Affine viewport transform, including CSS rotate/scale and scaled Player ancestors. */
@@ -105,7 +117,7 @@ export function isPaintedEditableHit(element: HTMLElement, x: number, y: number)
   return painted === true || (painted === null && (!state?.loading || state.failed === true));
 }
 
-/** Wait only for masks already being recovered through CORS, not every scene asset. */
+/** Wait for masks at the touched point to decode, including CORS recovery. */
 export function pendingEditableAlphaAtPoint(rects: Array<{ domEl: HTMLElement }>, x: number, y: number): Promise<void> | null {
   const pending: Promise<void>[] = [];
   for (const { domEl } of rects) {

@@ -474,7 +474,6 @@ export default function DesignOverlay({
       if (pendingTouch || dragState) return;
       const target = e.target as HTMLElement | null;
       const selected = rectsRef.current.find(rect => rect.id === selectedFieldIdRef.current)?.domEl;
-      if (location.hostname === 'localhost') Object.assign(window, { __editableTouchQA: { stage: 'down', selected: selectedFieldIdRef.current, rects: rectsRef.current.map(r => r.id), hit: selected && isPaintedEditableHit(selected, e.clientX, e.clientY), x: e.clientX, y: e.clientY, id: e.pointerId } });
       if (!target || target.closest('.moveable-control') || !selected || !isPaintedEditableHit(selected, e.clientX, e.clientY)) return;
       pendingTouch = { target, x: e.clientX, y: e.clientY, id: e.pointerId };
     };
@@ -497,7 +496,6 @@ export default function DesignOverlay({
 
     const onPointerMove = (e: PointerEvent) => {
       const point = pendingTouch;
-      if (location.hostname === 'localhost') Object.assign(window, { __editableMoveQA: { pending: point && { x: point.x, y: point.y, id: point.id }, id: e.pointerId, dragging: Boolean(dragState) } });
       if (point?.id === e.pointerId && Math.hypot(e.clientX - point.x, e.clientY - point.y) > EDITABLE_POINTER_MOVE_THRESHOLD) {
         pendingTouch = null;
         if (startDrag(point.target, point.x, point.y, 'touch')) {
