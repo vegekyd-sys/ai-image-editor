@@ -8,6 +8,7 @@ it('keeps identifying names while removing long image descriptions', () => {
   expect(label('前景白发小女孩角色，包含白色双马尾长发')).toBe('白发小女孩');
   expect(label('Blue character holding an illuminated futuristic device')).toBe('Blue character holding…');
   expect(label('HELLO')).toBe('HELLO');
+  expect(label('深紫色文字“Click → Chat → Edit”')).toBe('深紫色文字');
   expect(editableDisplayLabel({ id: 'layer_0', label: 'Layer 0' }, '背景')).toBe('背景');
 });
 it('keeps labels inside the visible canvas at the top and right edge', () => {

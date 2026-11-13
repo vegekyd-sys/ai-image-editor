@@ -4,6 +4,7 @@ import type { EditableField } from '@/types';
 export function editableDisplayLabel(field: Pick<EditableField, 'id' | 'label'>, background = 'Layer 0'): string {
   if (field.id === 'layer_0' && /^layer\s*0$/i.test(field.label.trim())) return background;
   let name = field.label.trim().split(/[，,。；;：:\n]/, 1)[0]
+    .replace(/[“「『].*$/u, '')
     .replace(/^(?:前景|后景|上方|下方|左侧|右侧|中间|中央)/u, '')
     .replace(/^(?:左手|右手|双手|手中)(?:握持|拿|持|捧)(?:着|的)?/u, '')
     .replace(/(?:角色人物|人物角色|角色|图层)$/u, '').trim();

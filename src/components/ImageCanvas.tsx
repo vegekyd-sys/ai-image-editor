@@ -668,6 +668,7 @@ export default function ImageCanvas({
   const wheelCooldown = useRef(false);
   const handleWheel = useCallback((e: WheelEvent) => {
     if (isVideoEntry || annotationMode) return;
+    if (selectedEditableId && !isLongContent) return;
 
     // Long content: wheel scrolls vertically instead of zooming
     if (isLongContent) {
@@ -706,7 +707,7 @@ export default function ImageCanvas({
       setAnimDir('right');
       setTimeout(() => { onIndexChange(currentIndex - 1); setAnimDir(null); }, 150);
     }
-  }, [currentIndex, timeline.length, onIndexChange, isVideoEntry, annotationMode, isLongContent]);
+  }, [currentIndex, timeline.length, onIndexChange, isVideoEntry, annotationMode, isLongContent, selectedEditableId]);
 
   // Attach native wheel listener (non-passive) so preventDefault works for pinch-to-zoom
   useEffect(() => {
@@ -721,6 +722,10 @@ export default function ImageCanvas({
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
+      if (selectedEditableId) {
+        if (e.key === 'Escape') { e.preventDefault(); onSelectEditable?.(null); }
+        return;
+      }
       if (e.key === 'ArrowLeft' && currentIndex > 0) {
         setAnimDir('right');
         setTimeout(() => { onIndexChange(currentIndex - 1); setAnimDir(null); }, 150);
@@ -731,7 +736,7 @@ export default function ImageCanvas({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentIndex, timeline.length, onIndexChange]);
+  }, [currentIndex, timeline.length, onIndexChange, selectedEditableId, onSelectEditable]);
 
   const goTo = useCallback((index: number) => {
     if (index === currentIndex) return;
