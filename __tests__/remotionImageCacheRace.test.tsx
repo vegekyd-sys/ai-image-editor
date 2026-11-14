@@ -1,12 +1,15 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+const fontWait = vi.hoisted(() => ({ load: vi.fn() }));
+beforeEach(() => { fontWait.load.mockReset().mockResolvedValue({ prepared: { code: '', defaultFontFamily: 'Inter' }, timing: {} }); });
 vi.mock('@remotion/player', () => ({ Player: ({ component: Component, inputProps }: any) => <div className="__remotion-player"><Component {...inputProps} /></div> }));
 vi.mock('@remotion/web-renderer', () => ({ renderStillOnWeb: vi.fn(), renderMediaOnWeb: vi.fn() }));
 vi.mock('@/lib/i18n', () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 vi.mock('@/lib/evalRemotionJSX', () => ({ preloadBabel: async () => {}, evalRemotionJSX: () => (props: any) => <div data-editable="body" data-testid="inputs">{JSON.stringify(props)}</div> }));
-vi.mock('@/remotion/font-catalog', async original => ({ ...await original<any>(), prepareRemotionFontCodeFromBundledCatalog: () => ({ code: '', defaultFontFamily: 'Inter' }), prepareAndLoadRemotionFontsWithTiming: async () => ({ prepared: { code: '', defaultFontFamily: 'Inter' }, timing: {} }), validateRemotionFontManifest: (value: unknown) => value }));
+vi.mock('@/remotion/font-catalog', async original => ({ ...await original<any>(), prepareRemotionFontCodeFromBundledCatalog: () => ({ code: '', defaultFontFamily: 'Inter' }), prepareAndLoadRemotionFontsWithTiming: fontWait.load, validateRemotionFontManifest: (value: unknown) => value }));
 vi.mock('@/lib/image/presentation', () => ({ preloadDecodedImage: async () => ({width:100,height:100}) }));
+import { applyLayerizeFonts } from '@/lib/layerize-fonts';
 import RemotionRenderer from '@/components/RemotionRenderer';
 import { buildLayerizeDesign, type LayerizeManifest } from '@/lib/layerize-design';
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -122,4 +125,25 @@ it('ignores the outer viewport height while Player scale catches up after a resi
   await waitFor(() => expect(size).toHaveBeenCalledWith(expect.objectContaining({ height: 340 })));
   expect(size.mock.calls.every(([value]) => value.height === 340)).toBe(true);
   view.unmount();
+});
+
+it('keeps current pixels and edited wording through a slow background-font load, then updates only font metadata', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ faces: [] })));
+  const manifest: LayerizeManifest = { version:1, taskId:'async-fonts', width:100, height:100, sourceSha256:'source', supplierCostUsd:.03, layers:[{z:0,name:'Title',url:'data:image/png;base64,aA==',width:100,height:100,bounds:[0,0,100,100],text:{lines:[{text:'HELLO',font:'Arial',color:'#ffffff',bold:false,italic:false,bounds:[0,0,100,100],appearance:{rasterUrl:'data:image/png;base64,aA==',width:100,height:100,bounds:[0,0,100,100]}}]}}] };
+  const projectId='11111111-1111-4111-8111-111111111111',snapshotId='22222222-2222-4222-8222-222222222222';
+  const base=buildLayerizeDesign(manifest,true,{version:1,projectId,snapshotId,storageOrigin:'https://cdn.makaron.app',storagePath:`/storage/v1/object/public/images/33333333-3333-4333-8333-333333333333/workspace/${projectId}/layerize/${snapshotId}/text-fonts.json`});
+  const changed={...base,props:{...base.props,layer_0_text_0:'USER TEXT',_pos_layer_0_text_0:{x:30,y:40}}};
+  const onLoading=vi.fn(),view=render(<RemotionRenderer design={changed} onLoading={onLoading}/>);
+  await waitFor(()=>expect(onLoading.mock.calls.at(-1)).toEqual([false]));expect(fontWait.load).not.toHaveBeenCalled();
+  let release!:(value:unknown)=>void; fontWait.load.mockImplementationOnce(()=>new Promise(resolve=>release=resolve));
+  const matched=applyLayerizeFonts(changed,{version:1,status:'ready',fits:{layer_0_text_0:{family:'Lato',weight:900,fontSize:2000,color:'#ffffff',score:.9,matrix:[.1,0,0,.1,0,100]}}});
+  view.rerender(<RemotionRenderer design={matched} onLoading={onLoading}/>);
+  await waitFor(()=>expect(fontWait.load).toHaveBeenCalledOnce());
+  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,550))});
+  expect(view.getByTestId('inputs').textContent).toContain('"status":"pending"');expect(view.getByTestId('inputs').textContent).toContain('USER TEXT');
+  await act(async()=>{release({prepared:{code:'',defaultFontFamily:'Inter'},timing:{}})});
+  await waitFor(()=>expect(view.getByTestId('inputs').textContent).toContain('"status":"ready"'));
+  expect(view.getByTestId('inputs').textContent).toContain('"x":30,"y":40');
+  view.rerender(<RemotionRenderer design={{...matched,props:{...matched.props,layer_0_text_0:'NEXT LETTERS'}}} onLoading={onLoading}/>);
+  await waitFor(()=>expect(view.getByTestId('inputs').textContent).toContain('NEXT LETTERS'));expect(fontWait.load).toHaveBeenCalledOnce();view.unmount();
 });

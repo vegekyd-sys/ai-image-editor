@@ -32,7 +32,7 @@ it('does not wait for font matching when exporting unmodified glyphs; changed te
 it('merges background results into the latest local edit, including an undo to a pending history entry',async()=>{
  let release!:(r:Response)=>void;const fetcher=vi.fn(()=>new Promise<Response>(r=>release=r));vi.stubGlobal('fetch',fetcher);
  const d=fixture();let update!:React.Dispatch<React.SetStateAction<Snapshot[]>>;let latest:Snapshot[]=[];
- function Surface(){const[snaps,set]=useState<Snapshot[]>([{id:snapshotId,image:'poster.jpg',tips:[],design:d}]);update=set;latest=snaps;useLayerizeFonts(projectId,snaps,set);return <div/>}
+ function Surface(){const[snaps,set]=useState<Snapshot[]>([{id:snapshotId,image:'poster.jpg',tips:[],messageId:'',design:d}]);update=set;latest=snaps;useLayerizeFonts(projectId,snaps,set);return <div/>}
  render(<Surface/>);await waitFor(()=>expect(fetcher).toHaveBeenCalledOnce());
  await act(async()=>{update(s=>s.map(x=>({...x,design:{...x.design!,props:{...x.design!.props,layer_1_text_0:'USER TEXT',_pos_layer_0:{x:50,y:60}}}})))});
  await act(async()=>{release(Response.json(ready))});await waitFor(()=>expect(latest[0].design?.props?._layerizeTextFontFits).toEqual(ready.fits));expect(latest[0].design?.props?.layer_1_text_0).toBe('USER TEXT');expect(latest[0].design?.props?._pos_layer_0).toEqual({x:50,y:60});
