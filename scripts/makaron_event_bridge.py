@@ -161,10 +161,20 @@ def receipt(state, args, enabled):
         outcome = json.loads(args.result.read_text())
         if any(key not in outcome for key in ['summary', 'evidence', 'unresolved', 'next_action']):
             return {'accepted': False, 'reason': 'incomplete_result'}
+        links = outcome.get('condition_pull_requests')
+        if links is not None and (not isinstance(links, dict) or any(
+                c not in batch['conditions'] or not isinstance(prs, list)
+                or not prs or any(not isinstance(pr, str) for pr in prs)
+                for c, prs in links.items())):
+            return {'accepted': False, 'reason': 'invalid_condition_pull_requests'}
         batch.update(phase='completed', completed=True, completed_at=utc_now(), outcome=outcome)
-        if not batch.get('selftest') and outcome.get('pull_requests'):
-            state.setdefault('tracked_conditions', {}).update(
-                {c: outcome['pull_requests'] for c in batch['conditions']})
+        if not batch.get('selftest'):
+            tracked = state.setdefault('tracked_conditions', {})
+            if links is not None:
+                tracked.update(links)
+            elif outcome.get('pull_requests'):
+                for c in batch['conditions']:
+                    tracked.setdefault(c, outcome['pull_requests'])
         if state.get('active_batch') == batch['id']:
             state['active_batch'] = None
         if state.get('selftest_batch') == batch['id']:

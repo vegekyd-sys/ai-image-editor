@@ -100,3 +100,29 @@ def test_recurring_unresolved_error_has_a_24h_model_cooldown():
     assert bridge.reconcile(state, [], [error], 300, 'thread') is None
     bridge.reconcile(state, [], [], 86500, 'thread')
     assert bridge.reconcile(state, [], [error], 86501, 'thread')['phase'] == 'pending'
+
+
+def test_completion_links_only_fixed_condition_and_preserves_existing_pr(tmp_path):
+    state = {'tracked_conditions': {'runtime:known': ['old-pr']}}
+    errors = [{'request_id': f'r{i}', 'fingerprint': name} for i, name in enumerate(['known', 'fixed', 'external'])]
+    batch = bridge.reconcile(state, [], errors, 100, 'thread')
+    batch['received'] = True
+    result = tmp_path / 'result.json'
+    result.write_text(json.dumps({'summary': 'candidate', 'evidence': [], 'unresolved': ['external'],
+        'next_action': 'review', 'pull_requests': ['new-pr'],
+        'condition_pull_requests': {'runtime:fixed': ['new-pr']}}))
+    args = SimpleNamespace(command='complete', batch=batch['id'], revision=batch['revision'], result=result)
+    assert bridge.receipt(state, args, True)['accepted']
+    assert state['tracked_conditions'] == {'runtime:known': ['old-pr'], 'runtime:fixed': ['new-pr']}
+
+
+def test_completion_rejects_links_to_conditions_outside_batch(tmp_path):
+    state = {}
+    batch = bridge.reconcile(state, [], [{'request_id': '1', 'fingerprint': 'actual'}], 100, 'thread')
+    batch['received'] = True
+    result = tmp_path / 'result.json'
+    result.write_text(json.dumps({'summary': 'candidate', 'evidence': [], 'unresolved': [],
+        'next_action': 'review', 'condition_pull_requests': {'runtime:other': ['wrong-pr']}}))
+    args = SimpleNamespace(command='complete', batch=batch['id'], revision=1, result=result)
+    assert bridge.receipt(state, args, True)['reason'] == 'invalid_condition_pull_requests'
+    assert not batch['completed'] and state['active_batch'] == batch['id']

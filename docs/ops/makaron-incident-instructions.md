@@ -20,6 +20,8 @@
 
 保存本地 JSON，必含 summary、evidence、unresolved、next_action；有 PR 时另存 pull_requests 数组（完整 GitHub PR URL），以便指纹关联与去重。不把“PR 已开”写成“线上已修复”。不能定位的问题保留直接证据和下一步，不猜根因。
 
+同批多个问题时另存 condition_pull_requests 对象，键为本批 condition、值为该问题对应的 PR URL 数组。只关联真正形成候选修复的问题，已恢复信号和外部未解决阻塞不要关联；可以给空对象。已有问题仍保留原 PR，不能用一个新 PR 覆盖整批所有问题的归属。
+
 重新读状态获得当前 revision 后执行消息指定脚本的 complete，带 --batch、--dispatch-id、--revision、--result。若 new_evidence 导致拒绝，先查看合并的新证据再使用最新 revision 完成；不得伪造已解决状态或代替其它批次写回执。
 
 只在形成可审查 PR、新的重要故障证据、阻塞或真实唤醒验收结果时向用户简报。健康与重复未变化条件不唤起模型，不添加周期模型 heartbeat。依赖 Mac 开机、联网、既有 CLI 登录和 Codex 桌面可用，不承诺云端全天候覆盖。
