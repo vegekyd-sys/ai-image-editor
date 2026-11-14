@@ -309,7 +309,7 @@ export function useProject(projectId: string, userId: string) {
 
           if (!imageUrl) {
             console.warn('Failed to upload snapshot image')
-            return
+            return false
           }
         }
 
@@ -352,8 +352,10 @@ export function useProject(projectId: string, userId: string) {
 
         // Touch project updated_at so projects page stale-check detects the change
         await supabase.from('projects').update({ updated_at: new Date().toISOString() }).eq('id', projectId)
+        return true
       } catch (err) {
         console.warn('saveSnapshot error:', err)
+        return false
       }
     })
   }, [projectId, userId])

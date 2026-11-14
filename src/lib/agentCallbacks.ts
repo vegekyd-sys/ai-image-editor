@@ -55,7 +55,7 @@ export interface AgentCallbackContext {
   fetchTipsForSnapshot: (...args: any[]) => void;
   onSaveMessage?: (message: Message) => void;
   onSaveDesignProps?: (snapshotId: string, design: DesignPayload, options: { propsOnly: boolean; revision: number }) => void | Promise<void>;
-  onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void | Promise<void>;
+  onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void | Promise<void | boolean>;
   onUpdateDescription?: (snapId: string, desc: string) => void;
   triggerProjectNaming?: (text: string) => void;
   triggerTipsTeaser?: (snapId: string, tips: Tip[]) => void;

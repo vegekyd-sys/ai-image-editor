@@ -97,7 +97,7 @@ interface EditorProps {
   pendingAgentRunId?: string;
   pendingSkill?: string;
   pendingSkillLaunchContext?: SkillLaunchContext;
-  onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void | Promise<void>;
+  onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void | Promise<void | boolean>;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
   onUpdateDescription?: (snapshotId: string, description: string) => void;
@@ -496,11 +496,9 @@ export default function Editor({
   const persistSource = useCallback((snap: Snapshot, index: number) => {
     const inFlight = sourceWrites.current.get(snap.id);
     if (inFlight) return inFlight;
-    let persisted = false;
     const write = Promise.resolve().then(() => onSaveSnapshot?.(snap, index, url => {
-      persisted = true;
       setSnapshots(prev => prev.map(item => item.id === snap.id ? { ...item, imageUrl: url } : item));
-    })).then(() => persisted, () => false);
+    })).then(result => result !== false, () => false);
     sourceWrites.current.set(snap.id, write);
     void write.then(() => sourceWrites.current.delete(snap.id));
     return write;
