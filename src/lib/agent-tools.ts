@@ -1406,7 +1406,7 @@ function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = f
     ? z.object({ job_id: z.string().uuid().describe('The existing Layerize job ID. Query it instead of creating another paid task.') })
     : z.object({
       media_index: z.number().int().positive().describe('Image in the current Media Index to split into layers.'),
-      prompt: z.string().default(LAYERIZE_TEXT_PROMPT).describe('Elements/regions to separate. For a full decomposition include all visible headings and words, including words on objects, as isolated text layers. Preserve a narrower user scope.'),
+      prompt: z.string().default(LAYERIZE_TEXT_PROMPT).describe('Elements/regions to separate. For a full decomposition include all visible headings and words, including words on objects, as isolated text layers. Preserve a narrower user scope. Original object thickness and cast/contact shadows are preserved by the provider contract; do not request new lighting or shadows unless the user asks.'),
       max_outputs: z.number().int().min(2).max(100).default(8).describe('Maximum output images INCLUDING the background; affects maximum funds required. Default 8.'),
       quality: z.enum(['auto', '1K', '1.5K', '2K']).default('1K').describe('Default 1K for faster layer decomposition. Quality applies to the entire task, not individual elements. Use auto, 1.5K or 2K only when the user requests source-resolution preservation or higher detail.'),
       editable_text: z.boolean().default(true).describe('Make recognized text directly editable. Original glyph pixels are preserved until wording changes; edited wording uses a visually fitted, pinned font. Font identification is approximate. Set false only when raster text is requested.'),

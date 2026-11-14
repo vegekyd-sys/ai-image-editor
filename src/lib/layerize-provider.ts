@@ -1,4 +1,5 @@
 export const LAYERIZE_TEXT_PROMPT = 'Separate the major people, objects, and all visible headings, labels and wordmarks, including text printed on objects, into distinct layers. Text must be isolated on transparent layers, with clean object/background pixels beneath it. Preserve original lettering, appearance, placement and occlusion. Name layers in the language of the user request.';
+export const LAYERIZE_APPEARANCE_PROMPT = 'Preserve each complete original object, including its sides, thickness, base, lighting and occlusion. Keep its ORIGINAL cast shadows and contact shadows with that same object on its transparent layer, retaining natural semitransparent alpha and the full shadow extent inside the layer bounds. If separate shadow layers were explicitly requested, keep those instead. Inpaint the exposed receiving surface/background so an old object or its shadow is not duplicated underneath. Recombining unchanged layers must reproduce the original photograph, including object geometry and shadows. Do not flatten a three-dimensional object into its top surface or invent a new shadow. Use short object names in the language of the user request.';
 export const LAYERIZE_PROVIDER_MODEL = 'doubao-seedream-5.5-layerize';
 export const LAYERIZE_MODEL = 'seedream-5.5-layerize';
 export type LayerizeQuality = 'auto' | '1K' | '1.5K' | '2K';
@@ -19,8 +20,9 @@ export function layerizeRequest(input: LayerizeInput) {
   if (!Number.isSafeInteger(n) || n < 2 || n > 100) throw new Error('maxOutputs must be 2–100 including the background.');
   const quality = input.quality ?? '1K';
   if (!['auto', '1K', '1.5K', '2K'].includes(quality)) throw new Error('Layerize quality must be auto, 1K, 1.5K or 2K.');
+  const scope = input.prompt?.trim();
   return { model: LAYERIZE_PROVIDER_MODEL, image_urls: [input.imageUrl], n, quality,
-    ...(input.prompt?.trim() ? { prompt: input.prompt.trim() } : {}),
+    prompt: scope ? `${scope}\n${LAYERIZE_APPEARANCE_PROMPT}` : LAYERIZE_APPEARANCE_PROMPT,
     prompt_priority: 'standard', output_format: 'png', model_params: { text_recognition: true } };
 }
 function headers() {

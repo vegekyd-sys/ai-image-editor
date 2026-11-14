@@ -85,7 +85,9 @@ function response(owner: LayerizeOwner, job: Pick<LayerizeJob, 'id' | 'status'> 
 export async function startLayerize(owner: LayerizeOwner, id: string, input: LayerizeInput): Promise<LayerizeResult> {
   await ownerCheck(owner); assertId(id);
   const request = layerizeRequest(input);
-  const normalized: LayerizeInput = { imageUrl: input.imageUrl, prompt: request.prompt ?? '', maxOutputs: request.n, quality: request.quality as LayerizeInput['quality'], editableText: input.editableText === true };
+  // Fingerprint the user's scope, not the versioned provider instructions. Old
+  // request IDs must remain recoverable after the appearance contract improves.
+  const normalized: LayerizeInput = { imageUrl: input.imageUrl, prompt: input.prompt?.trim() ?? '', maxOutputs: request.n, quality: request.quality as LayerizeInput['quality'], editableText: input.editableText === true };
   const fingerprint = sha(JSON.stringify(normalized));
   const previous = await load(owner, id);
   if (previous) {
