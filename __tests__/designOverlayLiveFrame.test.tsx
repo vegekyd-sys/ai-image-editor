@@ -24,7 +24,7 @@ beforeEach(() => {
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   container = document.createElement('div'); target = document.createElement('div'); target.dataset.editable = 'shape';
-  Object.assign(target.style, { width: '100px', height: '80px' }); container.append(target); document.body.append(container); runtime.target = target;
+  Object.assign(target.style, { width: '100px', height: '80px', translate: '0px 0px', scale: '1' }); container.append(target); document.body.append(container); runtime.target = target;
   target.getBoundingClientRect = () => {
     const [x = 0, y = 0] = target.style.translate.split(' ').map(v => parseFloat(v) || 0), scale = parseFloat(target.style.scale) || 1;
     const left = 100 + x - 50 * (scale - 1), top = 150 + y - 40 * (scale - 1), width = 100 * scale, height = 80 * scale;
