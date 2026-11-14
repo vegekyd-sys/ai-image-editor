@@ -1853,10 +1853,7 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
   border: 0; background: transparent; color: #d946ef;
   pointer-events: auto; touch-action: none; cursor: nwse-resize;
 }
-.mkr-resize-handle::before { content: ''; width: 10px; height: 10px; border-left: 2px solid currentColor; border-top: 2px solid currentColor; }
 .mkr-resize-handle[data-resize-corner="ne"], .mkr-resize-handle[data-resize-corner="sw"] { cursor: nesw-resize; }
-.mkr-resize-handle[data-resize-corner="ne"]::before { transform: rotate(90deg); }
-.mkr-resize-handle[data-resize-corner="sw"]::before { transform: rotate(-90deg); }
-.mkr-resize-handle[data-resize-corner="se"]::before { transform: rotate(180deg); }
+.mkr-resize-handle:focus-visible { outline: 2px solid #f0abfc; outline-offset: 2px; border-radius: 4px; }
 @media (pointer: coarse) { .mkr-resize-handle { width: 44px; height: 44px; margin-left: -22px; margin-top: -22px; } }
 

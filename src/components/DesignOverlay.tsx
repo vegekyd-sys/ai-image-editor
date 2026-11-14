@@ -772,6 +772,7 @@ export default function DesignOverlay({
   }, [containerEl, interactionEl, props, onUpdateProp, syncGestureFrame]);
 
   const selectedRect = rects.find(r => r.id === selectedFieldId && r.domEl.isConnected);
+  const cornerLength = selectedRect ? Math.min(10, selectedRect.width / 2, selectedRect.height / 2) : 0;
 
   return (
     <div
@@ -803,8 +804,15 @@ export default function DesignOverlay({
       })()}
 
       {selectedRect && selectedFieldId && <>
-        <div data-editable-selection-frame className="absolute pointer-events-none border border-dashed border-fuchsia-500"
-          style={{ left: selectedRect.left, top: selectedRect.top, width: selectedRect.width, height: selectedRect.height }} />
+        <div data-editable-selection-frame className="absolute pointer-events-none"
+          style={{ left: selectedRect.left, top: selectedRect.top, width: selectedRect.width, height: selectedRect.height }}>
+          <svg width="100%" height="100%" aria-hidden="true" style={{ overflow: 'visible', display: 'block' }}>
+            <rect width="100%" height="100%" fill="none" stroke="#d946ef" strokeWidth="1" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+            <path data-editable-frame-corners
+              d={`M0 ${cornerLength}V0H${cornerLength} M${selectedRect.width - cornerLength} 0H${selectedRect.width}V${cornerLength} M0 ${selectedRect.height - cornerLength}V${selectedRect.height}H${cornerLength} M${selectedRect.width - cornerLength} ${selectedRect.height}H${selectedRect.width}V${selectedRect.height - cornerLength}`}
+              fill="none" stroke="#d946ef" strokeWidth="2" strokeLinecap="square" vectorEffect="non-scaling-stroke" />
+          </svg>
+        </div>
         {([['nw', -1, -1], ['ne', 1, -1], ['sw', -1, 1], ['se', 1, 1]] as const).map(([corner, dx, dy]) => (
           <button key={corner} data-resize-corner={corner} className="mkr-resize-handle"
             aria-label={t('design.resizeCorner', corner)}
