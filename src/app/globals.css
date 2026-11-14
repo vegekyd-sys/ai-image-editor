@@ -1752,6 +1752,11 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
 /* Editable element — clickable + hover hint */
 [data-editable], .makaron-editable-node { cursor: pointer; pointer-events: auto; }
 
+[data-editable-hover-outline]:not([data-editable-selected]) {
+  outline: 1.5px dashed rgba(255, 255, 255, 0.7);
+  outline-offset: -1px;
+}
+
 /* Input box action cluster: model · Skill · primary action read as one control. */
 .mkr-action-cluster {
   display: inline-flex;
@@ -1844,16 +1849,3 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
 @media (prefers-reduced-motion: reduce) {
   :root { --mkr-image-reveal-duration: 0ms; }
 }
-
-/* Pointer capture keeps one corner resize attached to its original layer. */
-.mkr-resize-handle {
-  position: absolute; z-index: 3001; width: 24px; height: 24px;
-  margin-left: -12px; margin-top: -12px; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-  border: 0; background: transparent; color: #d946ef;
-  pointer-events: auto; touch-action: none; cursor: nwse-resize;
-}
-.mkr-resize-handle[data-resize-corner="ne"], .mkr-resize-handle[data-resize-corner="sw"] { cursor: nesw-resize; }
-.mkr-resize-handle:focus-visible { outline: 2px solid #f0abfc; outline-offset: 2px; border-radius: 4px; }
-@media (pointer: coarse) { .mkr-resize-handle { width: 44px; height: 44px; margin-left: -22px; margin-top: -22px; } }
-

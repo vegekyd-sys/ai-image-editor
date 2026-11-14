@@ -41,11 +41,9 @@ describe('DesignOverlay moveable guideline regression guards', () => {
   });
 
   it('keeps corner resize controls usable for small editable images on touch screens', () => {
-    expect(source).toContain('data-resize-corner={corner}');
-    expect(source).toContain('setPointerCapture(event.pointerId)');
-    expect(source).toContain('scalable={false}');
-    expect(css).toContain('@media (pointer: coarse) { .mkr-resize-handle { width: 44px; height: 44px;');
-    expect(css).toContain('pointer-events: auto; touch-action: none;');
+    expect(source).toContain('scalable={true}');
+    expect(source).toContain("renderDirections={['nw', 'ne', 'sw', 'se']}");
+    expect(css).toContain('min-width: 44px !important');
   });
 
   it('coalesces touch drag layout work to one update per animation frame', () => {
