@@ -17,7 +17,7 @@ export function layerizeRequest(input: LayerizeInput) {
   if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Layerize requires an uploaded HTTPS original.');
   const n = input.maxOutputs ?? 8;
   if (!Number.isSafeInteger(n) || n < 2 || n > 100) throw new Error('maxOutputs must be 2–100 including the background.');
-  const quality = input.quality ?? 'auto';
+  const quality = input.quality ?? '1K';
   if (!['auto', '1K', '1.5K', '2K'].includes(quality)) throw new Error('Layerize quality must be auto, 1K, 1.5K or 2K.');
   return { model: LAYERIZE_PROVIDER_MODEL, image_urls: [input.imageUrl], n, quality,
     ...(input.prompt?.trim() ? { prompt: input.prompt.trim() } : {}),

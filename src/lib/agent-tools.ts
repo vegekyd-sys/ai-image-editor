@@ -1408,7 +1408,7 @@ function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = f
       media_index: z.number().int().positive().describe('Image in the current Media Index to split into layers.'),
       prompt: z.string().default(LAYERIZE_TEXT_PROMPT).describe('Elements/regions to separate. For a full decomposition include all visible headings and words, including words on objects, as isolated text layers. Preserve a narrower user scope.'),
       max_outputs: z.number().int().min(2).max(100).default(8).describe('Maximum output images INCLUDING the background; affects maximum funds required. Default 8.'),
-      quality: z.enum(['auto', '1K', '1.5K', '2K']).default('auto').describe('Prefer auto to preserve the source resolution without unnecessary upscaling. Use an explicit resolution when requested.'),
+      quality: z.enum(['auto', '1K', '1.5K', '2K']).default('1K').describe('Default 1K for faster layer decomposition. Quality applies to the entire task, not individual elements. Use auto, 1.5K or 2K only when the user requests source-resolution preservation or higher detail.'),
       editable_text: z.boolean().default(true).describe('Make recognized text directly editable. Original glyph pixels are preserved until wording changes; edited wording uses a visually fitted, pinned font. Font identification is approximate. Set false only when raster text is requested.'),
       request_id: z.string().uuid().optional().describe('Reuse the original job ID after interruption; never make another provider submission to recover a result.'),
     });

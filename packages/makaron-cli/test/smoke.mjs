@@ -671,12 +671,14 @@ try {
     const project = '11111111-1111-4111-8111-111111111111';
     const job = '22222222-2222-4222-8222-222222222222';
     const before = requests.length;
-    const result = await expectSuccess(['layerize', '--image', 'https://example.com/source.png', '--project', project, '--request-id', job, '--max-outputs', '6', '--quality', '1K', '--editable-text', '--json']);
+    const result = await expectSuccess(['layerize', '--image', 'https://example.com/source.png', '--project', project, '--request-id', job, '--max-outputs', '6', '--editable-text', '--json']);
     assert.equal(JSON.parse(result.stdout).projectUrl, `https://candidate.example/projects/${project}`);
     const submitted = requests.slice(before).filter(req => req.pathname === '/api/layerize' && req.method === 'POST');
     assert.equal(submitted.length, 1);
     assert.deepEqual(submitted[0].body, { projectId: project, requestId: job, imageUrl: 'https://example.com/source.png', maxOutputs: 6, quality: '1K', editableText: true });
     assert.match(submitted[0].client, /^makaron-cli\//);
+    await expectSuccess(['layerize', '--image', 'https://example.com/source.png', '--project', project, '--quality', '2K', '--json']);
+    assert.equal(requests.at(-1).body.quality, '2K');
     const count = requests.length;
     const resumed = await expectSuccess(['layerize', 'status', job, '--project', project, '--json']);
     assert.equal(JSON.parse(resumed.stdout).jobId, job);

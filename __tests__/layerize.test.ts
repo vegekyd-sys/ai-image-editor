@@ -76,7 +76,8 @@ describe('Layerize standard design contract', () => {
 });
 describe('Layerize paid request boundary', () => {
   it('sends exactly one input, explicit PNG/OCR, default 8 including base; rejects unsupported values before POST', () => {
-    expect(layerizeRequest({ imageUrl: 'https://example.com/a.png' })).toMatchObject({ model: 'doubao-seedream-5.5-layerize', n: 8, output_format: 'png', model_params: { text_recognition: true }, image_urls: ['https://example.com/a.png'] });
+    expect(layerizeRequest({ imageUrl: 'https://example.com/a.png' })).toMatchObject({ model: 'doubao-seedream-5.5-layerize', n: 8, quality: '1K', output_format: 'png', model_params: { text_recognition: true }, image_urls: ['https://example.com/a.png'] });
+    for (const quality of ['auto', '1.5K', '2K'] as const) expect(layerizeRequest({ imageUrl: 'https://example.com/a.png', quality }).quality).toBe(quality);
     for (const n of [0, 1, 101, 2.5]) expect(() => layerizeRequest({ imageUrl: 'https://example.com/a.png', maxOutputs: n })).toThrow();
     for (const imageUrl of ['http://example.com/a', 'https://key:secret@example.com/a']) expect(() => layerizeRequest({ imageUrl })).toThrow();
     expect(() => layerizeRequest({ imageUrl: 'https://example.com/a.png', quality: '4K' as never })).toThrow();

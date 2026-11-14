@@ -2214,7 +2214,7 @@ function printLayerizeHelp() {
        makaron layerize status <jobId> --project <id> [--json]
 
   --max-outputs <2..100>   Maximum images including background (default 8)
-  --quality <id>          auto, 1K, 1.5K, 2K (default auto)
+  --quality <id>          auto, 1K, 1.5K, 2K (default 1K)
   --editable-text         Convert recognized text to editable design text; fonts may differ
   --prompt <text>         Elements or regions to separate
   --request-id <uuid>     Reuse the original request after interruption
@@ -2241,7 +2241,7 @@ async function runLayerize(args) {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   let projectId = options['--project'];
   const jobId = statusOnly ? args[2] : options['--request-id'] || randomUUID();
-  const n = Number(options['--max-outputs'] || 8), quality = options['--quality'] || 'auto';
+  const n = Number(options['--max-outputs'] || 8), quality = options['--quality'] || '1K';
   if (!uuid.test(jobId || '') || (projectId && !uuid.test(projectId))) throw new Error('Use valid project/request UUIDs.');
   if (!statusOnly && (!options['--image'] || !Number.isSafeInteger(n) || n < 2 || n > 100 || !['auto', '1K', '1.5K', '2K'].includes(quality))) throw new Error('Provide --image and valid layerize options; see layerize --help.');
   if (statusOnly && !projectId) throw new Error('status requires --project <id>.');
