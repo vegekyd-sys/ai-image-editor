@@ -27,5 +27,9 @@ it('cleans up the old snapshot without overwriting a concurrent authored filter 
   const view = render(<EditableHoverTint element={old} fieldId="first" visible />); finish();
   view.rerender(<EditableHoverTint element={next} fieldId="second" visible />); finish();
   expect(old.style.filter).toBe(''); expect(next.style.filter).toContain('mkr-hover-');
-  next.style.filter = 'contrast(1.2)'; view.unmount(); expect(next.style.filter).toBe('contrast(1.2)');
+  next.style.filter = 'contrast(1.2)';
+  view.rerender(<EditableHoverTint element={next} fieldId="second" visible={false} />); finish();
+  view.rerender(<EditableHoverTint element={next} fieldId="second" visible />); finish();
+  expect(next.style.filter).toContain('contrast(1.2)');
+  view.unmount(); expect(next.style.filter).toBe('contrast(1.2)');
 });

@@ -46,12 +46,22 @@ export default function EditableHoverTint({ element, fieldId, visible }: { eleme
     const owner = ownerRef.current;
     if (!owner) return;
     cancelAnimationFrame(frameRef.current);
-    if (visible && !owner.active) { element.style.setProperty('filter', owner.expected, 'important'); owner.active = true; }
+    if (visible && (!owner.active || element.style.filter !== owner.expected)) {
+      // An authored filter may have changed while this layer stayed mounted.
+      // A later hover must compose with that latest value, not restore an old one.
+      owner.value = element.style.filter; owner.priority = element.style.getPropertyPriority('filter');
+      const base = getComputedStyle(element).filter;
+      owner.expected = `${base && base !== 'none' ? `${base} ` : ''}url("#${filterId}")`;
+      element.style.setProperty('filter', owner.expected, 'important'); owner.active = true;
+    }
     const from = amountRef.current, to = visible ? .15 : 0;
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const start = performance.now();
     const update = (now: number) => {
-      if (!element.isConnected || (owner.active && element.style.filter !== owner.expected)) return;
+      if (!element.isConnected) return;
+      if (owner.active && element.style.filter !== owner.expected) {
+        owner.active = false; amountRef.current = 0; colorRef.current?.setAttribute('values', matrix(0)); return;
+      }
       const progress = reduced ? 1 : Math.min(1, Math.max(0, (now - start) / 100));
       const amount = from + (to - from) * (1 - (1 - progress) ** 3);
       amountRef.current = amount;
