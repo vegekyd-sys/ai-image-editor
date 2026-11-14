@@ -115,6 +115,19 @@ export default function DesignOverlay({
   // Drag snapshots
   const pickEditable = useCallback((x: number, y: number) => pickPaintedEditable(rectsRef.current, x, y), []);
 
+  // The custom frame and its corner handles read our rects, not Moveable's
+  // internal geometry. Keep them in the same frame as every live DOM gesture.
+  const syncGestureFrame = useCallback((fieldId: string, target: HTMLElement) => {
+    const overlay = overlayRef.current;
+    if (!overlay || !target.isConnected) return;
+    const bounds = target.getBoundingClientRect(), base = overlay.getBoundingClientRect();
+    const measured = rectsRef.current.map(item => item.id === fieldId && item.domEl === target
+      ? { ...item, left: bounds.left - base.left, top: bounds.top - base.top, width: bounds.width, height: bounds.height }
+      : item);
+    rectsRef.current = measured;
+    setRects(measured);
+  }, []);
+
   // Measure editable elements
   const measure = useCallback(() => {
     if (isDraggingRef.current || isMeasuringRef.current) return;
@@ -282,13 +295,9 @@ export default function DesignOverlay({
     } : gesture.basePosition;
     target.style.translate = `${gesture.position.x}px ${gesture.position.y}px`;
     gesture.moved = gesture.scale.w !== gesture.baseScale.w || gesture.scale.h !== gesture.baseScale.h;
-    const next = target.getBoundingClientRect(), overlay = overlayRef.current?.getBoundingClientRect();
-    if (overlay) {
-      const measured = rectsRef.current.map(item => item.id === gesture.fieldId ? { ...item, left: next.left - overlay.left, top: next.top - overlay.top, width: next.width, height: next.height } : item);
-      rectsRef.current = measured; setRects(measured);
-    }
+    syncGestureFrame(gesture.fieldId, target);
     moveableRef.current?.updateRect();
-  }, []);
+  }, [syncGestureFrame]);
   const startCornerResize = (event: ReactPointerEvent<HTMLButtonElement>, fieldId: string, target: HTMLElement, dx: number, dy: number) => {
     if (event.button !== 0 || moveableGestureRef.current) return;
     event.preventDefault(); event.stopPropagation();
@@ -619,6 +628,7 @@ export default function DesignOverlay({
       const dx = (clientX - dragState.startX) * dragState.sourcePerViewportPx;
       const dy = (clientY - dragState.startY) * dragState.sourcePerViewportPx;
       dragState.target.style.translate = `${dragState.baseX + dx}px ${dragState.baseY + dy}px`;
+      syncGestureFrame(dragState.fieldId, dragState.target);
     };
 
     const flushDrag = () => {
@@ -681,7 +691,7 @@ export default function DesignOverlay({
       if (interactionEl) delete interactionEl.dataset.editableGesture;
       if (dragRaf) cancelAnimationFrame(dragRaf);
     };
-  }, [containerEl, interactionEl, measure, onUpdateProp, props, touchGestures]);
+  }, [containerEl, interactionEl, measure, onUpdateProp, props, touchGestures, syncGestureFrame]);
 
   // ── Container-level pinch-to-scale ──
   // Single implementation: works regardless of where fingers land.
@@ -723,6 +733,7 @@ export default function DesignOverlay({
       )?.domEl ?? null;
       if (el) {
         el.style.scale = `${+newW.toFixed(4)} ${+newH.toFixed(4)}`;
+        syncGestureFrame(selectedFieldIdRef.current!, el);
       }
 
       // Update Moveable frame to follow
@@ -758,7 +769,7 @@ export default function DesignOverlay({
       containerEl.removeEventListener('touchend', onTouchEnd);
       containerEl.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [containerEl, interactionEl, props, onUpdateProp]);
+  }, [containerEl, interactionEl, props, onUpdateProp, syncGestureFrame]);
 
   const selectedRect = rects.find(r => r.id === selectedFieldId && r.domEl.isConnected);
 
@@ -866,6 +877,7 @@ export default function DesignOverlay({
                 y: gesture.basePosition.y + beforeTranslate[1] * gesture.baseScale.w };
               gesture.moved = beforeTranslate[0] !== 0 || beforeTranslate[1] !== 0;
               target.style.translate = `${gesture.position.x}px ${gesture.position.y}px`;
+              syncGestureFrame(gesture.fieldId, target);
             }}
             onDragEnd={() => { if (moveableGestureRef.current?.kind === 'drag') finishMoveableGesture(); }}
 
