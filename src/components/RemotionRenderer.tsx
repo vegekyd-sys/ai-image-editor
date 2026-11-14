@@ -432,8 +432,14 @@ export default function RemotionRenderer({
   const inputReadyRef = useRef(false);
   const notifyLoading = useCallback(() => onLoadingRef.current?.(compileLoadingRef.current || inputLoadingRef.current), []);
 
-  const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
+  const [compiledComponent, setComponent] = useState<React.ComponentType<any> | null>(null);
+  const [compiledCode, setCompiledCode] = useState<string | null>(null);
   const [inputProps, setInputProps] = useState<Record<string, unknown>>(design.props || {});
+  const [inputIdentity, setInputIdentity] = useState({ code: design.code, snapshotId });
+  // Code and image props resolve independently. Never run a new composition
+  // against the previous snapshot's asset keys (or the inverse).
+  const Component = compiledCode === design.code && inputIdentity.code === design.code
+    && inputIdentity.snapshotId === snapshotId ? compiledComponent : null;
   const [compileError, setCompileError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const fontRenderKey = layerizeFontRenderKey(design);
@@ -541,6 +547,7 @@ export default function RemotionRenderer({
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
         setComponent(() => comp);
+        setCompiledCode(design.code);
         if (fontsSettled) { compileLoadingRef.current = false; fontBarrier.release(); notifyLoading(); }
       } catch (e) {
         if (cancelled) return;
@@ -595,6 +602,7 @@ export default function RemotionRenderer({
       if (fontRenderKey) await fontBarrier.ready;
       if (cancelled) return;
       setInputProps(resolved);
+      setInputIdentity({ code: design.code, snapshotId });
       inputReadyRef.current = true; inputSnapshotRef.current = snapshotId;
       inputLoadingRef.current = false; notifyLoading();
     })();
