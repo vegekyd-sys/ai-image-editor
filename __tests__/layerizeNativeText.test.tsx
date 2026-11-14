@@ -22,7 +22,7 @@ describe('font-fitted editable text', () => {
     const runtime = createEditableReactRuntime(React, 'video');
     new Function('require', 'exports', transform(design.code, { transforms: ['jsx', 'imports'] }).code)(
       (name: string) => name === 'react' ? runtime.React : { AbsoluteFill: 'div', Img: 'img' }, exports);
-    const render = (props: Record<string, unknown>) => renderToStaticMarkup(React.createElement(exports.default, props));
+    const render = (props: Record<string, unknown>) => renderToStaticMarkup(React.createElement(runtime.wrap(exports.default, 'proxy'), props));
     const original = render(design.props!);
     expect(original).toContain('glyphs.png'); expect(original).not.toContain('<text');
     const edited = render({ ...design.props, layer_1_text_0: 'WORLD', _pos_layer_0: { x: 12, y: 24 } });

@@ -14,8 +14,8 @@ export async function prepareLayerizeTextLayers(layers: LayerizeLayer[], bytes: 
     for (const [index, line] of lines.entries()) {
       const lineBox = lines.length === 1 ? { left: 0, top: 0, width: info.width, height: info.height } : (() => {
         const padding = (line.bounds[3] - line.bounds[1]) * .12;
-        const left = Math.max(0, Math.floor((line.bounds[0] - padding - layer.bounds[0]) / sx));
-        const top = Math.max(0, Math.floor((line.bounds[1] - padding - layer.bounds[1]) / sy));
+        const left = Math.min(info.width - 1, Math.max(0, Math.floor((line.bounds[0] - padding - layer.bounds[0]) / sx)));
+        const top = Math.min(info.height - 1, Math.max(0, Math.floor((line.bounds[1] - padding - layer.bounds[1]) / sy)));
         return { left, top, width: Math.max(1, Math.min(info.width - left, Math.ceil((line.bounds[2] + padding - layer.bounds[0]) / sx) - left)), height: Math.max(1, Math.min(info.height - top, Math.ceil((line.bounds[3] + padding - layer.bounds[1]) / sy) - top)) };
       })();
       let left = info.width, top = info.height, right = 0, bottom = 0;

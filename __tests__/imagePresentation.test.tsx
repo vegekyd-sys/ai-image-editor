@@ -9,7 +9,7 @@ const resolvers = new Map<string, () => void>();
 function pending(src: string) { gates.set(src, new Promise(resolve => resolvers.set(src, resolve))); }
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.spyOn(HTMLImageElement.prototype, 'decode').mockImplementation(function () { return gates.get(this.getAttribute('src') || this.src) || Promise.resolve(); });
+  vi.spyOn(HTMLImageElement.prototype, 'decode').mockImplementation(function (this: HTMLImageElement) { return gates.get(this.getAttribute('src') || this.src) || Promise.resolve(); });
   vi.stubGlobal('Image', function () {
     const image = document.createElement('img');
     Object.defineProperties(image, { naturalWidth: { value: 400 }, naturalHeight: { value: 300 } });

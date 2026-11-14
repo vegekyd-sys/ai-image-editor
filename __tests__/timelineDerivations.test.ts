@@ -97,7 +97,7 @@ describe('editor timeline derivations', () => {
     })).toBe(true);
   });
 
-  it('returns nearby optimized preload URLs while skipping cached/base64 snapshots', () => {
+  it('preloads the current and nearby timeline URLs while skipping cached/base64 snapshots', () => {
     const urls = getNearbyOptimizedPreloadUrls([
       snap('a', storageUrl('a')),
       snap('b', 'data:image/png;base64,b'),
@@ -106,8 +106,9 @@ describe('editor timeline derivations', () => {
       snap('e', storageUrl('e')),
     ], 2);
 
-    expect(urls).toHaveLength(3);
-    expect(urls.every(url => url.includes('width=2000'))).toBe(true);
+    expect(urls).toHaveLength(4);
+    expect(urls.every(url => url.includes('width='))).toBe(true);
+    expect(urls.join('\n')).toContain('/c.png');
     expect(urls.join('\n')).toContain('/a.png');
     expect(urls.join('\n')).toContain('/d.png');
     expect(urls.join('\n')).toContain('/e.png');

@@ -208,7 +208,7 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
   const usesRasterPoster = design.editables?.every(field => field.type === 'image') || usesOriginalTextPixels;
   if (usesRasterPoster) {
     // Raster Layerize results already contain everything needed for the exact
-    // initial composition. Native OCR text still uses the pinned-font renderer.
+    // initial composition, including original glyph pixels for editable text.
     poster = await renderLayerizeRasterPoster(manifest, new Map(decoded.map(item => [item.row.z_index, item.bytes])));
   } else {
     const { renderDesignFrame } = await import('./remotion-server');

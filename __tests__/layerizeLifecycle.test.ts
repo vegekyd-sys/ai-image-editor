@@ -32,6 +32,7 @@ vi.mock('@/lib/layerize-provider', async (original) => ({ ...await original<any>
 vi.mock('@/lib/billing/token-rates', async original => ({ ...await original<any>(), getTokenRate: h.rate }));
 vi.mock('@/lib/billing/credits', () => ({ isBillingEnabled: async () => true, requireCredits: async () => ({ ok: true, balance: 1000 }) }));
 vi.mock('@/lib/remotion-server', () => ({ renderDesignFrame: h.render }));
+vi.mock('@/lib/layerize-text-fit', () => ({layerizeMatchingFaces:async()=>[],fitLayerizeText:async()=>null}));
 import { startLayerize, getLayerize } from '@/lib/layerize';
 import { LayerizeProviderError } from '@/lib/layerize-provider';
 const projectId = '11111111-1111-4111-8111-111111111111', jobId = '22222222-2222-4222-8222-222222222222';
@@ -142,12 +143,14 @@ describe('Layerize lifecycle and billing ownership', () => {
   });
 
 });
-it('keeps native OCR text on the pinned-font Remotion poster path', async () => {
+it('publishes editable OCR text with original glyph pixels without waiting for a font render', async () => {
+  const pixels = await sharp({create:{width:20,height:20,channels:4,background:'#ffffff'}}).png().toBuffer();
+  h.read.mockImplementation(async () => pixels);
   const task = await h.query();
   task.result_data[1].text_recognition = {lines:[{bounding_box:{absolute:[5,8,25,28]},runs:[{text:'HELLO',style:{similar_font_family:'Arial',foreground_color:'#000000'}}]}]};
   h.query.mockReset().mockResolvedValue(task);
   await startLayerize(owner, jobId, {...input,editableText:true});
   const result=await getLayerize(owner,jobId);
-  expect(result.status).toBe('completed'); expect(h.render).toHaveBeenCalledOnce();
+  expect(result.status).toBe('completed'); expect(h.render).not.toHaveBeenCalled();
   expect(result.design?.editables?.some(field=>field.type==='text')).toBe(true);
 });

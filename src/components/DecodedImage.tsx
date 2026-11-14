@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ImgHTMLAttributes } from 'react';
 import { getDecodedImageSize, preloadDecodedImage } from '@/lib/image/presentation';
 
 /** New model images reveal after decoding, with a short opacity-only entrance. */
-export default function DecodedImage({ src = '', style, onLoad, ...rest }: ImgHTMLAttributes<HTMLImageElement>) {
+export default function DecodedImage({ src = '', style, onLoad, ...rest }: Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & { src?: string }) {
   const ref = useRef<HTMLImageElement>(null);
   const [readySource, setReadySource] = useState('');
   useEffect(() => {
