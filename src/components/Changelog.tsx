@@ -17,12 +17,13 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'fasterMediaReplies' | 'seedance25Flash' | 'spatialExplainers' | 'seedream55' | 'characterImageRecovery' | 'klingFlashDefault' | 'googleOmni12' | 'kling4Flash' | 'fasterImage26Svg' | 'gifStickers' | 'fasterMediaDelivery' | 'gptImage26' | 'cliLargeUploads' | 'retakeChoices' | 'kling4' | 'videoFramingParity' | 'fasterFrameChecks' | 'reliable4kExport' | 'deepseekFlashDefault' | 'nativeAudiovisual' | 'marketplaceSkillUpdates' | 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'autoLayerize' | 'fasterMediaReplies' | 'seedance25Flash' | 'spatialExplainers' | 'seedream55' | 'characterImageRecovery' | 'klingFlashDefault' | 'googleOmni12' | 'kling4Flash' | 'fasterImage26Svg' | 'gifStickers' | 'fasterMediaDelivery' | 'gptImage26' | 'cliLargeUploads' | 'retakeChoices' | 'kling4' | 'videoFramingParity' | 'fasterFrameChecks' | 'reliable4kExport' | 'deepseekFlashDefault' | 'nativeAudiovisual' | 'marketplaceSkillUpdates' | 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-11-15', localeKey: 'autoLayerize' },
   { date: '2026-11-13', localeKey: 'fasterMediaReplies' },
   { date: '2026-11-13', localeKey: 'seedance25Flash' },
   { date: '2026-11-13', localeKey: 'spatialExplainers' },
@@ -998,6 +999,10 @@ const CHANGELOG: ChangelogEntry[] = [
 ];
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  autoLayerize: {
+    title: 'changelog.autoLayerize.title',
+    items: ['changelog.autoLayerize.item1', 'changelog.autoLayerize.item2'],
+  },
   fasterMediaReplies: {
     title: 'changelog.fasterMediaReplies.title',
     items: ['changelog.fasterMediaReplies.item1', 'changelog.fasterMediaReplies.item2'],

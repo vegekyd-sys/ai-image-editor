@@ -351,6 +351,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.autoLayerize.title': "一枚の写真を、パーツごとに編集",
+  'changelog.autoLayerize.item1': "自動レイヤー分割で、人物や小物、背景を個別に編集できます。ボールを動かす、帽子を大きくする、ポスターの見出しを選んで Agent に書き換えてもらう。",
+  'changelog.autoLayerize.item2': "お使いの Agent に画像を渡すこともできます。Makaron CLI で分割したら、届いたリンクを開いてそのまま編集できます。",
   'changelog.fasterMediaReplies.title': "素材を使うチャットがもっとスムーズに",
   'changelog.fasterMediaReplies.item1': "画像付きチャットで、標準の Agent がより早く返答を開始します。",
   'changelog.fasterMediaReplies.item2': "画像と動画を組み合わせた依頼でも、素材の分析や制作プランをより早く受け取れます。",

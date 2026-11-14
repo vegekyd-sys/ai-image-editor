@@ -316,6 +316,9 @@ const zh = {
   'editor.trim.playhead': '裁剪播放头',
 
   // Changelog
+  'changelog.autoLayerize.title': "一张图，拆开来玩",
+  'changelog.autoLayerize.item1': "点「自动分层」，把照片里的人物、物件和背景拆开。挪走一颗球，放大一顶帽子，或点中海报上的标题，让 Agent 帮你改字。",
+  'changelog.autoLayerize.item2': "也可以把图片交给自己的 Agent。它用 Makaron CLI 分好层，你点开项目链接，就能接着动手。",
   'changelog.fasterMediaReplies.title': "带素材聊天，回复更快",
   'changelog.fasterMediaReplies.item1': "带图片聊天时，默认 Agent 更快开始回复，减少等待。",
   'changelog.fasterMediaReplies.item2': "同时使用图片和视频时，更快收到素材分析与创作方案。",

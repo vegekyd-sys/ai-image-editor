@@ -76,7 +76,7 @@ async function save(owner: LayerizeOwner, job: LayerizeJob) {
 }
 function response(owner: LayerizeOwner, job: Pick<LayerizeJob, 'id' | 'status'> & Partial<LayerizeJob>): LayerizeResult {
   return { jobId: job.id, projectId: owner.projectId, status: job.status,
-    projectUrl: `${owner.origin.replace(/\/$/, '')}/projects/${owner.projectId}`,
+    projectUrl: `${owner.origin.replace(/\/$/, '')}/projects/${owner.projectId}${job.snapshotId ? `?snapshot=${job.snapshotId}` : ''}`,
     taskId: job.taskId, snapshotId: job.snapshotId, designPath: job.designPath, posterUrl: job.posterUrl,
     credits: job.credits, message: job.error };
 }

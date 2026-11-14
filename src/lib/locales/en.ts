@@ -316,6 +316,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.autoLayerize.title': "Take a picture apart. Make it yours.",
+  'changelog.autoLayerize.item1': "Use Auto Layerize to separate people, objects and the background. Move a ball, make a hat bigger, or select a poster headline and ask the Agent to rewrite it.",
+  'changelog.autoLayerize.item2': "Give the image to your own agent, too. It can split the layers with Makaron CLI and send you a link that opens the editable result.",
   'changelog.fasterMediaReplies.title': "Faster replies with your media",
   'changelog.fasterMediaReplies.item1': "The default Agent starts replying sooner in chats with images.",
   'changelog.fasterMediaReplies.item2': "Get media analysis and creative plans sooner when using images and videos together.",

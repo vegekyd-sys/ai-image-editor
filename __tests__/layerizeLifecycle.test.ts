@@ -65,7 +65,7 @@ describe('Layerize lifecycle and billing ownership', () => {
     await startLayerize(owner, jobId, input); await startLayerize(owner, jobId, input);
     await Promise.all([getLayerize(owner, jobId), getLayerize(owner, jobId)]);
     const result = await getLayerize(owner, jobId);
-    expect(result).toMatchObject({ status: 'completed', credits: 8, snapshotId: jobId, projectUrl: `https://www.makaron.app/projects/${projectId}` });
+    expect(result).toMatchObject({ status: 'completed', credits: 8, snapshotId: jobId, projectUrl: `https://www.makaron.app/projects/${projectId}?snapshot=${jobId}` });
     expect(h.submit).toHaveBeenCalledTimes(1); expect(h.render).not.toHaveBeenCalled();
     expect(h.debits.size).toBe(1);
     expect(h.debits.get(jobId)).toMatchObject({ p_model: 'seedream-5.5-layerize', p_source: 'cli', p_project_id: projectId, p_quote: { credits: 8, supplierCostUsd: .0384 } });

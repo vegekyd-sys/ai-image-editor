@@ -404,7 +404,7 @@ function normalizeRunResponse(data) {
   const projectId = data.projectId || data.project_id;
   if (projectId) {
     data.projectId = projectId;
-    data.projectUrl = `${APP_URL}/projects/${projectId}`;
+    data.projectUrl = data.project_url || `${APP_URL}/projects/${projectId}`;
   }
   return data;
 }
@@ -915,7 +915,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
           }
           if (data.result.error) process.stderr.write(`❌  ${data.result.error}\n`);
         }
-        process.stderr.write(`🔗  ${APP_URL}/projects/${data.projectId}\n`);
+        process.stderr.write(`🔗  ${data.projectUrl}\n`);
         printRunUsage(data.usage);
       }
 
