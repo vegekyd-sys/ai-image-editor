@@ -994,6 +994,7 @@ const en = {
   'profile.signOut': 'Sign Out',
 
   // Agent runtime
+  'design.resizeCorner': (corner: string) => `Resize from the ${({ nw: 'top left', ne: 'top right', sw: 'bottom left', se: 'bottom right' } as Record<string, string>)[corner] || ''} corner`,
   'agent.mediaOnlyPrompt': 'The user sent only images in this turn. Inspect the newly uploaded images and respond in the context of the conversation. If no edit is clearly requested, briefly describe the image and ask what they would like to change. An upload alone is not a request to generate or decompose an image.',
   'agent.status.starting': 'Starting...',
   'agent.status.planning': 'Planning...',

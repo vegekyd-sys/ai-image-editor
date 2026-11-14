@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, type PointerEvent as ReactPointerEvent } from 'react';
 import Moveable from 'react-moveable';
 import type { EditableField } from '@/types';
 import {
@@ -254,12 +254,80 @@ export default function DesignOverlay({
     update: DesignOverlayProps['onUpdateProp'];
     anchor?: { x: number; y: number; fx: number; fy: number };
     basis?: { a: number; b: number; c: number; d: number };
+    pointer?: { id: number; x: number; y: number; dx: number; dy: number; width: number; height: number; capture: HTMLElement };
   };
   const moveableGestureRef = useRef<MoveableGesture | null>(null);
+  const resizeRafRef = useRef(0);
+  const resizePointRef = useRef<{ x: number; y: number } | null>(null);
+  const applyCornerResize = useCallback((gesture: MoveableGesture, point: { x: number; y: number }) => {
+    const pointer = gesture.pointer;
+    if (!pointer) return;
+    const projected = ((point.x - pointer.x) * pointer.dx * pointer.width + (point.y - pointer.y) * pointer.dy * pointer.height)
+      / Math.max(1, pointer.width ** 2 + pointer.height ** 2);
+    const ratio = Math.max(Math.max(.01 / gesture.baseScale.w, .01 / gesture.baseScale.h),
+      Math.min(Math.min(20 / gesture.baseScale.w, 20 / gesture.baseScale.h), 1 + projected));
+    gesture.scale = { w: +(gesture.baseScale.w * ratio).toFixed(4), h: +(gesture.baseScale.h * ratio).toFixed(4) };
+    const target = gesture.target;
+    target.style.scale = `${gesture.scale.w} ${gesture.scale.h}`;
+    target.style.translate = `${gesture.basePosition.x}px ${gesture.basePosition.y}px`;
+    const rect = target.getBoundingClientRect(), anchor = gesture.anchor!, basis = gesture.basis!;
+    const dx = anchor.x - (rect.left + anchor.fx * rect.width), dy = anchor.y - (rect.top + anchor.fy * rect.height);
+    const determinant = basis.a * basis.d - basis.b * basis.c;
+    gesture.position = Math.abs(determinant) > .000001 ? {
+      x: gesture.basePosition.x + (basis.d * dx - basis.c * dy) / determinant,
+      y: gesture.basePosition.y + (basis.a * dy - basis.b * dx) / determinant,
+    } : gesture.basePosition;
+    target.style.translate = `${gesture.position.x}px ${gesture.position.y}px`;
+    gesture.moved = gesture.scale.w !== gesture.baseScale.w || gesture.scale.h !== gesture.baseScale.h;
+    const next = target.getBoundingClientRect(), overlay = overlayRef.current?.getBoundingClientRect();
+    if (overlay) {
+      const measured = rectsRef.current.map(item => item.id === gesture.fieldId ? { ...item, left: next.left - overlay.left, top: next.top - overlay.top, width: next.width, height: next.height } : item);
+      rectsRef.current = measured; setRects(measured);
+    }
+    moveableRef.current?.updateRect();
+  }, []);
+  const startCornerResize = (event: ReactPointerEvent<HTMLButtonElement>, fieldId: string, target: HTMLElement, dx: number, dy: number) => {
+    if (event.button !== 0 || moveableGestureRef.current) return;
+    event.preventDefault(); event.stopPropagation();
+    onGestureStartRef.current?.();
+    const basePosition = (props[`_pos_${fieldId}`] as { x: number; y: number } | undefined) ?? { x: 0, y: 0 };
+    const baseScale = (props[`_scale_${fieldId}`] as { w: number; h: number } | undefined) ?? { w: 1, h: 1 };
+    const rect = target.getBoundingClientRect(), originalTranslate = target.style.translate;
+    target.style.translate = `${basePosition.x + 1}px ${basePosition.y}px`;
+    const xRect = target.getBoundingClientRect();
+    target.style.translate = `${basePosition.x}px ${basePosition.y + 1}px`;
+    const yRect = target.getBoundingClientRect();
+    target.style.translate = originalTranslate;
+    moveableGestureRef.current = { kind: 'scale', fieldId, target, basePosition, baseScale,
+      position: basePosition, scale: baseScale, originalTranslate, originalScale: target.style.scale, moved: false, update: onUpdateProp,
+      anchor: { x: dx > 0 ? rect.left : rect.right, y: dy > 0 ? rect.top : rect.bottom, fx: dx > 0 ? 0 : 1, fy: dy > 0 ? 0 : 1 },
+      basis: { a: xRect.left - rect.left, b: xRect.top - rect.top, c: yRect.left - rect.left, d: yRect.top - rect.top },
+      pointer: { id: event.pointerId, x: event.clientX, y: event.clientY, dx, dy, width: rect.width, height: rect.height, capture: event.currentTarget } };
+    isDraggingRef.current = true; setIsDragging(true);
+    if (interactionEl) interactionEl.dataset.editableGesture = 'scale';
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const moveCornerResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const gesture = moveableGestureRef.current;
+    if (gesture?.pointer?.id !== event.pointerId) return;
+    event.preventDefault(); event.stopPropagation();
+    resizePointRef.current = { x: event.clientX, y: event.clientY };
+    if (!resizeRafRef.current) resizeRafRef.current = requestAnimationFrame(() => {
+      resizeRafRef.current = 0;
+      const point = resizePointRef.current; resizePointRef.current = null;
+      if (point && moveableGestureRef.current === gesture) applyCornerResize(gesture, point);
+    });
+  };
+
   const finishMoveableGesture = useCallback((commit = true) => {
     const gesture = moveableGestureRef.current;
     if (!gesture) return;
+    if (resizeRafRef.current) { cancelAnimationFrame(resizeRafRef.current); resizeRafRef.current = 0; }
+    const point = resizePointRef.current; resizePointRef.current = null;
+    if (commit && point && gesture.kind === 'scale') applyCornerResize(gesture, point);
     moveableGestureRef.current = null;
+    const pointer = gesture.pointer;
+    if (pointer?.capture.hasPointerCapture(pointer.id)) pointer.capture.releasePointerCapture(pointer.id);
     moveableRef.current?.stopDrag();
     if (interactionEl) delete interactionEl.dataset.editableGesture;
     isDraggingRef.current = false; setIsDragging(false);
@@ -272,7 +340,7 @@ export default function DesignOverlay({
       gesture.target.style.scale = gesture.originalScale;
     }
     requestAnimationFrame(() => { measure(); moveableRef.current?.updateRect(); });
-  }, [interactionEl, measure]);
+  }, [interactionEl, measure, applyCornerResize]);
 
   const finishMoveableGestureRef = useRef(finishMoveableGesture);
   finishMoveableGestureRef.current = finishMoveableGesture;
@@ -305,6 +373,8 @@ export default function DesignOverlay({
       const gesture = moveableGestureRef.current;
       if (gesture) { gesture.target.style.translate = gesture.originalTranslate; gesture.target.style.scale = gesture.originalScale; }
       moveableGestureRef.current = null;
+      if (resizeRafRef.current) cancelAnimationFrame(resizeRafRef.current);
+      resizeRafRef.current = 0; resizePointRef.current = null;
       isDraggingRef.current = false; setIsDragging(false);
       if (interactionEl) delete interactionEl.dataset.editableGesture;
     };
@@ -531,7 +601,7 @@ export default function DesignOverlay({
 
     let pendingTouch: { target: HTMLElement; x: number; y: number; id: number } | null = null;
     const onPointerDown = (e: PointerEvent) => {
-      if (e.pointerType !== 'touch') return;
+      if (e.pointerType !== 'touch' || moveableGestureRef.current) return;
       if (e.isPrimary === false) { pendingTouch = null; if (dragState) finishDrag(); return; }
       if (pendingTouch || dragState) return;
       const target = e.target as HTMLElement | null;
@@ -557,6 +627,7 @@ export default function DesignOverlay({
     };
 
     const onPointerMove = (e: PointerEvent) => {
+      if (moveableGestureRef.current) { pendingTouch = null; return; }
       const point = pendingTouch;
       if (point?.id === e.pointerId && Math.hypot(e.clientX - point.x, e.clientY - point.y) > EDITABLE_POINTER_MOVE_THRESHOLD) {
         pendingTouch = null;
@@ -620,7 +691,7 @@ export default function DesignOverlay({
       Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
     const onTouchStart = (e: TouchEvent) => {
-      if (!selectedFieldIdRef.current || e.touches.length !== 2) return;
+      if (moveableGestureRef.current || !selectedFieldIdRef.current || e.touches.length !== 2) return;
       const sc = props[`_scale_${selectedFieldIdRef.current}`] as { w: number; h: number } | undefined;
       onGestureStartRef.current?.();
       if (interactionEl) interactionEl.dataset.editableGesture = 'scale';
@@ -715,7 +786,21 @@ export default function DesignOverlay({
         );
       })()}
 
-      {/* Moveable: drag + desktop scale handles. Pinch handled by container touch listener above. */}
+      {selectedRect && selectedFieldId && <>
+        <div data-editable-selection-frame className="absolute pointer-events-none border border-dashed border-fuchsia-500"
+          style={{ left: selectedRect.left, top: selectedRect.top, width: selectedRect.width, height: selectedRect.height }} />
+        {([['nw', -1, -1], ['ne', 1, -1], ['sw', -1, 1], ['se', 1, 1]] as const).map(([corner, dx, dy]) => (
+          <button key={corner} data-resize-corner={corner} className="mkr-resize-handle"
+            aria-label={t('design.resizeCorner', corner)}
+            style={{ left: selectedRect.left + (dx > 0 ? selectedRect.width : 0), top: selectedRect.top + (dy > 0 ? selectedRect.height : 0) }}
+            onPointerDown={event => startCornerResize(event, selectedFieldId, selectedRect.domEl, dx, dy)}
+            onPointerMove={moveCornerResize}
+            onPointerUp={event => { event.preventDefault(); event.stopPropagation(); finishMoveableGesture(); }}
+            onPointerCancel={() => finishMoveableGesture()}
+            onLostPointerCapture={() => finishMoveableGesture()} />
+        ))}
+      </>}
+      {/* Moveable retains drag alignment; corner resize owns a captured pointer. */}
       {selectedRect && selectedFieldId && (
         <div style={{ transform: scrollOffset ? `translateY(${scrollOffset}px)` : undefined }}>
           <Moveable
@@ -727,7 +812,7 @@ export default function DesignOverlay({
             dragArea={!touchGestures}
             passDragArea={touchGestures}
             preventDefault={false}
-            scalable={true}
+            scalable={false}
             keepRatio={true}
             renderDirections={['nw', 'ne', 'sw', 'se']}
             pinchable={false}
@@ -735,7 +820,7 @@ export default function DesignOverlay({
             origin={false}
             throttleDrag={0}
             throttleScale={0}
-            hideDefaultLines={false}
+            hideDefaultLines={true}
             edge={false}
             padding={{ left: 0, top: 0, right: 0, bottom: 0 }}
             /* ── Snap & Guidelines ── */
@@ -779,52 +864,7 @@ export default function DesignOverlay({
               target.style.translate = `${gesture.position.x}px ${gesture.position.y}px`;
             }}
             onDragEnd={() => { if (moveableGestureRef.current?.kind === 'drag') finishMoveableGesture(); }}
-            /* ── Scale: pin the original target and opposite corner until release. ── */
-            onScaleStart={(event) => {
-              onGestureStartRef.current?.();
-              const target = selectedRect.domEl;
-              const basePosition = (props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined) ?? { x: 0, y: 0 };
-              const baseScale = (props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined) ?? { w: 1, h: 1 };
-              const rect = target.getBoundingClientRect(), originalTranslate = target.style.translate;
-              // Measure the CSS-translation basis, including parent zoom and
-              // rotation. This keeps anchoring correct for ordinary Editables too.
-              target.style.translate = `${basePosition.x + 1}px ${basePosition.y}px`;
-              const xRect = target.getBoundingClientRect();
-              target.style.translate = `${basePosition.x}px ${basePosition.y + 1}px`;
-              const yRect = target.getBoundingClientRect();
-              target.style.translate = originalTranslate;
-              const direction = event.direction;
-              const opposite = `${direction[1] > 0 ? 'n' : 's'}${direction[0] > 0 ? 'w' : 'e'}`;
-              const control = overlayRef.current?.querySelector(`.moveable-${opposite}`)?.getBoundingClientRect();
-              const x = control ? control.left + control.width / 2 : direction[0] > 0 ? rect.left : rect.right;
-              const y = control ? control.top + control.height / 2 : direction[1] > 0 ? rect.top : rect.bottom;
-              moveableGestureRef.current = { kind: 'scale', fieldId: selectedFieldId, target,
-                basePosition, baseScale, position: basePosition, scale: baseScale, originalTranslate,
-                originalScale: target.style.scale, moved: false, update: onUpdateProp,
-                anchor: { x, y, fx: (x - rect.left) / Math.max(1, rect.width), fy: (y - rect.top) / Math.max(1, rect.height) },
-                basis: { a: xRect.left - rect.left, b: xRect.top - rect.top, c: yRect.left - rect.left, d: yRect.top - rect.top } };
-              isDraggingRef.current = true; setIsDragging(true);
-              if (interactionEl) interactionEl.dataset.editableGesture = 'scale';
-              event.set([1, 1]);
-            }}
-            onScale={({ target, scale: scaleVec }) => {
-              const gesture = moveableGestureRef.current;
-              if (!gesture || gesture.kind !== 'scale' || target !== gesture.target) return;
-              const clamp = (value: number) => +Math.max(0.01, Math.min(20, Number.isFinite(value) ? value : 1)).toFixed(4);
-              gesture.scale = { w: clamp(gesture.baseScale.w * scaleVec[0]), h: clamp(gesture.baseScale.h * scaleVec[1]) };
-              target.style.scale = `${gesture.scale.w} ${gesture.scale.h}`;
-              target.style.translate = `${gesture.basePosition.x}px ${gesture.basePosition.y}px`;
-              const rect = target.getBoundingClientRect(), anchor = gesture.anchor!, basis = gesture.basis!;
-              const dx = anchor.x - (rect.left + anchor.fx * rect.width), dy = anchor.y - (rect.top + anchor.fy * rect.height);
-              const determinant = basis.a * basis.d - basis.b * basis.c;
-              gesture.position = Math.abs(determinant) > 0.000001 ? {
-                x: gesture.basePosition.x + (basis.d * dx - basis.c * dy) / determinant,
-                y: gesture.basePosition.y + (basis.a * dy - basis.b * dx) / determinant,
-              } : gesture.basePosition;
-              target.style.translate = `${gesture.position.x}px ${gesture.position.y}px`;
-              gesture.moved = gesture.scale.w !== gesture.baseScale.w || gesture.scale.h !== gesture.baseScale.h;
-            }}
-            onScaleEnd={() => { if (moveableGestureRef.current?.kind === 'scale') finishMoveableGesture(); }}
+
           />
         </div>
       )}

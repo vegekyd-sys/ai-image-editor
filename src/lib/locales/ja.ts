@@ -890,6 +890,7 @@ const ja = {
   'profile.signOut': 'ログアウト',
 
   // Agent runtime
+  'design.resizeCorner': (corner: string) => `${({ nw: '左上', ne: '右上', sw: '左下', se: '右下' } as Record<string, string>)[corner] || ''}の角からサイズを変更`,
   'agent.mediaOnlyPrompt': '今回ユーザーは画像のみを送信しました。新しくアップロードされた画像を確認し、会話の文脈に沿って応答してください。明確な編集依頼がなければ、画像を簡潔に説明して希望する変更を尋ねてください。アップロードだけを理由に画像生成やレイヤー分割を始めないでください。',
   'agent.status.starting': '開始しています...',
   'agent.status.planning': '計画中...',

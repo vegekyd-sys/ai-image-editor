@@ -994,6 +994,7 @@ const zh = {
   'profile.signOut': '退出登录',
 
   // Agent runtime
+  'design.resizeCorner': (corner: string) => `从${({ nw: '左上', ne: '右上', sw: '左下', se: '右下' } as Record<string, string>)[corner] || ''}角调整大小`,
   'agent.mediaOnlyPrompt': '用户本轮只上传了图片。请查看本轮新上传的图片并结合对话回应；没有明确编辑要求时，先简短说明画面并询问想怎么修改。不要仅因上传就开始生成图片或分层。',
   'agent.status.starting': '开始处理...',
   'agent.status.planning': '规划中...',

@@ -890,6 +890,7 @@ const zhHant = {
   'profile.signOut': '登出',
 
   // Agent runtime
+  'design.resizeCorner': (corner: string) => `從${({ nw: '左上', ne: '右上', sw: '左下', se: '右下' } as Record<string, string>)[corner] || ''}角調整大小`,
   'agent.mediaOnlyPrompt': '使用者本輪只上傳了圖片。請查看本輪新上傳的圖片並結合對話回應；沒有明確編輯要求時，先簡短說明畫面並詢問想如何修改。不要僅因上傳就開始生成圖片或分層。',
   'agent.status.starting': '開始處理...',
   'agent.status.planning': '規劃中...',
