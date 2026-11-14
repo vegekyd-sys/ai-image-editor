@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { transform } from 'sucrase';
 import { buildLayerizeDesign, type LayerizeManifest } from '@/lib/layerize-design';
@@ -33,12 +33,16 @@ it('does not wait for font matching when exporting unmodified glyphs; changed te
 });
 it('merges background results into the latest local edit, including an undo to a pending history entry',async()=>{
  let release!:(r:Response)=>void;const fetcher=vi.fn(()=>new Promise<Response>(r=>release=r));vi.stubGlobal('fetch',fetcher);
- const d=fixture();let update!:React.Dispatch<React.SetStateAction<Snapshot[]>>;let latest:Snapshot[]=[];
- function Surface(){const[snaps,set]=useState<Snapshot[]>([{id:snapshotId,image:'poster.jpg',tips:[],messageId:'',design:d}]);update=set;latest=snaps;useLayerizeFonts(projectId,snaps,set);return <div/>}
- render(<Surface/>);await waitFor(()=>expect(fetcher).toHaveBeenCalledOnce());
- await act(async()=>{update(s=>s.map(x=>({...x,design:{...x.design!,props:{...x.design!.props,layer_1_text_0:'USER TEXT',_pos_layer_0:{x:50,y:60}}}})))});
- await act(async()=>{release(Response.json(ready))});await waitFor(()=>expect(latest[0].design?.props?._layerizeTextFontFits).toEqual(ready.fits));expect(latest[0].design?.props?.layer_1_text_0).toBe('USER TEXT');expect(latest[0].design?.props?._pos_layer_0).toEqual({x:50,y:60});
- await act(async()=>{update(s=>s.map(x=>({...x,design:{...x.design!,props:{...d.props,layer_1_text_0:'RESTORED TEXT'}}})))});await waitFor(()=>expect(latest[0].design?.props?._layerizeTextFontFits).toEqual(ready.fits));expect(latest[0].design?.props?.layer_1_text_0).toBe('RESTORED TEXT');expect(fetcher).toHaveBeenCalledOnce();
+ const d=fixture();
+ const { result }=renderHook(()=>{
+  const [snaps,set]=useState<Snapshot[]>([{id:snapshotId,image:'poster.jpg',tips:[],messageId:'',design:d}]);
+  useLayerizeFonts(projectId,snaps,set);
+  return { latest:snaps, update:set };
+ });
+ await waitFor(()=>expect(fetcher).toHaveBeenCalledOnce());
+ await act(async()=>{result.current.update(s=>s.map(x=>({...x,design:{...x.design!,props:{...x.design!.props,layer_1_text_0:'USER TEXT',_pos_layer_0:{x:50,y:60}}}})))});
+ await act(async()=>{release(Response.json(ready))});await waitFor(()=>expect(result.current.latest[0].design?.props?._layerizeTextFontFits).toEqual(ready.fits));expect(result.current.latest[0].design?.props?.layer_1_text_0).toBe('USER TEXT');expect(result.current.latest[0].design?.props?._pos_layer_0).toEqual({x:50,y:60});
+ await act(async()=>{result.current.update(s=>s.map(x=>({...x,design:{...x.design!,props:{...d.props,layer_1_text_0:'RESTORED TEXT'}}})))});await waitFor(()=>expect(result.current.latest[0].design?.props?._layerizeTextFontFits).toEqual(ready.fits));expect(result.current.latest[0].design?.props?.layer_1_text_0).toBe('RESTORED TEXT');expect(fetcher).toHaveBeenCalledOnce();
 });
 
 it('keeps pinned CJK fallbacks available when dynamic matched fonts do not contain newly entered Chinese text',()=>{

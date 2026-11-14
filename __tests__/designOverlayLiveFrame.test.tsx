@@ -2,7 +2,7 @@ import React from 'react';
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const runtime = vi.hoisted(() => ({ target: null as HTMLElement | null, moveable: null as any, updateRect: vi.fn() }));
-vi.mock('react-moveable', () => ({ default: React.forwardRef((props: any, ref: any) => {
+vi.mock('react-moveable', () => ({ default: React.forwardRef(function MockMoveable(props: any, ref: any) {
   runtime.moveable = props; React.useImperativeHandle(ref, () => ({ updateRect: runtime.updateRect, stopDrag() {} })); return null;
 }) }));
 vi.mock('@/lib/editor/scene-registry', async original => ({ ...await original<any>(), buildLegacySceneRegistry: () => ({ activeInstances: () => runtime.target ? [{ id: 'shape', element: runtime.target }] : [] }) }));
