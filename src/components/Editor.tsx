@@ -113,6 +113,7 @@ interface EditorProps {
   initialAnimations?: ProjectAnimation[];
   timelineVersion?: number;
   readOnly?: boolean;
+  ownershipPending?: boolean;
   disableAgentLiveReload?: boolean;
   disableBodyScrollLock?: boolean;
   inactive?: boolean;
@@ -160,6 +161,7 @@ export default function Editor({
   initialAnimations,
   timelineVersion = 1,
   readOnly,
+  ownershipPending = false,
   disableBodyScrollLock = false,
   inactive = false,
 }: EditorProps = {}) {
@@ -4238,10 +4240,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       />
                     </DesignEditorFrame>
                   </div>
-                ) : isDesignLoading || (isViewingDesign && allDesignEditables.length > 0) ? (
+                ) : (ownershipPending || !readOnly) && (isDesignLoading || (isViewingDesign && allDesignEditables.length > 0)) ? (
                   <DesignEditPanel
                     key={currentDesignSnap?.id}
-                    loading={isDesignLoading || readOnly}
+                    loading={isDesignLoading || ownershipPending}
                     editables={allDesignEditables}
                     renderedOrder={renderedEditableOrder?.snapshotId === currentDesignSnap?.id ? renderedEditableOrder?.ids : undefined}
                     onHistorySeek={handleDesignHistorySeek}

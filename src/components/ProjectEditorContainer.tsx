@@ -509,6 +509,7 @@ export default function ProjectEditorContainer({
         initialAnimations={initialAnimations}
         timelineVersion={timelineVersion}
         readOnly={readOnly}
+        ownershipPending={projectOwnerId === null && !isOwner}
         disableAgentLiveReload={disableAgentLiveReload}
         disableBodyScrollLock={disableBodyScrollLock}
         inactive={!isInlineActive}
