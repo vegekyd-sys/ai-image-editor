@@ -677,7 +677,7 @@ try {
     assert.equal(submitted.length, 1);
     assert.deepEqual(submitted[0].body, { projectId: project, requestId: job, imageUrl: 'https://example.com/source.png', maxOutputs: 6, quality: '1K', editableText: true });
     assert.match(submitted[0].client, /^makaron-cli\//);
-    await expectSuccess(['layerize', '--image', 'https://example.com/source.png', '--project', project, '--quality', '2K', '--json']);
+    await expectSuccess(['layerize', '--image', 'https://example.com/source.png', '--project', project, '--request-id', '33333333-3333-4333-8333-333333333333', '--quality', '2K', '--json']);
     assert.equal(requests.at(-1).body.quality, '2K');
     const count = requests.length;
     const resumed = await expectSuccess(['layerize', 'status', job, '--project', project, '--json']);
