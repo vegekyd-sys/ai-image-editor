@@ -6,6 +6,7 @@ const ja = {
   "design.editTextPlaceholder": (label: string) => `${label}を編集…`,
 
 
+  "design.sourceSaveFailed": "画像を保存できませんでした。もう一度お試しください。",
   "design.autoLayer": "自動レイヤー分割",
   "design.autoLayerHint": "画像を個別に編集できるレイヤーに分割",
   "design.touchHint": "ドラッグ / ピンチ · 解除して閲覧",

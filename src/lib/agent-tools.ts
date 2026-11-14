@@ -1425,6 +1425,7 @@ function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = f
           origin: process.env.MAKARON_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.makaron.app' };
         let id = raw.job_id;
         if (!statusOnly) {
+          if (!ctx.snapshotImages[raw.media_index - 1]) await refreshSnapshotUrls(ctx);
           const index = validateImageIndex(ctx.snapshotImages, raw.media_index);
           if (index.error) return { success: false, error: index.error };
           const input = { imageUrl: ctx.snapshotImages[index.idx], prompt: raw.prompt,

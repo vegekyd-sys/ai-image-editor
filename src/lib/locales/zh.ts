@@ -4,6 +4,7 @@ const zh = {
   "design.editTextPlaceholder": (label: string) => `编辑${label}…`,
 
 
+  "design.sourceSaveFailed": "图片保存失败，请重试。",
   "design.autoLayer": "自动分层",
   "design.autoLayerHint": "把图片拆成可以单独调整的图层",
   "design.touchHint": "拖动 / 缩放 · 取消选中后浏览",

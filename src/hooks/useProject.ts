@@ -313,9 +313,6 @@ export function useProject(projectId: string, userId: string) {
           }
         }
 
-        // Notify caller of the uploaded URL
-        if (imageUrl) onUploaded?.(imageUrl)
-
         // Persist design code to workspace if present
         let designPath: string | null = null
         if (snapshot.design?.code) {
@@ -349,7 +346,9 @@ export function useProject(projectId: string, userId: string) {
           ...(snapshot.metadata ? { metadata: snapshot.metadata } : {}),
         }, { onConflict: 'id' })
 
-        if (error) console.warn('saveSnapshot error:', error)
+        if (error) throw error
+        // Clients may now reference this URL in the server-side timeline.
+        if (imageUrl) onUploaded?.(imageUrl)
 
         // Touch project updated_at so projects page stale-check detects the change
         await supabase.from('projects').update({ updated_at: new Date().toISOString() }).eq('id', projectId)

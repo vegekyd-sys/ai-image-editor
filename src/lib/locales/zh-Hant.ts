@@ -7,6 +7,7 @@ const zhHant = {
   "design.approximateFont": "修改後的文字將使用相近字體。",
   "design.editTextPlaceholder": (label: string) => `編輯${label}…`,
 
+  "design.sourceSaveFailed": "圖片儲存失敗，請重試。",
   "design.autoLayer": "自動分層",
   "design.autoLayerHint": "將圖片拆成可獨立調整的圖層",
   "design.touchHint": "拖曳 / 縮放 · 取消選取後瀏覽",

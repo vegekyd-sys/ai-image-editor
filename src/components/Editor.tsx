@@ -490,6 +490,22 @@ export default function Editor({
   const pullCommitted = useRef(false);     // commit decision (ref to avoid flash between render cycles)
   // ────────────────────────────────────────────────────────────────
 
+  // New project photos are visible while their timeline rows are being written.
+  // Share the pending write with CUI and one-click actions on that snapshot.
+  const sourceWrites = useRef(new Map<string, Promise<boolean>>());
+  const persistSource = useCallback((snap: Snapshot, index: number) => {
+    const inFlight = sourceWrites.current.get(snap.id);
+    if (inFlight) return inFlight;
+    let persisted = false;
+    const write = Promise.resolve().then(() => onSaveSnapshot?.(snap, index, url => {
+      persisted = true;
+      setSnapshots(prev => prev.map(item => item.id === snap.id ? { ...item, imageUrl: url } : item));
+    })).then(() => persisted, () => false);
+    sourceWrites.current.set(snap.id, write);
+    void write.then(() => sourceWrites.current.delete(snap.id));
+    return write;
+  }, [onSaveSnapshot]);
+
   const snapshotsRef = useRef(snapshots);
   snapshotsRef.current = snapshots;
   const animationStateRef = useRef(animationState);
@@ -1694,6 +1710,17 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       }
     }
     if (!projectId) return;
+    const selectedSource = snapIdx === null ? undefined : snapshotsRef.current[snapIdx];
+    if (snapIdx !== null && selectedSource && !selectedSource.design && selectedSource.type !== 'video') {
+      const writing = sourceWrites.current.get(selectedSource.id);
+      if (writing || (!selectedSource.imageUrl && selectedSource.image)) {
+        const saved = await (writing ?? persistSource(selectedSource, snapIdx));
+        if (!saved) {
+          setAgentStatus(t('design.sourceSaveFailed'));
+          return;
+        }
+      }
+    }
     // Path 2 (text-only): no image is OK — Agent will generate one
     // Design snapshots have no image (rendered via Player), skip this check for them
     const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
@@ -1828,7 +1855,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     } finally {
       setIsAgentActive(false);
     }
-  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
+  }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, persistSource, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
 
   const autoLayerSubmitRef = useRef(false);
   const handleAutoLayerize = async () => {
@@ -2349,9 +2376,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       const finalSnapshot = newSnapshot;
       setSnapshots([finalSnapshot]);
       snapshotsRef.current = [finalSnapshot];
-      onSaveSnapshot?.(finalSnapshot, 0, (url) => {
-        setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
-      });
+      void persistSource(finalSnapshot, 0);
       cacheImage(`snap:${snapId}`, base64);
       // Auto-analyze the uploaded photo
       runAutoAnalysis(snapId, base64);
@@ -2369,7 +2394,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       console.error('Image upload error:', err);
       URL.revokeObjectURL(previewUrl);
     }
-  }, [fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis]);
+  }, [fetchTipsForSnapshot, persistSource, runAutoAnalysis]);
 
   // Video upload: transcode → upload → create video snapshot. Returns 1-based image index.
   const handleVideoUpload = useCallback(async (file: File): Promise<number | null> => {
@@ -2520,7 +2545,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             image: img,
             tips: [],
             messageId: '',
-            ...(img.startsWith('http') ? { imageUrl: img } : {}),
             ...(i === 0 && pendingMetadata ? { metadata: pendingMetadata } : {}),
           }))
         : [];
@@ -2557,13 +2581,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
       // ── Step 3: Persist + cache + log events ──
       await Promise.all(workSnapshots.map(async (snap, i) => {
-        await onSaveSnapshot?.(snap, i, (url) => {
-          setSnapshots(prev => {
-            const next = prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s);
-            snapshotsRef.current = next;
-            return next;
-          });
-        });
+        if (snap.type === 'video') await onSaveSnapshot?.(snap, i);
+        else if (!await persistSource(snap, i)) throw new Error('Could not save source image');
+
         cacheImage(`snap:${snap.id}`, snap.image);
       }));
 
@@ -2640,9 +2660,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
     void init().catch(error => {
       finishTipsStartup();
+      setAgentStatus(t('design.sourceSaveFailed'));
       console.error('Project initialization failed:', error);
     });
-  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, pendingSkillLaunchContext, pendingAgentRunId, startTipsFetchForSnapshot, beginTipsStartup, finishTipsStartup, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, addMessage, isDesktop, t]);
+  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, pendingSkillLaunchContext, pendingAgentRunId, startTipsFetchForSnapshot, beginTipsStartup, finishTipsStartup, persistSource, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, addMessage, isDesktop, t]);
 
   // Existing project/current timeline item with no tips — auto-fetch once per snapshot.
   // Do not mark a snapshot attempted until it has a usable image; cached projects can

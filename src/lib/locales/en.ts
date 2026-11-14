@@ -4,6 +4,7 @@ const en = {
   "design.editTextPlaceholder": (label: string) => `Edit ${label}…`,
 
 
+  "design.sourceSaveFailed": "Could not save the image. Try again.",
   "design.autoLayer": "Auto layers",
   "design.autoLayerHint": "Split this image into independently editable layers",
   "design.touchHint": "Drag / pinch · Clear selection to browse",
