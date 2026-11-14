@@ -36,7 +36,8 @@ describe('DesignOverlay moveable guideline regression guards', () => {
     expect(source).toContain("if (pointerType !== 'touch') return false;");
     expect(source).not.toContain("addEventListener('mousedown'");
     expect(source).not.toContain("addEventListener('mousemove'");
-    expect(source).not.toContain("addEventListener('mouseup'");
+    expect(source).not.toContain("addEventListener('mouseup', finishDrag");
+    expect(source).toContain("window.addEventListener('mouseup', release);");
   });
 
   it('keeps corner resize controls usable for small editable images on touch screens', () => {
