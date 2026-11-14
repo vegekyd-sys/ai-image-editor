@@ -5,6 +5,8 @@ import { applyLayerizeFonts, layerizeFontsReference, parseLayerizeFontsResult, t
 
 /** Background metadata never replaces a user's content or enters undo/redo history. */
 export function useLayerizeFonts(projectId: string | undefined, snapshots: Snapshot[], setSnapshots: Dispatch<SetStateAction<Snapshot[]>>) {
+  const latest = useRef(snapshots);
+  latest.current = snapshots;
   const completed = useRef(new Map<string, LayerizeFontsResult>());
   const active = useRef(new Map<string, AbortController>());
   useEffect(() => {
@@ -26,6 +28,10 @@ export function useLayerizeFonts(projectId: string | undefined, snapshots: Snaps
               const value = await response.json();
               if (value.status !== 'pending') {
                 const result = parseLayerizeFontsResult(value);
+                const current = latest.current.find(item => item.id === snapshot.id)?.design;
+                if (current && result.status === 'ready') {
+                  try { const { warmLayerizeMatchedFonts } = await import('@/components/RemotionRenderer'); await warmLayerizeMatchedFonts(applyLayerizeFonts(current, result)); } catch { /* The interactive renderer can retry a transient font load. */ }
+                }
                 if (abort.signal.aborted) return;
                 completed.current.set(snapshot.id, result);
                 setSnapshots(current => current.map(item => item.id === snapshot.id && item.design && layerizeFontsReference(item.design)?.snapshotId === ref.snapshotId

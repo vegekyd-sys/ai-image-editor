@@ -1,6 +1,6 @@
 'use client';
 
-import { layerizeFontRenderKey, layerizeUsesOriginalGlyphs, resolveLayerizeFontsForRender } from '@/lib/layerize-fonts';
+import { layerizeFontsReference, layerizeFontRenderKey, layerizeUsesOriginalGlyphs, resolveLayerizeFontsForRender } from '@/lib/layerize-fonts';
 import { preloadDecodedImage } from '@/lib/image/presentation';
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
@@ -177,6 +177,14 @@ async function resolveBrowserFontManifest(
     browserFontManifestCache.delete(body);
     throw error;
   }
+}
+
+/** Warm the chosen pinned faces after matching without delaying or replacing the visible canvas. */
+export async function warmLayerizeMatchedFonts(design: DesignPayload): Promise<void> {
+  if (layerizeFontsReference(design)?.status !== 'ready') return;
+  const props = design.props || {};
+  const manifest = await resolveBrowserFontManifest(design, design.code, props);
+  await prepareAndLoadRemotionFontsWithTiming({ code: design.code, props, manifest, substitutions: design.fontSubstitutions });
 }
 
 async function compileBrowserDesign(

@@ -10,6 +10,7 @@ import { validateDesign } from '@/lib/design-harness';
 import { prepareRemotionFontCodeFromBundledCatalog } from '@/remotion/font-catalog';
 import { useLayerizeFonts } from '@/hooks/useLayerizeFonts';
 import type { Snapshot } from '@/types';
+vi.mock('@/components/RemotionRenderer',()=>({warmLayerizeMatchedFonts:async()=>{}}));
 const projectId='11111111-1111-4111-8111-111111111111',snapshotId='22222222-2222-4222-8222-222222222222';
 const reference={version:1 as const,projectId,snapshotId,storageOrigin:'https://cdn.makaron.app',storagePath:`/storage/v1/object/public/images/33333333-3333-4333-8333-333333333333/workspace/${projectId}/layerize/${snapshotId}/text-fonts.json`};
 const manifest:LayerizeManifest={version:1,taskId:'retained',width:800,height:500,sourceSha256:'original',supplierCostUsd:.1,layers:[
