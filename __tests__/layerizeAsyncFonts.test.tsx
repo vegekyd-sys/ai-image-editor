@@ -7,6 +7,7 @@ import { buildLayerizeDesign, type LayerizeManifest } from '@/lib/layerize-desig
 import { applyLayerizeFonts, layerizeFontRenderKey, layerizeUsesOriginalGlyphs, resolveLayerizeFontsForRender, type LayerizeFontsResult } from '@/lib/layerize-fonts';
 import { createEditableReactRuntime } from '@/lib/editor/editable-react-runtime';
 import { validateDesign } from '@/lib/design-harness';
+import { prepareRemotionFontCodeFromBundledCatalog } from '@/remotion/font-catalog';
 import { useLayerizeFonts } from '@/hooks/useLayerizeFonts';
 import type { Snapshot } from '@/types';
 const projectId='11111111-1111-4111-8111-111111111111',snapshotId='22222222-2222-4222-8222-222222222222';
@@ -37,4 +38,8 @@ it('merges background results into the latest local edit, including an undo to a
  await act(async()=>{update(s=>s.map(x=>({...x,design:{...x.design!,props:{...x.design!.props,layer_1_text_0:'USER TEXT',_pos_layer_0:{x:50,y:60}}}})))});
  await act(async()=>{release(Response.json(ready))});await waitFor(()=>expect(latest[0].design?.props?._layerizeTextFontFits).toEqual(ready.fits));expect(latest[0].design?.props?.layer_1_text_0).toBe('USER TEXT');expect(latest[0].design?.props?._pos_layer_0).toEqual({x:50,y:60});
  await act(async()=>{update(s=>s.map(x=>({...x,design:{...x.design!,props:{...d.props,layer_1_text_0:'RESTORED TEXT'}}})))});await waitFor(()=>expect(latest[0].design?.props?._layerizeTextFontFits).toEqual(ready.fits));expect(latest[0].design?.props?.layer_1_text_0).toBe('RESTORED TEXT');expect(fetcher).toHaveBeenCalledOnce();
+});
+
+it('keeps pinned CJK fallbacks available when dynamic matched fonts do not contain newly entered Chinese text',()=>{
+ const d=applyLayerizeFonts(fixture(),ready);d.props!.layer_1_text_0='你好 Makaron';const prepared=prepareRemotionFontCodeFromBundledCatalog({code:d.code,props:d.props});expect(prepared.usedFamilies).toContain('Lato');expect(prepared.usedFamilies).toContain('Noto Sans SC');
 });
