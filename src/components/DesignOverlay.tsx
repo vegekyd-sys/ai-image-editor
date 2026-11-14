@@ -274,17 +274,19 @@ export default function DesignOverlay({
     requestAnimationFrame(() => { measure(); moveableRef.current?.updateRect(); });
   }, [interactionEl, measure]);
 
+  const finishMoveableGestureRef = useRef(finishMoveableGesture);
+  finishMoveableGestureRef.current = finishMoveableGesture;
   useEffect(() => {
     const release = () => {
       const gesture = moveableGestureRef.current;
-      if (gesture) requestAnimationFrame(() => { if (moveableGestureRef.current === gesture) finishMoveableGesture(); });
+      if (gesture) requestAnimationFrame(() => { if (moveableGestureRef.current === gesture) finishMoveableGestureRef.current(); });
     };
     const move = (event: PointerEvent) => {
-      if (event.pointerType !== 'touch' && event.buttons === 0) finishMoveableGesture();
+      if (event.pointerType !== 'touch' && event.buttons === 0) finishMoveableGestureRef.current();
     };
-    const blur = () => finishMoveableGesture();
+    const blur = () => finishMoveableGestureRef.current();
     const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && moveableGestureRef.current) { event.preventDefault(); finishMoveableGesture(false); }
+      if (event.key === 'Escape' && moveableGestureRef.current) { event.preventDefault(); finishMoveableGestureRef.current(false); }
     };
     window.addEventListener('pointerup', release);
     window.addEventListener('mouseup', release);
@@ -306,7 +308,7 @@ export default function DesignOverlay({
       isDraggingRef.current = false; setIsDragging(false);
       if (interactionEl) delete interactionEl.dataset.editableGesture;
     };
-  }, [interactionEl, finishMoveableGesture]);
+  }, [interactionEl]);
 
 
   // One surface-level pointer arbiter keeps poster, editable selection, and
