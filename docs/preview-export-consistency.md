@@ -157,3 +157,15 @@ Range 探测使用 64 KiB 窗口合并相邻 box 读取，避免带 ftyp/uuid/fr
 本次应用与渲染站点必须使用同一候选版本，独立站点地址通过单次部署或验收进程环境传入，不能拿旧渲染站点验收新应用。普通客户端默认不改变生产配置。
 
 本机 renderer 与 Sandbox/export 共享 `collectPreviewMediaSources` 和 URL token 替换逻辑，包含 Scene 无扩展名的签名媒体端点。本机也先缓存源文件，再交给解码器，不能把远程下载时间算进浏览器每帧的 28 秒等待期限；缓存只改渲染副本，原始源地址、剪辑范围和画布保持原样。
+
+### Layerize 图层顺序与删除（候选）
+
+`props._layerState` 保存 bottom-to-top `order` 和 `deleted`。DesignEditPanel、画布选区与共享 Editable React runtime 使用同一状态：Proxy 重排真实兄弟节点，并对删除元素返回 null，web-renderer 按同样 DOM 顺序绘制。素材不删除，可在原面板恢复；不依赖 z-index 或只隐藏选区。旧 Layerize manifest 首次编辑时补齐属性，原文字、位移和缩放保持不变。客户端按设计串行保存，避免连续排序/删除的慢 PUT 后写覆盖。运行时标记提升至 r7；未构建、部署新的独立 Lambda bundle，旧 bundle 仍由版本门禁阻止使用。
+
+### 统一 Editable 交互（r8 候选）
+
+普通 `run_code` 设计与 Layerize 结果共用 DesignEditPanel、DesignOverlay、属性保存及操作历史。`_layerState` 本身不再代表固定画布；新拆层使用 `_canvasSizing: "fixed"`，旧拆层兼容 manifest/原有 layer ID，普通长图保留内容高度测量。普通 flex/grid 兄弟元素调层时保留原 CSS order 布局位置，同时调整 DOM 绘制顺序；未编辑的旧设计不增加层序覆盖。
+
+选区按浏览器实际绘制顺序采样图片 alpha，透明处优先命中后面的可见元素，全部透明时仍可选择最上层。采样遵循缩放、二维旋转、object-fit 和 object-position；无法读取跨域像素时保留矩形选择。淡粉色选区使用原图 alpha 蒙版，只存在于编辑器覆盖层，不写入 design 或导出。
+
+`props._editHistory` 记录移动、缩放、文字、媒体、调层、删除与恢复，最多保留 80 条，游标支持撤销、重做与历史跳转；连续输入合并，独立拖动分别记录。撤销新增覆盖值时，属性保存 API 的可选 `unsetProps` 删除对应 key，避免与旧 props 合并后重新出现。客户端携带编辑 revision，较晚返回的旧 hydration 不覆盖较新的 GUI 修改。r8 应用需要同版本的隔离 Sandbox Snapshot / Lambda site，不能直接使用 r7 bundle。

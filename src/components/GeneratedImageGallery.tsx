@@ -1,10 +1,12 @@
 'use client';
+import DecodedImage from '@/components/DecodedImage';
 
 import type { Snapshot } from '@/types';
 import { useLocale } from '@/lib/i18n';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { sharedImagePrompt, type getGeneratedImageCards } from '@/lib/editor/image-prompt-card';
 import ImagePromptCard from '@/components/ImagePromptCard';
+import { getSnapshotTimelineImage } from '@/lib/editor/timeline-derivations';
 
 export default function GeneratedImageGallery({ cards, currentSnapshotIndex, isPanel, onSelect }: {
   cards: ReturnType<typeof getGeneratedImageCards>;
@@ -24,7 +26,7 @@ export default function GeneratedImageGallery({ cards, currentSnapshotIndex, isP
               <button aria-label={`${t('image.generatedImage')} ${position + 1}`} aria-pressed={currentSnapshotIndex === index + 1}
                 className="relative block w-full active:opacity-75 transition-opacity"
                 onClick={event => onSelect(snapshot, event.currentTarget.getBoundingClientRect())}>
-                <img src={source.startsWith('http') ? getThumbnailUrl(source, isPanel ? 680 : 1024, 75, 2000, 'contain') : source}
+                <DecodedImage src={snapshot.design || snapshot.designPath ? getSnapshotTimelineImage(snapshot, index, index) : source.startsWith('http') ? getThumbnailUrl(source, isPanel ? 680 : 1024, 75, 2000, 'contain') : source}
                   alt={`${t('image.generatedImage')} ${position + 1}`} className="w-full h-auto rounded-2xl"
                   style={{ border: '1px solid rgba(255,255,255,0.08)' }} />
                 <span className="absolute bottom-2 left-2 bg-black/60 backdrop-blur text-white text-sm font-medium px-2 py-0.5 rounded-md">@{index + 1}</span>

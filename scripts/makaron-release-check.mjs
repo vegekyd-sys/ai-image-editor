@@ -67,7 +67,8 @@ async function healthCheck() {
 function localCheck() {
   run('pnpm', ['run', 'check:skill-sync']);
   run('pnpm', ['exec', 'tsc', '--noEmit']);
-  run('pnpm', ['run', 'test']);
+  // Keep native-image tests responsive while other local runtimes are active.
+  run('pnpm', ['run', 'test', '--maxWorkers=4']);
   run('pnpm', ['run', 'test:cli']);
   const nodeModulesPath = resolve(root, 'node_modules');
   const hasSharedNodeModules = existsSync(nodeModulesPath)

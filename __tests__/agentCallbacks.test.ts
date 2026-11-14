@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeAgentCallbacks, type AgentCallbackContext } from '@/lib/agentCallbacks';
 import type { Message, Snapshot } from '@/types';
+import { timelineFromSnap } from '@/lib/editor/timeline-utils';
+const recovery = vi.hoisted(() => ({ load: vi.fn() }));
+vi.mock('@/lib/editor/published-snapshot', () => ({ loadPublishedSnapshot: recovery.load }));
 
 function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCallbackContext {
   return {
@@ -49,6 +52,7 @@ describe('makeAgentCallbacks', () => {
 
   beforeEach(() => {
     messages = [];
+    recovery.load.mockReset();
     ctx = createMockContext({
       setMessages: vi.fn((updater: (prev: Message[]) => Message[]) => {
         messages = updater(messages);
@@ -270,7 +274,76 @@ describe('makeAgentCallbacks', () => {
     });
   });
 
+  describe('onFocusSnapshot', () => {
+    it('focuses the existing design without replacing edited props or publishing it again', () => {
+      const focus = vi.fn();
+      ctx.snapshotsRef.current = [{ id: 'existing-design', design: { code: 'code', width: 10, height: 10 } } as Snapshot];
+      ctx.draftParentIndexRef.current = 0;
+      ctx.viewIndexRef.current = 1;
+      const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: focus });
+      callbacks.onFocusSnapshot?.('existing-design');
+      expect(focus).toHaveBeenCalledWith('existing-design');
+      expect(ctx.draftParentIndexRef.current).toBeNull();
+      expect(ctx.viewIndexRef.current).toBe(0);
+      expect(ctx.setPendingDesign).not.toHaveBeenCalled();
+      expect(ctx.setSnapshots).not.toHaveBeenCalled();
+      expect(ctx.onSaveSnapshot).not.toHaveBeenCalled();
+    });
+
+    it('recovers a missing server result before focusing it without republishing', async () => {
+      const focus = vi.fn();
+      const snapshot = { id: 'saved', image: 'https://example.com/poster.jpg', tips: [], messageId: '' } as Snapshot;
+      ctx.draftParentIndexRef.current = 0;
+      recovery.load.mockResolvedValue(snapshot);
+      const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: focus });
+      callbacks.onFocusSnapshot?.('saved');
+      await vi.waitFor(() => expect(focus).toHaveBeenCalledWith('saved'));
+      expect(ctx.snapshotsRef.current).toContain(snapshot);
+      expect(ctx.draftParentIndexRef.current).toBeNull();
+      expect(ctx.setPendingDesign).not.toHaveBeenCalled();
+      expect(ctx.onSaveSnapshot).not.toHaveBeenCalled();
+    });
+  });
+
   describe('onRender', () => {
+    it('focuses the published result without the removed virtual draft offset in a batched render', () => {
+      ctx.snapshotsRef.current = ['original', 'existing'].map(id => ({ id, image: 'poster', tips: [], messageId: '' }));
+      ctx.draftParentIndexRef.current = 1;
+      ctx.viewIndexRef.current = 2;
+      let focusedIndex = -1;
+      const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: snapshotId => {
+        const index = ctx.snapshotsRef.current.findIndex(snapshot => snapshot.id === snapshotId);
+        focusedIndex = timelineFromSnap(index, ctx.draftParentIndexRef.current);
+      } });
+      callbacks.onRender?.({ code: 'function D(){}', width: 100, height: 100,
+        snapshotId: 'saved', published: true, previewUrl: 'https://example.com/saved.jpg' });
+      // Removing the draft and appending the snapshot keeps timeline.length at 3,
+      // so the editor's length-change clamp cannot repair an erroneous index 3.
+      expect(ctx.snapshotsRef.current).toHaveLength(3);
+      expect(focusedIndex).toBe(2);
+      expect(ctx.draftParentIndexRef.current).toBeNull();
+      expect(ctx.viewIndexRef.current).toBe(2);
+      expect(ctx.setDesignDraftParent).toHaveBeenCalledWith(null);
+    });
+
+    it('adds the saved poster and design synchronously without browser capture or a second save', () => {
+      const focus = vi.fn();
+      const { callbacks } = makeAgentCallbacks({ ...ctx, onFocusSnapshot: focus });
+      callbacks.onNewTurn?.('msg-saved');
+      const design = { code: 'function D(){}', width: 1080, height: 1350,
+        snapshotId: 'saved', published: true, prePublished: true, previewUrl: 'https://example.com/poster.jpg' };
+      callbacks.onRender?.(design);
+      expect(ctx.snapshotsRef.current[0]).toMatchObject({ id: 'saved', imageUrl: design.previewUrl, design });
+      expect(focus).toHaveBeenCalledWith('saved');
+      expect(ctx.setPendingDesign).not.toHaveBeenCalled();
+      expect(ctx.onSaveSnapshot).not.toHaveBeenCalled();
+      expect(messages[0]).toMatchObject({ image: design.previewUrl, design });
+      // Persisted render replay must preserve GUI layer edits already in memory.
+      ctx.snapshotsRef.current[0].design = { ...design, props: { _pos_layer_1: { x: 30, y: 40 } } };
+      callbacks.onRender?.(design);
+      expect(ctx.snapshotsRef.current).toHaveLength(1);
+      expect(ctx.snapshotsRef.current[0].design?.props).toEqual({ _pos_layer_1: { x: 30, y: 40 } });
+    });
     it('published render triggers pendingDesign with snapshotId', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onNewTurn?.('msg-1');
@@ -438,4 +511,23 @@ describe('makeAgentCallbacks', () => {
       expect(getAgentMsgIds()[0]).toBe('server-id');
     });
   });
+});
+it('rebases a published element replacement on GUI edits newer than the server render', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    const source = { code: 'same source', width: 512, height: 512, __makaronEditableRevision: 20,
+      editables: [{ id: 'baby', type: 'image' as const, propKey: 'asset', label: 'Baby' }],
+      props: { asset: 'original.png', _pos_baby: { x: 123, y: 45 }, _scale_baby: { w: .5, h: .6 } } };
+    let snapshots: Snapshot[] = [{ id: 'source', image: 'poster', tips: [], messageId: '', design: source }];
+    const ref = { current: snapshots };
+    const ctx = createMockContext({ snapshotsRef: ref, setSnapshots: updater => { snapshots = updater(snapshots); ref.current = snapshots; } });
+    const { callbacks } = makeAgentCallbacks(ctx);
+    callbacks.onRender!({ ...source, __makaronEditableRevision: 10, props: { ...source.props, asset: 'edited.png', _pos_baby: { x: 0, y: 0 } },
+      elementEdit: { version: 1, id: 'edit', sourceSnapshotId: 'source', fieldId: 'baby', operation: { kind: 'replace', source: 'original.png', url: 'edited.png' } },
+      snapshotId: 'published', published: true, previewUrl: 'poster-new', sourceDesignPath: 'code/published.json' });
+    expect(snapshots.find(s => s.id === 'published')?.design?.props).toMatchObject({ asset: 'edited.png', _pos_baby: { x: 123, y: 45 }, _scale_baby: { w: .5, h: .6 } });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).props._pos_baby).toEqual({ x: 123, y: 45 });
+  } finally { vi.unstubAllGlobals(); }
 });

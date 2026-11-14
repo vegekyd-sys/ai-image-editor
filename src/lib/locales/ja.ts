@@ -1,6 +1,41 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  "design.matchingFont": "バックグラウンドでフォントを照合中です。先に入力できます。完了後に文字プレビューが更新されます。",
+  "design.approximateFont": "編集後の文字には近似フォントが使用されます。",
+  "design.editTextPlaceholder": (label: string) => `${label}を編集…`,
+
+
+  "design.autoLayer": "自動レイヤー分割",
+  "design.autoLayerHint": "画像を個別に編集できるレイヤーに分割",
+  "design.touchHint": "ドラッグ / ピンチ · 解除して閲覧",
+  "design.loadingEditables": "編集項目を読み込み中…",
+  "design.background": "背景",
+  "design.autoLayerPrompt": (index: number) => `@${index} を自動でレイヤー分割し、元画像の見た目と重なりを保ち、被写体と背景を個別に編集できるようにしてください。見える文字は元の字形と位置を保った透明な画像レイヤーに分けてください。別の画像を生成せず、分割結果をそのままキャンバスに公開してください。`,
+  "design.editingElement": (label: string) => `編集中：${label}`,
+  "design.clearSelection": "選択を解除",
+  "design.saveBeforeEditFailed": "変更を保存できていません。少し待ってから再試行してください。",
+  "design.undo": "元に戻す",
+  "design.redo": "やり直す",
+  "design.history": "操作履歴",
+  "design.historyStart": "開始時の状態",
+  "design.history.move": "移動",
+  "design.history.scale": "サイズ変更",
+  "design.history.reorder": "重なり順を変更",
+  "design.history.delete": "削除",
+  "design.history.restore": "復元",
+  "design.history.text": "テキストを変更",
+  "design.history.media": "素材を置換",
+  "design.history.edit": "設定を変更",
+  "design.layers": (n: number) => `${n} レイヤー · 前面から`,
+  "design.editables": (n: number) => `${n} 個の要素`,
+  "design.layerForward": "一つ前面へ",
+  "design.layerBackward": "一つ背面へ",
+  "design.layerDelete": "要素を削除",
+  "design.trim": "トリミング",
+  "design.moveScale": "移動 / 拡大縮小",
+  "design.edit": "編集",
+
   "mjLab.back": "Makaron に戻る",
   "mjLab.eyebrow": "ローカル試用 · Midjourney V8.2",
   "image.candidates": "候補画像",
@@ -316,6 +351,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.autoLayerize.title': "一枚の写真を、パーツごとに編集",
+  'changelog.autoLayerize.item1': "自動レイヤー分割で、人物や小物、背景を個別に編集できます。ボールを動かす、帽子を大きくする、ポスターの見出しを選んで Agent に書き換えてもらう。",
+  'changelog.autoLayerize.item2': "お使いの Agent に画像を渡すこともできます。Makaron CLI で分割したら、届いたリンクを開いてそのまま編集できます。",
   'changelog.fasterMediaReplies.title': "素材を使うチャットがもっとスムーズに",
   'changelog.fasterMediaReplies.item1': "画像付きチャットで、標準の Agent がより早く返答を開始します。",
   'changelog.fasterMediaReplies.item2': "画像と動画を組み合わせた依頼でも、素材の分析や制作プランをより早く受け取れます。",
@@ -622,7 +660,7 @@ const ja = {
   'canvas.resetLayers': 'リセット',
   'canvas.layerFailed': 'レイヤー分離に失敗しました',
   'canvas.layerEmpty': '利用できるレイヤーがありません',
-  'canvas.layerDelete': 'レイヤーを削除',
+  'canvas.layerDelete': '要素を削除',
   'canvas.layerResize': 'ドラッグしてサイズ変更',
   'canvas.previewUnavailable': 'プレビューを一時的に表示できません',
   'canvas.previewUsingPoster': 'カバー画像を表示しています。後でもう一度読み込めます',
@@ -872,6 +910,8 @@ const ja = {
   'profile.signOut': 'ログアウト',
 
   // Agent runtime
+  'design.resizeCorner': (corner: string) => `${({ nw: '左上', ne: '右上', sw: '左下', se: '右下' } as Record<string, string>)[corner] || ''}の角からサイズを変更`,
+  'agent.mediaOnlyPrompt': '今回ユーザーは画像のみを送信しました。新しくアップロードされた画像を確認し、会話の文脈に沿って応答してください。明確な編集依頼がなければ、画像を簡潔に説明して希望する変更を尋ねてください。アップロードだけを理由に画像生成やレイヤー分割を始めないでください。',
   'agent.status.starting': '開始しています...',
   'agent.status.planning': '計画中...',
   'agent.status.searchingWeb': 'ウェブを検索中...',
@@ -886,6 +926,7 @@ const ja = {
   'agent.status.generatingAudio': '音声を生成中...',
   'agent.status.understandingRetake': '選択した区間を確認しています…',
   'agent.status.capturingFrame': (hint: string) => `${hint}をキャプチャ中...`,
+  'agent.status.layerizing': '画像をレイヤーに分割中...',
   'agent.status.generatingImage': '画像を生成中...',
   'agent.status.browsingWorkspace': 'ワークスペースを確認中...',
   'agent.status.readingFile': (name: string) => `${name}を読み込み中...`,

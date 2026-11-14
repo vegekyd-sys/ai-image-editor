@@ -28,6 +28,19 @@ export function checkVideoMediaRuntime(root = process.cwd(), routes = videoMedia
   return routes.length;
 }
 
+export function checkFontMatchingRuntime(root = process.cwd(), routes = ['layerize', 'agent', 'projects/[id]/snapshots/[snapshotId]/fonts']) {
+  for (const route of routes) {
+    const manifest = path.join(root, '.next/server/app/api', route, 'route.js.nft.json');
+    if (!existsSync(manifest)) throw new Error(`/api/${route}: missing font runtime trace`);
+    const { files } = JSON.parse(readFileSync(manifest, 'utf8'));
+    for (const suffix of ['/fontkit/dist/node/index.js', '/unicode-properties/data.trie']) {
+      const entry = files?.find(file => file.replaceAll('\\', '/').endsWith(suffix));
+      if (!entry || !existsSync(path.resolve(path.dirname(manifest), entry))) throw new Error(`/api/${route}: missing font runtime ${suffix}`);
+    }
+  }
+  return routes.length;
+}
+
 // Vercel packages these traced files. A package.json alone lets resolution
 // succeed during the build, then crashes the function on its first request.
 export function checkServerRuntime(root = process.cwd(), routes = checksumRoutes) {
@@ -68,6 +81,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     console.log(`Local campaign exclusion: ${checkLocalCampaignExclusion()} API traces contain no local marketing records.`);
     console.log(`Server runtime packaging: ${checkServerRuntime()} API traces include the CRC32C entry.`);
+    console.log(`Font matching runtime: ${checkFontMatchingRuntime()} API traces include Fontkit and its Unicode binary data.`);
     console.log(`Video media runtime: ${checkVideoMediaRuntime()} API traces include FFmpeg.`);
     if (process.env.VERCEL === '1' && process.env.REMOTION_RENDERER?.trim() !== 'local') {
       const { routes } = checkCloudDeploymentFootprint();

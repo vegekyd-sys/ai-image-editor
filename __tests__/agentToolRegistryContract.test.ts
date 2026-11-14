@@ -30,11 +30,13 @@ function extractSet(source: string, name: string): string[] {
 describe('Agent tool registry contract', () => {
   it('keeps the complete public tool surface stable during extraction', () => {
     const source = readAgentSources();
-    const names = [...source.matchAll(/^\s{4}([a-z_]+): create[A-Za-z]+Tool\(scope\),$/gm)]
+    const names = [...source.matchAll(/^\s{4}([a-z_]+): create[A-Za-z]+Tool\(scope(?:, true)?\),$/gm)]
       .map((match) => match[1]);
 
     expect(names).toEqual([
       'generate_image',
+      'decompose_image',
+      'get_layerize_status',
       'generate_animation',
       'inspect_retake',
       'retake_video',
@@ -46,6 +48,8 @@ describe('Agent tool registry contract', () => {
       'execution_checkpoint',
       'studio_run',
       'publish_draft',
+      'inspect_element',
+      'edit_element',
       'materialize_media',
       'preview_frame',
       'rotate_camera',
@@ -64,6 +68,7 @@ describe('Agent tool registry contract', () => {
 
     expect(extractSet(source, 'DURABLE_IDEMPOTENT_TOOLS')).toEqual([
       'generate_image',
+      'edit_element',
       'generate_animation',
       'retake_video',
       'upscale_video',

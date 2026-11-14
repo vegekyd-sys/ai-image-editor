@@ -58,7 +58,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       if (!revision) {
         return NextResponse.json({ error: 'Invalid revision' }, { status: 400 });
       }
-      const currentFile = await workspace.readFile(snapshot.design_path, admin, project.user_id);
+      const currentFile = await workspace.readFile(snapshot.design_path, admin, project.user_id, { fresh: true });
       if (!currentFile) {
         return NextResponse.json({ error: 'Composition not found' }, { status: 404 });
       }
@@ -67,7 +67,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       if (revision < currentRevision) {
         return NextResponse.json({ ok: true, staleIgnored: true });
       }
-      persisted = mergePersistedEditableProps(currentValue, body.props, revision);
+      persisted = mergePersistedEditableProps(currentValue, body.props, revision, body.unsetProps);
     }
 
     const result = await workspace.writeFile(

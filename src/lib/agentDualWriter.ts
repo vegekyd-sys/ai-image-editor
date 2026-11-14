@@ -3,6 +3,7 @@ import type { AgentStreamEvent } from './agent';
 import { uploadImage } from './supabase/storage';
 import { sanitizeToolHistory, type ToolHistoryBudget } from './agentToolHistory';
 import * as workspace from './workspace';
+import { publishDesignSnapshot } from './publish-design';
 
 const EVENT_WRITE_RETRY_DELAYS_MS = [0, 75, 250, 750] as const;
 
@@ -206,7 +207,6 @@ export class AgentDualWriter {
           const snapId = typeof (event as any).snapshotId === 'string' && (event as any).snapshotId
             ? (event as any).snapshotId
             : crypto.randomUUID();
-          const designPath = `code/${snapId}.json`;
           const sourceDesignPath = (event as any).sourceDesignPath as string | undefined;
 
           const designDesc = (event as any).description as string | undefined;
@@ -223,7 +223,7 @@ export class AgentDualWriter {
           }
           const eventEditables = (event as Record<string, unknown>).editables;
           const eventFontSubstitutions = (event as Record<string, unknown>).fontSubstitutions;
-          const persistedDesign = {
+          const persistedDesign: Record<string, unknown> & { code: string; width: number; height: number } = {
             ...(sourceDesign || {}),
             // publish_draft emits the normalized, validated composition. Keep
             // source-only metadata, but never replace the compiled manifest
@@ -244,43 +244,14 @@ export class AgentDualWriter {
                   ? { fontSubstitutions: sourceDesign.fontSubstitutions }
                 : {}),
           };
-          const designJson = JSON.stringify(persistedDesign);
 
-          // Upload design JSON to workspace + index in workspace_files for agent read_file
-          const storagePath = `${this.userId}/workspace/${designPath}`;
-          const { error: designUploadError } = await this.supabase.storage.from('images')
-            .upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true });
-          if (designUploadError) {
-            throw new Error(`Failed to persist published design: ${designUploadError.message}`);
-          }
-          const { data: urlData } = this.supabase.storage.from('images').getPublicUrl(storagePath);
-          const { error: workspaceIndexError } = await this.supabase.from('workspace_files').upsert({
-            user_id: this.userId,
-            path: designPath,
-            content_type: 'application/json',
-            size_bytes: designJson.length,
-            storage_url: urlData?.publicUrl || '',
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'user_id,path' });
-          if (workspaceIndexError) {
-            throw new Error(`Failed to index published design: ${workspaceIndexError.message}`);
-          }
-
-          // Write snapshots table
-          const sortOrder = await this.nextSortOrder();
-          const { error: snapshotError } = await this.supabase.from('snapshots').upsert({
-            id: snapId,
-            project_id: this.projectId,
-            image_url: '',
-            tips: [],
-            message_id: this.currentMessageId,
-            sort_order: sortOrder,
-            description: designDesc || '[composition]',
-            design_path: designPath,
-          }, { onConflict: 'id' });
-          if (snapshotError) {
-            throw new Error(`Failed to persist published design snapshot: ${snapshotError.message}`);
-          }
+          await publishDesignSnapshot({
+            supabase: this.supabase, userId: this.userId, projectId: this.projectId,
+            snapshotId: snapId, design: persistedDesign, description: designDesc,
+            messageId: this.currentMessageId,
+            posterUrl: (event as any).previewUrl,
+            preserveExisting: (event as any).prePublished === true,
+          });
           this.currentMessageHasImage = true;
           this.currentTurnHasDelivery = true;
 
@@ -293,6 +264,10 @@ export class AgentDualWriter {
               ? { fontSubstitutions: persistedDesign.fontSubstitutions }
               : {}),
             ...(sourceDesignPath ? { sourceDesignPath } : {}),
+            ...(designDesc ? { description: designDesc } : {}),
+            ...((event as any).previewUrl ? { previewUrl: (event as any).previewUrl } : {}),
+            ...((event as any).prePublished === true ? { prePublished: true } : {}),
+            ...(persistedDesign.elementEdit ? { elementEdit: persistedDesign.elementEdit, __makaronEditableRevision: persistedDesign.__makaronEditableRevision } : {}),
             published: true,
           });
 
@@ -445,6 +420,7 @@ export class AgentDualWriter {
 
       case 'animation_task':
       case 'video_snapshot':
+      case 'focus_snapshot':
       case 'image_analyzed':
       case 'nsfw_detected': {
         await this.flushContent();

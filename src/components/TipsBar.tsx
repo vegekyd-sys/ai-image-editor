@@ -5,6 +5,7 @@ import { useLocale } from '@/lib/i18n';
 import { Tip } from '@/types';
 import { CATEGORIES } from '@/lib/categories';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
+import { MOBILE_EDITOR_SLOT_HEIGHT } from '@/lib/editor/panel-layout';
 
 interface TipsBarProps {
   tips: Tip[];
@@ -220,7 +221,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
 
   // Collect the set of categories present in current tips (for nav bar)
   return (
-    <div data-testid="tips-bar" className="flex flex-col">
+    <div data-testid="tips-bar" className="flex flex-col" style={{ height: MOBILE_EDITOR_SLOT_HEIGHT }}>
       {/* Carousel */}
       <div
         ref={scrollContainerRef}
@@ -229,7 +230,8 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        className={`flex h-[86px] items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'select-none' : ''}`}
+        data-pill-row
+        className={`flex h-[86px] shrink-0 items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'select-none' : ''}`}
         style={isDragging ? { cursor: 'grabbing' } : undefined}
         data-dragging={isDragging || undefined}
       >
@@ -268,7 +270,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                   data-tip-status={tip.previewStatus || 'pending'}
                   onClick={handleCardClick}
                   disabled={isEditing}
-                  className={`mkr-liquid-pill mkr-liquid-pill-strong ${isDesktop ? 'w-[176px]' : 'w-[200px]'} text-left hover:brightness-110 active:scale-[0.97] disabled:opacity-40 border overflow-hidden cursor-pointer ${
+                  className={`mkr-liquid-pill mkr-liquid-pill-strong ${isDesktop ? 'w-[176px] h-[64px]' : 'w-[200px] h-[72px]'} text-left hover:brightness-110 active:scale-[0.97] disabled:opacity-40 border overflow-hidden cursor-pointer ${
                     missingPrompt
                       ? 'border-white/5 opacity-50'
                       : isSelected
@@ -288,9 +290,9 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                             : 'linear-gradient(145deg, rgba(245,158,11,0.12), rgba(12,12,16,0.46))',
                   }}
                 >
-                  <div className="flex">
+                  <div className="flex h-full">
                     {/* Thumbnail */}
-                    <div className={`${isDesktop ? 'w-[64px] h-[64px]' : 'w-[72px] h-[72px]'} flex-shrink-0 bg-white/5 relative overflow-hidden`}>
+                    <div className={`${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full flex-shrink-0 bg-white/5 relative overflow-hidden`}>
                       {missingPrompt ? (
                         <div className="w-full h-full flex items-center justify-center">
                           <div className="flex gap-0.5">
@@ -428,7 +430,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
       </div>
 
       {/* Category toolbar — always visible, driven by CATEGORIES config */}
-      <div className="flex">
+      <div data-pill-toolbar className="flex min-h-0 flex-1">
         {CATEGORIES.map(({ id, label, activeText }) => {
           const enabled = enabledCategories.has(id);
           const isFailed = !enabled && !!failedCategories?.has(id as Tip['category']);

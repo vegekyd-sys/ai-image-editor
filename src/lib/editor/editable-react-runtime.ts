@@ -4,7 +4,7 @@ import { editableRuntimeClassName } from './scene-registry';
 export type EditableTransformMode = 'proxy' | 'registry';
 
 export const REMOTION_EDITABLE_RUNTIME_VERSION =
-  'remotion-editable-runtime-r6-media-parity';
+  'remotion-editable-runtime-r8-shared-editing';
 
 type ReactRuntime = typeof React;
 
@@ -250,6 +250,8 @@ export function createEditableReactRuntime(
         !hasSameIdEditableDescendant(renderedChildren, id)
         && ownsMediaSource
       );
+      const layerState = currentProps._layerState as { deleted?: unknown } | undefined;
+      if (ownsTransform && Array.isArray(layerState?.deleted) && layerState.deleted.includes(id)) return null;
       const ownsTextLeaf = (
         ownsTransform
         && typeof type === 'string'
@@ -368,6 +370,33 @@ export function createEditableReactRuntime(
             child => renderTextLineBreaks(react, child),
           ),
         };
+      }
+    }
+
+    // Layerize siblings share a stacking context. Reorder actual React children,
+    // not CSS z-index: the web renderer paints in DOM order too.
+    const layerState = currentProps._layerState as { order?: unknown; stacking?: boolean } | undefined;
+    if (Array.isArray(layerState?.order)) {
+      const ranks = new Map(layerState.order.map((id, index) => [id, index]));
+      const ordered = react.Children.toArray(nextChildren.length ? nextChildren : nextProps?.children as React.ReactNode);
+      const rank = (node: React.ReactNode): number | undefined => react.isValidElement(node)
+        ? ranks.get((node.props as Record<string, unknown>)['data-editable']) : undefined;
+      const layers = ordered.filter(node => rank(node) !== undefined).sort((a, b) => rank(a)! - rank(b)!);
+      if (layers.length > 1) {
+        let index = 0;
+        // Preserve flex/grid layout slots while changing paint order. Applying
+        // only DOM order would swap ordinary design content in its flow layout.
+        const sharedStacking = layerState.stacking === true && currentProps._canvasSizing !== 'fixed';
+        const prepared = sharedStacking ? new Map(ordered.filter(react.isValidElement).map((node, sourceIndex) => {
+          const element = node as React.ReactElement<Record<string, unknown>>;
+          const style = (element.props.style || {}) as Record<string, unknown>;
+          return [node, react.cloneElement(element, { style: { ...style, order: style.order ?? sourceIndex,
+            ...(rank(node) !== undefined ? { zIndex: rank(node), position: style.position || 'relative' } : {}) } })];
+        })) : null;
+        nextChildren = ordered.map(node => {
+          const layer = rank(node) === undefined ? node : layers[index++];
+          return prepared?.get(layer as React.ReactElement) ?? layer;
+        });
       }
     }
 

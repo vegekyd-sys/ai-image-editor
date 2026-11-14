@@ -12,6 +12,7 @@
  */
 
 import fs from 'fs';
+import { randomUUID } from 'node:crypto';
 import path from 'path';
 import { createInterface } from 'readline';
 import { execFileSync } from 'child_process';
@@ -403,7 +404,7 @@ function normalizeRunResponse(data) {
   const projectId = data.projectId || data.project_id;
   if (projectId) {
     data.projectId = projectId;
-    data.projectUrl = `${APP_URL}/projects/${projectId}`;
+    data.projectUrl = data.project_url || `${APP_URL}/projects/${projectId}`;
   }
   return data;
 }
@@ -914,7 +915,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
           }
           if (data.result.error) process.stderr.write(`❌  ${data.result.error}\n`);
         }
-        process.stderr.write(`🔗  ${APP_URL}/projects/${data.projectId}\n`);
+        process.stderr.write(`🔗  ${data.projectUrl}\n`);
         printRunUsage(data.usage);
       }
 
@@ -2211,6 +2212,80 @@ Run "makaron video create --help" for every model, option, example, and limit.
 `);
 }
 
+function printLayerizeHelp() {
+  console.log(`Usage: makaron layerize --image <file|https-url> [--project <id>] [--json]
+       makaron layerize status <jobId> --project <id> [--json]
+
+  --max-outputs <2..100>   Maximum images including background (default 8)
+  --quality <id>          auto, 1K, 1.5K, 2K (default 1K)
+  --editable-text         Convert recognized text to editable design text; fonts may differ
+  --prompt <text>         Elements or regions to separate
+  --request-id <uuid>     Reuse the original request after interruption
+  --no-wait               Return the job and Makaron editing URL immediately
+
+Returns a normal Makaron design. Open projectUrl to move/scale, reorder, delete/restore layers or edit
+recognized text. Charges actual output images once; query the same job to recover.
+Chat alternative: makaron chat --project auto --image poster.png "拆成图层，文字可编辑"
+`);
+}
+
+async function runLayerize(args) {
+  const { baseUrl, headers } = getAuth();
+  const options = {};
+  const flags = new Set(['--json', '--editable-text', '--no-wait']);
+  const valued = new Set(['--image', '--project', '--max-outputs', '--quality', '--prompt', '--request-id']);
+  const statusOnly = args[1] === 'status';
+  for (let i = statusOnly ? 3 : 1; i < args.length; i++) {
+    const arg = args[i];
+    if (flags.has(arg)) options[arg] = true;
+    else if (valued.has(arg) && args[i + 1] && !args[i + 1].startsWith('--')) options[arg] = args[++i];
+    else throw new Error(`Unknown or incomplete layerize option: ${arg}`);
+  }
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  let projectId = options['--project'];
+  const jobId = statusOnly ? args[2] : options['--request-id'] || randomUUID();
+  const n = Number(options['--max-outputs'] || 8), quality = options['--quality'] || '1K';
+  if (!uuid.test(jobId || '') || (projectId && !uuid.test(projectId))) throw new Error('Use valid project/request UUIDs.');
+  if (!statusOnly && (!options['--image'] || !Number.isSafeInteger(n) || n < 2 || n > 100 || !['auto', '1K', '1.5K', '2K'].includes(quality))) throw new Error('Provide --image and valid layerize options; see layerize --help.');
+  if (statusOnly && !projectId) throw new Error('status requires --project <id>.');
+  const request = async (route, body) => {
+    const response = await fetch(`${baseUrl}${route}`, { headers: { ...headers, 'Content-Type': 'application/json' }, ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Layerize HTTP ${response.status}`);
+    return data;
+  };
+  let result;
+  if (!statusOnly) {
+    if (!projectId) {
+      projectId = (await request('/api/projects/create', { title: 'Layerized image' })).projectId;
+      const privacy = await fetch(`${baseUrl}/api/projects/${projectId}/share`, { method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ is_public: false }) });
+      if (!privacy.ok || (await request(`/api/projects/${projectId}/share`)).is_public !== false) throw new Error('Could not confirm private project; no decomposition was submitted.');
+    }
+    let imageUrl = options['--image'];
+    if (!isHttpUrl(imageUrl)) [imageUrl] = await uploadImageFilesViaSignedUrl(baseUrl, headers, projectId, [imageUrl]);
+    if (!imageUrl.startsWith('https://')) throw new Error('Layerize requires an uploaded HTTPS original.');
+    // Attach the source once, only for a new job. A resumed request uses status instead.
+    if (!options['--request-id']) await request('/api/projects/create', { _addToProject: projectId, imageUrls: [imageUrl] });
+    process.stderr.write(`Layerize job: ${jobId}\nProject: ${projectId}\nRecovery: makaron layerize status ${jobId} --project ${projectId}\n`);
+    // A paid submission is deliberately never retried on a transport error.
+    result = await request('/api/layerize', { projectId, requestId: jobId, imageUrl, maxOutputs: n, quality, prompt: options['--prompt'], editableText: options['--editable-text'] === true });
+  } else result = await request(`/api/layerize?projectId=${projectId}&jobId=${jobId}`);
+  process.stderr.write(`Edit in Makaron: ${result.projectUrl}\n`);
+  const deadline = Date.now() + 8 * 60_000;
+  while (!options['--no-wait'] && ['preparing', 'processing'].includes(result.status) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    result = await request(`/api/layerize?projectId=${projectId}&jobId=${jobId}`);
+  }
+  if (options['--json']) console.log(JSON.stringify(result));
+  else {
+    console.log(`${result.status === 'completed' ? 'Layers ready. Edit in Makaron' : result.status}: ${result.projectUrl}`);
+    if (result.status !== 'completed') console.log(`Job: ${result.jobId}`);
+    if (result.message) console.log(result.message);
+    if (result.status !== 'completed') console.log(`Resume: makaron layerize status ${jobId} --project ${projectId}`);
+  }
+  if (['failed', 'uncertain'].includes(result.status)) process.exitCode = 1;
+}
+
 function printRootHelp() {
   console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
 
@@ -2232,6 +2307,9 @@ Commands:
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   create --title "name"              Create empty project (text-to-image)
+
+  layerize --image <file|url>        Split into editable design layers; returns Makaron edit URL
+  layerize status <jobId> --project <id>  Recover the same layer task
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
   chat --project <id> --image <file> Attach an image or visual reference
@@ -2325,6 +2403,7 @@ function setupMakaron(values = []) {
 }
 
 function printHelp(topic, subtopic) {
+  if (topic === 'layerize') { printLayerizeHelp(); return; }
   if (topic === 'login') {
     console.log('Usage: makaron login');
   } else if (topic === 'create') {
@@ -2555,6 +2634,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     process.exit(1);
   }
   await createProject(baseUrl, headers, opts);
+} else if (command === 'layerize') {
+  try { await runLayerize(args); } catch (error) { console.error(error.message + '\nRetain the printed job ID; query status before any new submission.'); process.exitCode = 1; }
 } else if (command === 'chat') {
   if (args.includes('--help') || args.includes('-h')) {
     printChatHelp();

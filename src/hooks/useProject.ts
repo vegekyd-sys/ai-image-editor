@@ -1,5 +1,7 @@
 'use client'
 
+import { queueEditableSave } from '@/lib/editor/editable-save-queue';
+import { historyUnsetProps } from '@/lib/editor/design-edit-history';
 import { useRef, useCallback } from 'react'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
@@ -213,16 +215,16 @@ export function useProject(projectId: string, userId: string) {
     const buildMessages = (): Message[] => dbMessages.map((m) => {
       // Restore inline image + design: find the snapshot linked to this message
       // Try by messageId first, then by has_image flag matching any snapshot with this message_id
-      const linkedSnapshot = m.has_image
-        ? snapshots.find(s => s.messageId === m.id)
-        : undefined
+      const linkedSnapshots = m.has_image ? snapshots.filter(s => s.messageId === m.id) : []
+      const linkedSnapshot = linkedSnapshots[0]
       return {
         id: m.id,
         role: m.role,
         content: m.content,
         timestamp: new Date(m.created_at).getTime(),
         projectId: m.project_id,
-        ...(linkedSnapshot ? { image: linkedSnapshot.image } : {}),
+        ...(linkedSnapshot && m.role === 'assistant' ? { image: linkedSnapshot.image } : {}),
+        ...(linkedSnapshots.length && m.role === 'user' ? { editInputImages: linkedSnapshots.map(s => s.image) } : {}),
         ...(previewImagesByMessage.has(m.id) ? { images: previewImagesByMessage.get(m.id) } : {}),
         ...(previewCaptionsByMessage.has(m.id) ? { imageCaptions: previewCaptionsByMessage.get(m.id) } : {}),
         ...(sourcesByMessage.has(m.id) ? { sources: sourcesByMessage.get(m.id) } : {}),
@@ -274,7 +276,9 @@ export function useProject(projectId: string, userId: string) {
       };
     })
 
-    return { ownerId: projectOwnerId ?? null, isPublic: projectRes.data?.is_public === true, musicRows: musicRes.data ?? [], snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
+    // Hydration owns the internal objects above. Do not mutate snapshots already
+    // handed to React: that hides the update from memoized canvas derivations.
+    return { ownerId: projectOwnerId ?? null, isPublic: projectRes.data?.is_public === true, musicRows: musicRes.data ?? [], snapshots: snapshots.map(snapshot => ({ ...snapshot })), messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
   }, [projectId, userId])
 
   // --- Write ---
@@ -359,7 +363,7 @@ export function useProject(projectId: string, userId: string) {
     snapshotId: string,
     design: import('@/types').DesignPayload,
     options: { propsOnly?: boolean; revision?: number } = {},
-  ) => {
+  ) => queueEditableSave(`${projectId}:${snapshotId}`, async () => {
     const response = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/snapshots/${encodeURIComponent(snapshotId)}/design`,
       {
@@ -368,7 +372,7 @@ export function useProject(projectId: string, userId: string) {
         credentials: 'same-origin',
         keepalive: options.propsOnly === true,
         body: JSON.stringify(options.propsOnly
-          ? { props: design.props || {}, revision: options.revision }
+          ? { props: design.props || {}, revision: options.revision, unsetProps: historyUnsetProps(design.props || {}) }
           : { design: createPersistedEditableDesign(design) }),
       },
     )
@@ -388,7 +392,7 @@ export function useProject(projectId: string, userId: string) {
         cached.title,
       )
     }
-  }, [projectId])
+  }), [projectId])
 
   const saveMessage = useCallback((message: Message) => {
     Promise.resolve().then(async () => {
@@ -399,7 +403,7 @@ export function useProject(projectId: string, userId: string) {
           project_id: projectId,
           role: message.role,
           content: message.content,
-          has_image: !!message.image,
+          has_image: !!message.image || (message.role === 'user' && !!message.editInputImages?.length),
         }, { onConflict: 'id' })
         if (error) console.warn('saveMessage error:', error)
       } catch (err) {

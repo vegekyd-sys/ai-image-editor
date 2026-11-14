@@ -4,6 +4,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** A delayed hydration must not replace edits already made in this editor. */
+export function mergeHydratedEditableDesign(current: DesignPayload | undefined, fresh: DesignPayload): DesignPayload {
+  const localRevision = (current as (DesignPayload & { __makaronEditableRevision?: number }) | undefined)?.__makaronEditableRevision || 0;
+  const remoteRevision = (fresh as DesignPayload & { __makaronEditableRevision?: number }).__makaronEditableRevision || 0;
+  if (current?.code === fresh.code && localRevision > remoteRevision) {
+    return { ...fresh, ...current, height: Math.max(current.height, fresh.height) };
+  }
+  return fresh;
+}
+
 export function createPersistedEditableDesign(value: unknown): DesignPayload {
   if (!isRecord(value) || typeof value.code !== 'string' || !value.code.trim()) {
     throw new Error('Invalid design code');
@@ -32,6 +42,8 @@ export function createPersistedEditableDesign(value: unknown): DesignPayload {
   }
 
   return {
+    ...(isRecord(value.elementEdit) ? { elementEdit: value.elementEdit as unknown as DesignPayload['elementEdit'] } : {}),
+    ...(typeof value.__makaronEditableRevision === 'number' ? { __makaronEditableRevision: value.__makaronEditableRevision } : {}),
     code: value.code,
     width: value.width,
     height: value.height,
@@ -48,16 +60,17 @@ export function mergePersistedEditableProps(
   persistedValue: unknown,
   propsValue: unknown,
   revision: number,
+  unsetProps: unknown = [],
 ): DesignPayload & Record<string, unknown> & { __makaronEditableRevision: number } {
   if (!isRecord(propsValue)) throw new Error('Invalid design props');
   const persisted = createPersistedEditableDesign(persistedValue);
+  if (!Array.isArray(unsetProps) || unsetProps.length > 256 || unsetProps.some(key => typeof key !== 'string' || ['__proto__', 'prototype', 'constructor'].includes(key))) throw new Error('Invalid removed design properties');
+  const props = { ...(persisted.props || {}), ...propsValue };
+  for (const key of unsetProps) if (!Object.hasOwn(propsValue, key)) delete props[key];
   return {
     ...(isRecord(persistedValue) ? persistedValue : {}),
     ...persisted,
-    props: {
-      ...(persisted.props || {}),
-      ...propsValue,
-    },
+    props,
     __makaronEditableRevision: revision,
   };
 }

@@ -1,10 +1,14 @@
 'use client';
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { layerizeFontsReference, layerizeFontRenderKey, layerizeUsesOriginalGlyphs, resolveLayerizeFontsForRender } from '@/lib/layerize-fonts';
+import { preloadDecodedImage } from '@/lib/image/presentation';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { usesThreeCanvas } from '@/lib/remotion-gl';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
+import { isFixedCanvasDesign } from '@/lib/editor/design-layer-state';
+import { isRasterLayerizeDesign } from '@/lib/layerize-design';
 import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
 import type { DesignPayload } from '@/types';
 import {
@@ -56,6 +60,7 @@ async function resolveCodeUrls(
       const blob = await fetchImageBlob(url);
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
+      await preloadDecodedImage(blobUrl);
       while (resolved.includes(url)) resolved = resolved.replace(url, blobUrl);
     } catch (error) {
       onFailure?.(url, error);
@@ -86,6 +91,7 @@ async function resolveImageUrlsInValue(
       const blob = await fetchImageBlob(value);
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
+      await preloadDecodedImage(blobUrl);
       cache?.set(value, blobUrl);
       return blobUrl;
     } catch (error) {
@@ -174,12 +180,28 @@ async function resolveBrowserFontManifest(
   }
 }
 
+/** Warm the chosen pinned faces after matching without delaying or replacing the visible canvas. */
+export async function warmLayerizeMatchedFonts(design: DesignPayload): Promise<void> {
+  if (layerizeFontsReference(design)?.status !== 'ready') return;
+  const props = design.props || {};
+  const manifest = await resolveBrowserFontManifest(design, design.code, props);
+  await prepareAndLoadRemotionFontsWithTiming({ code: design.code, props, manifest, substitutions: design.fontSubstitutions });
+}
+
 async function compileBrowserDesign(
   design: DesignPayload,
   code: string,
   props: Record<string, unknown>,
   source: BrowserRemotionFontTiming['source'],
 ): Promise<React.ComponentType<Record<string, unknown>>> {
+  if (isRasterLayerizeDesign(design) || layerizeUsesOriginalGlyphs(design)) {
+    const Component = evalRemotionJSX(code, {
+      editableTransformMode: 'proxy',
+      videoRuntime: source === 'player' ? 'preview' : 'render',
+    });
+    if (!Component) throw new Error('Failed to compile design code');
+    return Component;
+  }
   const manifest = await resolveBrowserFontManifest(design, code, props);
   const { prepared, timing } = await prepareAndLoadRemotionFontsWithTiming({
     code,
@@ -236,6 +258,7 @@ function compileBrowserDesignWithDeferredPinnedFonts(
  * Returns JPEG data URL, or empty string on failure.
  */
 export async function captureDesignPoster(design: DesignPayload): Promise<string> {
+  design = await resolveLayerizeFontsForRender(design);
   let allBlobUrls: string[] = [];
   try {
     await preloadBabel().catch(() => {});
@@ -286,6 +309,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
  * Used by preview_frame tool — frontend renders, server polls for result.
  */
 export async function captureDesignFrame(design: DesignPayload, frame: number): Promise<Blob | null> {
+  design = await resolveLayerizeFontsForRender(design);
   let allBlobUrls: string[] = [];
   try {
     await preloadBabel().catch(() => {});
@@ -364,6 +388,7 @@ interface RemotionRendererProps {
   mode?: 'fill' | 'inline';
   hideControls?: boolean;
   posterImage?: string;
+  showPlaybackPoster?: boolean;
   onLoading?: (loading: boolean) => void;
   onContainerRef?: (el: HTMLDivElement | null) => void;
   onPlayerRef?: (ref: PlayerRef | null) => void;
@@ -378,6 +403,7 @@ export default function RemotionRenderer({
   mode = 'inline',
   hideControls,
   posterImage,
+  showPlaybackPoster = true,
   onLoading,
   onContainerRef,
   onPlayerRef,
@@ -393,14 +419,36 @@ export default function RemotionRenderer({
   const reportContextRef = useRef({ projectId, snapshotId });
   const designPropsRef = useRef(design.props || {});
   const inputPropImageCacheRef = useRef(new Map<string, string>());
+  const inputPropImageUrlsRef = useRef(new Set<string>());
+  const inputPropImageCacheMountedRef = useRef(true);
   onErrorRef.current = onError;
   reportContextRef.current = { projectId, snapshotId };
   designPropsRef.current = design.props || {};
 
-  const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
+  const onLoadingRef = useRef(onLoading);
+  onLoadingRef.current = onLoading;
+  const compileLoadingRef = useRef(true);
+  const inputLoadingRef = useRef(true);
+  const inputSnapshotRef = useRef<string | undefined>(undefined);
+  const inputReadyRef = useRef(false);
+  const notifyLoading = useCallback(() => onLoadingRef.current?.(compileLoadingRef.current || inputLoadingRef.current), []);
+
+  const [compiledComponent, setComponent] = useState<React.ComponentType<any> | null>(null);
+  const [compiledCode, setCompiledCode] = useState<string | null>(null);
   const [inputProps, setInputProps] = useState<Record<string, unknown>>(design.props || {});
+  const [inputIdentity, setInputIdentity] = useState({ code: design.code, snapshotId });
+  // Code and image props resolve independently. Never run a new composition
+  // against the previous snapshot's asset keys (or the inverse).
+  const Component = compiledCode === design.code && inputIdentity.code === design.code
+    && inputIdentity.snapshotId === snapshotId ? compiledComponent : null;
   const [compileError, setCompileError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
+  const fontRenderKey = layerizeFontRenderKey(design);
+  const fontBarrier = useMemo(() => {
+    let release!: () => void;
+    const ready = new Promise<void>(resolve => { release = resolve; });
+    return { ready, release };
+  }, [design.code, design.fontSubstitutions, retryToken, fontRenderKey]);
 
   const reportPreviewFailureRef = useRef((
     phase: RemotionPreviewErrorPhase,
@@ -426,7 +474,8 @@ export default function RemotionRenderer({
   useEffect(() => {
     let cancelled = false;
     const blobUrls: string[] = [];
-    onLoading?.(true);
+    compileLoadingRef.current = true;
+    notifyLoading();
     (async () => {
       try {
         await preloadBabel().catch(() => {});
@@ -490,35 +539,40 @@ export default function RemotionRenderer({
               // deferred component already references those versioned family
               // names, so registering the faces reflows it in place without
               // resetting playback.
-              onLoading?.(false);
+              compileLoadingRef.current = false;
+              fontBarrier.release();
+              notifyLoading();
             });
           }
         }
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
         setComponent(() => comp);
-        if (fontsSettled) onLoading?.(false);
+        setCompiledCode(design.code);
+        if (fontsSettled) { compileLoadingRef.current = false; fontBarrier.release(); notifyLoading(); }
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[RemotionRenderer] init failed:', msg);
         setCompileError(msg);
         reportPreviewFailureRef.current('player-init', e, { recovered: false });
-        onLoading?.(false);
+        compileLoadingRef.current = false; inputLoadingRef.current = false; fontBarrier.release(); notifyLoading();
       }
     })();
     return () => {
       cancelled = true;
+      fontBarrier.release();
       blobUrls.forEach(url => URL.revokeObjectURL(url));
     };
 
-  }, [design.code, design.fontSubstitutions, retryToken]);
+  }, [design.code, design.fontSubstitutions, retryToken, notifyLoading, fontBarrier]);
 
   // Editable text/media/transform changes should update Player input props
   // without recompiling the composition, fonts, and code.
   useEffect(() => {
     let cancelled = false;
     const newBlobUrls: string[] = [];
+    if (!inputReadyRef.current || inputSnapshotRef.current !== snapshotId) { inputLoadingRef.current = true; notifyLoading(); }
     const discardNewBlobUrls = () => {
       const discarded = new Set(newBlobUrls);
       inputPropImageCacheRef.current.forEach((blobUrl, sourceUrl) => {
@@ -537,20 +591,36 @@ export default function RemotionRenderer({
           { recovered: true, resourceUrl },
         ),
       ) as Record<string, unknown>;
+      if (inputPropImageCacheMountedRef.current) {
+        newBlobUrls.forEach(url => inputPropImageUrlsRef.current.add(url));
+      }
       if (cancelled) {
-        discardNewBlobUrls();
+        // A newer props effect may already have borrowed these cached URLs.
+        // The mounted Player owns them until unmount, even if this request lost.
+        if (!inputPropImageCacheMountedRef.current) discardNewBlobUrls();
         return;
       }
+      if (fontRenderKey) await fontBarrier.ready;
+      if (cancelled) return;
       setInputProps(resolved);
+      setInputIdentity({ code: design.code, snapshotId });
+      inputReadyRef.current = true; inputSnapshotRef.current = snapshotId;
+      inputLoadingRef.current = false; notifyLoading();
     })();
     return () => {
       cancelled = true;
     };
-  }, [design.props]);
+  }, [design.props, snapshotId, notifyLoading, fontRenderKey, fontBarrier]);
 
-  useEffect(() => () => {
-    inputPropImageCacheRef.current.forEach(url => URL.revokeObjectURL(url));
-    inputPropImageCacheRef.current.clear();
+  useEffect(() => {
+    inputPropImageCacheMountedRef.current = true;
+    return () => {
+      inputPropImageCacheMountedRef.current = false;
+      new Set([...inputPropImageCacheRef.current.values(), ...inputPropImageUrlsRef.current])
+        .forEach(url => URL.revokeObjectURL(url));
+      inputPropImageCacheRef.current.clear();
+      inputPropImageUrlsRef.current.clear();
+    };
   }, []);
 
   // Expose container and player refs to parent
@@ -575,7 +645,7 @@ export default function RemotionRenderer({
   // Static long designs are easy for the Agent to under-size. Measure the
   // rendered editable layer in the browser and let the parent expand height.
   useEffect(() => {
-    if (!Component || design.animation || !onContentSize) return;
+    if (!Component || design.animation || isFixedCanvasDesign(design) || !onContentSize) return;
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let raf1 = 0;
@@ -586,7 +656,11 @@ export default function RemotionRenderer({
       const wrapper = wrapperRef.current;
       if (!wrapper) return;
       const wrapperRect = wrapper.getBoundingClientRect();
-      const scale = wrapperRect.width > 0 ? wrapperRect.width / design.width : 1;
+      // Fill mode letterboxes the composition inside a wider wrapper. Measure
+      // in the actual Player canvas coordinates, not the surrounding viewport.
+      const canvas = wrapper.querySelector<HTMLElement>('.__remotion-player');
+      const canvasRect = canvas?.getBoundingClientRect() ?? wrapperRect;
+      const scale = canvasRect.width > 0 ? canvasRect.width / design.width : 1;
       if (!Number.isFinite(scale) || scale <= 0) return;
 
       let maxBottom = 0;
@@ -595,12 +669,15 @@ export default function RemotionRenderer({
       editables.forEach((el) => {
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 && rect.height <= 0) return;
-        maxBottom = Math.max(maxBottom, (rect.bottom - wrapperRect.top) / scale);
-        maxRight = Math.max(maxRight, (rect.right - wrapperRect.left) / scale);
+        maxBottom = Math.max(maxBottom, (rect.bottom - canvasRect.top) / scale);
+        maxRight = Math.max(maxRight, (rect.right - canvasRect.left) / scale);
       });
 
-      const scrollHeight = wrapper.scrollHeight / scale;
-      const scrollWidth = wrapper.scrollWidth / scale;
+      // Player CSS dimensions are in source units. The outer viewport can
+      // resize before Player updates its scale; dividing that viewport's new
+      // height by the previous scale would repeatedly enlarge the canvas.
+      const scrollHeight = canvas ? canvas.scrollHeight : wrapper.scrollHeight / scale;
+      const scrollWidth = canvas ? canvas.scrollWidth : wrapper.scrollWidth / scale;
       const measuredHeight = Math.ceil(Math.max(maxBottom, scrollHeight, design.height));
       const measuredWidth = Math.ceil(Math.max(maxRight, scrollWidth, design.width));
       const source = maxBottom > scrollHeight ? 'editables' : 'scroll';
@@ -616,6 +693,7 @@ export default function RemotionRenderer({
     if (typeof ResizeObserver !== 'undefined' && wrapperRef.current) {
       observer = new ResizeObserver(measure);
       observer.observe(wrapperRef.current);
+      wrapperRef.current.querySelectorAll<HTMLElement>(EDITABLE_RUNTIME_SELECTOR).forEach(element => observer?.observe(element));
     }
 
     return () => {
@@ -667,7 +745,7 @@ export default function RemotionRenderer({
     return previewFallback;
   }
 
-  if (!Component) return null;
+  if (!Component) return posterImage ? <img src={posterImage} alt="" className="h-full w-full object-contain" /> : null;
 
   const isFill = mode === 'fill';
 
@@ -702,9 +780,7 @@ export default function RemotionRenderer({
           renderPoster={posterImage ? () => (
             <img src={posterImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : undefined}
-          // The canvas already shows a loading poster until compilation finishes.
-          // Keeping the Player poster until first play hides a paused 3D seek.
-          showPosterWhenUnplayed={!!posterImage && !usesThreeCanvas(design.code)}
+          showPosterWhenUnplayed={!isStill && showPlaybackPoster && !!posterImage && !usesThreeCanvas(design.code)}
           showPosterWhenBuffering={false}
           posterFillMode="player-size"
           bufferStateDelayInMilliseconds={0}
@@ -816,6 +892,7 @@ export async function exportDesignVideo(
   design: DesignPayload,
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
+  design = await resolveLayerizeFontsForRender(design);
   // Pure video design → download source mp4 directly (no Remotion render needed)
   const singleVideoUrl = extractSingleVideoUrl(design.code);
   if (singleVideoUrl) {

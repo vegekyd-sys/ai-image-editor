@@ -8,6 +8,7 @@ import {
   getPreviousImageForCompare,
   getSnapshotTimelineImage,
   shouldShowCanvasPlaceholder,
+  shouldAutoFetchSnapshotTips,
 } from '@/lib/editor/timeline-derivations';
 import type { DesignPayload, Snapshot } from '@/types';
 
@@ -25,6 +26,13 @@ const snap = (id: string, image: string, extra: Partial<Snapshot> = {}): Snapsho
 const design = (code: string): DesignPayload => ({ code, width: 1080, height: 1350 });
 
 describe('editor timeline derivations', () => {
+  it('does not start photo Tips for decomposition results, hydrating designs or read-only viewers', () => {
+    expect(shouldAutoFetchSnapshotTips(snap('photo', storageUrl('photo')))).toBe(true);
+    expect(shouldAutoFetchSnapshotTips(snap('still', storageUrl('still'), { design: design('still') }))).toBe(true);
+    expect(shouldAutoFetchSnapshotTips(snap('layered', storageUrl('layered'), { design: { ...design('layered'), props: { _layerState: { order: ['layer_0'], deleted: [] } } } }))).toBe(false);
+    expect(shouldAutoFetchSnapshotTips(snap('loading', storageUrl('loading'), { designPath: 'code/loading.json' }))).toBe(false);
+    expect(shouldAutoFetchSnapshotTips(snap('readonly', storageUrl('readonly')), true)).toBe(false);
+  });
   it('opens an empty mobile editor in CUI without changing populated or desktop entry', () => {
     expect(getInitialEditorViewMode({ isDesktop: false, hasGuiContent: false })).toBe('cui');
     expect(getInitialEditorViewMode({ isDesktop: false, hasGuiContent: true })).toBe('gui');
@@ -89,7 +97,7 @@ describe('editor timeline derivations', () => {
     })).toBe(true);
   });
 
-  it('returns nearby optimized preload URLs while skipping cached/base64 snapshots', () => {
+  it('preloads the current and nearby timeline URLs while skipping cached/base64 snapshots', () => {
     const urls = getNearbyOptimizedPreloadUrls([
       snap('a', storageUrl('a')),
       snap('b', 'data:image/png;base64,b'),
@@ -98,8 +106,9 @@ describe('editor timeline derivations', () => {
       snap('e', storageUrl('e')),
     ], 2);
 
-    expect(urls).toHaveLength(3);
-    expect(urls.every(url => url.includes('width=2000'))).toBe(true);
+    expect(urls).toHaveLength(4);
+    expect(urls.every(url => url.includes('width='))).toBe(true);
+    expect(urls.join('\n')).toContain('/c.png');
     expect(urls.join('\n')).toContain('/a.png');
     expect(urls.join('\n')).toContain('/d.png');
     expect(urls.join('\n')).toContain('/e.png');

@@ -1,3 +1,4 @@
+import { LAYERIZE_TEXT_PROMPT } from './layerize-provider';
 import { estimateSeedream55Credits } from './models/seedream55';
 import { estimateGptImageCredits } from './models/gpt-image-quote';
 import { validatePrimaryVideoFraming } from './composition-video-framing';
@@ -68,6 +69,8 @@ import {
   partitionCompositionMediaRefs,
 } from './agent-media-index';
 import { mergePatchProps } from './patch-props';
+import { parseSelectedElement, applyElementEdit, rebaseElementEdit, elementLayoutReceipt, type SelectedElement } from './editor/element-edit';
+import { loadSelectedElement, prepareElementImage, finishElementImage } from './selected-element';
 import { persistCompositionDraft } from './composition-draft';
 import {
   assembleCompositionParts,
@@ -97,6 +100,7 @@ import {
   translate,
 } from './locales';
 import { stableDraftPromotionSnapshotId } from './draft-promotion';
+import { layerizeModelOutput } from './layerize-delivery';
 import { sourceRangeFromVideoMeta } from './media-source-range';
 import { materializeSeedAudioReference } from './seed-audio-reference';
 import { resolveAudioRefs } from './audio-reference-resolver';
@@ -219,6 +223,7 @@ function modelFileContent(base64Data: string, mediaType: string) {
 // ---------------------------------------------------------------------------
 
 export interface AgentContext {
+  deliverySurface?: 'app' | 'external';
   abortSignal?: AbortSignal;
   studioResumeAuthorized?: boolean;
   /** Pinned with the system prompt for this invocation, including model retries. */
@@ -277,6 +282,7 @@ export interface AgentContext {
   timelineVersion?: number;
   /** Published or autosaved composition used as the source for this turn. */
   currentDesignPath?: string;
+  selectedElement?: SelectedElement;
   /** Export attempts for an unchanged composition during this agent turn. */
   materializeAttempts?: Map<string, number>;
   /** Seedance image URLs rejected during this turn; unchanged resubmission is blocked. */
@@ -372,7 +378,8 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render' | 'composition'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string }  // Agent React composition for browser rendering
+  | { type: 'focus_snapshot'; snapshotId: string }
+  | { type: 'render' | 'composition'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; elementEdit?: import('./editor/element-edit').ElementEditReceipt; __makaronEditableRevision?: number; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string; prePublished?: boolean }  // Agent React composition for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | {
       type: 'context_compaction';
@@ -1394,8 +1401,61 @@ interface AgentToolFactoryScope {
   serializeVideoSubmission: SerializeVideoSubmission;
 }
 
+function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = false) {
+  const schema = statusOnly
+    ? z.object({ job_id: z.string().uuid().describe('The existing Layerize job ID. Query it instead of creating another paid task.') })
+    : z.object({
+      media_index: z.number().int().positive().describe('Image in the current Media Index to split into layers.'),
+      prompt: z.string().default(LAYERIZE_TEXT_PROMPT).describe('Elements/regions to separate. For a full decomposition include all visible headings and words, including words on objects, as isolated text layers. Preserve a narrower user scope.'),
+      max_outputs: z.number().int().min(2).max(100).default(8).describe('Maximum output images INCLUDING the background; affects maximum funds required. Default 8.'),
+      quality: z.enum(['auto', '1K', '1.5K', '2K']).default('1K').describe('Default 1K for faster layer decomposition. Quality applies to the entire task, not individual elements. Use auto, 1.5K or 2K only when the user requests source-resolution preservation or higher detail.'),
+      editable_text: z.boolean().default(false).describe('Keep lettering as an independently editable image layer by default. Set true when the user asks for a native text field; changed wording then uses an approximate pinned font.'),
+      request_id: z.string().uuid().optional().describe('Reuse the original job ID after interruption; never make another provider submission to recover a result.'),
+    });
+  return tool({
+    description: statusOnly
+      ? 'Query/recover an existing image layer decomposition. Downloads/publishes the original task, never generates another image or charges twice.'
+      : 'Split an existing image into editable design layers using Seedream 5.5 Layerize. For 拆图/拆层/分离背景或元素, use this tool instead of generate_image or writing a new renderer. It preserves transparent PNGs, coordinates and ordering, then publishes ONE normal Makaron design using the existing GUI editor. Split visible headings and printed words into independently movable image layers that retain their original lettering. The App displays the result directly; external clients receive a Makaron edit URL. No additional run_code/publish_draft is required. Actual outputs are billed once; each layer and the background have a supplier fee. Never automatically repeat a failed or uncertain submission.',
+    inputSchema: schema,
+    execute: async (raw: any) => {
+      if (!ctx.userId || !ctx.supabase) return { success: false, error: 'An authenticated project is required.' };
+      try {
+        const layerize = await import('./layerize');
+        const owner = { userId: ctx.userId, projectId: ctx.projectId,
+          origin: process.env.MAKARON_APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://www.makaron.app' };
+        let id = raw.job_id;
+        if (!statusOnly) {
+          const index = validateImageIndex(ctx.snapshotImages, raw.media_index);
+          if (index.error) return { success: false, error: index.error };
+          const input = { imageUrl: ctx.snapshotImages[index.idx], prompt: raw.prompt,
+            maxOutputs: raw.max_outputs, quality: raw.quality, editableText: raw.editable_text };
+          id = raw.request_id || stableDraftPromotionSnapshotId({ projectId: ctx.projectId,
+            agentRunId: ctx.agentRunId || ctx.execution?.runId, designPath: 'layerize:' + JSON.stringify(input) });
+          const started = await layerize.startLayerize(owner, id, input);
+          if (['failed', 'uncertain'].includes(started.status)) return { success: false, ...started };
+        }
+        const result = await layerize.waitLayerize(owner, id);
+        if (result.status === 'completed' && result.design && result.newlyPublished) {
+          (ctx as any).__pendingDesign = result.design;
+          (ctx as any).__pendingDesignPublished = true;
+          (ctx as any).__pendingDesignSnapshotId = result.snapshotId;
+          (ctx as any).__pendingDesignSourcePath = result.designPath;
+          (ctx as any).__pendingDesignAlreadyPersisted = true;
+          (ctx as any).__runCodeDrafts = [{ previewUrl: result.posterUrl }];
+          (ctx as any).__lastDesignPayload = result.design;
+          (ctx as any).__lastSavedDraftPath = result.designPath;
+        }
+        const { design: _design, ...publicResult } = result;
+        return { success: result.status === 'completed', ...publicResult };
+      } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Layer decomposition did not complete. Query the same job.' }; }
+    },
+    toModelOutput: ({ output }: { output: any }) => ({ type: 'content' as const, value: [{ type: 'text' as const, text: layerizeModelOutput(output, ctx.deliverySurface) }] }),
+  });
+}
+
 function createGenerateImageTool(
   { ctx, runtime }: AgentToolFactoryScope,
+  elementInput?: { source: string; reference: string },
 ) {
   return tool({
       description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}` + '\nRetake camera/content keyframes: use retake_source after inspect_retake to edit an actual source frame, rather than a video poster or contact sheet. The returned image is a visual checkpoint for H3 middle-frame control or an explicitly requested boundary-attribute correction. For a boundary correction use the corresponding inspected selected opening/closing source time; retain that exact composition and action phase except the requested correction. Read its actual pixels and verify the requested camera/content and action phase before passing its mediaIndex to retake_video.',
@@ -1446,6 +1506,8 @@ function createGenerateImageTool(
           editTarget = ctx.currentImage;
         }
 
+        if (elementInput) editTarget = elementInput.source;
+
         if (retake_source) {
           const r = retake_source;
           if (!ctx.userId || !ctx.projectId || media_index || reference_media_indices?.length || r.source_time < r.start || r.source_time >= r.end) return {success:false,message:'Retake keyframe requires an inspected in-selection source frame and no competing image target.'};
@@ -1459,7 +1521,7 @@ function createGenerateImageTool(
         }
 
         // Resolve reference images: user-uploaded + snapshot indices
-        const resolvedRefs = !retake_source && ctx.referenceImages ? [...ctx.referenceImages] : [];
+        const resolvedRefs = elementInput ? [elementInput.reference] : !retake_source && ctx.referenceImages ? [...ctx.referenceImages] : [];
         console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_media_indices?.length) {
           for (const refIdx of reference_media_indices) {
@@ -1610,6 +1672,7 @@ function createGenerateImageTool(
           imageQuality: skillResult.recovery ? undefined : imagePlan.request.imageQuality, imageReasoningEffort: skillResult.recovery ? undefined : imagePlan.request.imageReasoningEffort, outputFormat: imagePlan.request.outputFormat, frameCount: imagePlan.request.frameCount, frameDurationMs: imagePlan.request.frameDurationMs, gifFrameSize: imagePlan.request.gifFrameSize,
           inputImages: [editTarget, ...resolvedRefs].filter((url): url is string => Boolean(url?.startsWith('http'))),
         };
+        if (elementInput) return { success: skillResult.success, image: batchImages[0], message: skillResult.message, usedModel: skillResult.usedModel, provider: skillResult.provider, inputImages: imageGeneration.inputImages };
         const mediaIndices: number[] = [];
         for (const image of batchImages) {
           ctx.snapshotImages.push(image);
@@ -3551,6 +3614,102 @@ Review means previewing and patching the Remotion source before export, not auth
     });
 }
 
+function requireElementSelection(ctx: AgentContext) {
+  const selection = parseSelectedElement(ctx.selectedElement);
+  if (!selection || !ctx.supabase || !ctx.userId) throw new Error('Select an Editable element on the canvas before using this tool. No generation submitted.');
+  return { supabase: ctx.supabase, userId: ctx.userId, projectId: ctx.projectId, selection };
+}
+function currentElementReceipt(ctx: AgentContext): import('./editor/element-edit').ElementEditReceipt | undefined {
+  const receipt = (ctx as any).__elementEditReceipt || (ctx as any).__lastDesignPayload?.elementEdit;
+  return receipt && receipt.agentRunId === ctx.agentRunId && receipt.sourceSnapshotId === ctx.selectedElement?.snapshotId && receipt.fieldId === ctx.selectedElement?.fieldId ? receipt : undefined;
+}
+function createInspectElementTool({ ctx, runtime }: AgentToolFactoryScope) {
+  return tool({
+    description: 'Inspect the exact user-selected Editable element, resolved from the owned saved composition. Returns its actual asset pixels, source pixel dimensions, type, current position and scale. Inspect before a content edit. Pixel regions are in this ORIGINAL ASSET coordinate system, including transparent margins, not screen or composition coordinates. For a hat attached to a baby layer, identify a region with room for the enlarged hat and enough head context; do not scale the whole baby.',
+    inputSchema: z.object({}),
+    execute: async () => {
+      try {
+        const input = requireElementSelection(ctx), loaded = await loadSelectedElement(input);
+        const previous = elementLayoutReceipt(currentElementReceipt(ctx));
+        const design = previous ? applyElementEdit(loaded.design, previous) : loaded.design, field = loaded.field;
+        const source = design.props?.[field.propKey];
+        let hasTransparency: boolean | undefined, previewBase64: string | undefined, visualDescription: string | undefined, width: number | undefined, height: number | undefined;
+        if (field.type === 'image' && typeof source === 'string' && source) {
+          const prepared = await prepareElementImage(source);
+          width = prepared.width; height = prepared.height; hasTransparency = prepared.hasAlpha;
+          if (!runtime.spec.supportsImageInput) {
+            const { analyzeImageContent } = await import('./gemini');
+            visualDescription = await analyzeImageContent(source, `Describe this exact selected asset, its contents and transparent margins. Original source dimensions are ${width} by ${height} pixels. Give approximate ORIGINAL-ASSET pixel bounds for visible objects and editable subparts, particularly hats and faces, explicitly flagging coordinate uncertainty.`, ctx.userId);
+          }
+          const sharp = (await import('sharp')).default;
+          previewBase64 = (await sharp(prepared.image).resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true }).png().toBuffer()).toString('base64');
+        }
+        (ctx as any).__inspectedElement = { ...input.selection, source };
+        return { success: true, field, value: source, width, height, hasTransparency, visualDescription, position: design.props?.[`_pos_${field.id}`], scale: design.props?.[`_scale_${field.id}`], previewBase64 };
+      } catch (error) { return { success: false, error: String(error) }; }
+    },
+    toModelOutput: ({ output }: { output: any }) => ({ type: 'content' as const, value: [
+      ...(runtime.spec.supportsImageInput && output.previewBase64 ? [modelFileContent(output.previewBase64, 'image/png')] : []),
+      { type: 'text' as const, text: JSON.stringify({ ...output, previewBase64: undefined }) },
+    ] }),
+  });
+}
+function createEditElementTool(scope: AgentToolFactoryScope) {
+  const { ctx } = scope;
+  return tool({
+    description: `Edit ONLY the user-selected Editable element. Transforms use composition-pixel deltas and scale multipliers (1.2 = 20% larger), no image model. Text edits replace editable text directly. Content edits require inspect_element first: the server sends the actual selected source to the existing image-edit/billing pipeline, then preserves positions, scales, layer order and all other properties. For a subpart (hat/glasses within a baby layer), supply a region in ORIGINAL ASSET pixels; only that rectangle may change, all pixels outside are copied unchanged. Include space for enlarged content. Do not scale the baby to enlarge only its hat. A full replacement may omit region but must preserve original canvas and subject framing. Every appearance attempt starts from the saved original, replacing any earlier appearance draft in this turn; include the COMPLETE requested appearance change in its prompt. Earlier explicit transforms are retained. This saves a draft; use preview_frame then publish_draft with its exact design_path. Never rebuild the composition or reset offsets to replace one asset.`,
+    inputSchema: z.object({
+      operation: z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('transform'), dx: z.number().finite().min(-20000).max(20000).optional(), dy: z.number().finite().min(-20000).max(20000).optional(), scaleX: z.number().min(0.05).max(20).optional(), scaleY: z.number().min(0.05).max(20).optional() }),
+        z.object({ kind: z.literal('text'), text: z.string().max(100000) }),
+        z.object({ kind: z.literal('content'), prompt: z.string().min(1).max(12000), region: z.object({ x: z.number().nonnegative(), y: z.number().nonnegative(), width: z.number().positive(), height: z.number().positive() }).optional() }),
+      ]),
+    }),
+    execute: async ({ operation }, executionOptions) => {
+      try {
+        const input = requireElementSelection(ctx), loaded = await loadSelectedElement(input);
+        const priorReceipt = currentElementReceipt(ctx);
+        const previous = operation.kind === 'content' ? elementLayoutReceipt(priorReceipt) : priorReceipt;
+        const original = { ...loaded, design: previous ? applyElementEdit(loaded.design, previous) : loaded.design };
+        const id = crypto.randomUUID();
+        let op: import('./editor/element-edit').ElementOperation;
+        if (operation.kind === 'content') {
+          if (original.field.type !== 'image') throw new Error('Content generation requires an image element.');
+          const source = original.design.props?.[original.field.propKey];
+          if (typeof source !== 'string' || !source) throw new Error('Selected element has no image source. No generation submitted.');
+          const inspection = (ctx as any).__inspectedElement;
+          if (!inspection || inspection.snapshotId !== input.selection.snapshotId || inspection.fieldId !== input.selection.fieldId || inspection.source !== source) throw new Error('Inspect this exact selected element before generating an edit. No generation submitted.');
+          const prepared = await prepareElementImage(source, operation.region);
+          const cropPath = `${ctx.projectId}/element-edits/${id}-input.png`;
+          const savedInput = await workspace.writeFile(cropPath, prepared.crop, input.supabase, input.userId, 'image/png');
+          if (!savedInput.success || !savedInput.storageUrl) throw new Error('Could not prepare the original element for editing.');
+          const generator = createGenerateImageTool(scope, { source: savedInput.storageUrl, reference: source });
+          const generated = await generator.execute!({ benignCharacterContent: false, editPrompt: `${operation.prompt}\nEdit ONLY the supplied FIRST crop in place: ${prepared.box.width} by ${prepared.box.height} pixels, at original-asset x=${prepared.box.left}, y=${prepared.box.top}. The SECOND image is the complete original element for identity/context ONLY, not the output canvas. Return only the edited crop, never copy the whole character or scene from the second image into it. Preserve the crop framing, contact points, pose and identity. ${prepared.hasAlpha ? "Transparent source pixels must remain alpha, never paint a solid backdrop." : "Keep the existing background."} Do not zoom, recenter or invent a different person.`, outputFormat: 'png', aspectRatio: formatAspectRatio(prepared.box.width, prepared.box.height), ...(prepared.hasAlpha ? { background: 'transparent' as const } : {}) }, executionOptions) as any;
+          if (!generated.success || !generated.image) return { success: false, error: generated.message || 'Element image generation failed.' };
+          const bytes = await finishElementImage(prepared, generated.image);
+          const saved = await workspace.writeFile(`${ctx.projectId}/element-edits/${id}.png`, bytes, input.supabase, input.userId, 'image/png');
+          if (!saved.success || !saved.storageUrl) throw new Error('Generated element could not be saved.');
+          // The provider output remains available if the source itself changed concurrently.
+          const latest = await loadSelectedElement(input);
+          if ((previous ? applyElementEdit(latest.design, previous) : latest.design).props?.[original.field.propKey] !== source) return { success: false, conflict: true, candidateUrl: saved.storageUrl, error: 'The selected image changed during generation. Candidate retained; no composition overwritten.' };
+          op = { kind: 'replace', url: saved.storageUrl, source };
+        } else op = operation;
+        const latest = await loadSelectedElement(input);
+        const receipt: import('./editor/element-edit').ElementEditReceipt = { version: 1, id, agentRunId: ctx.agentRunId, sourceSnapshotId: input.selection.snapshotId, fieldId: input.selection.fieldId, operation: op, ...(previous ? { operations: [...(previous.operations || [previous.operation]), op] } : {}) };
+        const design = { ...applyElementEdit(latest.design, receipt), elementEdit: receipt };
+        const path = `${ctx.projectId}/element-edits/${id}.json`;
+        const saved = await workspace.writeFile(path, JSON.stringify(design), input.supabase, input.userId, 'application/json');
+        if (!saved.success) throw new Error('Element edit could not be saved.');
+        (ctx as any).__elementEditReceipt = receipt;
+        (ctx as any).__lastDesignPayload = design;
+        (ctx as any).__lastSavedDraftPath = path;
+        ((ctx as any).__runCodeDrafts ??= []).push({ design, sourceDesignPath: path });
+        return { success: true, design_path: path, field: original.field.label, operation: op.kind, message: 'Draft saved with shared edit history. Verify with preview_frame and publish_draft using this exact path. Other element properties are preserved.' };
+      } catch (error) { return { success: false, error: String(error) }; }
+    },
+  });
+}
+
 function createPublishDraftTool(
   { ctx }: AgentToolFactoryScope,
 ) {
@@ -3579,7 +3738,16 @@ The same Agent Run and design_path resolve to the same Snapshot ID, so a retry o
           } catch {
             return { success: false, error: `Editable composition at ${design_path} is not valid JSON.` };
           }
-          const design = rawDesign as unknown as DesignPayload;
+          let design = rawDesign as unknown as DesignPayload;
+          if (ctx.selectedElement && (!design.elementEdit || design.elementEdit.version !== 1 || design.elementEdit.sourceSnapshotId !== ctx.selectedElement.snapshotId || design.elementEdit.fieldId !== ctx.selectedElement.fieldId)) {
+            return { success: false, error: 'A selected-element request can publish only the exact draft returned by edit_element for this selection.' };
+          }
+          if (design.elementEdit) {
+            const latest = await loadSelectedElement({ supabase: ctx.supabase, userId: ctx.userId, projectId: ctx.projectId, selection: { snapshotId: design.elementEdit.sourceSnapshotId, fieldId: design.elementEdit.fieldId } });
+            design = rebaseElementEdit(design, latest.design);
+            const saved = await workspace.writeFile(design_path, JSON.stringify(design), ctx.supabase, ctx.userId, 'application/json');
+            if (!saved.success) throw new Error('Could not save rebased element edit');
+          }
           if (
             !design
             || typeof design.code !== 'string'
@@ -3652,6 +3820,13 @@ The same Agent Run and design_path resolve to the same Snapshot ID, so a retry o
             agentRunId: ctx.agentRunId || ctx.execution?.runId,
             designPath: design_path,
           });
+          if (design.elementEdit) {
+            const { renderDesignFrame } = await import('./remotion-server');
+            const bytes = await renderDesignFrame(design, 0, { signal: ctx.abortSignal, sandboxScope: `${ctx.userId}:${ctx.projectId}` });
+            const poster = await workspace.writeFile(`${ctx.projectId}/element-edits/${design.elementEdit.id}-poster.jpg`, bytes, ctx.supabase, ctx.userId, 'image/jpeg');
+            if (!poster.success || !poster.storageUrl) throw new Error('Element edit poster could not be saved.');
+            ((ctx as any).__runCodeDrafts ??= []).push({ previewUrl: poster.storageUrl });
+          }
           const promotedDesign = {
             ...design,
             description: name || (typeof rawDesign.description === 'string' ? rawDesign.description : '') || 'Editable Remotion composition',
@@ -5712,6 +5887,8 @@ export function createTools(ctx: AgentContext, runtime: AgentModelRuntime, local
 const tools = preserveOptionalToolFields({
     ...getAgentProviderTools(runtime),
     generate_image: createGenerateImageTool(scope),
+    decompose_image: createDecomposeImageTool(scope),
+    get_layerize_status: createDecomposeImageTool(scope, true),
 
     generate_animation: createGenerateAnimationTool(scope),
     inspect_retake: createInspectRetakeTool(scope),
@@ -5732,6 +5909,8 @@ const tools = preserveOptionalToolFields({
     studio_run: createStudioRunTool(scope),
 
     publish_draft: createPublishDraftTool(scope),
+    inspect_element: createInspectElementTool(scope),
+    edit_element: createEditElementTool(scope),
 
     materialize_media: createMaterializeMediaTool(scope),
 
@@ -5760,7 +5939,15 @@ const tools = preserveOptionalToolFields({
     tools.generate_animation.description = legacyVideoTool;
     tools.run_code.description = legacyCodingTool;
   }
-  return tools;
+  if (ctx.selectedElement) {
+    // Selection is an execution boundary, not just prompt advice. An unsuccessful
+    // content draft cannot bypass it through run_code or unrelated generation.
+    const allowed = new Set(['inspect_element', 'edit_element', 'preview_frame', 'publish_draft', 'read_file', 'list_files', 'execution_checkpoint', 'analyze_image', 'materialize_media']);
+    return Object.fromEntries(Object.entries(tools).filter(([name]) => allowed.has(name))) as typeof tools;
+  }
+  // Ordinary chat/CLI retains its existing surface. Selection-only tools must
+  // not invite an edit without a real canvas target.
+  return Object.fromEntries(Object.entries(tools).filter(([name]) => name !== 'inspect_element' && name !== 'edit_element')) as typeof tools;
 }
 
 /** Keep tool prompt telemetry independent from the Agent runner module. */

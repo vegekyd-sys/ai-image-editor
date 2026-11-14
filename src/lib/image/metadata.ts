@@ -11,7 +11,10 @@ export async function extractPhotoMetadata(
 ): Promise<PhotoMetadata | undefined> {
   const local = await extractPhotoMetadataLocally(file);
 
-  const needsServerFallback = isHeicFile(file) || !local?.takenAt;
+  // PNG artwork/screenshots commonly have no EXIF. Re-uploading the whole
+  // image cannot recover a missing capture date and can block project entry.
+  const isPng = file.type === 'image/png' || /\.png$/i.test(file.name);
+  const needsServerFallback = !isPng && (isHeicFile(file) || !local?.takenAt);
   if (!needsServerFallback || options?.allowServerFallback === false) return local;
 
   const server = await extractPhotoMetadataOnServer(file);
@@ -52,10 +55,13 @@ async function extractPhotoMetadataLocally(file: File): Promise<PhotoMetadata | 
 }
 
 async function extractPhotoMetadataOnServer(file: File): Promise<PhotoMetadata | undefined> {
+  // Keep below the hosting request-body limit; the original is already
+  // uploaded through Storage and a second large multipart upload returns 413.
+  if (file.size > 4 * 1024 * 1024) return undefined;
   try {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetch('/api/photo-metadata', { method: 'POST', body: formData });
+    const res = await fetch('/api/photo-metadata', { method: 'POST', body: formData, signal: AbortSignal.timeout(5000) });
     if (!res.ok) return undefined;
     const data = await res.json();
     return data?.metadata ?? undefined;

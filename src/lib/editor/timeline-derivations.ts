@@ -1,6 +1,13 @@
 import { type DesignPayload, type Snapshot } from '@/types';
 import { getOptimizedUrl, getThumbnailUrl } from '@/lib/supabase/storage';
 import { snapFromTimeline } from './timeline-utils';
+import { isFixedCanvasDesign } from './design-layer-state';
+
+export function shouldAutoFetchSnapshotTips(snapshot: Snapshot | undefined, readOnly = false): boolean {
+  return !!snapshot && !readOnly && snapshot.tips.length === 0 && snapshot.type !== 'video'
+    && (!snapshot.designPath || !!snapshot.design)
+    && !snapshot.design?.animation && !isFixedCanvasDesign(snapshot.design);
+}
 
 export const VIDEO_TIMELINE_SENTINEL = '__VIDEO__';
 export const VIDEO_PLACEHOLDER_IMAGE = '/video-placeholder.png';
@@ -27,6 +34,10 @@ export function getSnapshotTimelineImage(
 
   const url = snapshot.image || snapshot.imageUrl || '';
   if (!url) return '';
+
+  // Published design posters are already compressed JPEGs. Reuse the same URL in
+  // canvas and CUI rather than waiting for another cold image transformation.
+  if ((snapshot.design || snapshot.designPath) && /\.jpe?g(?:[?#]|$)/i.test(url)) return url;
 
   // Current snapshot and neighbors: high-quality WebP. Distant snapshots: thumbnail.
   if (Math.abs(snapshotIndex - viewIndex) <= 1) return getOptimizedUrl(url);
@@ -94,14 +105,11 @@ export function getNearbyOptimizedPreloadUrls(
   snapshots: Snapshot[],
   viewIndex: number,
 ): string[] {
-  return [viewIndex - 2, viewIndex - 1, viewIndex + 1, viewIndex + 2]
+  return [viewIndex, viewIndex - 2, viewIndex - 1, viewIndex + 1, viewIndex + 2]
     .filter(index => index >= 0 && index < snapshots.length)
-    .map(index => snapshots[index])
-    .filter((snapshot): snapshot is Snapshot => !!snapshot)
-    .filter(snapshot => !snapshot.image || snapshot.image.startsWith('http'))
-    .map(snapshot => snapshot.imageUrl || snapshot.image || '')
-    .filter((url): url is string => !!url)
-    .map(url => getOptimizedUrl(url));
+    .filter(index => !snapshots[index].image || snapshots[index].image.startsWith('http'))
+    .map(index => getSnapshotTimelineImage(snapshots[index], index, viewIndex))
+    .filter(Boolean);
 }
 
 export function getPreviousImageForCompare({

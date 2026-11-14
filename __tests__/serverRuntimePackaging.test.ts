@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { checkServerRuntime, checkVideoMediaRuntime } = require('../scripts/check-server-runtime.mjs');
+const { checkServerRuntime, checkVideoMediaRuntime, checkFontMatchingRuntime } = require('../scripts/check-server-runtime.mjs');
 const roots: string[] = [];
 
 function fixture(files: string[], entryExists = true) {
@@ -53,4 +53,14 @@ describe('server runtime packaging gate', () => {
     writeFileSync(file, 'binary fixture');
     expect(checkVideoMediaRuntime(root, route)).toBe(1);
   });
+  it('requires native Fontkit modules and Unicode trie data in the async font worker', () => {
+    const entries=['../../../../../../node_modules/fontkit/dist/node/index.js','../../../../../../node_modules/unicode-properties/data.trie'];
+    const root=fixture(entries);
+    expect(()=>checkFontMatchingRuntime(root,route)).toThrow('missing font runtime');
+    for(const relative of ['fontkit/dist/node/index.js','unicode-properties/data.trie']){
+      const file=path.join(root,'node_modules',relative);mkdirSync(path.dirname(file),{recursive:true});writeFileSync(file,'runtime fixture');
+    }
+    expect(checkFontMatchingRuntime(root,route)).toBe(1);
+  });
+
 });

@@ -275,6 +275,8 @@ export async function getCachedImages(keys: string[]): Promise<Map<string, strin
 interface PendingProjectImagesManifest {
   projectId: string
   keys: string[]
+  /** Compact permanent URLs survive reload without waiting for IndexedDB. */
+  urls?: string[]
 }
 
 function readPendingProjectImagesManifest(projectId: string): PendingProjectImagesManifest | null {
@@ -284,6 +286,8 @@ function readPendingProjectImagesManifest(projectId: string): PendingProjectImag
     if (!raw) return null
     const manifest = JSON.parse(raw) as PendingProjectImagesManifest
     if (manifest.projectId !== projectId || !Array.isArray(manifest.keys) || manifest.keys.length === 0) return null
+    if (!Array.isArray(manifest.urls) || manifest.urls.length !== manifest.keys.length
+      || manifest.urls.some(url => typeof url !== 'string' || !/^https?:\/\//i.test(url))) delete manifest.urls
     return manifest
   } catch {
     return null
@@ -294,7 +298,16 @@ export async function stagePendingProjectImages(projectId: string, images: strin
   if (typeof window === 'undefined' || images.length === 0) return
   const keys = images.map((_, index) => `pending-project:${projectId}:${index}`)
   images.forEach((image, index) => memoryCache.set(keys[index], image))
-  await Promise.all(images.map((image, index) => writeToIDB(keys[index], image)))
+  const persist = Promise.all(images.map((image, index) => writeToIDB(keys[index], image)))
+  if (images.every(image => /^https?:\/\//i.test(image))) {
+    // Permanent uploads are already durable. A blocked/slow local cache must
+    // not keep the user on the project gallery after upload has completed.
+    sessionStorage.setItem(PENDING_PROJECT_IMAGES_KEY, JSON.stringify({ projectId, keys, urls: images }))
+    void persist
+    return
+  }
+  // Legacy binary payloads stay in IndexedDB rather than sessionStorage.
+  await persist
   sessionStorage.setItem(PENDING_PROJECT_IMAGES_KEY, JSON.stringify({ projectId, keys }))
 }
 
@@ -305,6 +318,7 @@ export function hasPendingProjectImages(projectId: string): boolean {
 export function getPendingProjectImagesSync(projectId: string): string[] | null {
   const manifest = readPendingProjectImagesManifest(projectId)
   if (!manifest) return null
+  if (manifest.urls) return manifest.urls
   const images = manifest.keys.map(key => memoryCache.get(key))
   return images.every((image): image is string => typeof image === 'string') ? images : null
 }
@@ -312,6 +326,7 @@ export function getPendingProjectImagesSync(projectId: string): string[] | null 
 export async function getPendingProjectImages(projectId: string): Promise<string[] | null> {
   const manifest = readPendingProjectImagesManifest(projectId)
   if (!manifest) return null
+  if (manifest.urls) return manifest.urls
   const cached = await getCachedImages(manifest.keys)
   const images = manifest.keys.map(key => cached.get(key))
   return images.every((image): image is string => typeof image === 'string') ? images : null

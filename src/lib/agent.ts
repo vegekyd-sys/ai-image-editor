@@ -270,6 +270,7 @@ const ANALYSIS_PROMPT_VIDEO_TEMPLATE = (mediaIndex: number) =>
   `[System: User just uploaded a video at <<<media_${mediaIndex}>>>. Analyze it and describe the content.]\nDescribe this video in 2-3 sentences — duration, key subjects/actions, mood. Be conversational. No preamble.`;
 
 export interface RunMakaronAgentOptions {
+  deliverySurface?: 'app' | 'external';
   analysisOnly?: boolean;
   analysisContext?: 'initial' | 'post-edit';
   isVideoAnalysis?: boolean;
@@ -298,6 +299,7 @@ export interface RunMakaronAgentOptions {
   codexSubscriptionAllowed?: boolean;
   currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } };
   currentDesignPath?: string;
+  selectedElement?: import("./editor/element-edit").SelectedElement;
   history?: ModelMessage[];
   timelineVersion?: number;
   perf?: AgentPerf;
@@ -336,6 +338,7 @@ export async function* runMakaronAgent(
     options?.codexSubscriptionAllowed,
   );
   const ctx: AgentContext = {
+    deliverySurface: options?.deliverySurface,
     studioResumeAuthorized: options?.studioResumeAuthorized,
     abortSignal: options?.abortSignal,
     corePromptMode,
@@ -359,6 +362,7 @@ export async function* runMakaronAgent(
     userId: options?.userId,
     timelineVersion: options?.timelineVersion,
     currentDesignPath: options?.currentDesignPath,
+    selectedElement: options?.selectedElement,
     execution: options?.execution,
     agentRunId: options?.agentRunId || options?.execution?.runId,
   };
@@ -445,13 +449,16 @@ export async function* runMakaronAgent(
     // must pass code_path explicitly in run_code patch mode for persisted compositions.
     const promptHasCompositionPointer = typeof prompt === 'string'
       && (prompt.includes('[Current Composition]') || prompt.includes('[Current composition pointer]'));
-    const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
+    const designInjection = options?.currentDesignPath && !promptHasCompositionPointer && !options.selectedElement
       ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${options.currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
     const textOnlyVisionNote = animImages?.length && !runtime.spec.supportsImageInput
       ? '\n\n[Selected Agent model is text-only. Use analyze_image on the relevant Media Index entries before making image-dependent decisions.]'
       : '';
-    userContent = analysisOnly ? analysisPrompt : (designInjection + prompt + textOnlyVisionNote);
+    const selectedElementNote = options?.selectedElement
+      ? `\n[User-selected Editable element] snapshotId=${options.selectedElement.snapshotId}; fieldId=${options.selectedElement.fieldId}. For an edit to this selection use inspect_element and edit_element. Move/scale use transform, editable text uses text, appearance/replacement uses content with the actual original asset. A hat attached to a baby is a subregion edit, never a scale of the whole baby. Appearance retries always start from the saved original; include the complete requested change. Do not use code or unrelated generation to bypass a failed appearance edit. Preview the returned draft and publish_draft. Do not reconstruct the composition or reset stored transforms. If the user explicitly refers to another media index, ignore this selection and follow that explicit reference.\n`
+      : '';
+    userContent = analysisOnly ? analysisPrompt : (designInjection + selectedElementNote + prompt + textOnlyVisionNote);
   }
 
   // Build system prompt. Lightweight modes must stay small: they power
@@ -1080,6 +1087,8 @@ export async function* runMakaronAgent(
           const batch = input.frames?.length ? input.frames.join(', ') : input.timestamps?.length ? input.timestamps.map(value => `${value}s`).join(', ') : '';
           const hint = batch || (input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0');
           yield { type: 'status', text: translate(responseLocale, 'agent.status.capturingFrame', hint) };
+        } else if (event.toolName === 'decompose_image' || event.toolName === 'get_layerize_status') {
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.layerizing') };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingImage') };
         } else if (event.toolName === 'generate_animation' || event.toolName === 'retake_video') {
@@ -1342,8 +1351,14 @@ export async function* runMakaronAgent(
           }
         }
 
+        const layerizeResult = toolOutput as { status?: string; snapshotId?: string } | undefined;
+        if ((toolName === 'decompose_image' || toolName === 'get_layerize_status')
+          && layerizeResult?.status === 'completed' && typeof layerizeResult.snapshotId === 'string') {
+          yield { type: 'focus_snapshot', snapshotId: layerizeResult.snapshotId };
+        }
+
         // Composition output handling — emit design SSE with published flag.
-        if (toolName === 'run_code' || toolName === 'write_file' || toolName === 'publish_draft') {
+        if (toolName === 'run_code' || toolName === 'write_file' || toolName === 'publish_draft' || toolName === 'decompose_image' || toolName === 'get_layerize_status') {
           // Design output stored in ctx.__pendingDesign → emit as SSE event
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {
@@ -1363,17 +1378,21 @@ export async function* runMakaronAgent(
               animation: pendingDesign.animation,
               editables: pendingDesign.editables,
               fontSubstitutions: pendingDesign.fontSubstitutions,
+              elementEdit: pendingDesign.elementEdit,
+              __makaronEditableRevision: pendingDesign.__makaronEditableRevision,
               description: pendingDesign.description,
               snapshotId,
               sourceDesignPath,
               published,
               previewUrl,
+              prePublished: (ctx as any).__pendingDesignAlreadyPersisted === true,
             };
             if (published) {
               finalStepDeliveredArtifact = true;
               attemptDeliveredArtifact = true;
             }
             (ctx as any).__pendingDesign = null;
+            (ctx as any).__pendingDesignAlreadyPersisted = undefined;
             (ctx as any).__pendingDesignPublished = undefined;
             (ctx as any).__pendingDesignSnapshotId = undefined;
             (ctx as any).__pendingDesignSourcePath = undefined;

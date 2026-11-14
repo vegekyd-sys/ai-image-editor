@@ -25,7 +25,8 @@ export interface AgentStreamCallbacks {
   onReasoning?: (text: string) => void;
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
-  onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; published?: boolean; previewUrl?: string }) => void;
+  onFocusSnapshot?: (snapshotId: string) => void;
+  onRender?: (design: { elementEdit?: import('./editor/element-edit').ElementEditReceipt; __makaronEditableRevision?: number; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; sourceDesignPath?: string; published?: boolean; prePublished?: boolean; previewUrl?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
   /** SSE/network ended while the server-side run may still be alive. */
@@ -54,6 +55,9 @@ export async function streamAgent(
     skillLaunchContext?: SkillLaunchContext;
     snapshotImages?: string[];
     currentSnapshotIndex?: number;
+    selectedElement?: import("./editor/element-edit").SelectedElement;
+    currentDesign?: import("@/types").DesignPayload;
+    currentDesignPath?: string;
     isNsfw?: boolean;
     hasAnnotation?: boolean;
     isDraft?: boolean;
@@ -99,6 +103,7 @@ function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: Agen
     case 'new_turn': callbacks.onNewTurn?.(data.messageId); break;
     case 'tool_call': callbacks.onToolCall?.(String(data.tool || ''), data.input || {}, data.images); break;
     case 'image': callbacks.onImage?.(data.imageUrl || '', data.usedModel, data.snapshotId, data.imageUrl, data.metadata); break;
+    case 'focus_snapshot': callbacks.onFocusSnapshot?.(data.snapshotId); break;
     case 'render':
     case 'design': callbacks.onRender?.(data as Parameters<NonNullable<AgentStreamCallbacks['onRender']>>[0]); break;
     case 'animation_task': callbacks.onAnimationTask?.(data.taskId, data.prompt || '', data.imageUrls, data.model); break;
@@ -109,6 +114,14 @@ function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: Agen
     case 'coding': callbacks.onCoding?.(); break;
     case 'code_stream': callbacks.onCodeStream?.(data.text || '', Boolean(data.done)); break;
   }
+}
+
+async function readResponseError(response: Response, fallback: string): Promise<string> {
+  const text = await response.text().catch(() => '');
+  try {
+    const error = JSON.parse(text);
+    return typeof error.message === 'string' ? error.message : typeof error.error === 'string' ? error.error : fallback;
+  } catch { return text || fallback; }
 }
 
 async function streamDurableAgent(
@@ -129,6 +142,7 @@ async function streamDurableAgent(
       videoAuto: body.videoAuto,
       skillLaunchContext: body.skillLaunchContext,
       currentSnapshotIndex: body.currentSnapshotIndex,
+      selectedElement: body.selectedElement,
       hasAnnotation: body.hasAnnotation,
       isDraft: body.isDraft,
       referenceImageCount: body.referenceImageCount,
@@ -146,7 +160,7 @@ async function streamDurableAgent(
       callbacks.onInsufficientCredits?.(data.balance ?? 0);
       return;
     }
-    callbacks.onError?.(await response.text().catch(() => 'Failed to start Agent execution'));
+    callbacks.onError?.(await readResponseError(response, 'Failed to start Agent execution'));
     return;
   }
   const started = await response.json() as { runId: string; firstMessageId?: string };
@@ -277,7 +291,7 @@ async function streamAgentAttempt(
       }
       return;
     }
-    const text = await res.text().catch(() => 'Unknown error');
+    const text = await readResponseError(res, 'Unknown error');
     callbacks.onError?.(text);
     return;
   }
@@ -370,6 +384,7 @@ async function streamAgentAttempt(
           case 'code_stream':
             callbacks.onCodeStream?.(event.text, !!event.done);
             break;
+          case 'focus_snapshot': callbacks.onFocusSnapshot?.(event.snapshotId); break;
           case 'design': // backward compat — fall through to 'render'
           case 'render':
             callbacks.onRender?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; published?: boolean });

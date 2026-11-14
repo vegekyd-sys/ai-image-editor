@@ -2,8 +2,44 @@ import zh from './zh';
 import type { TranslationDictionary } from './index';
 
 const zhHant = {
-
   ...zh,
+  "design.matchingFont": "正在背景匹配字體。可以先輸入，匹配完成後更新文字預覽。",
+  "design.approximateFont": "修改後的文字將使用相近字體。",
+  "design.editTextPlaceholder": (label: string) => `編輯${label}…`,
+
+  "design.autoLayer": "自動分層",
+  "design.autoLayerHint": "將圖片拆成可獨立調整的圖層",
+  "design.touchHint": "拖曳 / 縮放 · 取消選取後瀏覽",
+  "design.loadingEditables": "正在載入編輯項目…",
+  "design.background": "背景",
+  "design.autoLayerPrompt": (index: number) => `請將 @${index} 自動分層，盡量保留原圖外觀與遮擋關係，讓各個主體與背景可以獨立編輯。將可見文字拆成獨立的透明圖片圖層，保留原字形與位置。直接完成分層並發佈至畫布，無需額外生成圖片。`,
+
+  "design.editingElement": (label: string) => `正在編輯：${label}`,
+  "design.clearSelection": "取消選取",
+  "design.saveBeforeEditFailed": "修改尚未儲存，請稍後重試。",
+
+
+  "design.undo": "復原",
+  "design.redo": "重做",
+  "design.history": "操作記錄",
+  "design.historyStart": "起始狀態",
+  "design.history.move": "移動",
+  "design.history.scale": "縮放",
+  "design.history.reorder": "調整層序",
+  "design.history.delete": "刪除",
+  "design.history.restore": "恢復",
+  "design.history.text": "修改文字",
+  "design.history.media": "替換素材",
+  "design.history.edit": "修改參數",
+  "design.layers": (n: number) => `${n} 個圖層 · 從上到下`,
+  "design.editables": (n: number) => `${n} 個元素`,
+  "design.layerForward": "上移一層",
+  "design.layerBackward": "下移一層",
+  "design.layerDelete": "刪除元素",
+  "design.trim": "裁剪",
+  "design.moveScale": "移動 / 縮放",
+  "design.edit": "編輯",
+
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': '文字生成與圖/影片參考，3–30 秒；影片編輯保留原聲。',
   'model.kling4Flash.name': 'Kling 4.0 Flash',
@@ -322,6 +358,9 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.autoLayerize.title': "一張圖，拆開來玩",
+  'changelog.autoLayerize.item1': "點「自動分層」，把照片裡的人物、物件和背景拆開。挪走一顆球、放大一頂帽子，或點選海報標題，請 Agent 幫你改字。",
+  'changelog.autoLayerize.item2': "也可以把圖片交給自己的 Agent。它用 Makaron CLI 分好層，你點開專案連結，就能接著動手。",
   'changelog.fasterMediaReplies.title': "帶素材聊天，回覆更快",
   'changelog.fasterMediaReplies.item1': "帶圖片聊天時，預設 Agent 更快開始回覆，減少等待。",
   'changelog.fasterMediaReplies.item2': "同時使用圖片與影片時，更快收到素材分析與創作方案。",
@@ -628,7 +667,7 @@ const zhHant = {
   'canvas.resetLayers': '重設',
   'canvas.layerFailed': '圖層分離失敗',
   'canvas.layerEmpty': '沒有可用的圖層',
-  'canvas.layerDelete': '刪除圖層',
+  'canvas.layerDelete': '刪除元素',
   'canvas.layerResize': '拖曳以調整大小',
   'canvas.previewUnavailable': '預覽暫時無法使用',
   'canvas.previewUsingPoster': '已保留封面，稍後可以重新載入',
@@ -871,6 +910,8 @@ const zhHant = {
   'profile.signOut': '登出',
 
   // Agent runtime
+  'design.resizeCorner': (corner: string) => `從${({ nw: '左上', ne: '右上', sw: '左下', se: '右下' } as Record<string, string>)[corner] || ''}角調整大小`,
+  'agent.mediaOnlyPrompt': '使用者本輪只上傳了圖片。請查看本輪新上傳的圖片並結合對話回應；沒有明確編輯要求時，先簡短說明畫面並詢問想如何修改。不要僅因上傳就開始生成圖片或分層。',
   'agent.status.starting': '開始處理...',
   'agent.status.planning': '規劃中...',
   'agent.status.searchingWeb': '正在搜尋網路...',
@@ -885,6 +926,7 @@ const zhHant = {
   'agent.status.generatingAudio': '正在產生音訊...',
   'agent.status.understandingRetake': '正在理解選取片段…',
   'agent.status.capturingFrame': (hint: string) => `正在擷取 ${hint}...`,
+  'agent.status.layerizing': '正在拆分圖層...',
   'agent.status.generatingImage': '正在產生圖片...',
   'agent.status.browsingWorkspace': '正在瀏覽工作區...',
   'agent.status.readingFile': (name: string) => `正在讀取 ${name}...`,

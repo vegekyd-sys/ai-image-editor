@@ -1751,8 +1751,11 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
 
 /* Editable element — clickable + hover hint */
 [data-editable], .makaron-editable-node { cursor: pointer; pointer-events: auto; }
-[data-editable]:hover:not([data-editable-selected]),
-.makaron-editable-node:hover:not([data-editable-selected]) { outline: 1.5px dashed rgba(255,255,255,0.7); outline-offset: -1px; }
+
+[data-editable-hover-outline]:not([data-editable-selected]) {
+  outline: 1.5px dashed rgba(255, 255, 255, 0.7);
+  outline-offset: -1px;
+}
 
 /* Input box action cluster: model · Skill · primary action read as one control. */
 .mkr-action-cluster {
@@ -1841,4 +1844,8 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
   .mkr-composer-lg textarea { min-height: 68px !important; }
   .mkr-composer-lg [data-testid='photo-slot'] { width: clamp(56px, 18vw, 80px) !important; }
   .mkr-composer-lg .mkr-create-btn { white-space: nowrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --mkr-image-reveal-duration: 0ms; }
 }

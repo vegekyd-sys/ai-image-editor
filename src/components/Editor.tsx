@@ -8,8 +8,12 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoMeta, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
+import { preloadDecodedImage } from '@/lib/image/presentation';
+import { useLayerizeFonts } from '@/hooks/useLayerizeFonts';
 import { getEditorCanvasKey } from '@/lib/editor/canvas-key';
 import TipsBar from '@/components/TipsBar';
+import { EditablePanelSkeleton } from '@/components/PillCarousel';
+import { editableDisplayLabel } from '@/lib/editor/editable-label';
 import AgentStatusBar from '@/components/AgentStatusBar';
 import AgentChatView, { type PreferredModel } from '@/components/AgentChatView';
 import AnnotationToolbar from '@/components/AnnotationToolbar';
@@ -18,12 +22,15 @@ import ShareButton from '@/components/ShareButton';
 import SaveMediaDialog from '@/components/SaveMediaDialog';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
+import { readDesignLayerState, isFixedCanvasDesign } from '@/lib/editor/design-layer-state';
+import { recordDesignEdit, recordDesignEditBatch, readDesignEditHistory, seekDesignEditHistory, type DesignEditKind } from '@/lib/editor/design-edit-history';
+import { mergeHydratedEditableDesign } from '@/lib/editor/editable-persistence';
 import { useTipsPreparation } from '@/hooks/useTipsPreparation';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/babel-status';
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
-import { buildDesignsMap, buildImageTimeline, getInitialEditorViewMode, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { buildDesignsMap, buildImageTimeline, getInitialEditorViewMode, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldAutoFetchSnapshotTips, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
 import { resolveContentType, type RendererContext, type ContentType } from '@/lib/editor/renderer-registry';
 
@@ -59,7 +66,7 @@ import type { SkillLaunchContext } from '@/lib/skill-launch-context';
 import { stripAgentInternalContextForDisplay } from '@/lib/agent-response-policy';
 
 const AnimateSheet = dynamic(() => import('@/components/AnimateSheet'), { ssr: false });
-const DesignEditPanel = dynamic(() => import('@/components/DesignEditPanel'), { ssr: false });
+const DesignEditPanel = dynamic(() => import('@/components/DesignEditPanel'), { ssr: false, loading: () => <EditablePanelSkeleton /> });
 const DesignFieldEditor = dynamic(() => import('@/components/DesignFieldEditor'), { ssr: false });
 const CameraPanel = dynamic(() => import('@/components/CameraPanel'), { ssr: false });
 
@@ -106,6 +113,7 @@ interface EditorProps {
   initialAnimations?: ProjectAnimation[];
   timelineVersion?: number;
   readOnly?: boolean;
+  ownershipPending?: boolean;
   disableAgentLiveReload?: boolean;
   disableBodyScrollLock?: boolean;
   inactive?: boolean;
@@ -153,6 +161,7 @@ export default function Editor({
   initialAnimations,
   timelineVersion = 1,
   readOnly,
+  ownershipPending = false,
   disableBodyScrollLock = false,
   inactive = false,
 }: EditorProps = {}) {
@@ -172,6 +181,7 @@ export default function Editor({
   const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(() => dedupeEditorMessages(initialMessages ?? []));
   const [snapshots, setSnapshots] = useState<Snapshot[]>(dedupeVideoSnapshots(initialSnapshots ?? []));
+  useLayerizeFonts(projectId, snapshots, setSnapshots);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isEditing, setIsEditing] = useState(false);
@@ -324,12 +334,23 @@ export default function Editor({
   }, []);
   const [loadingMoreCategories, setLoadingMoreCategories] = useState<Set<Tip['category']>>(new Set());
   const [committedCategory, setCommittedCategory] = useState<Tip['category'] | null>(null);
+  const selectedElementRef = useRef<import("@/lib/editor/element-edit").SelectedElement | undefined>(undefined);
+  const flushDesignSaveRef = useRef<() => Promise<void>>(async () => {});
+  const designSavePromiseRef = useRef<Promise<void>>(Promise.resolve());
   // Design editable state
   const [selectedEditableFieldId, _setSelectedEditableFieldId] = useState<string | null>(null);
   const [editingDesignFieldId, setEditingDesignFieldId] = useState<string | null>(null);
   // Mobile keyboard offset for text editor panel
   const editorKbInset = useVisualViewportInset(!isDesktop && Boolean(editingDesignFieldId));
-  const [visibleEditableIds, _setVisibleEditableIds] = useState<string[]>([]);
+  const [, _setVisibleEditableIds] = useState<string[]>([]);
+  const [renderedEditableOrder, setRenderedEditableOrder] = useState<{ snapshotId: string; ids: string[] } | null>(null);
+  const handleEditableRenderOrder = useCallback((ids: string[]) => {
+    const index = snapFromTimeline(viewIndex, draftParentIndex);
+    const snapshotId = index == null ? undefined : snapshotsRef.current[index]?.id;
+    if (!snapshotId) return;
+    setRenderedEditableOrder(previous => previous?.snapshotId === snapshotId && previous.ids.length === ids.length
+      && previous.ids.every((id, i) => id === ids[i]) ? previous : { snapshotId, ids });
+  }, [viewIndex, draftParentIndex]);
   const handleVisibleEditableFields = useCallback((ids: string[]) => {
     _setVisibleEditableIds(prev => {
       if (prev.length === ids.length && prev.every((id, i) => id === ids[i])) return prev;
@@ -337,6 +358,9 @@ export default function Editor({
     });
   }, []);
   const setSelectedEditableFieldId = useCallback((id: string | null) => {
+    const index = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
+    const snapshot = index == null ? undefined : snapshotsRef.current[index];
+    selectedElementRef.current = id && snapshot?.design ? { snapshotId: snapshot.id, fieldId: id } : undefined;
     _setSelectedEditableFieldId(id);
     if (!id) setEditingDesignFieldId(null); // deselect also closes editor
   }, []);
@@ -401,7 +425,7 @@ export default function Editor({
         }
         // Merge design/props updates
         if (fresh.design && (!updated.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(updated.design.props)))) {
-          updated = { ...updated, design: fresh.design };
+          updated = { ...updated, design: mergeHydratedEditableDesign(updated.design, fresh.design) };
           changed = true;
         }
         // Merge video state from Supabase over stale project cache.
@@ -593,8 +617,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
     getNearbyOptimizedPreloadUrls(snapshots, viewIndex).forEach(url => {
-      const img = new Image();
-      img.src = url;
+      void preloadDecodedImage(url).catch(() => {});
     });
   }, [viewIndex, snapshots]);
 
@@ -634,8 +657,14 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Design editable: current snapshot has a design with editables
   const currentDesignSnap = snapshots[currentSnapIndex];
   const isViewingDesign = contentType === 'design';
-  const currentDesignEditables = currentDesignSnap?.design?.editables ?? [];
+  const isDesignLoading = !isAtDraftSlot && !isViewingVideo && Boolean(currentDesignSnap?.designPath && !currentDesignSnap.design);
+  const allDesignEditables = currentDesignSnap?.design?.editables ?? [];
   const currentDesignProps = (currentDesignSnap?.design?.props || {}) as Record<string, unknown>;
+  const designLayerState = readDesignLayerState(allDesignEditables, currentDesignProps);
+  const currentDesignEditables = allDesignEditables.filter(field => !designLayerState.deleted.includes(field.id));
+  useEffect(() => {
+    if (selectedElementRef.current?.snapshotId !== currentDesignSnap?.id) setSelectedEditableFieldId(null);
+  }, [currentDesignSnap?.id, setSelectedEditableFieldId]);
   const editingDesignField = editingDesignFieldId
     ? currentDesignEditables.find(f => f.id === editingDesignFieldId) ?? null
     : null;
@@ -1056,9 +1085,9 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }
   }, [projectId, onSaveMessage]);
 
-  const addMessage = useCallback((role: 'user' | 'assistant', content: string, image?: string, attachedImages?: string[]) => {
+  const addMessage = useCallback((role: 'user' | 'assistant', content: string, image?: string, attachedImages?: string[], messageId?: string) => {
     const msg: Message = {
-      id: generateId(),
+      id: messageId || generateId(),
       role,
       content,
       image,
@@ -1200,6 +1229,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     previewMode: 'full' | 'none' = 'full',
     autoPreviewCategory?: string,
   ) => {
+    if (readOnly || isFixedCanvasDesign(snapshotsRef.current.find(snap => snap.id === snapshotId)?.design)) return;
     tipsFetchCountRef.current++;
     setIsTipsFetching(true);
     setFailedCategories(new Set());
@@ -1316,7 +1346,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     };
 
     categories.forEach(cat => fetchCategory(cat));
-  }, [onUpdateTips, triggerTipsTeaser, handleTipEvent]);
+  }, [onUpdateTips, triggerTipsTeaser, handleTipEvent, readOnly]);
 
   // Retry a single failed category
   const retryFailedCategory = useCallback((category: Tip['category']) => {
@@ -1597,17 +1627,21 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   // Agent request: route user message through Makaron Agent
   const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayText?: string; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number; turnMediaSnapshotIds?: string[]; skillLaunchContext?: SkillLaunchContext }) => {
+    const selectionForRequest = selectedElementRef.current;
+    try { await flushDesignSaveRef.current(); }
+    catch { setAgentStatus(t('design.saveBeforeEditFailed')); return; }
     const userVisibleText = options?.displayText ?? stripAgentInternalContextForDisplay(text);
     // Freeze the selected LLM at submit time. Upload waits below must not let a
     // later selector change mutate an already-submitted request.
     const agentModelForRequest = agentModelRef.current;
     const turnMediaSnapshotIds = [...(options?.turnMediaSnapshotIds || [])];
+    const userMessageId = options?.silent ? undefined : generateId();
     // CUI reference images → append as new snapshots (so agent sees them in Media Index)
     if (attachedImages?.length && !overrideImage) {
       const newSnaps: Snapshot[] = [];
       for (const img of attachedImages) {
         const snapId = generateId();
-        const snap: Snapshot = { id: snapId, image: img, tips: [], messageId: '', description: 'User-uploaded reference image' };
+        const snap: Snapshot = { id: snapId, image: img, tips: [], messageId: userMessageId || '', description: 'User-uploaded reference image' };
         newSnaps.push(snap);
       }
       if (newSnaps.length > 0) {
@@ -1683,7 +1717,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     // Show attached/annotated images in the user message bubble (skip for silent/system-initiated requests)
     if (!options?.silent) {
       const msgImages = options?.displayImages || (overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
-      addMessage('user', userVisibleText, undefined, msgImages);
+      addMessage('user', userVisibleText, undefined, msgImages, userMessageId);
     }
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
@@ -1715,6 +1749,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     const { callbacks: agentCallbacks, setCurrentMsgId } = makeAgentCallbacks({
       projectId: projectId!,
       setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+      onFocusSnapshot: (snapshotId) => {
+        const index = snapshotsRef.current.findIndex(snapshot => snapshot.id === snapshotId);
+        if (index >= 0) { setViewIndex(timelineFromSnap(index, draftParentIndexRef.current)); setViewMode('gui'); }
+      },
       setDesignDraftParent: (idx) => {
         if (idx !== null) {
           // Design draft: clear any active tips draft (mutually exclusive)
@@ -1734,7 +1772,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
       pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
       draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
-      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription, onSaveDesignProps,
       onSaveMessage,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
       t, initialTitle, userPromptText: userVisibleText,
@@ -1780,7 +1818,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, ...(hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}), currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0, turnMediaSnapshotIds },
+        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, ...(hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}), currentSnapshotIndex: contextSnapshotIndex, ...(!overrideImage && selectionForRequest?.snapshotId === snapshotsRef.current[contextSnapshotIndex]?.id && !/@[1-9]\d*/.test(text) ? { selectedElement: selectionForRequest } : {}), isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0, turnMediaSnapshotIds },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1791,6 +1829,18 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       setIsAgentActive(false);
     }
   }, [addMessage, projectId, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, triggerTipsTeaser, isDesktop, onSaveMessage, initialTitle, triggerProjectNaming]);
+
+  const autoLayerSubmitRef = useRef(false);
+  const handleAutoLayerize = async () => {
+    if (isAgentActive || autoLayerSubmitRef.current || gateInteraction()) return;
+    const index = snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current);
+    const snapshot = index == null ? undefined : snapshotsRef.current[index];
+    if (!snapshot || snapshot.design || snapshot.type === 'video') return;
+    autoLayerSubmitRef.current = true;
+    try {
+      await handleAgentRequest(t('design.autoLayerPrompt', index! + 1), undefined, undefined, { displayText: t('design.autoLayer') });
+    } finally { autoLayerSubmitRef.current = false; }
+  };
 
   // Abort the current agent request and discard its partial response
   const handleAgentAbort = useCallback(() => {
@@ -1829,6 +1879,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     const { callbacks: reconnectCallbacks } = makeAgentCallbacks({
       projectId: projectId ?? '',
       setMessages, setSnapshots, setAgentStatus, setAnimations, setPendingDesign, setDraftDesign,
+      onFocusSnapshot: (snapshotId) => {
+        const index = snapshotsRef.current.findIndex(snapshot => snapshot.id === snapshotId);
+        if (index >= 0) { setViewIndex(timelineFromSnap(index, draftParentIndexRef.current)); setViewMode('gui'); }
+      },
       setDesignDraftParent: (idx) => {
         if (idx !== null) {
           setActiveDraftType('design');
@@ -1846,7 +1900,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       agentRunIdRef, agentTimerRef, autoFetchTriggered: autoFetchTriggered,
       pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
       draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
-      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+      cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription, onSaveDesignProps,
       onSaveMessage,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
       t,
@@ -2597,16 +2651,13 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     if (inactive) return;
     if (pendingImages?.length || isTipsFetching) return;
     const snap = snapshots[tipsSourceIndex];
-    if (!snap || snap.tips.length > 0) return;
-    if (snap.type === 'video') return;
-    // Animated design snapshots don't need tips (still designs do)
-    if (snap.design?.animation) return;
+    if (!shouldAutoFetchSnapshotTips(snap, readOnly)) return;
     if (autoFetchTriggered.current.has(snap.id)) return;
     const image = getImageForApi(snap);
     if (!image) return;
     autoFetchTriggered.current.add(snap.id);
     startTipsFetchForSnapshot(snap);
-  }, [snapshots, tipsSourceIndex, pendingImages, isTipsFetching, inactive, startTipsFetchForSnapshot]);
+  }, [snapshots, tipsSourceIndex, pendingImages, isTipsFetching, inactive, readOnly, startTipsFetchForSnapshot]);
 
   // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
 
@@ -2756,8 +2807,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     for (const offset of [-1, 1]) {
       const src = timeline[viewIndex + offset];
       if (src && src.startsWith('http')) {
-        const img = new Image();
-        img.src = src;
+        void preloadDecodedImage(src).catch(() => {});
       }
     }
   }, [viewIndex, timeline, inactive]);
@@ -3133,7 +3183,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       });
       cacheImage(`snap:${snap.id}`, posterDataUrl);
       // Tips for still designs
-      if (!snap.design?.animation) {
+      if (!snap.design?.animation && !isFixedCanvasDesign(snap.design)) {
         fetchTipsForSnapshot(snap.id, posterDataUrl, 'none');
       }
     }
@@ -3147,22 +3197,27 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     revision: number;
   } | null>(null);
   const designSaveRevisionRef = useRef(0);
-  const flushPendingDesignSave = useCallback(() => {
+  const flushPendingDesignSave = useCallback((): Promise<void> => {
     if (designPropsSaveTimer.current) {
       clearTimeout(designPropsSaveTimer.current);
       designPropsSaveTimer.current = null;
     }
     const pending = pendingDesignSaveRef.current;
     pendingDesignSaveRef.current = null;
-    if (!pending || !onSaveDesignProps) return;
-    void Promise.resolve(onSaveDesignProps(
+    if (!pending || !onSaveDesignProps) return designSavePromiseRef.current;
+    const saving = Promise.resolve(onSaveDesignProps(
       pending.snapshotId,
       pending.design,
       { propsOnly: true, revision: pending.revision },
     )).catch((error) => {
-      console.error('[design] prop persistence failed', error);
+      if (!pendingDesignSaveRef.current) pendingDesignSaveRef.current = pending;
+      throw error;
     });
+    designSavePromiseRef.current = saving;
+    void saving.catch(error => console.error('[design] prop persistence failed', error));
+    return saving;
   }, [onSaveDesignProps]);
+  flushDesignSaveRef.current = flushPendingDesignSave;
 
   useEffect(() => {
     window.addEventListener('pagehide', flushPendingDesignSave);
@@ -3172,15 +3227,17 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     };
   }, [flushPendingDesignSave]);
 
-  const handleDesignPropUpdate = useCallback((key: string, value: unknown) => {
+  const commitDesignProps = useCallback((props: Record<string, unknown>) => {
     const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
     if (snapIdx == null) return;
     const current = snapshotsRef.current[snapIdx];
     if (!current?.design) return;
 
+    designSaveRevisionRef.current = Math.max(Date.now(), designSaveRevisionRef.current + 1);
     const design = {
       ...current.design,
-      props: { ...current.design.props, [key]: value },
+      props,
+      __makaronEditableRevision: designSaveRevisionRef.current,
     };
     const updated = snapshotsRef.current.map((snapshot, index) => (
       index === snapIdx ? { ...snapshot, design } : snapshot
@@ -3188,10 +3245,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     snapshotsRef.current = updated;
     setSnapshots(updated);
 
-    designSaveRevisionRef.current = Math.max(
-      Date.now(),
-      designSaveRevisionRef.current + 1,
-    );
+    if (pendingDesignSaveRef.current && pendingDesignSaveRef.current.snapshotId !== current.id) flushPendingDesignSave();
     pendingDesignSaveRef.current = {
       snapshotId: current.id,
       design,
@@ -3201,13 +3255,56 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     designPropsSaveTimer.current = setTimeout(flushPendingDesignSave, 500);
   }, [viewIndex, draftParentIndex, flushPendingDesignSave]);
 
+  const handleDesignPropUpdate = useCallback((key: string, value: unknown, related?: Record<string, unknown>) => {
+    const index = snapFromTimeline(viewIndex, draftParentIndex);
+    const design = index == null ? undefined : snapshotsRef.current[index]?.design;
+    if (!design) return;
+    const props = design.props || {}, fields = design.editables || [];
+    let field = fields.find(field => field.propKey === key || key === `_pos_${field.id}` || key === `_scale_${field.id}`);
+    let kind: DesignEditKind | undefined;
+    if (key === '_layerState') {
+      const old = readDesignLayerState(fields, props), next = readDesignLayerState(fields, { ...props, [key]: value });
+      const deleted = next.deleted.find(id => !old.deleted.includes(id)), restored = old.deleted.find(id => !next.deleted.includes(id));
+      kind = deleted ? 'delete' : restored ? 'restore' : 'reorder';
+      field = fields.find(field => field.id === (deleted || restored || selectedEditableFieldId));
+    } else if (field?.propKey === key) kind = field.type === 'text' ? 'text' : 'media';
+    const metadata = { kind, fieldId: field?.id, label: field?.label };
+    const next = related ? recordDesignEditBatch(props, { [key]: value, ...related }, metadata) : recordDesignEdit(props, key, value, metadata);
+    if (next !== props) commitDesignProps(next);
+  }, [viewIndex, draftParentIndex, selectedEditableFieldId, commitDesignProps]);
+
+  const handleDesignHistorySeek = useCallback((cursor: number) => {
+    const index = snapFromTimeline(viewIndex, draftParentIndex);
+    const design = index == null ? undefined : snapshotsRef.current[index]?.design;
+    if (!design) return;
+    const props = design.props || {}, next = seekDesignEditHistory(props, cursor);
+    if (next !== props) commitDesignProps(next);
+  }, [viewIndex, draftParentIndex, commitDesignProps]);
+
+  useEffect(() => {
+    if (readOnly || !isViewingDesign) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || (event.target as Element)?.closest?.('input, textarea, [contenteditable="true"]')) return;
+      const undo = event.key.toLowerCase() === 'z' && !event.shiftKey;
+      const redo = (event.key.toLowerCase() === 'z' && event.shiftKey) || event.key.toLowerCase() === 'y';
+      if (!undo && !redo) return;
+      const index = snapFromTimeline(viewIndex, draftParentIndex);
+      const props = index == null ? {} : snapshotsRef.current[index]?.design?.props || {};
+      const history = readDesignEditHistory(props);
+      if ((undo && history.cursor === 0) || (redo && history.cursor === history.entries.length)) return;
+      event.preventDefault(); handleDesignHistorySeek(history.cursor + (undo ? -1 : 1));
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [readOnly, isViewingDesign, viewIndex, draftParentIndex, handleDesignHistorySeek]);
+
   const designSizeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleDesignContentSize = useCallback((size: { width: number; height: number; source: 'editables' | 'scroll' }) => {
     const measuredHeight = Math.ceil(size.height);
     if (!Number.isFinite(measuredHeight) || measuredHeight <= 0) return;
 
     const expandHeight = (design: DesignPayload): DesignPayload | null => {
-      if (design.animation) return null;
+      if (design.animation || isFixedCanvasDesign(design)) return null;
       const nextHeight = Math.min(measuredHeight, 20000);
       if (nextHeight <= design.height + 12) return null;
       return { ...design, height: nextHeight };
@@ -3237,7 +3334,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         const snapId = snap.id;
         designSizeSaveTimer.current = setTimeout(() => {
           console.log('[design] auto-expanded height', snap.design?.height, '→', expanded.height, `(${size.source})`);
-          onSaveDesignProps(snapId, expanded);
+          // Text and transforms can change again during the debounce. A height
+          // save must retain those newer props instead of replaying this frame.
+          const latest = snapshotsRef.current.find(snapshot => snapshot.id === snapId)?.design;
+          if (latest) onSaveDesignProps(snapId, { ...latest, height: Math.max(latest.height, expanded.height) });
         }, 500);
       }
       return updated;
@@ -3473,6 +3573,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     isAgentActive,
     agentStatus,
     currentImage: currentDisplayImage,
+    selectedElement: selectedEditableFieldId && currentDesignEditables.find(f => f.id === selectedEditableFieldId) ? { label: editableDisplayLabel(currentDesignEditables.find(f => f.id === selectedEditableFieldId)!, t('design.background')) } : undefined,
+    onClearSelectedElement: () => setSelectedEditableFieldId(null),
     onSendMessage: handleCuiSend,
     onAbort: handleAgentAbort,
     onInputBarHeight: (h: number) => { cuiInputBarH.current = h; },
@@ -3749,13 +3851,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
-                editableFields={isViewingDesign ? currentDesignEditables : undefined}
+                editableFields={isViewingDesign && !readOnly ? currentDesignEditables : undefined}
                 designProps={isViewingDesign ? currentDesignProps : undefined}
                 selectedEditableId={selectedEditableFieldId}
                 onSelectEditable={setSelectedEditableFieldId}
                 onUpdateProp={handleDesignPropUpdate}
                 onStartEditEditable={setEditingDesignFieldId}
                 onVisibleEditableFields={handleVisibleEditableFields}
+                onEditableRenderOrder={handleEditableRenderOrder}
                 onDesignContentSize={handleDesignContentSize}
                 activeTrimFieldId={editingDesignField?.type === 'video' ? editingDesignField.id : null}
               />
@@ -4016,9 +4119,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 <AgentStatusBar
                   statusText={agentStatus}
                   isActive={isAgentActive}
+                  onAutoLayerize={!readOnly && !isViewingDesign && !isDesignLoading && !isViewingVideo && !isViewingDraft && !annotationMode ? handleAutoLayerize : undefined}
                   onOpenChat={videoRetakeSelection ? () => handleVideoRetake(videoRetakeSelection.anim, videoRetakeSelection.start, videoRetakeSelection.end) : openCUI}
                   chatActionLabel={videoRetakeSelection ? t('video.retakeEdit') : undefined}
-                  selectionText={videoRetakeSelection ? t('video.retakeStatusHint', String(Number(videoRetakeSelection.start.toFixed(1))), String(Number(videoRetakeSelection.end.toFixed(1)))) : undefined}
+                  selectionText={videoRetakeSelection ? t('video.retakeStatusHint', String(Number(videoRetakeSelection.start.toFixed(1))), String(Number(videoRetakeSelection.end.toFixed(1)))) : !isDesktop && selectedEditableFieldId && !isAgentActive ? t('design.touchHint') : undefined}
                   isViewingDraft={isViewingDraft}
                   hideChat={isDesktop}
                   snapshotCount={snapshots.length}
@@ -4136,11 +4240,13 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       />
                     </DesignEditorFrame>
                   </div>
-                ) : isViewingDesign && currentDesignEditables.length > 0 ? (
+                ) : (ownershipPending || !readOnly) && (isDesignLoading || (isViewingDesign && allDesignEditables.length > 0)) ? (
                   <DesignEditPanel
-                    editables={visibleEditableIds.length > 0
-                      ? currentDesignEditables.filter(f => visibleEditableIds.includes(f.id))
-                      : currentDesignEditables}
+                    key={currentDesignSnap?.id}
+                    loading={isDesignLoading || ownershipPending}
+                    editables={allDesignEditables}
+                    renderedOrder={renderedEditableOrder?.snapshotId === currentDesignSnap?.id ? renderedEditableOrder?.ids : undefined}
+                    onHistorySeek={handleDesignHistorySeek}
                     props={currentDesignProps}
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     selectedFieldId={selectedEditableFieldId}

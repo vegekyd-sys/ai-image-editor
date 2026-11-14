@@ -331,6 +331,7 @@ function dispatchEvent(row: AgentEventRow, callbacks: AgentStreamCallbacks) {
       )
       break
     }
+    case 'focus_snapshot': callbacks.onFocusSnapshot?.((data as { snapshotId: string }).snapshotId); break
     case 'design': // backward compat — fall through to 'render'
     case 'render': {
       const d = data as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; fontSubstitutions?: Record<string, string>; snapshotId?: string }

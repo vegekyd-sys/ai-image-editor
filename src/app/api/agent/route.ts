@@ -1,3 +1,5 @@
+import { resolveAgentTurnInput } from '@/lib/agent-turn-input';
+import { parseSelectedElement } from '@/lib/editor/element-edit';
 import { refreshOpenAIDirectBudget } from '@/lib/openai-direct';
 import { NextRequest } from 'next/server';
 import type { ModelMessage } from 'ai';
@@ -45,19 +47,23 @@ export async function POST(req: NextRequest) {
     const { userId, supabase, apiKeyId } = authResult.auth;
     const billingSource = resolveRequestBillingSource(req, { apiKeyId });
 
-    const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
+    const { prompt: rawPrompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
             tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, agentModel, snapshotImages, currentSnapshotIndex, isNsfw,
-            musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel, videoResolution, videoAuto,
+            musicReady, musicAudioUrl, currentDesign, currentDesignPath, selectedElement: rawSelectedElement, videoModel, videoResolution, videoAuto,
             headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, turnMediaCount, turnMediaSnapshotIds, audioAttachments,
             skillLaunchContext: rawSkillLaunchContext } = requestBody;
+    const locale = getRequestLocale(req);
+    const turnInput = await resolveAgentTurnInput({ prompt: rawPrompt, projectId, turnMediaSnapshotIds, image, locale, supabase });
+    const prompt = turnInput.prompt;
+    const selectedElement = turnInput.mediaOnly ? undefined : rawSelectedElement;
+    if (selectedElement !== undefined && !parseSelectedElement(selectedElement)) return Response.json({ error: 'Invalid selected element' }, { status: 400 });
     perf.mark('request_ready', {
       projectId: projectId || null,
       promptChars: typeof prompt === 'string' ? prompt.length : 0,
       hasImage: !!image,
       headless: !!headless,
     });
-    const locale = getRequestLocale(req);
     const executionOrigin = resolveAgentExecutionWorkerOrigin(req.nextUrl.origin);
 
     // Reject malformed requests before any credit check, which may expire a
@@ -263,6 +269,7 @@ export async function POST(req: NextRequest) {
           videoAuto,
           skillLaunchContext,
           currentSnapshotIndex,
+          selectedElement,
           hasAnnotation,
           isDraft,
           referenceImageCount,
@@ -346,6 +353,7 @@ export async function POST(req: NextRequest) {
                 currentDesign: currentDesign && typeof currentDesign === 'object'
                   ? currentDesign as Record<string, unknown>
                   : undefined,
+                selectedElement,
                 currentDesignPath: typeof currentDesignPath === 'string' ? currentDesignPath : undefined,
               },
             });
@@ -590,7 +598,7 @@ export async function POST(req: NextRequest) {
               // The timeline lookup started during admission and normally
               // resolves while prompt context is being built.
               const timelineVersion = await timelineVersionPromise;
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, nativeVisionImages: agentNativeVisionImages, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, explicitMediaIndices: agentExplicitMediaIndices, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, codexSubscriptionAllowed, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, studioWorkflowStage: agentStudioWorkflowStage, agentRunId: runId || undefined })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { deliverySurface: headless ? 'external' : 'app', analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, nativeVisionImages: agentNativeVisionImages, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, explicitMediaIndices: agentExplicitMediaIndices, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, codexSubscriptionAllowed, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, selectedElement, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, studioWorkflowStage: agentStudioWorkflowStage, agentRunId: runId || undefined })) {
                 if (event.type === 'done') sawDone = true;
                 if (event.type === 'error') {
                   sawError = true;

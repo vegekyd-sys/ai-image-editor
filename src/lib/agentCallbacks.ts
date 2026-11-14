@@ -5,6 +5,8 @@ import type { DesignPayload } from '@/types';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 import { appendSnapshotDedupeVideo } from '@/lib/video-snapshot-dedupe';
+import { rebaseElementEdit } from './editor/element-edit';
+import { historyUnsetProps } from './editor/design-edit-history';
 import { serializeCompletionActions } from '@/lib/artifact-actions';
 
 /**
@@ -45,11 +47,14 @@ export interface AgentCallbackContext {
   viewIndexRef: { current: number };
   pendingNavigateToVideoRef?: { current: boolean };
 
+  onFocusSnapshot?: (snapshotId: string) => void;
+
   // Callback functions (from Editor)
   cacheImage: (key: string, data: string) => void;
 
   fetchTipsForSnapshot: (...args: any[]) => void;
   onSaveMessage?: (message: Message) => void;
+  onSaveDesignProps?: (snapshotId: string, design: DesignPayload, options: { propsOnly: boolean; revision: number }) => void | Promise<void>;
   onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void | Promise<void>;
   onUpdateDescription?: (snapId: string, desc: string) => void;
   triggerProjectNaming?: (text: string) => void;
@@ -116,6 +121,20 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     }
     lastAnalyzedIdx = null;
     analyzedTextBuf = '';
+  };
+
+  const clearPublishedDraft = () => {
+    // React batches the state setters with navigation. Clear the ref now too:
+    // focus must not count a virtual draft slot that this same event removes.
+    ctx.draftParentIndexRef.current = null;
+    ctx.setDraftDesign?.(null);
+    ctx.setDesignDraftParent?.(null);
+  };
+  const focusPublishedSnapshot = (snapshotId: string) => {
+    clearPublishedDraft();
+    const index = ctx.snapshotsRef.current.findIndex(snapshot => snapshot.id === snapshotId);
+    if (index >= 0) ctx.viewIndexRef.current = index;
+    ctx.onFocusSnapshot?.(snapshotId);
   };
 
   // Tool status minimum display time (2s) — prevents "Thinking" from immediately overriding tool statuses
@@ -488,8 +507,47 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (ctx.agentTimerRef.current) ctx.agentTimerRef.current.phase = ctx.t('editor.agentCoding');
     },
 
+    onFocusSnapshot: (snapshotId) => {
+      if (ctx.snapshotsRef.current.some(snapshot => snapshot.id === snapshotId && snapshot.design)) {
+        focusPublishedSnapshot(snapshotId);
+        return;
+      }
+      // A completed status query only sends navigation, and may precede render.
+      // Recover the saved result; never publish/capture it again in the browser.
+      void import('./editor/published-snapshot').then(async ({ loadPublishedSnapshot }) => {
+        const snapshot = await loadPublishedSnapshot(ctx.projectId, snapshotId);
+        if (!snapshot) return;
+        const merge = (prev: Snapshot[]) => prev.some(item => item.id === snapshotId)
+          ? prev.map(item => item.id === snapshotId && !item.design ? { ...snapshot, ...item, design: snapshot.design } : item)
+          : [...prev, snapshot];
+        ctx.snapshotsRef.current = merge(ctx.snapshotsRef.current);
+        ctx.setSnapshots(merge);
+        focusPublishedSnapshot(snapshotId);
+      }).catch(error => console.warn('[design] Published snapshot recovery pending:', error));
+    },
+
     onRender: (design) => {
       const published = (design as Record<string, unknown>).published === true;
+      if (published && design.elementEdit) {
+        const source = ctx.snapshotsRef.current.find(snapshot => snapshot.id === design.elementEdit?.sourceSnapshotId)?.design;
+        if (source && (source.__makaronEditableRevision || 0) > (design.__makaronEditableRevision || 0)) {
+          try {
+            design = { ...design, ...rebaseElementEdit(design, source) };
+            const revision = Math.max(Date.now(), (source.__makaronEditableRevision || 0) + 1);
+            design.__makaronEditableRevision = revision;
+            const snapshotId = (design as Record<string, unknown>).snapshotId;
+            if (snapshotId) {
+              const saving = ctx.onSaveDesignProps
+                ? Promise.resolve(ctx.onSaveDesignProps(String(snapshotId), design, { propsOnly: true, revision }))
+                : fetch(`/api/projects/${encodeURIComponent(ctx.projectId)}/snapshots/${encodeURIComponent(String(snapshotId))}/design`, {
+                  method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ props: design.props || {}, revision, unsetProps: historyUnsetProps(design.props || {}) }),
+                }).then(response => { if (!response.ok) throw new Error('Element edit rebase could not be saved'); });
+              void saving.catch(error => { console.error('[element-edit]', error); setStatus(ctx.t('design.saveBeforeEditFailed')); });
+            }
+          } catch (error) { console.warn('[element-edit] concurrent source conflict', error); }
+        }
+      }
       const previewUrl = (design as Record<string, unknown>).previewUrl as string | undefined;
       console.log(`🎨 [agent] render received (published=${published}): ${design.width}x${design.height}, code ${design.code.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
       setStatus(ctx.t('status.renderingDesign'));
@@ -502,10 +560,30 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       }
 
       if (published) {
+        const snapshotId = (design as Record<string, unknown>).snapshotId as string | undefined;
+        if (snapshotId && previewUrl) {
+          const existing = ctx.snapshotsRef.current.find(snapshot => snapshot.id === snapshotId);
+          const saved: Snapshot = existing ? { ...existing, design: design.elementEdit ? design : existing.design || design } : {
+            id: snapshotId, image: previewUrl, imageUrl: previewUrl, tips: [], messageId: currentMsgId,
+            design, designPath: (design as Record<string, unknown>).sourceDesignPath as string | undefined,
+            description: (design as Record<string, unknown>).description as string || '[composition]',
+          };
+          if (!existing || !existing.design || design.elementEdit) {
+            const merge = (prev: Snapshot[]) => prev.some(item => item.id === snapshotId)
+              ? prev.map(item => item.id === snapshotId && (!item.design || design.elementEdit) ? { ...item, design } : item)
+              : [...prev, saved];
+            ctx.snapshotsRef.current = merge(ctx.snapshotsRef.current);
+            ctx.setSnapshots(merge);
+          }
+          if (currentMsgId) ctx.setMessages(prev => prev.map(message => message.id === currentMsgId
+            ? { ...message, image: saved.imageUrl || saved.image, design: saved.design || design } : message));
+          focusPublishedSnapshot(snapshotId);
+          setStatus(ctx.t('status.designCreated'));
+          return;
+        }
         ctx.pendingDesignMsgIdRef.current = currentMsgId;
         ctx.pendingDesignSnapIdRef.current = (design as Record<string, unknown>).snapshotId as string || '';
-        ctx.setDraftDesign?.(null);
-        ctx.setDesignDraftParent?.(null);
+        clearPublishedDraft();
         ctx.setPendingDesign(design);
       } else {
         ctx.setDraftDesign?.(design);

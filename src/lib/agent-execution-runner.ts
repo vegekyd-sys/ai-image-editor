@@ -59,6 +59,7 @@ interface ExecutionRequest {
   videoAuto?: boolean;
   skillLaunchContext?: SkillLaunchContext;
   currentSnapshotIndex?: number;
+  selectedElement?: import("./editor/element-edit").SelectedElement;
   hasAnnotation?: boolean;
   isDraft?: boolean;
   referenceImageCount?: number;
@@ -870,6 +871,7 @@ export async function runAgentExecutionAttempt(
         attemptImage,
         run.project_id,
         {
+          deliverySurface: billingAttributionFromRunMetadata(run.metadata, { runId: run.id }).source === 'app' ? 'app' : 'external',
           locale: request.locale,
           preferredModel: request.preferredModel as any,
           agentModel: effectiveAgentModel,
@@ -900,6 +902,7 @@ export async function runAgentExecutionAttempt(
           codexSubscriptionAllowed,
           currentDesign: request.currentDesign as typeof ctx.currentDesign || ctx.currentDesign,
           currentDesignPath: request.currentDesignPath || ctx.currentDesignPath,
+          selectedElement: request.selectedElement,
           history: ctx.history,
           timelineVersion,
           abortSignal: modelAbortController.signal,

@@ -147,7 +147,7 @@ describe('Remotion export worker contract', () => {
       runtimeVersion: 'remotion-font-runtime-r11-font-stack-literals',
       threeCanvasVersion: 1,
       fontCatalogVersion: 'makaron-fonts-r2-symbol-fallback',
-      editableRuntimeVersion: 'remotion-editable-runtime-r6-media-parity',
+      editableRuntimeVersion: 'remotion-editable-runtime-r8-shared-editing',
       remotionVersion: '4.0.527',
     })
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION')

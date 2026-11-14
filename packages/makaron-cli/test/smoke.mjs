@@ -87,6 +87,14 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify(data));
   };
 
+  if (url.pathname === '/api/layerize') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    const jobId = body?.requestId || url.searchParams.get('jobId');
+    const projectId = body?.projectId || url.searchParams.get('projectId');
+    sendJson(200, { jobId, projectId, status: 'completed', credits: 18, projectUrl: `https://candidate.example/projects/${projectId}`, snapshotId: jobId });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/home-skills') {
     sendJson(200, marketplaceSkills);
     return;
@@ -663,6 +671,27 @@ async function expectFailure(args, options) {
 }
 
 try {
+  {
+    await expectHelp(['layerize', '--help'], /Split|standard Makaron design|normal Makaron design/);
+    const project = '11111111-1111-4111-8111-111111111111';
+    const job = '22222222-2222-4222-8222-222222222222';
+    const before = requests.length;
+    const result = await expectSuccess(['layerize', '--image', 'https://example.com/source.png', '--project', project, '--request-id', job, '--max-outputs', '6', '--editable-text', '--json']);
+    assert.equal(JSON.parse(result.stdout).projectUrl, `https://candidate.example/projects/${project}`);
+    const submitted = requests.slice(before).filter(req => req.pathname === '/api/layerize' && req.method === 'POST');
+    assert.equal(submitted.length, 1);
+    assert.deepEqual(submitted[0].body, { projectId: project, requestId: job, imageUrl: 'https://example.com/source.png', maxOutputs: 6, quality: '1K', editableText: true });
+    assert.match(submitted[0].client, /^makaron-cli\//);
+    await expectSuccess(['layerize', '--image', 'https://example.com/source.png', '--project', project, '--request-id', '33333333-3333-4333-8333-333333333333', '--quality', '2K', '--json']);
+    assert.equal(requests.at(-1).body.quality, '2K');
+    const count = requests.length;
+    const resumed = await expectSuccess(['layerize', 'status', job, '--project', project, '--json']);
+    assert.equal(JSON.parse(resumed.stdout).jobId, job);
+    assert.equal(requests.slice(count).some(req => req.method === 'POST'), false);
+    const invalid = requests.length;
+    await expectFailure(['layerize', '--image', 'https://example.com/source.png', '--max-outputs', '101']);
+    assert.equal(requests.length, invalid);
+  }
   {
     const result = await expectSuccess(['--version']);
     assert.equal(result.stdout.trim(), pkg.version);

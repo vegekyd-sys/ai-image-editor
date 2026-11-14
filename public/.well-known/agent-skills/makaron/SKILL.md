@@ -576,3 +576,15 @@ The legacy `openai` image-model parameter now resolves to GPT Image 2.6 Flare.
 Naming Seedance 2.5 in chat defaults to Seedance 2.5 Eco. Use `seedance-2.5-native` only when explicitly requesting native generation; Eco supports 720p/1080p/2K/4K final delivery.
 
 Seedream 5.5 (`--image-model seedream-5.5`) uses EvoLink, accepts at most 10 ordered inputs (base included), `--image-resolution 1K|1.5K|2K`, and `--output-format png|jpeg` (default PNG). `--background transparent` requires native PNG alpha. Quality/reasoning/GIF/SVG controls are unsupported. It never participates in Auto or switches providers after failure. Direct `makaron edit --image/--ref` uploads local originals automatically; direct MCP callers must supply public HTTPS PNG/JPEG/WebP originals. Accepted task receipts are saved to the user workspace before polling. The server must configure `EVOLINK_API_KEY` and an exact active `seedream-5.5` pricing row before use.
+
+### Image layer decomposition
+
+```bash
+makaron chat --project auto --image poster.png "拆成图层，文字可以编辑，返回 Makaron 编辑链接"
+makaron layerize --image poster.png --max-outputs 8 --quality 1K --editable-text --json
+makaron layerize status <jobId> --project <projectId> --json
+```
+
+Both paths return a Makaron `projectUrl`. Open it to edit the standard design in the GUI: move/scale image layers, reorder or delete/restore layers, and edit recognized text. Default raster layers preserve the decomposed appearance; `--editable-text` replaces recognized text with ordinary editable design text using approximate fonts. Decorative text can remain raster. The original image and PNG layers remain in the project/workspace. No new GUI renderer is required.
+
+`--project` reuses a project; otherwise the direct command creates a private project. `--max-outputs` is 2–100 including the background (default 8); quality is `auto|1K|1.5K|2K` (default `1K` for faster decomposition). One quality setting applies to the whole task; per-layer resolution controls are unavailable. Use an explicit higher tier or `auto` when preserving source resolution is required. The actual output count and pixel tiers determine one task charge. Failed or uncertain submissions are never replayed automatically; retain the printed job ID and query status. Repeated status reads preserve saved GUI edits and do not debit again. When the layers are ready, the edit link opens the resulting snapshot.

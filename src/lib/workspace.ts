@@ -856,7 +856,21 @@ export async function listFiles(pattern?: string, supabase?: SupabaseClient, use
  * Read a workspace file's content.
  * Tries: workspace_files (Supabase) → built-in (local).
  */
-export async function readFile(filePath: string, supabase?: SupabaseClient, userId?: string): Promise<WorkspaceReadResult | null> {
+export async function readFile(filePath: string, supabase?: SupabaseClient, userId?: string, options: { fresh?: boolean } = {}): Promise<WorkspaceReadResult | null> {
+  if (options.fresh && supabase && userId) {
+    // Editable merges must observe writes from other workers, including same-size
+    // JSON changes. Bypass both the process cache and size-based local mirror.
+    const normalized = normalizeWorkspacePath(filePath);
+    const { data, error } = await supabase.storage.from('images').createSignedUrl(storagePath(userId, normalized), 60);
+    if (error || !data?.signedUrl) return null;
+    // Upserted Storage objects can still be served from an edge cache. A unique
+    // signed request bypasses that cache as well as Next's server fetch cache.
+    const url = new URL(data.signedUrl);
+    url.searchParams.set('makaron_fresh', crypto.randomUUID());
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) return null;
+    return { content: await response.text(), contentType: response.headers.get('content-type') || 'application/json', path: normalized };
+  }
   const cacheKey = `read:${userId || ''}:${filePath}`;
   const cached = supabase && userId && filePath.startsWith('skills/') ? undefined : getCached<WorkspaceReadResult>(cacheKey);
   if (cached) return cached;

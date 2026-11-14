@@ -43,4 +43,4 @@ App/CLI chat 的 Agent 推理单独计费，直接 CLI edit 没有 chat Agent �
 2. 正式发布时先核实 EvoLink 价格与账号权限，在选定数据库应用价格迁移，确认精确启用行。缺少该行的部署会在提交前拒绝候选生成。
 3. 按正常发布流程验证 Web 与 CLI/help/README/bundled Skill 同步，并从 registry 全新安装验收；本地 tarball 安装验收不等同于 NPM 已发布。
 
-`doubao-seedream-5.5-layerize` 是多结果分层任务，由独立候选维护。它不属于此单图后端，不可冒充普通图片模型注册；其计费、图层 manifest 和可编辑 composition 合同独立验收。
+`doubao-seedream-5.5-layerize` 通过独立拆层工具接入，复用现有 design，而非普通单图模型。详见 [Layerize 接入合同](layerize.md)。

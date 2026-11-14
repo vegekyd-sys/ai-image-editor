@@ -29,7 +29,7 @@ Usage:
   node scripts/makaron-runner.mjs status [--path <runner>]
   node scripts/makaron-runner.mjs test <ref> [--path <runner>]
   node scripts/makaron-runner.mjs dev <ref> [--path <runner>] [--port 3039]
-  node scripts/makaron-runner.mjs preview <ref> [--path <runner>] [--skip-check]
+  node scripts/makaron-runner.mjs preview <ref> [--path <runner>] [--skip-check] [--env KEY=VALUE] [--skip-domain]
 
 Contract:
   - Feature worktrees stay code-only and do not create their own .next directory.
@@ -295,7 +295,13 @@ function preview() {
   if (!has('--skip-check')) {
     run('pnpm', ['run', 'release:check', '--local'], { cwd: path });
   }
-  run('npx', ['vercel'], { cwd: path });
+  const deploymentEnv = args.flatMap((arg, index) => {
+    if (arg !== '--env') return [];
+    const value = args[index + 1];
+    if (!value || !/^[A-Za-z_][A-Za-z0-9_]*=/.test(value)) throw new Error('--env requires KEY=VALUE');
+    return ['-e', value];
+  });
+  run('npx', ['vercel', ...deploymentEnv, ...(has('--skip-domain') ? ['--skip-domain'] : [])], { cwd: path });
 }
 
 try {

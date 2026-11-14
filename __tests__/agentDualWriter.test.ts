@@ -292,6 +292,8 @@ describe('AgentDualWriter', () => {
       },
       rpc: async () => ({ data: 1 }),
       from: (table: string) => ({
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+        update: () => ({ eq: async () => ({ error: null }) }),
         insert: async () => ({ error: null }),
         upsert: async () => ({
           error: table === 'snapshots' ? { message: 'snapshot write failed' } : null,
@@ -306,7 +308,7 @@ describe('AgentDualWriter', () => {
       width: 1080,
       height: 1920,
       published: true,
-    })).rejects.toThrow('Failed to persist published design snapshot');
+    })).rejects.toThrow('Published design snapshot persistence failed');
 
     await expect(writer.processAndEnqueue({ type: 'done' }))
       .rejects.toThrow('Refusing empty agent completion');
@@ -324,6 +326,8 @@ describe('AgentDualWriter', () => {
       },
       rpc: async () => ({ data: 7 }),
       from: (table: string) => ({
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+        update: () => ({ eq: async () => ({ error: null }) }),
         insert: async (row: Record<string, unknown>) => {
           inserts.push({ table, row });
           return { error: null };
@@ -345,6 +349,8 @@ describe('AgentDualWriter', () => {
       snapshotId,
       sourceDesignPath: 'project-id/drafts/latest-composition.json',
       published: true,
+      prePublished: true,
+      previewUrl: 'https://storage.example.com/ready-poster.jpg',
     });
 
     expect(upserts).toContainEqual({
@@ -362,13 +368,15 @@ describe('AgentDualWriter', () => {
           snapshotId,
           sourceDesignPath: 'project-id/drafts/latest-composition.json',
           published: true,
+          prePublished: true,
+          previewUrl: 'https://storage.example.com/ready-poster.jpg',
         }),
       }),
     });
   });
 
   it('persists the validated render manifest instead of stale source metadata', async () => {
-    const uploads: Array<{ path: string; body: Blob }> = [];
+    const uploads: Array<{ path: string; body: string | Buffer }> = [];
     const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
     const sourceDesignPath = 'project-id/drafts/latest-composition.json';
     const readFile = vi.spyOn(workspace, 'readFile').mockResolvedValue({
@@ -389,7 +397,7 @@ describe('AgentDualWriter', () => {
     const fakeSupabase = {
       storage: {
         from: () => ({
-          upload: async (path: string, body: Blob) => {
+          upload: async (path: string, body: string | Buffer) => {
             uploads.push({ path, body });
             return { error: null };
           },
@@ -398,6 +406,8 @@ describe('AgentDualWriter', () => {
       },
       rpc: async () => ({ data: 3 }),
       from: (table: string) => ({
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
+        update: () => ({ eq: async () => ({ error: null }) }),
         insert: async (row: Record<string, unknown>) => {
           inserts.push({ table, row });
           return { error: null };
@@ -428,7 +438,7 @@ describe('AgentDualWriter', () => {
       published: true,
     });
 
-    const persisted = JSON.parse(await uploads[0].body.text());
+    const persisted = JSON.parse(uploads[0].body.toString());
     expect(persisted.code).toContain('__makaronEditable_title');
     expect(persisted.props.__makaronEditable_subtitle).toBe('subtitle');
     expect(persisted.editables).toHaveLength(3);

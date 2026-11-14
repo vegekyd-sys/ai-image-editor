@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
+import { getPublicOrigin } from '@/lib/auth/public-origin';
 import { authenticateRequest } from '@/lib/api-auth';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
 import { isPermanentUrl } from '@/lib/supabase/storage';
@@ -852,6 +853,12 @@ export async function GET(
       usage = typeof balance === 'number' ? { ...summary, balance } : summary;
     }
 
+    const projectUrl = new URL(`/projects/${run.project_id}`, getPublicOrigin(req));
+    const mediaOutputs = finalOutput.filter(item => item.type !== 'text');
+    if (mediaOutputs.length === 1 && mediaOutputs[0].type === 'design' && mediaOutputs[0].snapshot_id) {
+      projectUrl.searchParams.set('snapshot', mediaOutputs[0].snapshot_id);
+    }
+
     return NextResponse.json({
       id: run.id,
       status: effectiveStatus,
@@ -860,7 +867,7 @@ export async function GET(
       }),
       incomplete,
       project_id: run.project_id,
-      project_url: `https://www.makaron.app/projects/${run.project_id}`,
+      project_url: projectUrl.href,
       first_message_id: (run.metadata as Record<string, unknown> | null)?.firstMessageId,
       prompt: run.prompt,
       created_at: run.started_at,

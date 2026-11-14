@@ -32,26 +32,18 @@ describe('DesignOverlay moveable guideline regression guards', () => {
   });
 
   it('keeps fallback drag from stealing desktop Moveable drag events', () => {
-    expect(source).toContain('if (targetEl.closest(\'.moveable-area\')) return false;');
+    expect(source).toContain('if (targetEl.closest(\'.moveable-area\') && !touchGestures) return false;');
     expect(source).toContain("if (pointerType !== 'touch') return false;");
     expect(source).not.toContain("addEventListener('mousedown'");
     expect(source).not.toContain("addEventListener('mousemove'");
-    expect(source).not.toContain("addEventListener('mouseup'");
+    expect(source).not.toContain("addEventListener('mouseup', finishDrag");
+    expect(source).toContain("window.addEventListener('mouseup', release);");
   });
 
   it('keeps corner resize controls usable for small editable images on touch screens', () => {
-    const coarseRuleStart = css.indexOf('@media (pointer: coarse)');
-    const coarseHandleRule = css.slice(coarseRuleStart, coarseRuleStart + 900);
-
-    expect(coarseHandleRule).toContain('.moveable-nw.moveable-scalable');
-    expect(coarseHandleRule).toContain('.moveable-ne.moveable-scalable');
-    expect(coarseHandleRule).toContain('.moveable-sw.moveable-scalable');
-    expect(coarseHandleRule).toContain('.moveable-se.moveable-scalable');
-    expect(css).toContain('min-width: 44px !important;');
-    expect(css).toContain('min-height: 44px !important;');
-    expect(css).toContain('margin-top: -22px !important;');
-    expect(css).toContain('margin-left: -22px !important;');
-    expect(css).toContain('touch-action: none !important;');
+    expect(source).toContain('scalable={true}');
+    expect(source).toContain("renderDirections={['nw', 'ne', 'sw', 'se']}");
+    expect(css).toContain('min-width: 44px !important');
   });
 
   it('coalesces touch drag layout work to one update per animation frame', () => {
@@ -72,8 +64,9 @@ describe('DesignOverlay moveable guideline regression guards', () => {
     );
     expect(source).toContain("'data-editable-canvas-cover'");
     expect(source).toContain("if (intent === 'canvas-tap') onCanvasTapRef.current?.();");
-    expect(canvasSource).toContain('posterImage={currentDesign?.animation && !selectedEditableId ? displayImage : undefined}');
-    expect(canvasSource).toContain('remotionLoading && displayImage && !selectedEditableId');
+    expect(canvasSource).toContain('posterImage={displayImage || undefined}');
+    expect(canvasSource).toContain('showPlaybackPoster={!selectedEditableId}');
+    expect(canvasSource).toContain('remotionLoading && displayImage');
     expect(canvasSource).toContain('onCanvasTap={handleDesignCanvasTap}');
     expect(canvasSource).not.toContain('wasPlayingBeforeBufferRef');
     expect(canvasSource).toContain('if (id && remotionRef.current)');

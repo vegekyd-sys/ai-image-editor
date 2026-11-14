@@ -4,6 +4,13 @@ import { streamAgent } from '@/lib/agentStream';
 describe('Agent stream ownership', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('displays a server error message rather than raw JSON for a rejected turn', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'Please attach an image or write a message' }), { status: 400 })));
+    const onError = vi.fn();
+    await streamAgent({ projectId: 'project', prompt: '', image: '', durable: true }, { onError });
+    expect(onError).toHaveBeenCalledWith('Please attach an image or write a message');
+  });
+
   it('does not create a new model request just because a Studio workflow checkpoint exists', async () => {
     const event = {
       type: 'error' as const,
@@ -138,4 +145,16 @@ describe('Agent stream ownership', () => {
     expect(onRunId).toHaveBeenNthCalledWith(1, 'run-race');
     expect(onRunId).toHaveBeenLastCalledWith(null);
   });
+});
+it.each([true, false])('retains selected element identity on durable=%j requests', async durable => {
+  const selectedElement = { snapshotId: 'snapshot-source', fieldId: 'avatar' };
+  const fetchMock = durable ? vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ runId: 'run-selected' }), { status: 200 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'completed', agent_status: 'completed', events: [{ seq: 1, type: 'done', data: {} }] }), { status: 200 }))
+    : vi.fn().mockResolvedValueOnce(new Response('data: {"type":"done"}\n\n', { status: 200 }));
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    await streamAgent({ projectId: 'project', image: '', prompt: 'Move it right', durable, selectedElement }, {});
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).selectedElement).toEqual(selectedElement);
+  } finally { vi.unstubAllGlobals(); }
 });
