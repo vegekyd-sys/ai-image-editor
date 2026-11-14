@@ -31,7 +31,7 @@ interface DesignOverlayProps {
   selectedFieldId: string | null;
   onSelectField: (id: string | null) => void;
   onCanvasTap?: () => void;
-  onUpdateProp: (key: string, value: unknown) => void;
+  onUpdateProp: (key: string, value: unknown, related?: Record<string, unknown>) => void;
   onStartEdit?: (fieldId: string) => void;
   onVisibleFieldsChange?: (visibleIds: string[]) => void;
   onRenderedOrderChange?: (ids: string[]) => void;
@@ -110,9 +110,6 @@ export default function DesignOverlay({
   const isMeasuringRef = useRef(false);
 
   // Drag snapshots
-  const dragBaseOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const dragDomElRef = useRef<HTMLElement | null>(null);
-  const dragScaleRef = useRef(1);
   const pickEditable = useCallback((x: number, y: number) => pickPaintedEditable(rectsRef.current, x, y), []);
 
   // Measure editable elements
@@ -249,6 +246,69 @@ export default function DesignOverlay({
   const onCanvasTapRef = useRef(onCanvasTap);
   onCanvasTapRef.current = onCanvasTap;
 
+  type MoveableGesture = {
+    kind: 'drag' | 'scale'; fieldId: string; target: HTMLElement;
+    basePosition: { x: number; y: number }; baseScale: { w: number; h: number };
+    position: { x: number; y: number }; scale: { w: number; h: number };
+    originalTranslate: string; originalScale: string; moved: boolean;
+    update: DesignOverlayProps['onUpdateProp'];
+    anchor?: { x: number; y: number; fx: number; fy: number };
+    basis?: { a: number; b: number; c: number; d: number };
+  };
+  const moveableGestureRef = useRef<MoveableGesture | null>(null);
+  const finishMoveableGesture = useCallback((commit = true) => {
+    const gesture = moveableGestureRef.current;
+    if (!gesture) return;
+    moveableGestureRef.current = null;
+    moveableRef.current?.stopDrag();
+    if (interactionEl) delete interactionEl.dataset.editableGesture;
+    isDraggingRef.current = false; setIsDragging(false);
+    if (commit && gesture.moved && gesture.target.isConnected) {
+      if (gesture.kind === 'scale') gesture.update(`_scale_${gesture.fieldId}`, gesture.scale,
+        { [`_pos_${gesture.fieldId}`]: gesture.position });
+      else gesture.update(`_pos_${gesture.fieldId}`, gesture.position);
+    } else {
+      gesture.target.style.translate = gesture.originalTranslate;
+      gesture.target.style.scale = gesture.originalScale;
+    }
+    requestAnimationFrame(() => { measure(); moveableRef.current?.updateRect(); });
+  }, [interactionEl, measure]);
+
+  useEffect(() => {
+    const release = () => {
+      const gesture = moveableGestureRef.current;
+      if (gesture) requestAnimationFrame(() => { if (moveableGestureRef.current === gesture) finishMoveableGesture(); });
+    };
+    const move = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' && event.buttons === 0) finishMoveableGesture();
+    };
+    const blur = () => finishMoveableGesture();
+    const key = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && moveableGestureRef.current) { event.preventDefault(); finishMoveableGesture(false); }
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('mouseup', release);
+    window.addEventListener('pointercancel', release);
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('blur', blur);
+    window.addEventListener('keydown', key, true);
+    return () => {
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('mouseup', release);
+      window.removeEventListener('pointercancel', release);
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('blur', blur);
+      window.removeEventListener('keydown', key, true);
+      moveableRef.current?.stopDrag();
+      const gesture = moveableGestureRef.current;
+      if (gesture) { gesture.target.style.translate = gesture.originalTranslate; gesture.target.style.scale = gesture.originalScale; }
+      moveableGestureRef.current = null;
+      isDraggingRef.current = false; setIsDragging(false);
+      if (interactionEl) delete interactionEl.dataset.editableGesture;
+    };
+  }, [interactionEl, finishMoveableGesture]);
+
+
   // One surface-level pointer arbiter keeps poster, editable selection, and
   // canvas playback from competing with one another.
   useEffect(() => {
@@ -276,7 +336,7 @@ export default function DesignOverlay({
     };
 
     const handlePointerDown = (e: PointerEvent) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || isDraggingRef.current) return;
       pointerSequence++;
       const eventTarget = e.target as HTMLElement;
       if (eventTarget.closest?.('button, [data-remotion-seek], .moveable-control')) {
@@ -688,65 +748,81 @@ export default function DesignOverlay({
             elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
             /* ── Drag ── */
             onDragStart={(event) => {
+              // Scalable emits a companion dragStart. It must not overwrite the
+              // separate scale session with position values.
+              if ((event.inputEvent?.target as HTMLElement | undefined)?.closest?.('.moveable-control')) return;
               if (touchGestures && event.inputEvent?.type?.startsWith('touch')) { event.stopDrag(); return false; }
-              onGestureStartRef.current?.();
-              const input = event.inputEvent;
-              const point = input?.touches?.[0] || input;
+              const input = event.inputEvent, point = input?.touches?.[0] || input;
               if (typeof point?.clientX === 'number' && !isPaintedEditableHit(selectedRect.domEl, point.clientX, point.clientY)) {
                 event.stopDrag(); return false;
               }
-              const { set } = event;
-              isDraggingRef.current = true;
-              setIsDragging(true);
-              const pos = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
-              dragBaseOffsetRef.current = { x: pos?.x ?? 0, y: pos?.y ?? 0 };
-              dragDomElRef.current = selectedRect.domEl;
-              const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
-              dragScaleRef.current = sc?.w ?? 1;
-              set([0, 0]);
+              onGestureStartRef.current?.();
+              const position = props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined;
+              const scale = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
+              const basePosition = position ?? { x: 0, y: 0 }, baseScale = scale ?? { w: 1, h: 1 };
+              moveableGestureRef.current = { kind: 'drag', fieldId: selectedFieldId, target: selectedRect.domEl,
+                basePosition, baseScale, position: basePosition, scale: baseScale, moved: false,
+                originalTranslate: selectedRect.domEl.style.translate, originalScale: selectedRect.domEl.style.scale,
+                update: onUpdateProp };
+              isDraggingRef.current = true; setIsDragging(true);
+              if (interactionEl) interactionEl.dataset.editableGesture = 'drag';
+              event.set([0, 0]);
             }}
             onDrag={({ target, beforeTranslate }) => {
-              const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
-              const s = dragScaleRef.current;
-              target.style.translate = `${baseX + beforeTranslate[0] * s}px ${baseY + beforeTranslate[1] * s}px`;
+              const gesture = moveableGestureRef.current;
+              if (!gesture || gesture.kind !== 'drag' || target !== gesture.target) return;
+              gesture.position = { x: gesture.basePosition.x + beforeTranslate[0] * gesture.baseScale.w,
+                y: gesture.basePosition.y + beforeTranslate[1] * gesture.baseScale.w };
+              gesture.moved = beforeTranslate[0] !== 0 || beforeTranslate[1] !== 0;
+              target.style.translate = `${gesture.position.x}px ${gesture.position.y}px`;
             }}
-            onDragEnd={({ lastEvent }) => {
-              if (lastEvent) {
-                const { x: baseX, y: baseY } = dragBaseOffsetRef.current;
-                const s = dragScaleRef.current;
-                onUpdateProp(`_pos_${selectedFieldId}`, {
-                  x: baseX + lastEvent.beforeTranslate[0] * s,
-                  y: baseY + lastEvent.beforeTranslate[1] * s,
-                });
-              }
-              isDraggingRef.current = false; setIsDragging(false);
-              requestAnimationFrame(measure);
-            }}
-            /* ── Scale (desktop handle drag only) ── */
-            onScaleStart={({ set }) => {
+            onDragEnd={() => { if (moveableGestureRef.current?.kind === 'drag') finishMoveableGesture(); }}
+            /* ── Scale: pin the original target and opposite corner until release. ── */
+            onScaleStart={(event) => {
               onGestureStartRef.current?.();
-              isDraggingRef.current = true;
-              setIsDragging(true);
-              dragDomElRef.current = selectedRect.domEl;
-              const sc = props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined;
-              dragBaseOffsetRef.current = { x: sc?.w ?? 1, y: sc?.h ?? 1 };
-              set([1, 1]);
+              const target = selectedRect.domEl;
+              const basePosition = (props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined) ?? { x: 0, y: 0 };
+              const baseScale = (props[`_scale_${selectedFieldId}`] as { w: number; h: number } | undefined) ?? { w: 1, h: 1 };
+              const rect = target.getBoundingClientRect(), originalTranslate = target.style.translate;
+              // Measure the CSS-translation basis, including parent zoom and
+              // rotation. This keeps anchoring correct for ordinary Editables too.
+              target.style.translate = `${basePosition.x + 1}px ${basePosition.y}px`;
+              const xRect = target.getBoundingClientRect();
+              target.style.translate = `${basePosition.x}px ${basePosition.y + 1}px`;
+              const yRect = target.getBoundingClientRect();
+              target.style.translate = originalTranslate;
+              const direction = event.direction;
+              const opposite = `${direction[1] > 0 ? 'n' : 's'}${direction[0] > 0 ? 'w' : 'e'}`;
+              const control = overlayRef.current?.querySelector(`.moveable-${opposite}`)?.getBoundingClientRect();
+              const x = control ? control.left + control.width / 2 : direction[0] > 0 ? rect.left : rect.right;
+              const y = control ? control.top + control.height / 2 : direction[1] > 0 ? rect.top : rect.bottom;
+              moveableGestureRef.current = { kind: 'scale', fieldId: selectedFieldId, target,
+                basePosition, baseScale, position: basePosition, scale: baseScale, originalTranslate,
+                originalScale: target.style.scale, moved: false, update: onUpdateProp,
+                anchor: { x, y, fx: (x - rect.left) / Math.max(1, rect.width), fy: (y - rect.top) / Math.max(1, rect.height) },
+                basis: { a: xRect.left - rect.left, b: xRect.top - rect.top, c: yRect.left - rect.left, d: yRect.top - rect.top } };
+              isDraggingRef.current = true; setIsDragging(true);
+              if (interactionEl) interactionEl.dataset.editableGesture = 'scale';
+              event.set([1, 1]);
             }}
             onScale={({ target, scale: scaleVec }) => {
-              const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
-              target.style.scale = `${+(baseW * scaleVec[0]).toFixed(4)} ${+(baseH * scaleVec[1]).toFixed(4)}`;
+              const gesture = moveableGestureRef.current;
+              if (!gesture || gesture.kind !== 'scale' || target !== gesture.target) return;
+              const clamp = (value: number) => +Math.max(0.01, Math.min(20, Number.isFinite(value) ? value : 1)).toFixed(4);
+              gesture.scale = { w: clamp(gesture.baseScale.w * scaleVec[0]), h: clamp(gesture.baseScale.h * scaleVec[1]) };
+              target.style.scale = `${gesture.scale.w} ${gesture.scale.h}`;
+              target.style.translate = `${gesture.basePosition.x}px ${gesture.basePosition.y}px`;
+              const rect = target.getBoundingClientRect(), anchor = gesture.anchor!, basis = gesture.basis!;
+              const dx = anchor.x - (rect.left + anchor.fx * rect.width), dy = anchor.y - (rect.top + anchor.fy * rect.height);
+              const determinant = basis.a * basis.d - basis.b * basis.c;
+              gesture.position = Math.abs(determinant) > 0.000001 ? {
+                x: gesture.basePosition.x + (basis.d * dx - basis.c * dy) / determinant,
+                y: gesture.basePosition.y + (basis.a * dy - basis.b * dx) / determinant,
+              } : gesture.basePosition;
+              target.style.translate = `${gesture.position.x}px ${gesture.position.y}px`;
+              gesture.moved = gesture.scale.w !== gesture.baseScale.w || gesture.scale.h !== gesture.baseScale.h;
             }}
-            onScaleEnd={({ lastEvent }) => {
-              if (lastEvent) {
-                const { x: baseW, y: baseH } = dragBaseOffsetRef.current;
-                onUpdateProp(`_scale_${selectedFieldId}`, {
-                  w: baseW * lastEvent.scale[0],
-                  h: baseH * lastEvent.scale[1],
-                });
-              }
-              isDraggingRef.current = false; setIsDragging(false);
-              requestAnimationFrame(measure);
-            }}
+            onScaleEnd={() => { if (moveableGestureRef.current?.kind === 'scale') finishMoveableGesture(); }}
           />
         </div>
       )}

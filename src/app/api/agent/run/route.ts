@@ -1,3 +1,4 @@
+import { resolveAgentTurnInput } from '@/lib/agent-turn-input';
 import { parseSelectedElement } from '@/lib/editor/element-edit';
 import { refreshOpenAIDirectBudget } from '@/lib/openai-direct';
 import { NextRequest, NextResponse } from 'next/server';
@@ -56,9 +57,9 @@ export async function POST(req: NextRequest) {
 
     const {
       projectId,
-      prompt,
+      prompt: rawPrompt,
       currentSnapshotIndex,
-      selectedElement,
+      selectedElement: rawSelectedElement,
       hasAnnotation,
       isDraft,
       referenceImageCount,
@@ -75,6 +76,12 @@ export async function POST(req: NextRequest) {
       audioAttachments,
       clientPersistedUserMessage,
     } = requestBody;
+
+    const locale = getRequestLocale(req);
+    const turnInput = await resolveAgentTurnInput({ prompt: rawPrompt, projectId, turnMediaSnapshotIds, locale, supabase });
+    const prompt = turnInput.prompt;
+    // An image-only upload is about the new media, not an old GUI selection.
+    const selectedElement = turnInput.mediaOnly ? undefined : rawSelectedElement;
 
     if (selectedElement !== undefined && !parseSelectedElement(selectedElement)) return NextResponse.json({ error: 'Invalid selected element' }, { status: 400 });
     const endAdmissionPreflight = perf.span('admission_preflight', { projectId: projectId || null });
@@ -119,7 +126,6 @@ export async function POST(req: NextRequest) {
       if (!creditCheck.ok) return creditCheck.response;
     }
 
-    const locale = getRequestLocale(req);
     const executionOrigin = resolveAgentExecutionWorkerOrigin(req.nextUrl.origin);
 
     const persistHeadlessUserMessage = async () => {
@@ -128,8 +134,8 @@ export async function POST(req: NextRequest) {
         id: crypto.randomUUID(),
         project_id: projectId,
         role: 'user',
-        content: prompt,
-        has_image: false,
+        content: turnInput.mediaOnly ? '' : prompt,
+        has_image: turnInput.mediaOnly,
       });
     };
 

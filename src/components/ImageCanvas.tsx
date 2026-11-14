@@ -105,7 +105,7 @@ interface ImageCanvasProps {
   /** Callback when an editable field is selected/deselected in the canvas overlay */
   onSelectEditable?: (id: string | null) => void;
   /** Callback when a design prop is updated via canvas interaction */
-  onUpdateProp?: (key: string, value: unknown) => void;
+  onUpdateProp?: (key: string, value: unknown, related?: Record<string, unknown>) => void;
   /** Callback when user double-clicks (select then click again) an editable to start editing */
   onStartEditEditable?: (fieldId: string) => void;
   /** Callback with list of editable field IDs visible at the current frame */

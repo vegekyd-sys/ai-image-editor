@@ -890,6 +890,7 @@ const ja = {
   'profile.signOut': 'ログアウト',
 
   // Agent runtime
+  'agent.mediaOnlyPrompt': '今回ユーザーは画像のみを送信しました。新しくアップロードされた画像を確認し、会話の文脈に沿って応答してください。明確な編集依頼がなければ、画像を簡潔に説明して希望する変更を尋ねてください。アップロードだけを理由に画像生成やレイヤー分割を始めないでください。',
   'agent.status.starting': '開始しています...',
   'agent.status.planning': '計画中...',
   'agent.status.searchingWeb': 'ウェブを検索中...',

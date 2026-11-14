@@ -4,6 +4,13 @@ import { streamAgent } from '@/lib/agentStream';
 describe('Agent stream ownership', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('displays a server error message rather than raw JSON for a rejected turn', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'Please attach an image or write a message' }), { status: 400 })));
+    const onError = vi.fn();
+    await streamAgent({ projectId: 'project', prompt: '', image: '', durable: true }, { onError });
+    expect(onError).toHaveBeenCalledWith('Please attach an image or write a message');
+  });
+
   it('does not create a new model request just because a Studio workflow checkpoint exists', async () => {
     const event = {
       type: 'error' as const,

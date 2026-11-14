@@ -1455,7 +1455,7 @@ function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = f
 
 function createGenerateImageTool(
   { ctx, runtime }: AgentToolFactoryScope,
-  elementInput?: { source: string; reference: string },
+  elementInput?: { source: string; reference: string; scene?: string },
 ) {
   return tool({
       description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}` + '\nRetake camera/content keyframes: use retake_source after inspect_retake to edit an actual source frame, rather than a video poster or contact sheet. The returned image is a visual checkpoint for H3 middle-frame control or an explicitly requested boundary-attribute correction. For a boundary correction use the corresponding inspected selected opening/closing source time; retain that exact composition and action phase except the requested correction. Read its actual pixels and verify the requested camera/content and action phase before passing its mediaIndex to retake_video.',
@@ -1521,7 +1521,7 @@ function createGenerateImageTool(
         }
 
         // Resolve reference images: user-uploaded + snapshot indices
-        const resolvedRefs = elementInput ? [elementInput.reference] : !retake_source && ctx.referenceImages ? [...ctx.referenceImages] : [];
+        const resolvedRefs = elementInput ? [elementInput.reference, ...(elementInput.scene ? [elementInput.scene] : [])] : !retake_source && ctx.referenceImages ? [...ctx.referenceImages] : [];
         console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_media_indices?.length) {
           for (const refIdx of reference_media_indices) {
@@ -3637,12 +3637,12 @@ function createInspectElementTool({ ctx, runtime }: AgentToolFactoryScope) {
 function createEditElementTool(scope: AgentToolFactoryScope) {
   const { ctx } = scope;
   return tool({
-    description: `Edit ONLY the user-selected Editable element. Transforms use composition-pixel deltas and scale multipliers (1.2 = 20% larger), no image model. Text edits replace editable text directly. Content edits require inspect_element first: the server sends the actual selected source to the existing image-edit/billing pipeline, then preserves positions, scales, layer order and all other properties. For a subpart (hat/glasses within a baby layer), supply a region in ORIGINAL ASSET pixels; only that rectangle may change, all pixels outside are copied unchanged. Include space for enlarged content. Do not scale the baby to enlarge only its hat. A full replacement may omit region but must preserve original canvas and subject framing. Every appearance attempt starts from the saved original, replacing any earlier appearance draft in this turn; include the COMPLETE requested appearance change in its prompt. Earlier explicit transforms are retained. This saves a draft; use preview_frame then publish_draft with its exact design_path. Never rebuild the composition or reset offsets to replace one asset.`,
+    description: `Edit ONLY the user-selected Editable element. Transforms use composition-pixel deltas and scale multipliers (1.2 = 20% larger), no image model. Text edits replace editable text directly. Content edits require inspect_element first: the server sends the actual selected source to the existing image-edit/billing pipeline, then preserves positions, scales, layer order and all other properties. For a subpart (hat/glasses within a baby layer), supply a region in ORIGINAL ASSET pixels; only that rectangle may change, all pixels outside are copied unchanged. Include space for enlarged content. Do not scale the baby to enlarge only its hat. A full replacement may omit region but must preserve original canvas and subject framing. For an explicit request to reconstruct missing/occluded arms, body parts or object portions, set completeOccluded=true: only currently transparent pixels within the existing asset canvas may be filled, while every existing visible pixel is copied unchanged. Keep a transparent backdrop around the completed subject. Completion is inferred, not recovered ground truth, and cannot extend beyond the asset canvas. Do not enable completion for ordinary edits. Every appearance attempt starts from the saved original, replacing any earlier appearance draft in this turn; include the COMPLETE requested appearance change in its prompt. Earlier explicit transforms are retained. This saves a draft; use preview_frame then publish_draft with its exact design_path. Never rebuild the composition or reset offsets to replace one asset.`,
     inputSchema: z.object({
       operation: z.discriminatedUnion('kind', [
         z.object({ kind: z.literal('transform'), dx: z.number().finite().min(-20000).max(20000).optional(), dy: z.number().finite().min(-20000).max(20000).optional(), scaleX: z.number().min(0.05).max(20).optional(), scaleY: z.number().min(0.05).max(20).optional() }),
         z.object({ kind: z.literal('text'), text: z.string().max(100000) }),
-        z.object({ kind: z.literal('content'), prompt: z.string().min(1).max(12000), region: z.object({ x: z.number().nonnegative(), y: z.number().nonnegative(), width: z.number().positive(), height: z.number().positive() }).optional() }),
+        z.object({ kind: z.literal('content'), prompt: z.string().min(1).max(12000), completeOccluded: z.boolean().optional(), region: z.object({ x: z.number().nonnegative(), y: z.number().nonnegative(), width: z.number().positive(), height: z.number().positive() }).optional() }),
       ]),
     }),
     execute: async ({ operation }, executionOptions) => {
@@ -3660,13 +3660,14 @@ function createEditElementTool(scope: AgentToolFactoryScope) {
           const inspection = (ctx as any).__inspectedElement;
           if (!inspection || inspection.snapshotId !== input.selection.snapshotId || inspection.fieldId !== input.selection.fieldId || inspection.source !== source) throw new Error('Inspect this exact selected element before generating an edit. No generation submitted.');
           const prepared = await prepareElementImage(source, operation.region);
+          if (operation.completeOccluded && !prepared.hasAlpha) throw new Error('This element has no transparent missing area. Use a normal content edit. No generation submitted.');
           const cropPath = `${ctx.projectId}/element-edits/${id}-input.png`;
           const savedInput = await workspace.writeFile(cropPath, prepared.crop, input.supabase, input.userId, 'image/png');
           if (!savedInput.success || !savedInput.storageUrl) throw new Error('Could not prepare the original element for editing.');
-          const generator = createGenerateImageTool(scope, { source: savedInput.storageUrl, reference: source });
-          const generated = await generator.execute!({ editPrompt: `${operation.prompt}\nEdit ONLY the supplied FIRST crop in place: ${prepared.box.width} by ${prepared.box.height} pixels, at original-asset x=${prepared.box.left}, y=${prepared.box.top}. The SECOND image is the complete original element for identity/context ONLY, not the output canvas. Return only the edited crop, never copy the whole character or scene from the second image into it. Preserve the crop framing, contact points, pose and identity. ${prepared.hasAlpha ? "Transparent source pixels must remain alpha, never paint a solid backdrop." : "Keep the existing background."} Do not zoom, recenter or invent a different person.`, outputFormat: 'png', aspectRatio: formatAspectRatio(prepared.box.width, prepared.box.height), ...(prepared.hasAlpha ? { background: 'transparent' as const } : {}) }, executionOptions) as any;
+          const generator = createGenerateImageTool(scope, { source: savedInput.storageUrl, reference: source, ...(operation.completeOccluded && original.sceneUrl ? { scene: original.sceneUrl } : {}) });
+          const generated = await generator.execute!({ editPrompt: `${operation.prompt}\nEdit ONLY the supplied FIRST crop in place: ${prepared.box.width} by ${prepared.box.height} pixels, at original-asset x=${prepared.box.left}, y=${prepared.box.top}. The SECOND image is the complete original element for identity/context ONLY, not the output canvas. Return only the edited crop, never copy the whole character or scene from the second image into it. Preserve the crop framing, contact points, pose and identity. ${operation.completeOccluded ? "Reconstruct only the requested missing or occluded parts of this SAME subject within the supplied crop. Fill transparent space where those parts belong; keep the remaining background transparent. Preserve all visible source details. The THIRD image, when supplied, is the full original scene for anatomy, pose and occlusion context ONLY. Never copy other people, scene objects or background into the output." : prepared.hasAlpha ? "Transparent source pixels must remain alpha, never paint a solid backdrop." : "Keep the existing background."} Do not zoom, recenter or invent a different person.`, outputFormat: 'png', aspectRatio: formatAspectRatio(prepared.box.width, prepared.box.height), ...(prepared.hasAlpha ? { background: 'transparent' as const } : {}) }, executionOptions) as any;
           if (!generated.success || !generated.image) return { success: false, error: generated.message || 'Element image generation failed.' };
-          const bytes = await finishElementImage(prepared, generated.image);
+          const bytes = await finishElementImage(prepared, generated.image, { completeOccluded: operation.completeOccluded });
           const saved = await workspace.writeFile(`${ctx.projectId}/element-edits/${id}.png`, bytes, input.supabase, input.userId, 'image/png');
           if (!saved.success || !saved.storageUrl) throw new Error('Generated element could not be saved.');
           // The provider output remains available if the source itself changed concurrently.

@@ -116,6 +116,14 @@ function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: Agen
   }
 }
 
+async function readResponseError(response: Response, fallback: string): Promise<string> {
+  const text = await response.text().catch(() => '');
+  try {
+    const error = JSON.parse(text);
+    return typeof error.message === 'string' ? error.message : typeof error.error === 'string' ? error.error : fallback;
+  } catch { return text || fallback; }
+}
+
 async function streamDurableAgent(
   body: AgentRequestBody,
   callbacks: AgentStreamCallbacks,
@@ -152,7 +160,7 @@ async function streamDurableAgent(
       callbacks.onInsufficientCredits?.(data.balance ?? 0);
       return;
     }
-    callbacks.onError?.(await response.text().catch(() => 'Failed to start Agent execution'));
+    callbacks.onError?.(await readResponseError(response, 'Failed to start Agent execution'));
     return;
   }
   const started = await response.json() as { runId: string; firstMessageId?: string };
@@ -283,7 +291,7 @@ async function streamAgentAttempt(
       }
       return;
     }
-    const text = await res.text().catch(() => 'Unknown error');
+    const text = await readResponseError(res, 'Unknown error');
     callbacks.onError?.(text);
     return;
   }

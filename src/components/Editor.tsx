@@ -23,7 +23,7 @@ import SaveMediaDialog from '@/components/SaveMediaDialog';
 import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { readDesignLayerState, isFixedCanvasDesign } from '@/lib/editor/design-layer-state';
-import { recordDesignEdit, readDesignEditHistory, seekDesignEditHistory, type DesignEditKind } from '@/lib/editor/design-edit-history';
+import { recordDesignEdit, recordDesignEditBatch, readDesignEditHistory, seekDesignEditHistory, type DesignEditKind } from '@/lib/editor/design-edit-history';
 import { mergeHydratedEditableDesign } from '@/lib/editor/editable-persistence';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
@@ -3219,7 +3219,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     designPropsSaveTimer.current = setTimeout(flushPendingDesignSave, 500);
   }, [viewIndex, draftParentIndex, flushPendingDesignSave]);
 
-  const handleDesignPropUpdate = useCallback((key: string, value: unknown) => {
+  const handleDesignPropUpdate = useCallback((key: string, value: unknown, related?: Record<string, unknown>) => {
     const index = snapFromTimeline(viewIndex, draftParentIndex);
     const design = index == null ? undefined : snapshotsRef.current[index]?.design;
     if (!design) return;
@@ -3232,7 +3232,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       kind = deleted ? 'delete' : restored ? 'restore' : 'reorder';
       field = fields.find(field => field.id === (deleted || restored || selectedEditableFieldId));
     } else if (field?.propKey === key) kind = field.type === 'text' ? 'text' : 'media';
-    const next = recordDesignEdit(props, key, value, { kind, fieldId: field?.id, label: field?.label });
+    const metadata = { kind, fieldId: field?.id, label: field?.label };
+    const next = related ? recordDesignEditBatch(props, { [key]: value, ...related }, metadata) : recordDesignEdit(props, key, value, metadata);
     if (next !== props) commitDesignProps(next);
   }, [viewIndex, draftParentIndex, selectedEditableFieldId, commitDesignProps]);
 

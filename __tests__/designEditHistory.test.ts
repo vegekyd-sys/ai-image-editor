@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recordDesignEdit, readDesignEditHistory, seekDesignEditHistory, historyUnsetProps } from '@/lib/editor/design-edit-history';
+import { recordDesignEdit, recordDesignEditBatch, readDesignEditHistory, seekDesignEditHistory, historyUnsetProps } from '@/lib/editor/design-edit-history';
 import { mergePersistedEditableProps, mergeHydratedEditableDesign } from '@/lib/editor/editable-persistence';
 import { hasDesignLayers } from '@/lib/editor/design-layer-state';
 import { imagePaintRect } from '@/lib/editor/editable-image-alpha';
@@ -44,6 +44,19 @@ describe('shared design edit history', () => {
     props = recordDesignEdit(props, 'title', 'Branch', { kind: 'text', at: 1400 });
     expect(readDesignEditHistory(props)).toMatchObject({ cursor: 2 });
     expect(readDesignEditHistory(props).entries).toHaveLength(2);
+  });
+
+  it('undoes an anchored corner resize as one operation, including after reopening', () => {
+    const original = { title: 'Keep', _scale_other: { w: .5, h: .5 } };
+    const changed = recordDesignEditBatch(original, { _scale_hero: { w: 1.4, h: 1.4 }, _pos_hero: { x: -20, y: 30 } }, { kind: 'scale', fieldId: 'hero' });
+    expect(readDesignEditHistory(changed).entries).toHaveLength(1);
+    const reopened = JSON.parse(JSON.stringify(changed));
+    const undone = seekDesignEditHistory(reopened, 0);
+    expect(undone).toMatchObject(original);
+    expect(undone).not.toHaveProperty('_scale_hero');
+    expect(undone).not.toHaveProperty('_pos_hero');
+    expect(historyUnsetProps(undone)).toEqual(expect.arrayContaining(['_scale_hero', '_pos_hero']));
+    expect(seekDesignEditHistory(undone, 1)).toMatchObject({ _scale_hero: { w: 1.4, h: 1.4 }, _pos_hero: { x: -20, y: 30 }, _scale_other: original._scale_other });
   });
 
   it('keeps generic long designs content-sized after ordinary layer edits', () => {

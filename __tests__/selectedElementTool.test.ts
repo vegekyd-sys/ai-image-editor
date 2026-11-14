@@ -98,3 +98,27 @@ it('recovers explicit transforms from a same-run draft before an appearance edit
   expect(design.props._pos_baby).toEqual({ x: 35, y: 31 });
   expect(design.elementEdit.operations).toHaveLength(2);
 });
+it('completes missing pixels using the scene as context while retaining the saved layout', async () => {
+  const source = await sharp({ create: { width: 30, height: 40, channels: 4, background: '#00000000' } })
+    .composite([{ input: await sharp({ create: { width: 10, height: 10, channels: 4, background: '#224466ff' } }).png().toBuffer(), left: 10, top: 5 }]).png().toBuffer();
+  state.latest.props.asset = data(source);
+  ctx.supabase = { from: (table: string) => { const query = { select: () => query, eq: () => query,
+    maybeSingle: async () => ({ data: table === 'projects' ? { user_id: 'owner' } : { design_path: 'code/source.json', image_url: 'https://example.com/original-scene.png' } }) }; return query; } } as any;
+  state.output = data(await sharp({ create: { width: 30, height: 40, channels: 4, background: '#00000000' } })
+    .composite([{ input: await sharp({ create: { width: 10, height: 25, channels: 4, background: '#ff0066ff' } }).png().toBuffer(), left: 10, top: 5 }]).png().toBuffer());
+  const provider = vi.fn(async (request: any) => {
+    expect(request.references.map((r: any) => r.url)).toEqual(expect.arrayContaining([state.latest.props.asset, 'https://example.com/original-scene.png']));
+    expect(request.editPrompt || request.prompt).toContain('THIRD image');
+    return { image: state.output, provider: 'test', usage: { modelId: 'gpt-image-2.6-flare', inputTokens: 1, outputTokens: 2, providerCostUsd: .01 } };
+  });
+  state.backend.mockImplementation(id => ({ id, canHandle: () => true, generate: provider }));
+  await call('inspect_element');
+  const result = await call('edit_element', { operation: { kind: 'content', prompt: 'Complete the occluded body', completeOccluded: true } });
+  expect(result.success).toBe(true);
+  const design = JSON.parse(saved.get(result.design_path) as string);
+  expect(design.props).toMatchObject({ _pos_baby: { x: 15, y: 31 }, _scale_baby: { w: .6, h: .6 }, other: 'untouched' });
+  expect(provider).toHaveBeenCalledOnce();
+  const output = await sharp(saved.get(design.elementEdit.operation.url.replace('https://example.com/', '')) as Buffer).raw().toBuffer();
+  expect([...output.subarray((8 * 30 + 12) * 4, (8 * 30 + 12) * 4 + 4)]).toEqual([34, 68, 102, 255]);
+  expect(output[(20 * 30 + 12) * 4 + 3]).toBe(255);
+});
