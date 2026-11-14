@@ -12,7 +12,7 @@ import { queueEditableSave } from '@/lib/editor/editable-save-queue';
 import { layerizeModelOutput } from '@/lib/layerize-delivery';
 import DesignEditPanel from '@/components/DesignEditPanel';
 import { LocaleProvider } from '@/lib/i18n';
-import { recordDesignEdit } from '@/lib/editor/design-edit-history';
+import { recordDesignEdit, seekDesignEditHistory } from '@/lib/editor/design-edit-history';
 
 const design = buildLayerizeDesign({ version: 1, taskId: 'original', width: 100, height: 100, sourceSha256: 'hash', supplierCostUsd: .1,
   layers: [0, 1, 2].map(z => ({ z, url: `https://example.com/${z}.png`, width: 100, height: 100, bounds: [0, 0, 100, 100], name: `Layer ${z}` })) });
@@ -77,13 +77,13 @@ describe('Layerize layer editing', () => {
     expect(readDesignLayerState(fields, {})).toEqual({ order: ['layer_0', 'layer_1', 'layer_2'], deleted: [] });
     expect(readDesignLayerState(fields, { _layerState: { order: ['unknown', 'layer_2', 'layer_2'], deleted: ['layer_1', 'unknown'] } })).toEqual({ order: ['layer_2', 'layer_0', 'layer_1'], deleted: ['layer_1'] });
   });
-  it('moves across active neighbors, with boundaries and restore preserving source props', () => {
+  it('moves across active neighbors, without changing deleted layers or their source props', () => {
     const state = readDesignLayerState(fields, design.props!);
     expect(changeDesignLayer(state, 'layer_2', 'forward')).toBe(state);
     const deleted = changeDesignLayer(state, 'layer_1', 'delete');
     const moved = changeDesignLayer(deleted, 'layer_0', 'forward');
     expect(moved.order).toEqual(['layer_2', 'layer_1', 'layer_0']);
-    expect(changeDesignLayer(moved, 'layer_1', 'restore').deleted).toEqual([]);
+    expect(moved.deleted).toEqual(['layer_1']);
     expect(design.props!.layer_1).toBe('https://example.com/1.png');
   });
   for (const mode of ['proxy', 'registry'] as const) {
@@ -99,15 +99,27 @@ describe('Layerize layer editing', () => {
       expect(restored.indexOf('data-editable="layer_2"')).toBeLessThan(restored.indexOf('data-editable="layer_0"'));
     });
   }
-  it('keeps delete/restore accessible after every layer is removed', () => {
-    const update = vi.fn(), select = vi.fn();
-    const { getByRole, rerender } = render(<LocaleProvider initialLocale="en"><DesignEditPanel editables={fields} props={design.props} selectedFieldId="layer_1" onUpdateProp={update} onSelectField={select} onStartEdit={vi.fn()} /></LocaleProvider>);
+  it('recovers the last deleted element with Undo or the starting history entry', () => {
+    function Panel() {
+      const [props, setProps] = React.useState(design.props!);
+      const [selected, setSelected] = React.useState<string | null>('layer_1');
+      return <DesignEditPanel editables={[fields[1]]} props={props} selectedFieldId={selected}
+        onUpdateProp={(key, value) => setProps(prev => recordDesignEdit(prev, key, value, { kind: 'delete' }))}
+        onHistorySeek={cursor => setProps(prev => seekDesignEditHistory(prev, cursor))}
+        onSelectField={setSelected} onStartEdit={vi.fn()} />;
+    }
+    const { getByRole, queryByRole, container } = render(<LocaleProvider initialLocale="en"><Panel /></LocaleProvider>);
+    const element = () => container.querySelector('[data-editable-pill="layer_1"]');
     fireEvent.click(getByRole('button', { name: 'Delete element' }));
-    expect(update).toHaveBeenCalledWith('_layerState', { order: ['layer_0', 'layer_1', 'layer_2'], deleted: ['layer_1'] });
-    expect(select).toHaveBeenCalledWith(null);
-    rerender(<LocaleProvider initialLocale="en"><DesignEditPanel editables={fields} props={{ ...design.props, _layerState: { order: fields.map(f => f.id), deleted: fields.map(f => f.id) } }} selectedFieldId={null} onUpdateProp={update} onSelectField={select} onStartEdit={vi.fn()} /></LocaleProvider>);
-    fireEvent.click(getByRole('button', { name: 'Restore deleted element' }));
-    expect(update).toHaveBeenLastCalledWith('_layerState', { order: ['layer_0', 'layer_1', 'layer_2'], deleted: ['layer_0', 'layer_1'] });
+    expect(element()).toBeNull();
+    expect(queryByRole('button', { name: 'Restore deleted element' })).toBeNull();
+    fireEvent.click(getByRole('button', { name: 'Undo' }));
+    expect(element()).not.toBeNull();
+    fireEvent.click(getByRole('button', { name: 'Redo' }));
+    expect(element()).toBeNull();
+    fireEvent.click(getByRole('button', { name: 'Edit history' }));
+    fireEvent.click(getByRole('button', { name: 'Starting state' }));
+    expect(element()).not.toBeNull();
   });
 });
 

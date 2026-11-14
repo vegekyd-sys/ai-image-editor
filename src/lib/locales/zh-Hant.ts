@@ -36,7 +36,6 @@ const zhHant = {
   "design.layerForward": "上移一層",
   "design.layerBackward": "下移一層",
   "design.layerDelete": "刪除元素",
-  "design.layerRestore": "復原已刪圖層",
   "design.trim": "裁剪",
   "design.moveScale": "移動 / 縮放",
   "design.edit": "編輯",

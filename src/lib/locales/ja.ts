@@ -32,7 +32,6 @@ const ja = {
   "design.layerForward": "一つ前面へ",
   "design.layerBackward": "一つ背面へ",
   "design.layerDelete": "要素を削除",
-  "design.layerRestore": "削除した要素を復元",
   "design.trim": "トリミング",
   "design.moveScale": "移動 / 拡大縮小",
   "design.edit": "編集",

@@ -30,7 +30,6 @@ const en = {
   "design.layerForward": "Bring forward",
   "design.layerBackward": "Send backward",
   "design.layerDelete": "Delete element",
-  "design.layerRestore": "Restore deleted element",
   "design.trim": "Trim",
   "design.moveScale": "Move / scale",
   "design.edit": "Edit",

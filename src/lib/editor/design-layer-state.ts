@@ -17,10 +17,9 @@ export function readDesignLayerState(fields: EditableField[], props: Record<stri
   };
 }
 
-export function changeDesignLayer(state: DesignLayerState, id: string, action: 'forward' | 'backward' | 'delete' | 'restore'): DesignLayerState {
+export function changeDesignLayer(state: DesignLayerState, id: string, action: 'forward' | 'backward' | 'delete'): DesignLayerState {
   if (!state.order.includes(id)) return state;
   if (action === 'delete') return { ...state, deleted: [...state.deleted.filter(item => item !== id), id] };
-  if (action === 'restore') return { ...state, deleted: state.deleted.filter(item => item !== id) };
   const active = state.order.filter(item => !state.deleted.includes(item));
   const adjacent = active[active.indexOf(id) + (action === 'forward' ? 1 : -1)];
   if (!adjacent || state.deleted.includes(id)) return state;

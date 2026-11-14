@@ -30,7 +30,6 @@ const zh = {
   "design.layerForward": "上移一层",
   "design.layerBackward": "下移一层",
   "design.layerDelete": "删除元素",
-  "design.layerRestore": "恢复已删元素",
   "design.trim": "裁剪",
   "design.moveScale": "移动 / 缩放",
   "design.edit": "编辑",

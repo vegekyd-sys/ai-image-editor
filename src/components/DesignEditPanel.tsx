@@ -3,7 +3,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import type { EditableField } from '@/types';
 import { useLocale } from '@/lib/i18n';
-import { ArrowUp, ArrowDown, Trash2, Undo2, Redo2, History, RotateCcw, X } from 'lucide-react';
+import { ArrowUp, ArrowDown, Trash2, Undo2, Redo2, History, X } from 'lucide-react';
 import { readDesignEditHistory } from '@/lib/editor/design-edit-history';
 import { readDesignLayerState, changeDesignLayer, DESIGN_LAYER_STATE_PROP } from '@/lib/editor/design-layer-state';
 import PillCarousel, { EditablePanelSkeleton } from '@/components/PillCarousel';
@@ -51,10 +51,9 @@ export default function DesignEditPanel({
   const fields = [...editables].sort((a, b) => layerState.order.indexOf(b.id) - layerState.order.indexOf(a.id)).filter(field => !layerState.deleted.includes(field.id));
   const activeOrder = layerState.order.filter(id => !layerState.deleted.includes(id));
   const selectedIndex = selectedFieldId ? activeOrder.indexOf(selectedFieldId) : -1;
-  const changeLayer = (id: string, action: 'forward' | 'backward' | 'delete' | 'restore') => {
+  const changeLayer = (id: string, action: 'forward' | 'backward' | 'delete') => {
     onUpdateProp(DESIGN_LAYER_STATE_PROP, changeDesignLayer(layerState, id, action));
     if (action === 'delete') onSelectField(null);
-    if (action === 'restore') onSelectField(id);
   };
   useEffect(() => {
     if (!historyOpen) return;
@@ -91,24 +90,17 @@ export default function DesignEditPanel({
       <span className="text-[11px] text-white/50 mr-1 whitespace-nowrap">
         {t('design.editables', fields.length)}
       </span>
-      <>
-        {([
-          ['forward', 'design.layerForward', ArrowUp, selectedIndex < 0 || selectedIndex === activeOrder.length - 1],
-          ['backward', 'design.layerBackward', ArrowDown, selectedIndex <= 0],
-          ['delete', 'design.layerDelete', Trash2, selectedIndex < 0],
-        ] as const).map(([action, label, Icon, disabled]) => (
-          <button key={action} type="button" title={t(label)} aria-label={t(label)} disabled={disabled}
-            onClick={() => selectedFieldId && changeLayer(selectedFieldId, action)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/75 hover:bg-white/10 disabled:opacity-25 disabled:cursor-default">
-            <Icon size={16} />
-          </button>
-        ))}
-        <button type="button" title={t('design.layerRestore')} aria-label={t('design.layerRestore')} disabled={!layerState.deleted.length}
-          onClick={() => changeLayer(layerState.deleted[layerState.deleted.length - 1], 'restore')}
+      {([
+        ['forward', 'design.layerForward', ArrowUp, selectedIndex < 0 || selectedIndex === activeOrder.length - 1],
+        ['backward', 'design.layerBackward', ArrowDown, selectedIndex <= 0],
+        ['delete', 'design.layerDelete', Trash2, selectedIndex < 0],
+      ] as const).map(([action, label, Icon, disabled]) => (
+        <button key={action} type="button" title={t(label)} aria-label={t(label)} disabled={disabled}
+          onClick={() => selectedFieldId && changeLayer(selectedFieldId, action)}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-white/75 hover:bg-white/10 disabled:opacity-25 disabled:cursor-default">
-          <RotateCcw size={16} />
+          <Icon size={16} />
         </button>
-      </>
+      ))}
       <span className="h-4 w-px bg-white/15 mx-0.5" />
       <button type="button" title={t('design.undo')} aria-label={t('design.undo')} disabled={!onHistorySeek || history.cursor === 0}
         onClick={() => onHistorySeek?.(history.cursor - 1)} className="flex h-8 w-8 items-center justify-center rounded-lg text-white/75 hover:bg-white/10 disabled:opacity-25"><Undo2 size={16} /></button>
