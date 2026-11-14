@@ -1,12 +1,12 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const fontWait = vi.hoisted(() => ({ load: vi.fn() }));
+const fontWait = vi.hoisted(() => ({ load: vi.fn(), renders: [] as Array<{ code: string; props: Record<string, unknown> }> }));
 beforeEach(() => { fontWait.load.mockReset().mockResolvedValue({ prepared: { code: '', defaultFontFamily: 'Inter' }, timing: {} }); });
 vi.mock('@remotion/player', () => ({ Player: ({ component: Component, inputProps }: any) => <div className="__remotion-player"><Component {...inputProps} /></div> }));
 vi.mock('@remotion/web-renderer', () => ({ renderStillOnWeb: vi.fn(), renderMediaOnWeb: vi.fn() }));
 vi.mock('@/lib/i18n', () => ({ useLocale: () => ({ t: (key: string) => key }) }));
-vi.mock('@/lib/evalRemotionJSX', () => ({ preloadBabel: async () => {}, evalRemotionJSX: () => (props: any) => <div data-editable="body" data-testid="inputs">{JSON.stringify(props)}</div> }));
+vi.mock('@/lib/evalRemotionJSX', () => ({ preloadBabel: async () => {}, evalRemotionJSX: (code: string) => (props: any) => { fontWait.renders.push({ code, props }); return <div data-editable="body" data-testid="inputs">{JSON.stringify(props)}</div>; } }));
 vi.mock('@/remotion/font-catalog', async original => ({ ...await original<any>(), prepareRemotionFontCodeFromBundledCatalog: () => ({ code: '', defaultFontFamily: 'Inter' }), prepareAndLoadRemotionFontsWithTiming: fontWait.load, validateRemotionFontManifest: (value: unknown) => value }));
 vi.mock('@/lib/image/presentation', () => ({ preloadDecodedImage: async () => ({width:100,height:100}) }));
 import { applyLayerizeFonts } from '@/lib/layerize-fonts';
@@ -146,4 +146,25 @@ it('keeps current pixels and edited wording through a slow background-font load,
   expect(view.getByTestId('inputs').textContent).toContain('"x":30,"y":40');
   view.rerender(<RemotionRenderer design={{...matched,props:{...matched.props,layer_0_text_0:'NEXT LETTERS'}}} onLoading={onLoading}/>);
   await waitFor(()=>expect(view.getByTestId('inputs').textContent).toContain('NEXT LETTERS'));expect(fontWait.load).toHaveBeenCalledOnce();view.unmount();
+});
+
+it('never renders a newly compiled snapshot with the previous snapshot asset keys', async () => {
+  fontWait.load.mockImplementation(async ({ code }) => ({ prepared: { code, defaultFontFamily: 'Inter' }, timing: {} }));
+  let release!: (response: Response) => void;
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:second');
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  vi.stubGlobal('fetch', vi.fn((url: string) => url === 'https://example.com/second.png'
+    ? new Promise<Response>(resolve => { release = resolve; }) : Promise.resolve(Response.json({ faces: [] }))));
+  const first = { width: 100, height: 100, code: 'function First() { return null }', props: { firstAsset: 'data:image/png;base64,aA==' } };
+  const view = render(<RemotionRenderer design={first} snapshotId="first" />);
+  await waitFor(() => expect(view.getByTestId('inputs').textContent).toContain('firstAsset'));
+  fontWait.renders.length = 0;
+  view.rerender(<RemotionRenderer design={{ ...first, code: 'function Second() { return null }', props: { secondAsset: 'https://example.com/second.png' } }} snapshotId="second" posterImage="poster.jpg" />);
+  await waitFor(() => expect(fontWait.load).toHaveBeenCalledTimes(2));
+  expect(view.queryByTestId('inputs')).toBeNull();
+  await act(async () => { release(new Response('second', { headers: { 'content-type': 'image/png' } })); });
+  await waitFor(() => expect(view.getByTestId('inputs').textContent).toContain('secondAsset'));
+  expect(fontWait.renders.length).toBeGreaterThan(0);
+  expect(fontWait.renders.every(rendered => rendered.code.includes('Second') && rendered.props.secondAsset && !rendered.props.firstAsset)).toBe(true);
+  view.unmount();
 });
