@@ -671,6 +671,28 @@ export default function ImageCanvas({
     mouseStartPos.current = null;
   }, [clearLongPress, isComparing, currentIndex, timeline.length, onIndexChange, scale, selectedEditableId]);
 
+  // Mouse release can happen over chat or outside the window. Never resume an
+  // old canvas pan when the pointer returns, or after selecting an Editable.
+  useEffect(() => {
+    const release = () => {
+      if (mouseStartPos.current && mouseDidDrag.current) skipClick.current = true;
+      mouseStartPos.current = null;
+      mousePanning.current = false;
+      mouseDidDrag.current = false;
+      clearLongPress();
+      setIsComparing(false);
+    };
+    window.addEventListener('mouseup', release);
+    window.addEventListener('blur', release);
+    window.addEventListener('pointercancel', release);
+    return () => {
+      window.removeEventListener('mouseup', release);
+      window.removeEventListener('blur', release);
+      window.removeEventListener('pointercancel', release);
+      release();
+    };
+  }, [clearLongPress, selectedEditableId]);
+
   // Desktop: zoom (ctrl+wheel / plain wheel) + horizontal swipe (deltaX) → switch snapshot
   const wheelCooldown = useRef(false);
   const handleWheel = useCallback((e: WheelEvent) => {
