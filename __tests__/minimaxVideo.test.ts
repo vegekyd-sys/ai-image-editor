@@ -227,4 +227,22 @@ describe('MiniMax H3 video adapter', () => {
       error: 'generation expired',
     })
   })
+
+  it('distinguishes an invalid lookup ID from a refundable generation failure', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      message: 'invalid params, invalid task_id (2013)',
+    }), { status: 400 })))
+    const { getVideoStatus } = await import('@/lib/skills/get-video-status')
+    await expect(getVideoStatus({ taskId: 'minimax-h3-old-task' })).resolves.toMatchObject({
+      success: false, status: 'failed', queryFailed: true, queryUnavailable: true,
+    })
+  })
+
+  it.each([401, 429, 500])('does not retire a lookup on HTTP %s', async status => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'upstream unavailable' }), { status })))
+    const { getVideoStatus } = await import('@/lib/skills/get-video-status')
+    const result = await getVideoStatus({ taskId: 'minimax-h3-old-task' })
+    expect(result.queryFailed).toBe(true)
+    expect(result.queryUnavailable).toBeUndefined()
+  })
 })
