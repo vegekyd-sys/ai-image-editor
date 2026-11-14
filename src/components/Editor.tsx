@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoMeta, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import { preloadDecodedImage } from '@/lib/image/presentation';
+import { useLayerizeFonts } from '@/hooks/useLayerizeFonts';
 import { getEditorCanvasKey } from '@/lib/editor/canvas-key';
 import TipsBar from '@/components/TipsBar';
 import { EditablePanelSkeleton } from '@/components/PillCarousel';
@@ -175,6 +176,7 @@ export default function Editor({
   const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(() => dedupeEditorMessages(initialMessages ?? []));
   const [snapshots, setSnapshots] = useState<Snapshot[]>(dedupeVideoSnapshots(initialSnapshots ?? []));
+  useLayerizeFonts(projectId, snapshots, setSnapshots);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isEditing, setIsEditing] = useState(false);

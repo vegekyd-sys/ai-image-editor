@@ -1,11 +1,11 @@
 import sharp from 'sharp';
 import type { LayerizeLayer } from './layerize-design';
-import { fitLayerizeText, layerizeMatchingFaces } from './layerize-text-fit';
 
-export async function prepareLayerizeTextLayers(layers: LayerizeLayer[], bytes: Map<number, Buffer>, persist: (name: string, bytes: Buffer) => Promise<string>): Promise<void> {
+export async function prepareLayerizeTextLayers(layers: LayerizeLayer[], bytes: Map<number, Buffer>, persist: (name: string, bytes: Buffer) => Promise<string>, options: { matchFonts?: boolean } = {}): Promise<void> {
   const textLayers = layers.filter(l => l.text?.lines.some(line => line.text.trim()));
   if (!textLayers.length) return;
-  const faces = await layerizeMatchingFaces(textLayers.flatMap(l => l.text!.lines.map(line => line.font))).catch(() => []);
+  const matcher = options.matchFonts === false ? null : await import('./layerize-text-fit');
+  const faces = !matcher ? [] : await matcher.layerizeMatchingFaces(textLayers.flatMap(l => l.text!.lines.map(line => line.font))).catch(() => []);
   await Promise.all(textLayers.map(async layer => {
     const original = bytes.get(layer.z); if (!original) throw new Error('Text layer pixels are missing');
     const { data, info } = await sharp(original).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -28,7 +28,7 @@ export async function prepareLayerizeTextLayers(layers: LayerizeLayer[], bytes: 
       right = Math.min(lineBox.left + lineBox.width, right + 3); bottom = Math.min(lineBox.top + lineBox.height, bottom + 3);
       const region = { left, top, width: right - left, height: bottom - top };
       const cropped = await sharp(remainder, { raw: { width: info.width, height: info.height, channels: 4 } }).extract(region).png().toBuffer();
-      const fit = await fitLayerizeText(cropped, line.text, line.font, line.color, faces).catch(() => null);
+      const fit = !matcher ? null : await matcher.fitLayerizeText(cropped, line.text, line.font, line.color, faces).catch(() => null);
       const rasterUrl = await persist(`text-${layer.z}-${index}.png`, cropped);
       line.appearance = { rasterUrl, width: region.width, height: region.height,
         bounds: [layer.bounds[0] + left * sx, layer.bounds[1] + top * sy, layer.bounds[0] + right * sx, layer.bounds[1] + bottom * sy],

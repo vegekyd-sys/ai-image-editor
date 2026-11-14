@@ -1,4 +1,5 @@
 import type { DesignPayload, EditableField } from '@/types';
+import { ASYNC_LAYERIZE_FONTS_MARKER, type LayerizeFontsReference } from './layerize-fonts';
 import type { LayerizeTextFit } from './layerize-text-fit';
 
 const LAYERIZE_CODE_START = "import React from 'react';\nimport {AbsoluteFill, Img} from 'remotion';\nexport default function Composition(props) { return <AbsoluteFill style={{backgroundColor:'transparent'}}>";
@@ -38,7 +39,7 @@ export interface LayerizeManifest {
 }
 
 /** Use the normal DesignPayload/Img/editable ABI, with one independent source prop per layer. */
-export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = false): DesignPayload {
+export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = false, fontMatching?: Omit<LayerizeFontsReference, 'originals' | 'status'>): DesignPayload {
   const props: Record<string, unknown> = {};
   const editables: EditableField[] = [];
   const elements: string[] = [];
@@ -65,6 +66,11 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
           const fontStyle = { fontFamily: fit?.family || line.font, fontWeight: fit?.weight || (line.bold ? 700 : 400), fill: fit?.color || line.color };
           const matrix = fit?.matrix || [a.width / Math.max(1, line.text.length * .58 * a.height), 0, 0, 1, 0, a.height * .82];
           const fontSize = fit?.fontSize || a.height;
+          if (fontMatching) {
+            const fallback = { family: line.font, weight: line.bold ? 700 : 400, color: line.color, matrix, fontSize };
+            elements.push(`<div data-editable=${JSON.stringify(id)} style={${JSON.stringify(style)}}>{(() => {const fit = props._layerizeTextFontFits?.${id} || ${JSON.stringify(fallback)}; return props.${key} === ${JSON.stringify(line.text)} || props._layerizeTextFonts?.status === 'pending' ? <Img src={props.${id}_source} style={{width:'100%',height:'100%'}} /> : <svg width="100%" height="100%" viewBox="0 0 ${a.width} ${a.height}" style={{overflow:'visible'}}><text fontSize={fit.fontSize} transform={'matrix(' + fit.matrix.join(' ') + ')'} style={{fontFamily:fit.family,fontWeight:fit.weight,fill:fit.color}}>{props.${key}}</text></svg>;})()}</div>`);
+            continue;
+          }
           elements.push(`<div data-editable=${JSON.stringify(id)} style={${JSON.stringify(style)}}>{props.${key} === ${JSON.stringify(line.text)} ? <Img src={props.${id}_source} style={{width:'100%',height:'100%'}} /> : <svg width="100%" height="100%" viewBox="0 0 ${a.width} ${a.height}" style={{overflow:'visible'}}><text fontSize={${fontSize}} transform="matrix(${matrix.join(' ')})" style={${JSON.stringify(fontStyle).replace(/"(fontFamily|fontWeight|fontStyle)":/g, '$1:')}}>{props.${key}}</text></svg>}</div>`);
           continue;
         }
@@ -85,9 +91,10 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
   }
   props._layerState = { order: editables.map(field => field.id), deleted: [] };
   props._canvasSizing = 'fixed';
+  if (fontMatching) props._layerizeTextFonts = { ...fontMatching, status: 'pending', originals: Object.fromEntries(editables.filter(field => field.type === 'text').map(field => [field.id, props[field.propKey]])) };
   return {
     width: manifest.width, height: manifest.height, props, editables,
-    code: `${LAYERIZE_CODE_START}${elements.join('\n')}${LAYERIZE_CODE_END}`,
+    code: `${fontMatching ? ASYNC_LAYERIZE_FONTS_MARKER + "\n/* fontWeight:400 fontWeight:500 fontWeight:600 fontWeight:700 fontWeight:800 fontWeight:900 */\n" : ""}${LAYERIZE_CODE_START}${elements.join('\n')}${LAYERIZE_CODE_END}`,
   };
 }
 

@@ -25,7 +25,7 @@ export default function CanvasPreviewBridge({ source, contentReady, navigating, 
   // A mounted design already contains the user's latest transforms. Keep those
   // pixels until the incoming poster decodes; its saved poster can be older.
   const visible = preserveLiveContent
-    ? incomingReady && (!contentReady || retired !== source)
+    ? incomingReady && retired !== source
     : navigating || !contentReady || !incomingReady || retired !== source;
   useEffect(() => {
     if (!incomingReady || !contentReady || navigating) return;

@@ -1,3 +1,4 @@
+import { resolveLayerizeFontsForRender } from './layerize-fonts';
 /**
  * Server-side Remotion rendering via Vercel Sandbox.
  * Uses Snapshot for fast startup + font caching.
@@ -196,6 +197,7 @@ export async function renderDesignFrames(
   options: { signal?: AbortSignal; sandboxScope?: string; onMetrics?: (metrics: PreviewRenderMetrics) => void; freshSession?: boolean } = {},
 ): Promise<Buffer[]> {
   options.signal?.throwIfAborted();
+  design = await resolveLayerizeFontsForRender(design, options.signal);
   if (!frames.length) return [];
   if (readEnv('REMOTION_RENDERER') === 'local') {
     const { renderDesignFrameLocal } = await import('@/lib/remotion-local-renderer');
@@ -336,6 +338,7 @@ export async function renderDesignVideo(
     scale?: number;
   } = {},
 ): Promise<Buffer> {
+  design = await resolveLayerizeFontsForRender(design);
   if (readEnv('REMOTION_RENDERER') === 'lambda') {
     const { renderDesignVideoLambda } = await import('@/lib/remotion-lambda-renderer');
     return renderDesignVideoLambda(design, options);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { getPublicOrigin } from '@/lib/auth/public-origin';
+import { finishLayerizeFonts } from '@/lib/layerize-fonts-server';
 import { startLayerize, getLayerize, waitLayerize, type LayerizeOwner } from '@/lib/layerize';
 import { resolveRequestBillingSource } from '@/lib/billing/attribution';
 import type { LayerizeInput } from '@/lib/layerize-provider';
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
     const context = await owner(req, body.projectId);
     if (context instanceof Response) return context;
     const result = await startLayerize(context, body.requestId, body);
-    if (result.status === 'processing') after(async () => { await waitLayerize(context, result.jobId).catch(() => {}); });
+    if (result.status === 'processing') after(async () => { const completed = await waitLayerize(context, result.jobId).catch(() => null); if (completed?.status === 'completed') await finishLayerizeFonts(context, result.jobId); });
     const { design: _design, ...publicResult } = result;
     return NextResponse.json(publicResult);
   } catch (error) {
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
     const context = await owner(req, projectId);
     if (context instanceof Response) return context;
     const { design: _design, ...result } = await getLayerize(context, id);
+    if (result.status === 'completed') after(() => finishLayerizeFonts(context, id));
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Layerize query failed.' }, { status: 400 });

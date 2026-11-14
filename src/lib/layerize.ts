@@ -192,7 +192,7 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
   if (job.input.editableText) {
     const { prepareLayerizeTextLayers } = await import('./layerize-text');
     await prepareLayerizeTextLayers(layers, new Map(decoded.map(item => [item.row.z_index, item.bytes])),
-      (name, pixels) => permanent(owner, `${owner.projectId}/layerize/${job.id}/${name}`, pixels, 'image/png'));
+      (name, pixels) => permanent(owner, `${owner.projectId}/layerize/${job.id}/${name}`, pixels, 'image/png'), { matchFonts: false });
   }
   const supplierCostUsd = layerizeSupplierCost(layers);
   if (sha(source) !== job.sourceSha256) throw new Error('Source image changed; retain this task for reconciliation.');
@@ -200,7 +200,10 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
     layers.map((layer, index) => ({ ...layer, bytes: decoded[index].bytes })));
   const manifest: LayerizeManifest = { version: 1, taskId: task.id, width, height, sourceSha256: job.sourceSha256, supplierCostUsd, layers, stackOrder, reconstruction };
   const manifestPath = `${owner.projectId}/layerize/${job.id}/manifest.json`;
-  const design = buildLayerizeDesign(manifest, job.input.editableText);
+  const fontsUrl = new URL(getSupabaseAdmin().storage.from('images').getPublicUrl(`${owner.userId}/workspace/${owner.projectId}/layerize/${job.id}/text-fonts.json`).data.publicUrl);
+  const fontMatching = job.input.editableText && layers.some(layer => !layer.text?.preserveRaster && layer.text?.lines.some(line => line.appearance))
+    ? { version: 1 as const, projectId: owner.projectId, snapshotId: job.id, storageOrigin: fontsUrl.origin, storagePath: fontsUrl.pathname } : undefined;
+  const design = buildLayerizeDesign(manifest, job.input.editableText, fontMatching);
   const invalid = validateDesign(design); if (invalid) throw new Error(`Design validation failed: ${invalid}`);
   const posterStarted = Date.now();
   let poster: Buffer;

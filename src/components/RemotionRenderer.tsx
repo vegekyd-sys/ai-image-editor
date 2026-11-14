@@ -1,7 +1,8 @@
 'use client';
 
+import { layerizeFontRenderKey, layerizeUsesOriginalGlyphs, resolveLayerizeFontsForRender } from '@/lib/layerize-fonts';
 import { preloadDecodedImage } from '@/lib/image/presentation';
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
@@ -184,7 +185,7 @@ async function compileBrowserDesign(
   props: Record<string, unknown>,
   source: BrowserRemotionFontTiming['source'],
 ): Promise<React.ComponentType<Record<string, unknown>>> {
-  if (isRasterLayerizeDesign(design)) {
+  if (isRasterLayerizeDesign(design) || layerizeUsesOriginalGlyphs(design)) {
     const Component = evalRemotionJSX(code, {
       editableTransformMode: 'proxy',
       videoRuntime: source === 'player' ? 'preview' : 'render',
@@ -248,6 +249,7 @@ function compileBrowserDesignWithDeferredPinnedFonts(
  * Returns JPEG data URL, or empty string on failure.
  */
 export async function captureDesignPoster(design: DesignPayload): Promise<string> {
+  design = await resolveLayerizeFontsForRender(design);
   let allBlobUrls: string[] = [];
   try {
     await preloadBabel().catch(() => {});
@@ -298,6 +300,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
  * Used by preview_frame tool — frontend renders, server polls for result.
  */
 export async function captureDesignFrame(design: DesignPayload, frame: number): Promise<Blob | null> {
+  design = await resolveLayerizeFontsForRender(design);
   let allBlobUrls: string[] = [];
   try {
     await preloadBabel().catch(() => {});
@@ -425,6 +428,12 @@ export default function RemotionRenderer({
   const [inputProps, setInputProps] = useState<Record<string, unknown>>(design.props || {});
   const [compileError, setCompileError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
+  const fontRenderKey = layerizeFontRenderKey(design);
+  const fontBarrier = useMemo(() => {
+    let release!: () => void;
+    const ready = new Promise<void>(resolve => { release = resolve; });
+    return { ready, release };
+  }, [design.code, design.fontSubstitutions, retryToken, fontRenderKey]);
 
   const reportPreviewFailureRef = useRef((
     phase: RemotionPreviewErrorPhase,
@@ -516,6 +525,7 @@ export default function RemotionRenderer({
               // names, so registering the faces reflows it in place without
               // resetting playback.
               compileLoadingRef.current = false;
+              fontBarrier.release();
               notifyLoading();
             });
           }
@@ -523,22 +533,23 @@ export default function RemotionRenderer({
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
         setComponent(() => comp);
-        if (fontsSettled) { compileLoadingRef.current = false; notifyLoading(); }
+        if (fontsSettled) { compileLoadingRef.current = false; fontBarrier.release(); notifyLoading(); }
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[RemotionRenderer] init failed:', msg);
         setCompileError(msg);
         reportPreviewFailureRef.current('player-init', e, { recovered: false });
-        compileLoadingRef.current = false; inputLoadingRef.current = false; notifyLoading();
+        compileLoadingRef.current = false; inputLoadingRef.current = false; fontBarrier.release(); notifyLoading();
       }
     })();
     return () => {
       cancelled = true;
+      fontBarrier.release();
       blobUrls.forEach(url => URL.revokeObjectURL(url));
     };
 
-  }, [design.code, design.fontSubstitutions, retryToken, notifyLoading]);
+  }, [design.code, design.fontSubstitutions, retryToken, notifyLoading, fontBarrier]);
 
   // Editable text/media/transform changes should update Player input props
   // without recompiling the composition, fonts, and code.
@@ -573,6 +584,8 @@ export default function RemotionRenderer({
         if (!inputPropImageCacheMountedRef.current) discardNewBlobUrls();
         return;
       }
+      if (fontRenderKey) await fontBarrier.ready;
+      if (cancelled) return;
       setInputProps(resolved);
       inputReadyRef.current = true; inputSnapshotRef.current = snapshotId;
       inputLoadingRef.current = false; notifyLoading();
@@ -580,7 +593,7 @@ export default function RemotionRenderer({
     return () => {
       cancelled = true;
     };
-  }, [design.props, snapshotId, notifyLoading]);
+  }, [design.props, snapshotId, notifyLoading, fontRenderKey, fontBarrier]);
 
   useEffect(() => {
     inputPropImageCacheMountedRef.current = true;
@@ -861,6 +874,7 @@ export async function exportDesignVideo(
   design: DesignPayload,
   onProgress?: (progress: RenderMediaOnWebProgress) => void,
 ): Promise<Blob> {
+  design = await resolveLayerizeFontsForRender(design);
   // Pure video design → download source mp4 directly (no Remotion render needed)
   const singleVideoUrl = extractSingleVideoUrl(design.code);
   if (singleVideoUrl) {

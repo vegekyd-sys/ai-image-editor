@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useCallback } from 'react';
+import { useLocale } from '@/lib/i18n';
 import type { EditableField } from '@/types';
 import FloatingPanel from '@/components/FloatingPanel';
 
@@ -10,6 +11,7 @@ interface DesignTextEditorProps {
   onChangeValue: (value: string) => void;
   onClose: () => void;
   isDesktop: boolean;
+  fontMatching?: 'pending' | 'approximate';
 }
 
 export default function DesignTextEditor({
@@ -18,7 +20,9 @@ export default function DesignTextEditor({
   onChangeValue,
   onClose,
   isDesktop,
+  fontMatching,
 }: DesignTextEditorProps) {
+  const { t } = useLocale();
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -53,6 +57,7 @@ export default function DesignTextEditor({
           {field.label}
         </span>
 
+        {fontMatching && <p role="status" className="text-[11px] leading-relaxed text-white/50">{t(fontMatching === 'pending' ? 'design.matchingFont' : 'design.approximateFont')}</p>}
         {/* Input row: full-width input + Done button */}
         <div className="flex items-end gap-2">
           <textarea
@@ -67,7 +72,7 @@ export default function DesignTextEditor({
             onKeyDown={handleKeyDown}
             className="flex-1 min-w-0 bg-transparent text-white text-[15px] outline-none placeholder-white/20 resize-none"
             style={{ caretColor: '#d946ef', lineHeight: '1.5', minHeight: '1.5em', maxHeight: 'calc(1.5em * 4 + 2px)' }}
-            placeholder={`Edit ${field.label}...`}
+            placeholder={t('design.editTextPlaceholder', field.label)}
             rows={1}
           />
           <button

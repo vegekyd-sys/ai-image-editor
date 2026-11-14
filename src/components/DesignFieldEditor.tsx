@@ -1,5 +1,6 @@
 'use client';
 
+import { layerizeFontsReference } from '@/lib/layerize-fonts';
 import type { DesignPayload, EditableField } from '@/types';
 import DesignTextEditor from '@/components/DesignTextEditor';
 import DesignVideoTrimEditor from '@/components/DesignVideoTrimEditor';
@@ -46,6 +47,11 @@ export default function DesignFieldEditor({
     );
   }
 
+  const fontRef = layerizeFontsReference(design);
+  const fontFits = props._layerizeTextFontFits as Record<string, unknown> | undefined;
+  const fontMatching = fontRef && Object.hasOwn(fontRef.originals, field.propKey)
+    ? fontRef.status === 'pending' ? 'pending' : !fontFits?.[field.id] ? 'approximate' : undefined
+    : undefined;
   return (
     <DesignTextEditor
       field={field}
@@ -53,6 +59,7 @@ export default function DesignFieldEditor({
       onChangeValue={(value) => onUpdateProp(field.propKey, value)}
       onClose={onClose}
       isDesktop={isDesktop}
+      fontMatching={fontMatching}
     />
   );
 }

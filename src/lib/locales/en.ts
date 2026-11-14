@@ -1,11 +1,15 @@
 const en = {
+  "design.matchingFont": "Matching the font in the background. You can type now; the text preview will update when it is ready.",
+  "design.approximateFont": "An approximate font is being used for edited text.",
+  "design.editTextPlaceholder": (label: string) => `Edit ${label}…`,
+
 
   "design.autoLayer": "Auto layers",
   "design.autoLayerHint": "Split this image into independently editable layers",
   "design.touchHint": "Drag / pinch · Clear selection to browse",
   "design.loadingEditables": "Loading editables…",
   "design.background": "Background",
-  "design.autoLayerPrompt": (index: number) => `Automatically split @${index} into editable layers, preserving the original appearance and occlusion. Make subjects and background independently editable. Preserve raster text appearance; native text conversion is not needed. Publish the layered result directly to the canvas without generating another image.`,
+  "design.autoLayerPrompt": (index: number) => `Automatically split @${index} into editable layers, preserving the original appearance and occlusion. Make subjects and background independently editable. Separate all visible text into directly editable text layers, preserve its initial appearance, and match fonts in the background. Publish the layered result directly to the canvas without generating another image.`,
   "design.editingElement": (label: string) => `Editing: ${label}`,
   "design.clearSelection": "Clear selection",
   "design.saveBeforeEditFailed": "Changes have not been saved. Please try again shortly.",
