@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ImgHTMLAttributes } from 'react';
 import { getDecodedImageSize, preloadDecodedImage } from '@/lib/image/presentation';
 
 /** New model images reveal after decoding, with a short opacity-only entrance. */
-export default function DecodedImage({ src = '', style, onLoad, ...rest }: Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & { src?: string }) {
+export default function DecodedImage({ src = '', alt = '', style, onLoad, ...rest }: Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & { src?: string }) {
   const ref = useRef<HTMLImageElement>(null);
   const [readySource, setReadySource] = useState('');
   useEffect(() => {
@@ -16,7 +16,7 @@ export default function DecodedImage({ src = '', style, onLoad, ...rest }: Omit<
     return () => { cancelled = true; cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [src]);
   const size = getDecodedImageSize(src);
-  return <img {...rest} ref={ref} src={src} decoding="async" fetchPriority="high" onLoad={onLoad}
+  return <img {...rest} alt={alt} ref={ref} src={src} decoding="async" fetchPriority="high" onLoad={onLoad}
     data-image-decoded={readySource === src ? 'true' : 'false'}
     style={{ ...style, ...(size ? { aspectRatio: `${size.width}/${size.height}` } : {}), opacity: readySource === src ? 1 : 0, transition: 'opacity var(--mkr-image-reveal-duration, 120ms) ease-out' }} />;
 }

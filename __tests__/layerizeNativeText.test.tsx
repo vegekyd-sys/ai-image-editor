@@ -17,6 +17,9 @@ describe('font-fitted editable text', () => {
               fit: { family: 'Lato', weight: 900, fontSize: 2000, color: '#ffffff', score: .9, matrix: [.1, 0, 0, .1, 0, 100] } } }] } }] };
     const design = buildLayerizeDesign(manifest, true);
     expect(validateDesign(design)).toBeNull();
+    // r8 Preview/export font scanners consume literal style keys and weights.
+    expect(design.code).toMatch(/fontFamily:\s*["']Lato/);
+    expect(design.code).toMatch(/fontWeight:\s*900/);
     expect(design.editables?.find(x => x.id === 'layer_1_text_0')?.type).toBe('text');
     const exports: Record<string, React.ComponentType<Record<string, unknown>>> = {};
     const runtime = createEditableReactRuntime(React, 'video');
