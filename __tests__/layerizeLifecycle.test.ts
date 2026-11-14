@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
-const h = vi.hoisted(() => ({ files: new Map<string, string>(), tables: new Map<string, Map<string, any>>(), debits: new Map<string, any>(), submit: vi.fn(), query: vi.fn(), read: vi.fn(), rate: vi.fn(), rpc: vi.fn(), render: vi.fn(), failPublish: false }));
+const h = vi.hoisted(() => ({ files: new Map<string, string>(), tables: new Map<string, Map<string, any>>(), debits: new Map<string, any>(), submit: vi.fn(), query: vi.fn(), read: vi.fn(), rate: vi.fn(), rpc: vi.fn(), render: vi.fn(), fit: vi.fn(), faces: vi.fn(), failPublish: false }));
 function query(table: string) {
   let op = 'select', value: any, filters: [string, any][] = [];
   const rows = h.tables.get(table)!;
@@ -32,7 +32,7 @@ vi.mock('@/lib/layerize-provider', async (original) => ({ ...await original<any>
 vi.mock('@/lib/billing/token-rates', async original => ({ ...await original<any>(), getTokenRate: h.rate }));
 vi.mock('@/lib/billing/credits', () => ({ isBillingEnabled: async () => true, requireCredits: async () => ({ ok: true, balance: 1000 }) }));
 vi.mock('@/lib/remotion-server', () => ({ renderDesignFrame: h.render }));
-vi.mock('@/lib/layerize-text-fit', () => ({layerizeMatchingFaces:async()=>[],fitLayerizeText:async()=>null}));
+vi.mock('@/lib/layerize-text-fit', () => ({layerizeMatchingFaces:h.faces,fitLayerizeText:h.fit}));
 import { startLayerize, getLayerize } from '@/lib/layerize';
 import { LayerizeProviderError } from '@/lib/layerize-provider';
 const projectId = '11111111-1111-4111-8111-111111111111', jobId = '22222222-2222-4222-8222-222222222222';
@@ -54,6 +54,7 @@ beforeEach(async () => {
   h.read.mockReset().mockImplementation(async (url: string) => url === 'layer' ? layer : base);
   h.rate.mockReset().mockResolvedValue({ model_id: 'seedream-5.5-layerize', markup: 2 });
   h.render.mockReset().mockResolvedValue(Buffer.from('poster'));
+  h.faces.mockReset().mockResolvedValue([]); h.fit.mockReset().mockResolvedValue(null);
   h.rpc.mockReset().mockImplementation(async (name, args) => {
     if (name === 'reserve_mcp_video' && !h.debits.has(args.p_id)) h.debits.set(args.p_id, args);
     return { data: name === 'next_sort_order' ? 3 : {}, error: null };
@@ -154,4 +155,6 @@ it('publishes editable OCR text with original glyph pixels without waiting for a
   const result=await getLayerize(owner,jobId);
   expect(result.status, result.message).toBe('completed'); expect(h.render).not.toHaveBeenCalled();
   expect(result.design?.editables?.some(field=>field.type==='text')).toBe(true);
+  expect(h.faces).not.toHaveBeenCalled(); expect(h.fit).not.toHaveBeenCalled();
+  expect((result.design?.props?._layerizeTextFonts as any)?.status).toBe('pending');
 });
