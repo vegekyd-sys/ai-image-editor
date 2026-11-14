@@ -5,6 +5,31 @@ import type { LayerizeTextFit } from './layerize-text-fit';
 const LAYERIZE_CODE_START = "import React from 'react';\nimport {AbsoluteFill, Img} from 'remotion';\nexport default function Composition(props) { return <AbsoluteFill style={{backgroundColor:'transparent'}}>";
 const LAYERIZE_CODE_END = '</AbsoluteFill>; }';
 
+/** Pure generated JSX shared by Player, Proxy, preview_frame and Export. */
+const LAYERIZE_TEXT_RENDERER = `/* makaron-layerize-text-v2 */
+function LayerizeText({value, original, source, width, height, fit, pending}) {
+  if (value === original || pending) return <Img src={source} style={{width:'100%',height:'100%'}} />;
+  const matrix = fit.matrix, em = fit.fontSize, spacing = fit.letterSpacing || 0;
+  const advance = c => (fit.advances?.[c] ?? (/[^\\u0000-\\u024f]/u.test(c) ? em : em * .58)) + spacing;
+  const originalAdvance = Math.max(0, ...String(original).split('\\n').map(row => Array.from(row).reduce((n, c) => n + advance(c), 0)));
+  const maxAdvance = Math.max(originalAdvance, width / Math.max(.000001, Math.hypot(matrix[0], matrix[1])));
+  const lines = [];
+  for (const paragraph of String(value ?? '').split('\\n')) {
+    let row = '', used = 0;
+    for (const char of Array.from(paragraph)) {
+      const next = advance(char);
+      if (row && used + next > maxAdvance) { lines.push(row); row = ''; used = 0; }
+      row += char; used += next;
+    }
+    lines.push(row);
+  }
+  // Quote every named CSS family: an unquoted trailing numeric token (Symbols 2)
+  // invalidates the entire declaration, silently enabling platform font fallback.
+  const family = [fit.family, 'Noto Sans SC', 'Noto Color Emoji', 'Noto Sans Symbols 2'].map(f => JSON.stringify(f)).join(',') + ',sans-serif';
+  return <svg width="100%" height="100%" viewBox={'0 0 ' + width + ' ' + height} style={{overflow:'visible'}}><text fontSize={em} transform={'matrix(' + matrix.join(' ') + ')'} style={{fontFamily:family,fontWeight:fit.weight,fill:fit.color,letterSpacing:spacing,whiteSpace:'pre'}}>{lines.map((line, i) => <tspan key={i} x={0} y={i * (fit.lineHeight || em * 1.4)}>{line}</tspan>)}</text></svg>;
+}
+`;
+
 /** Recognize the image-only generated composition, including existing saved drafts.
  * Editable labels/history are UI metadata and must not trigger font downloads.
  * Any native text or authored composition continues through the pinned font path.
@@ -63,15 +88,13 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
           props[`${id}_source`] = a.rasterUrl;
           const [left, top, right, bottom] = a.bounds;
           const style = { position: 'absolute', left, top, width: right-left, height: bottom-top };
-          const fontStyle = { fontFamily: fit?.family || line.font, fontWeight: fit?.weight || (line.bold ? 700 : 400), fill: fit?.color || line.color };
-          const matrix = fit?.matrix || [a.width / Math.max(1, line.text.length * .58 * a.height), 0, 0, 1, 0, a.height * .82];
-          const fontSize = fit?.fontSize || a.height;
-          if (fontMatching) {
-            const fallback = { family: line.font, weight: line.bold ? 700 : 400, color: line.color, matrix, fontSize };
-            elements.push(`<div data-editable=${JSON.stringify(id)} style={${JSON.stringify(style)}}>{(() => {const fit = props._layerizeTextFontFits?.${id} || ${JSON.stringify(fallback)}; return props.${key} === ${JSON.stringify(line.text)} || props._layerizeTextFonts?.status === 'pending' ? <Img src={props.${id}_source} style={{width:'100%',height:'100%'}} /> : <svg width="100%" height="100%" viewBox="0 0 ${a.width} ${a.height}" style={{overflow:'visible'}}><text fontSize={fit.fontSize} transform={'matrix(' + fit.matrix.join(' ') + ')'} style={{fontFamily:[fit.family,'Noto Sans SC','Noto Color Emoji','Noto Sans Symbols 2','sans-serif'].join(','),fontWeight:fit.weight,fill:fit.color}}>{props.${key}}</text></svg>;})()}</div>`);
-            continue;
-          }
-          elements.push(`<div data-editable=${JSON.stringify(id)} style={${JSON.stringify(style)}}>{props.${key} === ${JSON.stringify(line.text)} ? <Img src={props.${id}_source} style={{width:'100%',height:'100%'}} /> : <svg width="100%" height="100%" viewBox="0 0 ${a.width} ${a.height}" style={{overflow:'visible'}}><text fontSize={${fontSize}} transform="matrix(${matrix.join(' ')})" style={${JSON.stringify(fontStyle).replace(/"(fontFamily|fontWeight|fontStyle)":/g, '$1:')}}>{props.${key}}</text></svg>}</div>`);
+          // A raster crop may contain transparent padding; neither its height nor
+          // Latin's average character width is a safe CJK font-size measurement.
+          const units = Array.from(line.text).reduce((n, c) => n + (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(c) ? 1 : .58), 0);
+          const fontSize = Math.min(a.height, a.width / Math.max(1, units));
+          const fallback = fit || { family: /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(line.text) ? 'Noto Sans SC' : line.font,
+            weight: line.bold ? 700 : 400, color: line.color, matrix: [1, 0, 0, 1, 3, fontSize * .88 + 3], fontSize };
+          elements.push(`<div data-editable=${JSON.stringify(id)} style={${JSON.stringify(style)}}><LayerizeText value={props.${key}} original={${JSON.stringify(line.text)}} source={props.${id}_source} width={${a.width}} height={${a.height}} fit={props._layerizeTextFontFits?.${id} || ${JSON.stringify(fallback)}} pending={props._layerizeTextFonts?.status === 'pending'} /></div>`);
           continue;
         }
         const [left, top, right, bottom] = line.bounds;
@@ -94,7 +117,7 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
   if (fontMatching) props._layerizeTextFonts = { ...fontMatching, status: 'pending', originals: Object.fromEntries(editables.filter(field => field.type === 'text').map(field => [field.id, props[field.propKey]])) };
   return {
     width: manifest.width, height: manifest.height, props, editables,
-    code: `${fontMatching ? ASYNC_LAYERIZE_FONTS_MARKER + "\n/* fontWeight:400 fontWeight:500 fontWeight:600 fontWeight:700 fontWeight:800 fontWeight:900 */\n" : ""}${LAYERIZE_CODE_START}${elements.join('\n')}${LAYERIZE_CODE_END}`,
+    code: `${(fontMatching ? ASYNC_LAYERIZE_FONTS_MARKER + "\n" : "") + (editableText ? "/* fontWeight:400 fontWeight:500 fontWeight:600 fontWeight:700 fontWeight:800 fontWeight:900 */\n" : "")}${editableText ? LAYERIZE_CODE_START.replace('export default function', LAYERIZE_TEXT_RENDERER + '\nexport default function') : LAYERIZE_CODE_START}${elements.join('\n')}${LAYERIZE_CODE_END}`,
   };
 }
 

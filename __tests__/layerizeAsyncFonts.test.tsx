@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -24,7 +24,7 @@ it('shows extracted glyphs before matching and renders edited text only after ma
  const runtime=createEditableReactRuntime(React,'video'),exports:any={};new Function('require','exports',transform(initial.code,{transforms:['jsx','imports']}).code)((name:string)=>name==='react'?runtime.React:{AbsoluteFill:'div',Img:'img'},exports);
  const paint=(d:typeof initial)=>renderToStaticMarkup(React.createElement(runtime.wrap(exports.default,'proxy'),d.props));
  expect(layerizeUsesOriginalGlyphs(changed)).toBe(true);expect(layerizeFontRenderKey(changed)).toBe('');expect(paint(changed)).toContain('glyphs.png');expect(paint(changed)).not.toContain('<text');
- const completed=applyLayerizeFonts(changed,ready);expect(completed.code).toBe(initial.code);expect(completed.props?.layer_1_text_0).toBe('WORLD');expect(completed.props?._editHistory).toEqual(changed.props._editHistory);expect(paint(completed)).toContain('translate:12px 24px');expect(paint(completed)).toContain('font-family:Lato');expect(paint(completed)).toContain('WORLD');expect(paint(completed)).not.toContain('glyphs.png');
+ const completed=applyLayerizeFonts(changed,ready);expect(completed.code).toBe(initial.code);expect(completed.props?.layer_1_text_0).toBe('WORLD');expect(completed.props?._editHistory).toEqual(changed.props._editHistory);expect(paint(completed)).toContain('translate:12px 24px');expect(paint(completed)).toContain('font-family:&quot;Lato&quot;');expect(paint(completed)).toContain('WORLD');expect(paint(completed)).not.toContain('glyphs.png');
  expect(layerizeUsesOriginalGlyphs(applyLayerizeFonts(initial,ready))).toBe(true);
 });
 it('does not wait for font matching when exporting unmodified glyphs; changed text hydrates font metadata without overwriting user props',async()=>{

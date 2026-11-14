@@ -30,6 +30,9 @@ export function parseLayerizeFontsResult(value: unknown): LayerizeFontsResult {
       || !Number.isFinite(fit.fontSize) || fit.fontSize <= 0 || fit.fontSize > 10000
       || ![400,500,600,700,800,900].includes(fit.weight) || !/^#[a-f\d]{6}$/i.test(fit.color)
       || !Array.isArray(fit.matrix) || fit.matrix.length !== 6 || fit.matrix.some(n => !Number.isFinite(n) || Math.abs(n) > 1e7)
+      || (fit.letterSpacing !== undefined && (!Number.isFinite(fit.letterSpacing) || Math.abs(fit.letterSpacing) > fit.fontSize))
+      || (fit.lineHeight !== undefined && (!Number.isFinite(fit.lineHeight) || fit.lineHeight <= 0 || fit.lineHeight > fit.fontSize * 10))
+      || (fit.advances !== undefined && (typeof fit.advances !== 'object' || !fit.advances || Object.entries(fit.advances).some(([char, n]) => Array.from(char).length !== 1 || !Number.isFinite(n) || n < 0 || n > fit.fontSize * 10)))
       || !Number.isFinite(fit.score) || fit.score < 0 || fit.score > 1) throw new Error('Invalid font match fit');
   }
   return r;

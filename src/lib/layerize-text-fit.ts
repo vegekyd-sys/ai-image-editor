@@ -10,11 +10,19 @@ export interface LayerizeTextFit {
   matrix: [number, number, number, number, number, number];
   score: number;
   color: string;
+  /** Advances in the same units as fontSize, used for deterministic wrapping. */
+  advances?: Record<string, number>;
+  lineHeight?: number;
+  letterSpacing?: number;
 }
 const fontCache = new Map<string, Promise<Font>>();
 const FALLBACK_FAMILIES = ['Montserrat', 'Inter', 'Roboto', 'Lato', 'Poppins'];
 const substitute: Record<string, string> = { calibri: 'Carlito', arial: 'Arimo', 'arial narrow': 'Roboto Condensed' };
-export function layerizeFontCandidates(hint: string): string[] {
+export function layerizeFontCandidates(hint: string, text = ''): string[] {
+  if (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text)) {
+    const known = ['Noto Sans SC', 'Noto Serif SC', 'LXGW WenKai TC', 'Ma Shan Zheng', 'ZCOOL XiaoWei'];
+    return known.includes(hint) ? [hint] : /serif|song|ming|宋|明朝/i.test(hint) && !/sans/i.test(hint) ? ['Noto Serif SC'] : ['Noto Sans SC'];
+  }
   const family = substitute[hint.toLowerCase()] || hint;
   return [...new Set([family, ...FALLBACK_FAMILIES])];
 }
@@ -31,12 +39,12 @@ async function fontFor(face: RemotionFontCatalogFace): Promise<Font> {
   }
   try { return await pending; } catch (error) { fontCache.delete(face.sha256); throw error; }
 }
-export async function layerizeMatchingFaces(hints: string[]): Promise<RemotionFontCatalogFace[]> {
-  const families = [...new Set(hints.flatMap(layerizeFontCandidates))];
+export async function layerizeMatchingFaces(hints: string[], texts: string[] = []): Promise<RemotionFontCatalogFace[]> {
+  const families = [...new Set(hints.flatMap((hint, i) => layerizeFontCandidates(hint, texts[i])))];
   const known = families.filter(f => /^[\w -]{1,80}$/.test(f));
   const resolved = await resolveRemotionFontManifestForDesign({ code: known.map(f => `const f = {fontFamily:${JSON.stringify(f)}};`).join('\n') });
   const manifest = resolved.manifest || await (await fetch(resolved.manifestUrl, { signal: AbortSignal.timeout(15_000) })).json();
-  return (manifest.faces as RemotionFontCatalogFace[]).filter(f => known.includes(f.family) && f.subset === 'latin' && f.style === 'normal' && [400, 500, 600, 700, 800, 900].includes(f.weight));
+  return (manifest.faces as RemotionFontCatalogFace[]).filter(f => known.includes(f.family) && f.style === 'normal' && [400, 500, 600, 700, 800, 900].includes(f.weight));
 }
 function inkBounds(data: Uint8Array, width: number, height: number) {
   let left = width, top = height, right = 0, bottom = 0;
@@ -55,17 +63,40 @@ export function textInkAngle(data: Uint8Array, width: number, height: number): n
   const angle = Math.atan2(2 * (xy / n - x * y / n / n), xx / n - x * x / n / n - yy / n + y * y / n / n) / 2 * 180 / Math.PI;
   return Math.abs(angle) < 5 ? 0 : Math.max(-65, Math.min(65, angle));
 }
-function glyphPaths(font: Font, text: string) {
-  const run = font.layout(text); let pen = 0;
-  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-  const paths = run.glyphs.map((g, i) => {
-    const p = run.positions[i], x = pen + p.xOffset, y = -p.yOffset, b = g.bbox;
-    left = Math.min(left, x + b.minX); top = Math.min(top, y - b.maxY);
-    right = Math.max(right, x + b.maxX); bottom = Math.max(bottom, y - b.minY);
-    pen += p.xAdvance;
-    return `<path transform="translate(${x},${y}) scale(1,-1)" d="${g.path.toSVG()}"/>`;
+/** CSS unicode-range fonts are a single family assembled from several subset files. */
+function glyphPaths(fonts: Font[], text: string, letterSpacing = 0) {
+  const groups: Array<{ font: Font; text: string }> = [];
+  for (const char of Array.from(text)) {
+    const font = fonts.find(f => f.hasGlyphForCodePoint(char.codePointAt(0)!));
+    if (!font) return null;
+    const last = groups.at(-1);
+    if (last?.font === font) last.text += char; else groups.push({ font, text: char });
+  }
+  let pen = 0, left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+  const advances: Record<string, number> = {};
+  const paths = groups.map(({ font, text }) => {
+    for (const char of Array.from(text)) advances[char] = font.layout(char).positions.reduce((n, p) => n + p.xAdvance, 0);
+    const run = font.layout(text);
+    return run.glyphs.map((g, i) => {
+      const p = run.positions[i], x = pen + p.xOffset, y = -p.yOffset, b = g.bbox;
+      if (b.maxX > b.minX && b.maxY > b.minY) {
+        left = Math.min(left, x + b.minX); top = Math.min(top, y - b.maxY);
+        right = Math.max(right, x + b.maxX); bottom = Math.max(bottom, y - b.minY);
+      }
+      pen += p.xAdvance + letterSpacing;
+      return `<path transform="translate(${x},${y}) scale(1,-1)" d="${g.path.toSVG()}"/>`;
+    }).join('');
   }).join('');
-  return { paths, left, top, width: right - left, height: bottom - top };
+  return { paths, left, top, width: right - left, height: bottom - top, advances };
+}
+function intersectsText(face: RemotionFontCatalogFace, text: string): boolean {
+  return !face.unicodeRange || Array.from(text).some(char => {
+    const cp = char.codePointAt(0)!;
+    return face.unicodeRange.split(',').some(range => {
+      const match = /U\+([\da-f]+)(?:-([\da-f]+))?/i.exec(range);
+      return !!match && cp >= parseInt(match[1], 16) && cp <= parseInt(match[2] || match[1], 16);
+    });
+  });
 }
 function silhouetteScore(target: Uint8Array, candidate: Uint8Array): number {
   if (target.length !== candidate.length) throw new Error('Text matching masks have different dimensions');
@@ -75,39 +106,49 @@ function silhouetteScore(target: Uint8Array, candidate: Uint8Array): number {
 }
 /** Fit actual isolated glyph pixels, rather than trusting OCR's approximate size/italic flags. */
 export async function fitLayerizeText(bytes: Buffer, text: string, hint: string, color: string, faces: RemotionFontCatalogFace[]): Promise<LayerizeTextFit | null> {
-  if (!text.trim() || text.length > 300 || !/^[\p{Script=Latin}\p{N}\p{P}\p{Z}\p{S}]+$/u.test(text)) return null;
+  if (!text.trim() || text.length > 300) return null;
   const { data, info } = await sharp(bytes).ensureAlpha().extractChannel('alpha').raw().toBuffer({ resolveWithObject: true });
-  const initialAngle = textInkAngle(data, info.width, info.height);
+  const initialBox = inkBounds(data, info.width, info.height);
+  const initialAngle = initialBox && initialBox.width > initialBox.height * 2 ? textInkAngle(data, info.width, info.height) : 0;
   const angles = initialAngle === 0 ? [0] : [-3, -1.5, 0, 1.5, 3].map(d => initialAngle + d);
-  const families = layerizeFontCandidates(hint);
-  const candidates = faces.filter(f => families.includes(f.family));
-  const fonts = await Promise.all(candidates.map(async face => {
+  const families = layerizeFontCandidates(hint, text);
+  const candidates = faces.filter(f => families.includes(f.family) && intersectsText(f, text));
+  const loaded = await Promise.all(candidates.map(async face => {
     try { const base = await fontFor(face); return { face, font: base.variationAxes?.wght ? base.getVariation({ wght: face.weight }) : base }; } catch { return null; }
   }));
+  const groups = new Map<string, { face: RemotionFontCatalogFace; fonts: Font[] }>();
+  for (const item of loaded) if (item) {
+    const key = `${item.face.family}:${item.face.weight}`;
+    const group = groups.get(key) || { face: item.face, fonts: [] };
+    group.fonts.push(item.font); groups.set(key, group);
+  }
+  const cjk = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text);
   let best: (LayerizeTextFit & { ranking: number }) | null = null;
   for (const angle of angles) {
     const rotated = await sharp(bytes).rotate(-angle, { background: '#00000000' }).ensureAlpha().extractChannel('alpha').raw().toBuffer({ resolveWithObject: true });
     const box = inkBounds(rotated.data, rotated.info.width, rotated.info.height); if (!box) continue;
     const sampleHeight = 72, sampleWidth = Math.max(1, Math.min(1000, Math.round(box.width / box.height * sampleHeight)));
     const target = await sharp(rotated.data, { raw: { width: rotated.info.width, height: rotated.info.height, channels: 1 } }).extract(box).resize(sampleWidth, sampleHeight).greyscale().raw().toBuffer();
-    for (const loaded of fonts) {
-      if (!loaded) continue;
-      const { face, font } = loaded;
-      if (Array.from(text).some(c => !font.hasGlyphForCodePoint(c.codePointAt(0)!))) continue;
-      const glyph = glyphPaths(font, text); if (!glyph.width || !glyph.height) continue;
-      for (const shear of [0, -.2126]) {
+    for (const { face, fonts } of groups.values()) {
+      const font = fonts[0];
+      let glyph = glyphPaths(fonts, text); if (!glyph?.width || !glyph.height) continue;
+      // Match row advance with spacing, never by flattening CJK glyphs.
+      const letterSpacing = cjk && Array.from(text).length > 1 ? Math.max(-font.unitsPerEm * .15, Math.min(font.unitsPerEm * .15, (box.width * glyph.height / box.height - glyph.width) / (Array.from(text).length - 1))) : 0;
+      if (letterSpacing) glyph = glyphPaths(fonts, text, letterSpacing)!;
+      for (const shear of cjk ? [0] : [0, -.2126]) {
         const xs = [glyph.left + shear * glyph.top, glyph.left + glyph.width + shear * glyph.top, glyph.left + shear * (glyph.top + glyph.height), glyph.left + glyph.width + shear * (glyph.top + glyph.height)];
         const left = Math.min(...xs), width = Math.max(...xs) - left;
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${sampleWidth}" height="${sampleHeight}" viewBox="${left} ${glyph.top} ${width} ${glyph.height}" preserveAspectRatio="none"><g fill="white" transform="matrix(1,0,${shear},1,0,0)">${glyph.paths}</g></svg>`;
         const candidate = await sharp(Buffer.from(svg)).ensureAlpha().extractChannel('alpha').raw().toBuffer();
         const score = silhouetteScore(target, candidate);
         const stretch = box.width / box.height / (width / glyph.height);
-        const ranking = score - .025 * Math.abs(Math.log(stretch));
+        const targetInk = target.reduce((n, v) => n + v, 0), candidateInk = candidate.reduce((n, v) => n + v, 0);
+        const ranking = score - .025 * Math.abs(Math.log(stretch)) - (cjk ? .25 * Math.abs(candidateInk / Math.max(1, targetInk) - 1) : 0);
         if (best && ranking <= best.ranking) continue;
-        const sx = box.width / width, sy = box.height / glyph.height, radians = angle * Math.PI / 180, c = Math.cos(radians), s = Math.sin(radians);
+        const sy = box.height / glyph.height, sx = cjk ? sy : box.width / width, radians = angle * Math.PI / 180, c = Math.cos(radians), s = Math.sin(radians);
         const tx = box.left - rotated.info.width / 2 - left * sx;
         const ty = box.top - rotated.info.height / 2 - glyph.top * sy;
-        best = { family: face.family, weight: face.weight, fontSize: font.unitsPerEm, color, score, ranking,
+        best = { family: face.family, weight: face.weight, fontSize: font.unitsPerEm, color, score, ranking, advances: glyph.advances, letterSpacing, lineHeight: font.unitsPerEm * 1.4,
           matrix: [c * sx, s * sx, c * shear * sx - s * sy, s * shear * sx + c * sy, c * tx - s * ty + info.width / 2, s * tx + c * ty + info.height / 2].map(v => Number(v.toFixed(6))) as LayerizeTextFit['matrix'] };
       }
     }

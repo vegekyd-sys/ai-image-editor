@@ -45,7 +45,7 @@ export async function finishLayerizeFonts(owner: LayerizeFontsOwner, snapshotId:
     const manifest = JSON.parse(recipe.content) as LayerizeManifest;
     const lines = manifest.layers.filter(l => !l.text?.preserveRaster).flatMap(l => (l.text?.lines || []).flatMap((line, i) => line.appearance ? [{ id: `layer_${l.z}_text_${i}`, line }] : []));
     const { fitLayerizeText, layerizeMatchingFaces } = await import('./layerize-text-fit');
-    const faces = await layerizeMatchingFaces(lines.map(l => l.line.font));
+    const faces = await layerizeMatchingFaces(lines.map(l => l.line.font), lines.map(l => l.line.text));
     const fits: LayerizeFontsResult['fits'] = {};
     // Bound both media decoding and matching when many text rows are recognized.
     let next = 0;

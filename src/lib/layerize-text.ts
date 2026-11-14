@@ -5,7 +5,7 @@ export async function prepareLayerizeTextLayers(layers: LayerizeLayer[], bytes: 
   const textLayers = layers.filter(l => l.text?.lines.some(line => line.text.trim()));
   if (!textLayers.length) return;
   const matcher = options.matchFonts === false ? null : await import('./layerize-text-fit');
-  const faces = !matcher ? [] : await matcher.layerizeMatchingFaces(textLayers.flatMap(l => l.text!.lines.map(line => line.font))).catch(() => []);
+  const faces = !matcher ? [] : await matcher.layerizeMatchingFaces(textLayers.flatMap(l => l.text!.lines.map(line => line.font)), textLayers.flatMap(l => l.text!.lines.map(line => line.text))).catch(() => []);
   await Promise.all(textLayers.map(async layer => {
     const original = bytes.get(layer.z); if (!original) throw new Error('Text layer pixels are missing');
     const { data, info } = await sharp(original).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
