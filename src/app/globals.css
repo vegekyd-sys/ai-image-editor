@@ -1860,6 +1860,3 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
 .mkr-resize-handle[data-resize-corner="se"]::before { transform: rotate(180deg); }
 @media (pointer: coarse) { .mkr-resize-handle { width: 44px; height: 44px; margin-left: -22px; margin-top: -22px; } }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-editable-hover-tint] { transition: none !important; }
-}

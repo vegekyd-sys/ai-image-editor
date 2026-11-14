@@ -1,27 +1,17 @@
 'use client';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { editableMediaImage, editableViewportMatrix, imagePaintRect } from '@/lib/editor/editable-image-alpha';
-import { readEditableRuntimeId } from '@/lib/editor/scene-registry';
 
 /** Selection-only decoration. It never enters design props or the export tree. */
-export default function EditableSelectionTint({ element, overlay, moving, hover = false, visible = true }: { element: HTMLElement; overlay: HTMLDivElement | null; moving: boolean; hover?: boolean; visible?: boolean }) {
+export default function EditableSelectionTint({ element, overlay, moving }: { element: HTMLElement; overlay: HTMLDivElement | null; moving: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!hover || !ref.current) return;
-    const target = ref.current;
-    target.style.opacity = '0';
-    const frame = visible ? requestAnimationFrame(() => { target.style.opacity = '.75'; }) : 0;
-    return () => cancelAnimationFrame(frame);
-  }, [element, hover, visible]);
-  useLayoutEffect(() => {
-    if (!visible) return;
     let raf = 0;
     let textFingerprint = '';
     const update = () => {
       cancelAnimationFrame(raf); raf = 0;
       const target = ref.current, image = editableMediaImage(element);
-      if (!target || !overlay) return;
-      if (!element.isConnected || (image && !image.naturalWidth)) { target.style.display = 'none'; return; }
+      if (!target || !overlay || (image && !image.naturalWidth)) return;
       const subject = image || element;
       const geometry = editableViewportMatrix(subject);
       if (!geometry) { target.style.display = 'none'; return; }
@@ -64,6 +54,6 @@ export default function EditableSelectionTint({ element, overlay, moving, hover 
     const image = editableMediaImage(element); image?.addEventListener('load', update);
     window.addEventListener('scroll', update, true); window.addEventListener('resize', update);
     return () => { cancelAnimationFrame(raf); observer.disconnect(); mutations.disconnect(); image?.removeEventListener('load', update); window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); };
-  }, [element, overlay, moving, visible]);
-  return <div ref={ref} data-editable-selection-tint={hover ? undefined : ''} data-editable-hover-tint={hover ? readEditableRuntimeId(element) : undefined} aria-hidden="true" inert className="absolute left-0 top-0 pointer-events-none" style={{ display: 'none', opacity: hover ? 0 : 1, transition: hover ? 'opacity 100ms ease-out' : undefined, background: 'rgba(255, 130, 185, 0.20)', maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }} />;
+  }, [element, overlay, moving]);
+  return <div ref={ref} data-editable-selection-tint aria-hidden="true" className="absolute left-0 top-0 pointer-events-none" style={{ display: 'none', background: 'rgba(255, 130, 185, 0.20)', maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat' }} />;
 }

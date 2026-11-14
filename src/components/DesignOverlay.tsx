@@ -20,6 +20,7 @@ import { editableMediaImage, warmEditableAlpha, pickPaintedEditable, isPaintedEd
 import { editableDisplayLabel, editableLabelPosition } from '@/lib/editor/editable-label';
 import { useLocale } from '@/lib/i18n';
 import EditableSelectionTint from './EditableSelectionTint';
+import EditableHoverTint from './EditableHoverTint';
 import { useEditableHover } from '@/lib/editor/use-editable-hover';
 
 interface DesignOverlayProps {
@@ -767,7 +768,7 @@ export default function DesignOverlay({
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 15 }}
     >
-      {hovered && hovered.id !== selectedFieldId && !isDragging && <EditableSelectionTint element={hovered.element} overlay={overlayRef.current} moving={false} hover visible={hovered.visible} />}
+      {hovered && hovered.id !== selectedFieldId && !isDragging && <EditableHoverTint key={hovered.id} element={hovered.element} fieldId={hovered.id} visible={hovered.visible} />}
       {selectedRect && <EditableSelectionTint element={selectedRect.domEl} overlay={overlayRef.current} moving={isDragging} />}
       {/* Label tag for selected element — hidden during drag */}
       {selectedRect && selectedFieldId && !isDragging && (() => {
