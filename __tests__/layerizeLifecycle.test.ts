@@ -145,7 +145,8 @@ describe('Layerize lifecycle and billing ownership', () => {
 });
 it('publishes editable OCR text with original glyph pixels without waiting for a font render', async () => {
   const pixels = await sharp({create:{width:20,height:20,channels:4,background:'#ffffff'}}).png().toBuffer();
-  h.read.mockImplementation(async () => pixels);
+  const base = await sharp({create:{width:100,height:80,channels:3,background:'#ffffff'}}).png().toBuffer();
+  h.read.mockImplementation(async (url: string) => url === 'layer' ? pixels : base);
   const task = await h.query();
   task.result_data[1].text_recognition = {lines:[{bounding_box:{absolute:[5,8,25,28]},runs:[{text:'HELLO',style:{similar_font_family:'Arial',foreground_color:'#000000'}}]}]};
   h.query.mockReset().mockResolvedValue(task);
