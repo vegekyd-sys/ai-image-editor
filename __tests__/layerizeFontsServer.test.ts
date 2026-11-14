@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ASYNC_LAYERIZE_FONTS_MARKER } from '@/lib/layerize-fonts';
 const h=vi.hoisted(()=>({files:new Map<string,string>(),locks:new Map<string,any>(),writes:vi.fn(),fit:vi.fn(),faces:vi.fn()}));
 const projectId='11111111-1111-4111-8111-111111111111',snapshotId='22222222-2222-4222-8222-222222222222',userId='33333333-3333-4333-8333-333333333333',base=`${projectId}/layerize/${snapshotId}`,designPath=`code/${snapshotId}.json`;
@@ -13,9 +13,16 @@ vi.mock('@/lib/supabase/service',()=>({getSupabaseAdmin:()=>({from})}));
 vi.mock('@/lib/workspace',()=>({readFile:async(path:string)=>h.files.has(path)?{content:h.files.get(path)}:null,writeFile:async(path:string,content:string)=>{h.writes(path);h.files.set(path,content);return{success:true}}}));
 vi.mock('@/lib/provider-image-preflight',()=>({readProviderImage:async()=>Buffer.from('retained glyph pixels')}));
 vi.mock('@/lib/layerize-text-fit',()=>({layerizeMatchingFaces:h.faces,fitLayerizeText:h.fit}));
-import{finishLayerizeFonts,readLayerizeFonts}from'@/lib/layerize-fonts-server';
+import{finishLayerizeFonts,readLayerizeFonts,resolveLayerizeFontsForServerRender}from'@/lib/layerize-fonts-server';
 const fit={family:'Lato',weight:900,fontSize:2000,color:'#ffffff',score:.85,matrix:[.1,0,0,.1,0,100]};
 beforeEach(()=>{h.files.clear();h.locks.clear();h.writes.mockReset();h.fit.mockReset().mockResolvedValue(fit);h.faces.mockReset().mockResolvedValue([]);h.files.set(designPath,JSON.stringify({code:ASYNC_LAYERIZE_FONTS_MARKER,width:800,height:500,props:{layer_1_text_0:'HELLO',_layerizeTextFonts:{version:1,projectId,snapshotId,status:'pending',originals:{layer_1_text_0:'HELLO'},storageOrigin:'https://cdn.makaron.app',storagePath:`/storage/v1/object/public/images/${userId}/workspace/${base}/text-fonts.json`}}}));h.files.set(`${base}/manifest.json`,JSON.stringify({layers:[{z:1,text:{lines:[{text:'HELLO',font:'Arial',color:'#ffffff',appearance:{rasterUrl:'https://cdn.makaron.app/glyphs.png'}}]}}]}))});
 it('deduplicates a concurrent background task and never writes over user wording, geometry or design code',async()=>{let release!:(v:any)=>void;h.fit.mockImplementationOnce(()=>new Promise(resolve=>release=resolve));const first=finishLayerizeFonts({userId,projectId},snapshotId);await vi.waitFor(()=>expect(h.fit).toHaveBeenCalledOnce());const updated=JSON.parse(h.files.get(designPath)!);updated.props.layer_1_text_0='USER TEXT';updated.props._pos_layer_1_text_0={x:50,y:70};updated.props._scale_layer_1_text_0={w:1.3,h:1.2};h.files.set(designPath,JSON.stringify(updated));await finishLayerizeFonts({userId,projectId},snapshotId);expect(h.fit).toHaveBeenCalledOnce();release(fit);await first;expect(JSON.parse(h.files.get(designPath)!)).toEqual(updated);expect(h.writes.mock.calls.map(([path])=>path)).toEqual([`${base}/text-fonts.json`]);expect((await readLayerizeFonts({userId,projectId},snapshotId))?.fits.layer_1_text_0).toEqual(fit);await finishLayerizeFonts({userId,projectId},snapshotId);expect(h.fit).toHaveBeenCalledOnce()});
 it('releases a failed matching lease so the same font job can resume without provider generation',async()=>{h.fit.mockRejectedValueOnce(new Error('temporary font outage'));await finishLayerizeFonts({userId,projectId},snapshotId);expect(h.locks.size).toBe(0);expect(h.writes).not.toHaveBeenCalled();await finishLayerizeFonts({userId,projectId},snapshotId);expect(h.writes).toHaveBeenCalledWith(`${base}/text-fonts.json`)});
 it('rejects foreign owners before matching or persisting anything',async()=>{await expect(finishLayerizeFonts({userId:'foreign',projectId},snapshotId)).rejects.toThrow('not accessible');expect(h.fit).not.toHaveBeenCalled();expect(h.writes).not.toHaveBeenCalled()});
+
+afterEach(()=>vi.unstubAllGlobals());
+it('starts missing font matching for a changed-text CLI export without an open editor',async()=>{
+ vi.stubGlobal('fetch',vi.fn(async()=>h.files.has(`${base}/text-fonts.json`)?Response.json(JSON.parse(h.files.get(`${base}/text-fonts.json`)!)):new Response('',{status:404})));
+ const d=JSON.parse(h.files.get(designPath)!);d.props.layer_1_text_0='CLI WORDING';d.props._pos_layer_1_text_0={x:22,y:33};
+ const resolved=await resolveLayerizeFontsForServerRender(d);expect(resolved.props?.layer_1_text_0).toBe('CLI WORDING');expect(resolved.props?._pos_layer_1_text_0).toEqual({x:22,y:33});expect((resolved.props?._layerizeTextFonts as any).status).toBe('ready');expect(h.fit).toHaveBeenCalledOnce();
+});
