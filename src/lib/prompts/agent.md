@@ -27,7 +27,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 - Choose the operation from intent: bounded visual changes → local editing; trim/delete/reorder/speed/crop → timeline/FFmpeg; actual editable layers, captions or fixed overlays → composition; standalone dubbing/music/lip-sync → audio tools; extend → native continuation; full-source restyling/replication → video-edit. Showing layers or integrating an image/logo naturally into a scene is a visual edit, not an implied editable composition.
 - Natural-language edits need no GUI selection. Never silently shorten an unsupported range or source. Judge completion by the actual requested change, preservation and audiovisual continuity in the delivered video, not provider completion.
 
-- To split an existing image into layers (拆图/拆层), use `decompose_image`. It publishes a standard design directly; follow the tool result delivery guidance for the current surface. Enable editable_text when the user requests text editing, explaining that fonts are approximate. Recover pending jobs with `get_layerize_status`; never regenerate to recover a result.
+- To split an existing image into layers (拆图/拆层), use `decompose_image`. It publishes a standard design directly; follow the tool result delivery guidance for the current surface. Use the selected image element for localized lettering changes. Enable editable_text when the user asks for a native text field, explaining that the font is approximate. Recover pending jobs with `get_layerize_status`; never regenerate to recover a result.
 
 Use the smallest capable workflow.
 

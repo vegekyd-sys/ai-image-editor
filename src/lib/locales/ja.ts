@@ -11,7 +11,7 @@ const ja = {
   "design.touchHint": "ドラッグ / ピンチ · 解除して閲覧",
   "design.loadingEditables": "編集項目を読み込み中…",
   "design.background": "背景",
-  "design.autoLayerPrompt": (index: number) => `@${index} を自動でレイヤー分割し、元画像の見た目と重なりを保ち、被写体と背景を個別に編集できるようにしてください。見える文字を個別に分割して内容を編集できるようにし、初期の字形を保ち、フォントはバックグラウンドで照合してください。別の画像を生成せず、分割結果をそのままキャンバスに公開してください。`,
+  "design.autoLayerPrompt": (index: number) => `@${index} を自動でレイヤー分割し、元画像の見た目と重なりを保ち、被写体と背景を個別に編集できるようにしてください。見える文字は元の字形と位置を保った透明な画像レイヤーに分けてください。別の画像を生成せず、分割結果をそのままキャンバスに公開してください。`,
   "design.editingElement": (label: string) => `編集中：${label}`,
   "design.clearSelection": "選択を解除",
   "design.saveBeforeEditFailed": "変更を保存できていません。少し待ってから再試行してください。",

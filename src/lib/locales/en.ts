@@ -9,7 +9,7 @@ const en = {
   "design.touchHint": "Drag / pinch · Clear selection to browse",
   "design.loadingEditables": "Loading editables…",
   "design.background": "Background",
-  "design.autoLayerPrompt": (index: number) => `Automatically split @${index} into editable layers, preserving the original appearance and occlusion. Make subjects and background independently editable. Separate all visible text into directly editable text layers, preserve its initial appearance, and match fonts in the background. Publish the layered result directly to the canvas without generating another image.`,
+  "design.autoLayerPrompt": (index: number) => `Automatically split @${index} into editable layers, preserving the original appearance and occlusion. Make subjects and background independently editable. Isolate visible lettering on transparent image layers, preserving its original shape and placement. Publish the layered result directly to the canvas without generating another image.`,
   "design.editingElement": (label: string) => `Editing: ${label}`,
   "design.clearSelection": "Clear selection",
   "design.saveBeforeEditFailed": "Changes have not been saved. Please try again shortly.",
