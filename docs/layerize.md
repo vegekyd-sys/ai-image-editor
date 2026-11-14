@@ -8,7 +8,7 @@ CUI `decompose_image` / `get_layerize_status`、CLI `makaron layerize` / `layeri
 
 最多四路并发下载/持久化独立图层。发布前必须持久化所有资源并通过现有 design-harness，纯图片或保留原字形的初始设计直接用原图层合成 JPEG poster；需要重排版的设计使用现有 renderDesignFrame。拿到 poster 后再写快照。Agent 与此工具复用 publishDesignSnapshot；已发布设计后续 CUI 事件只关联消息，不覆盖 GUI 编辑后的 props 或已有 message_id。拆层设计使用图层编辑入口，不自动启动普通照片 Tips；只读访问也不启动自动 Tips，尚在加载 design 的快照先等待合同恢复。App 直接把服务端已就绪的 poster 与 design 加入当前页面并定位，不再等待一次浏览器截图或重复保存。持久化 render 事件保留 previewUrl，重连使用相同路径；focus_snapshot 先于 render 或只发送定位事件时，从项目媒体和 canonical design 恢复缺失快照，已有 GUI props 不覆盖。App 在当前页面直接定位可编辑结果，完成回复简短、不重复展示项目链接。完成任务重查只发 `focus_snapshot` 导航事件，不重发 render，不覆盖 GUI props 或 message_id；SSE 和事件重连均处理该导航事件。CLI chat 和独立 CLI 继续交付 projectUrl；JSON 保留完整恢复回执，普通完成反馈不展示 jobId 或 workspace 路径。
 
-对拆层人物/物件的缺失部分，选中后可通过 CUI 明确要求补全。inspect_element 先读取真实资产；edit_element 的 completeOccluded 模式同时发送编辑区域、完整原资产和原场景参考，在原资产画布内生成缺失内容。只写入原先完全透明的像素，所有已有非透明像素（含抗锯齿边缘）逐字节保留；背景必须仍透明。普通内容编辑继续保留透明区域，不自动转为补全。补全是推测，不能承诺恢复真实身体结构，也不能越过现有资产画布；位置、缩放、层序和其他元素不变。
+遮挡补全仍在实验，未开放自动模式。普通选中元素内容编辑继续保持原透明区域。2026-11-14 对真实人物切片测试了原资产＋场景参考和显式原生遮罩；前者出现重复人物，后者改善轮廓但仍改变可见细节并产生背景光晕，均未通过质量验收，不发布到用户原项目。后续需要同时验证原像素锁定、补全连贯性、透明边缘和原布局保留，不能仅凭生成成功宣称支持。
 
 字体准备分为两步：首次发布只裁出原始透明字形，不下载或匹配字体；先用原始图层合成 poster 并展示。字体匹配是独立的可恢复后台任务，结果写入 text-fonts.json，绝不回写 canonical design、snapshot 或计费记录。App 只将匹配数据合并到当前最新 props；已输入文字、拖动缩放和撤销历史保留。匹配尚未完成时可先输入，画布暂保留原字形并提示；匹配与 pinned 字体加载完成后再更新文字预览。首屏不等待字体文件；后台匹配完成后预热所选 pinned 字体，再启用匹配后的文字预览。未改字的导出无需等字体匹配；已改字的导出会读取同一份匹配结果。GUI 历史恢复为 pending 时重用已完成结果。失败释放独立租约，后续页面/状态读取重试同一字体任务，不再调用图片模型。Fontkit 在 Next 服务端保持原生 ESM 入口，发布门禁检查其 Unicode 二进制数据，避免开发/云端打包差异。
 

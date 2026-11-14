@@ -41,18 +41,11 @@ describe('DesignOverlay moveable guideline regression guards', () => {
   });
 
   it('keeps corner resize controls usable for small editable images on touch screens', () => {
-    const coarseRuleStart = css.indexOf('@media (pointer: coarse)');
-    const coarseHandleRule = css.slice(coarseRuleStart, coarseRuleStart + 900);
-
-    expect(coarseHandleRule).toContain('.moveable-nw.moveable-scalable');
-    expect(coarseHandleRule).toContain('.moveable-ne.moveable-scalable');
-    expect(coarseHandleRule).toContain('.moveable-sw.moveable-scalable');
-    expect(coarseHandleRule).toContain('.moveable-se.moveable-scalable');
-    expect(css).toContain('min-width: 44px !important;');
-    expect(css).toContain('min-height: 44px !important;');
-    expect(css).toContain('margin-top: -22px !important;');
-    expect(css).toContain('margin-left: -22px !important;');
-    expect(css).toContain('touch-action: none !important;');
+    expect(source).toContain('data-resize-corner={corner}');
+    expect(source).toContain('setPointerCapture(event.pointerId)');
+    expect(source).toContain('scalable={false}');
+    expect(css).toContain('@media (pointer: coarse) { .mkr-resize-handle { width: 44px; height: 44px;');
+    expect(css).toContain('pointer-events: auto; touch-action: none;');
   });
 
   it('coalesces touch drag layout work to one update per animation frame', () => {

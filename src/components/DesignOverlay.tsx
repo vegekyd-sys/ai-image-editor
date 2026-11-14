@@ -345,8 +345,9 @@ export default function DesignOverlay({
   const finishMoveableGestureRef = useRef(finishMoveableGesture);
   finishMoveableGestureRef.current = finishMoveableGesture;
   useEffect(() => {
-    const release = () => {
+    const release = (event: PointerEvent | MouseEvent) => {
       const gesture = moveableGestureRef.current;
+      if (gesture?.pointer && 'pointerId' in event && event.pointerId !== gesture.pointer.id) return;
       if (gesture) requestAnimationFrame(() => { if (moveableGestureRef.current === gesture) finishMoveableGestureRef.current(); });
     };
     const move = (event: PointerEvent) => {
@@ -795,9 +796,9 @@ export default function DesignOverlay({
             style={{ left: selectedRect.left + (dx > 0 ? selectedRect.width : 0), top: selectedRect.top + (dy > 0 ? selectedRect.height : 0) }}
             onPointerDown={event => startCornerResize(event, selectedFieldId, selectedRect.domEl, dx, dy)}
             onPointerMove={moveCornerResize}
-            onPointerUp={event => { event.preventDefault(); event.stopPropagation(); finishMoveableGesture(); }}
-            onPointerCancel={() => finishMoveableGesture()}
-            onLostPointerCapture={() => finishMoveableGesture()} />
+            onPointerUp={event => { if (moveableGestureRef.current?.pointer?.id !== event.pointerId) return; event.preventDefault(); event.stopPropagation(); finishMoveableGesture(); }}
+            onPointerCancel={event => { if (moveableGestureRef.current?.pointer?.id === event.pointerId) finishMoveableGesture(); }}
+            onLostPointerCapture={event => { if (moveableGestureRef.current?.pointer?.id === event.pointerId) finishMoveableGesture(); }} />
         ))}
       </>}
       {/* Moveable retains drag alignment; corner resize owns a captured pointer. */}
@@ -835,8 +836,7 @@ export default function DesignOverlay({
             elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
             /* ── Drag ── */
             onDragStart={(event) => {
-              // Scalable emits a companion dragStart. It must not overwrite the
-              // separate scale session with position values.
+              // Corner handles own a separate captured pointer session.
               if ((event.inputEvent?.target as HTMLElement | undefined)?.closest?.('.moveable-control')) return;
               if (touchGestures && event.inputEvent?.type?.startsWith('touch')) { event.stopDrag(); return false; }
               const input = event.inputEvent, point = input?.touches?.[0] || input;
