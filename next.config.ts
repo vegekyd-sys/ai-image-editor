@@ -33,6 +33,7 @@ const nextConfig: NextConfig = {
     ];
   },
   serverExternalPackages: [
+    'fontkit', // Fontkit's binary font tables must retain native ESM file URL semantics.
     '@remotion/renderer',
     '@remotion/bundler',
     '@remotion/vercel',
