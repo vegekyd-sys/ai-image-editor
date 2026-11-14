@@ -1,7 +1,7 @@
 import { closestEditableRuntimeElement, readEditableRuntimeId } from './scene-registry';
 
 type Affine = { a: number; b: number; c: number; d: number; e: number; f: number };
-type Alpha = { width: number; height: number; data: Uint8ClampedArray };
+type Alpha = { width: number; height: number; data: Uint8Array };
 const cache = new Map<string, { alpha?: Alpha; loading?: Promise<void>; failed?: boolean }>();
 const MAX_CACHE = 48;
 const multiply = (p: Affine, q: Affine): Affine => ({ a: p.a * q.a + p.c * q.b, b: p.b * q.a + p.d * q.b,
@@ -20,7 +20,17 @@ function decodeAlpha(image: HTMLImageElement): Alpha {
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) throw new Error('Pixel sampling unavailable');
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return { width: canvas.width, height: canvas.height, data: context.getImageData(0, 0, canvas.width, canvas.height).data };
+  const { width, height } = canvas;
+  try {
+    const rgba = context.getImageData(0, 0, width, height).data;
+    const data = new Uint8Array(Math.ceil(width * height / 8));
+    for (let pixel = 0; pixel < width * height; pixel++) {
+      if (rgba[pixel * 4 + 3] > 8) data[pixel >> 3] |= 1 << (pixel & 7);
+    }
+    return { width, height, data };
+  } finally {
+    canvas.width = canvas.height = 0;
+  }
 }
 
 export function warmEditableAlpha(image: HTMLImageElement): void {
@@ -101,7 +111,8 @@ export function sampleEditableImage(image: HTMLImageElement, x: number, y: numbe
   const u = (lx - paint.left) / paint.width, v = (ly - paint.top) / paint.height;
   if (u < 0 || v < 0 || u >= 1 || v >= 1) return false;
   const px = Math.min(alpha.width - 1, Math.floor(u * alpha.width)), py = Math.min(alpha.height - 1, Math.floor(v * alpha.height));
-  return alpha.data[(py * alpha.width + px) * 4 + 3] > 8;
+  const pixel = py * alpha.width + px;
+  return (alpha.data[pixel >> 3] & (1 << (pixel & 7))) !== 0;
 }
 
 /** An explicitly selected layer can move through occluding layers, but its own

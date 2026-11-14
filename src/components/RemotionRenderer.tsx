@@ -8,6 +8,7 @@ import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } fro
 import { usesThreeCanvas } from '@/lib/remotion-gl';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import { isFixedCanvasDesign } from '@/lib/editor/design-layer-state';
+import { getOriginFormatThumbnailUrl } from '@/lib/supabase/storage';
 import { isRasterLayerizeDesign } from '@/lib/layerize-design';
 import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
 import type { DesignPayload } from '@/types';
@@ -78,21 +79,42 @@ function isImageUrl(value: unknown): value is string {
     );
 }
 
+// Keep original URLs in saved designs and exports. On a touch screen, a tiny
+// object on a poster does not need a full provider-sized bitmap in the Player.
+export function layerPreviewSources(design: DesignPayload, viewportWidth: number, dpr: number): Map<string, string> {
+  const sources = new Map<string, string>();
+  if (!isFixedCanvasDesign(design) || design.animation) return sources;
+  const scale = Math.min(1, viewportWidth * Math.min(dpr, 3) / design.width);
+  const images = /<Img data-editable="layer_\d+" src=\{props\.(layer_\d+)\} style=\{\{([^{}]+)\}\}/g;
+  for (const match of design.code.matchAll(images)) {
+    const source = design.props?.[match[1]];
+    if (typeof source !== 'string' || !source.includes('/layerize/')) continue;
+    const width = Number(/"width":(\d+(?:\.\d+)?)/.exec(match[2])?.[1]);
+    const height = Number(/"height":(\d+(?:\.\d+)?)/.exec(match[2])?.[1]);
+    if (!width || !height) continue;
+    const size = Math.min(1600, Math.max(64, Math.ceil(Math.max(width, height) * scale / 64) * 64));
+    sources.set(source, getOriginFormatThumbnailUrl(source, size, 95, size, 'contain'));
+  }
+  return sources;
+}
+
 async function resolveImageUrlsInValue(
   value: unknown,
   blobUrls: string[],
   cache?: Map<string, string>,
   onFailure?: ResourceFailureReporter,
+  previewSources?: Map<string, string>,
 ): Promise<unknown> {
   if (isImageUrl(value)) {
     try {
-      const cached = cache?.get(value);
+      const source = previewSources?.get(value) || value;
+      const cached = cache?.get(source);
       if (cached) return cached;
-      const blob = await fetchImageBlob(value);
+      const blob = await fetchImageBlob(source);
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
       await preloadDecodedImage(blobUrl);
-      cache?.set(value, blobUrl);
+      cache?.set(source, blobUrl);
       return blobUrl;
     } catch (error) {
       onFailure?.(value, error);
@@ -100,13 +122,13 @@ async function resolveImageUrlsInValue(
     }
   }
   if (Array.isArray(value)) {
-    return Promise.all(value.map(item => resolveImageUrlsInValue(item, blobUrls, cache, onFailure)));
+    return Promise.all(value.map(item => resolveImageUrlsInValue(item, blobUrls, cache, onFailure, previewSources)));
   }
   if (value && typeof value === 'object') {
     const entries = await Promise.all(
       Object.entries(value as Record<string, unknown>).map(async ([key, child]) => [
         key,
-        await resolveImageUrlsInValue(child, blobUrls, cache, onFailure),
+        await resolveImageUrlsInValue(child, blobUrls, cache, onFailure, previewSources),
       ] as const),
     );
     return Object.fromEntries(entries);
@@ -435,7 +457,14 @@ export default function RemotionRenderer({
 
   const [compiledComponent, setComponent] = useState<React.ComponentType<any> | null>(null);
   const [compiledCode, setCompiledCode] = useState<string | null>(null);
-  const [inputProps, setInputProps] = useState<Record<string, unknown>>(design.props || {});
+  const previewSources = useMemo(() => {
+    if (typeof window === 'undefined' || !window.matchMedia?.('(pointer: coarse)').matches) return undefined;
+    return layerPreviewSources(design, window.innerWidth, window.devicePixelRatio || 1);
+  }, [design]);
+  const [inputProps, setInputProps] = useState<Record<string, unknown>>(() =>
+    Object.fromEntries(Object.entries(design.props || {}).map(([key, value]) =>
+      [key, typeof value === 'string' ? previewSources?.get(value) || value : value])),
+  );
   const [inputIdentity, setInputIdentity] = useState({ code: design.code, snapshotId });
   // Code and image props resolve independently. Never run a new composition
   // against the previous snapshot's asset keys (or the inverse).
@@ -590,6 +619,7 @@ export default function RemotionRenderer({
           error,
           { recovered: true, resourceUrl },
         ),
+        previewSources,
       ) as Record<string, unknown>;
       if (inputPropImageCacheMountedRef.current) {
         newBlobUrls.forEach(url => inputPropImageUrlsRef.current.add(url));
@@ -610,7 +640,7 @@ export default function RemotionRenderer({
     return () => {
       cancelled = true;
     };
-  }, [design.props, snapshotId, notifyLoading, fontRenderKey, fontBarrier]);
+  }, [design.props, snapshotId, notifyLoading, fontRenderKey, fontBarrier, previewSources]);
 
   useEffect(() => {
     inputPropImageCacheMountedRef.current = true;

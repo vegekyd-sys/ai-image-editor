@@ -10,7 +10,7 @@ vi.mock('@/lib/evalRemotionJSX', () => ({ preloadBabel: async () => {}, evalRemo
 vi.mock('@/remotion/font-catalog', async original => ({ ...await original<any>(), prepareRemotionFontCodeFromBundledCatalog: () => ({ code: '', defaultFontFamily: 'Inter' }), prepareAndLoadRemotionFontsWithTiming: fontWait.load, validateRemotionFontManifest: (value: unknown) => value }));
 vi.mock('@/lib/image/presentation', () => ({ preloadDecodedImage: async () => ({width:100,height:100}) }));
 import { applyLayerizeFonts } from '@/lib/layerize-fonts';
-import RemotionRenderer from '@/components/RemotionRenderer';
+import RemotionRenderer, { layerPreviewSources } from '@/components/RemotionRenderer';
 import { buildLayerizeDesign, type LayerizeManifest } from '@/lib/layerize-design';
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 it('makes image-only layers editable without downloading fonts for Chinese history labels, retaining native text fonts', async () => {
@@ -167,4 +167,18 @@ it('never renders a newly compiled snapshot with the previous snapshot asset key
   expect(fontWait.renders.length).toBeGreaterThan(0);
   expect(fontWait.renders.every(rendered => rendered.code.includes('Second') && rendered.props.secondAsset && !rendered.props.firstAsset)).toBe(true);
   view.unmount();
+});
+
+it('sizes mobile layer previews by their visible bounds and preserves the source for export', () => {
+  const source = 'https://cdn.makaron.app/storage/v1/object/public/images/project/layerize/job/layer-1.png';
+  const design = {
+    width: 2000, height: 2500,
+    props: { _canvasSizing: 'fixed', layer_1: source },
+    code: '<Img data-editable="layer_1" src={props.layer_1} style={{"width":200,"height":120}} />',
+  };
+  const preview = new URL(layerPreviewSources(design, 400, 2).get(source)!);
+  expect(preview.pathname).toContain('/render/image/public/');
+  expect(preview.searchParams.get('width')).toBe('128');
+  expect(preview.searchParams.get('resize')).toBe('contain');
+  expect(design.props.layer_1).toBe(source);
 });

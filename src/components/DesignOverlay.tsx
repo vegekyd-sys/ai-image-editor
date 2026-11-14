@@ -51,6 +51,14 @@ interface MeasuredRect {
   domEl: HTMLElement;
 }
 
+function disableNativeMediaDrag(element: Element) {
+  element.querySelectorAll<HTMLElement>('img, video').forEach(media => {
+    if (media.getAttribute('draggable') !== 'false') media.setAttribute('draggable', 'false');
+    if (media.style.pointerEvents !== 'none') media.style.pointerEvents = 'none';
+    if (media.style.userSelect !== 'none') media.style.userSelect = 'none';
+  });
+}
+
 function getScrollViewportRect(containerEl: HTMLElement, fallback: DOMRect): DOMRect {
   return getNearestScrollParent(containerEl)?.getBoundingClientRect() ?? fallback;
 }
@@ -151,12 +159,7 @@ export default function DesignOverlay({
       if (image) warmEditableAlpha(image);
       // Fix inline elements — Moveable needs a box model to work correctly
       const htmlEl = el;
-      htmlEl.querySelectorAll('img, video').forEach((media) => {
-        const mediaEl = media as HTMLElement;
-        mediaEl.setAttribute('draggable', 'false');
-        mediaEl.style.pointerEvents = 'none';
-        mediaEl.style.userSelect = 'none';
-      });
+      disableNativeMediaDrag(htmlEl);
       if (getComputedStyle(htmlEl).display === 'inline') {
         htmlEl.style.display = 'inline-block';
       }
@@ -181,19 +184,26 @@ export default function DesignOverlay({
         visibleIds.push(id);
       }
     });
-    rectsRef.current = newRects;
-    setRects(newRects);
+    const previous = rectsRef.current;
+    if (previous.length !== newRects.length || newRects.some((r, i) => {
+      const p = previous[i];
+      return p.domEl !== r.domEl || p.id !== r.id || p.left !== r.left || p.top !== r.top || p.width !== r.width || p.height !== r.height;
+    })) {
+      rectsRef.current = newRects;
+      setRects(newRects);
+    }
     onRenderedOrderChangeRef.current?.(activeInstances.map(instance => instance.id));
     onVisibleFieldsChangeRef.current?.(visibleIds);
     isMeasuringRef.current = false;
   }, [containerEl, editables, filterVisibleFields, props]);
 
   // Mark selected element (CSS hides hover outline when Moveable frame shows)
+  const selectedElement = rects.find(r => r.id === selectedFieldId)?.domEl;
   useEffect(() => {
-    const el = selectedFieldId ? rects.find(r => r.id === selectedFieldId)?.domEl : null;
+    const el = selectedElement;
     if (el) el.setAttribute('data-editable-selected', '');
     return () => { if (el) el.removeAttribute('data-editable-selected'); };
-  }, [selectedFieldId, rects]);
+  }, [selectedElement]);
 
   // Measure triggers
   useEffect(() => { isDraggingRef.current = false; setIsDragging(false); measure(); }, [measure, props]);
@@ -338,15 +348,6 @@ export default function DesignOverlay({
       hitIsCanvasCover: boolean;
       moved: boolean;
     } | null = null;
-
-    const disableNativeMediaDrag = (editableEl: Element) => {
-      editableEl.querySelectorAll('img, video').forEach((media) => {
-        const mediaEl = media as HTMLElement;
-        mediaEl.setAttribute('draggable', 'false');
-        mediaEl.style.pointerEvents = 'none';
-        mediaEl.style.userSelect = 'none';
-      });
-    };
 
     const handlePointerDown = (e: PointerEvent) => {
       if (e.button !== 0 || isDraggingRef.current) return;
