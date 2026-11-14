@@ -5,7 +5,7 @@ import { sanitizeToolHistory, type ToolHistoryBudget } from './agentToolHistory'
 import * as workspace from './workspace';
 import { publishDesignSnapshot } from './publish-design';
 
-const EVENT_WRITE_RETRY_DELAYS_MS = [0, 75, 250, 750] as const;
+const WRITE_RETRY_DELAYS_MS = [0, 75, 250, 750] as const;
 
 function errorChain(error: unknown): unknown[] {
   const chain: unknown[] = [];
@@ -42,7 +42,8 @@ function isTransientWriteError(error: unknown): boolean {
   const values = errorChain(error);
   const codes = values.map(errorCode).join(' ');
   const messages = values.map(errorMessage).join(' ');
-  return /ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|EAI_AGAIN|UND_ERR|ABORT_ERR/i.test(codes)
+  return values.some(item => ['57014', '40001', '40P01', '55P03'].includes(errorCode(item)))
+    || /ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|EAI_AGAIN|UND_ERR|ABORT_ERR/i.test(codes)
     || /fetch failed|network|socket|timed?\s*out|timeout|connection reset|\b(?:429|502|503|504)\b/i.test(messages);
 }
 
@@ -296,7 +297,7 @@ export class AgentDualWriter {
       case 'new_turn': {
         await this.flushContent();
         // Save current message
-        await this.saveCurrentMessage();
+        await this.saveCurrentMessage(true);
         this.messageText = '';
         this.currentMessageId = crypto.randomUUID();
         this.currentMessageHasImage = false;
@@ -500,19 +501,31 @@ export class AgentDualWriter {
   /** Save accumulated message text to messages table. */
   private async saveCurrentMessage(required = false) {
     if (!this.messageText.trim() && !this.currentMessageHasImage) return;
-    try {
-      const { error } = await this.supabase.from('messages').upsert({
-        id: this.currentMessageId,
-        project_id: this.projectId,
-        role: 'assistant',
-        content: this.messageText,
-        has_image: this.currentMessageHasImage,
-      }, { onConflict: 'id' });
-      if (error) throw error;
-    } catch (err) {
-      console.error('[DualWriter] message upsert error:', err);
-      if (required) throw err;
+    // A response can be lost after commit. Retry the same immutable message
+    // identity/content, never start another generation or create a new row.
+    const row = {
+      id: this.currentMessageId,
+      project_id: this.projectId,
+      role: 'assistant',
+      content: this.messageText,
+      has_image: this.currentMessageHasImage,
+    };
+    let lastError: unknown;
+    for (let attempt = 0; attempt < WRITE_RETRY_DELAYS_MS.length; attempt += 1) {
+      const delayMs = WRITE_RETRY_DELAYS_MS[attempt];
+      if (delayMs) await sleep(delayMs);
+      try {
+        const { error } = await this.supabase.from('messages').upsert(row, { onConflict: 'id' });
+        if (error) throw error;
+        return;
+      } catch (err) {
+        lastError = err;
+        if (!isTransientWriteError(err) || attempt === WRITE_RETRY_DELAYS_MS.length - 1) break;
+        console.warn('[DualWriter] transient message write failure; retrying', { code: errorCode(err), attempt: attempt + 1 });
+      }
     }
+    console.error('[DualWriter] message upsert error:', lastError);
+    if (required) throw lastError;
   }
 
   /** Get next sort_order for snapshots in this project (atomic). */
@@ -535,8 +548,8 @@ export class AgentDualWriter {
       seq: this.seq++,
     };
     let lastError: unknown;
-    for (let attempt = 0; attempt < EVENT_WRITE_RETRY_DELAYS_MS.length; attempt += 1) {
-      const delayMs = EVENT_WRITE_RETRY_DELAYS_MS[attempt];
+    for (let attempt = 0; attempt < WRITE_RETRY_DELAYS_MS.length; attempt += 1) {
+      const delayMs = WRITE_RETRY_DELAYS_MS[attempt];
       if (delayMs) await sleep(delayMs);
       try {
         const { error } = await this.supabase.from('agent_events').insert(row);
@@ -545,7 +558,7 @@ export class AgentDualWriter {
       } catch (err) {
         if (isDuplicateWrite(err)) return;
         lastError = err;
-        const canRetry = isTransientWriteError(err) && attempt < EVENT_WRITE_RETRY_DELAYS_MS.length - 1;
+        const canRetry = isTransientWriteError(err) && attempt < WRITE_RETRY_DELAYS_MS.length - 1;
         if (!canRetry) break;
         console.warn(`[DualWriter] transient event write failure (${type}, retry ${attempt + 1})`, err);
       }
