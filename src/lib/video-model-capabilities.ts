@@ -586,7 +586,22 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
   longVideoChunkSeconds: 15,
 }
 
-// Eco describes final delivery, while its generation provider always receives 480p.
+// Flash owns a distinct native contract and never uses the Eco pipeline.
+MODEL_CAPABILITIES['seedance-2.5-flash'] = {
+  id: 'seedance-2.5-flash', label: 'Seedance 2.5 Flash',
+  minOutputDuration: 4, maxOutputDuration: 30, maxReferenceVideoDuration: 30,
+  referenceVideoDurationTolerance: 0,
+  supportsVideoReference: true, supportsBaseVideoEdit: true,
+  defaultImageWorkflow: 'reference-to-video', supportsExplicitImageToVideo: true,
+  supportsVideoExtend: false, longVideoChunkSeconds: 30,
+  maxImageReferences: 10, maxVideoReferences: 5, maxAudioReferences: 5, maxTotalReferences: 20,
+  supportedResolutions: ['480p', '720p'], defaultResolution: '720p',
+  supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+  estimatedCostPerSecondUsd: .24,
+  estimatedCostPerSecondUsdByResolution: { '480p': .12, '720p': .24 },
+  provider: 'seedance', providerModel: 'seedance-2.5-flash-reference-to-video',
+}
+// Eco describes final delivery; its generation provider always receives480p.
 MODEL_CAPABILITIES['seedance-2.5-eco'] = {
   ...MODEL_CAPABILITIES['seedance-2.5'], id: 'seedance-2.5-eco', label: 'Seedance 2.5 Eco',
   supportedResolutions: ['720p', '1080p', '2k', '4k'], defaultResolution: '1080p',
@@ -609,6 +624,7 @@ export function normalizeVideoModelId(model?: string | null): string {
   if (['kling-o3', 'kling-o3-video', 'kling-v3-omni', 'kling-3', 'kling-3.0'].includes(normalized)) return 'kling'
   if (['kling4', 'kling-4.0', 'kling 4.0', 'kling 4'].includes(normalized)) return 'kling-4'
   if (['kling4-flash', 'kling-4.0-flash', 'kling 4.0 flash', 'kling 4 flash'].includes(normalized)) return 'kling-4-flash'
+  if (['seedance25-flash', 'seedance-2-5-flash', 'seedance 2.5 flash'].includes(normalized)) return 'seedance-2.5-flash'
   if (normalized === 'seedance-2.5-native') return 'seedance-2.5'
   if (['fal-h3-max', 'fal h3 max'].includes(normalized)) return 'fal-h3-max'
   if (['fal h3 turbo'].includes(normalized)) return 'minimax-h3-max'
@@ -796,6 +812,7 @@ export function resolveVideoGenerationRoute(options: {
 
 function getSeedanceProviderBase(model?: string | null): string | undefined {
   const id = normalizeVideoModelId(model)
+  if (id === 'seedance-2.5-flash') return 'seedance-2.5-flash'
   if (id === 'seedance-fast') return 'seedance-2.0-fast'
   if (id === 'seedance-mini') return 'seedance-2.0-mini'
   if (id === 'seedance') return 'seedance-2.0'
@@ -816,6 +833,7 @@ export function resolveVideoProviderModel(options: {
   hasVideoReference?: boolean
   hasAudioReference?: boolean
   operation?: VideoGenerationOperation
+  imageWorkflow?: VideoImageWorkflow
 }): string | undefined {
   const route = resolveVideoGenerationRoute({
     model: options.model,
@@ -844,6 +862,12 @@ export function resolveVideoProviderModel(options: {
       : 'minimax/h3-max-turbo/text-to-video'
   }
 
+  if (route.model === 'seedance-2.5-flash') {
+    if (options.operation === 'extend') throw new Error('Seedance 2.5 Flash does not support extension.')
+    if (options.operation === 'edit') return 'seedance-2.5-flash-video-edit'
+    if (options.imageWorkflow === 'image-to-video') return 'seedance-2.5-flash-image-to-video'
+    return hasReferenceMedia ? 'seedance-2.5-flash-reference-to-video' : 'seedance-2.5-flash-text-to-video'
+  }
   if (route.model === 'seedance-2.5') {
     if (options.operation === 'edit') return 'seedance-2.5-video-edit'
     if (options.operation === 'extend') return 'seedance-2.5-video-extend'
@@ -893,6 +917,7 @@ export function resolveVideoProviderAspectRatio(
   const route = resolveVideoGenerationRoute({ model })
   if (route.provider === 'fal-sync') return undefined
   if (!aspectRatio || aspectRatio === 'auto') {
+    if (route.model === 'seedance-2.5-flash') return undefined
     return route.provider === 'seedance' || route.provider === 'mulerouter' ? 'adaptive' : undefined
   }
   return aspectRatio
@@ -974,6 +999,11 @@ export function estimateVideoProviderCostUsd(options: {
   if (normalizedModel === 'kling-4-flash' && (options.operation === 'edit' || (options.referenceVideoDurationSec ?? 0) > 0)) {
     const sourceSeconds = Math.round(options.referenceVideoDurationSec ?? 0)
     return (options.durationSec + Math.max(options.durationSec, sourceSeconds)) * .063
+  }
+  if (normalizedModel === 'seedance-2.5-flash' && (options.referenceVideoDurationSec ?? 0) > 0) {
+    const source = Math.ceil(options.referenceVideoDurationSec ?? 0)
+    const rate = route.resolution === '480p' ? .075 : .15
+    return (options.operation === 'edit' ? 2 * source : options.durationSec + Math.max(source, options.durationSec)) * rate
   }
   if (normalizedModel === 'seedance-2.5' && (options.referenceVideoDurationSec ?? 0) > 0) {
     const referenceRate = route.resolution === '480p' ? 0.084 : 0.180
@@ -1063,6 +1093,7 @@ export function resolveVideoOutputDuration(options: {
 }): number | undefined {
   const capability = getVideoModelCapability(options.model)
   const normalizedModel = normalizeVideoModelId(options.model)
+  if (normalizedModel === 'seedance-2.5-flash' && options.operation === 'edit') return options.referenceVideoDuration
   if (normalizedModel === 'grok' && options.operation === 'edit') {
     return options.referenceVideoDuration
   }
@@ -1122,6 +1153,14 @@ export function validateVideoModelRequest(options: {
   const normalizedModel = normalizeVideoModelId(options.model)
   const retirementError = getVideoModelRetirementError(normalizedModel)
   if (retirementError) return retirementError
+  if (normalizedModel === 'seedance-2.5-flash') {
+    if (options.operation === 'extend') return 'Seedance 2.5 Flash does not support extension.'
+    if (options.operation !== 'edit' && options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 4 || options.outputDuration > 30)) return 'Seedance 2.5 Flash duration must be an integer 4–30 seconds.'
+    if (options.operation === 'edit' && (options.videoReferenceCount ?? 0) !== 1) return 'Seedance 2.5 Flash edit requires exactly one source video.'
+    if (options.operation === 'edit' && options.referenceVideoDuration != null && (options.referenceVideoDuration < 4 || options.referenceVideoDuration > 30)) return 'Flash edit source must be 4–30 seconds.'
+    if (options.referenceVideoMetas?.some(m => m.durationSec != null && (m.durationSec < (options.operation === 'edit' ? 4 : 2) || m.durationSec > 30))) return 'Flash reference videos must each be 2–30 seconds (edit source 4–30).'
+    if (options.imageWorkflow === 'image-to-video' && ((options.imageReferenceCount != null && options.imageReferenceCount < 1) || (options.imageReferenceCount ?? 0) > 2 || options.hasVideoReference || (options.audioReferenceCount ?? 0) > 0)) return 'Flash first/last frame mode accepts 1–2 images only.'
+  }
   if (isKling4FamilyModel(normalizedModel)) {
     const { label, maxOutputDuration: max } = capability
     if (options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 3 || options.outputDuration > max)) return `${label} output must be an integer from 3 to ${max} seconds.${capability.id === 'kling-4-flash' ? ' If the user did not choose Kling 4.0 Flash, use seedance-2.5 for a 21-30s single generation; if they chose Flash, split into segments of 20s or less.' : ''}`

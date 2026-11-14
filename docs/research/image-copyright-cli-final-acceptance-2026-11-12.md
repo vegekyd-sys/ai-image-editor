@@ -4,11 +4,15 @@
 
 **当前修订：已按用户要求撤销额外 CLI 开关、help/README 和版本更新，整个 `packages/makaron-cli` 恢复至任务前的 0.17.16。服务端 Agent 自动判断、受限恢复与 NSFW 状态隔离逻辑保持不变。下面的 0.17.17/直接工具恢复记录属于历史候选，不是当前 CLI 用法。**
 
+### 生产验收补正（2026-11-13）
+
+Agent 的 `benignCharacterContent` 改为必填的独立判断，其他/不确定/NSFW/用户要求仅指定模型时必须 false。模型名和 GPT 专属 quality/reasoning 本身不再作为额外恢复锁：true 已表示允许受限兼容恢复；首轮仍完整保留这些调优，备用使用自己的原生设置，产物元数据记录实际模型与设置。格式、alpha、参考图、画布和提交预算不放宽。这样避免 Auto 下 Agent 自选 Flare + high 导致错误跳过恢复。
+
 ### 本地用户验收发现的 Auto 参数回归（2026-11-13）
 
 用户在本地 3039 请求“我希望马里奥大战皮卡丘 一张很有意思的海报图”。精确 run 回执显示 Agent 自动填写了 `imageQuality=high`、`benignCharacterContent=true`，Flare 返回已完成拒绝；恢复筛选却把 GPT 专属调优当成不可替换的交付合同，所以没有提交 Nano。
 
-修复保留 Auto 的来源：Auto 下只在既有良性角色拒绝恢复中移除 GPT 专属 quality/reasoning，使用 Nano 原生设置并在工具结果记录调整；首轮 GPT 参数保留。显式模型调优、透明、格式、GIF、参考图和画布限制仍按原兼容合同处理。普通图片和 NSFW 路径保持原来的计划请求；没有新增 CLI 参数或版本更新。
+首轮修复曾保留 Auto 的来源：Auto 下只在既有良性角色拒绝恢复中移除 GPT 专属 quality/reasoning，使用 Nano 原生设置并在工具结果记录调整；首轮 GPT 参数保留。显式模型调优、透明、格式、GIF、参考图和画布限制仍按原兼容合同处理。普通图片和 NSFW 路径保持原来的计划请求；没有新增 CLI 参数或版本更新。
 
 使用本机原有全局 CLI 0.17.9，全部经 `makaron chat --project auto -b --json`、`responses get --wait --json` 与 `--events`：
 

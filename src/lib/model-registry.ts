@@ -28,6 +28,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'seedream-5.5', nameKey: 'model.seedream55.name', descKey: 'model.seedream55.desc', category: 'image' },
   // Video (default first)
   { id: 'kling-4-flash', nameKey: 'model.kling4Flash.name', descKey: 'model.kling4Flash.desc', category: 'video', speedLabel: 'Flash · 720p' },
+  { id: 'seedance-2.5-flash', nameKey: 'model.seedance25Flash.name', descKey: 'model.seedance25Flash.desc', category: 'video', speedLabelKey: 'model.seedance25Flash.badge' },
   { id: 'seedance-2.5-eco', nameKey: 'model.seedance25Eco.name', descKey: 'model.seedance25Eco.desc', category: 'video', speedLabelKey: 'model.seedance25Eco.badge' },
   { id: 'seedance-2.5-native', nameKey: 'model.seedance25.name', descKey: 'model.seedance25.desc', category: 'video', speedLabelKey: 'model.seedance25.badge' },
   { id: 'seedance-fast', nameKey: 'model.seedanceFast.name', descKey: 'model.seedanceFast.desc', category: 'video', speedLabel: '~180s' },

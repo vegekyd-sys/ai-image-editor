@@ -51,7 +51,7 @@ describe('Agent FFmpeg video lab', () => {
     expect(cli).toContain('const MAX_VIDEO_PROVIDER_REFERENCE_FILE_SIZE = 50 * 1024 * 1024;')
     expect(cli).toContain('const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15')
     expect(cli).toContain('SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION = 30')
-    expect(cli).toContain('providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
+    // Generation duration limits are exercised by the CLI smoke boundary cases.
     expect(cli).toContain('MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE = 100 * 1024 * 1024')
     expect(cli).toContain('Math.min(providerMaxDuration')
     expect(cli).not.toContain('const MAX_VIDEO_DURATION = 15')

@@ -42,3 +42,30 @@ it('stops the Agent turn after exhausted recovery, then allows an unrelated ordi
   expect(ordinary.success).toBe(true); expect(ordinary.terminal).toBeUndefined();
   expect(ctx.isNsfw).toBe(false); expect(state.backend.mock.calls.map(([id]) => id)).toEqual(['gpt-image-2.6-flare']);
 });
+
+
+it.each([false, true])('stores only the delivered model tuning, recovered=%j', async recovered => {
+  if (!recovered) state.backend.mockImplementation(id => ({ id, canHandle: () => true, generate: async () => ({ image: 'data:image/png;base64,YQ==', provider: 'openai' }) }));
+  const ctx: AgentContext = { projectId: 'isolated-test', currentImage: '', explicitMediaIndices: [], generatedImages: [], snapshotImages: [], currentSnapshotIndex: -1, isNsfw: false };
+  const tool = createTools(ctx, { spec: { provider: 'test', supportsImageInput: true } } as any).generate_image;
+  const result = await (tool.execute as any)({ editPrompt: 'Mario versus Pikachu poster', model: 'gpt-image-2.6-flare', benignCharacterContent: true, imageQuality: 'high', imageReasoningEffort: 'high' }, {});
+  expect(result.success).toBe(true);
+  expect(ctx.generatedImageMetadata?.get(0)?.imageGeneration).toMatchObject({
+    model: recovered ? 'gemini-2.1' : 'gpt-image-2.6-flare',
+    imageQuality: recovered ? undefined : 'high',
+    imageReasoningEffort: recovered ? undefined : 'high',
+  });
+  expect(ctx.isNsfw).toBe(false);
+});
+
+
+it('requires an independent character assessment before an Agent image submission', () => {
+  const ctx: AgentContext = { projectId: 'isolated-test', currentImage: '', explicitMediaIndices: [], generatedImages: [], snapshotImages: [], currentSnapshotIndex: -1 };
+  const tool = createTools(ctx, { spec: { provider: 'test', supportsImageInput: true } } as any).generate_image;
+  const schema = tool.inputSchema as { safeParse: (input: unknown) => { success: boolean } };
+  expect(schema.safeParse({ editPrompt: 'Mario versus Pikachu poster' }).success).toBe(false);
+  expect(schema.safeParse({ editPrompt: 'Mario versus Pikachu poster', benignCharacterContent: true }).success).toBe(true);
+  expect(schema.safeParse({ editPrompt: 'A plain red cup', benignCharacterContent: false }).success).toBe(true);
+  expect(schema.safeParse({ editPrompt: 'Neutral cloth', isNsfw: true, benignCharacterContent: false }).success).toBe(true);
+  expect(state.backend).not.toHaveBeenCalled();
+});

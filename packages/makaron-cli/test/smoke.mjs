@@ -139,10 +139,15 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/api/admin/add-credits') {
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    if (body.apiKey === 'mk_live_missing_fixture') {
+      sendJson(404, { error: `Active API key not found: ${body.apiKey}` });
+      return;
+    }
     sendJson(200, {
       success: true,
       userId: 'user_credit_test',
-      email: body.email,
+      // Deliberately echo the synthetic key to verify client-side output redaction.
+      email: body.email || body.apiKey,
       credits: body.credits,
       newBalance: 1321,
     });
@@ -1323,6 +1328,16 @@ try {
     const request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
     assert.equal(request.body.params.name, 'makaron_retake_video');
     assert.deepEqual(request.body.params.arguments, { model: 'fal-h3-max', video_url: 'https://cdn.example/source.mp4', start: 2.5, end: 4.2, prompt: 'Make the umbrella red' });
+    await expectSuccess(['video','retake','--video','https://cdn.example/source.mp4','--start','1','--end','2','--prompt','Flash retake','--model','seedance-2.5-flash','--video-resolution','480p','--json']);
+    const flashRetake=requests.filter(r=>r.pathname==='/api/mcp').at(-1).body.params;
+    assert.equal(flashRetake.arguments.model,'seedance-2.5-flash');
+    assert.equal(flashRetake.arguments.video_resolution,'480p');
+    await expectSuccess(['video','create','--script','Flash full duration','--duration','30','--video-model','seedance-2.5-flash']);
+    const beforeFlashReject=requests.length;
+    await expectFailure(['video','retake','--video','https://cdn.example/source.mp4','--start','1','--end','2','--prompt','Flash retake','--model','seedance-2.5-flash','--video-resolution','1080p']);
+    assert.equal(requests.length,beforeFlashReject);
+    await expectFailure(['video','create','--script','Flash too long','--duration','31','--video-model','seedance-2.5-flash']);
+    assert.equal(requests.length,beforeFlashReject);
     await expectSuccess(['video', 'retake', '--video', 'https://cdn.example/source.mp4', '--start', '2.5', '--end', '4.2', '--prompt', 'Use multiple camera angles', '--json']);
     assert.equal(requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params.arguments.model, 'kling-4');
     const count = requests.length;
@@ -1380,6 +1395,26 @@ try {
     assert.equal(mcpRequest?.body?.params?.arguments?.duration, 30);
     assert.equal(mcpRequest?.body?.params?.arguments?.outputFormat, 'mp4');
     assert.equal(mcpRequest?.body?.params?.arguments?.webSearch, true);
+  }
+
+  {
+    await expectSuccess(['video', 'create', '--script', 'Flash first frame <<<media_1>>>', '--image', 'https://cdn.example/mascot.png', '--duration', '4', '--video-model', 'seedance-2.5-flash', '--image-workflow', 'image-to-video', '--video-resolution', '480p', '--request-id', 'a1c9dce2-4265-4c91-a3bb-8f930bc244ad']);
+    const req = requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params;
+    assert.equal(req.name, 'makaron_create_video');
+    assert.equal(req.arguments.videoModel, 'seedance-2.5-flash');
+    assert.equal(req.arguments.imageWorkflow, 'image-to-video');
+    assert.equal(req.arguments.duration, 4);
+    assert.equal(req.arguments.billingRequestId, 'a1c9dce2-4265-4c91-a3bb-8f930bc244ad');
+    await expectSuccess(['video', 'create', '--script', 'Change only the background', '--video', 'https://cdn.example/source.mp4', '--video-model', 'seedance-2.5-flash', '--video-operation', 'edit']);
+    const edit = requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params;
+    assert.equal(edit.name, 'makaron_create_video');
+    assert.equal(edit.arguments.operation, 'edit');
+    assert.equal(edit.arguments.duration, undefined);
+    const count = requests.length;
+    await expectFailure(['video', 'create', '--script', 'No unsupported mode', '--video-model', 'seedance-2.5-flash', '--video-operation', 'extend']);
+    assert.equal(requests.length, count);
+    await expectFailure(['video', 'create', '--script', 'Invalid request id', '--video-model', 'seedance-2.5-flash', '--request-id', 'invalid']);
+    assert.equal(requests.length, count);
   }
 
   {
@@ -1517,6 +1552,25 @@ try {
     const data = JSON.parse(result.stdout);
     assert.equal(data.credits, 25);
     assert.equal(data.newBalance, 1321);
+  }
+
+  for (const json of [false, true]) {
+    const targetKey = `mk_live_${'a'.repeat(64)}`;
+    const result = await expectSuccess(['admin', 'add-credits', targetKey, '100', ...(json ? ['--json'] : [])]);
+    const request = requests.filter(req => req.pathname === '/api/admin/add-credits').at(-1);
+    assert.deepEqual(request?.body, { apiKey: targetKey, credits: 100 });
+    assert.ok(!result.stdout.includes(targetKey));
+    assert.ok(!result.stderr.includes(targetKey));
+    if (json) assert.equal(JSON.parse(result.stdout).userId, 'user_credit_test');
+    else assert.match(result.stdout, /Added 100 credits to user_credit_test/);
+  }
+
+  {
+    const targetKey = 'mk_live_missing_fixture';
+    const result = await expectFailure(['admin', 'add-credits', targetKey, '100']);
+    assert.match(result.stderr, /Error 404/);
+    assert.ok(!result.stderr.includes(targetKey));
+    assert.ok(!result.stdout.includes(targetKey));
   }
 
   for (const invalidCredits of ['0', '-1', '1.5', 'not-a-number']) {

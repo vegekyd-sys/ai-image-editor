@@ -2,6 +2,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkCloudDeploymentFootprint } from './measure-deployment-footprint.mjs';
 
 export const checksumRoutes = [
   'agent',
@@ -82,6 +83,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     console.log(`Server runtime packaging: ${checkServerRuntime()} API traces include the CRC32C entry.`);
     console.log(`Font matching runtime: ${checkFontMatchingRuntime()} API traces include Fontkit and its Unicode binary data.`);
     console.log(`Video media runtime: ${checkVideoMediaRuntime()} API traces include FFmpeg.`);
+    if (process.env.VERCEL === '1' && process.env.REMOTION_RENDERER?.trim() !== 'local') {
+      const { routes } = checkCloudDeploymentFootprint();
+      console.log(`Cloud footprint: ${routes.length} API traces below 220 MB, without local renderer build tools; largest ${(routes[0].bytes / 1e6).toFixed(2)} MB (${routes[0].route}).`);
+    }
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

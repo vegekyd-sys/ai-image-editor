@@ -1465,7 +1465,7 @@ function createGenerateImageTool(
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
         isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
-        benignCharacterContent: z.boolean().optional().describe('Set true only after assessing this request and supplied images as harmless nonsexual fictional-character artwork (e.g. an ordinary cartoon-character scene). Enables at most one compatible model recovery after a terminal provider refusal. Omit for unsafe/uncertain content, NSFW, or when the user requires only the selected model. Never infer this assessment from a refusal, and never change isNsfw because of copyright or a provider error.'),
+        benignCharacterContent: z.boolean().describe('Required assessment before generation: true only for harmless nonsexual fictional-character artwork (e.g. an ordinary cartoon-character scene). Enables at most one compatible model recovery after a terminal provider refusal. Set false for other content, unsafe/uncertain content, NSFW, or when the user requires only the selected model. Never infer this assessment from a refusal, and never change isNsfw because of copyright or a provider error.'),
         imageQuality: z.enum(['auto', 'low', 'medium', 'high']).optional().describe('GPT Image 2.6 rendering quality. Default low; choose higher when the user asks for more visual detail.'),
       imageReasoningEffort: z.enum(['low', 'medium', 'high']).optional().describe('GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high.'),
       outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).optional().describe('Default PNG. Seedream 5.5 supports PNG/JPEG only, transparent PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
@@ -1668,7 +1668,8 @@ function createGenerateImageTool(
           imageResolution: imagePlan.request.imageResolution,
           aspectRatio: imagePlan.request.aspectRatio,
           background: imagePlan.request.background,
-          imageQuality: imagePlan.request.imageQuality, imageReasoningEffort: imagePlan.request.imageReasoningEffort, outputFormat: imagePlan.request.outputFormat, frameCount: imagePlan.request.frameCount, frameDurationMs: imagePlan.request.frameDurationMs, gifFrameSize: imagePlan.request.gifFrameSize,
+          // Recovery uses Nano native tuning, not the refused GPT tuning.
+          imageQuality: skillResult.recovery ? undefined : imagePlan.request.imageQuality, imageReasoningEffort: skillResult.recovery ? undefined : imagePlan.request.imageReasoningEffort, outputFormat: imagePlan.request.outputFormat, frameCount: imagePlan.request.frameCount, frameDurationMs: imagePlan.request.frameDurationMs, gifFrameSize: imagePlan.request.gifFrameSize,
           inputImages: [editTarget, ...resolvedRefs].filter((url): url is string => Boolean(url?.startsWith('http'))),
         };
         if (elementInput) return { success: skillResult.success, image: batchImages[0], message: skillResult.message, usedModel: skillResult.usedModel, provider: skillResult.provider, inputImages: imageGeneration.inputImages };
@@ -1743,9 +1744,10 @@ function createGenerateAnimationTool(
       inputSchema: z.object({
         story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers. Gemini Omni 1.2, Kling 4.0 / Flash and H3 Max text-to-video follow the same no-marker rule; fal H3 Turbo image-to-video uses exactly one media marker; FAL H3 Max accepts image/video/audio references. Kling 4.0 / Flash story_prompt must be 2500 characters or fewer, markers included. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
         video_intent: z.enum(['generate', 'replicate']).nullish().describe('Default generate: ordinary new videos, photo animation, lookbooks, loose references, edits and extensions. Set replicate ONLY when the user wants to reproduce a supplied video\'s measured timing, action and camera with replaced content; requires replication_contract and an actual source video. Never select replicate merely to preserve a face.'),
-        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max accepts integer 5–15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling 4.0 accepts integer 3-30s in one call; Kling 4.0 Flash accepts integer 3-20s; Grok accepts 1-15s; Google Omni accepts 3-15s (extend adds 3-10s).'),
+        image_workflow: z.enum(['reference-to-video', 'image-to-video']).optional().describe('Flash only: default feature-reference semantics; image-to-video explicitly locks1–2 first/last frames. Omit aspect_ratio for first/last frames or edit.'),
+        duration: z.number().optional().describe('Seedance2.5Flash generation uses4–30s integers; edit follows source duration and ignores output duration. Duration in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max accepts integer 5–15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling 4.0 accepts integer 3-30s in one call; Kling 4.0 Flash accepts integer 3-20s; Grok accepts 1-15s; Google Omni accepts 3-15s (extend adds 3-10s).'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can honor it. Kling 4.0 / Flash support 16:9/9:16/1:1/21:9; when omitted they follow the first reference image, or 16:9 for text-only. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive. Grok reference-to-video accepts supported fixed ratios.'),
-        model: z.string().optional().describe('Video model/provider id. Defaults to kling-4-flash (Kling 4.0 Flash, 720p, 3-20s). Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5-eco (the default for Seedance 2.5), seedance-2.5-native (explicit native only), wan-3.0, wan-3.0-prime, kling-4 (Kling 4.0; 3–30s, 720p/1080p; text/image/video references; edit preserves source audio), kling-4-flash (Kling 4.0 Flash, the default; faster/lower-cost, same inputs, 3–20s, 720p only, video inputs <=20s total), grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Never substitute kling-4-flash and kling-4 for each other; an explicit choice stays on that model. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Only when no model is explicitly selected, default to seedance-2.5-eco for non-NSFW direct 21-30s requests, kling-4 for requests that need 1080p, and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref. For google-omni, write story_prompt in English even when the user writes another language (Google validates English only); keep only quoted spoken lines in the language to be heard.'),
+        model: z.string().optional().describe('Video model/provider id. Defaults to kling-4-flash (Kling 4.0 Flash, 720p, 3-20s). Supported ids include seedance-2.5-flash (EvoLink; 4–30s integers at480p/720p, default720p; up to10images/5videos/5audios; reference or explicit first/last frame generation; edit follows4–30s source; no extend/draft/MOV/web search; no fallback), seedance-fast, seedance-mini, seedance, seedance-2.5-eco (the default for Seedance 2.5), seedance-2.5-native (explicit native only), wan-3.0, wan-3.0-prime, kling-4 (Kling 4.0; 3–30s, 720p/1080p; text/image/video references; edit preserves source audio), kling-4-flash (Kling 4.0 Flash, the default; faster/lower-cost, same inputs, 3–20s, 720p only, video inputs <=20s total), grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Never substitute kling-4-flash and kling-4 for each other; an explicit choice stays on that model. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Only when no model is explicitly selected, default to seedance-2.5-eco for non-NSFW direct 21-30s requests, kling-4 for requests that need 1080p, and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref. For google-omni, write story_prompt in English even when the user writes another language (Google validates English only); keep only quoted spoken lines in the language to be heard.'),
         video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. Kling 4.0 Flash is 720p only; Kling 4.0 supports 720p/1080p. fal H3 Max supports 480p/768p/1080p (1080p uses latent refinement from 768p), default 768p. fal H3 Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.2 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, MiniMax H3, and FAL H3 Max.'),
@@ -1787,7 +1789,7 @@ function createGenerateAnimationTool(
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ story_prompt, video_intent, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, replication_contract: suppliedReplicationContract, completion_actions }) => serializeVideoSubmission(async () => {
+      execute: async ({ story_prompt, video_intent, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, video_operation, extend_direction, generate_audio, image_workflow, content_filter, output_format, web_search, replication_contract: suppliedReplicationContract, completion_actions }) => serializeVideoSubmission(async () => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1906,6 +1908,7 @@ function createGenerateAnimationTool(
           return { success: false as const, message: `${videoRoute.label} requires an image or video reference. Use SeeDance, Wan 3.0, Grok Imagine Video, Gemini Omni, MiniMax H3, or MiniMax H3 Max for native text-to-video.` };
         }
         let reservedVideoCredits = 0;
+        let acceptedFlashTaskId: string | undefined;
         const reservationToolName = videoModel === 'grok' ? 'create_video_grok' : 'create_video';
         try {
           const selectedAspectRatio = aspect_ratio;
@@ -2018,7 +2021,7 @@ function createGenerateAnimationTool(
             };
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
-          if (video_ref_url && autoVideoUrls.length > 0 && videoModel !== 'seedance-2.5' && videoModel !== 'seedance-2.5-eco' && videoModel !== 'wan-3.0' && videoModel !== 'wan-3.0-prime') {
+          if (video_ref_url && autoVideoUrls.length > 0 && videoModel !== 'seedance-2.5' && videoModel !== 'seedance-2.5-eco' && videoModel !== 'seedance-2.5-flash' && videoModel !== 'wan-3.0' && videoModel !== 'wan-3.0-prime') {
             return {
               success: false as const,
               message: 'Do not mix video_ref_url with timeline video markers in one generation. For a local segment edit, pass only the extracted segment as video_ref_url and remove any <<<media_N>>> markers that point to timeline videos.',
@@ -2088,6 +2091,7 @@ function createGenerateAnimationTool(
             videoReferenceCount: allVideoUrls.length,
             audioReferenceCount: resolvedAudioRefs.audioUrls.length,
             operation: video_operation,
+            imageWorkflow: image_workflow,
           });
           if (modelError) {
             return invalidRequest(videoModel, modelError);
@@ -2139,6 +2143,7 @@ function createGenerateAnimationTool(
             audioUrls: resolvedAudioRefs.audioUrls.length ? resolvedAudioRefs.audioUrls : undefined,
             referenceVoiceIds: reference_voice_ids,
             videoOperation: video_operation,
+            imageWorkflow: image_workflow,
             previousInteractionId: isGoogleOmniStateful ? googleOmniPreviousInteractionId : undefined,
             videoExtendDirection: extend_direction,
             generateAudio: generate_audio,
@@ -2198,7 +2203,7 @@ function createGenerateAnimationTool(
             && await isGrokSubscriptionAllowedUser(ctx.userId);
           if (grokSubscriptionPreferred) {
             createVideoInput.onBeforeGrokApiFallback = reserveGrokApiCredits;
-          } else if ((videoRoute.provider === 'fal-h3-max' || forceUpscale) && ctx.userId) {
+          } else if ((videoRoute.provider === 'fal-h3-max' || videoModel === 'seedance-2.5-flash' || forceUpscale) && ctx.userId) {
             createVideoInput.onBeforeProviderSubmit = async usage => {
               billingQuote = await quoteVideo(usage);
               creditsRequired = billingQuote.credits;
@@ -2227,6 +2232,13 @@ function createGenerateAnimationTool(
 
           if (!skillResult.success || !skillResult.taskId) {
             console.error('[generate_animation] createVideo failed:', skillResult.message);
+            if (videoModel === 'seedance-2.5-flash' && skillResult.submissionUncertain) {
+              // A timeout is not a rejected POST. The durable Agent tool result
+              // and usage row retain the original run and reservation for review.
+              return { ...skillResult, success: false as const, retryable: false as const,
+                errorCode: 'SUBMISSION_UNCERTAIN',
+                message: `${skillResult.message}\nFlash submission is unconfirmed; credits remain reserved. Do not create another paid task. Reconcile this original Agent run before retrying.` };
+            }
             if (reservedVideoCredits > 0 && ctx.userId) {
               await refundCredits(ctx.userId, reservedVideoCredits, reservationToolName);
               reservedVideoCredits = 0;
@@ -2250,6 +2262,7 @@ function createGenerateAnimationTool(
           }
 
           const taskId = skillResult.taskId;
+          if (videoModel === 'seedance-2.5-flash') acceptedFlashTaskId = taskId;
           const actualVideoModel = (skillResult.videoModel || videoModel) as string;
           const actualVideoRoute = resolveVideoGenerationRoute({
             model: actualVideoModel,
@@ -2387,6 +2400,13 @@ function createGenerateAnimationTool(
             message: `Video generation task created with ${actualVideoRoute.label} ${actualVideoRoute.resolution.toUpperCase()}. ${renderTimeMessage} The result will appear here when done.`,
           };
         } catch (e) {
+          if (acceptedFlashTaskId) {
+            // Saving failed after provider acceptance: keep the task receipt
+            // and debit, rather than refunding a job that may still complete.
+            return { success: false as const, taskId: acceptedFlashTaskId, retryable: false as const,
+              errorCode: 'PERSISTENCE_RECONCILIATION_REQUIRED',
+              message: `Flash task ${acceptedFlashTaskId} was accepted but saving failed: ${String(e)}. Query this task and restore its project result; do not submit another paid job.` };
+          }
           if (reservedVideoCredits > 0 && ctx.userId) {
             try {
               await refundCredits(ctx.userId, reservedVideoCredits, reservationToolName);
@@ -3664,7 +3684,7 @@ function createEditElementTool(scope: AgentToolFactoryScope) {
           const savedInput = await workspace.writeFile(cropPath, prepared.crop, input.supabase, input.userId, 'image/png');
           if (!savedInput.success || !savedInput.storageUrl) throw new Error('Could not prepare the original element for editing.');
           const generator = createGenerateImageTool(scope, { source: savedInput.storageUrl, reference: source });
-          const generated = await generator.execute!({ editPrompt: `${operation.prompt}\nEdit ONLY the supplied FIRST crop in place: ${prepared.box.width} by ${prepared.box.height} pixels, at original-asset x=${prepared.box.left}, y=${prepared.box.top}. The SECOND image is the complete original element for identity/context ONLY, not the output canvas. Return only the edited crop, never copy the whole character or scene from the second image into it. Preserve the crop framing, contact points, pose and identity. ${prepared.hasAlpha ? "Transparent source pixels must remain alpha, never paint a solid backdrop." : "Keep the existing background."} Do not zoom, recenter or invent a different person.`, outputFormat: 'png', aspectRatio: formatAspectRatio(prepared.box.width, prepared.box.height), ...(prepared.hasAlpha ? { background: 'transparent' as const } : {}) }, executionOptions) as any;
+          const generated = await generator.execute!({ benignCharacterContent: false, editPrompt: `${operation.prompt}\nEdit ONLY the supplied FIRST crop in place: ${prepared.box.width} by ${prepared.box.height} pixels, at original-asset x=${prepared.box.left}, y=${prepared.box.top}. The SECOND image is the complete original element for identity/context ONLY, not the output canvas. Return only the edited crop, never copy the whole character or scene from the second image into it. Preserve the crop framing, contact points, pose and identity. ${prepared.hasAlpha ? "Transparent source pixels must remain alpha, never paint a solid backdrop." : "Keep the existing background."} Do not zoom, recenter or invent a different person.`, outputFormat: 'png', aspectRatio: formatAspectRatio(prepared.box.width, prepared.box.height), ...(prepared.hasAlpha ? { background: 'transparent' as const } : {}) }, executionOptions) as any;
           if (!generated.success || !generated.image) return { success: false, error: generated.message || 'Element image generation failed.' };
           const bytes = await finishElementImage(prepared, generated.image);
           const saved = await workspace.writeFile(`${ctx.projectId}/element-edits/${id}.png`, bytes, input.supabase, input.userId, 'image/png');

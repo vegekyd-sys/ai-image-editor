@@ -1,0 +1,1193 @@
+Seedance 2.5 Flash Text-to-Video API | WaveSpeed
+/
+Home
+/
+models
+/
+bytedance/seedance-2.5-flash/text-to-video
+Explore
+Pricing
+Enterprise
+Resources
+Products
+Image Generator
+Create Images with AI
+Video Generator
+Create Videos with AI
+AI Tools
+AI-powered image and video processing tools
+AI Apps
+Creative AI apps for ads, styling, and more
+Free Tools
+Edit, convert and create — free, no sign-up
+Desktop App
+Desktop application
+Developers
+Documentation
+API reference & guides
+CLI / MCP
+Run any model from your terminal or agent
+LLM
+Large language model
+GitHub
+Open source repos
+Blog
+Engineering updates
+Company
+Contact Sales
+Talk to our team
+Customer Stories
+Case studies
+Affiliate
+Partner program
+Community
+Support
+Help & troubleshooting
+Showcase
+AI films & influencers
+Be a Creator
+Join the creator program
+Search model
+...
+English
+Español
+Português
+Français
+Deutsch
+Italiano
+Русский
+Türkçe
+Polski
+Bahasa Indonesia
+Tiếng Việt
+ไทย
+हिन्दी
+日本語
+한국어
+简体中文
+繁體中文
+Sign In
+Dashboard
+Explore
+AI Generator
+Hot
+Desktop App
+LLM
+Billing
+Settings
+Home
+/
+Explore
+/
+ByteDance
+/
+Seedance 2.5 Flash
+/
+Text To Video
+Seedance 2.5 Flash Text-to-Video API
+bytedance
+/
+seedance-2.5-flash/text-to-video
+Add to favourites
+Schema
+Copy content
+Seedance 2.5 Flash Text-to-Video creates videos from text prompts and optional image, video, and audio references, with 480p or 720p output and optional generated audio. Ready-to-use REST inference API, best performance, no coldstarts, affordable pricing.
+Text to Video
+Playground
+API
+History
+Input
+prompt
+*
+Prompt Enhancer
+A handsome young man sits alone in a dark cinema holding a large bucket of popcorn. He reaches into the bucket, but a small handful of popcorn suddenly lifts out by itself and disappears toward the empty seat beside him. He slowly turns his head toward the seat. The camera begins in a clean two-seat composition and makes one subtle push toward the empty space. Supernatural comedy, cinematic theater lighting, restrained reaction.
+reference_images
+0/10
+Add Item
+reference_videos
+0/5
+Add Item
+reference_audios
+0/5
+Add Item
+aspect_ratio
+resolution
+duration
+generate_audio
+Whether to generate native audio synchronized with the output video. Defaults to true.
+Clear
+Generate
+$0.24
+Sign in to get free credits →
+Idle
+Preview
+JSON
+$
+0.24
+per run
+·
+~
+41
+/
+$
+10
+Examples
+View all
+A handsome young man sits alone in a dark cinema holding a large bucket of popcorn. He reaches into the bucket, but a small handful of popcorn suddenly lifts out by itself and disappears toward the empty seat beside him. He slowly turns his head toward the seat. The camera begins in a clean two-seat composition and makes one subtle push toward the empty space. Supernatural comedy, cinematic theater lighting, restrained reaction.
+A cinematic daytime scene on a sunlit coastal road. A woman in a cream linen shirt steps out of a vintage convertible, shades her eyes with one hand and looks out over the bright blue sea, then smiles as the wind lifts her hair. 0-2s: slow dolly-in as she closes the car door. 2-5s: the camera arcs around her to reveal the cliffs and the ocean. Golden afternoon sunlight, warm natural color grade, anamorphic lens flare, shallow depth of field. Waves, wind and distant gulls, no music.
+Related Models
+gemini-omni-1.2-flash/text-to-video
+Text to Video
+seedance-2.5/text-to-video
+Text to Video
+wan-3.0-prime/text-to-video
+Text to Video
+wan-3.0/text-to-video
+Text to Video
+seedance-2.5/text-to-video-turbo
+Text to Video
+kling-v4.0/text-to-video
+Text to Video
+README
+Seedance 2.5 Flash Text-to-Video
+Seedance 2.5 Flash Text-to-Video
+generates cinematic videos from text prompts, with optional reference images, videos and audio. Choose a duration of 4 to 30 seconds, 480p or 720p output, and optional synchronized audio.
+Early access:
+Seedance 2.5 Flash is available on WaveSpeedAI in early access. The official release is scheduled for November 15, 2026. During early access, each account can run 1 task of this model at a time; wait for it to finish before submitting the next one.
+Why Choose This?
+Native audio
+Enable audio generation for dialogue, sound effects and ambience.
+Director-style prompt control
+Direct camera movement, lighting, performance, atmosphere and pacing through the prompt.
+Up to 30 seconds
+Generate clips from 4 to 30 seconds in one request.
+480p and 720p output
+Choose the resolution that fits the job.
+Parameters
+Parameter
+Required
+Description
+prompt
+Yes
+Describe the scene, action, camera movement, lighting and mood.
+reference_images
+No
+Up to 10 reference image URLs.
+reference_videos
+No
+Up to 5 reference video URLs. Each is counted as at least 2 seconds; each clip and the combined input are capped at 30 seconds.
+reference_audios
+No
+Up to 5 reference audio URLs, 30 seconds in total.
+duration
+No
+Video length in whole seconds,
+4
+–
+30
+. Default:
+5
+.
+aspect_ratio
+No
+16:9
+,
+9:16
+,
+4:3
+,
+3:4
+,
+1:1
+or
+21:9
+. Default:
+16:9
+.
+resolution
+No
+480p
+or
+720p
+. Default:
+720p
+.
+generate_audio
+No
+Generate synchronized audio. Default:
+true
+.
+How to Use
+Write your prompt
+: describe the subject, action, camera movement, lighting and mood.
+Set duration and resolution
+:
+4
+–
+30
+seconds,
+480p
+or
+720p
+.
+Add references (optional)
+: use reference images, videos and audio, and bind each one in the prompt by upload order.
+Submit
+and retrieve the output URL.
+Pricing
+Output only
+Resolution
+Per second
+5 seconds
+10 seconds
+30 seconds
+480p
+$0.12
+$0.60
+$1.20
+$3.60
+720p
+$0.24
+$1.20
+$2.40
+$7.20
+Pricing is based on the selected generation duration, from 4 to 30 whole seconds.
+With reference videos
+Reference-video duration and the selected generation duration use the same per-second rate:
+Resolution
+Per second
+480p
+$0.075
+720p
+$0.15
+Each reference video is counted as at least 2 seconds, each clip and the combined input are capped at 30 seconds, and the combined input duration is rounded up to a whole second.
+Example: 5 seconds of reference input plus a selected generation duration of 5 seconds costs $0.75 at 480p or $1.50 at 720p.
+Best Use Cases
+Ad and social creative
+: test concepts and produce short clips in volume.
+Concept visualization
+: turn ideas into motion previews for pitching and storyboarding.
+Audio-driven scenes
+: clips with synchronized sound for ambience, music or narrative moments.
+Pro Tips
+Write prompts like a shot list: subject, action, camera, lighting, mood.
+Use
+16:9
+for widescreen and
+9:16
+for vertical social content.
+Start with a short duration while testing a prompt, then lengthen once the direction works.
+Bind reference media explicitly in the prompt, for example
+@Image 1
+,
+@Video 1
+,
+@Audio 1
+.
+Related Models
+Seedance 2.5 Text-to-Video
+: 480p to 4K output.
+Seedance 2.5 Image-to-Video
+: generate video from a start image.
+Seedance 2.5 Video Edit
+: edit an existing video with a prompt.
+Note:
+This website uses AI models provided by third parties. Documentation prices are for reference and may be outdated. The Generate button shows an estimate; the final task charge prevails.
+Seedance 2.5 Flash Text To Video
+API — Quick start
+Grab a WaveSpeedAI API key, then call
+POST
+https://api.wavespeed.ai/api/v3/bytedance/seedance-2.5-flash/text-to-video
+with your input as JSON. The endpoint returns a prediction id. Start polling the result endpoint around every 2 seconds, increase the interval for long-running tasks, and stop on any terminal status. On
+completed
+, read output values from
+data.outputs
+. Examples for
+Seedance 2.5 Flash Text To Video
+below.
+HTTP
+example
+▾
+set
+-euo pipefail
+:
+"
+${WAVESPEED_API_KEY
+:?
+Set WAVESPEED_API_KEY}
+"
+REQUEST_BODY
+=
+$(
+cat
+<<
+'JSON'
+{
+    "prompt": "A cinematic shot of a city at sunset, soft golden light",
+    "aspect_ratio": "16:9",
+    "resolution": "720p",
+    "duration": 5,
+    "generate_audio": true
+}
+JSON
+)
+# 1. Submit the prediction.
+SUBMIT_RESPONSE
+=
+$(
+curl
+--silent --show-error --fail-with-body
+\
+-X POST
+"https://api.wavespeed.ai/api/v3/bytedance/seedance-2.5-flash/text-to-video"
+\
+-H
+"Content-Type: application/json"
+\
+-H
+"Authorization: Bearer
+$WAVESPEED_API_KEY
+"
+\
+-d
+"
+$REQUEST_BODY
+"
+)
+TASK
+=
+$(
+printf
+'%s'
+"
+$SUBMIT_RESPONSE
+"
+|
+jq
+'if has("data") then .data else . end'
+)
+PREDICTION_ID
+=
+$(
+printf
+'%s'
+"
+$TASK
+"
+|
+jq -r
+'.id'
+)
+if
+[
+-z
+"
+$PREDICTION_ID
+"
+]
+||
+[
+"
+$PREDICTION_ID
+"
+=
+"null"
+]
+;
+then
+printf
+'Submission response did not contain a prediction id
+'
+>
+&2
+exit
+1
+fi
+RESULT_URL
+=
+"https://api.wavespeed.ai/api/v3/predictions/
+$PREDICTION_ID
+/result"
+# 2. Poll until the prediction finishes.
+while
+true
+;
+do
+RESPONSE
+=
+$(
+curl
+--silent --show-error --fail-with-body
+"
+$RESULT_URL
+"
+\
+-H
+"Authorization: Bearer
+$WAVESPEED_API_KEY
+"
+)
+RESULT
+=
+$(
+printf
+'%s'
+"
+$RESPONSE
+"
+|
+jq
+'if has("data") then .data else . end'
+)
+STATUS
+=
+$(
+printf
+'%s'
+"
+$RESULT
+"
+|
+jq -r
+'.status'
+)
+case
+"
+$STATUS
+"
+in
+completed
+)
+printf
+'%s\n'
+"
+$RESULT
+"
+|
+jq
+'.outputs'
+;
+break
+;
+;
+failed
+|
+cancelled
+|
+timeout
+|
+deleted
+)
+printf
+'%s\n'
+"
+$RESULT
+"
+|
+jq
+.
+>
+&2
+;
+exit
+1
+;
+;
+*
+)
+sleep
+2
+;
+;
+esac
+done
+Node.js
+example
+▾
+const
+submitUrl
+=
+"https://api.wavespeed.ai/api/v3/bytedance/seedance-2.5-flash/text-to-video"
+;
+const
+apiKey
+=
+process
+.
+env
+.
+WAVESPEED_API_KEY
+;
+if
+(
+!
+apiKey
+)
+throw
+new
+Error
+(
+'Set WAVESPEED_API_KEY'
+)
+;
+async
+function
+requestJson
+(
+url
+,
+options
+=
+{
+}
+)
+{
+const
+response
+=
+await
+fetch
+(
+url
+,
+options
+)
+;
+if
+(
+!
+response
+.
+ok
+)
+throw
+new
+Error
+(
+await
+response
+.
+text
+(
+)
+)
+;
+return
+response
+.
+json
+(
+)
+;
+}
+// 1. Submit the prediction.
+const
+body
+=
+await
+requestJson
+(
+submitUrl
+,
+{
+method
+:
+"POST"
+,
+headers
+:
+{
+"Authorization"
+:
+`
+Bearer
+${
+apiKey
+}
+`
+,
+"Content-Type"
+:
+"application/json"
+,
+}
+,
+body
+:
+JSON
+.
+stringify
+(
+{
+"prompt"
+:
+"A cinematic shot of a city at sunset, soft golden light"
+,
+"aspect_ratio"
+:
+"16:9"
+,
+"resolution"
+:
+"720p"
+,
+"duration"
+:
+5
+,
+"generate_audio"
+:
+true
+}
+)
+,
+}
+)
+;
+const
+task
+=
+body
+.
+data
+??
+body
+;
+if
+(
+!
+task
+.
+id
+)
+throw
+new
+Error
+(
+"Submission response did not contain a prediction id"
+)
+;
+const
+resultUrl
+=
+`
+https://api.wavespeed.ai/api/v3/predictions/
+${
+task
+.
+id
+}
+/result
+`
+;
+// 2. Poll until the prediction finishes.
+while
+(
+true
+)
+{
+const
+resultBody
+=
+await
+requestJson
+(
+resultUrl
+,
+{
+headers
+:
+{
+"Authorization"
+:
+`
+Bearer
+${
+apiKey
+}
+`
+}
+,
+}
+)
+;
+const
+result
+=
+resultBody
+.
+data
+??
+resultBody
+;
+if
+(
+result
+.
+status
+===
+"completed"
+)
+{
+console
+.
+log
+(
+result
+.
+outputs
+)
+;
+break
+;
+}
+if
+(
+[
+"failed"
+,
+"cancelled"
+,
+"timeout"
+,
+"deleted"
+]
+.
+includes
+(
+result
+.
+status
+)
+)
+throw
+new
+Error
+(
+JSON
+.
+stringify
+(
+result
+)
+)
+;
+await
+new
+Promise
+(
+resolve
+=>
+setTimeout
+(
+resolve
+,
+2000
+)
+)
+;
+}
+Python
+example
+▾
+import
+json
+import
+os
+import
+time
+from
+urllib
+.
+request
+import
+Request
+,
+urlopen
+
+api_key
+=
+os
+.
+environ
+[
+"WAVESPEED_API_KEY"
+]
+headers
+=
+{
+"Authorization"
+:
+f"Bearer
+{
+api_key
+}
+"
+,
+"Content-Type"
+:
+"application/json"
+}
+payload
+=
+{
+"prompt"
+:
+"A cinematic shot of a city at sunset, soft golden light"
+,
+"aspect_ratio"
+:
+"16:9"
+,
+"resolution"
+:
+"720p"
+,
+"duration"
+:
+5
+,
+"generate_audio"
+:
+True
+}
+def
+request_json
+(
+url
+,
+data
+=
+None
+)
+:
+request
+=
+Request
+(
+url
+,
+data
+=
+data
+,
+headers
+=
+headers
+,
+method
+=
+"POST"
+if
+data
+else
+"GET"
+)
+with
+urlopen
+(
+request
+)
+as
+response
+:
+return
+json
+.
+load
+(
+response
+)
+# 1. Submit the prediction.
+body
+=
+request_json
+(
+"https://api.wavespeed.ai/api/v3/bytedance/seedance-2.5-flash/text-to-video"
+,
+json
+.
+dumps
+(
+payload
+)
+.
+encode
+(
+)
+)
+task
+=
+body
+.
+get
+(
+"data"
+,
+body
+)
+if
+not
+task
+.
+get
+(
+"id"
+)
+:
+raise
+RuntimeError
+(
+"Submission response did not contain a prediction id"
+)
+result_url
+=
+f"https://api.wavespeed.ai/api/v3/predictions/
+{
+task
+[
+'id'
+]
+}
+/result"
+# 2. Poll until the prediction finishes.
+while
+True
+:
+result_body
+=
+request_json
+(
+result_url
+)
+result
+=
+result_body
+.
+get
+(
+"data"
+,
+result_body
+)
+status
+=
+result
+.
+get
+(
+"status"
+)
+if
+status
+==
+"completed"
+:
+print
+(
+result
+.
+get
+(
+"outputs"
+,
+[
+]
+)
+)
+break
+if
+status
+in
+{
+"failed"
+,
+"cancelled"
+,
+"timeout"
+,
+"deleted"
+}
+:
+raise
+RuntimeError
+(
+result
+)
+time
+.
+sleep
+(
+2
+)
+Seedance 2.5 Flash Text To Video
+API — Frequently asked questions
+What is the Seedance 2.5 Flash Text To Video API?
+▾
+Seedance 2.5 Flash Text To Video is a ByteDance model for video generation, exposed as a REST API on WaveSpeedAI. Seedance 2.5 Flash Text-to-Video creates videos from text prompts and optional image, video, and audio references, with 480p or 720p output and optional generated audio. Ready-to-use REST inference API, best performance, no coldstarts, affordable pricing. You can call it programmatically or try it from the playground above.
+How do I call the Seedance 2.5 Flash Text To Video API?
+▾
+POST your input parameters to the model's REST endpoint (shown in the API tab of this playground) with your WaveSpeedAI API key in the Authorization header. Submission returns a prediction ID. Poll the result endpoint starting around every 2 seconds, increase the interval for long-running tasks, and stop on any terminal status. The playground generates Python, JavaScript, and cURL examples for submitting requests and polling results. Full request/response shape is documented at https://wavespeed.ai/docs/docs-api/bytedance/seedance-2.5-flash/text-to-video.
+How much does Seedance 2.5 Flash Text To Video cost per run or per second?
+▾
+Seedance 2.5 Flash Text To Video starts at $0.24 per run or per second. That figure is the base price — the final charge scales with the parameters you set in the form (output size, length, count, references, or whatever knobs this model exposes), so a higher-quality or larger output costs more than a minimal one. The exact cost for your current input is shown live next to the Generate button before you submit, and the actual per-call charge is recorded on the prediction afterwards.
+What inputs does Seedance 2.5 Flash Text To Video accept?
+▾
+Key inputs: `prompt`, `aspect_ratio`, `resolution`, `duration`, `reference_images`, `generate_audio`. The full JSON schema (types, defaults, allowed values) is rendered above the Generate button and mirrored in the API reference at https://wavespeed.ai/docs/docs-api/bytedance/seedance-2.5-flash/text-to-video.
+How do I get started with the Seedance 2.5 Flash Text To Video API?
+▾
+Sign up for a free WaveSpeedAI account to claim starter credits, copy your API key from /accesskey, then call the endpoint shown in the API tab of the playground. The playground also auto-generates a code sample in Python, JavaScript, or cURL for the parameters you've set.
+Can I use Seedance 2.5 Flash Text To Video outputs commercially?
+▾
+Commercial usage rights depend on the model's license, set by its provider (ByteDance). Check the provider's applicable terms and WaveSpeedAI's Terms of Service before commercial use.
+More from ByteDance
+View all
+bytedance/avatar-omni-human
+Talking Avatar
+bytedance/avatar-omni-human-1.5
+Talking Avatar
+bytedance/dreamactor-v2
+Motion Control
+bytedance/latentsync
+Talking Avatar
+bytedance/lipsync/audio-to-video
+Talking Avatar
+bytedance/omni-human-2.0
+Talking Avatar
+bytedance/seed-audio-1.0
+Sound Effects Generation
+bytedance/seed-speech-tts-2.0
+Text to Speech
+More Text to Video models
+View all
+bytedance/seedance-2.5/text-to-video
+Text to Video
+alibaba/wan-3.0/text-to-video
+Text to Video
+bytedance/seedance-2.0/text-to-video
+Text to Video
+wavespeed-ai/minimax-h3/text-to-video
+Text to Video
+bytedance/seedance-2.0-fast/text-to-video
+Text to Video
+kwaivgi/kling-v4.0/text-to-video
+Text to Video
+bytedance/seedance-2.5/text-to-video-turbo
+Text to Video
+bytedance/seedance-2.0-mini/text-to-video
+Text to Video
+llms.txt
+—
+bytedance/seedance-2.5-flash/text-to-video
+for AI agents and LLMs
+Seedream 5.5 is LIVE | Try in Image Generator →
+Status
+↗
+Learn More
+Home
+Dashboard
+Explore
+History
+Pricing
+Enterprise
+About Us
+Contact
+Legal
+Terms of Service
+Privacy Policy
+Acceptable Use Policy
+Official Channels
+Official Apps
+Third-Party Licenses
+Resources
+Image Generator
+Video Generator
+AI Cinema Studio
+AI Influencer Studio
+AI Chat
+Showcase
+Avatar Generator
+Audio Generator
+3D Generator
+AI Tools
+AI Apps
+Free Tools
+Retake
+Desktop App
+CLI / MCP
+LLM API
+Documentation
+Integrations
+Blog
+Contact Sales
+Support
+Affiliate
+APIs
+Studios
+Alternatives
+llms.txt
+Models
+Seedance 2.5 API
+Wan 3.0 API
+Kling 4.0 API
+MiniMax H3 API
+Seedream 5.5 API
+Seedream 5 API
+Nano Banana 2.1 API
+GPT Image 2.6 API
+GPT Image 2.5 API
+GPT Image 2 API
+Nano Banana 2 API
+Nano Banana Pro API
+Veo 3.1 API
+FLUX 3 API
+Qwen Image 3.0 API
+Grok Imagine Video 1.5 API
+Happy Horse 1.1 API
+Happy Horse 1.0 API
+Wan 2.7 API
+Seedance 2.0 API
+Kling 3.0 API
+Kling Omni O3 API
+Vidu Q4 API
+Seedream 4.5 API
+Qwen Image API
+Grok Imagine Video API
+Flux 2 Klein API
+Tripo API
+Meshy API
+Hunyuan3D API
+InfiniteTalk API
+Hailuo 2.3 API
+Kling 3.0 Motion Control API
+Topaz API
+Tools
+Text to Video
+Image to Video
+Reference to Video
+First and Last Frame Video
+Text to Image
+Image Editing
+Video Edit
+Video Extend
+Motion Control Models
+Avatar Lipsync Models
+Swap Anything
+Remove Anything
+Enhance Videos
+Upscale Image
+LoRA Generation
+Speech Generation
+Generate Music
+Audio for Video
+Speech to Text
+3D Creation
+Best Video Models
+Best Image Models
+Object Detection and Segmentation
+Content Detection Models
+Training Tools
+©
+2026
+WAVESPEED
+System

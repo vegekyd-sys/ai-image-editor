@@ -7,11 +7,26 @@ import nextConfig from '../next.config';
 // Use the same matcher and options as Next's collect-build-traces implementation.
 const require = createRequire(import.meta.url);
 const picomatch = require('next/dist/compiled/picomatch');
+const ignore = require('ignore');
 
 const root = process.cwd();
 const read = (relativePath: string) => readFileSync(path.join(root, relativePath), 'utf8');
 
 describe('Vercel deployment footprint', () => {
+  it('excludes directory entries before tar can recursively reintroduce ignored files', () => {
+    const matcher = ignore().add(read('.vercelignore'));
+    for (const directory of ['evidence', 'testcases', 'artifacts', 'benchmarks', 'makaron-intro', 'ios', '__tests__']) {
+      expect(matcher.ignores(directory), directory).toBe(true);
+      expect(matcher.ignores(`${directory}/fixture.png`), directory).toBe(true);
+    }
+    for (const file of [
+      'docs/agent-guidance/makaron-cli-entry.zh.md',
+      'src/skills/makaron-mascot/assets/mascot.png',
+      'public/skills/makaron-mascot/mascot.png',
+      'src/app/api/e2e',
+    ]) expect(matcher.ignores(file), file).toBe(false);
+  });
+
   it('keeps local media and generated artifacts out of source uploads and function traces', () => {
     const vercelIgnore = read('.vercelignore');
     const nextConfig = read('next.config.ts');

@@ -44,21 +44,26 @@ describe('bounded character recovery after an independently assessed harmless re
   });
   it.each([
     { background: 'transparent' }, { outputFormat: 'gif', frameCount: 9 }, { outputFormat: 'svg' }, { outputFormat: 'jpeg' },
-    { model: 'gpt-image-2.6-flare', imageQuality: 'high' }, { model: 'gpt-image-2.6-flare', imageReasoningEffort: 'high' }, { aspectRatio: '5:3' },
+    { aspectRatio: '5:3' },
     { references: Array.from({ length: 15 }, () => ({ url: 'https://example.com/ref.png', role: 'keep' })) },
   ] as Partial<GenerateImageRequest>[])('never weakens an incompatible contract: %j', async options => {
     await expect(generateImage(request(options))).rejects.toThrow();
     expect(alternate).not.toHaveBeenCalled();
   });
-  it.each([undefined, 'auto'])('recovers Auto with Agent-selected GPT tuning (%j), keeping the original poster brief', async model => {
+  it.each([undefined, 'auto', 'gpt-image-2.6-flare'])('recovers an allowed model preference with GPT tuning (%j), keeping the original poster brief', async model => {
     const req = request({ model, prompt: 'Mario versus Pikachu poster', imageQuality: 'high', imageReasoningEffort: 'high', aspectRatio: '2:3' });
     const result = await generateImage(req);
     expect(primary).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ imageQuality: 'high', imageReasoningEffort: 'high' }));
     expect(alternate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ prompt: req.prompt, aspectRatio: '2:3', imageQuality: undefined, imageReasoningEffort: undefined }));
     expect(result).toMatchObject({ model: 'gemini-2.1', fallbackUsed: true });
-    expect(result.adjustments).toContain('Auto recovery used Nano Banana 2.1 native rendering settings in place of GPT Image quality/reasoning tuning.');
+    expect(result.adjustments).toContain('Recovery used Nano Banana 2.1 native rendering settings in place of GPT Image quality/reasoning tuning.');
     expect(req.imageQuality).toBe('high');
     expect(req.isNsfw).toBeUndefined();
+  });
+  it('honours an independently assessed selected-model-only requirement with quality tuning', async () => {
+    await expect(generateImage(request({ model: 'gpt-image-2.6-flare', imageQuality: 'high', benignCharacterContent: false }))).rejects.toBeInstanceOf(ImageProviderRefusalError);
+    expect(primary).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ model: 'gpt-image-2.6-flare', imageQuality: 'high' }));
+    expect(alternate).not.toHaveBeenCalled();
   });
   it('still blocks incompatible Auto output contracts even with quality tuning', async () => {
     await expect(generateImage(request({ imageQuality: 'high', background: 'transparent' }))).rejects.toBeInstanceOf(ImageProviderRefusalError);

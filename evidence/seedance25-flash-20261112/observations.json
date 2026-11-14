@@ -1,0 +1,27 @@
+{
+  "observed_at": "2026-11-12T12:15:52.366397+00:00",
+  "candidate_id": "B-20261112-seedance25-flash",
+  "status": "blocked_api_not_open",
+  "official_model_id": "dreamina-seedance-2-5-flash-261115",
+  "api_opens_at": "2026-11-15T06:00:00Z",
+  "full_flash_parameter_contract_confirmed": false,
+  "native_byteplus_account_access": "not_confirmed",
+  "evolink_catalog": {
+    "url": "https://evolink.ai/zh/models",
+    "method": "cua actual rendered AX",
+    "visible_model_count": 128,
+    "seedance_flash_present": false
+  },
+  "byteplus_detail": {
+    "url": "https://ai.byteplus.com/ark/region:ap-southeast-1/model/detail?name=dreamina-seedance-2-5-flash",
+    "method": "cua actual rendered AX",
+    "coverage_status": "failed",
+    "reason": "developer agreement modal prevents model body; no agreement accepted"
+  },
+  "generation_posts": 0,
+  "expense_usd": 0,
+  "code_ready": false,
+  "live_verified": false,
+  "merged": false,
+  "deployed": false
+}

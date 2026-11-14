@@ -135,3 +135,17 @@ it.each([false,true])('keeps source motion for a content checkpoint but omits a 
   else expect(input.videoUrl).toContain('-context.mp4');
   expect(retakeVideoMeta(stubs.jobs[0]).retake!.inputDuration).toBe(cameraChange?0:5);
 });
+
+it('routes Flash Retake as typed edit without duration or aspect overrides',async()=>{
+ stubs.meta.mockResolvedValue({duration:9.96,fps:24,width:854,height:480});
+ const result=await createVideoRetake({userId:'owner',projectId:'project',images:['https://image.example/brand.jpg'],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:2,end:3.4,audioMode:'generated'},script:'Recolor the portal.',videoModel:'seedance-2.5-flash',videoResolution:'480p'});
+ expect(result.success).toBe(true);expect(stubs.provider).toHaveBeenCalledTimes(1);
+ expect(stubs.provider.mock.calls[0][0]).toMatchObject({videoModel:'seedance-2.5-flash',videoOperation:'edit',videoResolution:'480p',duration:undefined,aspectRatio:undefined,referenceVideoDuration:4,generateAudio:true,images:['https://image.example/brand.jpg']});
+ expect(stubs.jobs[0].plan).toMatchObject({start:2,end:3.4,generationDuration:4});
+});
+it('rejects Flash short source and unsupported native controls before provider admission',async()=>{
+ const base={userId:'owner',projectId:'project',images:[],videoUrl:'https://storage.example/storage/v1/object/public/images/source.mp4',retake:{start:.2,end:1.2},script:'Edit.',videoModel:'seedance-2.5-flash'};
+ stubs.meta.mockResolvedValue({duration:3.99,fps:24,width:854,height:480});
+ for(const input of [base,{...base,videoResolution:'1080p' as const},{...base,retake:{...base.retake,endFrame:{imageUrl:'https://image.example/end.jpg'}}}])expect((await createVideoRetake(input)).success).toBe(false);
+ expect(stubs.jobs).toHaveLength(0);expect(stubs.provider).not.toHaveBeenCalled();
+});

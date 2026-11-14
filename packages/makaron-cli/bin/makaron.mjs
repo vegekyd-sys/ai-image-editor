@@ -2140,7 +2140,7 @@ Inputs:
   --voice <preset-id>       Grok preset voice. Repeatable, up to 3.
 
 Generation options:
-  --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5,
+  --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5-flash, seedance-2.5,
                             wan-3.0, wan-3.0-prime, kling-4, kling-4-flash, grok, google-omni,
                             minimax-h3, minimax-h3-max, fal-h3-max, or sync-lipsync-v3.
   --duration <seconds>      Output duration supported by the selected model.
@@ -2170,6 +2170,9 @@ Recent model choices:
                   5/10/15s; native 768p default or 480p; no video/audio/multi-image references.
   wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
   wan-3.0         Wan standard tier with the same public duration/resolution range.
+  seedance-2.5-flash  4-30s; 480p/720p;10 images/5 videos/5 audios; edit follows source.
+  --image-workflow <id> Flash: reference-to-video (default) or image-to-video (1-2 first/last frames).
+  --request-id <uuid> Reuse this ID with identical arguments to recover the original billed task.
   seedance-2.5    Defaults to Eco; 4-30s; 1080p default, 720p/2k/4k; multimodal refs.
   seedance-2.5-eco  480p generation → ByteDance Fast; 1080p default, 2k/4k.
   minimax-h3      4-15s; 768p default or 2k; image/video/audio feature refs.
@@ -2489,7 +2492,7 @@ Not sure which built-in skill to use? Start with:
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
     else if (subtopic === 'create') printVideoCreateHelp();
-    else if (subtopic === 'retake') console.log('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max|kling-4|kling-4-flash|wan-3.0|wan-3.0-prime|grok|google-omni|minimax-h3] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]\nDefault: kling-4 at 720p; source >=3s, original audio only. Select another compatible model explicitly for generated audio.');
+    else if (subtopic === 'retake') console.log('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|seedance-2.5-flash|fal-h3-max|kling-4|kling-4-flash|wan-3.0|wan-3.0-prime|grok|google-omni|minimax-h3] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated] [--video-resolution <resolution>]\nDefault: kling-4 at 720p; source >=3s, original audio only. Select another compatible model explicitly for generated audio.');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else printVideoHelp();
   } else if (topic === 'music') {
@@ -2504,7 +2507,7 @@ Not sure which built-in skill to use? Start with:
     else if (subtopic === 'skill-categories') console.log('Usage: makaron admin skill-categories [--json|add|update|delete] ...');
     else if (subtopic === 'upload') console.log('Usage: makaron admin upload <local-file> <storage-path>');
     else if (subtopic === 'fetch-skill') console.log('Usage: makaron admin fetch-skill <share-code|url>');
-    else if (subtopic === 'add-credits') console.log('Usage: makaron admin add-credits <email-or-user-id> <credits> [--json]');
+    else if (subtopic === 'add-credits') console.log('Usage: makaron admin add-credits <email-or-user-id-or-api-key> <credits> [--json]');
     else if (subtopic === 'set-admin') console.log('Usage: makaron admin set-admin <email>');
     else console.log(`Admin commands:
   admin skills                         List all marketplace skills
@@ -2517,7 +2520,7 @@ Not sure which built-in skill to use? Start with:
   admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
-  admin add-credits <user> <credits>   Add credits by email or user ID
+  admin add-credits <user> <credits>   Add credits by email, user ID or API key
   admin set-admin <email>              Grant admin access to a user
 `);
   } else if (topic === 'register') {
@@ -3433,14 +3436,16 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if ((flag === '--model' || flag === '--video-model') && args[i + 1]) params.model = args[++i];
       else if (flag === '--project' && args[i + 1]) params.project_id = args[++i];
       else if (flag === '--request-id' && args[i + 1]) params.request_id = args[++i];
-      else { console.error('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|fal-h3-max|kling-4|kling-4-flash|wan-3.0|wan-3.0-prime|grok|google-omni|minimax-h3] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated]\nDefault: kling-4 at 720p; source >=3s, original audio only. Select another compatible model explicitly for generated audio.'); process.exit(1); }
+      else if (flag === '--video-resolution' && args[i + 1]) params.video_resolution = args[++i];
+      else { console.error('Usage: makaron video retake --video <url|file> --start <seconds> --end <seconds> --prompt "change" [--model seedance-2.5-eco|seedance-2.5|seedance-2.5-flash|fal-h3-max|kling-4|kling-4-flash|wan-3.0|wan-3.0-prime|grok|google-omni|minimax-h3] [--project <id>] [--wait] [--json] [--request-id <uuid>] [--audio-mode original|generated] [--video-resolution <resolution>]\nDefault: kling-4 at 720p; source >=3s, original audio only. Select another compatible model explicitly for generated audio.'); process.exit(1); }
     }
     if (!params.video_url || !params.prompt || !Number.isFinite(params.start) || !Number.isFinite(params.end)
       || params.start < 0 || params.end - params.start < .1 || params.end - params.start > 15
       || (params.audio_mode && !['original','generated'].includes(params.audio_mode))
-      || !['seedance-2.5-eco', 'seedance-2.5', 'fal-h3-max', 'kling-4', 'kling-4-flash', 'wan-3.0', 'wan-3.0-prime', 'grok', 'google-omni', 'minimax-h3'].includes(params.model)) {
+      || !['seedance-2.5-eco', 'seedance-2.5', 'seedance-2.5-flash', 'fal-h3-max', 'kling-4', 'kling-4-flash', 'wan-3.0', 'wan-3.0-prime', 'grok', 'google-omni', 'minimax-h3'].includes(params.model)) {
       console.error('Retake needs one video, a prompt, a valid 0.1–15 second interval, and a supported model.'); process.exit(1);
     }
+    if (params.video_resolution && (!['480p','720p','768p','1080p'].includes(params.video_resolution) || (params.model === 'seedance-2.5-flash' && !['480p','720p'].includes(params.video_resolution)))) { console.error('Choose a supported Retake resolution; Flash supports 480p/720p only.'); process.exit(1); }
     if (!isHttpUrl(params.video_url)) {
       if (!params.project_id) { console.error('Local video upload requires --project <id>.'); process.exit(1); }
       const valid = validateVideoFileForAnalysis(params.video_url);
@@ -3464,9 +3469,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const videos = [];
     const audios = [];
     const referenceVoices = [];
-    let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, videoResolution = undefined, wait = false;
+    let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, videoResolution = undefined, imageWorkflow = undefined, wait = false;
     let keepOriginalSound = false, videoOperation = undefined, extendDirection = undefined, outputFormat = undefined;
-    let generateAudio = undefined, contentFilter = undefined, webSearch = false;
+    let generateAudio = undefined, contentFilter = undefined, webSearch = false, billingRequestId = undefined;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
       else if (args[i] === '--video' && args[i + 1]) videos.push(args[++i]);
@@ -3484,6 +3489,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
+      else if (args[i] === '--image-workflow' && args[i + 1]) imageWorkflow = args[++i];
+      else if (args[i] === '--request-id' && args[i + 1]) billingRequestId = args[++i];
       else if (args[i] === '--video-operation' && args[i + 1]) videoOperation = args[++i];
       else if (args[i] === '--extend-direction' && args[i + 1]) extendDirection = args[++i];
       else if (args[i] === '--output-format' && args[i + 1]) outputFormat = args[++i];
@@ -3508,9 +3515,13 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       : ['kling4-flash', 'kling-4.0-flash', 'kling 4.0 flash', 'kling 4 flash'].includes(String(videoModel).toLowerCase()) ? 'kling-4-flash'
       : ['omni', 'gemini-omni', 'gemini-omni-1.2', 'gemini-omni-1.2-flash', 'omni-1.2', 'gemini omni', 'gemini omni 1.2'].includes(String(videoModel).toLowerCase()) ? 'google-omni'
         : (videoModel || (duration != null && duration > 20 ? 'seedance-2.5' : 'kling-4-flash'));
+    if (billingRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(billingRequestId)) {
+      console.error('--request-id must be a UUID. Reuse it only for the identical submission.'); process.exit(1);
+    }
+    const isFlash = selectedVideoModel === 'seedance-2.5-flash';
     const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco'].includes(selectedVideoModel);
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
-    const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
+    const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25 || isFlash;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
     const isFalH3Max = selectedVideoModel === 'minimax-h3-max';
     const isFalReference = selectedVideoModel === 'fal-h3-max';
@@ -3533,6 +3544,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (isKling4 && script.length > 2500) { console.error(`${kling4Label} scripts are limited to 2500 characters (this one has ${script.length}). Shorten the script, or choose another model with --video-model.`); process.exit(1); }
     if (isFalReference && (images.length > 9 || videos.length > 3 || audios.length > 3 || images.length + videos.length + audios.length > 12)) { console.error('FAL H3 Max accepts at most 9 images, 3 videos, 3 audios, 12 total.'); process.exit(1); }
     if (isFalReference && duration != null && (!Number.isInteger(duration) || duration < 5 || duration > 15)) { console.error('FAL H3 Max output duration must be an integer from 5 to 15 seconds.'); process.exit(1); }
+    if (isFlash && (images.length > 10 || videos.length > 5 || audios.length > 5)) { console.error('Seedance 2.5 Flash accepts at most 10 images,5 videos and5 audios.'); process.exit(1); }
+    if (isFlash && duration != null && (!Number.isInteger(duration) || duration < 4 || duration > 30)) { console.error('Seedance 2.5 Flash duration must be an integer 4–30 seconds.'); process.exit(1); }
+    if (isFlash && videoResolution && !['auto', '480p', '720p'].includes(videoResolution)) { console.error('Seedance 2.5 Flash supports only 480p/720p.'); process.exit(1); }
+    if (isFlash && (videoOperation === 'extend' || extendDirection || outputFormat === 'mov' || webSearch || contentFilter === false)) { console.error('Flash has no extend, draft, MOV, web search or relaxed-filter mode.'); process.exit(1); }
+    if (imageWorkflow && (!isFlash || !['reference-to-video', 'image-to-video'].includes(imageWorkflow))) { console.error('--image-workflow is supported for Flash reference-to-video or image-to-video only.'); process.exit(1); }
+    if (isFlash && imageWorkflow === 'image-to-video' && (!images.length || images.length > 2 || videos.length || audios.length)) { console.error('Flash first/last frames need1–2 images only.'); process.exit(1); }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
     if (isSeedance25 && videos.length > 10) { console.error('Seedance 2.5 supports at most 10 video references.'); process.exit(1); }
     if (isSeedance25 && audios.length > 10) { console.error('Seedance 2.5 supports at most 10 audio references.'); process.exit(1); }
@@ -3565,12 +3582,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       process.exit(1);
     }
 
-    const inferredOperation = videoOperation || ((isSeedance25 || isGrok) && videos.length ? 'edit' : 'generate');
-    let providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION;
+    const inferredOperation = videoOperation || ((isSeedance25 || isFlash || isGrok) && videos.length ? 'edit' : 'generate');
+    let providerMaxDuration = isSeedance25 || isFlash ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION;
     if (isGrok) providerMaxDuration = inferredOperation === 'edit' ? 8.7 : 15;
     if (isSyncLipsync) providerMaxDuration = 60;
     if (isKling4) providerMaxDuration = kling4MaxSeconds;
-    const providerMaxPixels = isSyncLipsync || isMinimaxH3 || isWan30 || isKling4 ? Infinity : isSeedance25 ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
+    const providerMaxPixels = isSyncLipsync || isMinimaxH3 || isWan30 || isKling4 ? Infinity : isSeedance25 || isFlash ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
     const localImages = images.filter(image => !isHttpUrl(image));
     if (localImages.length) {
       const uploadedImages = await uploadImageFilesViaSignedUrl(baseUrl, headers, undefined, localImages);
@@ -3585,7 +3602,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         maxDuration: providerMaxDuration,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
         maxFramePixels: providerMaxPixels,
-        maxFileSize: isWan30 ? MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE : isSeedance25 || isSyncLipsync || isKling4 ? 200 * 1024 * 1024 : MAX_VIDEO_PROVIDER_REFERENCE_FILE_SIZE,
+        maxFileSize: isWan30 ? MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE : isSeedance25 || isFlash || isSyncLipsync || isKling4 ? 200 * 1024 * 1024 : MAX_VIDEO_PROVIDER_REFERENCE_FILE_SIZE,
         ...(isKling4 ? {
           allowedExtensions: ['mp4', 'mov'], minSide: 720, maxSide: 2160,
         } : isGrok ? {
@@ -3621,7 +3638,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const audioUrls = [];
     for (const audio of audios) {
       if (isHttpUrl(audio)) { audioUrls.push(audio); continue; }
-      const valid = validateAudioReferenceFile(audio, { maxDuration: isSyncLipsync ? 60 : isSeedance25 ? 30 : MAX_AUDIO_REFERENCE_DURATION });
+      const valid = validateAudioReferenceFile(audio, { maxDuration: isSyncLipsync ? 60 : isSeedance25 || isFlash ? 30 : MAX_AUDIO_REFERENCE_DURATION });
       if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
       process.stderr.write(`🎵 Uploading ${path.basename(audio)}...\n`);
       const uploaded = await uploadFileViaSignedUrl(baseUrl, headers, undefined, audio, valid.mime, { uploadKind: 'audio' });
@@ -3633,7 +3650,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const resolvedOperation = inferredOperation;
     const vArgs = isSyncLipsync
       ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
-      : isSeedance25 || isWan30 || isGrok
+      : isSeedance25 || isFlash || isWan30 || isGrok
       ? { script, images, videoUrls, audioUrls, referenceVoiceIds: referenceVoices, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
       : isMinimaxH3 || isFalReference
         ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
@@ -3642,12 +3659,14 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       : videoUrls[0]
         ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
         : { script, images, videoModel: selectedVideoModel, videoResolution };
+    if (imageWorkflow) vArgs.imageWorkflow = imageWorkflow;
+    if (billingRequestId) vArgs.billingRequestId = billingRequestId;
     if (inputVideoMeta?.duration) vArgs.referenceVideoDuration = inputVideoMeta.duration;
     const effectiveDuration = resolvedOperation === 'edit' ? undefined : duration || (inputVideoMeta?.duration ? Math.min(providerMaxDuration, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
     if (keepOriginalSound && videoUrls.length && !isSeedance25) vArgs.keepOriginalSound = true;
-    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isWan30 && !isGrok && !isMinimaxH3 && !isFalReference && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
+    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isFlash && !isWan30 && !isGrok && !isMinimaxH3 && !isFalReference && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) {
       console.log(text);
@@ -3898,17 +3917,25 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const user = args[2]?.trim();
     const credits = Number(args[3]);
     if (!user || !Number.isSafeInteger(credits) || credits <= 0) {
-      console.error('Usage: makaron admin add-credits <email-or-user-id> <credits> [--json]');
+      console.error('Usage: makaron admin add-credits <email-or-user-id-or-api-key> <credits> [--json]');
       console.error('Credits must be a positive integer.');
       process.exit(1);
     }
 
+    const isApiKey = user.startsWith('mk_live_');
     const res = await fetch(`${baseUrl}/api/admin/add-credits`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ email: user, credits }),
+      body: JSON.stringify({ ...(isApiKey ? { apiKey: user } : { email: user }), credits }),
     });
-    const data = await res.json().catch(() => null);
+    const responseText = await res.text();
+    // Never echo the target credential, even if an older server includes it in an error.
+    let data;
+    try {
+      data = JSON.parse(responseText, (_key, value) =>
+        isApiKey && typeof value === 'string' ? value.replaceAll(user, '[redacted API key]') : value);
+    }
+    catch { data = null; }
     if (!res.ok) {
       console.error(`Error ${res.status}:`, data?.error || 'Failed to add credits');
       process.exit(1);
@@ -3916,7 +3943,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (args.includes('--json')) {
       console.log(JSON.stringify(data));
     } else {
-      console.log(`✅ Added ${credits} credits to ${user}. New balance: ${data.newBalance}`);
+      console.log(`✅ Added ${credits} credits to ${isApiKey ? data.userId : user}. New balance: ${data.newBalance}`);
     }
 
   } else {
@@ -3931,7 +3958,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
-  admin add-credits <user> <credits>   Add credits by email or user ID
+  admin add-credits <user> <credits>   Add credits by email, user ID or API key
   admin set-admin <email>              Grant admin access to a user
 `);
   }

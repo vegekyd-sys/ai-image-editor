@@ -6,6 +6,7 @@ import { resolveLayerizeFontsForServerRender } from './layerize-fonts-server';
  * Unscoped operations, failures and cancellations stop their VM immediately.
  */
 
+import { remotionChromiumOptions } from './remotion-gl';
 import { createHash, randomUUID } from 'node:crypto';
 import { after } from 'next/server';
 import { PreviewSessionCache } from './remotion-preview-session';
@@ -199,7 +200,7 @@ export async function renderDesignFrames(
   options.signal?.throwIfAborted();
   design = await resolveLayerizeFontsForServerRender(design, options.signal);
   if (!frames.length) return [];
-  if (readEnv('REMOTION_RENDERER') === 'local') {
+  if (process.env.MAKARON_BUNDLE_LOCAL_RENDERER !== '0' && readEnv('REMOTION_RENDERER') === 'local') {
     const { renderDesignFrameLocal } = await import('@/lib/remotion-local-renderer');
     const buffers: Buffer[] = [];
     for (const frame of frames) {
@@ -263,7 +264,7 @@ export async function renderDesignFrames(
           mediaCacheSizeInBytes: null,
           offthreadVideoThreads: null,
           licenseKey: null,
-          chromiumOptions: { disableWebSecurity: true, gl: null },
+          chromiumOptions: remotionChromiumOptions(design.code),
           frame: Math.min(frame, durationInFrames - 1),
           output: outputFile,
           timeoutInMilliseconds: 30000,
@@ -344,7 +345,7 @@ export async function renderDesignVideo(
     return renderDesignVideoLambda(design, options);
   }
 
-  if (readEnv('REMOTION_RENDERER') === 'local') {
+  if (process.env.MAKARON_BUNDLE_LOCAL_RENDERER !== '0' && readEnv('REMOTION_RENDERER') === 'local') {
     const { renderDesignVideoLocal } = await import('@/lib/remotion-local-renderer');
     return renderDesignVideoLocal(design, {
       ...options,
@@ -394,7 +395,7 @@ export async function renderDesignVideo(
         outputFile,
         codec: 'h264',
         imageFormat: 'jpeg',
-        chromiumOptions: { disableWebSecurity: true, gl: null },
+        chromiumOptions: remotionChromiumOptions(design.code),
         scale,
         crf: 23,
         x264Preset: 'veryfast',

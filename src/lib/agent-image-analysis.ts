@@ -7,6 +7,8 @@ export interface NativeVisionImageInput {
   source: string;
   /** One-based Timeline Media Index. Omit for transient images such as annotations. */
   mediaIndex?: number;
+  /** Internal request-scoped marker; do not repeat a failed CDN prefetch. */
+  transportPrepared?: true;
 }
 
 export interface NativeVisionSnapshot {

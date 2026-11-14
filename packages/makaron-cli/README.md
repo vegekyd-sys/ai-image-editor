@@ -458,6 +458,8 @@ npx makaron-cli video status <taskId>
 npx makaron-cli video retake --video input.mp4 --start 2 --end 5 --prompt "Make the umbrella red" --project <id> --model seedance-2.5 --wait --json
 ```
 
+Seedance 2.5 Flash Retake: explicitly select `--model seedance-2.5-flash`; source >=4s, selection 0.1–15s, with at least 4s editing context. `--video-resolution 480p|720p` (default 720p); original audio is retained unless `--audio-mode generated` is explicit. No native exact final/middle-frame locks. The edited range is assembled back into the original duration; outside footage stays in place. Keep the request ID and poll the same root task.
+
 Video segment editing also works directly from natural-language chat, without a GUI selection:
 
 ```bash
@@ -474,6 +476,8 @@ npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 ```
 
 Kling 4.0: use `--video-model kling-4` for native text-to-video or image/video feature references, integer 3–30s at 720p (default) or 1080p. Up to 10 images and 5 videos; source videos must each be 3s or longer, total at most 30s, 720–2160px per side, 24–60fps and at most 200MB each. `--video-operation edit` requires exactly one source video and preserves its canvas/audio. Explicit keyframe I2V, extension and replacement-audio controls are not exposed. Retake defaults to `kling-4` at 720p, original audio only, source at least 3s, no final/middle frame control. Kling 4.0 Flash (`kling-4-flash`) is the default when `--video-model` is omitted (omitting it with `--duration` above 20 uses `seedance-2.5`): the faster variant with the same inputs, edit route and Retake rules, but integer 3–20s at 720p only, scripts at most 2500 characters, and source/reference videos at most 20s total. Never silently substitute one Kling 4 variant for the other.
+
+Seedance 2.5 Flash: explicitly select `--video-model seedance-2.5-flash`; generation is integer 4–30s at480p/720p (default720p). Up to10images,5videos(each2–30s,total≤30s),5audios(total≤30s). Images are feature references by default; `--image-workflow image-to-video` locks1–2 first/last frames with no video/audio inputs. Use `--video-operation generate` for video references or `edit` for exactly one4–30s source; edit and first/last frames follow source canvas. Edit follows source duration: omit duration, never -1. Native synchronized audio is included. No extend, draft, MOV, web-search, relaxed content filter or native1080p/4K. Set `--request-id <uuid>` before the first submission and reuse it with identical arguments to recover the original task without another charge. Keep the returned task ID and poll it; never silently substitute Eco or another model. Apply the additive media-pricing setup before submitting on a new database.
 
 Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to the selected model limit), `--video <file|url>` and `--audio <file|url>` (repeatable where supported), `--voice <xai-preset-id>` (repeatable, Grok only), `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|wan-3.0|wan-3.0-prime|kling-4|grok|google-omni|minimax-h3|minimax-h3-max|fal-h3-max|sync-lipsync-v3`, `--video-resolution auto|480p|720p|768p|1080p|2k|4k`. Default model is FAL H3 Max (`fal-h3-max`) at 768p (480p/1080p optional): native text-to-video or image/video/audio reference-to-video, integer 5-15s, up to 9 images + 3 videos + 3 audios (12 total). SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); every Seedance image input is submitted through reference-to-video, including one image. `seedance-mini` supports 480p/720p and is best for cheaper drafts/multi-size tests. Wan 3.0 and Wan 3.0 Prime both expose 480p/720p/1080p/2K/4K; 2K/4K automatically use the matching FlashVSR endpoint. MiniMax H3 accepts native text-to-video, 4-15s output, public 768p/2k resolution, and up to 9 image, up to 3 video, and up to 3 audio feature references through Makaron Agent/chat; a single image keeps the `reference_image` role. `sync-lipsync-v3` requires exactly one video plus one MP3/WAV and preserves that replacement audio while aligning the mouth. H3 defaults to 768p; request 2k explicitly for maximum/final quality. Kling 4.0 supports integer 3-30s in one call. Grok generation uses `grok-imagine-video-1.5`: text-only generation supports 480p/720p/1080p, while any 1-7 image or preset voice input uses reference-to-video and is capped at 720p. Grok edit/extend uses `grok-imagine-video` internally under the same `grok` selector. Gemini Omni 1.2 supports 3-15s fast image/video generation and editing with native generated audio and multi-speaker dialogue; every image-only generation request uses `reference_to_video`, including a single image, with up to 6 images when no video reference is provided.
 
@@ -624,11 +628,12 @@ Admin commands require an API key with admin privileges. Ask your admin to run `
 
 ### Add credits to a user
 
-Use either the account email address or the Supabase user UUID. Credits must be a positive integer.
+Use the account email address, Supabase user UUID, or full active API key. Credits are added to the owning account (shared by its API keys), and must be a positive integer. Keep `MAKARON_API_KEY` set to your administrator credential; the positional API key identifies the recipient. Full recipient keys are redacted from command output.
 
 ```bash
 npx makaron-cli admin add-credits user@example.com 1000
 npx makaron-cli admin add-credits <user-id> 1000 --json
+npx makaron-cli admin add-credits "$RECIPIENT_API_KEY" 1000 --json
 ```
 
 ### List all marketplace skills
@@ -749,7 +754,7 @@ makaron chat --image mascot.png "Use GPT Image 2.6 Flare to make a looping GIF o
 
 The provider schema also advertises xhigh/max reasoning, but the live 2.6 endpoint rejected both during acceptance. They are not exposed as working Makaron tiers. Exact active 2.6 pricing rows are required before submission; final cost uses that task's fal billable USD units.
 
-Seedream 5.5 candidate (`--image-model seedream-5.5`) uses EvoLink, accepts at most 10 ordered inputs (base included), `--image-resolution 1K|1.5K|2K`, and `--output-format png|jpeg` (default PNG). `--background transparent` requires native PNG alpha. Quality/reasoning/GIF/SVG controls are unsupported. It never participates in Auto or switches providers after failure. Direct `makaron edit --image/--ref` uploads local originals automatically; direct MCP callers must supply public HTTPS PNG/JPEG/WebP originals. Accepted task receipts are saved to the user workspace before polling. The server must configure `EVOLINK_API_KEY` and an exact active `seedream-5.5` pricing row before use. Not released on the live service.
+Seedream 5.5 (`--image-model seedream-5.5`) uses EvoLink, accepts at most 10 ordered inputs (base included), `--image-resolution 1K|1.5K|2K`, and `--output-format png|jpeg` (default PNG). `--background transparent` requires native PNG alpha. Quality/reasoning/GIF/SVG controls are unsupported. It never participates in Auto or switches providers after failure. Direct `makaron edit --image/--ref` uploads local originals automatically; direct MCP callers must supply public HTTPS PNG/JPEG/WebP originals. Accepted task receipts are saved to the user workspace before polling. The server must configure `EVOLINK_API_KEY` and an exact active `seedream-5.5` pricing row before use.
 
 ### Image layer decomposition (candidate)
 

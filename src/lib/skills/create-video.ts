@@ -202,6 +202,7 @@ function prepareSeedance25References(options: {
   let prompt = options.prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (marker, rawIndex) => {
     return mediaTags.get(Number(rawIndex)) || marker;
   });
+  prompt = prompt.replace(/<<<video_(\d+)>>>/gi, (_marker, rawIndex) => `@video${Number(rawIndex)}`);
   prompt = prompt.replace(/<<<audio_(\d+)>>>/gi, (_marker, rawIndex) => `@audio${Number(rawIndex)}`);
 
   if (options.operation === 'edit') {
@@ -341,6 +342,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const hasAudioReference = !!audioUrls?.length;
   const hasVoiceReference = !!referenceVoiceIds?.length;
   const provider = normalizeVideoModelId(videoModel);
+  const isFlash = provider === 'seedance-2.5-flash';
   const isWan30 = provider === 'wan-3.0' || provider === 'wan-3.0-prime';
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
   const isKling4Family = isKling4FamilyModel(provider);
@@ -412,10 +414,10 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: `${capability.label} supports at most ${capability.maxAudioReferences ?? 3} reference audio files per generation.`,
     };
   }
-  const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas, Boolean(input.onBeforeProviderSubmit));
+  const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas, Boolean(input.onBeforeProviderSubmit) || isFlash);
 
   if (images.length === 0 && !hasVideoReference) {
-    if (hasAudioReference && provider !== 'seedance-2.5' && !isWan30) {
+    if (hasAudioReference && provider !== 'seedance-2.5' && !isFlash && !isWan30) {
       return {
         success: false,
         message: 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.',
@@ -436,7 +438,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     const initialFiltered = filterAndRemapImages(script, images, Math.max(7, capability.maxImageReferences ?? 7));
     let filteredImages = initialFiltered.filteredImages;
     let finalPrompt = initialFiltered.finalPrompt;
-    if (provider === 'seedance-2.5') {
+    if (provider === 'seedance-2.5' || isFlash) {
       const prepared = prepareSeedance25References({
         prompt: script,
         images,
@@ -534,7 +536,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         return { success: false, retryable: false, message: 'Cannot measure reference-video duration for billing. Use a readable MP4/MOV before submitting.' };
       }
       const sourceSeconds = durations?.reduce<number>((sum, value) => sum + (value ?? 0), 0) ?? 0;
-      const retainsSource = route.provider === 'fal-sync' || (videoOperation === 'edit' && (provider === 'grok' || provider === 'seedance-2.5'));
+      const retainsSource = route.provider === 'fal-sync' || (videoOperation === 'edit' && (provider === 'grok' || provider === 'seedance-2.5' || isFlash));
       const adaptiveSourceDuration = provider === 'seedance-2.5' && providerVideoUrls.length > 0 && resolvedDuration === -1;
       const billsSourceDuration = retainsSource || adaptiveSourceDuration || klingAutoDuration;
       if (billsSourceDuration && !sourceSeconds) return { success: false, message: 'A measured source duration is required for video editing.' };
@@ -578,7 +580,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (provider === 'seedance-2.5' && (videoOperation !== 'generate' || resolvedDuration === -1)) {
       providerAspectRatio = 'adaptive';
     }
-    if (route.provider === 'fal-sync') providerAspectRatio = undefined;
+    if (route.provider === 'fal-sync' || isFlash && (videoOperation === 'edit' || resolvedImageWorkflow === 'image-to-video')) providerAspectRatio = undefined;
     // EvoLink Kling defaults to 16:9 when aspect_ratio is omitted. Follow the
     // first reference image instead, so a portrait photo stays portrait.
     if (isKling4Family && !providerAspectRatio && videoOperation !== 'edit' && filteredImages.length > 0) {
@@ -608,6 +610,20 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
           duration: resolvedDuration, resolution: route.resolution as '720p' | '1080p', aspectRatio: providerAspectRatio,
           operation: videoOperation as 'generate' | 'edit' });
       } catch (error) { return { success: false, submissionUncertain: false, message: error instanceof Error ? error.message : `Invalid ${route.label} request.` }; }
+    }
+    if (isFlash) {
+      try {
+        const measured = resolvedReferenceVideoMetas?.map(m => m.durationSec) ?? [];
+        if (providerVideoUrls.length && (measured.length !== providerVideoUrls.length || measured.some(n => !n || !Number.isFinite(n)))) throw new Error('Flash reference videos require measurable duration before submission.');
+        if (measured.reduce<number>((s,n) => s + (n ?? 0), 0) > 30) throw new Error('Flash reference videos must total 30 seconds or less.');
+        if (audioUrls?.length) await (await import('../seedance25-flash-preflight')).validateFlashAudioReferences(audioUrls);
+        (await import('../seedance25-flash')).buildSeedance25FlashPayload({
+          model: resolveVideoProviderModel({ model: provider, imageReferenceCount: filteredImages.length, hasVideoReference, hasAudioReference, operation: videoOperation, imageWorkflow: resolvedImageWorkflow }),
+          prompt: finalPrompt, images: filteredImages, videoUrls: providerVideoUrls, audioUrls,
+          duration: videoOperation === 'edit' ? undefined : resolvedDuration, aspectRatio: providerAspectRatio,
+          quality: route.resolution, contentFilter, outputFormat, webSearch, generateAudio,
+        });
+      } catch (error) { return { success: false, submissionUncertain: false, message: error instanceof Error ? error.message : 'Invalid Flash input.' }; }
     }
     // H3 validates the actual first-frame bytes before reserving credits.
     if (billingUsage && route.provider !== 'fal-h3-max') await input.onBeforeProviderSubmit!(billingUsage);
@@ -653,8 +669,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         hasVideoReference: providerVideoUrls.length > 0,
         hasAudioReference,
         operation: videoOperation,
+        imageWorkflow: resolvedImageWorkflow,
       });
-      const providerDuration = provider === 'seedance-2.5' && videoOperation === 'edit'
+      const providerDuration = isFlash && videoOperation === 'edit' ? undefined : provider === 'seedance-2.5' && videoOperation === 'edit'
         ? -1
         : resolvedDuration != null ? resolvedDuration : undefined;
       const providerPrompt = finalPrompt;

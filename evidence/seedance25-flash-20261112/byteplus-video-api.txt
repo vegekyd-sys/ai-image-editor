@@ -1,0 +1,3041 @@
+# Create a video generation task
+
+> The complete documentation index is available at [llms.txt](https://ai.byteplus.com/ark/llms.txt). Append `.md` to any documentation page URL to get its Markdown version.
+
+`POST https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks` [Try](https://api.byteplus.com/api-explorer/?action=CreateContentsGenerationsTasks&groupName=Video%20Generation%20API&serviceCode=ark&version=2024-01-01)
+This topic describes the input and output parameters of the API for creating video generation tasks. The model generates a video based on the input text, images, audio, videos, or sample task ID. After generation is complete, you can query the task and obtain the generated video.
+
+> **Warning: Model availability**
+>
+> Dreamina Seedance 2.5 flash is now available. For details, see the [Model details](https://ai.byteplus.com/ark/region:ap-southeast-1/model/detail?name=dreamina-seedance-2-5-flash) page. Starting at 14:00 (UTC+8) on November 15, 2026, the model will be available for online experience and API calls.
+
+> **Danger: Must-read before use**
+>
+> Dreamina Seedance 2.5 is now fully available. You can call the API and try the model online on the BytePlus ModelArk platform. Before calling the model, **please carefully read [Must-read before use](/docs/seedance-2-5#2.5_compatibility) to ensure that you correctly set the task type and configure parameters**.
+
+**Model activation**
+
+Before enabling the Dreamina Seedance 2.0 and Seedance 2.5 models, make sure you meet one of the following conditions:
+
+- **Recommended:** BytePlus account balance > USD 30 ([Top up](https://console.byteplus.com/finance/overview))
+- **Recommended:** Purchase a dedicated AI Savings Plan at the USD 30 tier or above. Purchase entry: [AI Savings Plan](https://console.byteplus.com/common-buy/AI-SavingsPlans%7C%7Cd9urs77og65q382arfog).
+- You have purchased a Seedance resource pack with available quota ([Purchase](https://console.byteplus.com/common-buy/ModelArk%7C%7Cd7d6aanpgiftptb9ajcg)).
+
+For detailed rules, see [Activate, use, and cancel Dreamina Seedance 2.5 and 2.0 series models](/docs/seedance-model-activation-usage-and-refund).
+
+**Model capabilities**
+
+* **Dreamina Seedance 2.5<sup>==new==</sup>** (video with audio / silent video)
+  * **Omni reference-to-video**: Input reference images (0–30), reference videos (0–10), reference audio clips (0–10), and an optional text prompt to generate one target video. Audio-only input is supported. The model supports generating new videos, editing videos, extending videos, and coherently generating videos up to 30 seconds long.
+  * **Image-to-video (first and last frames)**: Input a first-frame image, a last-frame image, and an optional text prompt to generate one target video.
+  * **Image-to-video (first frame)**: Input a first-frame image and an optional text prompt to generate one target video.
+  * **Text-to-video**: Input a text prompt to generate one target video.
+* **Dreamina Seedance 2.0 series** (video with audio / silent video)
+  * **Omni reference-to-video**: Input reference images (0–9), reference videos (0–3), reference audio clips (0–3), and an optional text prompt to generate one target video. Audio-only input is not supported; include at least one reference image or video. The models support generating new videos, editing videos, and extending videos.
+  * **Image-to-video (first and last frames)**: Input a first-frame image, a last-frame image, and an optional text prompt to generate one target video.
+  * **Image-to-video (first frame)**: Input a first-frame image and an optional text prompt to generate one target video.
+  * **Text-to-video**: Input a text prompt to generate one target video.
+* **Seedance 1.5 pro** (video with audio / silent video)
+  * Supports image-to-video (first and last frames), image-to-video (first frame), and text-to-video.
+* **Seedance 1.0 pro**
+  * Supports image-to-video (first and last frames), image-to-video (first frame), and text-to-video.
+* **Seedance 1.0 pro fast**
+  * Supports image-to-video (first frame) and text-to-video.
+
+**Parameter input methods**
+
+> **Note**
+>
+> * For `resolution`, `ratio`, `duration`, `frames`, `seed`, `camera_fixed`, and `watermark`, all models support both passing parameters directly in the request body and appending `--[parameters]` after the text prompt.
+> * Supported parameters and values vary by model. For details, see [Set video output specifications](/docs/video-generation-tutorial#9fe4cce0). When a parameter or value is invalid or unsupported:
+>   * **Conventional method (recommended)**: Pass parameters directly in the request body. This method uses strict validation and returns an error for invalid parameters.
+>   * **Legacy method**: Append `--[parameters]` after the text prompt. Invalid parameters are ignored or cause an error.
+
+**Conventional method (recommended): Pass parameters directly in the request body**
+
+```json
+{
+    "model": "seedance-1-5-pro-251215",
+    "content": [
+        {
+            "type": "text",
+            "text": "The kitten is yawning at the camera."
+        }
+    ],
+    "resolution": "720p",
+    "ratio": "16:9",
+    "duration": 5,
+    "seed": 11,
+    "camera_fixed": false,
+    "watermark": true
+}
+```
+
+**Weak-validation method: Append `--[parameters]` after the text prompt**
+
+```json
+{
+    "model": "seedance-1-5-pro-251215",
+    "content": [
+        {
+            "type": "text",
+            "text": "The kitten is yawning at the camera. --rs 720p --rt 16:9 --dur 5 --seed 11 --cf false --wm true"
+        }
+    ]
+}
+```
+
+**Tab: Try**
+
+[Try it](https://api.byteplus.com/api-explorer/?action=CreateContentsGenerationsTasks&groupName=Video%20Generation%20API&serviceCode=ark&version=2024-01-01): You can initiate calls online through API Explorer without paying attention to the signature generation process and quickly obtain the call results.
+
+**Tab: Quick start**
+
+[Playground](https://ai.byteplus.com/ark/region:ap-southeast-1/experience/gen_video) | [Model list](/docs/model-list) | [Model billing](/docs/model-pricing#8f25f772) | [API key](https://ai.byteplus.com/ark/region:ap-southeast-1/apiKey?apikey=%7B%7D)
+[API tutorial](/docs/video-generation-tutorial) | [API reference](/docs/create-video-generation-task-api) | [FAQs](/docs/modelark-faq) | [Model activation](https://ai.byteplus.com/ark/region:ap-southeast-1/openManagement?LLM=%7B%7D&tab=ComputerVision)
+
+**Tab: Authentication**
+
+This API supports only API Key authentication. Obtain a long-term API Key on the [API keys](https://ai.byteplus.com/ark/region:ap-southeast-1/apiKey?apikey=%7B%7D) page.
+
+## Request parameters
+
+### Request body
+
+**model** `string` `Required` | Model ID
+
+ID of the model you need to call. You can [activate a model service](https://ai.byteplus.com/ark/region:ap-southeast-1/openManagement?LLM=%7B%7D&tab=ComputerVision) and [query the model ID](/docs/model-list).
+You can also use an endpoint ID to call a model, querying its rate limits, billing method (prepaid or postpaid), and status, and using its advanced capabilities such as monitoring and security. For more information, refer to [Obtaining an endpoint ID](/docs/online-inference-standard).
+
+**content** `object[]` `Required` | Input content list
+
+The references provided to the model for video generation, supporting text, image, audio, video, and sample task ID.
+
+The following combinations are supported:
+* Text
+* Text (optional) + image
+* Text (optional) + video
+* Text (optional) + audio (Dreamina Seedance 2.5 supports audio-only input)
+* Text (optional) + image + audio
+* Text (optional) + image + video
+* Text (optional) + video + audio
+* Text (optional) + image + video + audio
+* Sample task ID: A sample video successfully generated using a Seedance model. The model can generate a high-quality final video based on the sample.
+
+> **Warning: Note**
+>
+> Dreamina Seedance 2.5 and Dreamina Seedance 2.0 series models do not support directly uploading reference images or videos that contain real human faces. ModelArk provides the following solutions to help you create videos with portrait assets. For details, see [Create portrait videos with Dreamina Seedance models](/docs/seedance-portrait-asset-guide).
+> * Supports using original outputs containing human faces from certain models as input assets
+> * Supports using preset digital characters as input assets
+> * Supports using authorized real-person assets as input assets
+
+**Text** `object`
+The input text information for the model to generate a video.
+
+**type** `string` `Required` | Content type
+
+`content.type`
+
+The type of the input content. In this case, set the value to `text`.
+
+**text** `string` `Required` | Text prompt
+
+`content.text`
+
+Text prompt input to the model, describing the expected generated video.
+
+> **Note: Tip**
+>
+> * **Supported prompt languages**: All models support English prompts.
+>   * **Dreamina Seedance 2.5** additionally supports Spanish, Indonesian, Portuguese, Japanese, Malay, Thai, Arabic, Vietnamese, and Korean.
+>   * **Dreamina Seedance 2.0 series** additionally supports Spanish, Indonesian, Portuguese, and Japanese.
+> * Recommended prompt length: no more than 500 Chinese characters or 1,000 English words. Lengthy text will lead to scattered information, and the model may ignore details and only focus on key points, resulting in missing elements in the generated video.
+> * See [Dreamina Seedance 2.0 series prompt guide](/docs/seedance-2-0-prompt-guide) for more tips on using prompts.
+
+**Image** `object`
+The input image information for the model to generate a video.
+
+**type** `string` `Required` | Content type
+
+`content.type`
+
+The type of the input content. In this case, set the value to `image_url`. Supports image URL or image Base64 encoding.
+
+**image_url** `object` `Required` | Image object
+
+`content.image_url`
+
+The input image object for the model.
+
+**url** `string` `Required` | Image source
+
+`content.image_url.url`
+
+Accepts image URL, Base64-encoded image, or asset ID.
+* URL: Enter the publicly accessible URL of the image.
+* Base64 encoding: Convert the local file to a Base64-encoded string, then submit to the model. Follow the format: `data:image/<image format>;base64,<Base64 encoding>`. Note that `<image format>` must be lowercase, for example `data:image/png;base64,{base64_image}`.
+* Asset ID: The URI of the digital character used for video generation. It follows the format `asset://<ASSET_ID>` and can be obtained from the [Digital characters library](https://ai.byteplus.com/ark/region:ap-southeast-1/experience/gen_video?model=dreamina-seedance-2-0-260128).
+
+> **Note: Requirements for uploading a single image**
+>
+> * Format: `jpeg`, `png`, `webp`, `bmp`, `tiff`, or `gif`. Seedance 1.5 pro and later models also support `heic` and `heif`.
+> * Aspect ratio (width/height): `[0.4, 2.5]`
+> * Width and height (px): `[300, 6000]`
+> * Size:
+>   * Single image must be less than 30 MB
+>   * Request body size does not exceed 64 MB.
+>   * Do not use Base64 encoding for large files.
+> * Number of images:
+>   * Image-to-video (first frame): 1
+>   * Image-to-video (first and last frames): 2
+>   * Dreamina Seedance 2.5 omni reference-to-video: 1–30 images
+>   * Seedance 2.0 series omni reference-to-video: 1–9 images
+
+**role** `string` `Required under certain conditions` | Role/purpose
+
+`content.role`
+
+The location or purpose of the image.
+
+Image-to-video (first frame)
+* **Supported models:** All models
+* **Values**: You need to pass in one **image_url** object, with the role field set to `first_frame` or leave **role** blank.
+
+Image-to-video (first and last frames)
+* **Supported models:** Dreamina Seedance 2.5, Dreamina Seedance 2.0 series, Seedance 1.5 pro, and Seedance 1.0 pro.
+* **Values**: Two **image_url** objects must be provided, and the role field is required.
+    * Role of the first frame: `first_frame`
+    * Role of the last frame: `last_frame`
+
+> **Note: Tip**
+>
+> The first-frame and last-frame images can be identical.
+> If the aspect ratios of the first and last frame images are inconsistent, the first frame image takes precedence, and the last frame image will be automatically cropped to fit.
+
+Image-to-video (reference images)
+* **Supported models:** Dreamina Seedance 2.5 (1–30 images) and Dreamina Seedance 2.0 series (1–9 images)
+* **Values**: Required. The **role** field for each reference image must be set to `reference_image`
+
+> **Warning: Note**
+>
+> * **Image-to-video (first frame)**, **image-to-video (first and last frames)**, and **omni reference-to-video** (including reference images, videos, and audio) are mutually exclusive scenarios and **cannot be mixed**.
+> * For omni reference-based video generation, you can specify reference images as the first and/or last frame in the prompt to indirectly achieve a "first/last frame + omni references" effect. If you need to strictly ensure the first and last frames exactly match the specified images, use **image to video - first and last frames** instead (set `role` to `first_frame` or `last_frame`).
+
+**Video** `object`
+Reference video provided to the model. Dreamina Seedance 2.5 and Dreamina Seedance 2.0 series models support video input.
+ModelArk trusts face-containing videos generated by these models. You can use the **original face-containing videos generated by these models under your account within the past 30 days** as input assets. For details, see [Trust model outputs as input assets](/docs/seedance-portrait-asset-guide#trust-model-output).
+
+**type** `string` `Required` | Content type
+
+`content.type`
+
+Type of the input; in this case, set to `video_url`.
+
+**video_url** `object` `Required` | Video object
+
+`content.video_url`
+
+The video object provided to the model.
+
+**url** `string` `Required` | Video source
+
+`content.video_url.url`
+
+Video URL or asset ID.
+
+* Video URL: Enter the public URL of the video.
+* Asset ID: The URI of the digital character used for video generation. It follows the format `asset://<ASSET_ID>` and can be obtained from the [digital characters library](https://ai.byteplus.com/ark/region:ap-southeast-1/experience/gen_video?model=dreamina-seedance-2-0-260128).
+
+> **Note: Video input requirements**
+>
+> * Video format: `mp4`, `mov`. Supported encoding formats are listed in the table below.
+> * Resolution: `480p`, `720p`, `1080p`, `4k`
+> * Duration:
+>   * **Dreamina Seedance 2.5:**
+>     * Non-video-editing tasks: Each video must be 2–30 seconds long.
+>     * [Video editing tasks](/docs/seedance-2-5#2.5_task_type_intro): Each video must be 4–30 seconds long.
+>     * You can submit up to 10 reference videos with a total duration of no more than 30 seconds.
+>   * **Dreamina Seedance 2.0 series:** Each video must be 2–15 seconds long. You can submit up to 3 reference videos with a total duration of no more than 15 seconds.
+> * Dimensions:
+>   * Aspect ratio (width/height): `[0.4, 2.5]`
+>   * Width and height (px): `[300, 6000]`
+>   * Total pixels: `[614×664=407696, 3326×2494=8295044]`, that is, the product of width and height must fall in the range `[407696, 8295044]`.
+> * Size: Each video must not exceed 200 MB.
+> * Frame rate (FPS): `[24, 60]`
+
+| Container Format | Common Extension Name | **MIME** | Supported Encodings |
+| --- | --- | --- | --- |
+| MP4 | .mp4 | video/mp4 | Video: H.264/AVC, H.265/HEVC<br>Audio: AAC, MP3 |
+| QuickTime | .mov | video/quicktime | Video: H.264/AVC, H.265/HEVC<br>Audio: AAC, MP3, PCM |
+
+**role** `string` `Required` | Role/purpose
+
+`content.role`
+
+Position or purpose of the video. Fixed to `reference_video`.
+
+**Supported models:** Dreamina Seedance 2.5 and Dreamina Seedance 2.0 series.
+
+**Audio** `object`
+Audio provided to the model. Dreamina Seedance 2.5 and Dreamina Seedance 2.0 series models support audio input.
+
+**type** `string` `Required` | Content type
+
+`content.type`
+
+Type of the input; in this case, set to `audio_url`. Supports audio URL or Base64-encoded audio string.
+
+**audio_url** `object` `Required` | Audio object
+
+`content.audio_url`
+
+Audio object provided to the model.
+
+**url** `string` `Required` | Audio source
+
+`content.audio_url.url`
+
+URL, Base64-encoded string or asset ID of the audio.
+* Audio URL: The publicly accessible URL of the audio.
+* Base64 encoding: Convert the local file to a Base64-encoded string, then submit it to the model. Follow the format: `data:audio/<audio format>;base64,<Base64 encoding>`.
+    `<audio format>` must be lowercase, for example, `data:audio/wav;base64,{base64_audio}`.
+* Asset ID: The URI of the digital character used for video generation. It follows the format `asset://<ASSET_ID>` and can be obtained from the [digital character library](https://ai.byteplus.com/ark/region:ap-southeast-1/experience/gen_video?model=dreamina-seedance-2-0-260128).
+
+> **Note: Audio input requirements**
+>
+> * Format: `wav`, `mp3`
+> * Duration:
+>   * **Dreamina Seedance 2.5:** Each audio clip must be 2–30 seconds long. You can submit up to 10 reference audio clips with a total duration of no more than 30 seconds.
+>   * **Dreamina Seedance 2.0 series:** Each audio clip must be 2–15 seconds long. You can submit up to 3 reference audio clips with a total duration of no more than 15 seconds.
+> * Size:
+>   * Each audio file must not exceed 15 MB.
+>   * The request body size must not exceed 64 MB.
+>   * Do not use Base64 encoding for large files.
+
+**role** `string` `Required` | Role/purpose
+
+`content.role`
+
+Position or purpose of the audio. Fixed to `reference_audio`.
+
+**Supported models:**
+
+* **Dreamina Seedance 2.5:** Supports audio-only input and combining audio with images or videos.
+* **Dreamina Seedance 2.0 series:** Audio-only input is not supported; include at least one reference image or video.
+
+**Draft information** `object`
+Generate a final video based on a Draft video task ID. For instructions and important notes, see [Draft mode](/docs/video-generation-tutorial#5acd28c8).
+
+**Supported models:**
+
+* `Dreamina Seedance 2.5`
+* `Seedance 1.5 pro`
+
+**type** `string` `Required` | Content type
+
+`content.type`
+
+Type of input content. In this case, set it to `draft_task`.
+
+**draft_task** `object` `Required` | Draft task object
+
+`content.draft_task`
+
+Draft task input to the model.
+
+**id** `string` `Required` | Draft task ID
+
+`content.draft_task.id`
+
+Draft task ID.
+
+When generating a final video based on a Draft video, the model automatically reuses some parameters. Some parameters must not be provided again, while others can be specified again.
+
+Parameter handling rules vary by model. For details, see [Dreamina Seedance 2.5 Draft mode](/docs/seedance-2-5#2.5_draft_mode) and [Seedance 1.5 pro Draft mode](/docs/video-generation-tutorial#5acd28c8).
+
+Two steps are required:
+1. Call this API to generate a Draft video.
+2. If the Draft video meets expectations, call this API to generate the final video based on the Draft video task ID returned in Step 1.
+
+> **Warning: Note**
+>
+> * A Draft video task ID has a validity period, measured from its `created_at` timestamp. The ID automatically becomes invalid when this period expires.
+>
+> * Draft video task IDs created at or after 10:00 on October 28, 2026 (UTC+8) are valid for 14 days. IDs created before this time remain valid for seven days. After a Draft video task ID expires, it cannot be used to generate a final video.
+
+**omni_reference_task_type<sup>==new==</sup>** `string` `Default value: auto` | Task type hint
+
+Seedance 2.5 **omni reference-to-video tasks** include three subtasks: reference-to-video, video editing, and video extension. Different task types have special parameter constraints. To reduce asynchronous errors after task creation, use this parameter to specify the subtask type and validate the corresponding constraints earlier.
+
+* By default, when `omni_reference_task_type=auto`, the model automatically determines the task type from the input assets and prompt, and then validates the parameter values. If the parameters are incompatible with the actual task type, the task triggers an [asynchronous error](/docs/seedance-2-5#2.5_error_handling) (error code: [`InvalidParameter.TaskTypeConstraint`](/docs/error-codes)).
+* When `omni_reference_task_type` is explicitly set to `reference`, `edit`, or `extend`, the API validates the special constraints for the specified task when you submit the task. If the request does not meet the requirements, the API immediately returns an error and the task is not created.
+
+**Supported values:**
+
+* `auto`: The model determines the task type from the input assets and prompt.
+* `reference`: A reference-to-video task that generates a new video based on reference images, reference videos, or reference audio. When set to `reference`, `ratio` and `duration` have no special constraints.
+* `edit`: A video editing task that edits the visuals or audio of an original video. When set to `edit`, `content` must contain at least one `reference_video`, the video must be 4–30 seconds long, `ratio` must be `adaptive`, and `duration` must be `-1`.
+* `extend`: A video extension task that extends an original video forward or backward. When set to `extend`, `content` must contain at least one `reference_video`, and `ratio` must be `adaptive`.
+
+> **Warning: Note**
+>
+> When actually processing the task, the model still further determines the task type based on the prompt. If the actual task type identified by the model does not match the specified value, the task still triggers an [asynchronous error](/docs/seedance-2-5#2.5_error_handling) (error code: [`InvalidParameter.TaskTypeMismatch`](/docs/error-codes)). Follow the [prompting guidance for each task type](/docs/seedance-2-5#2.5_param_constraints) to reduce the chance of errors.
+
+**Supported models:**
+
+* `Dreamina Seedance 2.5`
+
+**resolution** `string` | Video resolution
+
+Video resolution.
+
+> **Note: Tip**
+>
+> * Dreamina Seedance 2.5 1080p output and Dreamina Seedance 2.0 4K output both use 10-bit color depth and H.265/HEVC encoding.
+>   * Compared with standard 8-bit color depth, 10-bit color depth preserves richer color gradations and smoother tonal transitions, making it suitable for professional video production and HDR content.
+>   * H.265/HEVC encoding may not be compatible with some playback environments. If playback fails, upgrade your system, use another device, or try a player such as VLC, mpv, or QuickTime Player. For details, see [Playback compatibility for videos with 10-bit color depth and H.265/HEVC encoding](/docs/seedance-2-0#4k_player).
+
+**Supported models and values:**
+
+* **Dreamina Seedance 2.5:** Default `720p`; supports `480p`, `720p`, and `1080p`.
+* **Dreamina Seedance 2.0:** Default `720p`; supports `480p`, `720p`, `1080p`, and `4k`.
+* **Dreamina Seedance 2.0 fast:** Default `720p`; supports `480p` and `720p`.
+* **Dreamina Seedance 2.0 mini:** Default `720p`; supports `480p` and `720p`.
+* **Seedance 1.5 pro:** Default `720p`; supports `480p`, `720p`, and `1080p`.
+* **Seedance 1.0 pro:** Default `1080p`; supports `480p`, `720p`, and `1080p`.
+* **Seedance 1.0 pro fast:** Default `1080p`; supports `480p`, `720p`, and `1080p`.
+
+**ratio** `string` | Video aspect ratio
+
+Aspect ratio of the generated video.
+
+* Supported values: `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, `21:9`, and `adaptive`. The `adaptive` value automatically selects an aspect ratio based on the task type and input.
+
+Value restrictions and `adaptive` behavior by model
+
+|Task type | |Dreamina Seedance 2.5 |Dreamina Seedance 2.0 series |Seedance 1.5 pro |Seedance 1.0 series |
+|---|---|---|---|---|---|
+|Text-to-video | |Supports specifying an available aspect ratio or allowing the model to select one based on the prompt |Supports specifying an available aspect ratio or allowing the model to select one based on the prompt |Supports specifying an available aspect ratio or allowing the model to select one based on the prompt |Only supports specifying an available aspect ratio | \
+| | |> Supports `adaptive` or a specified aspect ratio |> Supports `adaptive` or a specified aspect ratio |> Supports `adaptive` or a specified aspect ratio |> Does not support `adaptive` |
+|First-frame or first-and-last-frame image-to-video | |**Automatically preserves the aspect ratio of the first-frame image specified by `first_frame`** |Supports specifying an available aspect ratio or allowing the model to select one based on the first-frame image |Supports specifying an available aspect ratio or allowing the model to select one based on the first-frame image |Supports specifying an available aspect ratio or allowing the model to select one based on the first-frame image | \
+| | |> Defaults to and only supports `adaptive` |> Supports `adaptive` or a specified aspect ratio |> Supports `adaptive` or a specified aspect ratio |> Supports `adaptive` or a specified aspect ratio |
+|Omni reference video generation |Video editing / video extension |**The model selects the video to edit or extend based on the prompt intent, then automatically preserves the aspect ratio of the selected video; you cannot specify another ratio** |Supports specifying an available aspect ratio or allowing the model to select one based on the video to edit or extend |— |— | \
+| | |> Defaults to and only supports `adaptive` |> Supports `adaptive` or a specified aspect ratio | | |
+|^^ |Reference-to-video |Supports specifying an available aspect ratio or allowing the model to select one based on the prompt |Supports specifying an available aspect ratio or allowing the model to select one based on the prompt |— |— | \
+| | |> Supports `adaptive` or a specified aspect ratio |> Supports `adaptive` or a specified aspect ratio | | |
+
+Width and height pixel values corresponding to different aspect ratios
+For image to video tasks, when the selected video aspect ratio is inconsistent with the aspect ratio of your uploaded image, ModelArk will crop your image, and the cropping will be centered. See [Image cropping rules](/docs/video-generation-tutorial#f76aafc8) for detailed rules.
+
+| Resolution | Aspect ratio | Dreamina Seedance 2.5 | Dreamina Seedance 2.0 series | Seedance 1.5 pro | Seedance 1.0 series |
+| --- | --- | --- | --- | --- | --- |
+| 480p | `16:9` | 854×480 | 864×496 | 864×496 | 864×480 |
+| ^^ | `4:3` | 752×560 | 752×560 | 752×560 | 736×544 |
+| ^^ | `1:1` | 640×640 | 640×640 | 640×640 | 640×640 |
+| ^^ | `3:4` | 560×752 | 560×752 | 560×752 | 544×736 |
+| ^^ | `9:16` | 480×854 | 496×864 | 496×864 | 480×864 |
+| ^^ | `21:9` | 992×432 | 992×432 | 992×432 | 960×416 |
+| 720p | `16:9` | 1280×720 | 1280×720 | 1280×720 | 1248×704 |
+| ^^ | `4:3` | 1112×834 | 1112×834 | 1112×834 | 1120×832 |
+| ^^ | `1:1` | 960×960 | 960×960 | 960×960 | 960×960 |
+| ^^ | `3:4` | 834×1112 | 834×1112 | 834×1112 | 832×1120 |
+| ^^ | `9:16` | 720×1280 | 720×1280 | 720×1280 | 704×1248 |
+| ^^ | `21:9` | 1470×630 | 1470×630 | 1470×630 | 1504×640 |
+| 1080p<br>(Seedance 2.0 fast and Seedance 2.0 mini are not supported) | `16:9` | 1920×1080 | 1920×1080 | 1920×1080 | 1920×1088 |
+| ^^ | `4:3` | 1664×1248 | 1664×1248 | 1664×1248 | 1664×1248 |
+| ^^ | `1:1` | 1440×1440 | 1440×1440 | 1440×1440 | 1440×1440 |
+| ^^ | `3:4` | 1248×1664 | 1248×1664 | 1248×1664 | 1248×1664 |
+| ^^ | `9:16` | 1080×1920 | 1080×1920 | 1080×1920 | 1088×1920 |
+| ^^ | `21:9` | 2206×946 | 2206×946 | 2206×946 | 2176×928 |
+| 4k | `16:9` | — | 3840×2160 | — | — |
+| ^^ | `4:3` | — | 3326×2494 | — | — |
+| ^^ | `1:1` | — | 2880×2880 | — | — |
+| ^^ | `3:4` | — | 2494×3326 | — | — |
+| ^^ | `9:16` | — | 2160×3840 | — | — |
+| ^^ | `21:9` | — | 4398×1886 | — | — |
+
+> **Warning: Note**
+>
+> Dreamina Seedance 2.5 has special constraints for **video editing, video extension, and first-frame/first-and-last-frame image-to-video tasks**. For task definitions, see [Task types and constraints](/docs/seedance-2-5#2.5_task_type_intro).
+>
+> * `ratio` only supports `adaptive`; you cannot specify another aspect ratio.
+>   * For video editing and extension, the model selects the video to edit or extend based on the prompt intent, then automatically preserves the aspect ratio of the selected video.
+>   * For first-frame and first-and-last-frame image-to-video, the model automatically preserves the aspect ratio of the first-frame image specified by `first_frame`.
+
+**Supported models and defaults:**
+
+* **Dreamina Seedance 2.5:** Default `adaptive`.
+* **Dreamina Seedance 2.0 series:** Default `adaptive`.
+* **Seedance 1.5 pro:** Default `adaptive`.
+* **Seedance 1.0 pro:** Defaults to `16:9` for text-to-video and `adaptive` for image-to-video.
+* **Seedance 1.0 pro fast:** Defaults to `16:9` for text-to-video and `adaptive` for image-to-video.
+
+**duration** `integer` | Video duration
+
+Generated video duration in seconds. Specify either `duration` or `frames`; `frames` takes precedence. To generate a whole-second video, specify `duration`.
+
+Behavior when `duration` is `-1`
+
+| Model | Behavior when `duration` is `-1` |
+| --- | --- |
+| Dreamina Seedance 2.0 series and Seedance 1.5 pro | The model selects an appropriate whole-second video length within the valid `duration` range. |
+| Dreamina Seedance 2.5 (video editing) | The model selects the video to edit based on the prompt intent, then automatically keeps the output duration approximately the same as the selected video; you cannot specify another duration. | \
+| |> The output duration may be a non-integer number of seconds. | \
+| |> The output may be about 0.4 seconds shorter than the selected video. |
+| Dreamina Seedance 2.5 (other task types) | The model selects an appropriate whole-second video length within the valid `duration` range. |
+
+> **Note: Returned duration**
+>
+> The `duration` returned by the [Retrieve a video generation task API](/docs/get-video-generation-task-api) is an integer approximation and may differ from the actual duration.
+>
+> * Calculation: returned `duration` = actual total frames / 24, rounded down.
+> * Example: For a 133-frame video, the actual duration is 133 / 24 = 5.54 seconds, while the returned `duration` is 5.
+
+> **Warning: Note**
+>
+> Dreamina Seedance 2.5 has special constraints for **video editing tasks**. For task definitions, see [Task types and constraints](/docs/seedance-2-5#2.5_task_type_intro).
+>
+> * `duration` only supports `-1`; you cannot specify an output duration.
+> * The video to edit must be 4–30 seconds long.
+
+**Supported models and values:**
+
+* **Dreamina Seedance 2.5:** Default `-1`; supports `[4, 30]` or `-1`.
+* **Dreamina Seedance 2.0 series:** Default `5`; supports `[4, 15]` or `-1`.
+* **Seedance 1.5 pro:** Default `5`; supports `[4, 12]` or `-1`.
+* **Seedance 1.0 pro:** Default `5`; supports `[2, 12]`.
+* **Seedance 1.0 pro fast:** Default `5`; supports `[2, 12]`.
+
+**frames** `integer` | Video frame count
+
+> You only need to specify either duration or frames, and frames takes precedence over duration. If you want to generate a video with fractional seconds, it is recommended to specify frames.
+
+Frame count of the generated video. By specifying the number of frames, you can flexibly control the length of the generated video and generate videos with fractional seconds.
+Due to the value limit of frames, only certain fractional seconds are supported. You need to calculate the closest number of frames according to the formula.
+* Calculation formula: Number of frames = duration × frame rate (24).
+* Value range: All integer values in the range `[29, 289]` that fit the format `25 + 4n` are supported, where n is a positive integer.
+
+Example: If you need to generate a 2.4-second video, the number of frames = 2.4 × 24 = 57.6. However, since frames value cannot be 57.6, you can only select the closest value. The closest number of frames calculated according to 25 + 4n is 57, and the actually generated video is 57 / 24 = 2.375 seconds.
+
+**Supported models**:
+* `Seedance 1.0 pro`
+* `Seedance 1.0 pro fast`
+
+**generate_audio** `boolean` `Default: true` | Generate audio
+
+Controls whether the generated video includes sound synchronized with the footage.
+* `true`: The video output by the model includes synchronized audio. The model will automatically generate matching human voice, sound effects and background music based on the text prompt and visual content. It is recommended to put dialogue content in double quotes to optimize the audio generation effect. For example: The man stopped the woman and said: "Remember, you can't point at the moon with your finger in the future."
+* `false`: The video output by the model is a silent video.
+
+> **Warning: Note**
+>
+> Audio-enabled videos generated by Seedance 2.0 and later versions are dual-channel (stereo), regardless of the number of input audio channels.
+
+**Supported models:**
+* `Dreamina Seedance 2.5`
+* `Dreamina Seedance 2.0 series`
+* `Seedance 1.5 pro`
+
+**watermark** `boolean` `Default value: false` | Video watermark
+
+Whether the generated video contains a watermark. Valid values:
+* `true`: An `AI Generated` watermark will be displayed in the lower right corner of the generated video.
+* `false`: The generated video does not contain a watermark.
+
+**output_format<sup>==new==</sup>** `string` `Default value: mp4` | Output format
+
+Output video format.
+
+* `mp4`: A general-purpose format with broad compatibility and standard color precision. It can be played directly in browsers, on mobile devices, in media players, and on distribution platforms.
+* `mov`: A high-color-precision format for professional workflows. It better preserves color and brightness consistency and is suitable for color grading, keying, compositing, and other professional post-production tasks. For video editing and extension, using MOV for both input and output is recommended.
+
+> **Note: MOV playback compatibility**
+>
+> MOV output uses H.264 video encoding, YUV 4:4:4 chroma sampling, and PCM audio encoding. Some players may not support this combination.
+>
+> | Player | macOS | Windows |
+> | --- | --- | --- |
+> | IINA | ✓ | ✕ |
+> | VLC | ✓ | ✓ |
+> | mpv | ✓ | ✓ |
+> | ffplay | ✓ | ✓ |
+
+**Supported models**
+* `Dreamina Seedance 2.5`
+
+**seed** `integer` `Default value: -1` | Random seed
+
+Seed integer, used to control the randomness of generated content.
+Value range: `[-1, 2147483647]`.
+
+> **Warning: Note**
+>
+> * For the same request, if the model receives different seed values, such as not specifying a seed value, setting the seed to -1 (which will be replaced by a random number), or manually changing the seed value, different results will be generated.
+> * For the same request, if the model receives the same seed value, similar results will be generated, but complete consistency is not guaranteed.
+
+**Supported models:**
+* `Seedance 1.5 pro`
+* `Seedance 1.0 pro`
+* `Seedance 1.0 pro fast`
+
+**camera_fixed** `boolean` `Default value: false` | Fix camera
+
+> Reference-image scenarios are not supported.
+
+Whether to fix the camera. Valid values:
+* `true`: Fix the camera. ModelArk will append the fixed camera instruction to the user's prompt, but the actual result is not guaranteed.
+* `false`: Do not fix the camera.
+
+**Supported models:**
+* `Seedance 1.5 pro`
+* `Seedance 1.0 pro`
+* `Seedance 1.0 pro fast`
+
+**return_last_frame** `boolean` `Default value: false` | Return last frame
+
+* `true`: Return the last frame image of the generated video in `jpeg` format. After setting it to `true`, you can get the last frame image via the [Retrieve a video generation task API](/docs/get-video-generation-task-api). Its pixel dimensions are consistent with the generated video, and it has no watermark.
+* `false`: Do not return the last frame image of the generated video.
+
+> **Note: Tip**
+>
+> You can use this parameter to generate multiple consecutive videos. Use the last frame of the previously generated video as the first frame of the next video task to quickly generate a sequence of videos. For an example, see [Generate multiple consecutive videos](/docs/video-generation-tutorial#141cf7fa).
+
+**draft** `boolean` `Default: false` | Draft mode
+
+Controls whether to enable draft mode. See [Draft mode](/docs/video-generation-tutorial#5acd28c8) for detailed instructions and notes.
+* `true`: Enable draft mode and generate a preview video to confirm whether the scene structure, shot scheduling, subject motion, and prompt intent meet expectations.
+* `false`: Disable draft mode and generate a video normally.
+
+> **Note: Tip**
+>
+> * After you enable draft mode, only 480p Draft videos can be generated. Using another resolution causes an error.
+> * A Draft video task ID has a validity period, measured from its `created_at` timestamp. The ID automatically becomes invalid when this period expires. Draft video task IDs created at or after 10:00 on October 28, 2026 (UTC+8) are valid for 14 days. IDs created before this time remain valid for seven days. After a Draft video task ID expires, it cannot be used to generate a final video.
+> * Parameter restrictions and billing rules vary by model. For details, see [Dreamina Seedance 2.5 Draft mode](/docs/seedance-2-5#2.5_draft_mode) and [Seedance 1.5 pro Draft mode](/docs/video-generation-tutorial#5acd28c8).
+
+**Supported models:**
+
+* `Dreamina Seedance 2.5`
+* `Seedance 1.5 pro`
+
+**service_tier** `string` `Default value: default` | Service tier
+
+> Modifying the service tier of a submitted task is not supported.
+
+Specify the service tier type for processing this request. Valid values:
+* `default`: Online inference mode, with lower RPM and concurrency quotas (see [Model list](/docs/model-list)), suitable for scenarios with high requirements for inference efficiency.
+* `flex`: Offline inference mode, with higher TPD quota (see [Model list](/docs/model-list)), priced at 50% of online inference, suitable for scenarios with high tolerance for inference latency. Dreamina Seedance 2.5 and Dreamina Seedance 2.0 series models are not currently supported.
+
+**callback_url** `string` | Callback URL
+
+Fill in the callback notification address for the result of this generation task. When the status of the video generation task changes, ModelArk will send a POST request to this address.
+The callback request content structure is consistent with the response body of the [Retrieve a video generation task API](/docs/get-video-generation-task-api).
+The status returned by the callback can be one of the following values:
+* `queued`: In queue.
+* `running`: Task is running.
+* `succeeded`: Task succeeded. If sending fails, that is, no successful delivery confirmation is received within 5 seconds, the callback is retried three times.
+* `failed`: Task failed. If sending fails, that is, no successful delivery confirmation is received within 5 seconds, the callback is retried three times.
+* `expired`: Task timed out, that is, the task has been in the `running` or `queued` state for longer than the expiration time. You can set the expiration time via `execution_expires_after`.
+
+**execution_expires_after** `integer` `Default value: 172800` | Task expiration threshold
+
+Task timeout threshold. Specifies the expiration time of the task after submission (unit: second), calculated from the **created at** timestamp. The default value is 172800 seconds, which is 48 hours. Value range: `[3600, 259200]`.
+No matter which **service_tier** you use, it is recommended to set an appropriate timeout according to your business scenario. After this time, the task will be automatically terminated and marked as `expired` status.
+
+**priority** `integer` `Default 0` | Execution priority
+
+> Supported by Dreamina Seedance 2.5 and Dreamina Seedance 2.0 series.
+
+Sets the execution priority of the current request and determines its position in the queue.
+Value range: `[0, 9]`.
+
+A larger value indicates a higher priority.
+By default, requests are executed in **FIFO** (First In, First Out) order. After you set a higher priority, the request is inserted before all lower-priority requests under the same **Endpoint**.
+**Example**:
+Assume an Endpoint currently has three queued tasks (`status=queued`), all with the default priority of 0.
+
+```text
+Queue: [Task A: priority=0] → [Task B: priority=0] → [Task C: priority=0]
+```
+
+If you submit a new request with `priority=5`, the request is moved directly to the front of the queue:
+
+```text
+Queue: [New request: priority=5] → [Task A: priority=0] → [Task B: priority=0] → [Task C: priority=0]
+```
+
+> **Note**
+>
+> * Requests with the same priority are still ordered by FIFO.
+> * Priority affects only the queue order. It does not interrupt tasks that are already running (status = `running`).
+> * Priority takes effect only within the same Endpoint and does not affect other Endpoints.
+> * Offline inference mode (`service_tier=flex`) does not support priority configuration.
+
+**safety_identifier** `string` | End-user identifier
+
+Unique identifier of end users, used to help the platform detect users in your application who may violate the ModelArk usage policy. This identifier is an English string, which must be fixed and unique for a single user, and the length cannot exceed 64 characters.
+
+It is recommended to pass in a string generated by hashing the username, user ID or email address to avoid leaking user privacy information.
+
+## Response parameters
+
+**id** `string` | Task ID
+
+Video generation task IDs have a validity period, measured from the `created_at` timestamp. An ID automatically becomes invalid when this period expires.
+
+* **Draft video task IDs:** IDs created at or after 10:00 on October 28, 2026 (UTC+8) are valid for 14 days. IDs created before this time remain valid for seven days. After a Draft video task ID expires, it cannot be used to generate a final video.
+* **Other video task IDs:** Valid for seven days.
+
+The video generation task creation is an asynchronous API. After obtaining the ID, you need to query the status of the video generation task through the [Retrieve a video generation task API](/docs/get-video-generation-task-api). After the task is successful, the `video_url` of the generated video will be output.
+
+
+## Code samples
+
+## Omni reference
+
+### cURL
+
+
+#### Request
+
+```bash
+curl -X POST https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ARK_API_KEY" \
+  -d '{
+    "model": "dreamina-seedance-2-5-260628",
+    "content": [
+        {
+            "type": "text",
+            "text": "A bright, colorful advertising-film style with fruit-flavored cookies as the main subject, including four flavors: strawberry, apple, grape, and orange. The strawberry flavor refers to @Image1. The cookies and corresponding fruits are arranged in strongly ordered geometric arrays. The overall image is clean, premium, and strongly rhythmic. The opening quickly builds visual focus on the fruit, referring to the composition of @Video1, with the music downbeat cutting in. Then cookies of different flavors are arranged neatly, cutting to close-ups, referring to the motion and camera movement of @Video2. In the climax, one cookie is snapped in half and instantly enters slow motion. The fruit-flavored filling bursts open, crumbs fly, and the juicy texture and granular impact are amplified, referring to the impact of @Video3. A horizontal array creates a rhythmic parabolic motion, referring to the movement in @Video4, highlighting ordered beauty and product variety. It then quickly returns to fast-paced editing. At the end, the English text \"One bite of crispness, a heart full of delight\" appears through rapid word-by-word cuts, paired with strong rhythmic text motion and product freeze frames, referring to @Video5. The final brand moment resolves as the cookies and fruits scatter outward, referring to @Video6. The image is filled with a young, energetic, delicious, and shareable advertising atmosphere."
+        },
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seedance2.5_reference1.png"
+            },
+            "role": "reference_image"
+        },
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference2.mp4"
+            },
+            "role": "reference_video"
+        },
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference3.mp4"
+            },
+            "role": "reference_video"
+        },
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference4.mp4"
+            },
+            "role": "reference_video"
+        },
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference5.mp4"
+            },
+            "role": "reference_video"
+        },
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference6.mp4"
+            },
+            "role": "reference_video"
+        },
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference7.mp4"
+            },
+            "role": "reference_video"
+        }
+    ],
+    "generate_audio": true,
+    "ratio": "16:9",
+    "duration": 15,
+    "omni_reference_task_type": "reference",
+    "output_format": "mov",
+    "watermark": true
+}'
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2026******-****"
+}
+```
+
+### Python
+
+
+#### Request
+
+```python
+import os
+import time
+# Install SDK: python -m pip install --upgrade arkruntime
+from arkruntime import Ark
+
+client = Ark(
+    # The base URL for model invocation
+    base_url='https://ark.ap-southeast.bytepluses.com/api/v3',
+    # Get API Key：https://ai.byteplus.com/ark/region:ap-southeast-1/apikey
+    api_key=os.environ.get("ARK_API_KEY"),
+)
+
+if __name__ == "__main__":
+    print("----- create request -----")
+    create_result = client.content_generation.tasks.create(
+        model="dreamina-seedance-2-5-260628", # Replace with Model ID
+        content=[
+            {
+                "type": "text",
+                "text": "A bright, colorful advertising-film style with fruit-flavored cookies as the main subject, including four flavors: strawberry, apple, grape, and orange. The strawberry flavor refers to @Image1. The cookies and corresponding fruits are arranged in strongly ordered geometric arrays. The overall image is clean, premium, and strongly rhythmic. The opening quickly builds visual focus on the fruit, referring to the composition of @Video1, with the music downbeat cutting in. Then cookies of different flavors are arranged neatly, cutting to close-ups, referring to the motion and camera movement of @Video2. In the climax, one cookie is snapped in half and instantly enters slow motion. The fruit-flavored filling bursts open, crumbs fly, and the juicy texture and granular impact are amplified, referring to the impact of @Video3. A horizontal array creates a rhythmic parabolic motion, referring to the movement in @Video4, highlighting ordered beauty and product variety. It then quickly returns to fast-paced editing. At the end, the English text \"One bite of crispness, a heart full of delight\" appears through rapid word-by-word cuts, paired with strong rhythmic text motion and product freeze frames, referring to @Video5. The final brand moment resolves as the cookies and fruits scatter outward, referring to @Video6. The image is filled with a young, energetic, delicious, and shareable advertising atmosphere."
+            },
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seedance2.5_reference1.png"
+                },
+                "role": "reference_image",
+            },
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference2.mp4"
+                },
+                "role": "reference_video",
+            },
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference3.mp4"
+                },
+                "role": "reference_video",
+            },
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference4.mp4"
+                },
+                "role": "reference_video",
+            },
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference5.mp4"
+                },
+                "role": "reference_video",
+            },
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference6.mp4"
+                },
+                "role": "reference_video",
+            },
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference7.mp4"
+                },
+                "role": "reference_video",
+            },
+        ],
+        generate_audio=True,
+        ratio="16:9",
+        duration=15,
+        extra_body={
+            "omni_reference_task_type": "reference",
+            "output_format": "mov",
+        },
+        watermark=True,
+    )
+    print(create_result)
+
+
+    # Polling query section
+    print("----- polling task status -----")
+    task_id = create_result.id
+    deadline = time.monotonic() + 30 * 60
+    while time.monotonic() < deadline:
+        get_result = client.content_generation.tasks.get(task_id=task_id)
+        status = get_result.status
+        if status == "succeeded":
+            print("----- task succeeded -----")
+            print(get_result)
+            break
+        elif status == "failed":
+            raise RuntimeError(f"Video generation task failed: {get_result.error}")
+        else:
+            print(f"Current status: {status}, Retrying after 10 seconds...")
+            time.sleep(10)
+    else:
+        raise TimeoutError("Video generation task did not finish within 30 minutes")
+```
+
+#### Response
+
+```
+----- create request -----
+ContentGenerationTaskID(id='cgt-20260414114820-*****')
+----- polling task status -----
+Current status: running, Retrying after 10 seconds...
+Current status: running, Retrying after 10 seconds...
+Current status: running, Retrying after 10 seconds...
+...
+----- task succeeded -----
+ContentGenerationTask(id='cgt-20260414114820-*****', model='dreamina-seedance-2-5-260628', status='succeeded', error=None, content=Content(video_url='https://xxx', last_frame_url=None, file_url=None), usage=Usage(completion_tokens=411300, total_tokens=411300), subdivisionlevel=None, fileformat=None, frames=None, framespersecond=24, created_at=1776138520, updated_at=1776139219, seed=33608, revised_prompt=None, service_tier='default', execution_expires_after=172800, generate_audio=True, duration=11, ratio='16:9', output_format='mov', resolution='720p', draft=False, draft_task_id=None)
+```
+
+### Java
+
+
+#### Request
+
+```java
+package com.ark.sample;
+
+import com.volcengine.ark.runtime.models.content_generation.*;
+import com.volcengine.ark.runtime.service.ArkService;
+import okhttp3.ConnectionPool;
+import okhttp3.Dispatcher;
+import retrofit2.Call;
+import retrofit2.Retrofit;
+import retrofit2.http.Body;
+import retrofit2.http.POST;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+public class ContentGenerationTaskExample {
+
+    interface ContentGenerationApi {
+        @POST("contents/generations/tasks")
+        Call<CreateContentGenerationTaskResponse> create(@Body Map<String, Object> request);
+    }
+
+    // Client initialization
+    static String apiKey = System.getenv("ARK_API_KEY");
+    static ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
+    static Dispatcher dispatcher = new Dispatcher();
+    static ArkService service = ArkService.builder()
+           .baseUrl("https://ark.ap-southeast.bytepluses.com/api/v3") // The base URL for model invocation
+           .dispatcher(dispatcher)
+           .connectionPool(connectionPool)
+           .apiKey(apiKey)
+           .build();
+    static Retrofit retrofit = ArkService.defaultRetrofit(
+            ArkService.defaultApiKeyClient(apiKey, Duration.ofSeconds(180)),
+            ArkService.defaultObjectMapper(),
+            "https://ark.ap-southeast.bytepluses.com/api/v3/",
+            Runnable::run);
+    static ContentGenerationApi contentGenerationApi =
+            retrofit.create(ContentGenerationApi.class);
+
+    public static void main(String[] args) throws IOException {
+
+        // Model ID
+        final String modelId = "dreamina-seedance-2-5-260628";
+        // Text prompt
+        final String prompt = "A bright, colorful advertising-film style with fruit-flavored cookies as the main subject, including four flavors: strawberry, apple, grape, and orange. The strawberry flavor refers to @Image1. The cookies and corresponding fruits are arranged in strongly ordered geometric arrays. The overall image is clean, premium, and strongly rhythmic. The opening quickly builds visual focus on the fruit, referring to the composition of @Video1, with the music downbeat cutting in. Then cookies of different flavors are arranged neatly, cutting to close-ups, referring to the motion and camera movement of @Video2. In the climax, one cookie is snapped in half and instantly enters slow motion. The fruit-flavored filling bursts open, crumbs fly, and the juicy texture and granular impact are amplified, referring to the impact of @Video3. A horizontal array creates a rhythmic parabolic motion, referring to the movement in @Video4, highlighting ordered beauty and product variety. It then quickly returns to fast-paced editing. At the end, the English text \"One bite of crispness, a heart full of delight\" appears through rapid word-by-word cuts, paired with strong rhythmic text motion and product freeze frames, referring to @Video5. The final brand moment resolves as the cookies and fruits scatter outward, referring to @Video6. The image is filled with a young, energetic, delicious, and shareable advertising atmosphere.";
+
+        // Example resource URLs
+        final String refImage1 = "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seedance2.5_reference1.png";
+        final String refVideo1 = "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference2.mp4";
+        final String refVideo2 = "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference3.mp4";
+        final String refVideo3 = "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference4.mp4";
+        final String refVideo4 = "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference5.mp4";
+        final String refVideo5 = "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference6.mp4";
+        final String refVideo6 = "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference7.mp4";
+
+        // Output video parameters
+        final boolean generateAudio = true;
+        final String videoRatio = "16:9";
+        final long videoDuration = 15L;
+        System.out.println("----- create request -----");
+        // Build request content
+        List<ContentItem> contents = new ArrayList<>();
+
+        // 1. Text prompt
+        contents.add(ContentItem.builder()
+                .type(ContentType.TEXT)
+                .text(prompt)
+                .build());
+
+        // 2. Reference image 1
+        contents.add(ContentItem.builder()
+                .type(ContentType.IMAGE_URL)
+                .imageUrl(ImageURL.builder()
+                        .url(refImage1)
+                        .build())
+                .role("reference_image")
+                .build());
+
+        // 3. Reference video 1
+        contents.add(ContentItem.builder()
+                .type(ContentType.VIDEO_URL)
+                .videoUrl(VideoURL.builder()
+                        .url(refVideo1)
+                        .build())
+                .role("reference_video")
+                .build());
+
+        // 4. Reference video 2
+        contents.add(ContentItem.builder()
+                .type(ContentType.VIDEO_URL)
+                .videoUrl(VideoURL.builder()
+                        .url(refVideo2)
+                        .build())
+                .role("reference_video")
+                .build());
+
+        // 5. Reference video 3
+        contents.add(ContentItem.builder()
+                .type(ContentType.VIDEO_URL)
+                .videoUrl(VideoURL.builder()
+                        .url(refVideo3)
+                        .build())
+                .role("reference_video")
+                .build());
+
+        // 6. Reference video 4
+        contents.add(ContentItem.builder()
+                .type(ContentType.VIDEO_URL)
+                .videoUrl(VideoURL.builder()
+                        .url(refVideo4)
+                        .build())
+                .role("reference_video")
+                .build());
+
+        // 7. Reference video 5
+        contents.add(ContentItem.builder()
+                .type(ContentType.VIDEO_URL)
+                .videoUrl(VideoURL.builder()
+                        .url(refVideo5)
+                        .build())
+                .role("reference_video")
+                .build());
+
+        // 8. Reference video 6
+        contents.add(ContentItem.builder()
+                .type(ContentType.VIDEO_URL)
+                .videoUrl(VideoURL.builder()
+                        .url(refVideo6)
+                        .build())
+                .role("reference_video")
+                .build());
+
+        // Create video generation task
+        Map<String, Object> createRequest = new LinkedHashMap<>();
+        createRequest.put("model", modelId);
+        createRequest.put("content", contents);
+        createRequest.put("generate_audio", generateAudio);
+        createRequest.put("ratio", videoRatio);
+        createRequest.put("duration", videoDuration);
+        createRequest.put("omni_reference_task_type", "reference");
+        createRequest.put("output_format", "mov");
+        createRequest.put("watermark", true);
+
+        retrofit2.Response<CreateContentGenerationTaskResponse> response =
+                contentGenerationApi.create(createRequest).execute();
+        if (!response.isSuccessful() || response.body() == null) {
+            throw new IOException("Unexpected code " + response.code());
+        }
+        CreateContentGenerationTaskResponse createResult = response.body();
+        System.out.println("Task Created: " + createResult);
+
+        // Get task details and poll status
+        String taskId = createResult.getId();
+        pollTaskStatus(taskId);
+    }
+
+    /**
+     * Poll task status
+     * @param taskId Task ID
+     */
+
+    private static void pollTaskStatus(String taskId) {
+        String getRequest = taskId;
+
+        System.out.println("----- polling task status -----");
+        try {
+            long deadlineNanos = System.nanoTime() + TimeUnit.MINUTES.toNanos(30);
+            while (System.nanoTime() < deadlineNanos) {
+                ContentGenerationTask getResponse = service.getContentGenerationTask(getRequest);
+                String status = getResponse.getStatus().toString();
+
+                if ("succeeded".equalsIgnoreCase(status)) {
+                    System.out.println("----- task succeeded -----");
+                    System.out.println(getResponse);
+                    return;
+                } else if ("failed".equalsIgnoreCase(status)) {
+                    throw new IllegalStateException(
+                            "Video generation task failed: " + getResponse.getError());
+                } else {
+                    System.out.printf("Current status: %s, Retrying in 10 seconds...%n", status);
+                    TimeUnit.SECONDS.sleep(10);
+                }
+            }
+            throw new IllegalStateException(
+                    "Video generation task did not finish within 30 minutes");
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Polling interrupted", ie);
+        } catch (Exception e) {
+            throw new RuntimeException("Error occurred while polling", e);
+        } finally {
+            service.shutdownExecutor();
+        }
+    }
+}
+```
+
+#### Response
+
+```
+----- create request -----
+Task Created: CreateContentGenerationTaskResult{id='cgt-20260414164332-*****', safetyIdentifier='null'}
+----- polling task status -----
+Current status: running, Retrying in 10 seconds...
+Current status: running, Retrying in 10 seconds...
+...
+----- task succeeded -----
+GetContentGenerationTaskResponse{id='cgt-20260414164332-*****', model='dreamina-seedance-2-5-260628', safetyIdentifier='null', status='succeeded', error='null', content=Content{videoUrl='https://xxx', lastFrameUrl='null', fileUrl='null'}, usage=Usage{completionTokens=411300}, subdivisionlevel=null, fileformat=null, frames=null, framespersecond=24, createdAt=1776156250, updatedAt=1776156791, seed=48112, revisedPrompt=null, serviceTier='default', executionExpiresAfter=172800, generateAudio=true, ratio='16:9', duration=11, outputFormat='mov', resolution='720p', draft=false, draftTaskID='null', tools='null'}
+```
+
+### Go
+
+
+#### Request
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/volcengine/ark-runtime-go/arkruntime"
+	model "github.com/volcengine/ark-runtime-go/arkruntime/model/contentgeneration"
+)
+
+func main() {
+	// Initialize Ark client
+	client := arkruntime.NewClientWithApiKey(
+		os.Getenv("ARK_API_KEY"),
+		// The base URL for model invocation
+		arkruntime.WithBaseUrl("https://ark.ap-southeast.bytepluses.com/api/v3"),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	// Model ID
+	modelID := "dreamina-seedance-2-5-260628"
+	// Text prompt
+	prompt := "A bright, colorful advertising-film style with fruit-flavored cookies as the main subject, including four flavors: strawberry, apple, grape, and orange. The strawberry flavor refers to @Image1. The cookies and corresponding fruits are arranged in strongly ordered geometric arrays. The overall image is clean, premium, and strongly rhythmic. The opening quickly builds visual focus on the fruit, referring to the composition of @Video1, with the music downbeat cutting in. Then cookies of different flavors are arranged neatly, cutting to close-ups, referring to the motion and camera movement of @Video2. In the climax, one cookie is snapped in half and instantly enters slow motion. The fruit-flavored filling bursts open, crumbs fly, and the juicy texture and granular impact are amplified, referring to the impact of @Video3. A horizontal array creates a rhythmic parabolic motion, referring to the movement in @Video4, highlighting ordered beauty and product variety. It then quickly returns to fast-paced editing. At the end, the English text \"One bite of crispness, a heart full of delight\" appears through rapid word-by-word cuts, paired with strong rhythmic text motion and product freeze frames, referring to @Video5. The final brand moment resolves as the cookies and fruits scatter outward, referring to @Video6. The image is filled with a young, energetic, delicious, and shareable advertising atmosphere."
+
+	// Example resource URLs
+	refImage1 := "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seedance2.5_reference1.png"
+	refVideo1 := "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference2.mp4"
+	refVideo2 := "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference3.mp4"
+	refVideo3 := "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference4.mp4"
+	refVideo4 := "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference5.mp4"
+	refVideo5 := "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference6.mp4"
+	refVideo6 := "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_reference7.mp4"
+
+	// Output video parameters
+	generateAudio := true
+	videoRatio := "16:9"
+	videoDuration := int64(15)
+
+	// 1. Create video generation task
+	fmt.Println("----- create request -----")
+	createReq := &model.CreateContentGenerationTaskRequest{
+		Model:         modelID,
+		GenerateAudio: model.NewOptBool(generateAudio),
+		Ratio:         model.NewOptString(videoRatio),
+		Duration:      model.NewOptInt64(videoDuration),
+		Content: []model.ContentItem{
+			{
+				Type: model.ContentTypeText,
+				Text: model.NewOptString(prompt),
+			},
+			{
+				Type: model.ContentTypeImageURL,
+				ImageURL: model.NewOptImageURL(model.ImageURL{
+					URL: refImage1,
+				}),
+				Role: model.NewOptString("reference_image"),
+			},
+			{
+				Type: model.ContentTypeVideoURL,
+				VideoURL: model.NewOptVideoURL(model.VideoURL{
+					URL: refVideo1,
+				}),
+				Role: model.NewOptString("reference_video"),
+			},
+			{
+				Type: model.ContentTypeVideoURL,
+				VideoURL: model.NewOptVideoURL(model.VideoURL{
+					URL: refVideo2,
+				}),
+				Role: model.NewOptString("reference_video"),
+			},
+			{
+				Type: model.ContentTypeVideoURL,
+				VideoURL: model.NewOptVideoURL(model.VideoURL{
+					URL: refVideo3,
+				}),
+				Role: model.NewOptString("reference_video"),
+			},
+			{
+				Type: model.ContentTypeVideoURL,
+				VideoURL: model.NewOptVideoURL(model.VideoURL{
+					URL: refVideo4,
+				}),
+				Role: model.NewOptString("reference_video"),
+			},
+			{
+				Type: model.ContentTypeVideoURL,
+				VideoURL: model.NewOptVideoURL(model.VideoURL{
+					URL: refVideo5,
+				}),
+				Role: model.NewOptString("reference_video"),
+			},
+			{
+				Type: model.ContentTypeVideoURL,
+				VideoURL: model.NewOptVideoURL(model.VideoURL{
+					URL: refVideo6,
+				}),
+				Role: model.NewOptString("reference_video"),
+			},
+		},
+		Watermark:     model.NewOptBool(true),
+	}
+
+	createResp, err := client.CreateContentGenerationTask(
+		ctx,
+		createReq,
+		arkruntime.WithExtraBody(map[string]interface{}{
+			"omni_reference_task_type": "reference",
+			"output_format":            "mov",
+		}),
+	)
+	if err != nil {
+		panic(fmt.Errorf("create content generation task: %w", err))
+	}
+
+	taskID := createResp.ID
+	fmt.Printf("Task Created with ID: %s\n", taskID)
+
+	// 2. Poll task status
+	pollTaskStatus(ctx, client, taskID)
+}
+
+// poll task status
+func pollTaskStatus(ctx context.Context, client *arkruntime.Client, taskID string) {
+	fmt.Println("----- polling task status -----")
+	for {
+		getReq := taskID
+		getResp, err := client.GetContentGenerationTask(ctx, getReq)
+		if err != nil {
+			panic(fmt.Errorf("get content generation task: %w", err))
+		}
+
+		status := getResp.Status
+		if status == "succeeded" {
+			fmt.Println("----- task succeeded -----")
+			fmt.Printf("Task ID: %s \n", getResp.ID)
+			fmt.Printf("Model: %s \n", getResp.Model)
+			fmt.Printf("Video URL: %s \n", getResp.Content.Or(model.TaskContent{}).VideoURL.Or(""))
+			fmt.Printf("Completion Tokens: %d \n", getResp.Usage.Or(model.TaskUsage{}).CompletionTokens)
+			fmt.Printf("Created At: %d, Updated At: %d\n", getResp.CreatedAt.Or(0), getResp.UpdatedAt.Or(0))
+			return
+		} else if status == "failed" {
+			if getResp.Error.IsSet() {
+				panic(fmt.Errorf("video generation task failed: %s: %s", getResp.Error.Value.Code, getResp.Error.Value.Message))
+			}
+			panic("video generation task failed")
+		} else {
+			fmt.Printf("Current status: %s, Retrying in 10 seconds... \n", status)
+			time.Sleep(10 * time.Second)
+		}
+	}
+}
+```
+
+#### Response
+
+```
+----- create request -----
+Task Created with ID: cgt-20260414164530-*****
+----- polling task status -----
+Current status: running, Retrying in 10 seconds...
+Current status: running, Retrying in 10 seconds...
+...
+----- task succeeded -----
+Task ID: cgt-20260414164530-*****
+Model: dreamina-seedance-2-5-260628
+Video URL: https://xxx
+Completion Tokens: 411300
+Output Format: mov
+Created At: 1776156350, Updated At: 1776156799
+```
+
+## Edit video
+
+### cURL
+
+
+#### Request
+
+```bash
+curl -X POST https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ARK_API_KEY" \
+  -d '{
+    "model": "dreamina-seedance-2-5-260628",
+    "content": [
+        {
+            "type": "text",
+            "text": "Video edit: remove everyone in @Video1 except the protagonist."
+        },
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_edit_input.mov"
+            },
+            "role": "reference_video"
+        }
+    ],
+    "generate_audio": true,
+    "ratio": "adaptive",
+    "duration": -1,
+    "output_format": "mov",
+    "watermark": true
+}'
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2026******-****"
+}
+```
+
+### Python
+
+
+#### Request
+
+```python
+import os
+import time
+# Install SDK: python -m pip install --upgrade arkruntime
+from arkruntime import Ark
+
+client = Ark(
+    # The base URL for model invocation
+    base_url='https://ark.ap-southeast.bytepluses.com/api/v3',
+    # Get API Key：https://ai.byteplus.com/ark/region:ap-southeast-1/apikey
+    api_key=os.environ.get("ARK_API_KEY"),
+)
+
+if __name__ == "__main__":
+    print("----- create request -----")
+    create_result = client.content_generation.tasks.create(
+        model="dreamina-seedance-2-5-260628", # Replace with Model ID
+        content=[
+            {
+                "type": "text",
+                "text": "Video edit: remove everyone in @Video1 except the protagonist."
+            },
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_edit_input.mov"
+                },
+                "role": "reference_video",
+            },
+        ],
+        generate_audio=True,
+        ratio="adaptive",
+        duration=-1,
+        extra_body={
+            "omni_reference_task_type": "edit",
+            "output_format": "mov",
+        },
+        watermark=True,
+    )
+    print(create_result)
+
+
+    # Polling query section
+    print("----- polling task status -----")
+    task_id = create_result.id
+    deadline = time.monotonic() + 30 * 60
+    while time.monotonic() < deadline:
+        get_result = client.content_generation.tasks.get(task_id=task_id)
+        status = get_result.status
+        if status == "succeeded":
+            print("----- task succeeded -----")
+            print(get_result)
+            break
+        elif status == "failed":
+            raise RuntimeError(f"Video generation task failed: {get_result.error}")
+        else:
+            print(f"Current status: {status}, Retrying after 10 seconds...")
+            time.sleep(10)
+    else:
+        raise TimeoutError("Video generation task did not finish within 30 minutes")
+```
+
+#### Response
+
+```
+----- create request -----
+ContentGenerationTaskID(id='cgt-20260414172010-*****')
+----- polling task status -----
+Current status: running, Retrying after 10 seconds...
+Current status: running, Retrying after 10 seconds...
+...
+----- task succeeded -----
+ContentGenerationTask(id='cgt-20260414172010-*****', model='dreamina-seedance-2-5-260628', status='succeeded', error=None, content=Content(video_url='https://xxx', last_frame_url=None, file_url=None), usage=Usage(completion_tokens=186300, total_tokens=186300), framespersecond=24, created_at=1776158410, updated_at=1776158892, seed=12345, service_tier='default', execution_expires_after=172800, generate_audio=True, duration=16, ratio='5:4', output_format='mov', resolution='720p', draft=False, draft_task_id=None)
+```
+
+### Java
+
+
+#### Request
+
+```java
+package com.ark.sample;
+
+import com.volcengine.ark.runtime.models.content_generation.*;
+import com.volcengine.ark.runtime.service.ArkService;
+import okhttp3.ConnectionPool;
+import okhttp3.Dispatcher;
+import retrofit2.Call;
+import retrofit2.Retrofit;
+import retrofit2.http.Body;
+import retrofit2.http.POST;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+public class ContentGenerationTaskExample {
+
+    interface ContentGenerationApi {
+        @POST("contents/generations/tasks")
+        Call<CreateContentGenerationTaskResponse> create(@Body Map<String, Object> request);
+    }
+
+    // Client initialization
+    static String apiKey = System.getenv("ARK_API_KEY");
+    static ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
+    static Dispatcher dispatcher = new Dispatcher();
+    static ArkService service = ArkService.builder()
+           .baseUrl("https://ark.ap-southeast.bytepluses.com/api/v3")
+           // The base URL for model invocation
+           .dispatcher(dispatcher)
+           .connectionPool(connectionPool)
+           .apiKey(apiKey)
+           .build();
+    static Retrofit retrofit = ArkService.defaultRetrofit(
+            ArkService.defaultApiKeyClient(apiKey, Duration.ofSeconds(180)),
+            ArkService.defaultObjectMapper(),
+            "https://ark.ap-southeast.bytepluses.com/api/v3/",
+            Runnable::run);
+    static ContentGenerationApi contentGenerationApi =
+            retrofit.create(ContentGenerationApi.class);
+
+    public static void main(String[] args) throws IOException {
+
+        // Model ID
+        final String modelId = "dreamina-seedance-2-5-260628";
+        // Text prompt
+        final String prompt = "Video edit: remove everyone in @Video1 except the protagonist.";
+
+        // Example resource URLs
+        final String refVideo = "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_edit_input.mov";
+
+        // Output video parameters
+        final boolean generateAudio = true;
+        final String videoRatio = "adaptive";
+        final long videoDuration = -1L;
+        System.out.println("----- create request -----");
+        // Build request content
+        List<ContentItem> contents = new ArrayList<>();
+
+        // 1. Text prompt
+        contents.add(ContentItem.builder()
+                .type(ContentType.TEXT)
+                .text(prompt)
+                .build());
+
+        // 2. Reference video
+        contents.add(ContentItem.builder()
+                .type(ContentType.VIDEO_URL)
+                .videoUrl(VideoURL.builder()
+                        .url(refVideo)
+                        .build())
+                .role("reference_video")
+                .build());
+
+        // Create video generation task
+        Map<String, Object> createRequest = new LinkedHashMap<>();
+        createRequest.put("model", modelId);
+        createRequest.put("content", contents);
+        createRequest.put("generate_audio", generateAudio);
+        createRequest.put("ratio", videoRatio);
+        createRequest.put("duration", videoDuration);
+        createRequest.put("omni_reference_task_type", "edit");
+        createRequest.put("output_format", "mov");
+        createRequest.put("watermark", true);
+
+        retrofit2.Response<CreateContentGenerationTaskResponse> response =
+                contentGenerationApi.create(createRequest).execute();
+        if (!response.isSuccessful() || response.body() == null) {
+            throw new IOException("Unexpected code " + response.code());
+        }
+        CreateContentGenerationTaskResponse createResult = response.body();
+        System.out.println("Task Created: " + createResult);
+
+        // Get task details and poll status
+        String taskId = createResult.getId();
+        pollTaskStatus(taskId);
+    }
+
+    /**
+     * Poll task status
+     * @param taskId Task ID
+     */
+
+    private static void pollTaskStatus(String taskId) {
+        String getRequest = taskId;
+
+        System.out.println("----- polling task status -----");
+        try {
+            long deadlineNanos = System.nanoTime() + TimeUnit.MINUTES.toNanos(30);
+            while (System.nanoTime() < deadlineNanos) {
+                ContentGenerationTask getResponse = service.getContentGenerationTask(getRequest);
+                String status = getResponse.getStatus().toString();
+
+                if ("succeeded".equalsIgnoreCase(status)) {
+                    System.out.println("----- task succeeded -----");
+                    System.out.println(getResponse);
+                    return;
+                } else if ("failed".equalsIgnoreCase(status)) {
+                    throw new IllegalStateException(
+                            "Video generation task failed: " + getResponse.getError());
+                } else {
+                    System.out.printf("Current status: %s, Retrying in 10 seconds...%n", status);
+                    TimeUnit.SECONDS.sleep(10);
+                }
+            }
+            throw new IllegalStateException(
+                    "Video generation task did not finish within 30 minutes");
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Polling interrupted", ie);
+        } catch (Exception e) {
+            throw new RuntimeException("Error occurred while polling", e);
+        } finally {
+            service.shutdownExecutor();
+        }
+    }
+}
+```
+
+#### Response
+
+```
+----- create request -----
+Task Created: CreateContentGenerationTaskResult{id='cgt-20260414172135-*****', safetyIdentifier='null'}
+----- polling task status -----
+Current status: running, Retrying in 10 seconds...
+Current status: running, Retrying in 10 seconds...
+...
+----- task succeeded -----
+GetContentGenerationTaskResponse{id='cgt-20260414172135-*****', model='dreamina-seedance-2-5-260628', safetyIdentifier='null', status='succeeded', error='null', content=Content{videoUrl='https://xxx', lastFrameUrl='null', fileUrl='null'}, usage=Usage{completionTokens=186300}, framespersecond=24, createdAt=1776158495, updatedAt=1776158977, seed=23456, serviceTier='default', executionExpiresAfter=172800, generateAudio=true, ratio='5:4', duration=16, outputFormat='mov', resolution='720p', draft=false, draftTaskID='null', tools='null'}
+```
+
+### Go
+
+
+#### Request
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/volcengine/ark-runtime-go/arkruntime"
+	model "github.com/volcengine/ark-runtime-go/arkruntime/model/contentgeneration"
+)
+
+func main() {
+	// Initialize Ark client
+	client := arkruntime.NewClientWithApiKey(
+		os.Getenv("ARK_API_KEY"),
+		// The base URL for model invocation
+		arkruntime.WithBaseUrl("https://ark.ap-southeast.bytepluses.com/api/v3"),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	// Model ID
+	modelID := "dreamina-seedance-2-5-260628"
+	// Text prompt
+	prompt := "Video edit: remove everyone in @Video1 except the protagonist."
+
+	// Example resource URLs
+	refVideo := "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/seedance2.5_edit_input.mov"
+
+	// Output video parameters
+	generateAudio := true
+	videoRatio := "adaptive"
+	videoDuration := int64(-1)
+
+	// 1. Create video generation task
+	fmt.Println("----- create request -----")
+	createReq := &model.CreateContentGenerationTaskRequest{
+		Model:         modelID,
+		GenerateAudio: model.NewOptBool(generateAudio),
+		Ratio:         model.NewOptString(videoRatio),
+		Duration:      model.NewOptInt64(videoDuration),
+		Content: []model.ContentItem{
+			{
+				Type: model.ContentTypeText,
+				Text: model.NewOptString(prompt),
+			},
+			{
+				Type: model.ContentTypeVideoURL,
+				VideoURL: model.NewOptVideoURL(model.VideoURL{
+					URL: refVideo,
+				}),
+				Role: model.NewOptString("reference_video"),
+			},
+		},
+		Watermark:     model.NewOptBool(true),
+	}
+
+	createResp, err := client.CreateContentGenerationTask(
+		ctx,
+		createReq,
+		arkruntime.WithExtraBody(map[string]interface{}{
+			"omni_reference_task_type": "edit",
+			"output_format":            "mov",
+		}),
+	)
+	if err != nil {
+		panic(fmt.Errorf("create content generation task: %w", err))
+	}
+
+	taskID := createResp.ID
+	fmt.Printf("Task Created with ID: %s\n", taskID)
+
+	// 2. Poll task status
+	pollTaskStatus(ctx, client, taskID)
+}
+
+// poll task status
+func pollTaskStatus(ctx context.Context, client *arkruntime.Client, taskID string) {
+	fmt.Println("----- polling task status -----")
+	for {
+		getReq := taskID
+		getResp, err := client.GetContentGenerationTask(ctx, getReq)
+		if err != nil {
+			panic(fmt.Errorf("get content generation task: %w", err))
+		}
+
+		status := getResp.Status
+		if status == "succeeded" {
+			fmt.Println("----- task succeeded -----")
+			fmt.Printf("Task ID: %s \n", getResp.ID)
+			fmt.Printf("Model: %s \n", getResp.Model)
+			fmt.Printf("Video URL: %s \n", getResp.Content.Or(model.TaskContent{}).VideoURL.Or(""))
+			fmt.Printf("Completion Tokens: %d \n", getResp.Usage.Or(model.TaskUsage{}).CompletionTokens)
+			fmt.Printf("Created At: %d, Updated At: %d\n", getResp.CreatedAt.Or(0), getResp.UpdatedAt.Or(0))
+			return
+		} else if status == "failed" {
+			if getResp.Error.IsSet() {
+				panic(fmt.Errorf("video generation task failed: %s: %s", getResp.Error.Value.Code, getResp.Error.Value.Message))
+			}
+			panic("video generation task failed")
+		} else {
+			fmt.Printf("Current status: %s, Retrying in 10 seconds... \n", status)
+			time.Sleep(10 * time.Second)
+		}
+	}
+}
+```
+
+#### Response
+
+```
+----- create request -----
+Task Created with ID: cgt-20260414172240-*****
+----- polling task status -----
+Current status: running, Retrying in 10 seconds...
+Current status: running, Retrying in 10 seconds...
+...
+----- task succeeded -----
+Task ID: cgt-20260414172240-*****
+Model: dreamina-seedance-2-5-260628
+Video URL: https://xxx
+Completion Tokens: 186300
+Duration: 16
+Ratio: 5:4
+Output Format: mov
+Created At: 1776158560, Updated At: 1776159042
+```
+
+## Extend video
+
+### cURL
+
+
+#### Request
+
+```bash
+curl -X POST https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ARK_API_KEY" \
+  -d '{
+    "model": "dreamina-seedance-2-5-260628",
+    "content": [
+        {
+            "type": "text",
+            "text": "Extend @Video 1. After the window opens, move into the art gallery interior shown in @Video 2. Finally, move the camera into the painting shown in @Video 3."
+        },
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video1_75.mov"
+            },
+            "role": "reference_video"
+        },
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video2.mp4"
+            },
+            "role": "reference_video"
+        },
+        {
+            "type": "video_url",
+            "video_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video3.mp4"
+            },
+            "role": "reference_video"
+        }
+    ],
+    "generate_audio": true,
+    "ratio": "adaptive",
+    "duration": 11,
+    "output_format": "mov",
+    "watermark": true
+}'
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2026******-****"
+}
+```
+
+### Python
+
+
+#### Request
+
+```python
+import os
+import time
+# Install SDK: python -m pip install --upgrade arkruntime
+from arkruntime import Ark
+
+client = Ark(
+    # The base URL for model invocation
+    base_url='https://ark.ap-southeast.bytepluses.com/api/v3',
+    # Get API Key：https://ai.byteplus.com/ark/region:ap-southeast-1/apikey
+    api_key=os.environ.get("ARK_API_KEY"),
+)
+
+if __name__ == "__main__":
+    print("----- create request -----")
+    create_result = client.content_generation.tasks.create(
+        model="dreamina-seedance-2-5-260628", # Replace with Model ID
+        content=[
+            {
+                "type": "text",
+                "text": "Extend @Video 1. After the window opens, move into the art gallery interior shown in @Video 2. Finally, move the camera into the painting shown in @Video 3."
+            },
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video1_75.mov"
+                },
+                "role": "reference_video",
+            },
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video2.mp4"
+                },
+                "role": "reference_video",
+            },
+            {
+                "type": "video_url",
+                "video_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video3.mp4"
+                },
+                "role": "reference_video",
+            },
+        ],
+        generate_audio=True,
+        ratio="adaptive",
+        duration=11,
+        extra_body={
+            "omni_reference_task_type": "extend",
+            "output_format": "mov",
+        },
+        watermark=True,
+    )
+    print(create_result)
+
+
+    # Polling query section
+    print("----- polling task status -----")
+    task_id = create_result.id
+    deadline = time.monotonic() + 30 * 60
+    while time.monotonic() < deadline:
+        get_result = client.content_generation.tasks.get(task_id=task_id)
+        status = get_result.status
+        if status == "succeeded":
+            print("----- task succeeded -----")
+            print(get_result)
+            break
+        elif status == "failed":
+            raise RuntimeError(f"Video generation task failed: {get_result.error}")
+        else:
+            print(f"Current status: {status}, Retrying after 10 seconds...")
+            time.sleep(10)
+    else:
+        raise TimeoutError("Video generation task did not finish within 30 minutes")
+```
+
+#### Response
+
+```
+----- create request -----
+ContentGenerationTaskID(id='cgt-20260414172508-*****')
+----- polling task status -----
+Current status: running, Retrying after 10 seconds...
+Current status: running, Retrying after 10 seconds...
+...
+----- task succeeded -----
+ContentGenerationTask(id='cgt-20260414172508-*****', model='dreamina-seedance-2-5-260628', status='succeeded', error=None, content=Content(video_url='https://xxx', last_frame_url=None, file_url=None), usage=Usage(completion_tokens=303300, total_tokens=303300), framespersecond=24, created_at=1776158708, updated_at=1776159289, seed=34567, service_tier='default', execution_expires_after=172800, generate_audio=True, duration=11, ratio='7:5', output_format='mov', resolution='720p', draft=False, draft_task_id=None)
+```
+
+### Java
+
+
+#### Request
+
+```java
+package com.ark.sample;
+
+import com.volcengine.ark.runtime.models.content_generation.*;
+import com.volcengine.ark.runtime.service.ArkService;
+import okhttp3.ConnectionPool;
+import okhttp3.Dispatcher;
+import retrofit2.Call;
+import retrofit2.Retrofit;
+import retrofit2.http.Body;
+import retrofit2.http.POST;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+public class ContentGenerationTaskExample {
+
+    interface ContentGenerationApi {
+        @POST("contents/generations/tasks")
+        Call<CreateContentGenerationTaskResponse> create(@Body Map<String, Object> request);
+    }
+
+    // Client initialization
+    static String apiKey = System.getenv("ARK_API_KEY");
+    static ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
+    static Dispatcher dispatcher = new Dispatcher();
+    static ArkService service = ArkService.builder()
+           .baseUrl("https://ark.ap-southeast.bytepluses.com/api/v3")
+           // The base URL for model invocation
+           .dispatcher(dispatcher)
+           .connectionPool(connectionPool)
+           .apiKey(apiKey)
+           .build();
+    static Retrofit retrofit = ArkService.defaultRetrofit(
+            ArkService.defaultApiKeyClient(apiKey, Duration.ofSeconds(180)),
+            ArkService.defaultObjectMapper(),
+            "https://ark.ap-southeast.bytepluses.com/api/v3/",
+            Runnable::run);
+    static ContentGenerationApi contentGenerationApi =
+            retrofit.create(ContentGenerationApi.class);
+
+    public static void main(String[] args) throws IOException {
+
+        // Model ID
+        final String modelId = "dreamina-seedance-2-5-260628";
+        // Text prompt
+        final String prompt = "Extend @Video 1. After the window opens, move into the art gallery interior shown in @Video 2. Finally, move the camera into the painting shown in @Video 3.";
+
+        // Example resource URLs
+        final String refVideo1 = "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video1_75.mov";
+        final String refVideo2 = "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video2.mp4";
+        final String refVideo3 = "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video3.mp4";
+
+        // Output video parameters
+        final boolean generateAudio = true;
+        final String videoRatio = "adaptive";
+        final long videoDuration = 11L;
+        System.out.println("----- create request -----");
+        // Build request content
+        List<ContentItem> contents = new ArrayList<>();
+
+        // 1. Text prompt
+        contents.add(ContentItem.builder()
+                .type(ContentType.TEXT)
+                .text(prompt)
+                .build());
+
+        // 2. Reference video 1
+        contents.add(ContentItem.builder()
+                .type(ContentType.VIDEO_URL)
+                .videoUrl(VideoURL.builder()
+                        .url(refVideo1)
+                        .build())
+                .role("reference_video")
+                .build());
+
+        // 3. Reference video 2
+        contents.add(ContentItem.builder()
+                .type(ContentType.VIDEO_URL)
+                .videoUrl(VideoURL.builder()
+                        .url(refVideo2)
+                        .build())
+                .role("reference_video")
+                .build());
+
+        // 4. Reference video 3
+        contents.add(ContentItem.builder()
+                .type(ContentType.VIDEO_URL)
+                .videoUrl(VideoURL.builder()
+                        .url(refVideo3)
+                        .build())
+                .role("reference_video")
+                .build());
+
+        // Create video generation task
+        Map<String, Object> createRequest = new LinkedHashMap<>();
+        createRequest.put("model", modelId);
+        createRequest.put("content", contents);
+        createRequest.put("generate_audio", generateAudio);
+        createRequest.put("ratio", videoRatio);
+        createRequest.put("duration", videoDuration);
+        createRequest.put("omni_reference_task_type", "extend");
+        createRequest.put("output_format", "mov");
+        createRequest.put("watermark", true);
+
+        retrofit2.Response<CreateContentGenerationTaskResponse> response =
+                contentGenerationApi.create(createRequest).execute();
+        if (!response.isSuccessful() || response.body() == null) {
+            throw new IOException("Unexpected code " + response.code());
+        }
+        CreateContentGenerationTaskResponse createResult = response.body();
+        System.out.println("Task Created: " + createResult);
+
+        // Get task details and poll status
+        String taskId = createResult.getId();
+        pollTaskStatus(taskId);
+    }
+
+    /**
+     * Poll task status
+     * @param taskId Task ID
+     */
+
+    private static void pollTaskStatus(String taskId) {
+        String getRequest = taskId;
+
+        System.out.println("----- polling task status -----");
+        try {
+            long deadlineNanos = System.nanoTime() + TimeUnit.MINUTES.toNanos(30);
+            while (System.nanoTime() < deadlineNanos) {
+                ContentGenerationTask getResponse = service.getContentGenerationTask(getRequest);
+                String status = getResponse.getStatus().toString();
+
+                if ("succeeded".equalsIgnoreCase(status)) {
+                    System.out.println("----- task succeeded -----");
+                    System.out.println(getResponse);
+                    return;
+                } else if ("failed".equalsIgnoreCase(status)) {
+                    throw new IllegalStateException(
+                            "Video generation task failed: " + getResponse.getError());
+                } else {
+                    System.out.printf("Current status: %s, Retrying in 10 seconds...%n", status);
+                    TimeUnit.SECONDS.sleep(10);
+                }
+            }
+            throw new IllegalStateException(
+                    "Video generation task did not finish within 30 minutes");
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Polling interrupted", ie);
+        } catch (Exception e) {
+            throw new RuntimeException("Error occurred while polling", e);
+        } finally {
+            service.shutdownExecutor();
+        }
+    }
+}
+```
+
+#### Response
+
+```
+----- create request -----
+Task Created: CreateContentGenerationTaskResult{id='cgt-20260414172612-*****', safetyIdentifier='null'}
+----- polling task status -----
+Current status: running, Retrying in 10 seconds...
+Current status: running, Retrying in 10 seconds...
+...
+----- task succeeded -----
+GetContentGenerationTaskResponse{id='cgt-20260414172612-*****', model='dreamina-seedance-2-5-260628', safetyIdentifier='null', status='succeeded', error='null', content=Content{videoUrl='https://xxx', lastFrameUrl='null', fileUrl='null'}, usage=Usage{completionTokens=303300}, framespersecond=24, createdAt=1776158772, updatedAt=1776159353, seed=45678, serviceTier='default', executionExpiresAfter=172800, generateAudio=true, ratio='7:5', duration=11, outputFormat='mov', resolution='720p', draft=false, draftTaskID='null', tools='null'}
+```
+
+### Go
+
+
+#### Request
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/volcengine/ark-runtime-go/arkruntime"
+	model "github.com/volcengine/ark-runtime-go/arkruntime/model/contentgeneration"
+)
+
+func main() {
+	// Initialize Ark client
+	client := arkruntime.NewClientWithApiKey(
+		os.Getenv("ARK_API_KEY"),
+		// The base URL for model invocation
+		arkruntime.WithBaseUrl("https://ark.ap-southeast.bytepluses.com/api/v3"),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	// Model ID
+	modelID := "dreamina-seedance-2-5-260628"
+	// Text prompt
+	prompt := "Extend @Video 1. After the window opens, move into the art gallery interior shown in @Video 2. Finally, move the camera into the painting shown in @Video 3."
+
+	// Example resource URLs
+	refVideo1 := "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video1_75.mov"
+    refVideo2 := "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video2.mp4"
+    refVideo3 := "https://arkdocs-en.tos-ap-southeast-1.volces.com/videos/video-generation/r2v_extend_video3.mp4"
+
+	// Output video parameters
+	generateAudio := true
+	videoRatio := "adaptive"
+	videoDuration := int64(11)
+
+	// 1. Create video generation task
+	fmt.Println("----- create request -----")
+	createReq := &model.CreateContentGenerationTaskRequest{
+		Model:         modelID,
+		GenerateAudio: model.NewOptBool(generateAudio),
+		Ratio:         model.NewOptString(videoRatio),
+		Duration:      model.NewOptInt64(videoDuration),
+		Content: []model.ContentItem{
+			{
+				Type: model.ContentTypeText,
+				Text: model.NewOptString(prompt),
+			},
+			{
+				Type: model.ContentTypeVideoURL,
+				VideoURL: model.NewOptVideoURL(model.VideoURL{
+					URL: refVideo1,
+				}),
+				Role: model.NewOptString("reference_video"),
+			},
+			{
+				Type: model.ContentTypeVideoURL,
+				VideoURL: model.NewOptVideoURL(model.VideoURL{
+					URL: refVideo2,
+				}),
+				Role: model.NewOptString("reference_video"),
+			},
+			{
+				Type: model.ContentTypeVideoURL,
+				VideoURL: model.NewOptVideoURL(model.VideoURL{
+					URL: refVideo3,
+				}),
+				Role: model.NewOptString("reference_video"),
+			},
+		},
+		Watermark:     model.NewOptBool(true),
+	}
+
+	createResp, err := client.CreateContentGenerationTask(
+		ctx,
+		createReq,
+		arkruntime.WithExtraBody(map[string]interface{}{
+			"omni_reference_task_type": "extend",
+			"output_format":            "mov",
+		}),
+	)
+	if err != nil {
+		panic(fmt.Errorf("create content generation task: %w", err))
+	}
+
+	taskID := createResp.ID
+	fmt.Printf("Task Created with ID: %s\n", taskID)
+
+	// 2. Poll task status
+	pollTaskStatus(ctx, client, taskID)
+}
+
+// poll task status
+func pollTaskStatus(ctx context.Context, client *arkruntime.Client, taskID string) {
+	fmt.Println("----- polling task status -----")
+	for {
+		getReq := taskID
+		getResp, err := client.GetContentGenerationTask(ctx, getReq)
+		if err != nil {
+			panic(fmt.Errorf("get content generation task: %w", err))
+		}
+
+		status := getResp.Status
+		if status == "succeeded" {
+			fmt.Println("----- task succeeded -----")
+			fmt.Printf("Task ID: %s \n", getResp.ID)
+			fmt.Printf("Model: %s \n", getResp.Model)
+			fmt.Printf("Video URL: %s \n", getResp.Content.Or(model.TaskContent{}).VideoURL.Or(""))
+			fmt.Printf("Completion Tokens: %d \n", getResp.Usage.Or(model.TaskUsage{}).CompletionTokens)
+			fmt.Printf("Created At: %d, Updated At: %d\n", getResp.CreatedAt.Or(0), getResp.UpdatedAt.Or(0))
+			return
+		} else if status == "failed" {
+			if getResp.Error.IsSet() {
+				panic(fmt.Errorf("video generation task failed: %s: %s", getResp.Error.Value.Code, getResp.Error.Value.Message))
+			}
+			panic("video generation task failed")
+		} else {
+			fmt.Printf("Current status: %s, Retrying in 10 seconds... \n", status)
+			time.Sleep(10 * time.Second)
+		}
+	}
+}
+```
+
+#### Response
+
+```
+----- create request -----
+Task Created with ID: cgt-20260414172730-*****
+----- polling task status -----
+Current status: running, Retrying in 10 seconds...
+Current status: running, Retrying in 10 seconds...
+...
+----- task succeeded -----
+Task ID: cgt-20260414172730-*****
+Model: dreamina-seedance-2-5-260628
+Video URL: https://xxx
+Completion Tokens: 303300
+Duration: 11
+Ratio: 7:5
+Output Format: mov
+Created At: 1776158850, Updated At: 1776159431
+```
+
+## Audio video - first frame
+
+### cURL
+
+#### Request
+
+```bash
+curl https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ARK_API_KEY" \
+  -d '{
+    "model": "dreamina-seedance-2-5-260628",
+    "content": [
+        {
+            "type": "text",
+            "text": "A girl holding a fox, the girl opens her eyes and gently looks at the camera, the fox is held gently, the camera slowly pulls back, the wind blows through the hair of the girl, and the sound of the wind can be heard."
+        },
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/i2v_foxrgirl.png"
+            }
+        }
+    ],
+    "generate_audio": true,
+    "ratio": "adaptive",
+    "duration": 5,
+    "watermark": true
+}'
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2025******-****"
+}
+```
+
+### Python
+
+
+#### Request
+
+```python
+import os
+from arkruntime import Ark
+
+# Get API Key: https://ai.byteplus.com/ark/region:ap-southeast-1/apikey
+client = Ark(
+    api_key=os.environ.get("ARK_API_KEY"),
+    base_url="https://ark.ap-southeast.bytepluses.com/api/v3",
+)
+
+if __name__ == "__main__":
+    print("----- create request -----")
+    resp = client.content_generation.tasks.create(
+        model="dreamina-seedance-2-5-260628", # Replace with Model ID
+        content=[
+            {
+                "text": (
+                    "A girl holding a fox, the girl opens her eyes and gently looks at the camera, the fox is held gently, the camera slowly pulls back, the girl's hair is blown by the wind, and the sound of the wind can be heard."
+                ),
+                "type": "text"
+            },
+            {
+                "image_url": {
+                    "url": (
+                        "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/i2v_foxrgirl.png"
+                    )
+                },
+                "type": "image_url"
+            }
+        ],
+        generate_audio=True,
+        ratio="adaptive",
+        duration=5,
+        watermark=True,
+    )
+
+    print(resp)
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2025******-****"
+}
+```
+
+### Java
+
+
+#### Request
+
+```java
+package com.ark.sample;
+
+import com.volcengine.ark.runtime.models.content_generation.*;
+import com.volcengine.ark.runtime.service.ArkService;
+import okhttp3.ConnectionPool;
+import okhttp3.Dispatcher;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+public class ContentGenerationTaskExample {
+    // Make sure that you have stored the API Key in the environment variable ARK_API_KEY
+    // Initialize the Ark client to read your API Key from an environment variable
+    static String apiKey = System.getenv("ARK_API_KEY");
+    static ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
+    static Dispatcher dispatcher = new Dispatcher();
+    static ArkService service = ArkService.builder()
+           .baseUrl("https://ark.ap-southeast.bytepluses.com/api/v3")
+           //The base URL for model invocation
+           .dispatcher(dispatcher)
+           .connectionPool(connectionPool)
+           .apiKey(apiKey)
+           .build();
+
+    public static void main(String[] args) {
+        String model = "dreamina-seedance-2-5-260628"; // Replace with Model ID
+
+        Boolean generateAudio = true;
+        String ratio = "adaptive";
+        Long duration = 5L;
+        Boolean watermark = true;
+        System.out.println("----- create request -----");
+        List<ContentItem> contents = new ArrayList<>();
+
+        // Combination of text prompt and parameters
+        contents.add(ContentItem.builder()
+                .type(ContentType.TEXT)
+
+                .text("A girl holding a fox, the girl opens her eyes and gently looks at the camera, the fox is held gently, the camera slowly pulls back, the girl's hair is blown by the wind, and the sound of the wind can be heard.")
+                .build());
+        // The URL of the first frame image
+        contents.add(ContentItem.builder()
+                .type(ContentType.IMAGE_URL)
+                .imageUrl(ImageURL.builder()
+                        .url("https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/i2v_foxrgirl.png")
+
+                        .build())
+                .build());
+
+        // Create a video generation task
+        CreateContentGenerationTaskRequest createRequest = CreateContentGenerationTaskRequest.builder()
+                .model(model)
+                .content(contents)
+                .generateAudio(generateAudio)
+                .ratio(ratio)
+                .duration(duration)
+                .watermark(watermark)
+                .build();
+
+        CreateContentGenerationTaskResponse createResult = service.createContentGenerationTask(createRequest);
+        System.out.println(createResult);
+
+        service.shutdownExecutor();
+    }
+}
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2025******-****"
+}
+```
+
+### Go
+
+
+#### Request
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/volcengine/ark-runtime-go/arkruntime"
+    model "github.com/volcengine/ark-runtime-go/arkruntime/model/contentgeneration"
+)
+
+func main() {
+    // Make sure that you have stored the API Key in the environment variable ARK_API_KEY
+    // Initialize the Ark client to read your API Key from an environment variable
+    client := arkruntime.NewClientWithApiKey(
+        // Get your API Key from the environment variable. This is the default mode and you can modify it as required
+        os.Getenv("ARK_API_KEY"),
+        //The base URL for model invocation
+        arkruntime.WithBaseUrl("https://ark.ap-southeast.bytepluses.com/api/v3"),
+    )
+    ctx := context.Background()
+    //Replace with Model ID
+    modelEp := "dreamina-seedance-2-5-260628"
+
+    // Generate a task
+    fmt.Println("----- create request -----")
+    createReq := &model.CreateContentGenerationTaskRequest{
+        Model: modelEp,
+        GenerateAudio: model.NewOptBool(true),
+        Ratio:         model.NewOptString("adaptive"),
+        Duration:      model.NewOptInt64(5),
+        Watermark:     model.NewOptBool(true),
+        Content: []model.ContentItem{
+            {
+                // Combination of text prompt and parameters
+                Type: model.ContentTypeText,
+
+                Text: model.NewOptString("A girl holding a fox, the girl opens her eyes and gently looks at the camera, the fox is held gently, the camera slowly pulls back, the girl's hair is blown by the wind, and the sound of the wind can be heard."),
+            },
+            {
+                // The URL of the first frame image
+                Type: model.ContentTypeImageURL,
+                ImageURL: model.NewOptImageURL(model.ImageURL{
+                    URL: "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/i2v_foxrgirl.png",
+
+                }),
+            },
+        },
+    }
+    createResp, err := client.CreateContentGenerationTask(ctx, createReq)
+    if err != nil {
+        fmt.Printf("create content generation error: %v", err)
+        return
+    }
+    taskID := createResp.ID
+    fmt.Printf("Task Created with ID: %s", taskID)
+}
+```
+#### Response
+
+```
+{
+  "id": "cgt-2025******-****"
+}
+```
+
+## Audio video - first and last frames
+
+### cURL
+
+#### Request
+
+```bash
+curl -X POST https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ARK_API_KEY" \
+  -d '{
+    "model": "seedance-1-5-pro-251215",
+    "content": [
+         {
+            "type": "text",
+            "text": "The girl in the frame says 'Cheese' to the camera, with a 360-degree orbiting camera shot"
+        },
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seepro_first_frame.jpeg"
+            },
+            "role": "first_frame"
+        },
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seepro_last_frame.jpeg"
+            },
+            "role": "last_frame"
+        }
+    ],
+    "generate_audio":true,
+    "ratio": "adaptive",
+    "duration": 5,
+    "watermark": true
+}'
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2025******-****"
+}
+```
+
+### Python
+
+
+#### Request
+
+```python
+import os
+# Install SDK:  python -m pip install --upgrade arkruntime
+from arkruntime import Ark
+
+# Make sure that you have stored the API Key in the environment variable ARK_API_KEY
+# Initialize the Ark client to read your API Key from an environment variable
+client = Ark(
+    # This is the default path. You can configure it based on the service location
+    base_url="https://ark.ap-southeast.bytepluses.com/api/v3",
+    # Get API Key：https://ai.byteplus.com/ark/region:ap-southeast-1/apikey
+    api_key=os.environ.get("ARK_API_KEY"),
+)
+
+
+if __name__ == "__main__":
+    print("----- create request -----")
+    create_result = client.content_generation.tasks.create(
+        model="seedance-1-5-pro-251215", # Replace with Model ID
+        content=[
+            {
+                # Combination of text prompt and parameters
+                "type": "text",
+                "text": "The girl in the frame says 'Cheese' to the camera, with a 360-degree orbiting camera shot"
+            },
+            {
+                # The URL of the first frame image
+                "type": "image_url",
+                "image_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seepro_first_frame.jpeg"
+                },
+                "role": "first_frame"
+            },
+            {
+                # The URL of the last frame image
+                "type": "image_url",
+                "image_url": {
+                    "url": "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seepro_last_frame.jpeg"
+                },
+                "role": "last_frame"
+            }
+        ],
+        generate_audio=True,
+        ratio="adaptive",
+        duration=5,
+        watermark=True,
+    )
+    print(create_result)
+```
+#### Response
+
+```
+{
+  "id": "cgt-2025******-****"
+}
+```
+
+### Java
+
+
+#### Request
+
+```java
+package com.ark.sample;
+
+import com.volcengine.ark.runtime.models.content_generation.*;
+import com.volcengine.ark.runtime.service.ArkService;
+import okhttp3.ConnectionPool;
+import okhttp3.Dispatcher;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+public class ContentGenerationTaskExample {
+    // Make sure that you have stored the API Key in the environment variable ARK_API_KEY
+    // Initialize the Ark client to read your API Key from an environment variable
+    static String apiKey = System.getenv("ARK_API_KEY");
+    static ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
+    static Dispatcher dispatcher = new Dispatcher();
+    static ArkService service = ArkService.builder()
+           .baseUrl("https://ark.ap-southeast.bytepluses.com/api/v3")
+           //The base URL for model invocation
+           .dispatcher(dispatcher)
+           .connectionPool(connectionPool)
+           .apiKey(apiKey)
+           .build();
+
+    public static void main(String[] args) {
+        String model = "dreamina-seedance-2-5-260628"; // Replace with Model ID
+
+        Boolean generateAudio = true;
+        String ratio = "adaptive";
+        Long duration = 5L;
+        Boolean watermark = true;
+        System.out.println("----- create request -----");
+        List<ContentItem> contents = new ArrayList<>();
+
+        // Combination of text prompt and parameters
+        contents.add(ContentItem.builder()
+                .type(ContentType.TEXT)
+
+                .text("The girl in the frame says “Cheese” to the camera, with a 360-degree orbiting camera shot")
+                .build());
+         // The URL of the first frame image
+        contents.add(ContentItem.builder()
+                .type(ContentType.IMAGE_URL)
+                .imageUrl(ImageURL.builder()
+                        .url("https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seepro_first_frame.jpeg")
+
+                        .build())
+                .role("first_frame")
+                .build());
+
+        // The URL of the last frame image
+        contents.add(ContentItem.builder()
+                .type(ContentType.IMAGE_URL)
+                .imageUrl(ImageURL.builder()
+                        .url("https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seepro_last_frame.jpeg")
+
+                        .build())
+                .role("last_frame")
+                .build());
+
+        // Create a video generation task
+        CreateContentGenerationTaskRequest createRequest = CreateContentGenerationTaskRequest.builder()
+                .model(model)
+                .content(contents)
+                .generateAudio(generateAudio)
+                .ratio(ratio)
+                .duration(duration)
+                .watermark(watermark)
+                .build();
+
+        CreateContentGenerationTaskResponse createResult = service.createContentGenerationTask(createRequest);
+        System.out.println(createResult);
+
+        // Get the details of the task
+        String taskId = createResult.getId();
+        String getRequest = taskId;
+
+        // Polling query section
+        System.out.println("----- polling task status -----");
+        while (true) {
+            try {
+                ContentGenerationTask getResponse = service.getContentGenerationTask(getRequest);
+                String status = getResponse.getStatus().toString();
+                if ("succeeded".equalsIgnoreCase(status)) {
+                    System.out.println("----- task succeeded -----");
+                    System.out.println(getResponse);
+                    break;
+                } else if ("failed".equalsIgnoreCase(status)) {
+                    System.out.println("----- task failed -----");
+                    System.out.println("Error: " + getResponse.getStatus());
+                    break;
+                } else {
+                    System.out.printf("Current status: %s, Retrying in 10 seconds...", status);
+                    TimeUnit.SECONDS.sleep(10);
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                System.err.println("Polling interrupted");
+                break;
+            }
+        }
+    }
+}
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2025******-****"
+}
+```
+
+### Go
+
+
+#### Request
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+    "time"
+
+    "github.com/volcengine/ark-runtime-go/arkruntime"
+    model "github.com/volcengine/ark-runtime-go/arkruntime/model/contentgeneration"
+)
+
+func main() {
+    // Make sure that you have stored the API Key in the environment variable ARK_API_KEY
+    // Initialize the Ark client to read your API Key from an environment variable
+    client := arkruntime.NewClientWithApiKey(
+        // Get your API Key from the environment variable. This is the default mode and you can modify it as required
+        os.Getenv("ARK_API_KEY"),
+        //The base URL for model invocation
+        arkruntime.WithBaseUrl("https://ark.ap-southeast.bytepluses.com/api/v3"),
+    )
+    ctx := context.Background()
+    //Replace with Model ID
+    modelEp := "dreamina-seedance-2-5-260628"
+
+
+    // Generate a task
+    fmt.Println("----- create request -----")
+    createReq := &model.CreateContentGenerationTaskRequest{
+        Model: modelEp,
+        GenerateAudio: model.NewOptBool(true),
+        Ratio:         model.NewOptString("adaptive"),
+        Duration:      model.NewOptInt64(5),
+        Watermark:     model.NewOptBool(true),
+        Content: []model.ContentItem{
+            {
+                // Combination of text prompt and parameters
+                Type: model.ContentTypeText,
+
+                Text: model.NewOptString("The girl in the frame says “Cheese” to the camera, with a 360-degree orbiting camera shot"),
+            },
+            {
+                // The URL of the first frame image
+                Type: model.ContentTypeImageURL,
+                ImageURL: model.NewOptImageURL(model.ImageURL{
+                    URL: "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seepro_first_frame.jpeg",
+
+                }),
+                Role: model.NewOptString("first_frame"),
+            },
+            {
+                // The URL of the last frame image
+                Type: model.ContentTypeImageURL,
+                ImageURL: model.NewOptImageURL(model.ImageURL{
+                    URL: "https://arkdocs-en.tos-ap-southeast-1.volces.com/images/video-generation/seepro_last_frame.jpeg",
+
+                }),
+                Role: model.NewOptString("last_frame"),
+            },
+        },
+    }
+    createResp, err := client.CreateContentGenerationTask(ctx, createReq)
+    if err != nil {
+        fmt.Printf("create content generation error: %v", err)
+        return
+    }
+    taskID := createResp.ID
+    fmt.Printf("Task Created with ID: %s", taskID)
+
+    // Polling query section
+    fmt.Println("----- polling task status -----")
+    for {
+        getReq := taskID
+        getResp, err := client.GetContentGenerationTask(ctx, getReq)
+        if err != nil {
+            fmt.Printf("get content generation task error: %v", err)
+            return
+        }
+
+        status := getResp.Status
+        if status == "succeeded" {
+            fmt.Println("----- task succeeded -----")
+            fmt.Printf("Task ID: %s \n", getResp.ID)
+            fmt.Printf("Model: %s \n", getResp.Model)
+            fmt.Printf("Video URL: %s \n", getResp.Content.Or(model.TaskContent{}).VideoURL.Or(""))
+            fmt.Printf("Completion Tokens: %d \n", getResp.Usage.Or(model.TaskUsage{}).CompletionTokens)
+            fmt.Printf("Created At: %d, Updated At: %d", getResp.CreatedAt.Or(0), getResp.UpdatedAt.Or(0))
+            return
+        } else if status == "failed" {
+            fmt.Println("----- task failed -----")
+            if getResp.Error.IsSet() {
+                fmt.Printf("Error Code: %s, Message: %s", getResp.Error.Value.Code, getResp.Error.Value.Message)
+            }
+            return
+        } else {
+            fmt.Printf("Current status: %s, Retrying in 10 seconds... \n", status)
+            time.Sleep(10 * time.Second)
+        }
+    }
+}
+```
+#### Response
+
+```
+{
+  "id": "cgt-2025******-****"
+}
+```
+
+## Image to video - base64
+
+### cURL
+
+#### Request
+
+```bash
+curl -X POST https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ARK_API_KEY" \
+  -d '{
+    "model": "seedance-1-0-lite-i2v-250428",
+    "content": [
+        {
+            "type": "text",
+            "text": "A girl holding a fox, the girl opens her eyes and gently looks at the camera, the fox is held gently, the camera slowly pulls back, the wind blows through the hair of the girl, and the sound of the wind can be heard."
+        },
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": "data:image/png;base64,aHR0******cG5n"
+            }
+        }
+    ],
+    "ratio": "adaptive",
+    "duration": 5,
+    "watermark": true
+}'
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2025******-****"
+}
+```
+
+## Text to video
+
+### cURL
+
+#### Request
+
+```bash
+curl -X POST https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ARK_API_KEY" \
+  -d '{
+    "model": "seedance-1-0-pro-250528",
+    "content": [
+        {
+            "type": "text",
+            "text": "Photorealistic style: Under a clear blue sky, a vast expanse of white daisy fields stretches out. The camera gradually zooms in and finally fixates on a close-up of a single daisy, with several glistening dewdrops resting on its petals."
+        }
+    ],
+    "ratio": "16:9",
+    "duration": 5,
+    "watermark": true
+}'
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2026******-****"
+}
+```
+
+### Python
+
+
+#### Request
+
+```python
+import os
+# Install SDK:  python -m pip install --upgrade arkruntime
+from arkruntime import Ark
+
+# Make sure that you have stored the API Key in the environment variable ARK_API_KEY
+# Initialize the Ark client to read your API Key from an environment variable
+client = Ark(
+    # This is the default path. You can configure it based on the service location
+    base_url="https://ark.ap-southeast.bytepluses.com/api/v3",
+    # Get API Key：https://ai.byteplus.com/ark/region:ap-southeast-1/apikey
+    api_key=os.environ.get("ARK_API_KEY"),
+)
+
+if __name__ == "__main__":
+    print("----- create request -----")
+    create_result = client.content_generation.tasks.create(
+        model="seedance-1-0-pro-250528", # Replace with Model ID
+        content=[
+            {
+                # Combination of text prompt and parameters
+                "type": "text",
+                "text": "Photorealistic style: Under a clear blue sky, a vast expanse of white daisy fields stretches out. The camera gradually zooms in and finally fixates on a close-up of a single daisy, with several glistening dewdrops resting on its petals."
+            }
+        ],
+        ratio="16:9",
+        duration=5,
+        watermark=True,
+    )
+    print(create_result)
+```
+#### Response
+
+```
+{
+  "id": "cgt-2026******-****"
+}
+```
+
+### Java
+
+
+#### Request
+
+```java
+package com.ark.sample;
+
+import com.volcengine.ark.runtime.models.content_generation.*;
+import com.volcengine.ark.runtime.service.ArkService;
+import okhttp3.ConnectionPool;
+import okhttp3.Dispatcher;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+public class ContentGenerationTaskExample {
+    // Make sure that you have stored the API Key in the environment variable ARK_API_KEY
+    // Initialize the Ark client to read your API Key from an environment variable
+    static String apiKey = System.getenv("ARK_API_KEY");
+    static ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
+    static Dispatcher dispatcher = new Dispatcher();
+    static ArkService service = ArkService.builder()
+           .baseUrl("https://ark.ap-southeast.bytepluses.com/api/v3")
+           // The base URL for model invocation
+           .dispatcher(dispatcher)
+           .connectionPool(connectionPool)
+           .apiKey(apiKey)
+           .build();
+
+    public static void main(String[] args) {
+        String model = "seedance-1-0-pro-250528"; // Replace with Model ID
+        String ratio = "16:9";
+        Long duration = 5L;
+        Boolean watermark = true;
+        System.out.println("----- create request -----");
+        List<ContentItem> contents = new ArrayList<>();
+
+        // Combination of text prompt and parameters
+        contents.add(ContentItem.builder()
+                .type(ContentType.TEXT)
+                .text("Photorealistic style: Under a clear blue sky, a vast expanse of white daisy fields stretches out. The camera gradually zooms in and finally fixates on a close-up of a single daisy, with several glistening dewdrops resting on its petals.")
+                .build());
+
+        // Create a video generation task
+        CreateContentGenerationTaskRequest createRequest = CreateContentGenerationTaskRequest.builder()
+                .model(model)
+                .content(contents)
+                .ratio(ratio)
+                .duration(duration)
+                .watermark(watermark)
+                .build();
+
+        CreateContentGenerationTaskResponse createResult = service.createContentGenerationTask(createRequest);
+        System.out.println(createResult);
+
+
+        // shutdown service after all requests is finished
+        service.shutdownExecutor();
+    }
+}
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2026******-****"
+}
+```
+
+### Go
+
+
+#### Request
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/volcengine/ark-runtime-go/arkruntime"
+    model "github.com/volcengine/ark-runtime-go/arkruntime/model/contentgeneration"
+)
+
+func main() {
+    // Make sure that you have stored the API Key in the environment variable ARK_API_KEY
+    // Initialize the Ark client to read your API Key from an environment variable
+    client := arkruntime.NewClientWithApiKey(
+        // Get your API Key from the environment variable. This is the default mode and you can modify it as required
+        os.Getenv("ARK_API_KEY"),
+        // The base URL for model invocation
+        arkruntime.WithBaseUrl("https://ark.ap-southeast.bytepluses.com/api/v3"),
+    )
+    ctx := context.Background()
+    // Replace with Model ID
+    modelEp := "seedance-1-0-pro-250528"
+
+    // Generate a task
+    fmt.Println("----- create request -----")
+    createReq := &model.CreateContentGenerationTaskRequest{
+        Model: modelEp,
+        Ratio:         model.NewOptString("16:9"),
+        Duration:      model.NewOptInt64(5),
+        Watermark:     model.NewOptBool(true),
+        Content: []model.ContentItem{
+            {
+                // Combination of text prompt and parameters
+                Type: model.ContentTypeText,
+                Text: model.NewOptString("Photorealistic style: Under a clear blue sky, a vast expanse of white daisy fields stretches out. The camera gradually zooms in and finally fixates on a close-up of a single daisy, with several glistening dewdrops resting on its petals."),
+            },
+        },
+    }
+    createResp, err := client.CreateContentGenerationTask(ctx, createReq)
+    if err != nil {
+        fmt.Printf("create content generation error: %v", err)
+        return
+    }
+    taskID := createResp.ID
+    fmt.Printf("Task Created with ID: %s", taskID)
+}
+```
+
+#### Response
+
+```
+{
+  "id": "cgt-2026******-****"
+}
+```

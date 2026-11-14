@@ -12,11 +12,13 @@ export class SpicyImageRequestError extends Error {
   readonly code = 'SPICY_IMAGE_REQUEST_FAILED';
 }
 
-/** Preserve output requirements. Auto may replace provider-specific tuning preferences. */
-export function planCharacterImageRecovery(req: GenerateImageRequest, autoSelected = false): GenerateImageRequest | undefined {
+/** Preserve output requirements; provider-specific tuning belongs to the first model. */
+export function planCharacterImageRecovery(req: GenerateImageRequest): GenerateImageRequest | undefined {
   if (req.benignCharacterContent !== true || req.isNsfw || req.model !== 'gpt-image-2.6-flare'
-    || (!autoSelected && (req.imageQuality || req.imageReasoningEffort)) || (req.outputFormat && req.outputFormat !== 'png')
+    || (req.outputFormat && req.outputFormat !== 'png')
     || req.background === 'transparent' || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) return;
+  // The independent assessment excludes selected-model-only requests. A tool
+  // model ID and GPT tuning are preferences, not an additional model lock.
   // Nano has no output_format control. Explicit PNG is encoded after decoding;
   // other explicit formats remain excluded rather than silently substituted.
   const next = { ...req, model: 'gemini-2.1', outputFormat: undefined, imageQuality: undefined, imageReasoningEffort: undefined };
@@ -43,7 +45,7 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
     // A caller assessment of harmless character content is independent of the
     // refusal code. No keyword guessing, prompt rewriting, NSFW state mutation,
     // same-model retry, or retry of a missing/unknown/partially delivered result.
-    const recovery = error instanceof ImageProviderRefusalError ? planCharacterImageRecovery(request, !req.model || req.model === 'auto') : undefined;
+    const recovery = error instanceof ImageProviderRefusalError ? planCharacterImageRecovery(request) : undefined;
     if (error instanceof ImageProviderRefusalError && recovery && !request.signal?.aborted && deadline - Date.now() >= 30_000) {
       const alternate = getBackend('gemini-2.1');
       if (alternate?.canHandle(recovery) && (!request.beforeImageRecovery || await request.beforeImageRecovery(recovery))) {
@@ -65,7 +67,7 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
           image = `data:image/png;base64,${png.toString('base64')}`;
         }
         return { ...result, image, model: 'gemini-2.1', fallbackUsed: true, adjustments: [...adjustments, ...(request.imageQuality || request.imageReasoningEffort
-            ? ['Auto recovery used Nano Banana 2.1 native rendering settings in place of GPT Image quality/reasoning tuning.'] : []), ...(result.adjustments ?? [])],
+            ? ['Recovery used Nano Banana 2.1 native rendering settings in place of GPT Image quality/reasoning tuning.'] : []), ...(result.adjustments ?? [])],
           provider: result.provider ?? result.usage?.provider,
           recovery: { fromModel: model, provider: error.provider, providerCode: error.providerCode, rejectedRequestId: error.requestId } };
       }
