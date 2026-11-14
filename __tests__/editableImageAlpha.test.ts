@@ -63,6 +63,19 @@ describe('painted editable hit testing', () => {
     expect(isPaintedEditableHit(back, 75, 25)).toBe(false);
   });
 
+  it('never advertises unknown alpha on hover, then passes through decoded clear pixels', async () => {
+    const front = image('front', [0, 255]), back = image('rear', [255, 255]);
+    let decoded!: () => void;
+    Object.defineProperty(front, 'decode', { value: () => new Promise<void>(resolve => { decoded = resolve; }) });
+    Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: () => [front, back] });
+    const rects = [{ id: 'front', domEl: front }, { id: 'rear', domEl: back }];
+    expect(pickPaintedEditable(rects, 25, 25, { requireDecodedAlpha: true })).toBeNull();
+    const pending = pendingEditableAlphaAtPoint(rects, 25, 25);
+    decoded(); await pending;
+    expect(pickPaintedEditable(rects, 25, 25, { requireDecodedAlpha: true })).toBe('rear');
+    expect(pickPaintedEditable(rects, 75, 25, { requireDecodedAlpha: true })).toBe('front');
+  });
+
   it('waits for image decoding before caching pixels on Safari', async () => {
     const node = image('rocket', [0, 0]);
     let finishDecode!: () => void;

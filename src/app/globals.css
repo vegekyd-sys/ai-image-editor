@@ -1751,8 +1751,6 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
 
 /* Editable element — clickable + hover hint */
 [data-editable], .makaron-editable-node { cursor: pointer; pointer-events: auto; }
-[data-editable]:hover:not([data-editable-selected]),
-.makaron-editable-node:hover:not([data-editable-selected]) { outline: 1.5px dashed rgba(255,255,255,0.7); outline-offset: -1px; }
 
 /* Input box action cluster: model · Skill · primary action read as one control. */
 .mkr-action-cluster {
@@ -1861,3 +1859,7 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
 .mkr-resize-handle[data-resize-corner="sw"]::before { transform: rotate(-90deg); }
 .mkr-resize-handle[data-resize-corner="se"]::before { transform: rotate(180deg); }
 @media (pointer: coarse) { .mkr-resize-handle { width: 44px; height: 44px; margin-left: -22px; margin-top: -22px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-editable-hover-tint] { transition: none !important; }
+}

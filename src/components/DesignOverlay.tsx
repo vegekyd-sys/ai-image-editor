@@ -20,6 +20,7 @@ import { editableMediaImage, warmEditableAlpha, pickPaintedEditable, isPaintedEd
 import { editableDisplayLabel, editableLabelPosition } from '@/lib/editor/editable-label';
 import { useLocale } from '@/lib/i18n';
 import EditableSelectionTint from './EditableSelectionTint';
+import { useEditableHover } from '@/lib/editor/use-editable-hover';
 
 interface DesignOverlayProps {
   touchGestures?: boolean;
@@ -107,6 +108,7 @@ export default function DesignOverlay({
 
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
+  const hovered = useEditableHover({ containerEl, interactionEl, rects, disabled: isDragging, allowCanvasCoverSelection });
   const isMeasuringRef = useRef(false);
 
   // Drag snapshots
@@ -765,6 +767,7 @@ export default function DesignOverlay({
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 15 }}
     >
+      {hovered && hovered.id !== selectedFieldId && !isDragging && <EditableSelectionTint element={hovered.element} overlay={overlayRef.current} moving={false} hover visible={hovered.visible} />}
       {selectedRect && <EditableSelectionTint element={selectedRect.domEl} overlay={overlayRef.current} moving={isDragging} />}
       {/* Label tag for selected element — hidden during drag */}
       {selectedRect && selectedFieldId && !isDragging && (() => {

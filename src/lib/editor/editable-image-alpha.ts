@@ -132,7 +132,7 @@ export function pendingEditableAlphaAtPoint(rects: Array<{ domEl: HTMLElement }>
   return pending.length ? Promise.all(pending).then(() => {}) : null;
 }
 
-export function pickPaintedEditable(rects: Array<{ id: string; domEl: HTMLElement }>, x: number, y: number): string | null {
+export function pickPaintedEditable(rects: Array<{ id: string; domEl: HTMLElement }>, x: number, y: number, options?: { requireDecodedAlpha?: boolean }): string | null {
   const hits = rects.filter(({ domEl }) => { const r = domEl.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; });
   const paintOrder = new Map<string, number>();
   document.elementsFromPoint(x, y).forEach((element, index) => {
@@ -143,7 +143,12 @@ export function pickPaintedEditable(rects: Array<{ id: string; domEl: HTMLElemen
   for (const hit of hits) {
     const image = editableMediaImage(hit.domEl);
     // Keep un-readable external images selectable rather than inventing alpha.
-    if (!image || sampleEditableImage(image, x, y) !== false) return hit.id;
+    if (!image) return hit.id;
+    const painted = sampleEditableImage(image, x, y);
+    // A hover hint must never advertise unknown transparent padding. Nor may
+    // it shine through a front layer whose mask has not finished decoding.
+    if (painted === null && options?.requireDecodedAlpha) return null;
+    if (painted !== false) return hit.id;
   }
   return null;
 }
