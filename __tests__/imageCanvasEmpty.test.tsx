@@ -12,9 +12,9 @@ it('renders an empty loading timeline, its first decoded image, and an empty tim
   const view = render(<ImageCanvas {...props} timeline={[]} />);
   expect(view.container.querySelector('[data-project-canvas]')).toBeTruthy();
   view.rerender(<ImageCanvas {...props} timeline={['data:image/jpeg;base64,YQ==']} />);
-  const image = view.container.querySelector('img[alt="preview"]')!;
+  const image = view.container.querySelector<HTMLImageElement>('img[alt="preview"]')!;
   Object.defineProperties(image, { naturalWidth: { value: 100 }, naturalHeight: { value: 100 } });
-  vi.spyOn(image, 'decode').mockResolvedValue();
+  vi.spyOn(image, 'decode').mockResolvedValue(undefined);
   fireEvent.load(image);
   await waitFor(() => expect(view.container.querySelector('[data-canvas-ready="true"]')).toBeTruthy());
   view.rerender(<ImageCanvas {...props} timeline={[]} />);
