@@ -6,6 +6,7 @@ vi.mock('@remotion/web-renderer', () => ({ renderStillOnWeb: vi.fn(), renderMedi
 vi.mock('@/lib/i18n', () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 vi.mock('@/lib/evalRemotionJSX', () => ({ preloadBabel: async () => {}, evalRemotionJSX: () => (props: any) => <div data-editable="body" data-testid="inputs">{JSON.stringify(props)}</div> }));
 vi.mock('@/remotion/font-catalog', async original => ({ ...await original<any>(), prepareRemotionFontCodeFromBundledCatalog: () => ({ code: '', defaultFontFamily: 'Inter' }), prepareAndLoadRemotionFontsWithTiming: async () => ({ prepared: { code: '', defaultFontFamily: 'Inter' }, timing: {} }), validateRemotionFontManifest: (value: unknown) => value }));
+vi.mock('@/lib/image/presentation', () => ({ preloadDecodedImage: async () => ({width:100,height:100}) }));
 import RemotionRenderer from '@/components/RemotionRenderer';
 import { buildLayerizeDesign, type LayerizeManifest } from '@/lib/layerize-design';
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });

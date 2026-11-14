@@ -144,7 +144,7 @@ describe('Layerize lifecycle and billing ownership', () => {
 
 });
 it('publishes editable OCR text with original glyph pixels without waiting for a font render', async () => {
-  const pixels = await sharp({create:{width:20,height:20,channels:4,background:'#ffffff'}}).png().toBuffer();
+  const pixels = await sharp({create:{width:20,height:20,channels:4,background:'#ffffff00'}}).composite([{input:await sharp({create:{width:14,height:14,channels:4,background:'#ffffff'}}).png().toBuffer(),left:3,top:3}]).png().toBuffer();
   const base = await sharp({create:{width:100,height:80,channels:3,background:'#ffffff'}}).png().toBuffer();
   h.read.mockImplementation(async (url: string) => url === 'layer' ? pixels : base);
   const task = await h.query();
@@ -152,6 +152,6 @@ it('publishes editable OCR text with original glyph pixels without waiting for a
   h.query.mockReset().mockResolvedValue(task);
   await startLayerize(owner, jobId, {...input,editableText:true});
   const result=await getLayerize(owner,jobId);
-  expect(result.status).toBe('completed'); expect(h.render).not.toHaveBeenCalled();
+  expect(result.status, result.message).toBe('completed'); expect(h.render).not.toHaveBeenCalled();
   expect(result.design?.editables?.some(field=>field.type==='text')).toBe(true);
 });
