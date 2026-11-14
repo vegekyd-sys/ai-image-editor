@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { getDecodedImageSize, preloadDecodedImage } from '@/lib/image/presentation';
 
 /** A single persistent poster bridges snapshot/image/Player handoffs without a black frame. */
-export default function CanvasPreviewBridge({ source, contentReady, navigating, longContent }: {
-  source: string; contentReady: boolean; navigating: boolean; longContent: boolean;
+export default function CanvasPreviewBridge({ source, contentReady, navigating, longContent, preserveLiveContent = false }: {
+  source: string; contentReady: boolean; navigating: boolean; longContent: boolean; preserveLiveContent?: boolean;
 }) {
   const [painted, setPainted] = useState(() => getDecodedImageSize(source) ? source : '');
   const [decoded, setDecoded] = useState(() => getDecodedImageSize(source) ? source : '');
@@ -22,7 +22,11 @@ export default function CanvasPreviewBridge({ source, contentReady, navigating, 
     return () => { cancelled = true; cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [source]);
   const incomingReady = decoded === source;
-  const visible = navigating || !contentReady || !incomingReady || retired !== source;
+  // A mounted design already contains the user's latest transforms. Keep those
+  // pixels until the incoming poster decodes; its saved poster can be older.
+  const visible = preserveLiveContent
+    ? incomingReady && (!contentReady || retired !== source)
+    : navigating || !contentReady || !incomingReady || retired !== source;
   useEffect(() => {
     if (!incomingReady || !contentReady || navigating) return;
     const id = setTimeout(() => { setPainted(source); setRetired(source); }, 120);

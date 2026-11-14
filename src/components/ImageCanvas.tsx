@@ -754,6 +754,15 @@ export default function ImageCanvas({
     }, 150);
   }, [currentIndex, onIndexChange]);
 
+  // The surface persists across still snapshots; only transient view state resets.
+  useEffect(() => {
+    setScale(1); setTranslate({ x: 0, y: 0 }); setIsComparing(false);
+    setAnimDir(null); isPinching.current = false; isPanning.current = false;
+    remotionStartedRef.current = false; pendingRemotionPlayRef.current = false;
+    remotionFrameRef.current = 0;
+    if (longScrollRef.current) longScrollRef.current.scrollTop = 0;
+  }, [currentIndex, designSnapshotId]);
+
   // Video helpers
   function formatTime(s: number) {
     if (!s || !isFinite(s)) return '0:00';
@@ -825,8 +834,10 @@ export default function ImageCanvas({
   const canvasReady = usesNativeVideo
     ? videoFrameLoaded
     : currentDesign ? readyDesignIdentity === designIdentity && Boolean(remotionPlayer) && !remotionLoading : imageLoaded;
+  const lastReadyWasDesign = useRef(false);
   useEffect(() => {
     if (!canvasReady) return;
+    lastReadyWasDesign.current = Boolean(currentDesign);
     // Two frames let the decoded media paint before retiring the early preview.
     let second = 0;
     const first = requestAnimationFrame(() => {
@@ -1295,7 +1306,7 @@ export default function ImageCanvas({
       )}
 
       {!usesNativeVideo && displayImage && displayImage !== VIDEO_SENTINEL && !isComparing && (
-        <CanvasPreviewBridge source={displayImage} contentReady={canvasReady} navigating={animDir !== null} longContent={isLongContent} />
+        <CanvasPreviewBridge source={displayImage} contentReady={canvasReady} navigating={animDir !== null} longContent={isLongContent} preserveLiveContent={Boolean(currentDesign) && lastReadyWasDesign.current} />
       )}
 
       {/* Zoom wrapper */}
@@ -1595,9 +1606,7 @@ export default function ImageCanvas({
             const isLongDesign = currentDesign.height / currentDesign.width > 2;
             return (
           <div ref={handleDesignInteractionRef} className={`relative w-full h-full ${isLongDesign ? 'overflow-y-auto overflow-x-hidden' : ''} transition-all duration-150 ${
-            pullDownActive ? 'opacity-[0.15] grayscale' :
-            animDir === 'left' ? 'opacity-0 -translate-x-8' :
-            animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
+            pullDownActive ? 'opacity-[0.15] grayscale' : 'opacity-100 translate-x-0'
           }`}
           >
             <RemotionRenderer

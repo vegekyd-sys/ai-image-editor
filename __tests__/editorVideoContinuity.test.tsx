@@ -60,9 +60,9 @@ describe('canvas continuity across Eco phases', () => {
     expect(onMount).toHaveBeenCalledTimes(2);
     expect(onUnmount).toHaveBeenCalledTimes(1);
   });
-  it('keeps separate image and annotation canvas identities', () => {
+  it('retains one still surface across poster and snapshot switches, with separate annotation identity', () => {
     const key = getEditorCanvasKey({viewIndex: 0, image: '/a.png', annotationMode: false});
-    expect(getEditorCanvasKey({viewIndex: 0, image: '/b.png', annotationMode: false})).not.toBe(key);
+    expect(getEditorCanvasKey({viewIndex: 1, image: '/b.png', annotationMode: false})).toBe(key);
     expect(getEditorCanvasKey({viewIndex: 0, image: '/a.png', annotationMode: true})).not.toBe(key);
   });
 });
