@@ -1435,7 +1435,6 @@ function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = f
           if (['failed', 'uncertain'].includes(started.status)) return { success: false, ...started };
         }
         const result = await layerize.waitLayerize(owner, id);
-        if (result.status === 'completed') after(async () => { const { finishLayerizeFonts } = await import('./layerize-fonts-server'); await finishLayerizeFonts(owner, id); });
         if (result.status === 'completed' && result.design && result.newlyPublished) {
           (ctx as any).__pendingDesign = result.design;
           (ctx as any).__pendingDesignPublished = true;

@@ -1,7 +1,7 @@
 import { getSupabaseAdmin } from './supabase/service';
 import * as workspace from './workspace';
 import { readProviderImage } from './provider-image-preflight';
-import { layerizeFontsReference, parseLayerizeFontsResult, type LayerizeFontsResult } from './layerize-fonts';
+import { layerizeFontsReference, parseLayerizeFontsResult, resolveLayerizeFontsForRender, type LayerizeFontsResult } from './layerize-fonts';
 import type { DesignPayload } from '@/types';
 import type { LayerizeManifest } from './layerize-design';
 
@@ -68,4 +68,15 @@ export async function finishLayerizeFonts(owner: LayerizeFontsOwner, snapshotId:
   } finally {
     await admin.from('workspace_files').delete().eq('user_id', owner.userId).eq('path', lock).eq('updated_at', now);
   }
+}
+
+/** CLI/worker exports can request matching without an open browser or a Next request scope. */
+export async function resolveLayerizeFontsForServerRender(design: DesignPayload, signal?: AbortSignal): Promise<DesignPayload> {
+  return resolveLayerizeFontsForRender(design, signal, async () => {
+    const ref = layerizeFontsReference(design);
+    if (!ref) return;
+    const userId = ref.storagePath.split('/images/')[1]?.split('/')[0];
+    if (!userId || !idPattern.test(userId)) throw new Error('Invalid font matching owner');
+    await finishLayerizeFonts({ userId, projectId: ref.projectId }, ref.snapshotId);
+  });
 }

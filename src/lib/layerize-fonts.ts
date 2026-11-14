@@ -45,15 +45,21 @@ export function layerizeFontRenderKey(design: DesignPayload): string {
     ? JSON.stringify([design.props?._layerizeTextFonts, design.props?._layerizeTextFontFits]) : '';
 }
 /** Export waits only when changed wording actually needs the matched font. */
-export async function resolveLayerizeFontsForRender(design: DesignPayload, signal?: AbortSignal): Promise<DesignPayload> {
+export async function resolveLayerizeFontsForRender(design: DesignPayload, signal?: AbortSignal, onPending?: () => Promise<void>): Promise<DesignPayload> {
   const ref = layerizeFontsReference(design);
   if (!ref || ref.status !== 'pending' || Object.entries(ref.originals).every(([key, text]) => design.props?.[key] === text)) return design;
   const deadline = Date.now() + 90_000;
+  let resumed = false;
   while (Date.now() < deadline) {
     signal?.throwIfAborted();
     const response = await fetch(`${ref.storageOrigin}${ref.storagePath}?font_version=${Date.now()}`, { cache: 'no-store', signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(10_000)]) });
     if (response.ok) return applyLayerizeFonts(design, parseLayerizeFontsResult(await response.json()));
     if (response.status !== 404) throw new Error('Font match result is unavailable');
+    if (!resumed) {
+      resumed = true;
+      if (onPending) await onPending();
+      else if (typeof window !== 'undefined') await fetch(`/api/projects/${ref.projectId}/snapshots/${ref.snapshotId}/fonts`, { cache: 'no-store', signal });
+    }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
   throw new Error('Font matching is still pending; retry this export shortly.');
