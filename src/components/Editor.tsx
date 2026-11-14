@@ -1053,9 +1053,9 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }
   }, [projectId, onSaveMessage]);
 
-  const addMessage = useCallback((role: 'user' | 'assistant', content: string, image?: string, attachedImages?: string[]) => {
+  const addMessage = useCallback((role: 'user' | 'assistant', content: string, image?: string, attachedImages?: string[], messageId?: string) => {
     const msg: Message = {
-      id: generateId(),
+      id: messageId || generateId(),
       role,
       content,
       image,
@@ -1602,12 +1602,13 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     // later selector change mutate an already-submitted request.
     const agentModelForRequest = agentModelRef.current;
     const turnMediaSnapshotIds = [...(options?.turnMediaSnapshotIds || [])];
+    const userMessageId = options?.silent ? undefined : generateId();
     // CUI reference images → append as new snapshots (so agent sees them in Media Index)
     if (attachedImages?.length && !overrideImage) {
       const newSnaps: Snapshot[] = [];
       for (const img of attachedImages) {
         const snapId = generateId();
-        const snap: Snapshot = { id: snapId, image: img, tips: [], messageId: '', description: 'User-uploaded reference image' };
+        const snap: Snapshot = { id: snapId, image: img, tips: [], messageId: userMessageId || '', description: 'User-uploaded reference image' };
         newSnaps.push(snap);
       }
       if (newSnaps.length > 0) {
@@ -1683,7 +1684,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     // Show attached/annotated images in the user message bubble (skip for silent/system-initiated requests)
     if (!options?.silent) {
       const msgImages = options?.displayImages || (overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
-      addMessage('user', userVisibleText, undefined, msgImages);
+      addMessage('user', userVisibleText, undefined, msgImages, userMessageId);
     }
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {

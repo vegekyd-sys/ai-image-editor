@@ -215,16 +215,16 @@ export function useProject(projectId: string, userId: string) {
     const buildMessages = (): Message[] => dbMessages.map((m) => {
       // Restore inline image + design: find the snapshot linked to this message
       // Try by messageId first, then by has_image flag matching any snapshot with this message_id
-      const linkedSnapshot = m.has_image
-        ? snapshots.find(s => s.messageId === m.id)
-        : undefined
+      const linkedSnapshots = m.has_image ? snapshots.filter(s => s.messageId === m.id) : []
+      const linkedSnapshot = linkedSnapshots[0]
       return {
         id: m.id,
         role: m.role,
         content: m.content,
         timestamp: new Date(m.created_at).getTime(),
         projectId: m.project_id,
-        ...(linkedSnapshot ? { image: linkedSnapshot.image } : {}),
+        ...(linkedSnapshot && m.role === 'assistant' ? { image: linkedSnapshot.image } : {}),
+        ...(linkedSnapshots.length && m.role === 'user' ? { editInputImages: linkedSnapshots.map(s => s.image) } : {}),
         ...(previewImagesByMessage.has(m.id) ? { images: previewImagesByMessage.get(m.id) } : {}),
         ...(previewCaptionsByMessage.has(m.id) ? { imageCaptions: previewCaptionsByMessage.get(m.id) } : {}),
         ...(sourcesByMessage.has(m.id) ? { sources: sourcesByMessage.get(m.id) } : {}),
@@ -403,7 +403,7 @@ export function useProject(projectId: string, userId: string) {
           project_id: projectId,
           role: message.role,
           content: message.content,
-          has_image: !!message.image,
+          has_image: !!message.image || (message.role === 'user' && !!message.editInputImages?.length),
         }, { onConflict: 'id' })
         if (error) console.warn('saveMessage error:', error)
       } catch (err) {
