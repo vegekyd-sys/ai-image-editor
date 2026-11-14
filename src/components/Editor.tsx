@@ -3849,7 +3849,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
-                editableFields={isViewingDesign ? currentDesignEditables : undefined}
+                editableFields={isViewingDesign && !readOnly ? currentDesignEditables : undefined}
                 designProps={isViewingDesign ? currentDesignProps : undefined}
                 selectedEditableId={selectedEditableFieldId}
                 onSelectEditable={setSelectedEditableFieldId}
@@ -4241,7 +4241,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 ) : isDesignLoading || (isViewingDesign && allDesignEditables.length > 0) ? (
                   <DesignEditPanel
                     key={currentDesignSnap?.id}
-                    loading={isDesignLoading}
+                    loading={isDesignLoading || readOnly}
                     editables={allDesignEditables}
                     renderedOrder={renderedEditableOrder?.snapshotId === currentDesignSnap?.id ? renderedEditableOrder?.ids : undefined}
                     onHistorySeek={handleDesignHistorySeek}
