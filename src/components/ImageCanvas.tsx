@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import VideoRetakeTimeline, { type VideoRetakeRange } from './VideoRetakeTimeline';
 import type { PlayerRef } from '@remotion/player';
@@ -8,6 +8,7 @@ import type { AnnotationEntry, DesignPayload, EditableField } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
 const DesignOverlay = dynamic(() => import('@/components/DesignOverlay'), { ssr: false });
 import TransparencyBackdrop from '@/components/TransparencyBackdrop';
+import CanvasPreviewBridge from '@/components/CanvasPreviewBridge';
 import { containRect } from '@/lib/image/geometry';
 import {
   detectImageTransparency,
@@ -237,6 +238,8 @@ export default function ImageCanvas({
   const activeDraftDesign = isDraft ? draftDesign : null;
   const timelineDesign = animatedDesigns?.get(currentIndex) || null;
   const currentDesign = activeDraftDesign || timelineDesign;
+  const designIdentity = useMemo(() => ({ index: currentIndex, snapshotId: designSnapshotId, code: currentDesign?.code }), [currentIndex, designSnapshotId, currentDesign?.code]);
+  const [readyDesignIdentity, setReadyDesignIdentity] = useState<typeof designIdentity | null>(null);
 
   // Match the inline Design layout threshold, including narrow phone screenshots.
   const isLongContent = (() => {
@@ -268,6 +271,7 @@ export default function ImageCanvas({
   const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
   const pendingRemotionPlayRef = useRef(false);
   const [remotionLoading, setRemotionLoading] = useState(true); // true while RemotionRenderer is initializing (fetching images/fonts/audio)
+  const handleRemotionLoading = useCallback((loading: boolean) => { setRemotionLoading(loading); if (!loading) setReadyDesignIdentity(designIdentity); }, [designIdentity]);
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
   const [videoFrameLoadedUrl, setVideoFrameLoadedUrl] = useState<string | null>(null);
@@ -306,10 +310,13 @@ export default function ImageCanvas({
 
   const finalizeLoadedImage = useCallback((image: HTMLImageElement) => {
     if (!image.naturalWidth) return;
-    const result = detectImageTransparency(image, displayImage);
-    setTransparencyResult({ source: displayImage, value: result });
-    setLoadedImageSource(displayImage);
-    updateImageRect();
+    void image.decode().then(() => {
+      if (image !== imgElRef.current) return;
+      const result = detectImageTransparency(image, displayImage);
+      setTransparencyResult({ source: displayImage, value: result });
+      setLoadedImageSource(displayImage);
+      updateImageRect();
+    }).catch(() => {});
   }, [displayImage, updateImageRect]);
 
   const handleImageRef = useCallback((image: HTMLImageElement | null) => {
@@ -817,7 +824,7 @@ export default function ImageCanvas({
   const usesNativeVideo = isVideoEntry && videoUrl && !(currentDesign && !isSimpleVideoWrapper(currentDesign.code));
   const canvasReady = usesNativeVideo
     ? videoFrameLoaded
-    : currentDesign ? Boolean(remotionPlayer) && !remotionLoading : imageLoaded;
+    : currentDesign ? readyDesignIdentity === designIdentity && Boolean(remotionPlayer) && !remotionLoading : imageLoaded;
   useEffect(() => {
     if (!canvasReady) return;
     // Two frames let the decoded media paint before retiring the early preview.
@@ -1287,6 +1294,10 @@ export default function ImageCanvas({
         </div>
       )}
 
+      {!usesNativeVideo && displayImage && displayImage !== VIDEO_SENTINEL && !isComparing && (
+        <CanvasPreviewBridge source={displayImage} contentReady={canvasReady} navigating={animDir !== null} longContent={isLongContent} />
+      )}
+
       {/* Zoom wrapper */}
       <div
         className="w-full h-full"
@@ -1597,7 +1608,7 @@ export default function ImageCanvas({
               hideControls
               posterImage={displayImage || undefined}
               showPlaybackPoster={!selectedEditableId}
-              onLoading={setRemotionLoading}
+              onLoading={handleRemotionLoading}
               onError={(err) => console.error('[canvas design]', err)}
               onContainerRef={setDesignContainerEl}
               onContentSize={onDesignContentSize}

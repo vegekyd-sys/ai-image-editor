@@ -1,4 +1,5 @@
 import type { DesignPayload, EditableField } from '@/types';
+import type { LayerizeTextFit } from './layerize-text-fit';
 
 const LAYERIZE_CODE_START = "import React from 'react';\nimport {AbsoluteFill, Img} from 'remotion';\nexport default function Composition(props) { return <AbsoluteFill style={{backgroundColor:'transparent'}}>";
 const LAYERIZE_CODE_END = '</AbsoluteFill>; }';
@@ -22,7 +23,7 @@ export interface LayerizeLayer {
   height: number;
   bounds: [number, number, number, number];
   name: string;
-  text?: { lines: Array<{ text: string; bounds: [number, number, number, number]; font: string; color: string; bold: boolean; italic: boolean }> };
+  text?: { preserveRaster?: boolean; remainderUrl?: string; lines: Array<{ text: string; bounds: [number, number, number, number]; font: string; color: string; bold: boolean; italic: boolean; appearance?: { rasterUrl: string; width: number; height: number; bounds: [number, number, number, number]; fit?: LayerizeTextFit } }> };
 }
 export interface LayerizeManifest {
   version: 1;
@@ -45,11 +46,28 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
   const order = manifest.stackOrder;
   if (order && (order[0] !== 0 || order.length !== sorted.length || new Set(order).size !== sorted.length || order.some(z => !sorted.some(layer => layer.z === z)))) throw new Error('Invalid layer stack inventory');
   for (const layer of order ? order.map(z => sorted.find(layer => layer.z === z)!) : sorted) {
-    if (editableText && layer.text?.lines.length) {
+    if (editableText && layer.text?.lines.length && !layer.text.preserveRaster) {
+      if (layer.text.remainderUrl) {
+        const id = `layer_${layer.z}_artwork`; props[id] = layer.text.remainderUrl;
+        editables.push({ id, propKey: id, type: 'image', label: layer.name });
+        const [left, top, right, bottom] = layer.bounds;
+        elements.push(`<Img data-editable=${JSON.stringify(id)} src={props.${id}} style={${JSON.stringify({ position: 'absolute', left, top, width: right-left, height: bottom-top, objectFit: 'fill' })}} />`);
+      }
       for (const [index, line] of layer.text.lines.entries()) {
         const id = `layer_${layer.z}_text_${index}`, key = id;
         props[key] = line.text;
-        editables.push({ id, propKey: key, type: 'text', label: `${layer.name} ${index + 1}` });
+        editables.push({ id, propKey: key, type: 'text', label: line.text || `${layer.name} ${index + 1}` });
+        if (line.appearance) {
+          const a = line.appearance, fit = a.fit;
+          props[`${id}_source`] = a.rasterUrl;
+          const [left, top, right, bottom] = a.bounds;
+          const style = { position: 'absolute', left, top, width: right-left, height: bottom-top };
+          const fontStyle = { fontFamily: fit?.family || line.font, fontWeight: fit?.weight || (line.bold ? 700 : 400), fill: fit?.color || line.color };
+          const matrix = fit?.matrix || [a.width / Math.max(1, line.text.length * .58 * a.height), 0, 0, 1, 0, a.height * .82];
+          const fontSize = fit?.fontSize || a.height;
+          elements.push(`<div data-editable=${JSON.stringify(id)} style={${JSON.stringify(style)}}>{props.${key} === ${JSON.stringify(line.text)} ? <Img src={props.${id}_source} style={{width:'100%',height:'100%'}} /> : <svg width="100%" height="100%" viewBox="0 0 ${a.width} ${a.height}" style={{overflow:'visible'}}><text fontSize={${fontSize}} transform="matrix(${matrix.join(' ')})" style={${JSON.stringify(fontStyle)}}>{props.${key}}</text></svg>}</div>`);
+          continue;
+        }
         const [left, top, right, bottom] = line.bounds;
         const style = { position: 'absolute', left, top, width: right - left, height: bottom - top,
           fontFamily: line.font, fontSize: (bottom - top) * 1.12, lineHeight: 1, whiteSpace: 'pre',

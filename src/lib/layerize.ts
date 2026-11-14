@@ -189,6 +189,11 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
     }
     return layer;
   });
+  if (job.input.editableText) {
+    const { prepareLayerizeTextLayers } = await import('./layerize-text');
+    await prepareLayerizeTextLayers(layers, new Map(decoded.map(item => [item.row.z_index, item.bytes])),
+      (name, pixels) => permanent(owner, `${owner.projectId}/layerize/${job.id}/${name}`, pixels, 'image/png'));
+  }
   const supplierCostUsd = layerizeSupplierCost(layers);
   if (sha(source) !== job.sourceSha256) throw new Error('Source image changed; retain this task for reconciliation.');
   const { order: stackOrder, ...reconstruction } = await inferLayerizeStack(source, width, height,
@@ -199,7 +204,9 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
   const invalid = validateDesign(design); if (invalid) throw new Error(`Design validation failed: ${invalid}`);
   const posterStarted = Date.now();
   let poster: Buffer;
-  if (design.editables?.every(field => field.type === 'image')) {
+  const usesOriginalTextPixels = layers.every(layer => !layer.text?.lines.length || layer.text.preserveRaster || layer.text.lines.every(line => line.appearance));
+  const usesRasterPoster = design.editables?.every(field => field.type === 'image') || usesOriginalTextPixels;
+  if (usesRasterPoster) {
     // Raster Layerize results already contain everything needed for the exact
     // initial composition. Native OCR text still uses the pinned-font renderer.
     poster = await renderLayerizeRasterPoster(manifest, new Map(decoded.map(item => [item.row.z_index, item.bytes])));
@@ -214,7 +221,7 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
       ]);
     } finally { if (timer) clearTimeout(timer); }
   }
-  console.info('[layerize-delivery]', JSON.stringify({ jobId: job.id, stage: 'poster', renderer: design.editables?.every(field => field.type === 'image') ? 'raster' : 'remotion', elapsedMs: Date.now() - posterStarted, layers: layers.length }));
+  console.info('[layerize-delivery]', JSON.stringify({ jobId: job.id, stage: 'poster', renderer: usesRasterPoster ? 'raster' : 'remotion', elapsedMs: Date.now() - posterStarted, layers: layers.length }));
   const [posterUrl] = await Promise.all([
     permanent(owner, `${owner.projectId}/layerize/${job.id}/poster.jpg`, poster, 'image/jpeg'),
     permanent(owner, manifestPath, JSON.stringify(manifest), 'application/json'),

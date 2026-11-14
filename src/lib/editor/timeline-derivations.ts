@@ -35,6 +35,10 @@ export function getSnapshotTimelineImage(
   const url = snapshot.image || snapshot.imageUrl || '';
   if (!url) return '';
 
+  // Published design posters are already compressed JPEGs. Reuse the same URL in
+  // canvas and CUI rather than waiting for another cold image transformation.
+  if ((snapshot.design || snapshot.designPath) && /\.jpe?g(?:[?#]|$)/i.test(url)) return url;
+
   // Current snapshot and neighbors: high-quality WebP. Distant snapshots: thumbnail.
   if (Math.abs(snapshotIndex - viewIndex) <= 1) return getOptimizedUrl(url);
   return getThumbnailUrl(url, 800, 75);
@@ -101,14 +105,11 @@ export function getNearbyOptimizedPreloadUrls(
   snapshots: Snapshot[],
   viewIndex: number,
 ): string[] {
-  return [viewIndex - 2, viewIndex - 1, viewIndex + 1, viewIndex + 2]
+  return [viewIndex, viewIndex - 2, viewIndex - 1, viewIndex + 1, viewIndex + 2]
     .filter(index => index >= 0 && index < snapshots.length)
-    .map(index => snapshots[index])
-    .filter((snapshot): snapshot is Snapshot => !!snapshot)
-    .filter(snapshot => !snapshot.image || snapshot.image.startsWith('http'))
-    .map(snapshot => snapshot.imageUrl || snapshot.image || '')
-    .filter((url): url is string => !!url)
-    .map(url => getOptimizedUrl(url));
+    .filter(index => !snapshots[index].image || snapshots[index].image.startsWith('http'))
+    .map(index => getSnapshotTimelineImage(snapshots[index], index, viewIndex))
+    .filter(Boolean);
 }
 
 export function getPreviousImageForCompare({

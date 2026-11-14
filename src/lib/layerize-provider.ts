@@ -1,3 +1,4 @@
+export const LAYERIZE_TEXT_PROMPT = 'Separate the major people, objects, and all visible headings, labels and wordmarks, including text printed on objects, into distinct layers. Text must be isolated on transparent layers, with clean object/background pixels beneath it. Preserve original lettering, appearance, placement and occlusion. Name layers in the language of the user request.';
 export const LAYERIZE_PROVIDER_MODEL = 'doubao-seedream-5.5-layerize';
 export const LAYERIZE_MODEL = 'seedream-5.5-layerize';
 export type LayerizeQuality = 'auto' | '1K' | '1.5K' | '2K';

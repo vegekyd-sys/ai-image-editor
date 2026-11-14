@@ -1,5 +1,6 @@
 'use client';
 
+import { preloadDecodedImage } from '@/lib/image/presentation';
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
@@ -57,6 +58,7 @@ async function resolveCodeUrls(
       const blob = await fetchImageBlob(url);
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
+      await preloadDecodedImage(blobUrl);
       while (resolved.includes(url)) resolved = resolved.replace(url, blobUrl);
     } catch (error) {
       onFailure?.(url, error);
@@ -87,6 +89,7 @@ async function resolveImageUrlsInValue(
       const blob = await fetchImageBlob(value);
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
+      await preloadDecodedImage(blobUrl);
       cache?.set(value, blobUrl);
       return blobUrl;
     } catch (error) {

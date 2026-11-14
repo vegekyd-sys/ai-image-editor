@@ -1842,3 +1842,7 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
   .mkr-composer-lg [data-testid='photo-slot'] { width: clamp(56px, 18vw, 80px) !important; }
   .mkr-composer-lg .mkr-create-btn { white-space: nowrap; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --mkr-image-reveal-duration: 0ms; }
+}

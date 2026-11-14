@@ -1,4 +1,5 @@
 'use client';
+import DecodedImage from '@/components/DecodedImage';
 
 import { DropOverlay, dropProximityStyle, dropState } from '@/components/DropAffordance';
 import { useDragProximity } from '@/hooks/useDragProximity';
@@ -12,6 +13,7 @@ import { useLocale } from '@/lib/i18n';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { Snapshot } from '@/types';
+import { getSnapshotTimelineImage } from '@/lib/editor/timeline-derivations';
 import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
@@ -1597,8 +1599,8 @@ export default function AgentChatView({
                           className="block w-full mt-3 active:opacity-75 transition-opacity relative"
                         >
                           { }
-                          <img
-                            src={classicImage.startsWith('http') ? getThumbnailUrl(classicImage, isPanel ? 680 : 1024, 75, 2000, 'contain') : classicImage}
+                          <DecodedImage
+                            src={cards.at(-1)?.snapshot.design || cards.at(-1)?.snapshot.designPath ? getSnapshotTimelineImage(cards.at(-1)!.snapshot, cards.at(-1)!.index, cards.at(-1)!.index) : classicImage.startsWith('http') ? getThumbnailUrl(classicImage, isPanel ? 680 : 1024, 75, 2000, 'contain') : classicImage}
                             alt="Generated"
                             className="rounded-2xl"
                             style={{ border: '1px solid rgba(255,255,255,0.08)', maxWidth: 308 }}

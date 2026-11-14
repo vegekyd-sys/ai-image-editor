@@ -8,6 +8,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoMeta, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
+import { preloadDecodedImage } from '@/lib/image/presentation';
 import { getEditorCanvasKey } from '@/lib/editor/canvas-key';
 import TipsBar from '@/components/TipsBar';
 import { EditablePanelSkeleton } from '@/components/PillCarousel';
@@ -605,8 +606,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Preload optimized images for nearby snapshots (±2) so swipe feels instant
   useEffect(() => {
     getNearbyOptimizedPreloadUrls(snapshots, viewIndex).forEach(url => {
-      const img = new Image();
-      img.src = url;
+      void preloadDecodedImage(url).catch(() => {});
     });
   }, [viewIndex, snapshots]);
 
@@ -2769,8 +2769,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     for (const offset of [-1, 1]) {
       const src = timeline[viewIndex + offset];
       if (src && src.startsWith('http')) {
-        const img = new Image();
-        img.src = src;
+        void preloadDecodedImage(src).catch(() => {});
       }
     }
   }, [viewIndex, timeline, inactive]);
