@@ -79,9 +79,9 @@ describe('Layerize paid request boundary', () => {
     const input = { imageUrl: 'https://example.com/a.png', prompt: 'Separate only the cup and its shadow.' };
     const request = layerizeRequest(input);
     expect(request.prompt.startsWith(`${input.prompt}\n`)).toBe(true);
-    expect(request.prompt).toContain('Complete each element behind overlaps');
-    expect(request.prompt).toContain('no duplicate or silhouette');
-    expect(request.prompt).toContain('original contact and cast shadows on the same transparent layer');
+    expect(request.prompt).toContain('complete outline and hidden parts');
+    expect(request.prompt).toContain('clean background with the separated elements removed');
+    expect(request.prompt).toContain('soft contact or cast shadows on the element layer');
     expect(request.prompt).toContain('unless separate shadows are requested');
     expect(request.prompt).not.toContain('Separate the main subjects');
     expect(input.prompt).toBe('Separate only the cup and its shadow.');

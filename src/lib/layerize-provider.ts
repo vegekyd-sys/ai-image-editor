@@ -1,5 +1,5 @@
 const DEFAULT_SCOPE = 'Separate this image into its main independently movable visual elements and a clean background. Use the image content to identify subjects, objects, graphics, standalone text blocks and interface components. Keep printed text and artwork on the object they belong to. Preserve each element’s original appearance, complete its hidden parts, and keep its contact and cast shadows when present.';
-const APPEARANCE = 'Complete each element behind overlaps, preserving its shape and surface detail. Fill the exposed surfaces underneath so moving an element leaves no duplicate or silhouette. Keep its original contact and cast shadows on the same transparent layer, including their soft edges, unless separate shadows are requested. Match the original when stacked.';
+const APPEARANCE = 'Reconstruct each element’s complete outline and hidden parts. Return each foreground element on its own transparent layer, and a clean background with the separated elements removed. Preserve the original appearance and any soft contact or cast shadows on the element layer, unless separate shadows are requested. Match the original when stacked.';
 export const LAYERIZE_PROVIDER_MODEL = 'doubao-seedream-5.5-layerize';
 export const LAYERIZE_MODEL = 'seedream-5.5-layerize';
 export type LayerizeQuality = 'auto' | '1K' | '1.5K' | '2K';
