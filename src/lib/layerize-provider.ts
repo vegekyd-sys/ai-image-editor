@@ -1,5 +1,5 @@
 const DEFAULT_SCOPE = 'Separate the main subjects and objects into independently movable layers, with a separate background.';
-const APPEARANCE = 'Preserve each object’s original shape and shadows unless requested separately. Reassemble the original composition.';
+const APPEARANCE = 'Complete each object behind overlaps, preserving its shape and surface detail. Fill the exposed surfaces underneath so moving an object leaves no duplicate or silhouette. Keep its original contact and cast shadows on the same transparent layer, including their soft edges, unless separate shadows are requested. Match the original when stacked.';
 export const LAYERIZE_PROVIDER_MODEL = 'doubao-seedream-5.5-layerize';
 export const LAYERIZE_MODEL = 'seedream-5.5-layerize';
 export type LayerizeQuality = 'auto' | '1K' | '1.5K' | '2K';
