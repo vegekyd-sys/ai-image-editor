@@ -32,9 +32,9 @@ beforeEach(() => {
   };
 });
 afterEach(() => { document.body.replaceChildren(); runtime.target = null; vi.unstubAllGlobals(); });
-async function setup() {
+async function setup(onBeforeEdit?: () => boolean, type: 'text' | 'image' | 'video' = 'image') {
   const save = vi.fn();
-  render(<DesignOverlay touchGestures containerEl={container} interactionEl={container} editables={[{ id: 'shape', propKey: 'shape', type: 'image', label: 'Shape' }]} props={{}} selectedFieldId="shape" onSelectField={() => {}} onUpdateProp={save} allowCanvasCoverSelection />);
+  render(<DesignOverlay touchGestures containerEl={container} interactionEl={container} editables={[{ id: 'shape', propKey: 'shape', type, label: 'Shape' }]} props={{}} selectedFieldId="shape" onSelectField={() => {}} onUpdateProp={save} onBeforeEdit={onBeforeEdit} allowCanvasCoverSelection />);
   await waitFor(() => expect(runtime.moveable?.target).toBe(target)); flush();
   const frame = () => {
     const { left, top, width, height } = runtime.moveable.target.getBoundingClientRect();
@@ -74,4 +74,19 @@ it('remeasures the native frame after undo changes CSS transforms on the same no
   target.style.scale = '1 1';
   act(() => window.dispatchEvent(new Event('resize')));
   expect(runtime.updateRect).toHaveBeenCalled();
+});
+
+it.each(['image', 'text', 'video'] as const)('blocks %s gestures before DOM or persistent changes when access is denied', async type => {
+  const authorize = vi.fn(() => false), stopDrag = vi.fn();
+  const { save, frame } = await setup(authorize, type); const original = frame();
+  act(() => runtime.moveable.onDragStart({ inputEvent: { target, clientX: 120, clientY: 170, type: 'mousedown' }, set() {}, stopDrag }));
+  act(() => runtime.moveable.onDrag({ target, beforeTranslate: [40, 25] })); act(() => runtime.moveable.onDragEnd());
+  act(() => runtime.moveable.onScaleStart({ direction: [1, 1], set() {}, stopDrag }));
+  act(() => runtime.moveable.onScale({ target, scale: [2, 2] })); act(() => runtime.moveable.onScaleEnd());
+  pointer('pointerdown', 120, 170); pointer('pointermove', 150, 190); flush(); pointer('pointerup', 150, 190);
+  const touch = (name: string, touches: unknown[]) => { const e = new Event(name, { bubbles: true }); Object.assign(e, { touches }); act(() => target.dispatchEvent(e)); };
+  touch('touchstart', [{ clientX: 120, clientY: 170 }, { clientX: 160, clientY: 170 }]);
+  touch('touchmove', [{ clientX: 90, clientY: 170 }, { clientX: 190, clientY: 170 }]); touch('touchend', []);
+  expect(authorize).toHaveBeenCalledTimes(4); expect(stopDrag).toHaveBeenCalledTimes(2);
+  expect(frame()).toEqual(original); expect(save).not.toHaveBeenCalled();
 });

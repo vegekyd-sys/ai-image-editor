@@ -110,6 +110,8 @@ interface ImageCanvasProps {
   onUpdateProp?: (key: string, value: unknown, related?: Record<string, unknown>) => void;
   /** Callback when user double-clicks (select then click again) an editable to start editing */
   onStartEditEditable?: (fieldId: string) => void;
+  /** Must authorize before any Editable gesture mutates its DOM target. */
+  onBeforeEditableEdit?: () => boolean;
   /** Callback with list of editable field IDs visible at the current frame */
   onVisibleEditableFields?: (visibleIds: string[]) => void;
   onEditableRenderOrder?: (ids: string[]) => void;
@@ -156,6 +158,7 @@ export default function ImageCanvas({
   onSelectEditable,
   onUpdateProp,
   onStartEditEditable,
+  onBeforeEditableEdit,
   onVisibleEditableFields,
   onEditableRenderOrder,
   onDesignContentSize,
@@ -1762,6 +1765,7 @@ export default function ImageCanvas({
                 }}
                 onUpdateProp={onUpdateProp}
                 onStartEdit={onStartEditEditable}
+                onBeforeEdit={onBeforeEditableEdit}
                 onVisibleFieldsChange={onVisibleEditableFields}
                 onRenderedOrderChange={onEditableRenderOrder}
                 filterVisibleFields={Boolean(currentDesign?.animation)}

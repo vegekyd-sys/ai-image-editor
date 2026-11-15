@@ -5,7 +5,7 @@ import { dedupeEditorMessages, videoCompletionMessageId } from '@/lib/editor/mes
 import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Snapshot, Message, Tip, PhotoMetadata, ProjectAnimation } from '@/types'
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
@@ -26,9 +26,6 @@ import { buildVideoFailureActions, serializeCompletionActions } from '@/lib/arti
 import { dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe'
 import { isCompletedGeneratedVideoSnapshot, isFailedGeneratedVideoSnapshot } from '@/lib/video-snapshot-kind'
 import { useLocale } from '@/lib/i18n'
-import { applyGuestEditableDraft, updateGuestEditableDraft, type GuestEditableDraft } from '@/lib/editor/guest-editable-draft'
-import { readGuestEditableDraft, writeGuestEditableDraft } from '@/lib/imageCache'
-import type { DesignPayload } from '@/types'
 
 interface ProjectEditorContainerProps {
   projectId: string
@@ -291,70 +288,7 @@ export default function ProjectEditorContainer({
   const isOwner = Boolean(
     user && (user.id === projectOwnerId || (isNewProject && projectOwnerId === null)),
   )
-  const [guestDraft, setGuestDraft] = useState<GuestEditableDraft | null>(null)
-  const guestDraftRef = useRef<GuestEditableDraft | null>(null)
-  const [draftReady, setDraftReady] = useState(false)
-  const [draftError, setDraftError] = useState(false)
-  const [copying, setCopying] = useState(false)
-  const copyingRef = useRef(false)
-  useEffect(() => {
-    let cancelled = false
-    setDraftReady(false)
-    readGuestEditableDraft(projectId).then(draft => {
-      if (cancelled) return
-      guestDraftRef.current = draft
-      setGuestDraft(draft)
-      setDraftReady(true)
-    }).catch(() => { if (!cancelled) setDraftReady(true) })
-    return () => { cancelled = true }
-  }, [projectId])
-  // Even the author returning from login must explicitly save the guest work
-  // as a copy. Loading a local draft never grants writes to the source.
-  const readOnly = !isOwner || (isPublicProject === true && Boolean(guestDraft))
-  const allowLocalEditing = isPublicProject === true && readOnly
-  const editableSnapshots = useMemo(() => applyGuestEditableDraft(initialSnapshots ?? [], allowLocalEditing ? guestDraft : null), [initialSnapshots, guestDraft, allowLocalEditing])
-  const saveGuestDesign = useCallback(async (snapshotId: string, design: DesignPayload) => {
-    if (!allowLocalEditing) return
-    const draft = updateGuestEditableDraft(projectId, guestDraftRef.current, snapshotId, design)
-    guestDraftRef.current = draft
-    setGuestDraft(draft)
-    try { await writeGuestEditableDraft(draft); setDraftError(false) }
-    catch (error) { setDraftError(true); throw error }
-  }, [projectId, allowLocalEditing])
-  const saveGuestCopy = useCallback(async () => {
-    if (copyingRef.current) return
-    if (!user) {
-      const returnPath = `/projects/${projectId}?saveEditableCopy=1`
-      sessionStorage.setItem('mkr_return_url', returnPath)
-      localStorage.setItem('mkr_return_url', returnPath)
-      router.push('/login')
-      return
-    }
-    copyingRef.current = true
-    setCopying(true)
-    setDraftError(false)
-    try {
-      const response = await fetch(`/api/projects/${projectId}/copy`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ designs: guestDraftRef.current?.designs || {} }),
-      })
-      const payload = await response.json()
-      if (!response.ok || !payload.projectId) throw new Error('Copy failed')
-      if (onProjectCreated) onProjectCreated(payload.projectId)
-      else router.push(`/projects/${payload.projectId}`)
-    } catch { setDraftError(true) }
-    finally { copyingRef.current = false; setCopying(false) }
-  }, [projectId, user, router, onProjectCreated])
-  const continuedCopyRef = useRef(false)
-  useEffect(() => {
-    if (!user || !draftReady || !allowLocalEditing || continuedCopyRef.current) return
-    if (new URLSearchParams(window.location.search).get('saveEditableCopy') !== '1') return
-    continuedCopyRef.current = true
-    // Consume the explicit login continuation once; errors leave the draft
-    // and the retry button intact instead of creating a loop on every render.
-    window.history.replaceState(window.history.state, '', `/projects/${projectId}`)
-    void saveGuestCopy()
-  }, [user, draftReady, allowLocalEditing, projectId, saveGuestCopy])
+  const readOnly = !isOwner
 
   async function patchFromImageCache(snapshots: Snapshot[]): Promise<Snapshot[]> {
     const keys: string[] = []
@@ -541,7 +475,7 @@ export default function ProjectEditorContainer({
   // the new session. Mounting Editor in that gap consumes pending media with
   // no authenticated persistence callbacks, leaving the photo only in local
   // cache. Keep the loading shell until the new-project owner is available.
-  if (!loaded || !draftReady || (!isNewProject && (authLoading || isPublicProject === null || (!isPublicProject && !isOwner))) || (isNewProject && (authLoading || !user))) {
+  if (!loaded || (!isNewProject && (authLoading || isPublicProject === null || (!isPublicProject && !isOwner))) || (isNewProject && (authLoading || !user))) {
     return (
       <div className={loadingClassName}>
         <EditorLoadingShell />
@@ -555,7 +489,7 @@ export default function ProjectEditorContainer({
         key={projectId}
         projectId={projectId}
         initialSnapshotId={initialSnapshotId}
-        initialSnapshots={editableSnapshots}
+        initialSnapshots={initialSnapshots ?? []}
         initialMessages={initialMessages ?? []}
         pendingImages={!readOnly ? (pendingImages ?? undefined) : undefined}
         pendingVideos={!readOnly ? (pendingVideos ?? undefined) : undefined}
@@ -568,7 +502,7 @@ export default function ProjectEditorContainer({
         onSaveMessage={!readOnly ? handleSaveMessage : undefined}
         onUpdateTips={!readOnly ? handleUpdateTips : undefined}
         onUpdateDescription={!readOnly ? updateDescription : undefined}
-        onSaveDesignProps={allowLocalEditing ? saveGuestDesign : !readOnly ? saveDesignProps : undefined}
+        onSaveDesignProps={!readOnly ? saveDesignProps : undefined}
         initialTitle={initialTitle}
         onRenameProject={!readOnly ? updateTitle : undefined}
         onBack={handleBack}
@@ -576,12 +510,7 @@ export default function ProjectEditorContainer({
         initialAnimations={initialAnimations}
         timelineVersion={timelineVersion}
         readOnly={readOnly}
-        allowLocalEditing={allowLocalEditing}
-        localDraftAction={allowLocalEditing ? {
-          label: copying ? t('design.copySaving') : user ? t('design.saveCopy') : t('design.loginCopy'),
-          status: draftError ? t('design.draftFailed') : guestDraft ? t('design.localDraft') : t('design.tryPublicEdit'),
-          busy: copying, onSave: saveGuestCopy,
-        } : undefined}
+        viewerSignedIn={Boolean(user)}
         ownershipPending={projectOwnerId === null && !isOwner}
         disableAgentLiveReload={disableAgentLiveReload}
         disableBodyScrollLock={disableBodyScrollLock}
