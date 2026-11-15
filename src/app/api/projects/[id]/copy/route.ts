@@ -71,6 +71,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     projectCreated = true;
     const { error: copyError } = await supabase.from('snapshots').insert(copied);
     if (copyError) throw copyError;
+    // Legacy timelines keep completed videos outside snapshots. Preserve those
+    // artifacts too, with fresh identities and no live provider task attached.
+    if (source.timeline_version < 2) {
+      const { data: animations, error: animationError } = await admin.from('project_animations')
+        .select('video_url, prompt, snapshot_urls, status').eq('project_id', id).eq('status', 'completed')
+        .order('created_at', { ascending: true });
+      if (animationError) throw animationError;
+      const rows = (animations || []).filter(animation => animation.video_url).map(animation => ({
+        ...animation, id: crypto.randomUUID(), project_id: copyId, piapi_task_id: null,
+      }));
+      if (rows.length) {
+        const { error: animationCopyError } = await supabase.from('project_animations').insert(rows);
+        if (animationCopyError) throw animationCopyError;
+      }
+    }
     return NextResponse.json({ projectId: copyId });
   } catch (error) {
     // Roll back only resources created by this request. Never remove source data.
