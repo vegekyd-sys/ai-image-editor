@@ -90,6 +90,21 @@ describe('Layerize lifecycle and billing ownership', () => {
     await startLayerize(owner, jobId, input); h.query.mockResolvedValue({ id: 'task-original', status: 'failed' });
     expect((await getLayerize(owner, jobId)).status).toBe('failed'); expect(h.debits.size).toBe(0);
   });
+  it('ends a completed background-only result without polling, publishing or charging again', async () => {
+    await startLayerize(owner, jobId, input);
+    h.query.mockResolvedValue({ id: 'task-original', status: 'completed', result_data: [
+      { z_index: 0, url: 'base', background: 'opaque' },
+    ] });
+    const first = await getLayerize(owner, jobId);
+    expect(first).toMatchObject({ status: 'failed', taskId: 'task-original' });
+    expect(first.message).toContain('No editable design was published');
+    expect((await getLayerize(owner, jobId)).status).toBe('failed');
+    expect((await startLayerize(owner, jobId, input)).status).toBe('failed');
+    expect(h.query).toHaveBeenCalledTimes(1);
+    expect(h.submit).toHaveBeenCalledTimes(1);
+    expect(h.debits.size).toBe(0);
+    expect(h.tables.get('snapshots')!.size).toBe(0);
+  });
   it('rejects foreign owners, parameter conflicts and missing pricing before any new POST', async () => {
     await expect(startLayerize({ ...owner, userId: 'foreign' }, jobId, input)).rejects.toThrow('not accessible');
     h.rate.mockResolvedValue(null);

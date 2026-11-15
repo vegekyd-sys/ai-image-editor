@@ -161,10 +161,12 @@ async function mapLayers<T, R>(items: T[], operation: (item: T) => Promise<R>): 
   }));
   return output;
 }
+class InvalidLayerizeOutputError extends Error {}
+
 async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: LayerizeProviderTask) {
   const deliveryStarted = Date.now();
   const rows = [...(task.result_data ?? [])].sort((a, b) => a.z_index - b.z_index);
-  if (rows.length < 2 || rows.length > job.input.maxOutputs! || rows[0].z_index !== 0 || new Set(rows.map(r => r.z_index)).size !== rows.length || rows.some(r => !Number.isInteger(r.z_index) || r.z_index < 0)) throw new Error('Provider output inventory does not satisfy the layer contract.');
+  if (rows.length < 2 || rows.length > job.input.maxOutputs! || rows[0].z_index !== 0 || new Set(rows.map(r => r.z_index)).size !== rows.length || rows.some(r => !Number.isInteger(r.z_index) || r.z_index < 0)) throw new InvalidLayerizeOutputError('The completed task returned no usable layer inventory. No editable design was published and no product credits were charged.');
   const [decoded, source] = await Promise.all([mapLayers(rows, async row => {
     const bytes = await readProviderImage(row.url, 50 * 1024 * 1024, { evolinkAsset: true });
     const image = sharp(bytes, { failOn: 'error', limitInputPixels: 4_624_220 });
@@ -287,7 +289,13 @@ export async function getLayerize(owner: LayerizeOwner, id: string): Promise<Lay
         .eq('path', `${owner.projectId}/layerize/${id}/publish.lock`).eq('updated_at', lease);
     }
   } catch (error) {
-    // A completed provider result is recoverable; never generate again or charge twice.
+    // Invalid completed output cannot improve by polling the same provider result.
+    if (error instanceof InvalidLayerizeOutputError) {
+      job.status = 'failed';
+      job.error = error.message;
+      await save(owner, job); return response(owner, job);
+    }
+    // Transport and publication errors retain the same recoverable provider task.
     job.error = `${error instanceof Error ? error.message : 'Task query or delivery pending.'} Retain job ${id}; query this same job only.`;
     await save(owner, job); return response(owner, job);
   }
