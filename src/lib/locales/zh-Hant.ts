@@ -20,6 +20,12 @@ const zhHant = {
   "design.saveBeforeEditFailed": "修改尚未儲存，請稍後重試。",
 
 
+  "design.tryPublicEdit": "可直接調整，原專案保持不變",
+  "design.localDraft": "草稿已儲存在此瀏覽器",
+  "design.loginCopy": "登入儲存副本",
+  "design.saveCopy": "儲存私人副本",
+  "design.copySaving": "正在儲存副本…",
+  "design.draftFailed": "儲存未完成，目前修改仍在，請重試。",
   "design.undo": "復原",
   "design.redo": "重做",
   "design.history": "操作記錄",

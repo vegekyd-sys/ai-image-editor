@@ -716,3 +716,28 @@ export function clearUserCache(): void {
     // Web storage failures are non-critical
   }
 }
+
+// Public-project edits share the existing draft database, under separate keys.
+// They never enter the owner project cache or the active Home create-draft.
+export async function readGuestEditableDraft(projectId: string): Promise<import('@/lib/editor/guest-editable-draft').GuestEditableDraft | null> {
+  const db = await getDB();
+  if (!db) return null;
+  const entry = await new Promise<import('@/lib/editor/guest-editable-draft').GuestEditableDraft | null>(resolve => {
+    const request = db.transaction(CREATE_DRAFT_STORE, 'readonly').objectStore(CREATE_DRAFT_STORE).get(`editable:${projectId}`);
+    request.onsuccess = () => resolve(request.result ?? null);
+    request.onerror = () => resolve(null);
+  });
+  return entry?.version === 1 && entry.projectId === projectId && entry.designs && Date.now() - entry.cachedAt < TTL_MS ? entry : null;
+}
+
+export async function writeGuestEditableDraft(draft: import('@/lib/editor/guest-editable-draft').GuestEditableDraft): Promise<void> {
+  const db = await getDB();
+  if (!db) throw new Error('Draft storage unavailable');
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(CREATE_DRAFT_STORE, 'readwrite');
+    tx.objectStore(CREATE_DRAFT_STORE).put({ ...draft, key: `editable:${draft.projectId}` });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}

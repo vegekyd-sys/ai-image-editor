@@ -114,6 +114,9 @@ interface EditorProps {
   timelineVersion?: number;
   readOnly?: boolean;
   ownershipPending?: boolean;
+  /** Local edits are allowed while all author persistence remains read-only. */
+  allowLocalEditing?: boolean;
+  localDraftAction?: { label: string; status: string; busy: boolean; onSave: () => Promise<void> };
   disableAgentLiveReload?: boolean;
   disableBodyScrollLock?: boolean;
   inactive?: boolean;
@@ -161,6 +164,8 @@ export default function Editor({
   initialAnimations,
   timelineVersion = 1,
   readOnly,
+  allowLocalEditing = false,
+  localDraftAction,
   ownershipPending = false,
   disableBodyScrollLock = false,
   inactive = false,
@@ -170,6 +175,8 @@ export default function Editor({
   const isDesktop = useIsDesktop();
   const { t, locale } = useLocale();
   const router = useRouter();
+
+  const canEditDesign = !readOnly || allowLocalEditing;
 
   const gateInteraction = useCallback(() => {
     if (!readOnly) return false;
@@ -3247,6 +3254,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [flushPendingDesignSave]);
 
   const commitDesignProps = useCallback((props: Record<string, unknown>) => {
+    if (!canEditDesign) return;
     const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
     if (snapIdx == null) return;
     const current = snapshotsRef.current[snapIdx];
@@ -3272,7 +3280,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     };
     if (designPropsSaveTimer.current) clearTimeout(designPropsSaveTimer.current);
     designPropsSaveTimer.current = setTimeout(flushPendingDesignSave, 500);
-  }, [viewIndex, draftParentIndex, flushPendingDesignSave]);
+  }, [viewIndex, draftParentIndex, flushPendingDesignSave, canEditDesign]);
 
   const handleDesignPropUpdate = useCallback((key: string, value: unknown, related?: Record<string, unknown>) => {
     const index = snapFromTimeline(viewIndex, draftParentIndex);
@@ -3301,7 +3309,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [viewIndex, draftParentIndex, commitDesignProps]);
 
   useEffect(() => {
-    if (readOnly || !isViewingDesign) return;
+    if (!canEditDesign || !isViewingDesign) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || (event.target as Element)?.closest?.('input, textarea, [contenteditable="true"]')) return;
       const undo = event.key.toLowerCase() === 'z' && !event.shiftKey;
@@ -3315,7 +3323,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [readOnly, isViewingDesign, viewIndex, draftParentIndex, handleDesignHistorySeek]);
+  }, [canEditDesign, isViewingDesign, viewIndex, draftParentIndex, handleDesignHistorySeek]);
 
   const designSizeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleDesignContentSize = useCallback((size: { width: number; height: number; source: 'editables' | 'scroll' }) => {
@@ -3870,7 +3878,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
-                editableFields={isViewingDesign && !readOnly ? currentDesignEditables : undefined}
+                editableFields={isViewingDesign && canEditDesign ? currentDesignEditables : undefined}
                 designProps={isViewingDesign ? currentDesignProps : undefined}
                 selectedEditableId={selectedEditableFieldId}
                 onSelectEditable={setSelectedEditableFieldId}
@@ -4135,6 +4143,15 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           {/* Bottom bar: tips or video results */}
           {snapshots.length > 0 && (
               <div className="makaron-editor-bottom-bar flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
+                {allowLocalEditing && localDraftAction && (
+                  <div className="flex items-center justify-between gap-2 px-4 pt-2 text-xs text-white/60" data-guest-editable-draft>
+                    <span role="status">{localDraftAction.status}</span>
+                    <button type="button" disabled={localDraftAction.busy} className="shrink-0 rounded-full border border-white/20 px-3 py-1.5 text-white disabled:opacity-40"
+                      onClick={async () => { try { await flushPendingDesignSave(); await localDraftAction.onSave(); } catch { /* persistence reports its error */ } }}>
+                      {localDraftAction.label}
+                    </button>
+                  </div>
+                )}
                 <AgentStatusBar
                   statusText={agentStatus}
                   isActive={isAgentActive}
@@ -4259,7 +4276,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       />
                     </DesignEditorFrame>
                   </div>
-                ) : (ownershipPending || !readOnly) && (isDesignLoading || (isViewingDesign && allDesignEditables.length > 0)) ? (
+                ) : (ownershipPending || canEditDesign) && (isDesignLoading || (isViewingDesign && allDesignEditables.length > 0)) ? (
                   <DesignEditPanel
                     key={currentDesignSnap?.id}
                     loading={isDesignLoading || ownershipPending}
