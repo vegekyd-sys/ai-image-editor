@@ -9,6 +9,7 @@ import AnnotationCanvas from '@/components/AnnotationCanvas';
 const DesignOverlay = dynamic(() => import('@/components/DesignOverlay'), { ssr: false });
 import TransparencyBackdrop from '@/components/TransparencyBackdrop';
 import CanvasPreviewBridge from '@/components/CanvasPreviewBridge';
+import { packageLayout } from '@/lib/editor/package-lettering';
 import { containRect } from '@/lib/image/geometry';
 import {
   detectImageTransparency,
@@ -110,6 +111,8 @@ interface ImageCanvasProps {
   onUpdateProp?: (key: string, value: unknown, related?: Record<string, unknown>) => void;
   /** Callback when user double-clicks (select then click again) an editable to start editing */
   onStartEditEditable?: (fieldId: string) => void;
+  /** Must authorize before any Editable gesture mutates its DOM target. */
+  onBeforeEditableEdit?: () => boolean;
   /** Callback with list of editable field IDs visible at the current frame */
   onVisibleEditableFields?: (visibleIds: string[]) => void;
   onEditableRenderOrder?: (ids: string[]) => void;
@@ -156,6 +159,7 @@ export default function ImageCanvas({
   onSelectEditable,
   onUpdateProp,
   onStartEditEditable,
+  onBeforeEditableEdit,
   onVisibleEditableFields,
   onEditableRenderOrder,
   onDesignContentSize,
@@ -240,6 +244,7 @@ export default function ImageCanvas({
   const activeDraftDesign = isDraft ? draftDesign : null;
   const timelineDesign = animatedDesigns?.get(currentIndex) || null;
   const currentDesign = activeDraftDesign || timelineDesign;
+  const printedLayout = useMemo(() => packageLayout(currentDesign ?? undefined), [currentDesign]);
   const designIdentity = useMemo(() => ({ index: currentIndex, snapshotId: designSnapshotId, code: currentDesign?.code }), [currentIndex, designSnapshotId, currentDesign?.code]);
   const [readyDesignIdentity, setReadyDesignIdentity] = useState<typeof designIdentity | null>(null);
 
@@ -1744,6 +1749,7 @@ export default function ImageCanvas({
             {/* Editable design overlay */}
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
               <DesignOverlay
+                printedLayout={printedLayout}
                 touchGestures={!isDesktop}
                 onGestureStart={claimEditableGesture}
                 containerEl={designContainerEl}
@@ -1762,6 +1768,7 @@ export default function ImageCanvas({
                 }}
                 onUpdateProp={onUpdateProp}
                 onStartEdit={onStartEditEditable}
+                onBeforeEdit={onBeforeEditableEdit}
                 onVisibleFieldsChange={onVisibleEditableFields}
                 onRenderedOrderChange={onEditableRenderOrder}
                 filterVisibleFields={Boolean(currentDesign?.animation)}

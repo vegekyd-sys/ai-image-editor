@@ -1,11 +1,11 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const runtime = vi.hoisted(() => ({ target: null as HTMLElement | null, moveable: null as any, updateRect: vi.fn() }));
+const runtime = vi.hoisted(() => ({ target: null as HTMLElement | null, peer: null as HTMLElement | null, moveable: null as any, updateRect: vi.fn() }));
 vi.mock('react-moveable', () => ({ default: React.forwardRef(function MockMoveable(props: any, ref: any) {
   runtime.moveable = props; React.useImperativeHandle(ref, () => ({ updateRect: runtime.updateRect, stopDrag() {} })); return null;
 }) }));
-vi.mock('@/lib/editor/scene-registry', async original => ({ ...await original<any>(), buildLegacySceneRegistry: () => ({ activeInstances: () => runtime.target ? [{ id: 'shape', element: runtime.target }] : [] }) }));
+vi.mock('@/lib/editor/scene-registry', async original => ({ ...await original<any>(), buildLegacySceneRegistry: () => ({ activeInstances: () => runtime.target ? [{ id: 'shape', element: runtime.target }, ...(runtime.peer ? [{ id: 'ink', element: runtime.peer }] : [])] : [] }) }));
 vi.mock('@/lib/editor/editable-image-alpha', () => ({ editableMediaImage: () => null, warmEditableAlpha() {}, pickPaintedEditable: () => 'shape', isPaintedEditableHit: () => true, pendingEditableAlphaAtPoint: () => null }));
 vi.mock('@/lib/editor/use-editable-hover', () => ({ useEditableHover: () => null }));
 vi.mock('@/components/EditableSelectionTint', () => ({ default: () => null }));
@@ -31,10 +31,10 @@ beforeEach(() => {
     return { x: left, y: top, left, top, width, height, right: left + width, bottom: top + height, toJSON() {} };
   };
 });
-afterEach(() => { document.body.replaceChildren(); runtime.target = null; vi.unstubAllGlobals(); });
-async function setup() {
+afterEach(() => { document.body.replaceChildren(); runtime.target = null; runtime.peer = null; vi.unstubAllGlobals(); });
+async function setup(onBeforeEdit?: () => boolean, type: 'text' | 'image' | 'video' = 'image', printedLayout?: import('@/lib/editor/package-lettering').PackageLayout) {
   const save = vi.fn();
-  render(<DesignOverlay touchGestures containerEl={container} interactionEl={container} editables={[{ id: 'shape', propKey: 'shape', type: 'image', label: 'Shape' }]} props={{}} selectedFieldId="shape" onSelectField={() => {}} onUpdateProp={save} allowCanvasCoverSelection />);
+  render(<DesignOverlay touchGestures containerEl={container} interactionEl={container} editables={[{ id: 'shape', propKey: 'shape', type, label: 'Shape' }]} props={{}} selectedFieldId="shape" onSelectField={() => {}} onUpdateProp={save} onBeforeEdit={onBeforeEdit} printedLayout={printedLayout} allowCanvasCoverSelection />);
   await waitFor(() => expect(runtime.moveable?.target).toBe(target)); flush();
   const frame = () => {
     const { left, top, width, height } = runtime.moveable.target.getBoundingClientRect();
@@ -74,4 +74,38 @@ it('remeasures the native frame after undo changes CSS transforms on the same no
   target.style.scale = '1 1';
   act(() => window.dispatchEvent(new Event('resize')));
   expect(runtime.updateRect).toHaveBeenCalled();
+});
+
+it.each(['image', 'text', 'video'] as const)('blocks %s gestures before DOM or persistent changes when access is denied', async type => {
+  const authorize = vi.fn(() => false), stopDrag = vi.fn();
+  const { save, frame } = await setup(authorize, type); const original = frame();
+  act(() => runtime.moveable.onDragStart({ inputEvent: { target, clientX: 120, clientY: 170, type: 'mousedown' }, set() {}, stopDrag }));
+  act(() => runtime.moveable.onDrag({ target, beforeTranslate: [40, 25] })); act(() => runtime.moveable.onDragEnd());
+  act(() => runtime.moveable.onScaleStart({ direction: [1, 1], set() {}, stopDrag }));
+  act(() => runtime.moveable.onScale({ target, scale: [2, 2] })); act(() => runtime.moveable.onScaleEnd());
+  pointer('pointerdown', 120, 170); pointer('pointermove', 150, 190); flush(); pointer('pointerup', 150, 190);
+  const touch = (name: string, touches: unknown[]) => { const e = new Event(name, { bubbles: true }); Object.assign(e, { touches }); act(() => target.dispatchEvent(e)); };
+  touch('touchstart', [{ clientX: 120, clientY: 170 }, { clientX: 160, clientY: 170 }]);
+  touch('touchmove', [{ clientX: 90, clientY: 170 }, { clientX: 190, clientY: 170 }]); touch('touchend', []);
+  expect(authorize).toHaveBeenCalledTimes(4); expect(stopDrag).toHaveBeenCalledTimes(2);
+  expect(frame()).toEqual(original); expect(save).not.toHaveBeenCalled();
+});
+
+it.each([false, true])('authorizes the whole printed package before moving its peers: allowed=%j', async allowed => {
+  const ink = document.createElement('div'); ink.dataset.editable = 'ink';
+  Object.assign(ink.style, { width: '40px', height: '20px', translate: '0px 0px', scale: '1' });
+  ink.getBoundingClientRect = () => ({ x: 110, y: 170, left: 110, top: 170, width: 40, height: 20, right: 150, bottom: 190, toJSON() {} });
+  container.append(ink); runtime.peer = ink;
+  const layout = { owners: new Map([['ink', 'shape']]), parts: new Map([
+    ['shape', { id: 'shape', label: 'Bottle', rect: { left: 100, top: 150, width: 100, height: 80 } }],
+    ['ink', { id: 'ink', label: 'Printed label', rect: { left: 110, top: 170, width: 40, height: 20 } }],
+  ]) };
+  const { save } = await setup(() => allowed, 'image', layout);
+  act(() => runtime.moveable.onDragStart({ inputEvent: { target, clientX: 120, clientY: 170, type: 'mousedown' }, set() {}, stopDrag() {} }));
+  act(() => runtime.moveable.onDrag({ target, beforeTranslate: [30, 20] }));
+  expect(target.style.translate).toBe(allowed ? '30px 20px' : '0px 0px');
+  expect(ink.style.translate).toBe(allowed ? '30px 20px' : '0px 0px');
+  act(() => runtime.moveable.onDragEnd());
+  if (allowed) expect(save).toHaveBeenCalledExactlyOnceWith('_pos_shape', { x: 30, y: 20 }, { _pos_ink: { x: 30, y: 20 } });
+  else expect(save).not.toHaveBeenCalled();
 });

@@ -79,12 +79,21 @@ describe('Layerize paid request boundary', () => {
     const input = { imageUrl: 'https://example.com/a.png', prompt: 'Separate only the cup and its shadow.' };
     const request = layerizeRequest(input);
     expect(request.prompt.startsWith(`${input.prompt}\n`)).toBe(true);
-    expect(request.prompt).toContain('ORIGINAL cast shadows and contact shadows');
-    expect(request.prompt).toContain('If separate shadow layers were explicitly requested');
-    expect(request.prompt).toContain('sides, thickness, base');
+    expect(request.prompt).toContain('Complete each object behind overlaps');
+    expect(request.prompt).toContain('no duplicate or silhouette');
+    expect(request.prompt).toContain('original contact and cast shadows on the same transparent layer');
+    expect(request.prompt).toContain('unless separate shadows are requested');
+    expect(request.prompt).not.toContain('Separate the main subjects');
     expect(input.prompt).toBe('Separate only the cup and its shadow.');
     expect(request.image_urls).toEqual([input.imageUrl]);
     expect(request.n).toBe(8);
+  });
+  it('asks for separate text only when native text editing is requested', () => {
+    const imageUrl = 'https://example.com/a.png';
+    expect(layerizeRequest({ imageUrl }).prompt).toContain('Keep the printed artwork on its object');
+    expect(layerizeRequest({ imageUrl }).prompt).toContain('both sides and the full base behind overlaps');
+    expect(layerizeRequest({ imageUrl, editableText: true }).prompt).not.toContain('Keep the printed artwork');
+    expect(layerizeRequest({ imageUrl, editableText: true }).prompt).toContain('text for editing');
   });
   it('sends exactly one input, explicit PNG/OCR, default 8 including base; rejects unsupported values before POST', () => {
     expect(layerizeRequest({ imageUrl: 'https://example.com/a.png' })).toMatchObject({ model: 'doubao-seedream-5.5-layerize', n: 8, quality: '1K', output_format: 'png', model_params: { text_recognition: true }, image_urls: ['https://example.com/a.png'] });

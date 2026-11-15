@@ -14,6 +14,7 @@ import { validateDesign } from './design-harness';
 import type { DesignPayload } from '@/types';
 import { prepareLayerizeSource } from './layerize-source';
 import { renderLayerizeRasterPoster } from './layerize-poster';
+import { recoverLayerizeShadows } from './layerize-shadows';
 import { inferLayerizeStack } from './layerize-reconstruction';
 
 export interface LayerizeOwner { userId: string; projectId: string; origin: string; attribution?: BillingAttribution }
@@ -170,15 +171,13 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
     const meta = await image.metadata();
     if (meta.format !== 'png' || !meta.width || !meta.height || (meta.pages ?? 1) !== 1) throw new Error('Layer output is not a valid PNG.');
     if (row.z_index > 0 && (!meta.hasAlpha || (await image.stats()).channels.at(-1)!.min === 255)) throw new Error('Foreground layer did not contain native alpha.');
-    const url = await permanent(owner, `${owner.projectId}/layerize/${job.id}/layer-${row.z_index}.png`, bytes, 'image/png');
-    return { row, bytes, url, width: meta.width, height: meta.height };
+    return { row, bytes, width: meta.width, height: meta.height };
   }), readProviderImage(job.input.imageUrl, 30 * 1024 * 1024)]);
   const width = decoded[0].width, height = decoded[0].height;
-  const layers: LayerizeLayer[] = await mapLayers(decoded, async item => {
+  const layers: LayerizeLayer[] = decoded.map(item => {
     const { row } = item;
-    const url = item.url;
     const box = row.z_index === 0 ? [0, 0, width, height] as [number, number, number, number] : bounds(row.bounding_box?.absolute, width, height);
-    const layer: LayerizeLayer = { z: row.z_index, url, width: item.width, height: item.height, bounds: box, name: String(row.name || row.description || `Layer ${row.z_index}`).slice(0, 120) };
+    const layer: LayerizeLayer = { z: row.z_index, url: '', width: item.width, height: item.height, bounds: box, name: String(row.name || row.description || `Layer ${row.z_index}`).slice(0, 120) };
     if (row.text_recognition?.lines?.length) {
       try {
         layer.text = { lines: row.text_recognition.lines.map(line => {
@@ -191,15 +190,28 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
     }
     return layer;
   });
-  if (job.input.editableText) {
-    const { prepareLayerizeTextLayers } = await import('./layerize-text');
-    await prepareLayerizeTextLayers(layers, new Map(decoded.map(item => [item.row.z_index, item.bytes])),
-      (name, pixels) => permanent(owner, `${owner.projectId}/layerize/${job.id}/${name}`, pixels, 'image/png'), { matchFonts: false });
-  }
   const supplierCostUsd = layerizeSupplierCost(layers);
   if (sha(source) !== job.sourceSha256) throw new Error('Source image changed; retain this task for reconciliation.');
   const { order: stackOrder, ...reconstruction } = await inferLayerizeStack(source, width, height,
     layers.map((layer, index) => ({ ...layer, bytes: decoded[index].bytes })));
+  const pixels = new Map(decoded.map(item => [item.row.z_index, item.bytes]));
+  const byZ = new Map(layers.map(layer => [layer.z, layer]));
+  // Explicit scopes can request separate shadows or a different lighting treatment.
+  if (!reconstruction.reason && !job.input.prompt?.trim()) {
+    const repaired = await recoverLayerizeShadows(source, width, height, stackOrder.map(z => {
+      const layer = byZ.get(z)!;
+      return { ...layer, bytes: pixels.get(z)!, canCast: !layer.text?.lines.length };
+    }));
+    for (const [z, bytes] of repaired) pixels.set(z, bytes);
+  }
+  await mapLayers(layers, async layer => {
+    layer.url = await permanent(owner, `${owner.projectId}/layerize/${job.id}/layer-${layer.z}.png`, pixels.get(layer.z)!, 'image/png');
+  });
+  if (job.input.editableText) {
+    const { prepareLayerizeTextLayers } = await import('./layerize-text');
+    await prepareLayerizeTextLayers(layers, pixels,
+      (name, pixels) => permanent(owner, `${owner.projectId}/layerize/${job.id}/${name}`, pixels, 'image/png'), { matchFonts: false });
+  }
   const manifest: LayerizeManifest = { version: 1, taskId: task.id, width, height, sourceSha256: job.sourceSha256, supplierCostUsd, layers, stackOrder, reconstruction };
   const manifestPath = `${owner.projectId}/layerize/${job.id}/manifest.json`;
   const fontsUrl = new URL(getSupabaseAdmin().storage.from('images').getPublicUrl(`${owner.userId}/workspace/${owner.projectId}/layerize/${job.id}/text-fonts.json`).data.publicUrl);
@@ -214,7 +226,7 @@ async function makeDesign(owner: LayerizeOwner, job: LayerizeJob, task: Layerize
   if (usesRasterPoster) {
     // Raster Layerize results already contain everything needed for the exact
     // initial composition, including original glyph pixels for editable text.
-    poster = await renderLayerizeRasterPoster(manifest, new Map(decoded.map(item => [item.row.z_index, item.bytes])));
+    poster = await renderLayerizeRasterPoster(manifest, pixels);
   } else {
     const { renderDesignFrame } = await import('./remotion-server');
     const signal = AbortSignal.timeout(120_000);

@@ -2,10 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLocale } from '@/lib/i18n';
 
 interface ShareButtonProps {
   projectId: string;
   readOnly?: boolean;
+  onRequestEdit?: () => unknown;
+  readOnlyLabel?: string;
 }
 
 function copyToClipboard(text: string): Promise<void> {
@@ -23,8 +26,9 @@ function copyToClipboard(text: string): Promise<void> {
   return Promise.resolve();
 }
 
-export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
+export default function ShareButton({ projectId, readOnly, onRequestEdit, readOnlyLabel }: ShareButtonProps) {
   const router = useRouter();
+  const { t } = useLocale();
   const [showPopover, setShowPopover] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
   const [toast, setToast] = useState(false);
@@ -64,12 +68,13 @@ export default function ShareButton({ projectId, readOnly }: ShareButtonProps) {
     return (
       <button
         onClick={() => {
+          if (onRequestEdit) { onRequestEdit(); return; }
           sessionStorage.setItem('mkr_return_url', window.location.pathname);
           router.push('/login');
         }}
         className="px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all cursor-pointer text-white bg-white/10 border-white/20 hover:bg-white/20"
       >
-        Log in
+        {readOnlyLabel || t('auth.login')}
       </button>
     );
   }

@@ -13,13 +13,15 @@ const zhHant = {
   "design.touchHint": "拖曳 / 縮放 · 取消選取後瀏覽",
   "design.loadingEditables": "正在載入編輯項目…",
   "design.background": "背景",
-  "design.autoLayerPrompt": (index: number) => `請將 @${index} 自動分層，盡量保留原圖外觀與遮擋關係，讓各個主體與背景可以獨立編輯。將可見文字拆成獨立的透明圖片圖層，保留原字形與位置。直接完成分層並發佈至畫布，無需額外生成圖片。`,
+  "design.autoLayerPrompt": (index: number) => `請將 @${index} 的主要元素和背景分成可獨立移動的圖層。`,
 
   "design.editingElement": (label: string) => `正在編輯：${label}`,
   "design.clearSelection": "取消選取",
   "design.saveBeforeEditFailed": "修改尚未儲存，請稍後重試。",
 
 
+  "design.ownerOnly": "只有專案原帳號可以編輯。",
+  "design.readOnly": "僅檢視",
   "design.undo": "復原",
   "design.redo": "重做",
   "design.history": "操作記錄",
