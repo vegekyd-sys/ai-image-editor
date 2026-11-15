@@ -7,10 +7,9 @@ import json
 import os
 from pathlib import Path
 import re
-import subprocess
 import time
-from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.parse import urlencode, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 
 def utc_now():
@@ -37,12 +36,15 @@ def normalized_path(value):
 def error_signature(message):
     text = message.lower()
     for pattern, family in [
+        (r'\[workspace\].*list error.*(?:statement.*timeout|57014)', 'workspace_list_timeout'),
+        (r'\[dualwriter\].*message upsert error.*(?:statement.*timeout|57014)', 'message_write_timeout'),
+        (r'\[gemini-2\.1\].*status:\s*402', 'image_provider_402'),
         (r'minimax.*invalid task_id', 'minimax_invalid_task_id'),
         (r'sigkill|exited with code 137|heap out of memory', 'process_killed'),
         (r'timed? ?out|deadline.exceeded', 'timeout'),
         (r'unhandled.*rejection|uncaught', 'unhandled_exception'),
     ]:
-        if re.search(pattern, text):
+        if re.search(pattern, text, re.S):
             return family, family
     # Digest a normalized first line; never persist raw errors/prompts/URLs.
     text = text.splitlines()[0] if text else 'error_without_message'
@@ -69,12 +71,83 @@ def runtime_errors(raw, since, qualifying_stream=True):
         family, digest = error_signature(str(row.get('message', '')))
         if int(row.get('responseStatusCode', 0)) >= 500:
             family = 'http_5xx'
-            digest = str(row['responseStatusCode'])
+            digest = str(row['responseStatusCode']) + ':' + digest
         rid = re.sub(r'[^a-zA-Z0-9_:.-]', '', str(row['id']))[:160]
         found[rid] = {'request_id': rid, 'at': at, 'http': int(row.get('responseStatusCode', 0)),
                       'path': path, 'family': family,
                       'fingerprint': hashlib.sha256((path + ':' + digest).encode()).hexdigest()[:24]}
     return list(found.values())
+
+
+def request_errors(rows, since):
+    """Fingerprint actual error logs, not the request's first performance line."""
+    found = {}
+    for row in rows:
+        timestamp = row['timestamp']
+        if isinstance(timestamp, str):
+            at = datetime.fromisoformat(timestamp.replace('Z', '+00:00')).timestamp() * 1000
+        else:
+            at = float(timestamp)
+        logs = row.get('logs') or []
+        if not isinstance(logs, list):
+            raise ValueError('invalid_request_logs')
+        messages = []
+        error_logs = [l for l in logs if l.get('level') in {'error', 'fatal'}]
+        for entry in error_logs:
+            message = str(entry.get('message', ''))
+            if message.startswith('[remotion-client-error] '):
+                try:
+                    diagnostic = json.loads(message[len('[remotion-client-error] '):])
+                    if diagnostic.get('recovered') is True:
+                        continue
+                    message = 'remotion ' + str(diagnostic.get('phase')) + ' ' + str(diagnostic.get('kind')) + ': ' + str(diagnostic.get('message'))
+                except (ValueError, TypeError, AttributeError):
+                    pass
+            messages.append(message)
+        if not messages and (int(row['statusCode']) >= 500 or not error_logs):
+            # A filtered request without available error detail stays visible.
+            messages = ['request_error_detail_unavailable']
+        for message in messages:
+            flat = {'id': row['requestId'], 'timestamp': at, 'responseStatusCode': row['statusCode'],
+                    'requestPath': row['requestPath'], 'message': message, 'level': 'error'}
+            for error in runtime_errors(json.dumps(flat), since):
+                found[(error['request_id'], error['fingerprint'])] = error
+    return list(found.values())
+
+
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def fetch_log_page(config, start, end, selector, page):
+    # Same read-only endpoint used by the installed Vercel CLI. Its CLI JSON
+    # conversion discards all but logs[0], which can hide/collide real errors.
+    owner = config.get('vercel_owner_id')
+    if not owner:
+        identity = json.loads((Path(config['handler_cwd']) / '.vercel/project.json').read_text())
+        if identity['projectId'] != config['vercel_project_id']:
+            raise RuntimeError('monitor_project_identity_mismatch')
+        owner = identity['orgId']
+    auth_paths = [Path.home() / 'Library/Application Support/com.vercel.cli/auth.json',
+                  Path.home() / '.local/share/com.vercel.cli/auth.json',
+                  Path.home() / '.config/vercel/auth.json']
+    token = next((json.loads(p.read_text()).get('token') for p in auth_paths if p.exists()), None)
+    if not token:
+        raise RuntimeError('monitor_vercel_auth_unavailable')
+    query = urlencode({'projectId': config['vercel_project_id'], 'ownerId': owner,
+        'page': page, 'startDate': int(start * 1000), 'endDate': int(end * 1000),
+        'environment': 'production', **selector})
+    request = Request('https://vercel.com/api/logs/request-logs?' + query,
+                      headers={'Authorization': 'Bearer ' + token, 'User-Agent': 'MakaronProductionMonitor/2.0'})
+    with build_opener(NoRedirect()).open(request, timeout=35) as response:
+        raw = response.read(8_000_001)
+    if len(raw) > 8_000_000:
+        raise RuntimeError('monitor_log_payload_limit')
+    data = json.loads(raw)
+    if not isinstance(data.get('rows'), list) or not isinstance(data.get('hasMoreRows'), bool):
+        raise ValueError('invalid_log_page_schema')
+    return data
 
 
 def read_runtime_logs(config, since, directory):
@@ -83,30 +156,24 @@ def read_runtime_logs(config, since, directory):
     try:
         # Time bisection handles the service's observed 50-request response cap.
         # On any missing coverage, do not advance the successful watermark.
-        for selector in [['--level', 'error'], ['--status-code', '5xx']]:
-            pending = [(since, until)]
+        for selector in [{'level': 'error'}, {'statusCode': '5xx'}]:
+            pending = [(since, until, 0)]
             while pending:
                 if pages >= 16:
                     raise RuntimeError('log_coverage_limit')
-                start, end = pending.pop()
-                iso = lambda t: datetime.fromtimestamp(t, timezone.utc).isoformat()
-                result = subprocess.run([
-                    config['vercel_cli'], 'logs', '--project', config['vercel_project_id'],
-                    '--environment', 'production', '--no-branch', '--no-follow',
-                    '--since', iso(start), '--until', iso(end), *selector,
-                    '--json', '--limit', '500',
-                ], capture_output=True, text=True, timeout=35, cwd=directory)
+                start, end, page = pending.pop()
+                result = fetch_log_page(config, start, end, selector, page)
                 pages += 1
-                if result.returncode:
-                    raise RuntimeError('monitor_log_fetch_failed')
-                rows = [json.loads(l) for l in result.stdout.splitlines() if l.strip()]
-                for row in runtime_errors(result.stdout, since):
-                    errors[row['request_id']] = row
-                if len(rows) >= 50:
+                rows = result['rows']
+                for row in request_errors(rows, since):
+                    errors[(row['request_id'], row['fingerprint'])] = row
+                if result['hasMoreRows']:
+                    pending.append((start, end, page + 1))
+                elif len(rows) >= 50:
                     if end - start <= 1:
                         raise RuntimeError('log_coverage_limit')
                     mid = (start + end) / 2
-                    pending.extend([(start, mid), (mid, end)])
+                    pending.extend([(start, mid, 0), (mid, end, 0)])
         return {'name': 'runtime_logs', 'ok': True, 'pages': pages,
                 'since': since, 'covered_until': until, 'observed_failures': len(errors)}, list(errors.values())
     except Exception as error:

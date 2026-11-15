@@ -14,6 +14,11 @@ def log(rid='request', message='MiniMax invalid task_id (2013)', **kwargs):
             'message': message, **kwargs}
 
 
+def request_row(rid='request', message='MiniMax invalid task_id (2013)', **kwargs):
+    return {'requestId': rid, 'timestamp': 100000, 'statusCode': 200,
+            'requestPath': '/api/cron/video-poll', 'logs': [{'level': 'error', 'message': message}], **kwargs}
+
+
 def test_200_error_and_5xx_detection_redacts_payload_and_dynamic_path():
     rows = [log(), log(), log('killed', 'Application exited with code 137 (SIGKILL).'),
             log('server', 'SECRET', responseStatusCode=503),
@@ -43,30 +48,80 @@ def test_error_fingerprint_ignores_request_ids_urls_and_numbers():
 def test_log_service_cap_is_split_and_all_requests_are_retained(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(monitor.time, 'time', lambda: 200)
-    def run(argv, **kwargs):
-        calls.append(argv)
-        if '--status-code' in argv:
+    def fetch(config, start, end, selector, page):
+        calls.append((config, selector, page))
+        if selector.get('statusCode'):
             rows = []
         elif len(calls) == 1:
-            rows = [log(str(i)) for i in range(50)]
+            rows = [request_row(str(i)) for i in range(50)]
         elif len(calls) == 2:
-            rows = [log('late')]
+            rows = [request_row('late')]
         else:
-            rows = [log('early')]
-        return SimpleNamespace(returncode=0, stdout='\n'.join(json.dumps(r) for r in rows))
-    monkeypatch.setattr(monitor.subprocess, 'run', run)
+            rows = [request_row('early')]
+        return {'rows': rows, 'hasMoreRows': False}
+    monkeypatch.setattr(monitor, 'fetch_log_page', fetch)
     check, errors = monitor.read_runtime_logs({'vercel_cli': '/vercel', 'vercel_project_id': 'project'}, 50, tmp_path)
     assert check['ok'] and check['pages'] == 4
     assert len(errors) == 52
-    assert all('--no-branch' in c and 'production' in c for c in calls)
+    assert calls[-1][1] == {'statusCode': '5xx'} and calls[0][1] == {'level': 'error'}
 
 
 def test_saturated_logs_are_explicit_partial_coverage(tmp_path, monkeypatch):
     monkeypatch.setattr(monitor.time, 'time', lambda: 100)
-    monkeypatch.setattr(monitor.subprocess, 'run', lambda *a, **kw: SimpleNamespace(
-        returncode=0, stdout='\n'.join(json.dumps(log(str(i))) for i in range(50))))
+    monkeypatch.setattr(monitor, 'fetch_log_page', lambda *a, **kw: {
+        'rows': [request_row(str(i)) for i in range(50)], 'hasMoreRows': False})
     check, _ = monitor.read_runtime_logs({'vercel_cli': '/vercel', 'vercel_project_id': 'project'}, 99.5, tmp_path)
     assert not check['ok'] and check['coverage'] == 'partial'
+
+
+def test_actual_errors_with_identical_info_first_lines_have_distinct_fingerprints():
+    def row(rid, error):
+        return request_row(rid, requestPath='/api/agent/run', timestamp='1970-01-01T00:01:40Z', logs=[
+            {'level': 'info', 'message': '[agent-perf] start'}, {'level': 'error', 'message': error}])
+    rows = [row('message', '[DualWriter] message upsert error: code 57014 statement timeout'),
+            row('workspace', '[workspace] list error: canceling statement due to statement timeout')]
+    errors = monitor.request_errors(rows, 50)
+    assert {e['family'] for e in errors} == {'message_write_timeout', 'workspace_list_timeout'}
+    assert errors[0]['fingerprint'] != errors[1]['fingerprint']
+    assert 'agent-perf' not in json.dumps(errors)
+
+
+def test_multiple_distinct_errors_in_one_request_are_not_discarded():
+    row = request_row(logs=[{'level': 'error', 'message': '[workspace] list error: statement timeout'},
+        {'level': 'error', 'message': '[DualWriter] message upsert error: 57014'}])
+    assert len(monitor.request_errors([row], 50)) == 2
+
+
+def test_confirmed_recovered_client_report_does_not_wake_but_real_5xx_stays_visible():
+    report = '[remotion-client-error] ' + json.dumps({'recovered': True, 'message': 'SECRET'})
+    row = request_row(message=report, requestPath='/api/remotion/client-error')
+    assert monitor.request_errors([row], 50) == []
+    row['statusCode'] = 503
+    errors = monitor.request_errors([row], 50)
+    assert len(errors) == 1 and errors[0]['family'] == 'http_5xx'
+    assert 'SECRET' not in json.dumps(errors)
+
+
+def test_missing_error_detail_is_still_a_signal_and_pagination_is_followed(tmp_path, monkeypatch):
+    calls = []
+    def fetch(config, start, end, selector, page):
+        calls.append((selector, page))
+        if selector.get('statusCode'):
+            return {'rows': [], 'hasMoreRows': False}
+        return {'rows': [request_row(str(page), logs=[])], 'hasMoreRows': page == 0}
+    monkeypatch.setattr(monitor, 'fetch_log_page', fetch)
+    check, errors = monitor.read_runtime_logs({}, 50, tmp_path)
+    assert check['ok'] and len(errors) == 2
+    assert calls[:2] == [({'level': 'error'}, 0), ({'level': 'error'}, 1)]
+
+
+def test_log_transport_failure_keeps_partial_coverage_without_raw_errors(tmp_path, monkeypatch):
+    def fetch(*args):
+        raise ValueError('SECRET URL or response')
+    monkeypatch.setattr(monitor, 'fetch_log_page', fetch)
+    check, _ = monitor.read_runtime_logs({}, 50, tmp_path)
+    assert not check['ok'] and check['coverage'] == 'partial'
+    assert 'SECRET' not in json.dumps(check)
 
 
 def test_failed_log_read_never_advances_watermark_and_eventually_alerts(tmp_path, monkeypatch):

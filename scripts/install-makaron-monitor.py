@@ -45,6 +45,7 @@ def main():
     shutil.copyfile(source.parent / 'docs/ops/makaron-production-selfcheck.md', directory / 'README.md')
     write_private(config_path, {'base_url': 'https://www.makaron.app',
         'vercel_project_id': project['projectId'], 'vercel_cli': vercel,
+        'vercel_owner_id': project['orgId'],
         'codex_cli': str(args.codex.resolve()), 'thread_id': args.thread, 'handler_cwd': str(cwd)})
     label = 'com.tianyi.makaron-monitor-event-bridge'
     plist = Path.home() / 'Library/LaunchAgents' / (label + '.plist')
