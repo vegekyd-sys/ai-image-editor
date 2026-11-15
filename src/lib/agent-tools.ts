@@ -5102,18 +5102,6 @@ function createRunCodeTool(
           if (!executableCode.trim()) {
             return { type: 'text' as const, content: `Code file not found or empty: ${code_path}` };
           }
-          // A patch result's code_path selects its saved JSON base; this top-level
-          // code_path selects executable source. Catch the mix-up before VM or
-          // media setup, without executing the inline code as an implicit fallback.
-          if (executableCode.trimStart().startsWith('{')) {
-            let savedDesign: unknown;
-            try { savedDesign = JSON.parse(executableCode); } catch { /* JavaScript source, not JSON. */ }
-            if (savedDesign && typeof savedDesign === 'object'
-              && 'code' in savedDesign && typeof savedDesign.code === 'string'
-              && 'width' in savedDesign && 'height' in savedDesign) {
-              return { type: 'text' as const, content: 'Invalid run_code input: top-level code_path points to saved composition JSON, not executable source. For a patch, omit top-level code_path and use inline code that returns {type:"patch",code_path:"<saved design path>",edits:[{old:"...",new:"..."}]}. Put the saved design path inside the returned patch object. To inspect JSON data, use read_file. No code was executed or design changed.' };
-            }
-          }
           (ctx as any).__lastCodeFilePath = code_path;
         }
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
