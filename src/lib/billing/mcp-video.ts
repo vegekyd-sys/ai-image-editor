@@ -134,7 +134,7 @@ export async function settleMcpVideoStatus(userId: string, taskId: string, statu
 export async function reconcileMcpVideos(): Promise<number> {
   const admin = getSupabaseAdmin()
   const { data, error } = await admin.from('mcp_video_reservations')
-    .select('id,user_id,task_id').eq('status', 'submitted')
+    .select('id,user_id,task_id,created_at').eq('status', 'submitted')
     .lt('last_checked_at', new Date(Date.now() - 30_000).toISOString())
     .order('last_checked_at').limit(10)
   if (error) throw new Error('MCP billing reconciliation query failed')
@@ -142,8 +142,18 @@ export async function reconcileMcpVideos(): Promise<number> {
     try {
       const result = await getVideoStatus({ taskId: row.task_id, userId: row.user_id })
       await settleMcpVideoStatus(row.user_id, row.task_id, result.status, result.queryFailed)
-      const update = await admin.from('mcp_video_reservations').update({ last_checked_at: new Date().toISOString() }).eq('id', row.id)
+      // Old IDs can disappear from the provider's query API. Keep the receipt
+      // and credits for manual reconciliation; never infer failure or resubmit.
+      // Fresh jobs and transient/auth errors remain eligible for later polling.
+      const createdAt = Date.parse(row.created_at)
+      const needsManualReview = result.queryFailed && result.queryUnavailable
+        && Number.isFinite(createdAt) && Date.now() - createdAt >= 24 * 60 * 60 * 1000
+      const update = await admin.from('mcp_video_reservations').update({
+        last_checked_at: new Date().toISOString(),
+        ...(needsManualReview ? { status: 'uncertain', updated_at: new Date().toISOString() } : {}),
+      }).eq('id', row.id).eq('status', 'submitted')
       if (update.error) throw update.error
+      if (needsManualReview) console.warn('[billing] Old video task lookup unavailable; manual reconciliation required', { requestId: row.id })
       return result.queryFailed ? 0 : 1
     } catch (error) {
       console.error('[billing] MCP video reconciliation failed', { requestId: row.id, error })
