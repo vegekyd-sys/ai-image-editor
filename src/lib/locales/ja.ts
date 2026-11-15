@@ -16,6 +16,8 @@ const ja = {
   "design.editingElement": (label: string) => `編集中：${label}`,
   "design.clearSelection": "選択を解除",
   "design.saveBeforeEditFailed": "変更を保存できていません。少し待ってから再試行してください。",
+  "design.ownerOnly": "このプロジェクトを作成したアカウントのみ編集できます。",
+  "design.readOnly": "閲覧のみ",
   "design.undo": "元に戻す",
   "design.redo": "やり直す",
   "design.history": "操作履歴",

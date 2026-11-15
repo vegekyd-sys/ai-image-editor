@@ -37,6 +37,8 @@ interface DesignOverlayProps {
   onCanvasTap?: () => void;
   onUpdateProp: (key: string, value: unknown, related?: Record<string, unknown>) => void;
   onStartEdit?: (fieldId: string) => void;
+  /** Shared authorization for every Editable type, before transient DOM edits. */
+  onBeforeEdit?: () => boolean;
   onVisibleFieldsChange?: (visibleIds: string[]) => void;
   onRenderedOrderChange?: (ids: string[]) => void;
   filterVisibleFields?: boolean;
@@ -98,6 +100,7 @@ export default function DesignOverlay({
   onUpdateProp: commitProp,
   printedLayout,
   onStartEdit,
+  onBeforeEdit,
   onVisibleFieldsChange,
   onRenderedOrderChange,
   filterVisibleFields = false,
@@ -286,6 +289,8 @@ export default function DesignOverlay({
   onStartEditRef.current = onStartEdit;
   const selectedFieldIdRef = useRef(selectedFieldId);
   selectedFieldIdRef.current = selectedFieldId;
+  const onBeforeEditRef = useRef(onBeforeEdit);
+  onBeforeEditRef.current = onBeforeEdit;
   const onGestureStartRef = useRef(onGestureStart);
   onGestureStartRef.current = onGestureStart;
   const onCanvasTapRef = useRef(onCanvasTap);
@@ -550,6 +555,7 @@ export default function DesignOverlay({
 
       const target = rectsRef.current.find(rect => rect.id === fieldId)?.domEl ?? null;
       if (!target || !isPaintedEditableHit(target, clientX, clientY)) return false;
+      if (onBeforeEditRef.current?.() === false) return false;
       const offset = readCurrentOffset(target, fieldId);
       dragState = {
         fieldId,
@@ -659,6 +665,7 @@ export default function DesignOverlay({
 
     const onTouchStart = (e: TouchEvent) => {
       if (moveableGestureRef.current || !selectedFieldIdRef.current || e.touches.length !== 2) return;
+      if (onBeforeEditRef.current?.() === false) return;
       const sc = props[`_scale_${selectedFieldIdRef.current}`] as { w: number; h: number } | undefined;
       onGestureStartRef.current?.();
       if (interactionEl) interactionEl.dataset.editableGesture = 'scale';
@@ -799,6 +806,7 @@ export default function DesignOverlay({
               // Scalable emits a companion dragStart. It must not overwrite the
               // separate scale session with position values.
               if ((event.inputEvent?.target as HTMLElement | undefined)?.closest?.('.moveable-control')) return;
+              if (onBeforeEditRef.current?.() === false) { event.stopDrag(); return false; }
               if (touchGestures && event.inputEvent?.type?.startsWith('touch')) { event.stopDrag(); return false; }
               const input = event.inputEvent, point = input?.touches?.[0] || input;
               if (typeof point?.clientX === 'number' && !isPaintedEditableHit(selectedRect.domEl, point.clientX, point.clientY)) {
@@ -828,6 +836,7 @@ export default function DesignOverlay({
             onDragEnd={() => { if (moveableGestureRef.current?.kind === 'drag') finishMoveableGesture(); }}
             /* ── Scale: pin the original target and opposite corner until release. ── */
             onScaleStart={(event) => {
+              if (onBeforeEditRef.current?.() === false) { event.stopDrag(); return false; }
               onGestureStartRef.current?.();
               const target = selectedRect.domEl;
               const basePosition = (props[`_pos_${selectedFieldId}`] as { x: number; y: number } | undefined) ?? { x: 0, y: 0 };

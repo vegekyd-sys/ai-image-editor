@@ -113,6 +113,7 @@ interface EditorProps {
   initialAnimations?: ProjectAnimation[];
   timelineVersion?: number;
   readOnly?: boolean;
+  viewerSignedIn?: boolean;
   ownershipPending?: boolean;
   disableAgentLiveReload?: boolean;
   disableBodyScrollLock?: boolean;
@@ -161,6 +162,7 @@ export default function Editor({
   initialAnimations,
   timelineVersion = 1,
   readOnly,
+  viewerSignedIn = false,
   ownershipPending = false,
   disableBodyScrollLock = false,
   inactive = false,
@@ -171,12 +173,26 @@ export default function Editor({
   const { t, locale } = useLocale();
   const router = useRouter();
 
+  const [ownerOnlyNotice, setOwnerOnlyNotice] = useState(false);
+  useEffect(() => {
+    if (!ownerOnlyNotice) return;
+    const timer = setTimeout(() => setOwnerOnlyNotice(false), 3000);
+    return () => clearTimeout(timer);
+  }, [ownerOnlyNotice]);
   const gateInteraction = useCallback(() => {
     if (!readOnly) return false;
-    sessionStorage.setItem('mkr_return_url', window.location.pathname);
+    if (viewerSignedIn) { setOwnerOnlyNotice(true); return true; }
+    const returnUrl = window.location.pathname + window.location.search;
+    sessionStorage.setItem('mkr_return_url', returnUrl);
+    localStorage.setItem('mkr_return_url', returnUrl);
     router.push('/login');
     return true;
-  }, [readOnly, router]);
+  }, [readOnly, viewerSignedIn, router]);
+  const authorizeEditableEdit = useCallback(() => !gateInteraction(), [gateInteraction]);
+  const startEditableEditor = useCallback((id: string) => {
+    if (gateInteraction()) return;
+    setEditingDesignFieldId(previous => previous === id ? null : id);
+  }, [gateInteraction]);
   const [cuiPanelWidth, setCuiPanelWidth] = useState(500);
   const cuiPanelRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>(() => dedupeEditorMessages(initialMessages ?? []));
@@ -3247,6 +3263,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [flushPendingDesignSave]);
 
   const commitDesignProps = useCallback((props: Record<string, unknown>) => {
+    if (readOnly) return;
     const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
     if (snapIdx == null) return;
     const current = snapshotsRef.current[snapIdx];
@@ -3272,9 +3289,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     };
     if (designPropsSaveTimer.current) clearTimeout(designPropsSaveTimer.current);
     designPropsSaveTimer.current = setTimeout(flushPendingDesignSave, 500);
-  }, [viewIndex, draftParentIndex, flushPendingDesignSave]);
+  }, [viewIndex, draftParentIndex, flushPendingDesignSave, readOnly]);
 
   const handleDesignPropUpdate = useCallback((key: string, value: unknown, related?: Record<string, unknown>) => {
+    if (gateInteraction()) return;
     const index = snapFromTimeline(viewIndex, draftParentIndex);
     const design = index == null ? undefined : snapshotsRef.current[index]?.design;
     if (!design) return;
@@ -3290,15 +3308,16 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     const metadata = { kind, fieldId: field?.id, label: field?.label };
     const next = related ? recordDesignEditBatch(props, { [key]: value, ...related }, metadata) : recordDesignEdit(props, key, value, metadata);
     if (next !== props) commitDesignProps(next);
-  }, [viewIndex, draftParentIndex, selectedEditableFieldId, commitDesignProps]);
+  }, [viewIndex, draftParentIndex, selectedEditableFieldId, commitDesignProps, gateInteraction]);
 
   const handleDesignHistorySeek = useCallback((cursor: number) => {
+    if (gateInteraction()) return;
     const index = snapFromTimeline(viewIndex, draftParentIndex);
     const design = index == null ? undefined : snapshotsRef.current[index]?.design;
     if (!design) return;
     const props = design.props || {}, next = seekDesignEditHistory(props, cursor);
     if (next !== props) commitDesignProps(next);
-  }, [viewIndex, draftParentIndex, commitDesignProps]);
+  }, [viewIndex, draftParentIndex, commitDesignProps, gateInteraction]);
 
   useEffect(() => {
     if (readOnly || !isViewingDesign) return;
@@ -3870,12 +3889,13 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
-                editableFields={isViewingDesign && !readOnly ? currentDesignEditables : undefined}
+                editableFields={isViewingDesign ? currentDesignEditables : undefined}
                 designProps={isViewingDesign ? currentDesignProps : undefined}
                 selectedEditableId={selectedEditableFieldId}
                 onSelectEditable={setSelectedEditableFieldId}
                 onUpdateProp={handleDesignPropUpdate}
-                onStartEditEditable={setEditingDesignFieldId}
+                onStartEditEditable={startEditableEditor}
+                onBeforeEditableEdit={authorizeEditableEdit}
                 onVisibleEditableFields={handleVisibleEditableFields}
                 onEditableRenderOrder={handleEditableRenderOrder}
                 onDesignContentSize={handleDesignContentSize}
@@ -3976,7 +3996,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   )}
                   {snapshots.length > 0 && (
                     <>
-                    <ShareButton projectId={projectId || ''} readOnly={readOnly} />
+                    <ShareButton projectId={projectId || ''} readOnly={readOnly} onRequestEdit={gateInteraction} readOnlyLabel={viewerSignedIn ? t('design.readOnly') : t('auth.login')} />
                     <button
                       onClick={handleDownload}
                       disabled={isSaving}
@@ -4259,7 +4279,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       />
                     </DesignEditorFrame>
                   </div>
-                ) : (ownershipPending || !readOnly) && (isDesignLoading || (isViewingDesign && allDesignEditables.length > 0)) ? (
+                ) : (isDesignLoading || (isViewingDesign && allDesignEditables.length > 0)) ? (
                   <DesignEditPanel
                     key={currentDesignSnap?.id}
                     loading={isDesignLoading || ownershipPending}
@@ -4270,7 +4290,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     selectedFieldId={selectedEditableFieldId}
                     onSelectField={setSelectedEditableFieldId}
-                    onStartEdit={(fieldId) => setEditingDesignFieldId(prev => prev === fieldId ? null : fieldId)}
+                    onStartEdit={startEditableEditor}
                     isDesktop={isDesktop}
                   />
                 ) : (
@@ -4534,6 +4554,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         </div>
       )}
 
+      {ownerOnlyNotice && (
+        <div role="status" className="fixed top-20 left-1/2 -translate-x-1/2 z-[300] max-w-[90vw] rounded-xl bg-black/90 px-5 py-3 text-center text-sm text-white shadow-lg">
+          {t('design.ownerOnly')}
+        </div>
+      )}
       {/* Save success toast */}
       {saveToast && (
         <div

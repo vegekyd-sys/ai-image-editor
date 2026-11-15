@@ -20,6 +20,8 @@ const zhHant = {
   "design.saveBeforeEditFailed": "修改尚未儲存，請稍後重試。",
 
 
+  "design.ownerOnly": "只有專案原帳號可以編輯。",
+  "design.readOnly": "僅檢視",
   "design.undo": "復原",
   "design.redo": "重做",
   "design.history": "操作記錄",

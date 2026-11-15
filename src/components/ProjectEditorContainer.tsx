@@ -475,7 +475,7 @@ export default function ProjectEditorContainer({
   // the new session. Mounting Editor in that gap consumes pending media with
   // no authenticated persistence callbacks, leaving the photo only in local
   // cache. Keep the loading shell until the new-project owner is available.
-  if (!loaded || (isNewProject && (authLoading || !user))) {
+  if (!loaded || (!isNewProject && (authLoading || isPublicProject === null || (!isPublicProject && !isOwner))) || (isNewProject && (authLoading || !user))) {
     return (
       <div className={loadingClassName}>
         <EditorLoadingShell />
@@ -486,6 +486,7 @@ export default function ProjectEditorContainer({
   return (
     <div className={className}>
       <Editor
+        key={projectId}
         projectId={projectId}
         initialSnapshotId={initialSnapshotId}
         initialSnapshots={initialSnapshots ?? []}
@@ -509,6 +510,7 @@ export default function ProjectEditorContainer({
         initialAnimations={initialAnimations}
         timelineVersion={timelineVersion}
         readOnly={readOnly}
+        viewerSignedIn={Boolean(user)}
         ownershipPending={projectOwnerId === null && !isOwner}
         disableAgentLiveReload={disableAgentLiveReload}
         disableBodyScrollLock={disableBodyScrollLock}
