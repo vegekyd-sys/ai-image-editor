@@ -7,7 +7,14 @@ function fixture(read: () => Promise<{ data: unknown[] | null; error: unknown }>
   const order = vi.fn(read);
   const upload = vi.fn();
   const upsert = vi.fn();
+  const rpc = vi.fn(async (name: string, args: { p_user_id: string; p_manifest: boolean }) => {
+    expect(name).toBe('list_workspace_skill_entries');
+    scopes.push(`user_id.eq.${args.p_user_id},user_id.is.null`);
+    patterns.push(args.p_manifest ? 'skills/%/.makaron-skill-index.json' : 'skills/%/SKILL.md');
+    return order();
+  });
   const client = {
+    rpc,
     from: () => {
       const query = { select: () => query, or: (scope: string) => { scopes.push(scope); return query; },
         like: (_field: string, pattern: string) => { patterns.push(pattern); return query; }, order, upsert };
@@ -15,7 +22,7 @@ function fixture(read: () => Promise<{ data: unknown[] | null; error: unknown }>
     },
     storage: { from: () => ({ upload }) },
   };
-  return { client, scopes, patterns, order, upload, upsert };
+  return { client, scopes, patterns, order, upload, upsert, rpc };
 }
 
 const row = { path: 'skills/recovered-list/SKILL.md', content_type: 'text/markdown', size_bytes: 100,
@@ -32,6 +39,7 @@ describe('workspace list failure recovery', () => {
       : { data: [row], error: null });
     const files = await workspace.listFiles('skills/*/SKILL.md', f.client, 'list-owner');
     expect(f.order).toHaveBeenCalledTimes(2);
+    expect(f.rpc).toHaveBeenNthCalledWith(1, 'list_workspace_skill_entries', { p_user_id: 'list-owner', p_manifest: false });
     expect(f.scopes).toEqual(['user_id.eq.list-owner,user_id.is.null', 'user_id.eq.list-owner,user_id.is.null']);
     expect(f.patterns).toEqual(['skills/%/SKILL.md', 'skills/%/SKILL.md']);
     expect(files).toContainEqual(expect.objectContaining({ path: row.path }));
