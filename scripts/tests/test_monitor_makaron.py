@@ -92,6 +92,16 @@ def test_multiple_distinct_errors_in_one_request_are_not_discarded():
     assert len(monitor.request_errors([row], 50)) == 2
 
 
+def test_later_error_in_same_request_keeps_its_own_evidence():
+    state = {}
+    first = {'request_id': 'same-request', 'fingerprint': 'first'}
+    second = {'request_id': 'same-request', 'fingerprint': 'second'}
+    batch = bridge.reconcile(state, [], [first], 100, 'thread')
+    bridge.reconcile(state, [], [first, second], 101, 'thread')
+    assert batch['revision'] == 2
+    assert batch['observations'][-1]['new_runtime_errors'] == [second]
+
+
 def test_confirmed_recovered_client_report_does_not_wake_but_real_5xx_stays_visible():
     report = '[remotion-client-error] ' + json.dumps({'recovered': True, 'message': 'SECRET'})
     row = request_row(message=report, requestPath='/api/remotion/client-error')

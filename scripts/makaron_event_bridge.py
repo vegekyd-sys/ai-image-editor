@@ -40,8 +40,11 @@ def reconcile(state, checks, errors, now, thread_id):
     tracked = state.get('tracked_conditions', {})
     novel_conditions = {c for c in current - previous if c not in tracked
                         and (c not in reported or now - reported[c] >= 86400)}
-    seen = set(state.get('seen_request_ids', []))
-    novel_errors = [row for row in errors if row['request_id'] not in seen]
+    error_key = lambda row: row['request_id'] + ':' + row['fingerprint']
+    seen = set(state.get('seen_error_keys', []))
+    novel_errors = [row for row in errors if error_key(row) not in seen]
+    state['seen_error_keys'] = list(dict.fromkeys(state.get('seen_error_keys', []) +
+                                                [error_key(row) for row in errors]))[-2000:]
     state['seen_request_ids'] = list(dict.fromkeys(state.get('seen_request_ids', []) +
                                                    [row['request_id'] for row in errors]))[-2000:]
     state.update(conditions=sorted(current), last_check_at=utc_now(), checks=checks,
