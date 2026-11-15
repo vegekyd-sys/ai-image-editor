@@ -24,7 +24,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { parseSkillMd, type ParsedSkill } from './skill-registry';
 import builtInSkillManifest from '../generated/built-in-skill-manifest.json';
-import { retryIdempotentStorage } from './idempotent-storage-retry';
+import { isTransientStorageError, retryIdempotentStorage } from './idempotent-storage-retry';
 
 
 type SupabaseClient = any;
@@ -418,6 +418,14 @@ function pathToContentType(filePath: string): string {
 
 // ── Supabase operations ────────────────────────────────────────────────────
 
+export class WorkspaceListUnavailableError extends Error {
+  readonly code = 'WORKSPACE_LIST_UNAVAILABLE';
+  constructor(readonly cause: unknown) {
+    super('Workspace file list is unavailable. Please retry.');
+    this.name = 'WorkspaceListUnavailableError';
+  }
+}
+
 /** Storage path: {userId}/workspace/{path} — first folder must be userId for RLS */
 function storagePath(userId: string, path: string): string {
   return `${userId}/workspace/${path}`;
@@ -425,23 +433,37 @@ function storagePath(userId: string, path: string): string {
 
 /** List files from workspace_files table */
 async function dbListFiles(supabase: SupabaseClient, userId: string, pattern?: string): Promise<WorkspaceFile[]> {
-  let query = supabase
-    .from('workspace_files')
-    .select('path, content_type, size_bytes, storage_url, updated_at')
-    .or(`user_id.eq.${userId},user_id.is.null`); // own files + global
-
-  if (pattern) {
-    const likePattern = pattern.replace(/\*/g, '%');
-    query = query.like('path', likePattern);
+  let data: Array<{ path: string; content_type: string; size_bytes: number | null; storage_url: string; updated_at: string | null }> | null = null;
+  let lastError: unknown;
+  // One extra read only. Rebuild the scoped query, and do not multiply load
+  // indefinitely when the database itself remains unavailable.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (attempt) await new Promise(resolve => setTimeout(resolve, 250));
+    try {
+      let query = supabase
+        .from('workspace_files')
+        .select('path, content_type, size_bytes, storage_url, updated_at')
+        .or(`user_id.eq.${userId},user_id.is.null`); // own files + global
+      if (pattern) query = query.like('path', pattern.replace(/\*/g, '%'));
+      const result = await query.order('path');
+      if (result.error) throw result.error;
+      data = result.data || [];
+      break;
+    } catch (error) {
+      lastError = error;
+      const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+      if (attempt || (code !== '57014' && !isTransientStorageError(error))) break;
+      console.warn('[workspace] transient list error; retrying', { code });
+    }
+  }
+  if (data === null) {
+    console.error('[workspace] list error:', lastError);
+    // A failed lookup is not an empty workspace. In particular, do not cache a
+    // partial skills catalog or install over a name that could not be checked.
+    throw new WorkspaceListUnavailableError(lastError);
   }
 
-  const { data, error } = await query.order('path');
-  if (error) {
-    console.error('[workspace] list error:', error.message);
-    return [];
-  }
-
-  return (data || []).map((row: { path: string; content_type: string; size_bytes: number | null; storage_url: string; updated_at: string | null }) => {
+  return data.map((row) => {
     const localPath = workspaceMirrorPath(userId, { path: row.path, storageUrl: row.storage_url, contentType: row.content_type });
     return {
       path: row.path,
