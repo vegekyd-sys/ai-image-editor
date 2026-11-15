@@ -143,8 +143,9 @@ export default function DesignOverlay({
     }
   }, [peerChanges]);
 
-  const onUpdateProp = useCallback<DesignOverlayProps['onUpdateProp']>((key, value, related) => {
-    if (!printedLayout?.owners.size || !/^_(?:scale|pos)_/.test(key)) return commitProp(key, value, related);
+  const onUpdateProp = useCallback<DesignOverlayProps['onUpdateProp']>((...args) => {
+    const [key, value, related] = args;
+    if (!printedLayout?.owners.size || !/^_(?:scale|pos)_/.test(key)) return commitProp(...args);
     const id = key.slice(key.indexOf('_', 1) + 1);
     const changes = { [key]: value, ...related };
     const peers = peerChanges(id, changes['_pos_' + id] as {x: number; y: number}, changes['_scale_' + id] as {w: number; h: number});
