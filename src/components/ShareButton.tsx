@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLocale } from '@/lib/i18n';
 
 interface ShareButtonProps {
   projectId: string;
@@ -27,6 +28,7 @@ function copyToClipboard(text: string): Promise<void> {
 
 export default function ShareButton({ projectId, readOnly, onRequestEdit, readOnlyLabel }: ShareButtonProps) {
   const router = useRouter();
+  const { t } = useLocale();
   const [showPopover, setShowPopover] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
   const [toast, setToast] = useState(false);
@@ -72,7 +74,7 @@ export default function ShareButton({ projectId, readOnly, onRequestEdit, readOn
         }}
         className="px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all cursor-pointer text-white bg-white/10 border-white/20 hover:bg-white/20"
       >
-        {readOnlyLabel || 'Log in'}
+        {readOnlyLabel || t('auth.login')}
       </button>
     );
   }
