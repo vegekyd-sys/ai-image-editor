@@ -23,6 +23,8 @@ it('moves only connected source darkening with the object and preserves its orig
   expect([...at(25, 32)]).toEqual([221, 51, 17, 255]);
   expect(at(56, 32)[3]).toBeCloseTo(128, -1);
   expect(at(85, 70)[3]).toBe(0);
+  const native = await sharp(object).composite([{ input: await png(15, 22, '#00000060'), left: 50, top: 23 }]).png().toBuffer();
+  expect((await recoverLayerizeShadows(source, width, height, [stack[0], { ...stack[1], bytes: native }])).size).toBe(0);
   expect((await recoverLayerizeShadows(await sharp(plate).composite([{ input: object }]).png().toBuffer(), width, height, stack)).size).toBe(0);
   expect((await recoverLayerizeShadows(source, width, height, [stack[0], { ...stack[1], canCast: false }])).size).toBe(0);
 });

@@ -3,6 +3,24 @@ import type { LayerizeLayer } from './layerize-design';
 
 type Raster = Pick<LayerizeLayer, 'z' | 'bounds' | 'width' | 'height'> & { bytes: Buffer; canCast: boolean };
 
+// Dark translucent pixels extending past the antialiasing fringe indicate an existing
+// shadow. Preserve that PNG instead of adding a second, guessed shadow from reflections.
+function hasNativeShadow(data: Buffer, width: number, height: number) {
+  const required = Math.max(12, Math.ceil(width * height * .0008));
+  let count = 0;
+  for (let y = 2; y < height - 2; y++) for (let x = 2; x < width - 2; x++) {
+    const p = (y * width + x) * 4;
+    const [r, g, b, a] = [data[p], data[p + 1], data[p + 2], data[p + 3]];
+    if (a < 12 || a > 177 || r + g + b >= 240 || Math.max(r, g, b) - Math.min(r, g, b) >= 30) continue;
+    let touchesCore = false;
+    for (let dy = -2; dy <= 2 && !touchesCore; dy++) for (let dx = -2; dx <= 2; dx++) {
+      if (data[p + 4 * (dy * width + dx) + 3] > 210) { touchesCore = true; break; }
+    }
+    if (!touchesCore && ++count >= required) return true;
+  }
+  return false;
+}
+
 /** Transfer missing soft darkening from the source onto the adjacent movable cutout.
  * Only the exposed background votes. Foreground details and reconstructed hidden surfaces
  * have no reliable source evidence and must retain the provider pixels. */
@@ -22,11 +40,12 @@ export async function recoverLayerizeShadows(source: Buffer, width: number, heig
   for (let i = 1; i < stack.length; i++) {
     const b = boxes[i], rw = b.right - b.left;
     const data = await sample(stack[i].bytes, rw, b.bottom - b.top);
+    const canCast = stack[i].canCast && !hasNativeShadow(data, rw, b.bottom - b.top);
     for (let y = b.top; y < b.bottom; y++) for (let x = b.left; x < b.right; x++) {
       const a = data[((y - b.top) * rw + x - b.left) * 4 + 3], p = y * w + x;
       if (a > 12) {
         occupied[p] = 1;
-        owner[p] = stack[i].canCast ? i : 0;
+        owner[p] = canCast ? i : 0;
       }
     }
   }
