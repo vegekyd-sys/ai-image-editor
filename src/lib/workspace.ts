@@ -440,12 +440,22 @@ async function dbListFiles(supabase: SupabaseClient, userId: string, pattern?: s
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (attempt) await new Promise(resolve => setTimeout(resolve, 250));
     try {
-      let query = supabase
-        .from('workspace_files')
-        .select('path, content_type, size_bytes, storage_url, updated_at')
-        .or(`user_id.eq.${userId},user_id.is.null`); // own files + global
-      if (pattern) query = query.like('path', pattern.replace(/\*/g, '%'));
-      const result = await query.order('path');
+      const likePattern = pattern?.replace(/\*/g, '%');
+      const catalog = likePattern === 'skills/%/SKILL.md'
+        || likePattern === `skills/%/${USER_SKILL_INDEX_FILENAME}`;
+      let result;
+      if (catalog) {
+        result = await supabase.rpc('list_workspace_skill_entries', {
+          p_user_id: userId,
+          p_manifest: likePattern !== 'skills/%/SKILL.md',
+        });
+      } else {
+        let query = supabase.from('workspace_files')
+          .select('path, content_type, size_bytes, storage_url, updated_at')
+          .or(`user_id.eq.${userId},user_id.is.null`);
+        if (likePattern) query = query.like('path', likePattern);
+        result = await query.order('path');
+      }
       if (result.error) throw result.error;
       data = result.data || [];
       break;
