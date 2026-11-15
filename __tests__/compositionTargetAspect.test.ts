@@ -11,6 +11,7 @@ import { validateDesign } from '@/lib/design-harness';
 import { normalizeCompositionAnimation } from '@/lib/composition-duration';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from '@/lib/media-markers';
 import { remotionFontWarningText } from '@/lib/remotion-font-diagnostics';
+import { isDirectRemotionCompositionSource } from '@/lib/remotion-code-normalization';
 
 // Run the actual tool factory and guard, isolating database writes and unrelated
 // provider SDKs. This exercises schema -> execution -> validation -> autosave.
@@ -26,22 +27,24 @@ const executable = ts.transpileModule(functions, {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText;
 
-function harness(dimensions = [[1280, 720], [1280, 720]]) {
+function harness(dimensions = [[1280, 720], [1280, 720]], files: Record<string, string> = {}) {
   const rows = dimensions.map(([width, height], i) => ({
     id: String(i), video_meta: { videoUrl: `https://media.test/${i}.mp4`, width, height },
   }));
   const query = { select: vi.fn(() => query), eq: vi.fn(() => query),
     then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: rows }).then(resolve) };
   const persist = vi.fn(async () => ({ success: true, path: 'test/drafts/current.json' }));
+  const readFile = vi.fn(async (path: string) => path in files ? { content: files[path] } : null);
+  const refresh = vi.fn();
   const ctx = { projectId: 'test', userId: 'test', supabase: { from: vi.fn(() => query) },
     snapshotImages: rows.map(r => r.video_meta.videoUrl), generatedImages: [] };
   const scope = vm.createContext({ z, Buffer, console: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
     tool: (value: unknown) => value, ctx, formatAspectRatio, validateDesign,
     require: createRequire(import.meta.url), sharp: {}, setTimeout, clearTimeout,
     mergePatchProps, validatePrimaryVideoFraming, normalizeCompositionAnimation, resolveMediaMarkersInString, resolveMediaMarkersInValue,
-    refreshSnapshotUrls: vi.fn(), getStudioRunCheckpoint: async () => null,
+    refreshSnapshotUrls: refresh, getStudioRunCheckpoint: async () => null,
     studioCompositionPromiseError: () => null, persistCompositionDraft: persist,
-    remotionFontWarningText,
+    remotionFontWarningText, isDirectRemotionCompositionSource, workspace: { readFile },
   });
   vm.runInContext(executable, scope);
   const tool = vm.runInContext('createRunCodeTool({ctx})', scope);
@@ -50,8 +53,66 @@ function harness(dimensions = [[1280, 720], [1280, 720]]) {
     composition: { width, height, code: 'function Composition(props) { return <AbsoluteFill><Video src={props.clip} style={{width:"100%",height:"100%",objectFit:"contain"}} muted /></AbsoluteFill>; }',
       props: { clip: rows[0].video_meta.videoUrl, sources: rows.map(row => row.video_meta.videoUrl) }, animation: { fps: 30, durationInSeconds: 3 } },
   });
-  return { tool, payload, persist };
+  return { tool, payload, persist, readFile, refresh, ctx };
 }
+
+describe('run_code executable source versus saved design', () => {
+  const path = 'test/drafts/saved.json';
+  const design = {
+    code: 'function Composition(props) { return <AbsoluteFill><div data-editable="title">{props.title}</div></AbsoluteFill>; }',
+    width: 1920, height: 1080, props: { title: 'Original', keep: 'Unchanged' },
+    animation: { fps: 30, durationInSeconds: 12 },
+    editables: [{ id: 'title', type: 'text', label: 'Title', propKey: 'title' }],
+  };
+
+  it.each(['composition', 'design', 'node'])('rejects JSON as executable %s source before setup or mutation', async runtime => {
+    const { tool, persist, readFile, refresh, ctx } = harness([], { [path]: JSON.stringify(design) });
+    const before = JSON.stringify(ctx);
+    // The inline JS is valid but the old implementation silently ran the JSON.
+    const code = `return {type:"patch",code_path:${JSON.stringify(path)},props:{title:"Updated"}};`;
+    const result = await tool.execute(tool.inputSchema.parse({ runtime, code, code_path: path }));
+    expect(result.content).toContain('top-level code_path points to saved composition JSON');
+    expect(result.content).toContain('omit top-level code_path');
+    expect(result.content).toContain('inside the returned patch object');
+    expect(result.content).not.toContain(path);
+    expect(readFile).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(persist).not.toHaveBeenCalled();
+    expect(JSON.stringify(ctx)).toBe(before);
+  });
+
+  it('accepts the corrected inline patch and preserves all saved design fields', async () => {
+    const { tool, persist } = harness([], { [path]: JSON.stringify(design) });
+    const result = await tool.execute(tool.inputSchema.parse({ runtime: 'composition',
+      code: `return {type:"patch",code_path:${JSON.stringify(path)},props:{title:"Updated"}};` }));
+    expect(result.content).toContain('Patched');
+    expect(persist).toHaveBeenCalledOnce();
+    expect(persist).toHaveBeenCalledWith(expect.objectContaining({
+      sourceDesignPath: path, design: { ...design, props: { ...design.props, title: 'Updated' } },
+    }));
+  });
+
+  it('preserves executable file precedence over inline JS, including a JS block', async () => {
+    const sourcePath = 'test/source.js';
+    const { tool, readFile, persist } = harness([], { [sourcePath]: '{return {type:"text",content:"Saved source"};}' });
+    const result = await tool.execute(tool.inputSchema.parse({ runtime: 'composition', code_path: sourcePath,
+      code: 'throw new Error("Inline code must not run");' }));
+    expect(result.content).toBe('Saved source');
+    expect(readFile).toHaveBeenCalledOnce();
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it('preserves natural Remotion modules supplied by code_path', async () => {
+    const sourcePath = 'test/source.tsx';
+    const { tool, persist } = harness([], { [sourcePath]: design.code });
+    const result = await tool.execute(tool.inputSchema.parse({ runtime: 'composition', code_path: sourcePath,
+      composition: { width: design.width, height: design.height, props: design.props, animation: design.animation } }));
+    expect(result.content).toContain('Composition ready');
+    expect(persist).toHaveBeenCalledWith(expect.objectContaining({ design: expect.objectContaining({
+      code: design.code, width: design.width, height: design.height, props: design.props,
+    }) }));
+  });
+});
 
 describe('requested composition canvas', () => {
   it('reproduces AFF rejection without a target, then autosaves the same 9:16 draft with an explicit target', async () => {

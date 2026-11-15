@@ -5035,7 +5035,7 @@ function createRunCodeTool(
       description: "Execute JavaScript. Before writing or executing code, read prompts/agent-coding.md once; it returns the full execution, persistence, runtime, and verification contracts. For editable Remotion also read prompts/remotion-composition.md and, for new or major visuals, skills/_shared/remotion-director-contract.md. For file-level MP4 work read skills/video-ffmpeg-lab/SKILL.md. Substantial code: write_code_file then run_code(code_path). Short patches/utilities may use inline code. Use composition for editable work (design is its legacy alias); node for file operations. Pass timeline indices in media_refs and workspace files in workspace_paths. Return one supported result object as documented by the coding guide. Do not fall back to node for imperfect editable previews; repair the saved composition.",
       inputSchema: z.object({
         code: z.string().optional().describe('JavaScript code to execute. Required for node, patch, image, and legacy calls. For a first Remotion draft prefer the direct composition input instead.'),
-        code_path: z.string().optional().describe('Workspace code file created by write_code_file. Preferred for substantial normal Agent Run coding; run_code reads and executes the saved source without repeating it in tool history.'),
+        code_path: z.string().optional().describe('Executable workspace JS/TS/JSX/TSX source created by write_code_file; replaces inline code when provided. Not a saved composition JSON. To patch a saved design, omit this top-level field and return {type:"patch",code_path:"saved-design.json",edits:[...]} from inline code.'),
         composition: z.object({
           code: z.string().min(1).optional().describe('Direct Remotion component source. Natural imports/exports are accepted. Omit when code_path supplies the source and this object only supplies metadata.'),
           width: z.number().int().positive(),
@@ -5101,6 +5101,18 @@ function createRunCodeTool(
           executableCode = file?.content || '';
           if (!executableCode.trim()) {
             return { type: 'text' as const, content: `Code file not found or empty: ${code_path}` };
+          }
+          // A patch result's code_path selects its saved JSON base; this top-level
+          // code_path selects executable source. Catch the mix-up before VM or
+          // media setup, without executing the inline code as an implicit fallback.
+          if (executableCode.trimStart().startsWith('{')) {
+            let savedDesign: unknown;
+            try { savedDesign = JSON.parse(executableCode); } catch { /* JavaScript source, not JSON. */ }
+            if (savedDesign && typeof savedDesign === 'object'
+              && 'code' in savedDesign && typeof savedDesign.code === 'string'
+              && 'width' in savedDesign && 'height' in savedDesign) {
+              return { type: 'text' as const, content: 'Invalid run_code input: top-level code_path points to saved composition JSON, not executable source. For a patch, omit top-level code_path and use inline code that returns {type:"patch",code_path:"<saved design path>",edits:[{old:"...",new:"..."}]}. Put the saved design path inside the returned patch object. To inspect JSON data, use read_file. No code was executed or design changed.' };
+            }
           }
           (ctx as any).__lastCodeFilePath = code_path;
         }
