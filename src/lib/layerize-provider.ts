@@ -1,5 +1,6 @@
 const DEFAULT_SCOPE = 'Separate the main subjects and objects into independently movable layers, with a separate background.';
-const APPEARANCE = 'Show each object as if photographed alone: reconstruct its entire outline, both sides and the full base behind overlaps. Keep its surface detail. Produce a clean background plate with the removed objects and their shadows erased. Keep each object’s original contact and cast shadows on the same transparent layer, fading beyond its outline, unless separate shadows are requested. Match the original when stacked.';
+const AUTOMATIC_CUTOUTS = 'Separate the main objects as if each had been photographed alone. Reconstruct the entire outline, both sides and the full base behind overlaps. Keep the printed artwork on its object. Give each cutout the real soft shadow it casts beyond its outline, fading into transparency. Produce a clean background plate with all removed objects and their shadows erased.';
+const APPEARANCE = 'Complete each object behind overlaps, preserving its shape and surface detail. Fill the exposed surfaces underneath so moving an object leaves no duplicate or silhouette. Keep its original contact and cast shadows on the same transparent layer, including their soft edges, unless separate shadows are requested. Match the original when stacked.';
 export const LAYERIZE_PROVIDER_MODEL = 'doubao-seedream-5.5-layerize';
 export const LAYERIZE_MODEL = 'seedream-5.5-layerize';
 export type LayerizeQuality = 'auto' | '1K' | '1.5K' | '2K';
@@ -20,7 +21,7 @@ export function layerizeRequest(input: LayerizeInput) {
   if (!Number.isSafeInteger(n) || n < 2 || n > 100) throw new Error('maxOutputs must be 2–100 including the background.');
   const quality = input.quality ?? '1K';
   if (!['auto', '1K', '1.5K', '2K'].includes(quality)) throw new Error('Layerize quality must be auto, 1K, 1.5K or 2K.');
-  const instructions = [input.prompt?.trim() || DEFAULT_SCOPE];
+  const instructions = [input.prompt?.trim() || (input.editableText ? DEFAULT_SCOPE : AUTOMATIC_CUTOUTS)];
   if (input.editableText) instructions.push('Separate the requested text for editing.');
   instructions.push(APPEARANCE);
   return { model: LAYERIZE_PROVIDER_MODEL, image_urls: [input.imageUrl], n, quality,

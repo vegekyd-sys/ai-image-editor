@@ -79,8 +79,8 @@ describe('Layerize paid request boundary', () => {
     const input = { imageUrl: 'https://example.com/a.png', prompt: 'Separate only the cup and its shadow.' };
     const request = layerizeRequest(input);
     expect(request.prompt.startsWith(`${input.prompt}\n`)).toBe(true);
-    expect(request.prompt).toContain('both sides and the full base behind overlaps');
-    expect(request.prompt).toContain('background plate with the removed objects and their shadows erased');
+    expect(request.prompt).toContain('Complete each object behind overlaps');
+    expect(request.prompt).toContain('no duplicate or silhouette');
     expect(request.prompt).toContain('original contact and cast shadows on the same transparent layer');
     expect(request.prompt).toContain('unless separate shadows are requested');
     expect(request.prompt).not.toContain('Separate the main subjects');
@@ -90,7 +90,9 @@ describe('Layerize paid request boundary', () => {
   });
   it('asks for separate text only when native text editing is requested', () => {
     const imageUrl = 'https://example.com/a.png';
-    expect(layerizeRequest({ imageUrl }).prompt).not.toMatch(/lettering|printed|text/i);
+    expect(layerizeRequest({ imageUrl }).prompt).toContain('Keep the printed artwork on its object');
+    expect(layerizeRequest({ imageUrl }).prompt).toContain('both sides and the full base behind overlaps');
+    expect(layerizeRequest({ imageUrl, editableText: true }).prompt).not.toContain('Keep the printed artwork');
     expect(layerizeRequest({ imageUrl, editableText: true }).prompt).toContain('text for editing');
   });
   it('sends exactly one input, explicit PNG/OCR, default 8 including base; rejects unsupported values before POST', () => {
