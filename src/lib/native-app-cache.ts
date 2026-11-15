@@ -36,6 +36,11 @@ function isFresh(entry: CacheEntry<unknown>, ttlMs: number): boolean {
   return Date.now() - entry.cachedAt <= ttlMs;
 }
 
+function isValidPayload(path: string, data: unknown): boolean {
+  if (path !== '/api/skills') return true;
+  return Boolean(data && typeof data === 'object' && 'skills' in data && Array.isArray(data.skills));
+}
+
 export function readNativeJSONCache<T>(path: string, ttlMs = DEFAULT_TTL_MS): T | null {
   const session = getStorage('session');
   const local = getStorage('local');
@@ -45,13 +50,13 @@ export function readNativeJSONCache<T>(path: string, ttlMs = DEFAULT_TTL_MS): T 
   try {
     const sessionEntry = parseCacheEntry<T>(session?.getItem(key) ?? null);
     if (sessionEntry) {
-      if (isFresh(sessionEntry, ttlMs)) return sessionEntry.data;
+      if (isFresh(sessionEntry, ttlMs) && isValidPayload(path, sessionEntry.data)) return sessionEntry.data;
       session?.removeItem(key);
     }
 
     const localEntry = parseCacheEntry<T>(local?.getItem(key) ?? null);
     if (localEntry) {
-      if (isFresh(localEntry, ttlMs)) {
+      if (isFresh(localEntry, ttlMs) && isValidPayload(path, localEntry.data)) {
         session?.setItem(key, JSON.stringify(localEntry));
         return localEntry.data;
       }
@@ -64,6 +69,9 @@ export function readNativeJSONCache<T>(path: string, ttlMs = DEFAULT_TTL_MS): T 
 }
 
 export function writeNativeJSONCache<T>(path: string, data: T): void {
+  // Skills callers can receive an API error body during a workspace outage.
+  // Preserve the last complete catalog instead of persisting that error body.
+  if (!isValidPayload(path, data)) return;
   const session = getStorage('session');
   const local = getStorage('local');
   if (!session && !local) return;
