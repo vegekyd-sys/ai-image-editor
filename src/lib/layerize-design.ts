@@ -69,20 +69,29 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
   const editables: EditableField[] = [];
   const elements: string[] = [];
   const sorted = [...manifest.layers].sort((a, b) => a.z - b.z);
+  const attachments: Record<string, string> = {};
   const order = manifest.stackOrder;
   if (order && (order[0] !== 0 || order.length !== sorted.length || new Set(order).size !== sorted.length || order.some(z => !sorted.some(layer => layer.z === z)))) throw new Error('Invalid layer stack inventory');
   for (const layer of order ? order.map(z => sorted.find(layer => layer.z === z)!) : sorted) {
+    const tag = /\s*\[on:\s*([^\]]+)\]\s*$/i.exec(layer.name);
+    const label = tag ? layer.name.slice(0, tag.index).trim() : layer.name;
+    const parents = tag ? sorted.filter(p => p.z !== 0 && p.z !== layer.z && p.name.trim() === tag[1].trim()) : [];
+    const parent = parents.length === 1 ? parents[0] : undefined;
+    const parentId = parent && (editableText && parent.text?.lines.length && !parent.text.preserveRaster
+      ? (parent.text.remainderUrl ? `layer_${parent.z}_artwork` : undefined) : `layer_${parent.z}`);
     if (editableText && layer.text?.lines.length && !layer.text.preserveRaster) {
       if (layer.text.remainderUrl) {
         const id = `layer_${layer.z}_artwork`; props[id] = layer.text.remainderUrl;
-        editables.push({ id, propKey: id, type: 'image', label: layer.name });
+        if (parentId) attachments[id] = parentId;
+        editables.push({ id, propKey: id, type: 'image', label });
         const [left, top, right, bottom] = layer.bounds;
         elements.push(`<Img data-editable=${JSON.stringify(id)} src={props.${id}} style={${JSON.stringify({ position: 'absolute', left, top, width: right-left, height: bottom-top, objectFit: 'fill' })}} />`);
       }
       for (const [index, line] of layer.text.lines.entries()) {
         const id = `layer_${layer.z}_text_${index}`, key = id;
         props[key] = line.text;
-        editables.push({ id, propKey: key, type: 'text', label: line.text || `${layer.name} ${index + 1}` });
+        if (parentId) attachments[id] = parentId;
+        editables.push({ id, propKey: key, type: 'text', label: line.text || `${label} ${index + 1}` });
         if (line.appearance) {
           const a = line.appearance, fit = a.fit;
           props[`${id}_source`] = a.rasterUrl;
@@ -107,12 +116,14 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
     }
     const id = `layer_${layer.z}`, key = id;
     props[key] = layer.url;
-    editables.push({ id, propKey: key, type: 'image', label: layer.name });
+    if (parentId) attachments[id] = parentId;
+    editables.push({ id, propKey: key, type: 'image', label });
     const [left, top, right, bottom] = layer.bounds;
     const style = { position: 'absolute', left, top, width: right - left, height: bottom - top, objectFit: 'fill' };
     elements.push(`<Img data-editable=${JSON.stringify(id)} src={props.${key}} style={${JSON.stringify(style)}} />`);
   }
   props._layerState = { order: editables.map(field => field.id), deleted: [] };
+  if (Object.keys(attachments).length) props._layerizeAttachments = attachments;
   props._canvasSizing = 'fixed';
   if (fontMatching) props._layerizeTextFonts = { ...fontMatching, status: 'pending', originals: Object.fromEntries(editables.filter(field => field.type === 'text').map(field => [field.id, props[field.propKey]])) };
   return {

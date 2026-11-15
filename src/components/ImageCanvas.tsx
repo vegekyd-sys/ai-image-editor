@@ -9,6 +9,7 @@ import AnnotationCanvas from '@/components/AnnotationCanvas';
 const DesignOverlay = dynamic(() => import('@/components/DesignOverlay'), { ssr: false });
 import TransparencyBackdrop from '@/components/TransparencyBackdrop';
 import CanvasPreviewBridge from '@/components/CanvasPreviewBridge';
+import { packageLayout } from '@/lib/editor/package-lettering';
 import { containRect } from '@/lib/image/geometry';
 import {
   detectImageTransparency,
@@ -240,6 +241,7 @@ export default function ImageCanvas({
   const activeDraftDesign = isDraft ? draftDesign : null;
   const timelineDesign = animatedDesigns?.get(currentIndex) || null;
   const currentDesign = activeDraftDesign || timelineDesign;
+  const printedLayout = useMemo(() => packageLayout(currentDesign ?? undefined), [currentDesign]);
   const designIdentity = useMemo(() => ({ index: currentIndex, snapshotId: designSnapshotId, code: currentDesign?.code }), [currentIndex, designSnapshotId, currentDesign?.code]);
   const [readyDesignIdentity, setReadyDesignIdentity] = useState<typeof designIdentity | null>(null);
 
@@ -1744,6 +1746,7 @@ export default function ImageCanvas({
             {/* Editable design overlay */}
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
               <DesignOverlay
+                printedLayout={printedLayout}
                 touchGestures={!isDesktop}
                 onGestureStart={claimEditableGesture}
                 containerEl={designContainerEl}

@@ -1,5 +1,6 @@
 import type { DesignPayload, EditableField } from '@/types';
-import { recordDesignEdit } from './design-edit-history';
+import { packageLayout, packagePeerTransforms } from './package-lettering';
+import { recordDesignEdit, recordDesignEditBatch } from './design-edit-history';
 import { readDesignLayerState } from './design-layer-state';
 
 /** Wire input contains identity only. Sources and prop keys always come from the owned design. */
@@ -36,7 +37,13 @@ export function applyElementEdit(design: DesignPayload, receipt: ElementEditRece
   const field = resolveElement(design, receipt.fieldId), op = receipt.operation;
   let props = design.props || {};
   const record = (key: string, value: unknown, kind: 'move' | 'scale' | 'text' | 'media') => {
-    props = recordDesignEdit(props, key, value, { kind, fieldId: field.id, label: field.label });
+    const meta = { kind, fieldId: field.id, label: field.label };
+    if (kind === 'move' || kind === 'scale') {
+      const peers = packagePeerTransforms(packageLayout(design), props, field.id,
+        kind === 'move' ? value as { x: number; y: number } : undefined,
+        kind === 'scale' ? value as { w: number; h: number } : undefined);
+      props = recordDesignEditBatch(props, { [key]: value, ...peers }, meta);
+    } else props = recordDesignEdit(props, key, value, meta);
   };
   if (op.kind === 'transform') {
     if (op.dx !== undefined || op.dy !== undefined) {

@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import Moveable from 'react-moveable';
+import { packagePeerTransforms, type PackageLayout } from '@/lib/editor/package-lettering';
 import type { EditableField } from '@/types';
 import {
   EDITABLE_POINTER_MOVE_THRESHOLD,
@@ -24,6 +25,7 @@ import EditableHoverTint from './EditableHoverTint';
 import { useEditableHover } from '@/lib/editor/use-editable-hover';
 
 interface DesignOverlayProps {
+  printedLayout?: PackageLayout;
   touchGestures?: boolean;
   onGestureStart?: () => void;
   containerEl: HTMLDivElement | null;
@@ -93,7 +95,8 @@ export default function DesignOverlay({
   selectedFieldId,
   onSelectField,
   onCanvasTap,
-  onUpdateProp,
+  onUpdateProp: commitProp,
+  printedLayout,
   onStartEdit,
   onVisibleFieldsChange,
   onRenderedOrderChange,
@@ -127,6 +130,26 @@ export default function DesignOverlay({
     return () => element.removeAttribute('data-editable-hover-outline');
   }, [showHover, hovered, hoverType]);
   const isMeasuringRef = useRef(false);
+
+  const peerChanges = useCallback((id: string, position?: {x: number; y: number}, scale?: {w: number; h: number}) =>
+    printedLayout?.owners.size ? packagePeerTransforms(printedLayout, props, id, position, scale) : {}, [printedLayout, props]);
+
+  const previewPeers = useCallback((id: string, position?: {x: number; y: number}, scale?: {w: number; h: number}) => {
+    for (const [key, value] of Object.entries(peerChanges(id, position, scale))) {
+      const peer = rectsRef.current.find(r => r.id === key.slice(key.indexOf('_', 1) + 1))?.domEl;
+      if (!peer) continue;
+      if ('x' in value) peer.style.translate = `${value.x}px ${value.y}px`;
+      else peer.style.scale = `${value.w} ${value.h}`;
+    }
+  }, [peerChanges]);
+
+  const onUpdateProp = useCallback<DesignOverlayProps['onUpdateProp']>((key, value, related) => {
+    if (!printedLayout?.owners.size || !/^_(?:scale|pos)_/.test(key)) return commitProp(key, value, related);
+    const id = key.slice(key.indexOf('_', 1) + 1);
+    const changes = { [key]: value, ...related };
+    const peers = peerChanges(id, changes['_pos_' + id] as {x: number; y: number}, changes['_scale_' + id] as {w: number; h: number});
+    commitProp(key, value, { ...related, ...peers });
+  }, [commitProp, peerChanges, printedLayout]);
 
   // Drag snapshots
   const pickEditable = useCallback((x: number, y: number) => pickPaintedEditable(rectsRef.current, x, y), []);
@@ -289,11 +312,12 @@ export default function DesignOverlay({
         { [`_pos_${gesture.fieldId}`]: gesture.position });
       else gesture.update(`_pos_${gesture.fieldId}`, gesture.position);
     } else {
+      previewPeers(gesture.fieldId, gesture.basePosition, gesture.baseScale);
       gesture.target.style.translate = gesture.originalTranslate;
       gesture.target.style.scale = gesture.originalScale;
     }
     requestAnimationFrame(() => { measure(); moveableRef.current?.updateRect(); });
-  }, [interactionEl, measure]);
+  }, [interactionEl, measure, previewPeers]);
 
   const finishMoveableGestureRef = useRef(finishMoveableGesture);
   finishMoveableGestureRef.current = finishMoveableGesture;
@@ -324,8 +348,7 @@ export default function DesignOverlay({
       window.removeEventListener('keydown', key, true);
       moveableRef.current?.stopDrag();
       const gesture = moveableGestureRef.current;
-      if (gesture) { gesture.target.style.translate = gesture.originalTranslate; gesture.target.style.scale = gesture.originalScale; }
-      moveableGestureRef.current = null;
+      if (gesture) finishMoveableGestureRef.current(false);
       isDraggingRef.current = false; setIsDragging(false);
       if (interactionEl) delete interactionEl.dataset.editableGesture;
     };
@@ -556,6 +579,7 @@ export default function DesignOverlay({
       if (!dragState) return;
       const dx = (clientX - dragState.startX) * dragState.sourcePerViewportPx;
       const dy = (clientY - dragState.startY) * dragState.sourcePerViewportPx;
+      previewPeers(dragState.fieldId, { x: dragState.baseX + dx, y: dragState.baseY + dy });
       dragState.target.style.translate = `${dragState.baseX + dx}px ${dragState.baseY + dy}px`;
     };
 
@@ -619,7 +643,7 @@ export default function DesignOverlay({
       if (interactionEl) delete interactionEl.dataset.editableGesture;
       if (dragRaf) cancelAnimationFrame(dragRaf);
     };
-  }, [containerEl, interactionEl, measure, onUpdateProp, props, touchGestures]);
+  }, [containerEl, interactionEl, measure, onUpdateProp, previewPeers, props, touchGestures]);
 
   // ── Container-level pinch-to-scale ──
   // Single implementation: works regardless of where fingers land.
@@ -661,6 +685,7 @@ export default function DesignOverlay({
       )?.domEl ?? null;
       if (el) {
         el.style.scale = `${+newW.toFixed(4)} ${+newH.toFixed(4)}`;
+        previewPeers(selectedFieldIdRef.current, undefined, { w: +newW.toFixed(4), h: +newH.toFixed(4) });
       }
 
       // Update Moveable frame to follow
@@ -696,7 +721,7 @@ export default function DesignOverlay({
       containerEl.removeEventListener('touchend', onTouchEnd);
       containerEl.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [containerEl, interactionEl, props, onUpdateProp]);
+  }, [containerEl, interactionEl, props, onUpdateProp, previewPeers]);
 
   const selectedRect = rects.find(r => r.id === selectedFieldId && r.domEl.isConnected);
 
@@ -795,6 +820,7 @@ export default function DesignOverlay({
               if (!gesture || gesture.kind !== 'drag' || target !== gesture.target) return;
               gesture.position = { x: gesture.basePosition.x + beforeTranslate[0] * gesture.baseScale.w,
                 y: gesture.basePosition.y + beforeTranslate[1] * gesture.baseScale.w };
+              previewPeers(gesture.fieldId, gesture.position);
               gesture.moved = beforeTranslate[0] !== 0 || beforeTranslate[1] !== 0;
               target.style.translate = `${gesture.position.x}px ${gesture.position.y}px`;
             }}
@@ -842,6 +868,7 @@ export default function DesignOverlay({
                 y: gesture.basePosition.y + (basis.a * dy - basis.b * dx) / determinant,
               } : gesture.basePosition;
               target.style.translate = `${gesture.position.x}px ${gesture.position.y}px`;
+              previewPeers(gesture.fieldId, gesture.position, gesture.scale);
               gesture.moved = gesture.scale.w !== gesture.baseScale.w || gesture.scale.h !== gesture.baseScale.h;
             }}
             onScaleEnd={() => { if (moveableGestureRef.current?.kind === 'scale') finishMoveableGesture(); }}
