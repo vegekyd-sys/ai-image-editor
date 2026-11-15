@@ -1,4 +1,3 @@
-import { LAYERIZE_TEXT_PROMPT } from './layerize-provider';
 import { estimateSeedream55Credits } from './models/seedream55';
 import { estimateGptImageCredits } from './models/gpt-image-quote';
 import { validatePrimaryVideoFraming } from './composition-video-framing';
@@ -1406,16 +1405,16 @@ function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = f
     ? z.object({ job_id: z.string().uuid().describe('The existing Layerize job ID. Query it instead of creating another paid task.') })
     : z.object({
       media_index: z.number().int().positive().describe('Image in the current Media Index to split into layers.'),
-      prompt: z.string().default(LAYERIZE_TEXT_PROMPT).describe('Elements/regions to separate. For a full decomposition include all visible headings and words, including words on objects, as isolated text layers. Preserve a narrower user scope.'),
+      prompt: z.string().optional().describe('Specific elements the user wants to separate. Omit for automatic decomposition.'),
       max_outputs: z.number().int().min(2).max(100).default(8).describe('Maximum output images INCLUDING the background; affects maximum funds required. Default 8.'),
       quality: z.enum(['auto', '1K', '1.5K', '2K']).default('1K').describe('Default 1K for faster layer decomposition. Quality applies to the entire task, not individual elements. Use auto, 1.5K or 2K only when the user requests source-resolution preservation or higher detail.'),
-      editable_text: z.boolean().default(false).describe('Keep lettering as an independently editable image layer by default. Set true when the user asks for a native text field; changed wording then uses an approximate pinned font.'),
+      editable_text: z.boolean().default(false).describe('Set true when the user asks for native editable text. Edited wording uses an approximate font.'),
       request_id: z.string().uuid().optional().describe('Reuse the original job ID after interruption; never make another provider submission to recover a result.'),
     });
   return tool({
     description: statusOnly
       ? 'Query/recover an existing image layer decomposition. Downloads/publishes the original task, never generates another image or charges twice.'
-      : 'Split an existing image into editable design layers using Seedream 5.5 Layerize. For 拆图/拆层/分离背景或元素, use this tool instead of generate_image or writing a new renderer. It preserves transparent PNGs, coordinates and ordering, then publishes ONE normal Makaron design using the existing GUI editor. Split visible headings and printed words into independently movable image layers that retain their original lettering. The App displays the result directly; external clients receive a Makaron edit URL. No additional run_code/publish_draft is required. Actual outputs are billed once; each layer and the background have a supplier fee. Never automatically repeat a failed or uncertain submission.',
+      : 'Split an existing image into editable design layers using Seedream 5.5 Layerize. For 拆图/拆层/分离背景或元素, use this tool instead of generate_image or writing a new renderer. It preserves transparent PNGs, coordinates and ordering, then publishes ONE normal Makaron design using the existing GUI editor. The App displays the result directly; external clients receive a Makaron edit URL. No additional run_code/publish_draft is required. Actual outputs are billed once; each layer and the background have a supplier fee. Never automatically repeat a failed or uncertain submission.',
     inputSchema: schema,
     execute: async (raw: any) => {
       if (!ctx.userId || !ctx.supabase) return { success: false, error: 'An authenticated project is required.' };
