@@ -1,3 +1,5 @@
+import { VideoTaskLookupUnavailable } from '../video-provider-error';
+
 export interface GetVideoStatusInput {
   taskId: string;
   userId?: string;
@@ -9,6 +11,7 @@ export interface GetVideoStatusResult {
   videoUrl?: string;
   error?: string;
   queryFailed?: boolean;
+  queryUnavailable?: boolean;
   baseVideoUrl?: string;
   stage?: string;
   requestedResolution?: '720p' | '1080p' | '2k' | '4k';
@@ -265,6 +268,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
       status: 'failed',
       message: `Failed to query video status: ${msg}`,
       queryFailed: true,
+      ...(e instanceof VideoTaskLookupUnavailable ? { queryUnavailable: true } : {}),
     };
   }
 }

@@ -1,0 +1,143 @@
+"""No healthy-loop model calls; launched execution is not a handler receipt."""
+import json
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+
+sys.path.insert(0, str(Path(__file__).parents[2] / 'scripts'))
+import makaron_event_bridge as bridge
+
+
+def healthy():
+    return [{'name': 'projects', 'ok': True}, {'name': 'media', 'ok': True},
+            {'name': 'search_logs', 'ok': True, 'mode': 'passive_real_requests'}]
+
+
+def error(rid, status=503):
+    return {'request_id': rid, 'http': status, 'at': 100, 'path': '/api/agent', 'fingerprint': 'one-error-family'}
+
+
+def test_healthy_rounds_and_recovery_never_create_model_batch():
+    state = {}
+    assert bridge.reconcile(state, healthy(), [], 100, 'thread') is None
+    assert bridge.reconcile(state, healthy(), [], 200, 'thread') is None
+    failed = [*healthy(), {'name': 'projects', 'ok': False, 'error': 'timeout'}]
+    b = bridge.reconcile(state, failed, [], 300, 'thread')
+    assert b['phase'] == 'pending'
+    b['phase'] = 'completed'
+    state['active_batch'] = None
+    assert bridge.reconcile(state, failed, [], 400, 'thread') is None
+    assert bridge.reconcile(state, healthy(), [], 500, 'thread') is None
+
+
+def test_two_distinct_search_errors_trigger_once_and_merge_new_evidence():
+    state = {}
+    assert bridge.reconcile(state, healthy(), [], 100, 'thread') is None
+    b = bridge.reconcile(state, healthy(), [error('r1'), error('r2')], 200, 'thread')
+    assert b['conditions'] == ['runtime:one-error-family']
+    bid = b['id']
+    b.update(phase='working', receipt_at=200)
+    same = bridge.reconcile(state, healthy(), [error('r1'), error('r2'), error('r3')], 300, 'thread')
+    assert same['id'] == bid and same['revision'] == 2
+    assert len(state['batches']) == 1
+
+
+
+def test_dispatch_launches_one_managed_worker_without_marking_received(tmp_path, monkeypatch):
+    state = {}
+    b = bridge.reconcile(state, [{'name': 'media', 'ok': False, 'error': 'timeout'}], [], 100, 'thread')
+    calls = []
+    def command(argv, *args):
+        calls.append(argv)
+        return {'returncode': 0, 'stdout': '', 'stderr': ''}
+    monkeypatch.setattr(bridge, 'bounded_command', command)
+    config = {'codex_cli': '/codex', 'thread_id': 'thread'}
+    bridge.enqueue(state, b, config, tmp_path)
+    bridge.enqueue(state, b, config, tmp_path)
+    assert len(calls) == 1 and calls[0][:2] == ['/bin/launchctl', 'submit']
+    assert '--dispatch-id' in calls[0] and 'queue' not in calls[0]
+    assert b['phase'] == 'dispatched' and not b['received'] and not b['completed']
+    assert b['dispatch_id'] in bridge.handler_message(b, tmp_path)
+
+
+def test_uncertain_enqueue_is_never_blindly_repeated(tmp_path, monkeypatch):
+    state = {}
+    b = bridge.reconcile(state, [{'name': 'media', 'ok': False, 'error': 'timeout'}], [], 100, 'thread')
+    calls = []
+    def command(*args):
+        calls.append(1)
+        return {'returncode': -1, 'error': 'deadline'}
+    monkeypatch.setattr(bridge, 'bounded_command', command)
+    bridge.enqueue(state, b, {'codex_cli': '/codex', 'thread_id': 'thread'}, tmp_path)
+    bridge.enqueue(state, b, {'codex_cli': '/codex', 'thread_id': 'thread'}, tmp_path)
+    assert len(calls) == 1 and b['phase'] == 'dispatch_failed'
+
+
+def test_dispatch_id_fences_duplicate_handlers_and_explicit_renewal(tmp_path):
+    state = {}
+    b = bridge.reconcile(state, [{'name': 'media', 'ok': False, 'error': 'timeout'}], [], 100, 'thread')
+    b['dispatch_id'] = 'one-attempt'
+    args = SimpleNamespace(command='claim', batch=b['id'], dispatch_id=None)
+    assert bridge.receipt(state, args, True)['reason'] == 'dispatch_id_required'
+    args.dispatch_id = 'one-attempt'
+    assert bridge.receipt(state, args, True)['accepted']
+    first = b['first_receipt_at']
+    assert bridge.receipt(state, args, True)['reason'] == 'already_claimed'
+    args.renew = True
+    assert bridge.receipt(state, args, True)['accepted']
+    assert b['first_receipt_at'] == first
+
+
+def test_claim_revision_fence_complete_and_late_message_noop(tmp_path):
+    state = {}
+    b = bridge.reconcile(state, [{'name': 'media', 'ok': False, 'error': 'timeout'}], [], 100, 'thread')
+    args = SimpleNamespace(command='claim', batch=b['id'])
+    assert bridge.receipt(state, args, False)['reason'] == 'disabled'
+    assert bridge.receipt(state, args, True)['accepted']
+    result = tmp_path / 'result.json'
+    result.write_text(json.dumps({'summary': 'reviewed', 'evidence': [], 'unresolved': ['root cause'],
+                                 'next_action': 'reproduce'}))
+    args = SimpleNamespace(command='complete', batch=b['id'], revision=0, result=result)
+    assert not bridge.receipt(state, args, True)['accepted']
+    args.revision = b['revision']
+    assert bridge.receipt(state, args, True)['accepted']
+    assert b['outcome']['unresolved'] == ['root cause']
+    assert bridge.receipt(state, args, True)['reason'] == 'completed'
+
+
+def test_missing_handler_receipt_does_not_mean_repaired():
+    state = {}
+    b = bridge.reconcile(state, [{'name': 'media', 'ok': False, 'error': 'timeout'}], [], 100, 'thread')
+    b.update(phase='queued', queued_at=100)
+    bridge.reconcile(state, healthy(), [], 281, 'thread')
+    assert b['phase'] == 'receipt_timeout'
+    assert not b['received'] and not b['completed']
+
+
+def test_selftest_cannot_swallow_real_incident(tmp_path):
+    state = {}
+    b = bridge.reconcile(state, [{'name': 'wake_selftest', 'ok': False, 'error': 'synthetic'}], [], 100, 'thread')
+    b.update(selftest=True, phase='working', receipt_at=100, received=True)
+    state['conditions'] = []
+    real = [{'name': 'media', 'ok': False, 'error': 'deadline_exceeded'}]
+    bridge.reconcile(state, real, [], 110, 'thread')
+    assert len(b['observations']) == 1
+    result = tmp_path / 'result.json'
+    result.write_text(json.dumps({'summary': 'selftest', 'evidence': [], 'unresolved': [], 'next_action': 'none'}))
+    args = SimpleNamespace(command='complete', batch=b['id'], revision=1, result=result)
+    assert bridge.receipt(state, args, True)['accepted']
+    assert state['active_batch'] != b['id']
+    pending = state['batches'][state['active_batch']]
+    assert pending['phase'] == 'pending' and pending['conditions'] == ['media:deadline_exceeded']
+
+
+def test_separate_selftest_receipt_never_clears_real_batch(tmp_path):
+    state = {'selftest_batch': 'test', 'batches': {'test': {'id': 'test', 'revision': 1,
+             'selftest': True, 'thread_id': 'thread'}}}
+    real = bridge.reconcile(state, [{'name': 'media', 'ok': False, 'error': 'timeout'}], [], 100, 'thread')
+    assert bridge.receipt(state, SimpleNamespace(command='claim', batch='test'), True)['accepted']
+    path = tmp_path / 'test.json'
+    path.write_text(json.dumps({'summary': 'test', 'evidence': [], 'unresolved': [], 'next_action': 'none'}))
+    args = SimpleNamespace(command='complete', batch='test', revision=1, result=path)
+    assert bridge.receipt(state, args, True)['accepted']
+    assert state['active_batch'] == real['id'] and not state.get('selftest_batch')

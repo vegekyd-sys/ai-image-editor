@@ -47,6 +47,10 @@ function createFakeSupabase() {
   return {
     rows,
     uploads,
+    rpc: async (name: string, args: { p_user_id: string; p_manifest: boolean }) => {
+      if (name !== 'list_workspace_skill_entries') throw new Error(`Unexpected RPC: ${name}`)
+      return workspaceQuery().like('path', args.p_manifest ? 'skills/%/.makaron-skill-index.json' : 'skills/%/SKILL.md').order()
+    },
     storage: {
       from: () => ({
         upload: async (storagePath: string, body: string | Buffer, options: { contentType?: string }) => {

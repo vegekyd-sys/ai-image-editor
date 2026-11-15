@@ -1,4 +1,4 @@
-import { VideoProviderRejection } from './video-provider-error'
+import { VideoProviderRejection, VideoTaskLookupUnavailable } from './video-provider-error'
 const MINIMAX_BASE_URL = process.env.MINIMAX_API_BASE || 'https://api.minimaxi.com'
 const MINIMAX_MODEL = 'MiniMax-H3'
 const TASK_PREFIX = 'minimax-h3-'
@@ -80,6 +80,9 @@ async function readJson(response: Response, submission = false): Promise<Record<
   }
   if (!response.ok) {
     const message = `MiniMax video API error ${response.status}: ${extractApiError(data, text.slice(0, 500) || response.statusText)}`
+    if (!submission && response.status === 400 && /\binvalid task_id\b/i.test(message)) {
+      throw new VideoTaskLookupUnavailable(message)
+    }
     if (submission && response.status >= 400 && response.status < 500 && response.status !== 408) throw new VideoProviderRejection(message)
     throw new Error(message)
   }
