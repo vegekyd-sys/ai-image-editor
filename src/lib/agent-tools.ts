@@ -1406,7 +1406,7 @@ function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = f
     : z.object({
       media_index: z.number().int().positive().describe('Image in the current Media Index to split into layers.'),
       prompt: z.string().optional().describe('A short scope based on the user’s request and the actual image. For automatic decomposition, use one short phrase per group, at most max_outputs minus one foreground groups. Prioritize main content and combine minor related details to fit this limit. Preserve complete objects with their printed lettering; keep standalone text and interface components separately movable.'),
-      max_outputs: z.number().int().min(2).max(100).default(8).describe('Maximum output images including the background. Omit unless the user requests a layer limit. Default 8.'),
+      max_outputs: z.number().int().min(2).max(100).default(8).describe('Maximum output images including one background. Default 8. For automatic decomposition, choose the smallest limit that fits the image-informed foreground groups plus the background. Respect an explicit user layer limit.'),
       quality: z.enum(['auto', '1K', '1.5K', '2K']).default('1K').describe('Default 1K for faster layer decomposition. Quality applies to the entire task, not individual elements. Use auto, 1.5K or 2K only when the user requests source-resolution preservation or higher detail.'),
       editable_text: z.boolean().default(false).describe('Set true when the user asks for native editable text. Edited wording uses an approximate font.'),
       request_id: z.string().uuid().optional().describe('Reuse the original job ID after interruption; never make another provider submission to recover a result.'),
