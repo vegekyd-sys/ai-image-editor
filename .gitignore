@@ -164,3 +164,12 @@ infra/
 !/scripts/tests/
 /scripts/tests/*
 !/scripts/tests/external-skill-sync.test.mjs
+!/scripts/monitor_makaron.py
+!/scripts/makaron_event_bridge.py
+!/scripts/makaron_event_worker.py
+!/scripts/makaron_desktop_ipc.py
+!/scripts/install-makaron-monitor.py
+!/scripts/tests/test_monitor_makaron.py
+!/scripts/tests/test_makaron_event_bridge.py
+!/scripts/tests/test_makaron_event_worker.py
+!/scripts/tests/test_makaron_desktop_ipc.py

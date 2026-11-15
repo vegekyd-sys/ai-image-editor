@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { after, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { streamTipsByCategory, ContentBlockedError, type UsageAccum } from '@/lib/gemini';
 import { getSkill } from '@/lib/workspace';
@@ -43,33 +43,41 @@ export async function POST(req: NextRequest) {
 
     const encoder = new TextEncoder();
     const usageAccum: UsageAccum = { inputTokens: 0, outputTokens: 0, model: '' };
+    let finishStream!: () => void;
+    const streamFinished = new Promise<void>(resolve => { finishStream = resolve; });
+    let billingWork: Promise<unknown> | undefined;
+    // Register while the request context is active. Keep settlement alive even
+    // after the response closes, without making the UI wait for a billing read.
+    after(async () => { await streamFinished; await billingWork; });
+    let cancelled = false;
 
     const stream = new ReadableStream({
       async start(controller) {
         try {
           for await (const tip of streamTipsByCategory(image, category, metadata, count, existingLabels, locale, skillContext, usageAccum)) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(tip)}\n\n`));
+            if (!cancelled) controller.enqueue(encoder.encode(`data: ${JSON.stringify(tip)}\n\n`));
           }
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+          if (!cancelled) controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
         } catch (err) {
           if (err instanceof ContentBlockedError) {
             console.warn('[tips] Content blocked, sending [BLOCKED] to client');
-            controller.enqueue(encoder.encode(`data: [BLOCKED]\n\n`));
+            if (!cancelled) controller.enqueue(encoder.encode(`data: [BLOCKED]\n\n`));
           } else {
             console.error('Tips stream error:', err);
           }
         } finally {
           // Deduct credits: token-based if usage available, else per-action
           if (usageAccum.inputTokens > 0 && usageAccum.model) {
-            deductByTokens(session.user.id, 'tips', usageAccum.model, usageAccum.inputTokens, usageAccum.outputTokens)
+            billingWork = deductByTokens(session.user.id, 'tips', usageAccum.model, usageAccum.inputTokens, usageAccum.outputTokens)
               .catch(e => console.error('[billing] tips deduct error:', e));
           } else {
-            deductCredits(session.user.id, null, 'tips')
+            billingWork = deductCredits(session.user.id, null, 'tips')
               .catch(e => console.error('[billing] tips deduct error:', e));
           }
-          controller.close();
+          try { if (!cancelled) controller.close(); } finally { finishStream(); }
         }
       },
+      cancel() { cancelled = true; },
     });
 
     return new Response(stream, {
