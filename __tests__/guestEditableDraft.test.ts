@@ -27,6 +27,11 @@ describe('guest Editable drafts', () => {
     expect(seekDesignEditHistory(props, 0).title).toBe('Source');
     expect(JSON.stringify(design)).toBe(source);
   });
+  it('does not carry another project draft into a new project', () => {
+    const first = updateGuestEditableDraft('first', null, 'a', design);
+    const second = updateGuestEditableDraft('second', first, 'b', design);
+    expect(Object.keys(second.designs)).toEqual(['b']);
+  });
   it('waits for source hydration and refuses a changed source composition', () => {
     const draft = updateGuestEditableDraft('public', null, 'a', { ...design, props: { title: 'Guest' } });
     const noDesign = { ...snapshot('a'), design: undefined };

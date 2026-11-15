@@ -310,7 +310,7 @@ export default function ProjectEditorContainer({
   }, [projectId])
   // Even the author returning from login must explicitly save the guest work
   // as a copy. Loading a local draft never grants writes to the source.
-  const readOnly = !isOwner || Boolean(guestDraft)
+  const readOnly = !isOwner || (isPublicProject === true && Boolean(guestDraft))
   const allowLocalEditing = isPublicProject === true && readOnly
   const editableSnapshots = useMemo(() => applyGuestEditableDraft(initialSnapshots ?? [], allowLocalEditing ? guestDraft : null), [initialSnapshots, guestDraft, allowLocalEditing])
   const saveGuestDesign = useCallback(async (snapshotId: string, design: DesignPayload) => {

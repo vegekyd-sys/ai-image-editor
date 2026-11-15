@@ -41,6 +41,13 @@ describe('visitor and owner persistence boundaries', () => {
     await waitFor(() => expect(state.lastProps?.initialSnapshots[0]?.design?.props?.title).toBe('Guest'));
     expect(state.lastProps.readOnly).toBe(true); expect(state.lastProps.onSaveDesignProps).not.toBe(state.saveOriginal);
   });
+  it('allows the private project owner even when a former public draft remains', async () => {
+    state.user = { id: 'author' }; state.isPublic = false;
+    state.draft = { version: 1, projectId: 'public', cachedAt: Date.now(), designs: { snap: design } };
+    render(<ProjectEditorContainer projectId="public" />);
+    await waitFor(() => expect(state.lastProps?.readOnly).toBe(false));
+    expect(state.lastProps.onSaveDesignProps).toBe(state.saveOriginal);
+  });
   it('does not render a private project for visitors', async () => {
     state.isPublic = false; render(<ProjectEditorContainer projectId="private" />);
     await waitFor(() => expect(state.router.replace).toHaveBeenCalledWith('/login'));

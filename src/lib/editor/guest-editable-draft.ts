@@ -8,10 +8,11 @@ export interface GuestEditableDraft {
 }
 
 export function updateGuestEditableDraft(projectId: string, draft: GuestEditableDraft | null, snapshotId: string, design: DesignPayload): GuestEditableDraft {
+  const current = draft?.projectId === projectId ? draft : null;
   return {
     version: 1, projectId,
     cachedAt: Date.now(),
-    designs: { ...draft?.designs, [snapshotId]: design },
+    designs: { ...current?.designs, [snapshotId]: design },
   };
 }
 
