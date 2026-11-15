@@ -61,10 +61,10 @@ export async function POST(req: NextRequest) {
         } finally {
           // Deduct credits: token-based if usage available, else per-action
           if (usageAccum.inputTokens > 0 && usageAccum.model) {
-            deductByTokens(session.user.id, 'tips', usageAccum.model, usageAccum.inputTokens, usageAccum.outputTokens)
+            await deductByTokens(session.user.id, 'tips', usageAccum.model, usageAccum.inputTokens, usageAccum.outputTokens)
               .catch(e => console.error('[billing] tips deduct error:', e));
           } else {
-            deductCredits(session.user.id, null, 'tips')
+            await deductCredits(session.user.id, null, 'tips')
               .catch(e => console.error('[billing] tips deduct error:', e));
           }
           controller.close();

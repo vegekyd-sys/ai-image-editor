@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { PricingUnavailableError } from './media-pricing'
+import { isTransientStorageError } from '@/lib/idempotent-storage-retry'
 
 export interface TokenRate {
   model_id: string
@@ -26,16 +27,38 @@ const CREDIT_VALUE = 0.01
 
 // Authoritative DB prices; no implicit per-model or generic fallback.
 
+export class TokenPricingReadError extends PricingUnavailableError {
+  readonly code: string
+  constructor(error: unknown, readonly attempts: number) {
+    super('Token pricing unavailable. Please retry.')
+    // Keep a diagnostic code, never raw database details or connection URLs.
+    const code = (error as { code?: unknown } | null)?.code
+    this.code = typeof code === 'string' && /^[A-Z0-9_]{1,32}$/i.test(code) ? code : 'TOKEN_PRICING_READ_FAILED'
+  }
+}
+
 export async function getAllTokenRates(): Promise<TokenRate[]> {
   const admin = getSupabaseAdmin()
-  const { data, error } = await admin
-    .from('token_rates')
-    .select('*')
-    .eq('is_active', true)
-    .order('model_id')
-  if (error) throw new PricingUnavailableError('Token pricing unavailable. Please retry.')
-  const dbRates = (data ?? []) as TokenRate[]
-  return dbRates
+  for (let attempt = 0; ; attempt++) {
+    let failure: unknown
+    try {
+      const { data, error } = await admin
+        .from('token_rates')
+        .select('*')
+        .eq('is_active', true)
+        .order('model_id')
+      if (!error) return (data ?? []) as TokenRate[]
+      failure = error
+    } catch (error) {
+      failure = error
+    }
+    const code = (failure as { code?: string } | null)?.code
+    const transient = ['57014', '40001', '40P01', '55P03'].includes(code ?? '')
+      || (!['42501', '42P01', '42703', 'PGRST301'].includes(code ?? '') && isTransientStorageError(failure))
+    if (attempt || !transient) throw new TokenPricingReadError(failure, attempt + 1)
+    // Only the read is retried. Never retry a debit or use a stale/guessed price.
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
 }
 
 /**
