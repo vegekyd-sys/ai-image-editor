@@ -145,7 +145,12 @@ export async function POST(
       .eq('id', id)
       .eq('user_id', userId)
       .maybeSingle()
-    if (projectError) return NextResponse.json({ error: projectError.message }, { status: 500 })
+    if (projectError) {
+      const invalidProjectId = projectError.code === '22P02'
+      return NextResponse.json({ error: invalidProjectId ? 'Invalid project ID' : projectError.message }, {
+        status: invalidProjectId ? 400 : 500,
+      })
+    }
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
     const body = await req.json() as Record<string, unknown>
