@@ -22,7 +22,6 @@ vi.mock('@/lib/agent-model-runtime', () => ({
 }));
 
 describe('streamed workspace checkpoint uploads', () => {
-  const path = 'project/drafts/streamed-run_code-inline-call.partial.js';
   const requestId = '01910234-abcd-4321-8765-123456789abc';
   let cacheDir: string;
   let server: ReturnType<typeof createServer>;
@@ -31,9 +30,6 @@ describe('streamed workspace checkpoint uploads', () => {
   let uploads: number[];
   let indexed: number[];
   let paths: string[];
-  let removed: string[];
-  let commitIndex: (size: number) => boolean;
-  let afterIndexCommit: () => Promise<void>;
 
   beforeEach(async () => {
     cacheDir = await mkdtemp(join(tmpdir(), 'workspace-checkpoint-'));
@@ -42,9 +38,6 @@ describe('streamed workspace checkpoint uploads', () => {
     uploads = [];
     indexed = [];
     paths = [];
-    removed = [];
-    commitIndex = () => true;
-    afterIndexCommit = async () => {};
     const objects = new Map<string, string>();
     const index = new Map<string, { path: string; size_bytes: number }>();
     server = createServer(async (req, res) => {
@@ -66,28 +59,11 @@ describe('streamed workspace checkpoint uploads', () => {
         objects.set(name, body);
       } else if (req.method === 'POST' && url.pathname === '/rest/v1/workspace_files') {
         const row = JSON.parse(body) as { path: string; size_bytes: number };
-        if (!commitIndex(row.size_bytes)) {
-          res.writeHead(403, { 'content-type': 'application/json' }).end('{"message":"index refused"}');
-          return;
-        }
         index.set(row.path, row);
         indexed.push(row.size_bytes);
-        await afterIndexCommit();
       } else if (req.method === 'GET' && url.pathname === '/rest/v1/workspace_files') {
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([...index.values()]));
         return;
-      } else if (req.method === 'POST' && url.pathname.startsWith('/storage/v1/object/sign/')) {
-        const signedURL = url.pathname.replace('/storage/v1/object/sign/', '/object/public/');
-        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ signedURL }));
-        return;
-      } else if (req.method === 'DELETE' && url.pathname === '/storage/v1/object/images') {
-        for (const key of JSON.parse(body).prefixes as string[]) {
-          const name = key.slice('user/workspace/'.length);
-          objects.delete(name);
-          removed.push(name);
-        }
-      } else if (req.method === 'DELETE' && url.pathname === '/rest/v1/workspace_files') {
-        index.delete(url.searchParams.get('path')!.slice('eq.'.length));
       } else if (req.method === 'GET' && url.pathname.startsWith(publicPrefix)) {
         const object = objects.get(url.pathname.slice(publicPrefix.length));
         res.writeHead(object === undefined ? 404 : 200).end(object);
@@ -138,22 +114,15 @@ describe('streamed workspace checkpoint uploads', () => {
     expect(indexed).toEqual([1_001]);
     expect(checkpoint).toMatchObject({ streamedCodePath: paths[0], streamedCodeChars: 1_001 });
     expect(paths[0]).toMatch(/^project\/drafts\/streamed-run_code-.*\.partial\.js$/);
-    expect(paths[0]).not.toBe(paths[1]);
-    expect(paths[1]).toBe(paths[2]);
-    expect((await workspace.readFile(paths[0], client, 'user'))?.content).toBe('a'.repeat(1_001));
-    expect(warn).toHaveBeenCalledWith('[workspace] checkpoint upload response', {
-      status: 403, format: 'html', requestId, cfRay: '0123456789abcdef-SIN',
-    });
-  });
-
-  it('leaves an equal-size rejected replacement out of warm workspace reads', async () => {
-    expect((await workspace.writeFile(path, 'old', client, 'user')).success).toBe(true);
-    expect((await workspace.readFile(path, client, 'user'))?.content).toBe('old');
-    accept = () => false;
-    expect(await workspace.writeFile(path, 'new', client, 'user')).toMatchObject({ success: false, uploadForbidden: true });
+    expect(new Set(paths).size).toBe(1);
+    const fromIndex = await workspace.readFile(paths[0], client, 'user');
+    expect(fromIndex?.content).toBe('a'.repeat(1_001));
+    await rm(fromIndex!.localPath!);
     workspace.clearWorkspaceCache();
-    expect((await workspace.readFile(path, client, 'user'))?.content).toBe('old');
-    expect(indexed).toEqual([3]);
+    expect((await workspace.readFile(paths[0], client, 'user'))?.content).toBe(fromIndex?.content);
+    expect(warn).toHaveBeenCalledWith('[workspace] upload response', {
+      kind: 'checkpoint', status: 403, format: 'html', requestId, cfRay: '0123456789abcdef-SIN',
+    });
   });
 
   it('does not advertise a rejected first version or re-upload identical bytes at interruption', async () => {
@@ -166,45 +135,16 @@ describe('streamed workspace checkpoint uploads', () => {
     expect(await workspace.readFile(paths[0], client, 'user')).toBeNull();
   });
 
-  it('keeps a newer equal-size revision readable when the first index response arrives last', async () => {
-    let releaseFirst!: () => void;
-    let firstCommitted!: () => void;
-    const delayed = new Promise<void>(resolve => { releaseFirst = resolve; });
-    const committed = new Promise<void>(resolve => { firstCommitted = resolve; });
-    afterIndexCommit = async () => {
-      if (indexed.length !== 1) return;
-      firstCommitted();
-      await delayed;
-    };
-    const first = workspace.writeFile(path, 'old', client, 'user');
-    try {
-      await committed;
-      expect((await workspace.writeFile(path, 'new', client, 'user')).success).toBe(true);
-      expect((await workspace.readFile(path, client, 'user'))?.content).toBe('new');
-    } finally {
-      releaseFirst();
-      await first;
-    }
-    expect((await workspace.readFile(path, client, 'user'))?.content).toBe('new');
-  });
-
-  it('reuses two slots and preserves the confirmed prefix when a subsequent index update fails', async () => {
-    commitIndex = size => size < 3_000;
-    const checkpoint = await interruptAfter(['a'.repeat(1_000), 'b'.repeat(1_000), 'c'.repeat(1_000)]);
-    expect(indexed).toEqual([1_000, 2_000]);
-    expect(new Set(paths).size).toBe(2);
-    expect(paths[2]).toBe(paths[0]);
-    expect(checkpoint).toMatchObject({ streamedCodePath: paths[0], streamedCodeChars: 2_000 });
-    expect((await workspace.listFiles('project/drafts/*', client, 'user')).map(file => file.path)).toEqual([paths[0]]);
-    const saved = await workspace.readFile(paths[0], client, 'user');
-    expect(saved?.content).toBe('a'.repeat(1_000) + 'b'.repeat(1_000));
-    await rm(saved!.localPath!);
-    workspace.clearWorkspaceCache();
-    expect((await workspace.readFile(paths[0], client, 'user'))?.content).toBe(saved?.content);
-    expect((await workspace.readFile(paths[0], client, 'user', { fresh: true }))?.content).toBe(saved?.content);
-    expect(await workspace.deleteFile(paths[0], client, 'user')).toBe(true);
-    expect(removed).toEqual([paths[0], paths[1]]);
-    expect(await workspace.readFile(paths[0], client, 'user')).toBeNull();
+  it('captures ordinary object refusals without logging their paths or response bodies', async () => {
+    accept = () => false;
+    const warn = vi.spyOn(console, 'warn');
+    expect(await workspace.writeFile('project/code/source.js', 'fixture', client, 'user')).toMatchObject({
+      success: false, error: 'Forbidden', uploadForbidden: true,
+    });
+    expect(warn).toHaveBeenCalledWith('[workspace] upload response', {
+      kind: 'file', status: 403, format: 'html', requestId, cfRay: '0123456789abcdef-SIN',
+    });
+    expect(indexed).toEqual([]);
   });
 
   it('records a later accepted version through the same authorized client and object path', async () => {

@@ -829,8 +829,7 @@ export async function* runMakaronAgent(
     let codeExtractor: {
       toolName: 'run_code' | 'write_code_file' | 'write_file';
       valueKey: 'code' | 'content';
-      checkpointId: string;
-      useSpareCheckpoint: boolean;
+      toolCallId: string;
       targetPath?: string;
       buffer: string;
       state: 'waiting' | 'in_code' | 'done';
@@ -845,23 +844,20 @@ export async function* runMakaronAgent(
       if (!codeExtractor || !ctx.supabase || !ctx.userId) return;
       const newChars = codeExtractor.decoded.length - codeExtractor.checkpointCursor;
       if (newChars <= 0 || (!force && newChars < 1_000)) return;
-      const targetSlug = (codeExtractor.targetPath?.split('/').at(-1) || 'inline')
+      const targetSlug = `${codeExtractor.targetPath?.split('/').at(-1) || 'inline'}-${codeExtractor.toolCallId}`
         .replace(/[^a-zA-Z0-9.-]+/g, '-')
-        .slice(0, 40);
-      // Keep the last committed object readable if the next upload succeeds but
-      // its index write fails. Both physical slots share one logical draft path.
-      const partialPath = `${ctx.projectId}/drafts/streamed-${codeExtractor.toolName}-${targetSlug}-checkpoint-${codeExtractor.checkpointId}.partial.js`;
-      const saved = await workspace.writeStreamedCheckpoint(
+        .slice(0, 80);
+      const partialPath = `${ctx.projectId}/drafts/streamed-${codeExtractor.toolName}-${targetSlug}.partial.js`;
+      const saved = await workspace.writeFile(
         partialPath,
         codeExtractor.decoded,
         ctx.supabase,
         ctx.userId,
-        codeExtractor.useSpareCheckpoint,
+        'text/javascript',
       );
-      // A refusal consumes this upload interval. Only committed bytes become a recovery pointer.
+      // A refusal consumes this upload interval but does not advance the durable pointer.
       if (saved.success || saved.uploadForbidden) codeExtractor.checkpointCursor = codeExtractor.decoded.length;
       if (saved.success) {
-        codeExtractor.useSpareCheckpoint = !codeExtractor.useSpareCheckpoint;
         (ctx as any).__streamedCodeCheckpoint = {
           streamedCodePath: partialPath,
           streamedCodeChars: codeExtractor.decoded.length,
@@ -991,8 +987,7 @@ export async function* runMakaronAgent(
           codeExtractor = {
             toolName,
             valueKey: toolName === 'run_code' ? 'code' : 'content',
-            checkpointId: crypto.randomUUID(),
-            useSpareCheckpoint: false,
+            toolCallId: String((event as any).toolCallId || crypto.randomUUID()),
             buffer: '',
             state: 'waiting',
             decoded: '',
