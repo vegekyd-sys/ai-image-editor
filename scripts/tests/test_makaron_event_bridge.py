@@ -177,3 +177,23 @@ def test_reinstall_retires_only_completed_legacy_labels(monkeypatch):
     installer.retire_legacy_handlers(state, 'gui/123')
     assert calls == [['/bin/launchctl', cmd, 'gui/123/com.tianyi.makaron-handler.old'] for cmd in ['bootout', 'print']]
     assert all('completed' in b for b in state['batches'].values())
+
+
+def test_owner_idle_timeout_starts_after_acquiring_slot():
+    b = dict(phase='waiting_for_chat_idle', selftest=True, dispatched_at=100, phase_started_at=250)
+    bridge.update_timeout(b, 710)
+    assert b['phase'] == 'waiting_for_chat_idle'
+    bridge.update_timeout(b, 851)
+    assert b['phase'] == 'receipt_timeout'
+
+
+def test_reinstall_defers_while_legacy_worker_finishes(tmp_path):
+    import fcntl
+    import runpy
+    import pytest
+    ensure_idle = runpy.run_path(str(Path(bridge.__file__).with_name('install-makaron-monitor.py')))['ensure_handler_idle']
+    with (tmp_path / 'handler.lock').open('a') as gate:
+        fcntl.flock(gate, fcntl.LOCK_EX)
+        with pytest.raises(SystemExit, match='still finishing'):
+            ensure_idle(tmp_path)
+    ensure_idle(tmp_path)

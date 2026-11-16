@@ -187,7 +187,7 @@ def run(directory, bid, token):
 
     # Reserve this dispatch *before* contending with unrelated jobs for the slot.
     batch = edit_batch(directory, bid, token, lambda _, b: b.update(
-        phase='waiting_for_slot', worker=dict(facts)), when=unstarted)
+        phase='waiting_for_slot', phase_started_at=time.time(), worker=dict(facts)), when=unstarted)
     if not batch:
         return 0
 
@@ -200,7 +200,7 @@ def run(directory, bid, token):
 
     def progress(phase, metadata):
         def change(_, current):
-            current.update(phase=phase, worker=dict(metadata))
+            current.update(phase=phase, phase_started_at=time.time(), worker=dict(metadata))
             if phase == 'executing':
                 current['model_requested_at'] = time.time()
         if not edit_batch(directory, bid, token, change,
@@ -254,9 +254,14 @@ def run(directory, bid, token):
                         return 2
                     time.sleep(0.5)
             progress('executing', facts)
-            process = subprocess.Popen(command(config, directory), stdin=subprocess.PIPE,
-                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                       cwd=config['handler_cwd'])
+            try:
+                process = subprocess.Popen(command(config, directory), stdin=subprocess.PIPE,
+                                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           cwd=config['handler_cwd'])
+            except OSError:
+                # Popen failed before a child could receive the prompt on stdin.
+                facts['cli_not_started'] = True
+                raise
             facts['cli_pid'] = process.pid
             edit_batch(directory, bid, token, lambda _, b: b.update(worker=dict(facts)))
             readers = [threading.Thread(target=observe_events,
@@ -291,7 +296,9 @@ def run(directory, bid, token):
                 facts['cli_exit_code'] = exit_code
             def finish(_, batch):
                 batch['worker'] = dict(facts)
-                if not handed_off and not batch.get('completed') and not batch.get('received'):
+                if facts.get('cli_not_started') and not batch.get('received') and not batch.get('completed'):
+                    batch.pop('model_requested_at', None)
+                if not handed_off and not batch.get('completed') and (process is not None or not batch.get('received')):
                     batch.update(phase='handler_failed', handler_error='exec_did_not_complete_receipt')
                 if batch.get('selftest'):
                     passed = bool(batch.get('received') and batch.get('completed')

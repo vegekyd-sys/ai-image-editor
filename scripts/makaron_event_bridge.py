@@ -38,7 +38,11 @@ def update_timeout(batch, now):
         return
     if batch['phase'] in {'queued', 'dispatched', 'dispatch_uncertain', 'starting', 'executing', 'waiting_for_slot', 'waiting_for_chat_idle'} and not batch.get('received'):
         requested = batch.get('model_requested_at', batch.get('dispatched_at', batch.get('queued_at', now)))
-        timeout = (600 if batch.get('selftest') else 3600) if batch['phase'] == 'waiting_for_chat_idle' else 180
+        timeout = 180
+        if batch['phase'] in {'waiting_for_slot', 'waiting_for_chat_idle'}:
+            requested = batch.get('phase_started_at', requested)
+            if batch['phase'] == 'waiting_for_chat_idle':
+                timeout = 600 if batch.get('selftest') else 3600
         if now - requested > timeout:
             batch['phase'] = 'receipt_timeout'
     elif batch['phase'] == 'working' and now - batch['receipt_at'] > 3600:
@@ -153,7 +157,11 @@ def retry_dispatch(state, args, config, directory):
     if (batch.get('received') or batch.get('completed') or 'model_requested_at' in batch
             or batch['phase'] not in {'dispatch_failed', 'handler_failed', 'receipt_timeout', 'dispatch_uncertain'}):
         return {'accepted': False, 'reason': 'not_retryable'}
-    fields = ['dispatch_id', 'dispatched_at', 'handler_label', 'dispatch_result', 'phase', 'worker', 'handler_error']
+    if batch.get('selftest'):
+        acceptance = directory / ('wake-acceptance-' + batch['id'] + '.json')
+        if acceptance.exists():
+            acceptance.rename(acceptance.with_name(acceptance.stem + '-' + args.dispatch_id + '.json'))
+    fields = ['phase_started_at', 'dispatch_id', 'dispatched_at', 'handler_label', 'dispatch_result', 'phase', 'worker', 'handler_error']
     batch.setdefault('previous_dispatches', []).append({k: batch.pop(k) for k in fields if k in batch})
     batch['phase'] = 'pending'
     enqueue(state, batch, config, directory)

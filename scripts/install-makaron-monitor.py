@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install the local event detector paused; enable after checking its baseline."""
 import argparse
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,16 @@ import time
 
 from makaron_event_bridge import lock
 from monitor_makaron import write_private
+
+
+def ensure_handler_idle(directory):
+    # The legacy worker holds this lock through child exit and its last receipt
+    # evidence write. Only probe it; release the state lock on a busy install.
+    with (directory / 'handler.lock').open('a') as gate:
+        try:
+            fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit('Handler is still finishing; retry installation after it exits')
 
 
 def retire_legacy_handlers(state, domain):
@@ -51,6 +62,7 @@ def main():
         state = json.loads(state_path.read_text()) if state_path.exists() else {'installed_at': time.time()}
         if state.get('active_batch') or state.get('selftest_batch'):
             raise SystemExit('Finish the active batch before reinstalling')
+        ensure_handler_idle(directory)
         state['enabled'] = False
         write_private(state_path, state)
         domain = 'gui/' + str(os.getuid())

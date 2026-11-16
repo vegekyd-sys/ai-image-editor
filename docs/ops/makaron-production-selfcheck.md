@@ -16,7 +16,7 @@
 
 每次派发使用独立 dispatch ID 和一次性 launchd 作业（RunAtLoad、LaunchOnlyOnce）。worker 在争用执行锁前登记该次尝试，提交桌面 IPC 或 CLI 前在状态锁内复核当前批次并记录 model_requested_at。桌面 owner 收到启动请求后接管回合；真实批次的 worker 退出，演练的 worker 释放执行锁后等完成回执。领取与完成以原聊天的 claim、complete 为准。迟到回执仍可完成当前尝试，revision 变化时先复核新证据。
 
-若启动失败，或等待超时且状态中尚无 model_requested_at，可对当前一次性作业显式执行 `retry-dispatch --batch BATCH --dispatch-id CURRENT_ID`。旧尝试保存在 previous_dispatches，新 ID 生效后旧 worker 和旧回执自动失效。已尝试提交模型、已领取、已完成或旧版批次均拒绝此操作。IPC 回复丢失时等待同一 ID 的回执。
+若启动失败，或等待超时且状态中尚无 model_requested_at，可对当前一次性作业显式执行 `retry-dispatch --batch BATCH --dispatch-id CURRENT_ID`。旧尝试保存在 previous_dispatches，新 ID 生效后旧 worker 和旧回执自动失效。CLI 启动被操作系统明确拒绝时可重派；已可能送达模型、已领取、已完成或旧版批次均拒绝此操作。IPC 回复丢失时等待同一 ID 的回执。
 
 每次收到真实新异常，先复核线上证据并检查现有 PR；需要修复时从最新 dev 创建 managed worktree，完成相称验证，开 base=dev 的 PR 交用户验收。此机制不自动合入、不部署、不改生产数据/共享配置、不执行收费生成、也不操作 Scene、V 或夜班。
 
@@ -26,7 +26,7 @@
 
 `bridge-config.json`（0600）包含 base_url、Vercel 项目 ID、现有 vercel_cli/codex_cli 的绝对路径、原聊天 thread_id 和稳定 handler_cwd；不存账号密钥。Vercel 使用既有 CLI 登录态。
 
-先运行 `scripts/install-makaron-monitor.py --thread THREAD --cwd CANONICAL_CHECKOUT --codex EXISTING_CLI`；安装默认暂停，在状态锁内保留既有记录并拒绝覆盖其他聊天或未完成批次。升级时仅卸载本监控已完成批次按旧格式注册的 keepalive handler，保留原 phase、回执、结果与指纹历史。核对基线及已知 PR 后执行 bridge 的 enable。无需创建周期模型 automation。
+先运行 `scripts/install-makaron-monitor.py --thread THREAD --cwd CANONICAL_CHECKOUT --codex EXISTING_CLI`；安装默认暂停，在状态锁内保留既有记录并拒绝覆盖其他聊天或未完成批次。旧 worker 尚在收尾时推迟安装。升级时仅卸载本监控已完成批次按旧格式注册的 keepalive handler，保留原 phase、回执、结果与指纹历史。核对基线及已知 PR 后执行 bridge 的 enable。无需创建周期模型 automation。
 
 ```sh
 /usr/bin/python3 ~/.codex/monitors/makaron-production/makaron_event_bridge.py --directory ~/.codex/monitors/makaron-production status

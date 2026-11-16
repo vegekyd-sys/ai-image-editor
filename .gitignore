@@ -173,3 +173,4 @@ infra/
 !/scripts/tests/test_makaron_event_bridge.py
 !/scripts/tests/test_makaron_event_worker.py
 !/scripts/tests/test_makaron_desktop_ipc.py
+!/scripts/tests/test_makaron_monitor_launchd.py

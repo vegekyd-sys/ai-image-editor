@@ -28,6 +28,10 @@ def read(stream):
 
 @pytest.mark.skipif(sys.platform != 'darwin', reason='requires a macOS GUI launchd domain')
 def test_error_starts_one_owner_turn_through_launchd_and_completes_latest_revision(monkeypatch):
+    domain = subprocess.run(['/bin/launchctl', 'print', f'gui/{os.getuid()}'],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if domain.returncode:
+        pytest.skip('no GUI launchd domain for this user')
     # launchd runs the candidate files. The only endpoints in this fixture are
     # the temporary state and this Unix socket; there is no real Codex CLI.
     with tempfile.TemporaryDirectory(prefix='makaron-test-', dir='/tmp') as tmp, socket.socket(socket.AF_UNIX) as server:

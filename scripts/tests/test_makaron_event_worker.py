@@ -209,18 +209,22 @@ def test_old_worker_cannot_submit_on_owner_idle_after_dispatch_replaced(tmp_path
     isolated_state(tmp_path)
     monkeypatch.setattr(bridge, 'bounded_command', lambda *a: {'returncode': 0})
     path = tmp_path / 'bridge-state.json'
+    submissions = []
     def desktop(config, message, token, facts, cancelled, progress, enabled, timeout):
         progress('waiting_for_chat_idle', facts)
         with worker.state_lock(tmp_path):
             state = json.loads(path.read_text())
-            bridge.update_timeout(state['batches']['batch'], 4000)
+            current = state['batches']['batch']
+            bridge.update_timeout(current, current['phase_started_at'] + 3601)
             assert bridge.retry_dispatch(state, SimpleNamespace(batch='batch', dispatch_id='first'), {}, tmp_path)['accepted']
         assert not enabled()
         progress('executing', facts)
-        raise AssertionError('obsolete dispatch reached start_turn')
+        submissions.append(token)
+        return True
     monkeypatch.setattr(worker, 'desktop_dispatch', desktop)
     assert worker.run(tmp_path, 'batch', 'first') == 2
     b = json.loads(path.read_text())['batches']['batch']
+    assert submissions == []
     assert b['phase'] == 'dispatched' and 'worker' not in b and 'model_requested_at' not in b
 
 
@@ -267,14 +271,61 @@ def test_selftest_observer_timeout_keeps_claim_and_releases_slot(tmp_path, monke
         facts['native_accepted'] = True
         return True
     monkeypatch.setattr(worker, 'desktop_dispatch', desktop)
+    unlocked = []
     times = iter([0, 0, 601])
     def clock():
         now = next(times)
         if now == 601:
             with (tmp_path / 'handler.lock').open('a') as gate:
                 fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                unlocked.append(True)
         return now
     monkeypatch.setattr(worker.time, 'monotonic', clock)
     assert worker.run(tmp_path, 'batch', 'first') == 2
     assert json.loads(path.read_text())['batches']['batch']['phase'] == 'working'
+    assert unlocked == [True]
     assert not json.loads((tmp_path / 'wake-acceptance-batch.json').read_text())['passed']
+
+
+def test_unstartable_cli_can_retry_and_archives_failed_selftest(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import makaron_event_bridge as bridge
+    isolated_state(tmp_path, selftest=True)
+    path = tmp_path / 'bridge-state.json'
+    assert worker.run(tmp_path, 'batch', 'first') == 2
+    s = json.loads(path.read_text())
+    b = s['batches']['batch']
+    assert b['phase'] == 'handler_failed' and b['worker']['cli_not_started'] and 'model_requested_at' not in b
+    previous = tmp_path / 'wake-acceptance-batch.json'
+    evidence = previous.read_bytes()
+    monkeypatch.setattr(bridge, 'bounded_command', lambda *a: {'returncode': 0})
+    assert bridge.retry_dispatch(s, SimpleNamespace(batch='batch', dispatch_id='first'), {}, tmp_path)['accepted']
+    assert not previous.exists()
+    assert (tmp_path / 'wake-acceptance-batch-first.json').read_bytes() == evidence
+    assert b['previous_dispatches'][0]['worker']['launch_error_type'] == 'FileNotFoundError'
+
+
+def test_cli_exit_after_claim_is_failure_and_retains_late_completion(tmp_path):
+    from types import SimpleNamespace
+    import makaron_event_bridge as bridge
+    isolated_state(tmp_path)
+    config = json.loads((tmp_path / 'bridge-config.json').read_text())
+    cli = Path(config['codex_cli'])
+    cli.write_text(f"""#!/usr/bin/python3
+import json, sys, subprocess
+sys.stdin.read()
+claim = subprocess.check_output(['/usr/bin/python3', {bridge.__file__!r}, '--directory', {str(tmp_path)!r},
+                                 'claim', '--batch', 'batch', '--dispatch-id', 'first'])
+assert json.loads(claim)['accepted']
+sys.exit(7)
+""")
+    cli.chmod(0o700)
+    assert worker.run(tmp_path, 'batch', 'first') == 2
+    s = json.loads((tmp_path / 'bridge-state.json').read_text())
+    b = s['batches']['batch']
+    assert b['received'] and b['first_receipt_at'] and b['worker']['cli_exit_code'] == 7
+    assert b['phase'] == 'handler_failed' and not b.get('completed')
+    args = SimpleNamespace(command='complete', batch='batch', dispatch_id='first', revision=1, result=tmp_path / 'outcome')
+    assert not bridge.retry_dispatch(s, args, {}, tmp_path)['accepted']
+    args.result.write_text(json.dumps(dict(summary='recovered', evidence=[], unresolved=[], next_action='done')))
+    assert bridge.receipt(s, args, True)['accepted'] and b['phase'] == 'completed'
