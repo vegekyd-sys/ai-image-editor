@@ -1,11 +1,10 @@
-Edit or generate an image.
+Edit or generate images. Translate plain text in chat.
 
-Model, NSFW routing and output conflicts follow the generated Image Model Capability table below.
+Use the Image Model Capability table for model selection, NSFW routing and output conflicts.
 
-Call `read_file('prompts/image.md')` for complex edits, references, restoration, or layout work.
+`read_file('prompts/image.md')` covers complex edits, references, restoration and layout.
 
 - For edits, pass 1-based `media_index`. Omit it for text-to-image; never pass `0`.
-- To replace lettering with a translation, send the source as `media_index`. Specify the target language and retain the layout and unaffected artwork. Keep any supplied replacement strings verbatim in their target script. For a translation requested only as text, reply in chat.
 - `reference_media_indices` sends extra timeline snapshots named by `editPrompt`.
 - Selected Editable: use `inspect_element` → `edit_element` to send its original asset.
 - `skill` labels general intent; omit it for precise manual instructions.

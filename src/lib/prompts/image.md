@@ -184,7 +184,7 @@ Use this ending line:
 
 "Do NOT add any text, watermarks, or borders."
 
-Omit this line if the user explicitly requested text or captions.
+Omit this line for requested text or captions, including translations. To replace lettering in an image, pass its `media_index`, specify the target language, keep supplied replacement strings verbatim in their target script, and preserve the surrounding layout and artwork.
 
 ## Skill Persistence
 
