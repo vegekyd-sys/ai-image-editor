@@ -48,6 +48,10 @@ describe('streamed workspace checkpoint uploads', () => {
       const uploadPrefix = '/storage/v1/object/images/user/workspace/';
       const publicPrefix = '/storage/v1/object/public/images/user/workspace/';
       if (req.method === 'POST' && url.pathname.startsWith(uploadPrefix)) {
+        if (req.headers.authorization !== 'Bearer fixture' || req.headers.apikey !== 'fixture') {
+          res.writeHead(401).end();
+          return;
+        }
         const name = url.pathname.slice(uploadPrefix.length);
         paths.push(name);
         uploads.push(body.length);
@@ -120,9 +124,11 @@ describe('streamed workspace checkpoint uploads', () => {
     await rm(fromIndex!.localPath!);
     workspace.clearWorkspaceCache();
     expect((await workspace.readFile(paths[0], client, 'user'))?.content).toBe(fromIndex?.content);
-    expect(warn).toHaveBeenCalledWith('[workspace] upload response', {
+    const receipt = ['[workspace] upload response', {
       kind: 'checkpoint', status: 403, format: 'html', requestId, cfRay: '0123456789abcdef-SIN',
-    });
+    }];
+    const receipts = warn.mock.calls.filter(([tag]) => tag === '[workspace] upload response');
+    expect(receipts).toStrictEqual([receipt, receipt]);
   });
 
   it('does not advertise a rejected first version or re-upload identical bytes at interruption', async () => {
@@ -135,15 +141,16 @@ describe('streamed workspace checkpoint uploads', () => {
     expect(await workspace.readFile(paths[0], client, 'user')).toBeNull();
   });
 
-  it('captures ordinary object refusals without logging their paths or response bodies', async () => {
+  it('limits the ordinary upload refusal receipt to status, format, kind and request identifiers', async () => {
     accept = () => false;
     const warn = vi.spyOn(console, 'warn');
     expect(await workspace.writeFile('project/code/source.js', 'fixture', client, 'user')).toMatchObject({
       success: false, error: 'Forbidden', uploadForbidden: true,
     });
-    expect(warn).toHaveBeenCalledWith('[workspace] upload response', {
+    const receipts = warn.mock.calls.filter(([tag]) => tag === '[workspace] upload response');
+    expect(receipts).toStrictEqual([['[workspace] upload response', {
       kind: 'file', status: 403, format: 'html', requestId, cfRay: '0123456789abcdef-SIN',
-    });
+    }]]);
     expect(indexed).toEqual([]);
   });
 
