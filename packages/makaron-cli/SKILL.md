@@ -473,6 +473,16 @@ GPT Image 2.6 Flare is the default; Sunburst is optional. `--quality auto|low|me
 
 The legacy `openai` image-model parameter now resolves to GPT Image 2.6 Flare.
 
+### Image layer decomposition
+
+```bash
+makaron chat --project auto --image poster.png "拆成图层，文字保留图片样式，返回 Makaron 编辑链接"
+makaron layerize --image poster.png --max-outputs 8 --quality 1K --json
+makaron layerize status <jobId> --project <projectId> --json
+```
+
+Default output is image layers, including lettering, with a Makaron `projectUrl` for moving/scaling, reordering and deleting/restoring layers. Prefer image-model editing of the selected image layer through `makaron chat` when changing wording while retaining its style; an exact visual match is not guaranteed. Use `--editable-text` only when the user explicitly requests native editable text fields, explaining that approximate fonts can change typography, texture and styling. Splitting layers or changing wording alone does not imply this option.
+
 Wan Retake (`wan-3.0` / `wan-3.0-prime`) rebuilds the selected interval using cropped video references and automatic assembly; it is reference-guided generation, with no native endpoint locks. Kling 4 remains the single default; choose alternatives explicitly.
 
 Seedream 5.5 (`--image-model seedream-5.5`) uses EvoLink, accepts at most 10 ordered inputs (base included), `--image-resolution 1K|1.5K|2K`, and `--output-format png|jpeg` (default PNG). `--background transparent` requires native PNG alpha. Quality/reasoning/GIF/SVG controls are unsupported. It never participates in Auto or switches providers after failure. Direct `makaron edit --image/--ref` uploads local originals automatically; direct MCP callers must supply public HTTPS PNG/JPEG/WebP originals. Accepted task receipts are saved to the user workspace before polling. The server must configure `EVOLINK_API_KEY` and an exact active `seedream-5.5` pricing row before use.

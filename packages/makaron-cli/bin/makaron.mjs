@@ -2218,14 +2218,17 @@ function printLayerizeHelp() {
 
   --max-outputs <2..100>   Maximum images including background (default 8)
   --quality <id>          auto, 1K, 1.5K, 2K (default 1K)
-  --editable-text         Convert recognized text to editable design text; fonts may differ
+  --editable-text         Opt in to native editable text only when explicitly requested (default off)
   --prompt <text>         Elements or regions to separate
   --request-id <uuid>     Reuse the original request after interruption
   --no-wait               Return the job and Makaron editing URL immediately
 
-Returns a normal Makaron design. Open projectUrl to move/scale, reorder, delete/restore layers or edit
-recognized text. Charges actual output images once; query the same job to recover.
-Chat alternative: makaron chat --project auto --image poster.png "拆成图层，文字可编辑"
+Returns a normal Makaron design. Open projectUrl to move/scale, reorder or delete/restore image layers.
+By default, lettering stays in image layers to preserve its appearance. Prefer image-model edits for
+wording changes that should retain the original lettering style. Native text uses approximate fonts
+and may change the typography or styling; enable --editable-text only for an explicit native text request.
+Charges actual output images once; query the same job to recover.
+Chat alternative: makaron chat --project auto --image poster.png "拆成图层，文字保留图片样式，返回 Makaron 编辑链接"
 `);
 }
 
