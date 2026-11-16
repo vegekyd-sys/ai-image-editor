@@ -1,12 +1,25 @@
 """Worker lifecycle and redaction tests; real-model acceptance is separate."""
 import io
 import json
+import os
 from pathlib import Path
 import sys
 import threading
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parents[2] / 'scripts'))
 import makaron_event_worker as worker
+
+
+@pytest.fixture(autouse=True)
+def isolate_worker_process_settings(monkeypatch):
+    monkeypatch.setattr(worker.signal, 'signal', lambda *args: None)
+    previous = os.umask(0o077)
+    try:
+        yield
+    finally:
+        os.umask(previous)
 
 
 def test_command_resumes_exact_thread_without_daemon_queue_or_model_override(tmp_path):
@@ -92,7 +105,6 @@ def test_stderr_diagnostics_are_bounded_and_do_not_store_secrets():
 
 def test_worker_requires_real_receipts_and_does_not_repeat_completed_batch(tmp_path, monkeypatch):
     import makaron_event_bridge as bridge
-    monkeypatch.setattr(worker.signal, 'signal', lambda *args: None)
     batch = {'id': 'test', 'thread_id': 'original', 'selftest': True,
              'dispatch_id': 'attempt', 'dispatched_at': 100, 'phase': 'dispatched',
              'revision': 1, 'received': False, 'completed': False}
@@ -268,7 +280,7 @@ def test_selftest_observer_timeout_keeps_claim_and_releases_slot(tmp_path, monke
         s = json.loads(path.read_text())
         assert bridge.receipt(s, SimpleNamespace(batch='batch', dispatch_id=token, command='claim'), True)['accepted']
         path.write_text(json.dumps(s))
-        facts['native_accepted'] = True
+        facts.update(native_accepted=True, native_turn_id='new')
         return True
     monkeypatch.setattr(worker, 'desktop_dispatch', desktop)
     unlocked = []
@@ -278,12 +290,12 @@ def test_selftest_observer_timeout_keeps_claim_and_releases_slot(tmp_path, monke
         if now == 601:
             with (tmp_path / 'handler.lock').open('a') as gate:
                 fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                unlocked.append(True)
+                unlocked.append(json.loads(path.read_text())['batches']['batch']['worker'].get('native_turn_id'))
         return now
     monkeypatch.setattr(worker.time, 'monotonic', clock)
     assert worker.run(tmp_path, 'batch', 'first') == 2
     assert json.loads(path.read_text())['batches']['batch']['phase'] == 'working'
-    assert unlocked == [True]
+    assert unlocked == ['new']
     assert not json.loads((tmp_path / 'wake-acceptance-batch.json').read_text())['passed']
 
 
@@ -329,3 +341,32 @@ sys.exit(7)
     assert not bridge.retry_dispatch(s, args, {}, tmp_path)['accepted']
     args.result.write_text(json.dumps(dict(summary='recovered', evidence=[], unresolved=[], next_action='done')))
     assert bridge.receipt(s, args, True)['accepted'] and b['phase'] == 'completed'
+
+
+@pytest.mark.parametrize('error,retryable', [
+    ('no-client-found', True), ('request-version-mismatch', True), ('no-handler-for-request', True),
+    ('client-disconnected', False), ('request-timeout', False), ('no-client-found: disconnected', False)])
+def test_explicit_native_non_delivery_vs_unknown_delivery(tmp_path, monkeypatch, error, retryable):
+    from types import SimpleNamespace
+    import makaron_event_bridge as bridge
+    isolated_state(tmp_path)
+    (tmp_path / 'absent.sock').touch()
+    starts = []
+    class Client:
+        initial_turn_id = 'setup'
+        def __init__(self, path): pass
+        def owner(self, thread): return 'owner'
+        def wait_idle(self, *args): pass
+        def start_turn(self, thread, owner, message, token):
+            starts.append(token)
+            return {'resultType': 'error', 'error': error}
+        def close(self): pass
+    monkeypatch.setattr(worker, 'DesktopIPC', Client)
+    assert worker.run(tmp_path, 'batch', 'first') == 2
+    assert starts == ['first']
+    state = json.loads((tmp_path / 'bridge-state.json').read_text())
+    b = state['batches']['batch']
+    assert b['worker']['native_error'] == error and b['phase'] == 'handler_failed'
+    assert ('model_requested_at' not in b) == retryable
+    monkeypatch.setattr(bridge, 'bounded_command', lambda *a: {'returncode': 0})
+    assert bridge.retry_dispatch(state, SimpleNamespace(batch='batch', dispatch_id='first'), {}, tmp_path)['accepted'] == retryable

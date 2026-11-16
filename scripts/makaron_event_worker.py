@@ -81,6 +81,11 @@ def desktop_dispatch(config, message, token, facts, cancelled=None, notify=lambd
         facts['native_accepted'] = reply.get('resultType') == 'success'
         if not facts['native_accepted']:
             facts['native_rejected'] = True
+            # These exact IPC replies occur before the start-turn handler runs.
+            # A disconnect, timeout or application error may follow delivery.
+            if reply.get('resultType') == 'error' and reply.get('error') in (
+                    'no-client-found', 'request-version-mismatch', 'no-handler-for-request'):
+                facts['native_not_delivered'] = True
             facts['native_error'] = str(reply.get('error', 'request_failed'))[:160]
         result = reply.get('result', {})
         for _ in range(4):
@@ -238,6 +243,7 @@ def run(directory, bid, token):
                 if not batch.get('selftest'):
                     exit_code = 0
                     return 0
+                edit_batch(directory, bid, token, lambda _, b: b.update(worker=dict(facts)))
                 deadline = time.monotonic() + 600
                 while True:
                     with state_lock(directory):
@@ -296,7 +302,8 @@ def run(directory, bid, token):
                 facts['cli_exit_code'] = exit_code
             def finish(_, batch):
                 batch['worker'] = dict(facts)
-                if facts.get('cli_not_started') and not batch.get('received') and not batch.get('completed'):
+                not_delivered = facts.get('cli_not_started') or facts.get('native_not_delivered')
+                if not_delivered and not batch.get('received') and not batch.get('completed'):
                     batch.pop('model_requested_at', None)
                 if not handed_off and not batch.get('completed') and (process is not None or not batch.get('received')):
                     batch.update(phase='handler_failed', handler_error='exec_did_not_complete_receipt')

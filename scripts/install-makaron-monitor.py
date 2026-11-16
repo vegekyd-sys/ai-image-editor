@@ -63,10 +63,10 @@ def main():
         if state.get('active_batch') or state.get('selftest_batch'):
             raise SystemExit('Finish the active batch before reinstalling')
         ensure_handler_idle(directory)
-        state['enabled'] = False
-        write_private(state_path, state)
         domain = 'gui/' + str(os.getuid())
         retire_legacy_handlers(state, domain)
+        state['enabled'] = False
+        write_private(state_path, state)
         source = Path(__file__).resolve().parent
         for name in ['monitor_makaron.py', 'makaron_event_bridge.py', 'makaron_event_worker.py', 'makaron_desktop_ipc.py']:
             shutil.copyfile(source / name, directory / name)

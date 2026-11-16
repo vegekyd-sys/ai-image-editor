@@ -197,3 +197,28 @@ def test_reinstall_defers_while_legacy_worker_finishes(tmp_path):
         with pytest.raises(SystemExit, match='still finishing'):
             ensure_idle(tmp_path)
     ensure_idle(tmp_path)
+
+
+def test_failed_legacy_cleanup_preserves_enabled_monitor(tmp_path, monkeypatch):
+    import importlib.util
+    import pytest
+    spec = importlib.util.spec_from_file_location('installer', Path(bridge.__file__).with_name('install-makaron-monitor.py'))
+    installer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(installer)
+    (tmp_path / '.vercel').mkdir()
+    (tmp_path / '.vercel/project.json').write_text(json.dumps({'projectName': 'ai-image-editor'}))
+    monitor = tmp_path / '.codex/monitors/makaron-production'
+    monitor.mkdir(parents=True)
+    state_path = monitor / 'bridge-state.json'
+    state_path.write_text(json.dumps({'enabled': True, 'batches': {'legacy': {'completed': True}}}))
+    before = state_path.read_bytes()
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    monkeypatch.setattr(installer.shutil, 'which', lambda name: '/fixture/vercel')
+    monkeypatch.setattr(sys, 'argv', ['install', '--thread', 'fixture', '--cwd', str(tmp_path), '--codex', sys.executable])
+    def cleanup_failure(*args):
+        raise SystemExit('fixture cleanup failure')
+    monkeypatch.setattr(installer, 'retire_legacy_handlers', cleanup_failure)
+    monkeypatch.setattr(installer.os, 'umask', lambda *args: None)
+    with pytest.raises(SystemExit, match='fixture cleanup failure'):
+        installer.main()
+    assert state_path.read_bytes() == before
