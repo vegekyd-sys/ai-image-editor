@@ -417,6 +417,13 @@ export default function DesignOverlay({
 
       if (!id || !hitTarget) return;
       disableNativeMediaDrag(hitTarget);
+      // In H5 the selection frame lets events through. A transparent sibling
+      // can receive the press even though the selected layer is painted here.
+      if (touchGestures && e.pointerType === 'mouse' && id === selectedFieldIdRef.current &&
+          directTarget && directTarget !== hitTarget && moveableRef.current?.getTargets()[0] === hitTarget) {
+        moveableRef.current.dragStart(e, hitTarget);
+        return;
+      }
       const intent = resolveEditablePointerIntent({
         hitFieldId: id,
         hitIsCanvasCover,
@@ -510,7 +517,7 @@ export default function DesignOverlay({
       interactionEl.removeEventListener('pointercancel', handlePointerCancel, { capture: true });
       interactionEl.removeEventListener('dragstart', handleDragStart);
     };
-  }, [interactionEl, editables, pickEditable, allowCanvasCoverSelection]);
+  }, [interactionEl, editables, pickEditable, allowCanvasCoverSelection, touchGestures]);
 
   // Touch-only fallback drag, including the Moveable selection surface.
   // Desktop drags stay on Moveable so alignment guidelines remain visible.
