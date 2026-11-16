@@ -347,10 +347,10 @@ export default function ProjectEditorContainer({
       const hydratedMessages = new Map(messages.map(m => [m.id, m]))
       setInitialSnapshots(prev => prev?.map(s => {
         const fresh = hydratedSnapshots.get(s.id)
-        return fresh?.design ? { ...s, design: fresh.design } : s
+        return fresh?.design || fresh?.designLoadFailed ? { ...s, design: fresh.design ?? s.design, designLoadFailed: fresh.designLoadFailed } : s
       }) ?? prev)
       setInitialMessages(prev => prev?.map(m => hydratedMessages.get(m.id) ?? m) ?? prev)
-    }).then(async ({ snapshots, messages, title, animations, timelineVersion: tv, ownerId, isPublic, musicRows }) => {
+    }, initialSnapshotId).then(async ({ snapshots, messages, title, animations, timelineVersion: tv, ownerId, isPublic, musicRows }) => {
       console.log(`⏱️ [page] loadProject done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
       if (!ownerId || (!isPublic && ownerId !== userId)) {
@@ -411,7 +411,7 @@ export default function ProjectEditorContainer({
       shownRef.current = true
       setInitialSnapshots(patched.map(s => {
         const fresh = hydratedSnapshots.get(s.id)
-        return fresh?.design ? { ...s, design: fresh.design } : s
+        return fresh?.design || fresh?.designLoadFailed ? { ...s, design: fresh.design ?? s.design, designLoadFailed: fresh.designLoadFailed } : s
       }))
       setInitialMessages(dedupeEditorMessages(messages.map(m => {
         const design = restoredSnapshots.find(s => s.messageId === m.id)
@@ -431,7 +431,7 @@ export default function ProjectEditorContainer({
     })
 
     return () => { cancelled = true }
-  }, [userId, authLoading, projectId, loadProject, isNewProject, isInlineActive, t, locale, leaveEditor])
+  }, [userId, authLoading, projectId, initialSnapshotId, loadProject, isNewProject, isInlineActive, t, locale, leaveEditor])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
     return saveSnapshot(snapshot, sortOrder, onUploaded)

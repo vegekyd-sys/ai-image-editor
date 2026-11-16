@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { getDecodedImageSize, preloadDecodedImage } from '@/lib/image/presentation';
 
 /** A single persistent poster bridges snapshot/image/Player handoffs without a black frame. */
-export default function CanvasPreviewBridge({ source, contentReady, navigating, longContent, preserveLiveContent = false }: {
-  source: string; contentReady: boolean; navigating: boolean; longContent: boolean; preserveLiveContent?: boolean;
+export default function CanvasPreviewBridge({ source, contentReady, navigating, longContent, preserveLiveContent = false, revealLayers = false }: {
+  source: string; contentReady: boolean; navigating: boolean; longContent: boolean; preserveLiveContent?: boolean; revealLayers?: boolean;
 }) {
   const [painted, setPainted] = useState(() => getDecodedImageSize(source) ? source : '');
   const [decoded, setDecoded] = useState(() => getDecodedImageSize(source) ? source : '');
@@ -36,7 +36,7 @@ export default function CanvasPreviewBridge({ source, contentReady, navigating, 
   return (
     <div data-canvas-preview-bridge data-preview-source={source} aria-hidden="true"
       className="absolute inset-0 pointer-events-none overflow-hidden z-[16]"
-      style={{ opacity: visible ? 1 : 0, transition: visible ? 'none' : 'opacity var(--mkr-image-reveal-duration, 120ms) ease-out' }}>
+      style={{ opacity: visible && !revealLayers ? 1 : 0, transition: visible || revealLayers ? 'none' : 'opacity var(--mkr-image-reveal-duration, 120ms) ease-out' }}>
       {painted && <img src={painted} alt="" className={imageClass} draggable={false} />}
       {source && <img key={source} ref={incomingRef} src={source} alt="" decoding="async" fetchPriority="high" draggable={false}
         className={imageClass} style={{ opacity: incomingReady ? 1 : 0, transition: 'opacity var(--mkr-image-reveal-duration, 120ms) ease-out' }} />}

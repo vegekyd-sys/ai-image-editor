@@ -12,7 +12,24 @@ vi.mock('@/lib/image/presentation', () => ({ preloadDecodedImage: async () => ({
 import { applyLayerizeFonts } from '@/lib/layerize-fonts';
 import RemotionRenderer, { layerPreviewSources } from '@/components/RemotionRenderer';
 import { buildLayerizeDesign, type LayerizeManifest } from '@/lib/layerize-design';
+import { fetchPreviewImageBlob, preloadLayerImages } from '@/lib/editor/layer-preview';
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+it('joins the opening layer download and retries a failed preload', async () => {
+  const source = 'https://example.com/opening-layer.png';
+  const design = { width: 1, height: 1, code: '', props: { layer_0: source },
+    editables: [{ id: 'layer_0', propKey: 'layer_0', type: 'image' as const, label: 'Background' }] };
+  vi.stubGlobal('matchMedia', () => ({ matches: false }));
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(null, { status: 503 }))
+    .mockResolvedValueOnce(new Response('pixels', { headers: { 'content-type': 'image/png' } }));
+  vi.stubGlobal('fetch', fetcher);
+  preloadLayerImages(design);
+  await expect(fetchPreviewImageBlob(source)).rejects.toThrow('503');
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  preloadLayerImages(design);
+  const [first, second] = await Promise.all([fetchPreviewImageBlob(source), fetchPreviewImageBlob(source)]);
+  expect(second).toBe(first);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
 it('makes image-only layers editable without downloading fonts for Chinese history labels, retaining native text fonts', async () => {
   const fetcher = vi.fn(async () => Response.json({ faces: [] }));
   vi.stubGlobal('fetch', fetcher);

@@ -12,6 +12,7 @@ import { preloadDecodedImage } from '@/lib/image/presentation';
 import { useLayerizeFonts } from '@/hooks/useLayerizeFonts';
 import { getEditorCanvasKey } from '@/lib/editor/canvas-key';
 import TipsBar from '@/components/TipsBar';
+import { isLayerSnapshot } from '@/lib/editor/layer-preview';
 import { EditablePanelSkeleton } from '@/components/PillCarousel';
 import { editableDisplayLabel } from '@/lib/editor/editable-label';
 import AgentStatusBar from '@/components/AgentStatusBar';
@@ -439,6 +440,10 @@ export default function Editor({
           updated = { ...updated, imageUrl: fresh.imageUrl };
           changed = true;
         }
+        if (fresh.designLoadFailed !== updated.designLoadFailed) {
+          updated = { ...updated, designLoadFailed: fresh.designLoadFailed };
+          changed = true;
+        }
         // Merge design/props updates
         if (fresh.design && (!updated.design || (fresh.design.props && JSON.stringify(fresh.design.props) !== JSON.stringify(updated.design.props)))) {
           updated = { ...updated, design: mergeHydratedEditableDesign(updated.design, fresh.design) };
@@ -687,6 +692,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Design editable: current snapshot has a design with editables
   const currentDesignSnap = snapshots[currentSnapIndex];
   const isViewingDesign = contentType === 'design';
+  const layerEntry = !isAtDraftSlot && !isViewingVideo && isLayerSnapshot(currentDesignSnap);
+  const [readyLayerSnapshot, setReadyLayerSnapshot] = useState<string | null>(null);
   const isDesignLoading = !isAtDraftSlot && !isViewingVideo && Boolean(currentDesignSnap?.designPath && !currentDesignSnap.design);
   const allDesignEditables = currentDesignSnap?.design?.editables ?? [];
   const currentDesignProps = (currentDesignSnap?.design?.props || {}) as Record<string, unknown>;
@@ -3779,6 +3786,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 data-testid="canvas"
                 projectId={projectId ?? undefined}
                 designSnapshotId={currentSnap?.id}
+                layerEntry={layerEntry}
+                layerDesignFailed={!!currentSnap?.designLoadFailed && !currentSnap.design}
+                onLayerReady={setReadyLayerSnapshot}
                 key={getEditorCanvasKey({ viewIndex, image: timeline[viewIndex], videoId: isViewingVideoV2 ? currentSnap?.id : isViewingVideo ? currentVideo?.id || 'legacy-video' : undefined, videoUrl: currentVideo?.videoUrl, snapshotVideoUrl: currentSnap?.videoMeta?.videoUrl, annotationMode })}
                 timeline={timeline}
                 currentIndex={viewIndex}
@@ -4282,7 +4292,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 ) : (isDesignLoading || (isViewingDesign && allDesignEditables.length > 0)) ? (
                   <DesignEditPanel
                     key={currentDesignSnap?.id}
-                    loading={isDesignLoading || ownershipPending}
+                    loading={isDesignLoading || ownershipPending || (layerEntry && readyLayerSnapshot !== currentDesignSnap?.id)}
                     editables={allDesignEditables}
                     renderedOrder={renderedEditableOrder?.snapshotId === currentDesignSnap?.id ? renderedEditableOrder?.ids : undefined}
                     onHistorySeek={handleDesignHistorySeek}

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { transform } from 'sucrase';
 import { createEditableReactRuntime } from '@/lib/editor/editable-react-runtime';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildLayerizeDesign, isRasterLayerizeDesign, layerizeSupplierCost, type LayerizeManifest } from '@/lib/layerize-design';
+import { buildLayerizeDesign, hasCompleteRasterLayerManifest, isRasterLayerizeDesign, layerizeSupplierCost, type LayerizeManifest } from '@/lib/layerize-design';
 import { layerizeRequest, submitLayerize, queryLayerize } from '@/lib/layerize-provider';
 import { validateDesign } from '@/lib/design-harness';
 import { providerCostToCredits } from '@/lib/billing/token-rates';
@@ -16,6 +16,18 @@ const manifest: LayerizeManifest = { version: 1, taskId: 'task-one', width: 1000
 ] };
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 describe('Layerize standard design contract', () => {
+  it('reuses only complete generated raster manifests that are identical after JSX discovery', () => {
+    const design = { ...buildLayerizeDesign(manifest), layerizeManifestPath: 'layers/manifest.json' };
+    expect(hasCompleteRasterLayerManifest(design)).toBe(true);
+    expect(normalizeLoadedDesignManifest(design)).toEqual(design);
+    expect(hasCompleteRasterLayerManifest(buildLayerizeDesign(manifest))).toBe(false);
+    expect(hasCompleteRasterLayerManifest({ ...buildLayerizeDesign(manifest, true), layerizeManifestPath: design.layerizeManifestPath })).toBe(false);
+    expect(hasCompleteRasterLayerManifest({ ...design, editables: design.editables!.slice(1) })).toBe(false);
+    expect(hasCompleteRasterLayerManifest({ ...design, code: design.code.replace('props.layer_1', 'props.layer_2') })).toBe(false);
+    expect(hasCompleteRasterLayerManifest({ ...design, code: design.code.replace('"left":0', '"left":props.x') })).toBe(false);
+    expect(hasCompleteRasterLayerManifest({ ...design, code: design.code.replaceAll('layer_1', 'layer_0'),
+      editables: [design.editables![0], design.editables![0], design.editables![2]] })).toBe(false);
+  });
   it('recognizes image-only saved layers without skipping fonts for native text or authored content', () => {
     const raster = buildLayerizeDesign(manifest);
     expect(isRasterLayerizeDesign({ ...raster, props: { ...raster.props, _editHistory: { label: '红色礼帽' } } })).toBe(true);

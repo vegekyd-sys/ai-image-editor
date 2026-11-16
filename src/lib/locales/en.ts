@@ -630,6 +630,7 @@ const en = {
   'canvas.layerEmpty': 'No layers available',
   'canvas.layerDelete': 'Delete element',
   'canvas.layerResize': 'Drag to resize',
+  'canvas.loadingLayers': 'Loading layers…',
   'canvas.previewUnavailable': 'Preview temporarily unavailable',
   'canvas.previewUsingPoster': 'Your poster is preserved. You can reload the preview.',
   'canvas.previewRetry': 'Retry',

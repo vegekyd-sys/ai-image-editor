@@ -9,7 +9,8 @@ import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } fro
 import { usesThreeCanvas } from '@/lib/remotion-gl';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import { isFixedCanvasDesign } from '@/lib/editor/design-layer-state';
-import { getOriginFormatThumbnailUrl } from '@/lib/supabase/storage';
+import { fetchPreviewImageBlob, layerPreviewSources } from '@/lib/editor/layer-preview';
+export { layerPreviewSources } from '@/lib/editor/layer-preview';
 import { isRasterLayerizeDesign } from '@/lib/layerize-design';
 import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
 import type { DesignPayload } from '@/types';
@@ -34,16 +35,6 @@ export type { RenderMediaOnWebProgress };
  *  Caller must revoke blobUrls after use. */
 type ResourceFailureReporter = (url: string, error: unknown) => void;
 
-async function fetchImageBlob(url: string): Promise<Blob> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Image fetch failed: ${response.status}`);
-  const contentType = response.headers.get('content-type') || '';
-  if (!contentType.toLowerCase().startsWith('image/')) {
-    throw new Error(`Image fetch returned ${contentType || 'an unknown content type'}`);
-  }
-  return response.blob();
-}
-
 async function resolveCodeUrls(
   code: string,
   onFailure?: ResourceFailureReporter,
@@ -59,7 +50,7 @@ async function resolveCodeUrls(
   const blobUrls: string[] = [];
   await Promise.all([...urls].map(async (url) => {
     try {
-      const blob = await fetchImageBlob(url);
+      const blob = await fetchPreviewImageBlob(url);
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
       await preloadDecodedImage(blobUrl);
@@ -80,25 +71,6 @@ function isImageUrl(value: unknown): value is string {
     );
 }
 
-// Keep original URLs in saved designs and exports. On a touch screen, a tiny
-// object on a poster does not need a full provider-sized bitmap in the Player.
-export function layerPreviewSources(design: DesignPayload, viewportWidth: number, dpr: number): Map<string, string> {
-  const sources = new Map<string, string>();
-  if (!isFixedCanvasDesign(design) || design.animation) return sources;
-  const scale = Math.min(1, viewportWidth * Math.min(dpr, 3) / design.width);
-  const images = /<Img data-editable="layer_\d+" src=\{props\.(layer_\d+)\} style=\{\{([^{}]+)\}\}/g;
-  for (const match of design.code.matchAll(images)) {
-    const source = design.props?.[match[1]];
-    if (typeof source !== 'string' || !source.includes('/layerize/')) continue;
-    const width = Number(/"width":(\d+(?:\.\d+)?)/.exec(match[2])?.[1]);
-    const height = Number(/"height":(\d+(?:\.\d+)?)/.exec(match[2])?.[1]);
-    if (!width || !height) continue;
-    const size = Math.min(1600, Math.max(64, Math.ceil(Math.max(width, height) * scale / 64) * 64));
-    sources.set(source, getOriginFormatThumbnailUrl(source, size, 95, size, 'contain'));
-  }
-  return sources;
-}
-
 async function resolveImageUrlsInValue(
   value: unknown,
   blobUrls: string[],
@@ -111,7 +83,7 @@ async function resolveImageUrlsInValue(
       const source = previewSources?.get(value) || value;
       const cached = cache?.get(source);
       if (cached) return cached;
-      const blob = await fetchImageBlob(source);
+      const blob = await fetchPreviewImageBlob(source);
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
       await preloadDecodedImage(blobUrl);
@@ -433,10 +405,11 @@ export default function RemotionRenderer({
     Object.fromEntries(Object.entries(design.props || {}).map(([key, value]) =>
       [key, typeof value === 'string' ? previewSources?.get(value) || value : value])),
   );
-  const [inputIdentity, setInputIdentity] = useState({ code: design.code, snapshotId });
+  const rasterLayers = useMemo(() => isRasterLayerizeDesign(design), [design]);
+  const [inputIdentity, setInputIdentity] = useState(() => rasterLayers ? null : { code: design.code, snapshotId });
   // Code and image props resolve independently. Never run a new composition
   // against the previous snapshot's asset keys (or the inverse).
-  const Component = compiledCode === design.code && inputIdentity.code === design.code
+  const Component = compiledCode === design.code && inputIdentity?.code === design.code
     && inputIdentity.snapshotId === snapshotId ? compiledComponent : null;
   const [compileError, setCompileError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
@@ -475,7 +448,8 @@ export default function RemotionRenderer({
     notifyLoading();
     (async () => {
       try {
-        await preloadBabel().catch(() => {});
+        // Generated image-only JSX uses the bundled Sucrase compiler.
+        if (!rasterLayers) await preloadBabel().catch(() => {});
         // PreviewVideo owns the direct -> proxy -> direct-retry recovery cycle.
         // Rewriting the authored URL here would start permanently on the proxy
         // and prevent both browser-cache reuse and the direct recovery path.
@@ -562,7 +536,7 @@ export default function RemotionRenderer({
       blobUrls.forEach(url => URL.revokeObjectURL(url));
     };
 
-  }, [design.code, design.fontSubstitutions, retryToken, notifyLoading, fontBarrier]);
+  }, [design.code, design.fontSubstitutions, retryToken, notifyLoading, fontBarrier, rasterLayers]);
 
   // Editable text/media/transform changes should update Player input props
   // without recompiling the composition, fonts, and code.

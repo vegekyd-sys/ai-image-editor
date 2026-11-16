@@ -42,6 +42,27 @@ export function isRasterLayerizeDesign(design: DesignPayload): boolean {
   return (body.match(images)?.length ?? 0) > 0 && !body.replace(images, '').trim();
 }
 
+// Only the generator's exact image template has a manifest we can use without
+// rediscovering JSX bindings. Older and hand-edited compositions still get repaired.
+const generatedLayer = /^<Img data-editable="(layer_\d+)" src=\{props\.\1\} style=\{\{"position":"absolute","left":-?\d+,"top":-?\d+,"width":\d+,"height":\d+,"objectFit":"fill"\}\} \/>$/;
+
+export function hasCompleteRasterLayerManifest(value: unknown): value is DesignPayload {
+  if (!value || typeof value !== 'object') return false;
+  const design = value as DesignPayload;
+  if (!design.layerizeManifestPath || design.animation || !Array.isArray(design.editables) || !design.editables.length) return false;
+  if (typeof design.code !== 'string' || !design.code.startsWith(LAYERIZE_CODE_START) || !design.code.endsWith(LAYERIZE_CODE_END)) return false;
+  const nodes = design.code.slice(LAYERIZE_CODE_START.length, -LAYERIZE_CODE_END.length).split('\n');
+  if (nodes.length !== design.editables.length) return false;
+  const seen = new Set<string>();
+  return design.editables.every((field, index) => {
+    const id = generatedLayer.exec(nodes[index])?.[1];
+    if (!id || seen.has(id) || field?.id !== id || field.propKey !== id || field.type !== 'image' ||
+      typeof field.label !== 'string' || !field.label || typeof design.props?.[id] !== 'string') return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 export interface LayerizeLayer {
   z: number;
   url: string;

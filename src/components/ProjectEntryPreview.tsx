@@ -1,6 +1,7 @@
 'use client'
 
 import { useLayoutEffect, useState } from 'react'
+import LayerLoadingHint from './LayerLoadingHint'
 import { buildVideoProxyUrl } from '@/lib/video-playback-url'
 import { getTransparencyCrossOrigin } from '@/lib/image/transparency'
 
@@ -33,6 +34,7 @@ export default function ProjectEntryPreview({ projectId, imageUrl, videoUrl }: P
       <div className="w-full h-full flex flex-col lg:flex-row">
         <div className="flex-1 min-w-0 flex flex-col">
           <div className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center bg-black p-[2px]">
+            {imageUrl?.includes('/layerize/') && <LayerLoadingHint />}
             {videoUrl ? (
               <video
                 src={previewVideoUrl ?? undefined}

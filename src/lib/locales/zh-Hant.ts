@@ -672,6 +672,7 @@ const zhHant = {
   'canvas.layerEmpty': '沒有可用的圖層',
   'canvas.layerDelete': '刪除元素',
   'canvas.layerResize': '拖曳以調整大小',
+  'canvas.loadingLayers': '正在載入圖層…',
   'canvas.previewUnavailable': '預覽暫時無法使用',
   'canvas.previewUsingPoster': '已保留封面，稍後可以重新載入',
   'canvas.previewRetry': '重試',

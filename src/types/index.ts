@@ -11,6 +11,7 @@ export interface EditableField {
 }
 
 export interface DesignPayload {
+  layerizeManifestPath?: string;
   __makaronEditableRevision?: number;
   elementEdit?: import("@/lib/editor/element-edit").ElementEditReceipt;
   /** Explicit inset treatment; otherwise source-led compositions use primary footage. */
@@ -140,6 +141,7 @@ export interface Snapshot {
   type?: 'original' | 'edit' | 'reference' | 'video';
   design?: DesignPayload;
   designPath?: string;
+  designLoadFailed?: boolean;
   videoMeta?: VideoMeta;
 }
 

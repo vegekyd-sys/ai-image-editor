@@ -8,6 +8,8 @@ import type { AnnotationEntry, DesignPayload, EditableField } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
 const DesignOverlay = dynamic(() => import('@/components/DesignOverlay'), { ssr: false });
 import TransparencyBackdrop from '@/components/TransparencyBackdrop';
+import { useLayerReveal } from '@/hooks/useLayerReveal';
+import LayerLoadingHint from './LayerLoadingHint';
 import CanvasPreviewBridge from '@/components/CanvasPreviewBridge';
 import { packageLayout } from '@/lib/editor/package-lettering';
 import { containRect } from '@/lib/image/geometry';
@@ -54,6 +56,9 @@ function isSimpleVideoWrapper(code: string): boolean {
 interface ImageCanvasProps {
   projectId?: string;
   designSnapshotId?: string;
+  layerEntry?: boolean;
+  layerDesignFailed?: boolean;
+  onLayerReady?: (snapshotId: string | null) => void;
   timeline: string[];
   currentIndex: number;
   onIndexChange: (index: number) => void;
@@ -138,7 +143,7 @@ interface ImageCanvasProps {
 
 export default function ImageCanvas({
   projectId,
-  designSnapshotId,
+  designSnapshotId, layerEntry = false, layerDesignFailed = false, onLayerReady,
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
   isVideoEntry, videoUrl, videoProcessing, videoFailed, videoTaskId, videoModel, videoPosterImage, isDesktop,
@@ -864,6 +869,16 @@ export default function ImageCanvas({
     ? videoFrameLoaded
     : currentDesign ? readyDesignIdentity === designIdentity && Boolean(remotionPlayer) && !remotionLoading : imageLoaded;
   const lastReadyWasDesign = useRef(false);
+  const layerPhase = useLayerReveal(designIdentity, layerEntry, !!currentDesign && canvasReady, designContainerEl, editableFields);
+  const rendererFailed = layerEntry && currentDesign && !remotionLoading && readyDesignIdentity === designIdentity && !remotionPlayer;
+  const layerLoadFailed = layerDesignFailed || layerPhase === 'error';
+  const layersEditable = !layerEntry || layerPhase === 'ready';
+  const [layerRetry, setLayerRetry] = useState(0);
+  useEffect(() => {
+    if (!layerEntry) return;
+    onLayerReady?.(layersEditable ? designSnapshotId ?? null : null);
+    return () => onLayerReady?.(null);
+  }, [layerEntry, layersEditable, designSnapshotId, onLayerReady]);
   useEffect(() => {
     if (!canvasReady) return;
     lastReadyWasDesign.current = Boolean(currentDesign);
@@ -1311,6 +1326,7 @@ export default function ImageCanvas({
     <div
       ref={containerRef}
       data-project-canvas={projectId}
+      data-layer-phase={layerEntry ? (layerLoadFailed || rendererFailed ? 'error' : layerPhase) : undefined}
       data-canvas-ready={canvasReady ? 'true' : 'false'}
       className="absolute inset-0 flex items-center justify-center touch-none select-none"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
@@ -1334,8 +1350,14 @@ export default function ImageCanvas({
         </div>
       )}
 
-      {!usesNativeVideo && displayImage && displayImage !== VIDEO_SENTINEL && !isComparing && (
-        <CanvasPreviewBridge source={displayImage} contentReady={canvasReady} navigating={animDir !== null} longContent={isLongContent} preserveLiveContent={Boolean(currentDesign) && lastReadyWasDesign.current} />
+      {!rendererFailed && !usesNativeVideo && displayImage && displayImage !== VIDEO_SENTINEL && !isComparing && (
+        <CanvasPreviewBridge source={displayImage} contentReady={layerEntry && currentDesign && !rendererFailed ? layerPhase === 'revealing' || layersEditable : canvasReady} revealLayers={layerEntry && (layerPhase === 'revealing' || layerPhase === 'ready')} navigating={animDir !== null} longContent={isLongContent} preserveLiveContent={Boolean(currentDesign) && lastReadyWasDesign.current} />
+      )}
+
+      {layerEntry && layerPhase === 'loading' && !layerLoadFailed && !rendererFailed && <LayerLoadingHint />}
+      {layerEntry && layerLoadFailed && (
+        <button type="button" className="absolute bottom-5 z-20 rounded-full bg-black/70 px-3 py-1.5 text-xs text-white"
+          onClick={() => layerDesignFailed ? window.location.reload() : setLayerRetry(value => value + 1)}>{t('canvas.previewRetry')}</button>
       )}
 
       {/* Zoom wrapper */}
@@ -1639,6 +1661,7 @@ export default function ImageCanvas({
           }`}
           >
             <RemotionRenderer
+              key={layerRetry}
               design={currentDesign!}
               projectId={projectId}
               snapshotId={designSnapshotId}
@@ -1747,7 +1770,7 @@ export default function ImageCanvas({
             )}
             {/* Edit mode gesture shield div removed — handled by capture-phase on outer container */}
             {/* Editable design overlay */}
-            {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
+            {layersEditable && editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
               <DesignOverlay
                 printedLayout={printedLayout}
                 touchGestures={!isDesktop}

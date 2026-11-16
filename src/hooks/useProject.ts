@@ -1,12 +1,14 @@
 'use client'
 
+import { isLayerSnapshot, preloadLayerImages } from '@/lib/editor/layer-preview';
+import { hasCompleteRasterLayerManifest } from '@/lib/layerize-design';
 import { queueEditableSave } from '@/lib/editor/editable-save-queue';
 import { historyUnsetProps } from '@/lib/editor/design-edit-history';
 import { useRef, useCallback } from 'react'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { uploadImage } from '@/lib/supabase/storage'
-import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
+import { DesignPayload, Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { groupWebSearchSourcesByMessage } from '@/lib/web-citations'
 import { createPersistedEditableDesign } from '@/lib/editor/editable-persistence'
@@ -39,7 +41,7 @@ export function useProject(projectId: string, userId: string) {
 
   // --- Load ---
 
-  const loadProject = useCallback(async (onDesignsLoaded?: (snapshots: Snapshot[], messages: Message[]) => void): Promise<LoadedProject> => {
+  const loadProject = useCallback(async (onDesignsLoaded?: (snapshots: Snapshot[], messages: Message[]) => void, initialSnapshotId?: string | null): Promise<LoadedProject> => {
     const supabase = getSupabase()
 
     const [snapshotsRes, messagesRes, projectRes, agentMediaEventsRes, musicRes] = await Promise.all([
@@ -145,6 +147,12 @@ export function useProject(projectId: string, userId: string) {
       }
       return ''
     })()
+    const openingSnapshot = snapshots.find(s => s.id === initialSnapshotId) ?? snapshots.at(-1)
+    const openingLayers = isLayerSnapshot(openingSnapshot)
+    if (openingLayers) {
+      void import('@/components/RemotionRenderer').catch(() => {})
+      void import('@/components/DesignOverlay').catch(() => {})
+    }
     const designsReady = Promise.all(snapshots.map(async (snap) => {
       const dp = snap.designPath
       if (!dp || !resolvedUserId) return
@@ -155,8 +163,8 @@ export function useProject(projectId: string, userId: string) {
         if (urlData?.publicUrl) {
           // Cache-bust: design JSON is updated in-place via upsert, CDN caches stale version
           const bustUrl = `${urlData.publicUrl}?t=${Date.now()}`
-          const res = await fetch(bustUrl, { signal: AbortSignal.timeout(5000) })
-          if (res.ok) {
+          const res = await fetch(bustUrl, { signal: AbortSignal.timeout(5000) }).catch(() => null)
+          if (res?.ok) {
             design = await res.json()
           }
         }
@@ -173,16 +181,20 @@ export function useProject(projectId: string, userId: string) {
           }
         }
         if (design) {
-          // Lazy import keeps the AST compiler out of the initial editor
-          // bundle. Existing compositions upgrade in memory when opened.
-          const { normalizeLoadedDesignManifest } = await import(
-            '@/lib/editor/loaded-design-manifest'
-          )
-          snap.design = await normalizeLoadedDesignManifest(design)
+          const opening = snap === openingSnapshot && openingLayers
+          if (opening) preloadLayerImages(design as DesignPayload)
+          if (hasCompleteRasterLayerManifest(design)) {
+            snap.design = design
+          } else {
+            const { normalizeLoadedDesignManifest } = await import('@/lib/editor/loaded-design-manifest')
+            snap.design = normalizeLoadedDesignManifest(design)
+          }
+          if (opening && snap.design) onDesignsLoaded?.([{ ...snap }], [])
         }
       } catch (e) {
         console.warn('Failed to load design from workspace:', dp, e)
       }
+      if (!snap.design && isLayerSnapshot(snap)) snap.designLoadFailed = true
     }))
 
     // Background: resolve expired audio/video URLs in design code (non-blocking, re-save for next load)

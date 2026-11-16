@@ -630,6 +630,7 @@ const zh = {
   'canvas.layerEmpty': '没有可用图层',
   'canvas.layerDelete': '删除元素',
   'canvas.layerResize': '拖动缩放',
+  'canvas.loadingLayers': '正在加载图层…',
   'canvas.previewUnavailable': '预览暂时不可用',
   'canvas.previewUsingPoster': '已保留封面，稍后可以重新加载',
   'canvas.previewRetry': '重试',
