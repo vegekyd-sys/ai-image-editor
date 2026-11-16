@@ -695,10 +695,14 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   const layerEntry = !isAtDraftSlot && !isViewingVideo && isLayerSnapshot(currentDesignSnap);
   const [readyLayerSnapshot, setReadyLayerSnapshot] = useState<string | null>(null);
   const isDesignLoading = !isAtDraftSlot && !isViewingVideo && Boolean(currentDesignSnap?.designPath && !currentDesignSnap.design);
-  const allDesignEditables = currentDesignSnap?.design?.editables ?? [];
-  const currentDesignProps = (currentDesignSnap?.design?.props || {}) as Record<string, unknown>;
-  const designLayerState = readDesignLayerState(allDesignEditables, currentDesignProps);
-  const currentDesignEditables = allDesignEditables.filter(field => !designLayerState.deleted.includes(field.id));
+  const allDesignEditables = useMemo(() => currentDesignSnap?.design?.editables ?? [], [currentDesignSnap?.design?.editables]);
+  const currentDesignProps = useMemo(() => (currentDesignSnap?.design?.props || {}) as Record<string, unknown>, [currentDesignSnap?.design?.props]);
+  // Streaming chat updates must not replace the canvas field list. A changed
+  // list recreates overlay measurement effects and interrupts a live gesture.
+  const currentDesignEditables = useMemo(() => {
+    const state = readDesignLayerState(allDesignEditables, currentDesignProps);
+    return allDesignEditables.filter(field => !state.deleted.includes(field.id));
+  }, [allDesignEditables, currentDesignProps]);
   useEffect(() => {
     if (selectedElementRef.current?.snapshotId !== currentDesignSnap?.id) setSelectedEditableFieldId(null);
   }, [currentDesignSnap?.id, setSelectedEditableFieldId]);
