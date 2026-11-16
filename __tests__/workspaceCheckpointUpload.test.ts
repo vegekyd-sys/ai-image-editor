@@ -31,6 +31,7 @@ describe('streamed workspace checkpoint uploads', () => {
   let uploads: number[];
   let indexed: number[];
   let paths: string[];
+  let removed: string[];
   let commitIndex: (size: number) => boolean;
   let afterIndexCommit: () => Promise<void>;
 
@@ -41,6 +42,7 @@ describe('streamed workspace checkpoint uploads', () => {
     uploads = [];
     indexed = [];
     paths = [];
+    removed = [];
     commitIndex = () => true;
     afterIndexCommit = async () => {};
     const objects = new Map<string, string>();
@@ -74,6 +76,18 @@ describe('streamed workspace checkpoint uploads', () => {
       } else if (req.method === 'GET' && url.pathname === '/rest/v1/workspace_files') {
         res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify([...index.values()]));
         return;
+      } else if (req.method === 'POST' && url.pathname.startsWith('/storage/v1/object/sign/')) {
+        const signedURL = url.pathname.replace('/storage/v1/object/sign/', '/object/public/');
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ signedURL }));
+        return;
+      } else if (req.method === 'DELETE' && url.pathname === '/storage/v1/object/images') {
+        for (const key of JSON.parse(body).prefixes as string[]) {
+          const name = key.slice('user/workspace/'.length);
+          objects.delete(name);
+          removed.push(name);
+        }
+      } else if (req.method === 'DELETE' && url.pathname === '/rest/v1/workspace_files') {
+        index.delete(url.searchParams.get('path')!.slice('eq.'.length));
       } else if (req.method === 'GET' && url.pathname.startsWith(publicPrefix)) {
         const object = objects.get(url.pathname.slice(publicPrefix.length));
         res.writeHead(object === undefined ? 404 : 200).end(object);
@@ -137,6 +151,7 @@ describe('streamed workspace checkpoint uploads', () => {
     expect((await workspace.readFile(path, client, 'user'))?.content).toBe('old');
     accept = () => false;
     expect(await workspace.writeFile(path, 'new', client, 'user')).toMatchObject({ success: false, uploadForbidden: true });
+    workspace.clearWorkspaceCache();
     expect((await workspace.readFile(path, client, 'user'))?.content).toBe('old');
     expect(indexed).toEqual([3]);
   });
@@ -179,12 +194,17 @@ describe('streamed workspace checkpoint uploads', () => {
     expect(indexed).toEqual([1_000, 2_000]);
     expect(new Set(paths).size).toBe(2);
     expect(paths[2]).toBe(paths[0]);
-    expect(checkpoint).toMatchObject({ streamedCodePath: paths[1], streamedCodeChars: 2_000 });
-    const saved = await workspace.readFile(paths[1], client, 'user');
+    expect(checkpoint).toMatchObject({ streamedCodePath: paths[0], streamedCodeChars: 2_000 });
+    expect((await workspace.listFiles('project/drafts/*', client, 'user')).map(file => file.path)).toEqual([paths[0]]);
+    const saved = await workspace.readFile(paths[0], client, 'user');
     expect(saved?.content).toBe('a'.repeat(1_000) + 'b'.repeat(1_000));
     await rm(saved!.localPath!);
     workspace.clearWorkspaceCache();
-    expect((await workspace.readFile(paths[1], client, 'user'))?.content).toBe(saved?.content);
+    expect((await workspace.readFile(paths[0], client, 'user'))?.content).toBe(saved?.content);
+    expect((await workspace.readFile(paths[0], client, 'user', { fresh: true }))?.content).toBe(saved?.content);
+    expect(await workspace.deleteFile(paths[0], client, 'user')).toBe(true);
+    expect(removed).toEqual([paths[0], paths[1]]);
+    expect(await workspace.readFile(paths[0], client, 'user')).toBeNull();
   });
 
   it('records a later accepted version through the same authorized client and object path', async () => {

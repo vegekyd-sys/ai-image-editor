@@ -830,7 +830,7 @@ export async function* runMakaronAgent(
       toolName: 'run_code' | 'write_code_file' | 'write_file';
       valueKey: 'code' | 'content';
       checkpointId: string;
-      nextCheckpointSlot: 0 | 1;
+      useSpareCheckpoint: boolean;
       targetPath?: string;
       buffer: string;
       state: 'waiting' | 'in_code' | 'done';
@@ -849,20 +849,19 @@ export async function* runMakaronAgent(
         .replace(/[^a-zA-Z0-9.-]+/g, '-')
         .slice(0, 40);
       // Keep the last committed object readable if the next upload succeeds but
-      // its index write fails. Each tool stream reuses at most two workspace files.
-      const slot = codeExtractor.nextCheckpointSlot === 0 ? '' : '.next';
-      const partialPath = `${ctx.projectId}/drafts/streamed-${codeExtractor.toolName}-${targetSlug}-${codeExtractor.checkpointId}${slot}.partial.js`;
-      const saved = await workspace.writeFile(
+      // its index write fails. Both physical slots share one logical draft path.
+      const partialPath = `${ctx.projectId}/drafts/streamed-${codeExtractor.toolName}-${targetSlug}-checkpoint-${codeExtractor.checkpointId}.partial.js`;
+      const saved = await workspace.writeStreamedCheckpoint(
         partialPath,
         codeExtractor.decoded,
         ctx.supabase,
         ctx.userId,
-        'text/javascript',
+        codeExtractor.useSpareCheckpoint,
       );
       // A refusal consumes this upload interval. Only committed bytes become a recovery pointer.
       if (saved.success || saved.uploadForbidden) codeExtractor.checkpointCursor = codeExtractor.decoded.length;
       if (saved.success) {
-        codeExtractor.nextCheckpointSlot = codeExtractor.nextCheckpointSlot === 0 ? 1 : 0;
+        codeExtractor.useSpareCheckpoint = !codeExtractor.useSpareCheckpoint;
         (ctx as any).__streamedCodeCheckpoint = {
           streamedCodePath: partialPath,
           streamedCodeChars: codeExtractor.decoded.length,
@@ -993,7 +992,7 @@ export async function* runMakaronAgent(
             toolName,
             valueKey: toolName === 'run_code' ? 'code' : 'content',
             checkpointId: crypto.randomUUID(),
-            nextCheckpointSlot: 0,
+            useSpareCheckpoint: false,
             buffer: '',
             state: 'waiting',
             decoded: '',

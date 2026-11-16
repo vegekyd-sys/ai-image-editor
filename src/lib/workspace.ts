@@ -375,6 +375,16 @@ function isStreamedCheckpoint(filePath: string): boolean {
   return /(?:^|\/)drafts\/streamed-[^/]+\.partial\.js$/.test(filePath);
 }
 
+// Only newly allocated checkpoint names own a second storage slot. Older
+// checkpoints and ordinary user files continue to own just their original key.
+function hasCheckpointSlots(filePath: string): boolean {
+  return isStreamedCheckpoint(filePath) && /-checkpoint-[0-9a-f-]{36}\.partial\.js$/.test(filePath);
+}
+
+function spareCheckpointPath(filePath: string): string {
+  return filePath.replace(/\.partial\.js$/, '.spare.partial.js');
+}
+
 function workspaceMirrorPath(userId: string, file: WorkspaceFile): string {
   const ordinary = getLocalWorkspacePath(userId, file.path);
   if (file.updatedAt && isStreamedCheckpoint(file.path)) {
@@ -521,9 +531,10 @@ async function dbWriteFile(
   content: string | Buffer,
   contentType?: string,
   marketplaceId?: string,
+  objectPath = path,
 ): Promise<WorkspaceWriteResult> {
   const ct = contentType || pathToContentType(path);
-  const sp = storagePath(userId, path);
+  const sp = storagePath(userId, objectPath);
   const isText = ct.startsWith('text/') || ct === 'application/json';
   const body = isText && typeof content === 'string' ? content : (Buffer.isBuffer(content) ? content : Buffer.from(content));
   const sizeBytes = typeof content === 'string' ? Buffer.byteLength(content, 'utf-8') : (Buffer.isBuffer(content) ? content.length : 0);
@@ -581,12 +592,26 @@ async function dbWriteFile(
   return { success: true, storageUrl: publicUrl, localPath, size: sizeBytes, updatedAt };
 }
 
+/** One workspace index points to the most recently committed physical slot. */
+export function writeStreamedCheckpoint(
+  path: string,
+  content: string,
+  supabase: SupabaseClient,
+  userId: string,
+  useSpare: boolean,
+): Promise<WorkspaceWriteResult> {
+  return dbWriteFile(supabase, userId, path, content, 'text/javascript', undefined,
+    useSpare ? spareCheckpointPath(path) : path);
+}
+
 /** Delete file from Storage + workspace_files */
 async function dbDeleteFile(supabase: SupabaseClient, userId: string, path: string): Promise<boolean> {
   const sp = storagePath(userId, path);
 
   // Delete from Storage
-  await supabase.storage.from('images').remove([sp]);
+  const keys = hasCheckpointSlots(path) ? [sp, storagePath(userId, spareCheckpointPath(path))] : [sp];
+  const { error: removeError } = await supabase.storage.from('images').remove(keys);
+  if (removeError && keys.length > 1) return false;
 
   // Delete from DB
   const { error } = await supabase.from('workspace_files')
@@ -909,7 +934,17 @@ export async function readFile(filePath: string, supabase?: SupabaseClient, user
     // Editable merges must observe writes from other workers, including same-size
     // JSON changes. Bypass both the process cache and size-based local mirror.
     const normalized = normalizeWorkspacePath(filePath);
-    const { data, error } = await supabase.storage.from('images').createSignedUrl(storagePath(userId, normalized), 60);
+    const bucket = supabase.storage.from('images');
+    let key = storagePath(userId, normalized);
+    if (hasCheckpointSlots(normalized)) {
+      const files = await dbListFiles(supabase, userId, normalized);
+      const file = files.find(entry => entry.path === normalized);
+      if (!file?.storageUrl) return null;
+      const spareKey = storagePath(userId, spareCheckpointPath(normalized));
+      const spareUrl = bucket.getPublicUrl(spareKey).data.publicUrl;
+      if (new URL(file.storageUrl).pathname === new URL(spareUrl).pathname) key = spareKey;
+    }
+    const { data, error } = await bucket.createSignedUrl(key, 60);
     if (error || !data?.signedUrl) return null;
     // Upserted Storage objects can still be served from an edge cache. A unique
     // signed request bypasses that cache as well as Next's server fetch cache.
@@ -920,7 +955,8 @@ export async function readFile(filePath: string, supabase?: SupabaseClient, user
     return { content: await response.text(), contentType: response.headers.get('content-type') || 'application/json', path: normalized };
   }
   const cacheKey = `read:${userId || ''}:${filePath}`;
-  const cached = supabase && userId && filePath.startsWith('skills/') ? undefined : getCached<WorkspaceReadResult>(cacheKey);
+  const readCurrentIndex = supabase && userId && (filePath.startsWith('skills/') || isStreamedCheckpoint(filePath));
+  const cached = readCurrentIndex ? undefined : getCached<WorkspaceReadResult>(cacheKey);
   if (cached) return cached;
 
   // Try Supabase first

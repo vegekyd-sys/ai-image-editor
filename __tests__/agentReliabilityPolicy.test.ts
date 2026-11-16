@@ -40,7 +40,7 @@ describe('agent reliability policy', () => {
     expect(agent).toContain('compositionWorkspace.status="ready"');
     expect(agent).toContain('Do not call run_code merely to assemble files');
     expect(agent).toContain("checkpoint.streamedCodePath");
-    expect(agent).toContain("codeExtractor.toolCallId");
+    expect(agent).toContain("codeExtractor.checkpointId");
     expect(runner).toContain('Persist registration before compiling');
     expect(runner).toContain('persistCompositionDraft');
   });
