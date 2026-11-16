@@ -28,6 +28,15 @@ makaron responses get <runId> --wait --json
 获准自行审核中间环节时明确写入 brief；内部制作和检查要求仍须执行。
 详细流程由内部 Skill 负责，外部宿主无需重新编排。
 
+## 图片分层
+
+分层默认输出图片图层，文字也保留图片外观，可移动、缩放、调整顺序和删除/恢复。需要改字且保留原字形风格时，优先通过 `makaron chat` 对选中的图片图层使用图片模型编辑，具体效果仍需检查。只有用户明确需要原生可编辑文字字段时，才使用 `--editable-text`，并说明字体匹配是近似的，排版、纹理和风格可能变化。单纯要求分层或改字，不代表要开启此选项。
+
+```bash
+makaron chat --project auto --image poster.png "拆成图层，文字保留图片样式，返回 Makaron 编辑链接"
+makaron layerize --image poster.png --json
+```
+
 ## 需求 → 入口
 
 <!-- makaron:workflow-directory:start -->
