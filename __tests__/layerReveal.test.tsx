@@ -48,6 +48,30 @@ it('ignores a previous snapshot finishing late and honors reduced motion on the 
   expect(view.result.current).toBe('ready');
 });
 
+it('keeps the background unchanged and waits for its decode while highlighting only foreground', async () => {
+  vi.stubGlobal('matchMedia', () => ({ matches: false }));
+  const root = document.createElement('div'), identity = {}, backgroundDecode = deferred(), motion = deferred();
+  const background = layer(() => backgroundDecode.promise), subject = layer(async () => {});
+  background.dataset.editable = 'layer_0';
+  background.style.filter = 'contrast(1.1)';
+  const backgroundAnimate = vi.fn(), subjectAnimate = vi.fn(() => ({ finished: motion.promise, cancel: vi.fn() }));
+  Object.defineProperty(background, 'animate', { value: backgroundAnimate });
+  Object.defineProperty(subject, 'animate', { value: subjectAnimate });
+  root.append(background, subject);
+  const view = renderHook(() => useLayerReveal(identity, true, true, root,
+    [{ ...fields[0], id: 'layer_0', propKey: 'layer_0' }, ...fields]));
+  expect(view.result.current).toBe('loading');
+  expect(subjectAnimate).not.toHaveBeenCalled();
+  await act(async () => backgroundDecode.resolve());
+  await waitFor(() => expect(view.result.current).toBe('revealing'));
+  expect(backgroundAnimate).not.toHaveBeenCalled();
+  expect(background.style.filter).toBe('contrast(1.1)');
+  expect(subjectAnimate).toHaveBeenCalledWith(expect.any(Array), { duration: 1000 });
+  await act(async () => motion.resolve());
+  expect(view.result.current).toBe('ready');
+  expect(background.style.filter).toBe('contrast(1.1)');
+});
+
 it('keeps editing closed on a failed image decode', async () => {
   const root = document.createElement('div'), identity = {};
   root.append(layer(async () => { throw new Error('Decode failed'); }));

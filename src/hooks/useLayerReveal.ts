@@ -33,7 +33,8 @@ export function useLayerReveal(identity: object, enabled: boolean, playerReady: 
         clearTimeout(decodeTimeout);
       }
       if (cancelled) return;
-      if (elements.length && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const foreground = elements.filter(element => readEditableRuntimeId(element) !== 'layer_0');
+      if (foreground.length && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         setResult({ identity, phase: 'revealing' });
         // Mix the selection pink into RGB while preserving each layer's alpha.
         // One shared matrix animates all layers without changing their image URLs.
@@ -57,22 +58,22 @@ export function useLayerReveal(identity: object, enabled: boolean, playerReady: 
         tintSvg.append(filter);
         document.body.append(tintSvg);
         const started = performance.now();
+        const duration = 1000;
         const tick = (now: number) => {
-          const progress = Math.min(1, (now - started) / 480);
-          const amount = progress < .3
-            ? .28 * (1 - (1 - progress / .3) ** 3)
-            : .28 * (1 - (progress - .3) / .7) ** 2;
-          paint(amount);
-          if (progress < 1 && !cancelled) tintFrame = requestAnimationFrame(tick);
+          const elapsed = Math.min(duration, now - started);
+          const fadeIn = 1 - (1 - Math.min(1, elapsed / 180)) ** 3;
+          const fadeOut = (1 - Math.max(0, (elapsed - 480) / 520)) ** 2;
+          paint(.28 * fadeIn * fadeOut);
+          if (elapsed < duration && !cancelled) tintFrame = requestAnimationFrame(tick);
         };
         tintFrame = requestAnimationFrame(tick);
-        animations = elements.map(element => {
+        animations = foreground.map(element => {
           const rest = getComputedStyle(element).filter;
           const highlight = (rest === 'none' ? '' : rest + ' ')
             + `url("#${tintId}")`;
           return element.animate(
             [{ filter: highlight }, { filter: highlight }],
-            { duration: 480 },
+            { duration },
           );
         });
         await Promise.allSettled(animations.map(animation => animation.finished));
