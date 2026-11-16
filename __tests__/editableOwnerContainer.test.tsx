@@ -55,7 +55,9 @@ describe('layer project opening', () => {
   }
   it('lets the owner edit the streamed design even when history fails', async () => {
     state.failHistory = true; state.user = { id: 'author' };
-    render(<ProjectEditorContainer projectId="private" openingLayers={opening()} />);
+    const entry = opening();
+    const streamed = { then(resolve: (value: Awaited<typeof entry>) => void) { void entry.then(resolve); } };
+    render(<ProjectEditorContainer projectId="private" openingLayers={streamed as unknown as typeof entry} />);
     await waitFor(() => expect(state.lastProps?.initialSnapshots[0].design).toBe(design));
     expect(state.lastProps.readOnly).toBe(false);
   });

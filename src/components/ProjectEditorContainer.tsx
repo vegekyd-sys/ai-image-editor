@@ -354,7 +354,8 @@ export default function ProjectEditorContainer({
       controller.abort()
       setEntryError(true)
     }, 20_000)
-    void openingLayers?.then(entry => {
+    // React Flight may stream a thenable whose .then() does not return a chain.
+    void Promise.resolve(openingLayers).then(entry => {
       if (cancelled || accessDenied || !entry || entry.projectId !== projectId ||
         (initialSnapshotId && initialSnapshotId !== entry.snapshotId) || (!entry.isPublic && entry.ownerId !== userId)) return
       opening = entry
