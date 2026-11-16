@@ -95,6 +95,7 @@ export interface WorkspaceFileHandle {
 
 export interface WorkspaceWriteResult {
   success: boolean;
+  uploadForbidden?: boolean;
   storageUrl?: string;
   localPath?: string;
   size?: number;
@@ -519,15 +520,6 @@ async function dbWriteFile(
   const isText = ct.startsWith('text/') || ct === 'application/json';
   const body = isText && typeof content === 'string' ? content : (Buffer.isBuffer(content) ? content : Buffer.from(content));
   const sizeBytes = typeof content === 'string' ? Buffer.byteLength(content, 'utf-8') : (Buffer.isBuffer(content) ? content.length : 0);
-  let localPath: string | undefined;
-
-  try {
-    localPath = await writeLocalMirror(userId, path, body);
-    console.log(`[workspace] local write ${path}`);
-  } catch (e) {
-    console.warn('[workspace] local write failed:', e);
-  }
-
   // Upload to Storage
   const { error: uploadError } = await retryIdempotentStorage(() => supabase.storage
     .from('images')
@@ -536,7 +528,9 @@ async function dbWriteFile(
   if (uploadError) {
     const message=String((uploadError as {message?:unknown}).message||'Workspace upload failed');
     console.error('[workspace] upload error:', message);
-    return { success: false, error: message };
+    const { status, statusCode } = uploadError as { status?: number; statusCode?: string };
+    const forbidden = status === 403 || Number(statusCode) === 403 || message === 'Forbidden';
+    return { success: false, error: message, ...(forbidden ? { uploadForbidden: true } : {}) };
   }
 
   // Get public URL
@@ -559,6 +553,14 @@ async function dbWriteFile(
     const message=String((dbError as {message?:unknown}).message||'Workspace index failed');
     console.error('[workspace] db upsert error:', message);
     return { success: false, error: message };
+  }
+
+  // Readers trust a same-size mirror. Only expose bytes from a confirmed write.
+  let localPath: string | undefined;
+  try {
+    localPath = await writeLocalMirror(userId, path, body);
+  } catch {
+    console.warn('[workspace] local mirror write failed');
   }
 
   cache.clear();

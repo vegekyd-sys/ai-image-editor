@@ -132,7 +132,7 @@ describe('local-first workspace runtime', () => {
     }
   })
 
-  it('writes workspace files to a local mirror before persisting them', async () => {
+  it('exposes a local mirror of persisted workspace files', async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), 'makaron-workspace-local-test-'))
     const previousCacheDir = process.env.MAKARON_WORKSPACE_CACHE_DIR
     process.env.MAKARON_WORKSPACE_CACHE_DIR = cacheDir
