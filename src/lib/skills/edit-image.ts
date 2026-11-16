@@ -43,7 +43,7 @@ export async function editImage(
   const finalPrompt = editPrompt;
 
   const t0 = Date.now();
-  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} hasReference=${hasReference} model=${requestedModel ?? 'auto'} background=${background ?? 'default'}\neditPrompt: ${editPrompt.slice(0, 200)}\n`);
+  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} hasReference=${hasReference} model=${requestedModel ?? 'auto'} background=${background ?? 'default'}`);
 
   // Build references array for multi-image mode
   let references: { url: string; role: string }[] | undefined;
@@ -84,6 +84,9 @@ export async function editImage(
     return { success: true, message, image: result.image, images: result.images, taskId: result.taskId, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage, recovery: result.recovery };
   } catch (error) {
     if (error instanceof MidjourneyRequestError || error instanceof Seedream55RequestError) return { success: false, taskId: error.taskId, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
+    if (error instanceof NanoBanana21RequestError && error.payment) {
+      return { success: false, errorCode: 'image_provider_payment_required', message: error.message };
+    }
     if (error instanceof ImageProviderRefusalError || error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
 
       return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };

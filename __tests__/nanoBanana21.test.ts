@@ -45,6 +45,25 @@ describe('Nano Banana 2.1 OpenRouter contract', () => {
     await expect(nanoBanana21Backend.generate({ prompt: 'Scene' })).rejects.toThrow('No automatic retry');
     expect(fetch).toHaveBeenCalledTimes(1);
   });
+  it.each([
+    { status: 402, body: 'unreadable private body', source: 'unknown' },
+    { status: 402, body: JSON.stringify({ error: { metadata: { limit_source: 'private injected value' } } }), source: 'unknown' },
+    { status: 402, body: JSON.stringify({ error: { metadata: { limit_source: 'openrouter_key_limit' } } }), source: 'openrouter_key_limit' },
+    { status: 200, body: JSON.stringify({ error: { code: 402, metadata: { limit_source: 'openrouter_credits', reason: 'weight_exceeds_budget' } } }), source: 'openrouter_credits' },
+  ])('keeps only documented billing fields on status $status ($source)', async ({ status, body, source }) => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const fetch = vi.fn().mockResolvedValue(new Response(body, { status }));
+      vi.stubGlobal('fetch', fetch);
+      await expect(nanoBanana21Backend.generate({ prompt: 'private instruction' })).rejects.toMatchObject({
+        contentBlocked: false, payment: { limitSource: source }, message: expect.stringContaining(source),
+      });
+      expect(fetch).toHaveBeenCalledOnce();
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private');
+    } finally { log.mockRestore(); }
+  });
+
   it('identifies invalid JSON without logging response bodies or repeating the paid POST', async () => {
     vi.stubEnv('OPENROUTER_API_KEY', 'test');
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});

@@ -9,6 +9,7 @@ export interface SkillContext {
 export interface SkillResult {
   success: boolean;
   message: string;
+  errorCode?: 'image_provider_payment_required';
   images?: string[];
   taskId?: string;
   image?: string;              // base64 result image (data URL)

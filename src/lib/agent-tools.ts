@@ -1523,7 +1523,7 @@ function createGenerateImageTool(
 
         // Resolve reference images: user-uploaded + snapshot indices
         const resolvedRefs = elementInput ? [elementInput.reference] : !retake_source && ctx.referenceImages ? [...ctx.referenceImages] : [];
-        console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
+        console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length}`);
         if (reference_media_indices?.length) {
           for (const refIdx of reference_media_indices) {
             const v = validateImageIndex(ctx.snapshotImages, refIdx);
@@ -1618,6 +1618,15 @@ function createGenerateImageTool(
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
           },
         );
+        if (skillResult.errorCode === 'image_provider_payment_required') return {
+          success: false, terminal: true, errorCode: skillResult.errorCode, message: skillResult.message,
+          userMessage: {
+            zh: 'Nano Banana 2.1 的图片服务返回了计费错误（402），这次未返回图片。',
+            'zh-Hant': 'Nano Banana 2.1 的圖片服務傳回計費錯誤（402），這次未傳回圖片。',
+            en: 'The Nano Banana 2.1 image service returned a billing error (402). No image was returned for this request.',
+            ja: 'Nano Banana 2.1 の画像サービスで課金エラー（402）が発生し、今回は画像が返されませんでした。',
+          },
+        };
         // Reuse the existing terminal-tool contract: the model must not start
         // another paid workflow after the bounded character attempt fails.
         // This is a result for this input, not a project/NSFW state mutation.
@@ -3686,6 +3695,7 @@ function createEditElementTool(scope: AgentToolFactoryScope) {
           if (!savedInput.success || !savedInput.storageUrl) throw new Error('Could not prepare the original element for editing.');
           const generator = createGenerateImageTool(scope, { source: savedInput.storageUrl, reference: source });
           const generated = await generator.execute!({ benignCharacterContent: false, editPrompt: `${operation.prompt}\nEdit ONLY the supplied FIRST crop in place: ${prepared.box.width} by ${prepared.box.height} pixels, at original-asset x=${prepared.box.left}, y=${prepared.box.top}. The SECOND image is the complete original element for identity/context ONLY, not the output canvas. Return only the edited crop, never copy the whole character or scene from the second image into it. Preserve the crop framing, contact points, pose and identity. ${prepared.hasAlpha ? "Transparent source pixels must remain alpha, never paint a solid backdrop." : "Keep the existing background."} Do not zoom, recenter or invent a different person.`, outputFormat: 'png', aspectRatio: formatAspectRatio(prepared.box.width, prepared.box.height), ...(prepared.hasAlpha ? { background: 'transparent' as const } : {}) }, executionOptions) as any;
+          if (generated.terminal) return generated;
           if (!generated.success || !generated.image) return { success: false, error: generated.message || 'Element image generation failed.' };
           const bytes = await finishElementImage(prepared, generated.image);
           const saved = await workspace.writeFile(`${ctx.projectId}/element-edits/${id}.png`, bytes, input.supabase, input.userId, 'image/png');
