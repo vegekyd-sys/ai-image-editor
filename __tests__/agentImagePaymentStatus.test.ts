@@ -35,6 +35,7 @@ it('reports an upstream image payment rejection as a failed polled run after dra
   const message = '本次图片服务返回 402。';
   state.stream.mockReturnValue({
     fullStream: [
+      { type: 'text-delta', text: '正在替换文字。' },
       { type: 'tool-result', toolName: 'generate_image', toolCallId: 'call', output: {
         success: false, terminal: true, errorCode: 'image_provider_payment_required',
         message: 'provider 402', userMessage: { zh: message },
@@ -49,6 +50,9 @@ it('reports an upstream image payment rejection as a failed polled run after dra
     locale: 'zh', execution: { runId: 'run', attemptId: 'attempt', attemptNo: 1, inputEpoch: 0 },
     promptPrefetch: { corePromptMode: Promise.resolve('layered'), systemPrompt: Promise.resolve('test') },
   })) events.push(event);
+  const liveText = events.flatMap(event => event.type === 'content' ? [event.text] : []).join('');
+  expect(liveText).toContain('正在替换文字。');
+  expect(liveText.split(message)).toHaveLength(2);
   const terminal = events.find(event => event.type === 'error');
   expect(terminal).toMatchObject({ code: 'image_provider_payment_required', recoverable: false, message });
   expect(events.some(event => event.type === 'usage')).toBe(true);

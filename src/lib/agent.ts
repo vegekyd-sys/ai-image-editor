@@ -1321,10 +1321,9 @@ export async function* runMakaronAgent(
             if (outputRecord.errorCode === 'image_provider_payment_required') {
               // Drain the current SDK step for token usage before closing the run.
               providerPaymentError = { type: 'error', code: outputRecord.errorCode, recoverable: false, message: userFacingMessage };
-            } else {
-              finalStepTextChars += userFacingMessage.trim().length;
-              yield { type: 'content', text: `\n\n${userFacingMessage}` };
             }
+            finalStepTextChars += userFacingMessage.trim().length;
+            yield { type: 'content', text: `\n\n${userFacingMessage}` };
           }
           if (completedCodeTargetPath && toolName === 'write_file') {
             const savedPath = typeof outputRecord?.path === 'string' ? outputRecord.path : undefined;
