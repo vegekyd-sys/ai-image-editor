@@ -1,5 +1,6 @@
 'use client'
 
+import { restoreProjectSnapshot, type OpeningLayerProject } from '@/lib/editor/project-snapshot';
 import { isLayerSnapshot, preloadLayerImages } from '@/lib/editor/layer-preview';
 import { hasCompleteRasterLayerManifest } from '@/lib/layerize-design';
 import { queueEditableSave } from '@/lib/editor/editable-save-queue';
@@ -9,7 +10,6 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import { uploadImage } from '@/lib/supabase/storage'
 import { DesignPayload, Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
-import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { groupWebSearchSourcesByMessage } from '@/lib/web-citations'
 import { createPersistedEditableDesign } from '@/lib/editor/editable-persistence'
 import { cacheProjectData, getCachedProjectData } from '@/lib/imageCache'
@@ -41,36 +41,21 @@ export function useProject(projectId: string, userId: string) {
 
   // --- Load ---
 
-  const loadProject = useCallback(async (onDesignsLoaded?: (snapshots: Snapshot[], messages: Message[]) => void, initialSnapshotId?: string | null): Promise<LoadedProject> => {
+  const loadProject = useCallback(async (onDesignsLoaded?: (snapshots: Snapshot[], messages: Message[]) => void, initialSnapshotId?: string | null, options?: { opening: () => OpeningLayerProject | null; signal: AbortSignal }): Promise<LoadedProject> => {
     const supabase = getSupabase()
 
+    function cancellable<T extends { abortSignal(signal: AbortSignal): unknown }>(query: T): T {
+      if (options) query.abortSignal(options.signal)
+      return query
+    }
     const [snapshotsRes, messagesRes, projectRes, agentMediaEventsRes, musicRes] = await Promise.all([
-      supabase
-        .from('snapshots')
-        .select('*')
-        .eq('project_id', projectId)
-        .order('sort_order', { ascending: true }),
-      supabase
-        .from('messages')
-        .select('*')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('projects')
-        .select('title, timeline_version, user_id, is_public')
-        .eq('id', projectId)
-        .maybeSingle(),
-      supabase
-        .from('agent_events')
-        .select('type, data, created_at, seq, run_id')
-        .eq('project_id', projectId)
-        .in('type', ['preview_frame_captured', 'source', 'tool_call', 'image'])
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('project_music')
-        .select('suno_task_id, track_index, audio_url, duration, title, tags, status')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: true }),
+      cancellable(supabase.from('snapshots').select('*').eq('project_id', projectId).order('sort_order', { ascending: true })),
+      cancellable(supabase.from('messages').select('*').eq('project_id', projectId).order('created_at', { ascending: true })),
+      cancellable(supabase.from('projects').select('title, timeline_version, user_id, is_public').eq('id', projectId)).maybeSingle(),
+      cancellable(supabase.from('agent_events').select('type, data, created_at, seq, run_id').eq('project_id', projectId)
+        .in('type', ['preview_frame_captured', 'source', 'tool_call', 'image']).order('created_at', { ascending: true })),
+      cancellable(supabase.from('project_music').select('suno_task_id, track_index, audio_url, duration, title, tags, status')
+        .eq('project_id', projectId).order('created_at', { ascending: true })),
     ])
 
     if (projectRes.error) throw projectRes.error
@@ -81,12 +66,12 @@ export function useProject(projectId: string, userId: string) {
 
     // Only load project_animations for v1 projects (v2 stores videos as snapshots)
     const animationRes = timelineVersion < 2
-      ? await supabase
+      ? await cancellable(supabase
           .from('project_animations')
           .select('id, video_url, prompt, snapshot_urls, status, piapi_task_id, created_at')
           .eq('project_id', projectId)
           .in('status', ['completed', 'processing'])
-          .order('created_at', { ascending: false })
+          .order('created_at', { ascending: false }))
       : { data: [] }
 
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
@@ -114,25 +99,7 @@ export function useProject(projectId: string, userId: string) {
       ])
     }
 
-    const snapshots: Snapshot[] = restoreImageGenerationHistory(dbSnapshots.map((s) => {
-      const imageUrl = s.image_url || (s.type === 'video' ? VIDEO_PLACEHOLDER_IMAGE : '')
-      return {
-        id: s.id,
-        image: imageUrl,
-        tips: (Array.isArray(s.tips) ? s.tips : []).map(t => ({
-          ...t,
-          previewStatus: t.previewImage ? 'done' as const
-            : t.editPrompt ? 'none' as const : undefined,
-        })),
-        messageId: s.message_id || '',
-        imageUrl: imageUrl || undefined,
-        description: s.description ?? undefined,
-        ...(s.type ? { type: s.type as Snapshot['type'] } : {}),
-        ...(s.design_path ? { designPath: s.design_path } : {}),
-        ...(s.video_meta ? { videoMeta: s.video_meta as VideoMeta } : {}),
-        ...(s.metadata ? { metadata: s.metadata } : {}),
-      }
-    }), agentMediaEvents)
+    const snapshots: Snapshot[] = restoreImageGenerationHistory(dbSnapshots.map(restoreProjectSnapshot), agentMediaEvents)
 
     // Publish posters and history first; persisted compositions hydrate independently.
     // Public viewers must read the owner workspace, never their own workspace.
@@ -157,10 +124,12 @@ export function useProject(projectId: string, userId: string) {
       const dp = snap.designPath
       if (!dp || !resolvedUserId) return
       try {
-        let design: unknown | null = null
+        const entry = options?.opening()
+        let design: unknown | null = entry?.projectId === projectId && entry.ownerId === resolvedUserId &&
+          entry.snapshotId === snap.id && entry.designPath === dp ? entry.design : null
         const storagePath = `${resolvedUserId}/workspace/${dp}`
         const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
-        if (urlData?.publicUrl) {
+        if (!design && urlData?.publicUrl) {
           // Cache-bust: design JSON is updated in-place via upsert, CDN caches stale version
           const bustUrl = `${urlData.publicUrl}?t=${Date.now()}`
           const res = await fetch(bustUrl, { signal: AbortSignal.timeout(5000) }).catch(() => null)

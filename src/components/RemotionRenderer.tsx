@@ -9,7 +9,7 @@ import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } fro
 import { usesThreeCanvas } from '@/lib/remotion-gl';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import { isFixedCanvasDesign } from '@/lib/editor/design-layer-state';
-import { fetchPreviewImageBlob, layerPreviewSources } from '@/lib/editor/layer-preview';
+import { fetchPreviewImageBlob, playerLayerSources } from '@/lib/editor/layer-preview';
 export { layerPreviewSources } from '@/lib/editor/layer-preview';
 import { isRasterLayerizeDesign } from '@/lib/layerize-design';
 import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
@@ -397,10 +397,7 @@ export default function RemotionRenderer({
 
   const [compiledComponent, setComponent] = useState<React.ComponentType<any> | null>(null);
   const [compiledCode, setCompiledCode] = useState<string | null>(null);
-  const previewSources = useMemo(() => {
-    if (typeof window === 'undefined' || !window.matchMedia?.('(pointer: coarse)').matches) return undefined;
-    return layerPreviewSources(design, window.innerWidth, window.devicePixelRatio || 1);
-  }, [design]);
+  const previewSources = useMemo(() => playerLayerSources(design), [design]);
   const [inputProps, setInputProps] = useState<Record<string, unknown>>(() =>
     Object.fromEntries(Object.entries(design.props || {}).map(([key, value]) =>
       [key, typeof value === 'string' ? previewSources?.get(value) || value : value])),

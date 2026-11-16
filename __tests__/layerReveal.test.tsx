@@ -54,3 +54,18 @@ it('keeps editing closed on a failed image decode', async () => {
   const view = renderHook(() => useLayerReveal(identity, true, true, root, fields));
   await waitFor(() => expect(view.result.current).toBe('error'));
 });
+
+it('ends loading when image decoding stalls and ignores its late completion', async () => {
+  vi.useFakeTimers();
+  try {
+    const root = document.createElement('div'), identity = {}, decode = deferred();
+    root.append(layer(() => decode.promise));
+    const view = renderHook(() => useLayerReveal(identity, true, true, root, fields));
+    act(() => { vi.advanceTimersByTime(20_000); });
+    expect(view.result.current).toBe('error');
+    await act(async () => { decode.resolve(); });
+    expect(view.result.current).toBe('error');
+  } finally {
+    vi.useRealTimers();
+  }
+});

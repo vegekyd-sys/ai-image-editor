@@ -15,12 +15,19 @@ export function useLayerReveal(identity: object, enabled: boolean, playerReady: 
     let cancelled = false;
     let animations: Animation[] = [];
     const expected: string[] = JSON.parse(ids);
+    let decodeTimeout: number | undefined;
     const reveal = async (elements: HTMLElement[]) => {
+      decodeTimeout = window.setTimeout(() => {
+        cancelled = true;
+        setResult({ identity, phase: 'error' });
+      }, 20_000);
       try {
         await Promise.all(Array.from(container.querySelectorAll('img'), image => image.decode()));
       } catch {
         if (!cancelled) setResult({ identity, phase: 'error' });
         return;
+      } finally {
+        clearTimeout(decodeTimeout);
       }
       if (cancelled) return;
       if (elements.length && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -57,6 +64,7 @@ export function useLayerReveal(identity: object, enabled: boolean, playerReady: 
       cancelled = true;
       observer.disconnect();
       clearTimeout(timeout);
+      clearTimeout(decodeTimeout);
       animations.forEach(animation => animation.cancel());
     };
   }, [identity, enabled, playerReady, container, ids]);

@@ -1,6 +1,8 @@
 'use client'
 
 import { dedupeEditorMessages, videoCompletionMessageId } from '@/lib/editor/message-dedupe';
+import { preloadLayerImages } from '@/lib/editor/layer-preview'
+import type { OpeningLayerProject } from '@/lib/editor/project-snapshot'
 
 import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
@@ -30,6 +32,7 @@ import { useLocale } from '@/lib/i18n'
 interface ProjectEditorContainerProps {
   projectId: string
   initialSnapshotId?: string | null
+  openingLayers?: Promise<OpeningLayerProject | null>
   className?: string
   loadingClassName?: string
   onBack?: () => void
@@ -128,6 +131,7 @@ export function EditorLoadingShell() {
 export default function ProjectEditorContainer({
   projectId,
   initialSnapshotId,
+  openingLayers,
   className = 'h-dvh w-full',
   loadingClassName = 'h-dvh flex items-center justify-center relative z-[1]',
   onBack,
@@ -332,6 +336,8 @@ export default function ProjectEditorContainer({
   }, [projectId, isInlineActive, isNewProject])
 
   const userId = user?.id
+  const [loadAttempt, setLoadAttempt] = useState(0)
+  const [entryError, setEntryError] = useState(false)
   useEffect(() => {
     if (!isInlineActive) return
     if (!projectId) return
@@ -339,8 +345,40 @@ export default function ProjectEditorContainer({
     if (authLoading) return
 
     let cancelled = false
-    const pageT0 = performance.now()
+    let accessDenied = false
+    let opening: OpeningLayerProject | null = null
     const hydratedSnapshots = new Map<string, Snapshot>()
+    setEntryError(false)
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => {
+      controller.abort()
+      setEntryError(true)
+    }, 20_000)
+    void openingLayers?.then(entry => {
+      if (cancelled || accessDenied || !entry || entry.projectId !== projectId ||
+        (initialSnapshotId && initialSnapshotId !== entry.snapshotId) || (!entry.isPublic && entry.ownerId !== userId)) return
+      opening = entry
+      preloadLayerImages(entry.design)
+      void import('@/components/RemotionRenderer').catch(() => {})
+      void import('@/components/DesignOverlay').catch(() => {})
+      setProjectOwnerId(entry.ownerId)
+      setIsPublicProject(entry.isPublic)
+      const target = entry.snapshots.find(s => s.id === entry.snapshotId)
+      if (target && !hydratedSnapshots.get(target.id)?.design) hydratedSnapshots.set(target.id, { ...target, design: entry.design })
+      if (!shownRef.current) {
+        setInitialSnapshots(dedupeVideoSnapshots(entry.snapshots.map(s => hydratedSnapshots.get(s.id) ?? s)))
+        setInitialTitle(entry.title)
+        setTimelineVersion(entry.timelineVersion)
+        shownRef.current = true
+        setLoaded(true)
+      } else {
+        setInitialSnapshots(prev => prev?.map(s => s.id === entry.snapshotId && s.designPath === entry.designPath && !s.design
+          ? { ...s, design: entry.design } : s) ?? prev)
+      }
+      clearTimeout(timeout)
+      setEntryError(false)
+    }).catch(() => {})
+    const pageT0 = performance.now()
     loadProject((snapshots, messages) => {
       if (cancelled) return
       for (const snapshot of snapshots) hydratedSnapshots.set(snapshot.id, snapshot)
@@ -350,10 +388,14 @@ export default function ProjectEditorContainer({
         return fresh?.design || fresh?.designLoadFailed ? { ...s, design: fresh.design ?? s.design, designLoadFailed: fresh.designLoadFailed } : s
       }) ?? prev)
       setInitialMessages(prev => prev?.map(m => hydratedMessages.get(m.id) ?? m) ?? prev)
-    }, initialSnapshotId).then(async ({ snapshots, messages, title, animations, timelineVersion: tv, ownerId, isPublic, musicRows }) => {
+    }, initialSnapshotId, { opening: () => opening, signal: controller.signal }).then(async ({ snapshots, messages, title, animations, timelineVersion: tv, ownerId, isPublic, musicRows }) => {
       console.log(`⏱️ [page] loadProject done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
       if (!ownerId || (!isPublic && ownerId !== userId)) {
+        accessDenied = true
+        setIsPublicProject(false)
+        setProjectOwnerId(null)
+        clearTimeout(timeout)
         if (!userId) sessionStorage.setItem('mkr_return_url', `/projects/${projectId}`)
         leaveEditor(userId ? '/projects' : '/login')
         return
@@ -408,6 +450,8 @@ export default function ProjectEditorContainer({
       const patched = await patchFromImageCache(restoredSnapshots)
       console.log(`⏱️ [page] patchFromImageCache done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
+      clearTimeout(timeout)
+      setEntryError(false)
       shownRef.current = true
       setInitialSnapshots(patched.map(s => {
         const fresh = hydratedSnapshots.get(s.id)
@@ -422,16 +466,12 @@ export default function ProjectEditorContainer({
     }).catch((err: unknown) => {
       if (cancelled) return
       console.error('Failed to load project:', err)
-      if (!shownRef.current) {
-        shownRef.current = true
-        setInitialSnapshots([])
-        setInitialMessages([])
-        setLoaded(true)
-      }
+      clearTimeout(timeout)
+      if (!opening) setEntryError(true)
     })
 
-    return () => { cancelled = true }
-  }, [userId, authLoading, projectId, initialSnapshotId, loadProject, isNewProject, isInlineActive, t, locale, leaveEditor])
+    return () => { cancelled = true; clearTimeout(timeout); controller.abort() }
+  }, [userId, authLoading, projectId, initialSnapshotId, openingLayers, loadAttempt, loadProject, isNewProject, isInlineActive, t, locale, leaveEditor])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
     return saveSnapshot(snapshot, sortOrder, onUploaded)
@@ -476,6 +516,12 @@ export default function ProjectEditorContainer({
   // no authenticated persistence callbacks, leaving the photo only in local
   // cache. Keep the loading shell until the new-project owner is available.
   if (!loaded || (!isNewProject && (authLoading || isPublicProject === null || (!isPublicProject && !isOwner))) || (isNewProject && (authLoading || !user))) {
+    if (entryError) return (
+      <div className={loadingClassName + ' flex-col gap-3 bg-black text-white'} style={{ zIndex: 10 }}>
+        <p role="status">{t('editor.errorRetry')}</p>
+        <button type="button" className="rounded-full bg-white/15 px-4 py-2" onClick={() => setLoadAttempt(n => n + 1)}>{t('project.retry')}</button>
+      </div>
+    )
     return (
       <div className={loadingClassName}>
         <EditorLoadingShell />

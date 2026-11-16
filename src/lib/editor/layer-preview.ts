@@ -1,5 +1,6 @@
 import type { DesignPayload, Snapshot } from '@/types';
-import { getOriginFormatThumbnailUrl } from '@/lib/supabase/storage';
+import { getOriginFormatThumbnailUrl, getThumbnailUrl } from '@/lib/supabase/storage';
+import { hasCompleteRasterLayerManifest } from '@/lib/layerize-design';
 import { isFixedCanvasDesign } from './design-layer-state';
 
 export function isLayerSnapshot(snapshot?: Snapshot): boolean {
@@ -12,7 +13,7 @@ export function isLayerSnapshot(snapshot?: Snapshot): boolean {
 
 // Keep original URLs in saved designs and exports. On a touch screen, a tiny
 // object on a poster does not need a full provider-sized bitmap in the Player.
-export function layerPreviewSources(design: DesignPayload, viewportWidth: number, dpr: number): Map<string, string> {
+export function layerPreviewSources(design: DesignPayload, viewportWidth: number, dpr: number, webp = false): Map<string, string> {
   const sources = new Map<string, string>();
   if (!isFixedCanvasDesign(design) || design.animation) return sources;
   const scale = Math.min(1, viewportWidth * Math.min(dpr, 3) / design.width);
@@ -24,9 +25,20 @@ export function layerPreviewSources(design: DesignPayload, viewportWidth: number
     const height = Number(/"height":(\d+(?:\.\d+)?)/.exec(match[2])?.[1]);
     if (!width || !height) continue;
     const size = Math.min(1600, Math.max(64, Math.ceil(Math.max(width, height) * scale / 64) * 64));
-    sources.set(source, getOriginFormatThumbnailUrl(source, size, 95, size, 'contain'));
+    const thumbnail = webp ? getThumbnailUrl(source, size, 95, size, 'contain')
+      : getOriginFormatThumbnailUrl(source, size, 95, size, 'contain');
+    sources.set(source, webp && thumbnail.includes('/storage/v1/render/image/public/') ? thumbnail + '&format=webp' : thumbnail);
   }
   return sources;
+}
+
+// A single transparent rendition per generated layer lets the SSR resource hint
+// and the Player request the same URL before the editor knows its viewport.
+export function playerLayerSources(design: DesignPayload): Map<string, string> | undefined {
+  if (hasCompleteRasterLayerManifest(design)) return layerPreviewSources(design, design.width, 1, true);
+  if (typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches) {
+    return layerPreviewSources(design, window.innerWidth, window.devicePixelRatio || 1);
+  }
 }
 
 const openingImages = new Map<string, Promise<Blob>>();
@@ -34,7 +46,7 @@ const openingImages = new Map<string, Promise<Blob>>();
 export async function fetchPreviewImageBlob(url: string): Promise<Blob> {
   const opening = openingImages.get(url);
   if (opening) return opening;
-  const response = await fetch(url);
+  const response = await fetch(url, url.includes('/layerize/') ? { signal: AbortSignal.timeout(20_000) } : undefined);
   if (!response.ok) throw new Error(`Image fetch failed: ${response.status}`);
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.toLowerCase().startsWith('image/')) {
@@ -46,8 +58,7 @@ export async function fetchPreviewImageBlob(url: string): Promise<Blob> {
 // Share the actual download with the Player, even when the HTTP cache is cold.
 // Evict failed requests immediately so the usual retry/fallback can run.
 export function preloadLayerImages(design: DesignPayload): void {
-  const previews = window.matchMedia('(pointer: coarse)').matches
-    ? layerPreviewSources(design, window.innerWidth, window.devicePixelRatio || 1) : undefined;
+  const previews = playerLayerSources(design);
   const sources = new Set<string>();
   for (const field of design.editables ?? []) {
     const source = design.props?.[field.type === 'image' ? field.propKey : field.propKey + '_source'];
