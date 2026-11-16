@@ -626,7 +626,19 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       } catch (error) { return { success: false, submissionUncertain: false, message: error instanceof Error ? error.message : 'Invalid Flash input.' }; }
     }
     // H3 validates the actual first-frame bytes before reserving credits.
-    if (billingUsage && route.provider !== 'fal-h3-max') await input.onBeforeProviderSubmit!(billingUsage);
+    if (billingUsage && route.provider !== 'fal-h3-max') {
+      try {
+        await input.onBeforeProviderSubmit!(billingUsage);
+      } catch (error) {
+        // The provider POST has not started. A rejected admission (including
+        // insufficient credits) must not be reported as an unknown submission.
+        return {
+          success: false,
+          submissionUncertain: false,
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
 
     if (route.provider === 'evolink-kling4') {
       const { createKling4Task } = await import('../kling4');
