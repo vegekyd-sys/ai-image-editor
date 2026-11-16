@@ -180,7 +180,7 @@ describe('Remotion preview playback contract', () => {
 
     expect(rendererSource).toContain('const designPropsRef = useRef(design.props || {})')
     expect(rendererSource).toContain('designPropsRef.current = design.props || {}')
-    expect(rendererSource).toContain('design.fontSubstitutions, retryToken, notifyLoading, fontBarrier]')
+    expect(rendererSource).toContain('}, [design.code, design.fontSubstitutions, retryToken, notifyLoading, fontBarrier, rasterLayers])')
     expect(rendererSource).toContain('}, [design.props, snapshotId, notifyLoading, fontRenderKey, fontBarrier, previewSources])')
     expect(rendererSource).not.toContain('}, [design.code, design.fontSubstitutions, design.props])')
   })
