@@ -1048,6 +1048,7 @@ const zh = {
   'agent.status.imageGenerationFailed': '图片生成失败',
   'agent.status.resuming': '上一轮卡住了，正在从已保存草稿继续...',
   'agent.error.recoverable': '模型在完成刚才承诺的修改前中断了。草稿已经保存，发送“继续”会从这份草稿恢复。',
+  'agent.error.contextLength': '项目上下文超过了当前模型能读取的长度，自动接续已停止。已有消息、素材和草稿仍保留。',
   'agent.error.fatal': '模型在完成本次请求前中断，且没有可恢复的草稿。请重新发送请求。',
   'agent.error.connectionEnded': 'Agent 在没有完成结果时结束了。已保存的工作会保留，发送“继续”即可恢复。',
   'agent.error.runtimeDraftSaved': 'Agent 运行环境已中断，但草稿已经保存。发送“继续”会从这份草稿恢复。',

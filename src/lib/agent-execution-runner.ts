@@ -912,6 +912,9 @@ export async function runAgentExecutionAttempt(
             ? getAgentContextPolicy(resolvedModel.id).providerCompactAtTokens
             : undefined,
           historyBoundary: ctx.historyBoundary,
+          recoverDeepSeekHistory: typedPreviousAttempts.some(attempt =>
+            attempt.terminal_code === 'context_length_exceeded' && attempt.metadata?.inputEpoch === inputVersionAtAttemptStart
+          ),
           execution: {
             leaseToken: claim.lease_token,
             runId,

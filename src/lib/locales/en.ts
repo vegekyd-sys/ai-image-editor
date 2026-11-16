@@ -1048,6 +1048,7 @@ const en = {
   'agent.status.imageGenerationFailed': 'Image generation failed',
   'agent.status.resuming': 'The last step stalled — resuming from the saved draft...',
   'agent.error.recoverable': 'The model stopped before completing the promised change. Your draft is saved; send “continue” to resume from it.',
+  'agent.error.contextLength': 'The project context exceeds this model’s input limit. Automatic retries have stopped. Your messages, assets and drafts are preserved.',
   'agent.error.fatal': 'The model stopped before completing this request and no resumable draft was saved. Please retry the request.',
   'agent.error.connectionEnded': 'The agent connection ended without a completed result. Your saved work is preserved; send “continue” to resume.',
   'agent.error.runtimeDraftSaved': 'The agent runtime stopped, but your draft was saved. Send “continue” to resume from it.',

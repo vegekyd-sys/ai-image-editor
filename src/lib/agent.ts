@@ -1,6 +1,7 @@
 import { activeSkillNameFromPrompt } from './template-skill-video-model';
 import { isOpenAIDirectFallbackError, isOpenAIQuotaExhausted, markOpenAIDirectExhausted, refreshOpenAIDirectBudget } from './openai-direct';
 import { streamText } from 'ai';
+import { prepareDeepSeekHistoryRecovery } from './deepseek-history-recovery';
 import { initializeAgentSnapshotUrls } from './agent-media-index';
 import type { ModelMessage } from 'ai';
 import type { ModelId } from './models/types';
@@ -312,6 +313,7 @@ export interface RunMakaronAgentOptions {
   attemptBudgetMs?: number;
   maxSteps?: number;
   contextCompactAtTokens?: number;
+  recoverDeepSeekHistory?: boolean;
   historyBoundary?: string;
   /** Started by the caller before prompt-context construction. */
   promptPrefetch?: AgentPromptPrefetch;
@@ -411,6 +413,14 @@ export async function* runMakaronAgent(
   // analysisOnly: multimodal Agents see the image in their first request;
   // text-only image Agents and all video analysis retain their analyzer tool.
   // normal chat / animation: all tools including workspace (agent.md controls behavior)
+  // Lightweight analysis and reaction modes intentionally skip history.
+  const sendHistory = !analysisOnly && !tipReactionOnly;
+  const fullHistory = sendHistory ? (options?.history ?? []) : [];
+  const canPageHistory = sendHistory && !options?.disableToolCalls && runtime.spec.provider === 'deepseek' && Boolean(options?.execution);
+  const historicalFiles = canPageHistory && options?.recoverDeepSeekHistory
+    ? prepareDeepSeekHistoryRecovery(fullHistory) : undefined;
+  const history = historicalFiles?.messages ?? fullHistory;
+  if (historicalFiles?.size) allTools.read_history_file = historicalFiles.reader;
   const tools = tipReactionOnly ? undefined : analysisOnly
     ? nativeImageAnalysis
       ? undefined
@@ -514,11 +524,6 @@ export async function* runMakaronAgent(
         p?.type === 'image' || (p?.type === 'file' && p.mediaType?.startsWith('image/'))
       )).length
     : 0;
-  // analysis / tipReaction modes intentionally skip history to keep
-  // the request single-turn (matches prior behavior). Normal chat and video
-  // requests send it so read_file/tool results can be reused cross-turn.
-  const sendHistory = !analysisOnly && !tipReactionOnly;
-  const history = sendHistory ? (options?.history ?? []) : [];
   console.log(
     `[agent-req] systemChars=${systemPrompt.length} toolsChars=${toolsChars} userChars=${userContentChars} images=${userImagesCount} historyTurns=${history.length} mode=${tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal'}`
   );
@@ -1485,10 +1490,11 @@ export async function* runMakaronAgent(
               finalStepToolCalls,
               finalStepDeliveredArtifact,
               streamError,
+              provider: runtime.spec.provider,
             });
 
       if (
-        !nonRetryableToolFailure
+        !nonRetryableToolFailure && assessment.code !== 'context_length_exceeded'
         && (attemptBudgetReached || stepBudgetReached)
       ) {
         assessment = {
@@ -1616,13 +1622,18 @@ export async function* runMakaronAgent(
           : {}),
         ...(assessment.detail ? { errorDetail: assessment.detail } : {}),
       };
-      const recoverable = assessment.retryable && Boolean(
-        checkpoint.draftPath
-        || checkpoint.streamedCodePath
-        || checkpoint.compositionPartPaths?.length
-        || checkpoint.studioRunId
-        || options?.execution,
-      );
+      const contextOverflow = assessment.code === 'context_length_exceeded';
+      // Only hand off a rejected input when a changed request is available.
+      // The runner remembers this terminal code across subsequent attempts.
+      const recoverable = contextOverflow
+        ? canPageHistory && !options?.recoverDeepSeekHistory && prepareDeepSeekHistoryRecovery(fullHistory).size > 0
+        : assessment.retryable && Boolean(
+            checkpoint.draftPath
+            || checkpoint.streamedCodePath
+            || checkpoint.compositionPartPaths?.length
+            || checkpoint.studioRunId
+            || options?.execution,
+          );
       const usageEvent = buildUsageEvent();
       if (usageEvent) yield usageEvent;
       yield {
@@ -1632,7 +1643,7 @@ export async function* runMakaronAgent(
         checkpoint,
         message: recoverable
           ? translate(responseLocale, 'agent.error.recoverable')
-          : translate(responseLocale, 'agent.error.fatal'),
+          : translate(responseLocale, contextOverflow ? 'agent.error.contextLength' : 'agent.error.fatal'),
       };
       return;
     }
