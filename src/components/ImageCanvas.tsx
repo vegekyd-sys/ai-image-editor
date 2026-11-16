@@ -1328,7 +1328,7 @@ export default function ImageCanvas({
       data-project-canvas={projectId}
       data-layer-phase={layerEntry ? (layerLoadFailed || rendererFailed ? 'error' : layerPhase) : undefined}
       data-canvas-ready={canvasReady ? 'true' : 'false'}
-      className="absolute inset-0 flex items-center justify-center touch-none select-none"
+      className="absolute inset-0 isolate flex items-center justify-center touch-none select-none"
       style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
       /* Edit mode: capture-phase intercept blocks ALL gestures before they reach any handler.
          Moveable (z-3000 on body) and DesignOverlay hit-targets are unaffected. */

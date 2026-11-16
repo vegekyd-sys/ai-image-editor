@@ -5,11 +5,11 @@ import { LocaleProvider } from '@/lib/i18n';
 
 const mocks = vi.hoisted(() => ({
   compress: vi.fn(), push: vi.fn(), canvas: null as any, panel: null as any,
-  reconnect: vi.fn(), disconnect: vi.fn(),
+  reconnect: vi.fn(), disconnect: vi.fn(), activeRunId: null as string | null,
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replace: vi.fn() }) }));
 vi.mock('@/hooks/useIsDesktop', () => ({ useIsDesktop: () => false }));
-vi.mock('@/hooks/useAgentRun', () => ({ useAgentRun: () => ({ activeRunId: null, reconnect: mocks.reconnect, disconnect: mocks.disconnect }) }));
+vi.mock('@/hooks/useAgentRun', () => ({ useAgentRun: () => ({ activeRunId: mocks.activeRunId, reconnect: mocks.reconnect, disconnect: mocks.disconnect }) }));
 vi.mock('@/lib/imageUtils', () => ({ compressBase64Image: mocks.compress, compressImageFile: vi.fn(), isHeicFile: () => false }));
 vi.mock('@/lib/agentStream', () => ({ streamAgent: vi.fn(async () => {}) }));
 vi.mock('@/lib/babel-status', () => ({ getBabelStatus: () => ({ status: 'ready' }), subscribeBabelStatus: () => () => {} }));
@@ -36,13 +36,32 @@ const fields = [
 const snapshots = [{ id: 'source', image: '/poster.png', tips: [], messageId: '', type: 'edit' as const,
   design: { code: 'function Composition() { return null; }', width: 800, height: 600,
     props: { title: 'Source', photo: '/photo.png', layer: '/layer.png', clip: '/clip.mp4' }, editables: fields } }];
-beforeEach(() => { vi.clearAllMocks(); mocks.canvas = null; mocks.panel = null; localStorage.clear(); localStorage.setItem('mkr_auto_tips', 'off'); localStorage.setItem('locale', 'zh'); vi.stubGlobal('fetch', vi.fn(async () => Response.json({ balance: 100, skills: [] }))); });
+beforeEach(() => { vi.clearAllMocks(); mocks.canvas = null; mocks.panel = null; mocks.activeRunId = null; localStorage.clear(); localStorage.setItem('mkr_auto_tips', 'off'); localStorage.setItem('locale', 'zh'); vi.stubGlobal('fetch', vi.fn(async () => Response.json({ balance: 100, skills: [] }))); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 function mount(readOnly: boolean, viewerSignedIn = false) {
   const save = vi.fn(); render(<LocaleProvider initialLocale="zh"><Editor projectId="public" initialSnapshots={snapshots}
     readOnly={readOnly} viewerSignedIn={viewerSignedIn} onSaveDesignProps={save} /></LocaleProvider>); return save;
 }
 describe('one shared Editable permission gate', () => {
+  it('keeps canvas fields stable during a running Agent while applying real layer changes', async () => {
+    mocks.activeRunId = 'streaming-run';
+    mount(false, true);
+    await waitFor(() => expect(mocks.reconnect).toHaveBeenCalled());
+    const callbacks = mocks.reconnect.mock.calls[0][0];
+    act(() => callbacks.onNewTurn?.('streaming-message'));
+    const originalFields = mocks.canvas.editableFields;
+    const originalProps = mocks.canvas.designProps;
+    for (let index = 0; index < 12; index++) {
+      const previousCanvas = mocks.canvas;
+      act(() => { callbacks.onContent('Working '); callbacks.onStatus('Processing ' + index); });
+      expect(mocks.canvas).not.toBe(previousCanvas);
+      expect(mocks.canvas.editableFields).toBe(originalFields);
+      expect(mocks.canvas.designProps).toBe(originalProps);
+    }
+    act(() => mocks.canvas.onUpdateProp('_layerState', { order: fields.map(field => field.id), deleted: ['layer'] }));
+    expect(mocks.canvas.editableFields.map((field: any) => field.id)).toEqual(['title', 'photo', 'clip']);
+    expect(mocks.canvas.editableFields).not.toBe(originalFields);
+  });
   it('shows every type and permits selection, but sends anonymous edits to login without changing data', async () => {
     const save = mount(true); await waitFor(() => expect(mocks.panel?.editables).toHaveLength(4));
     expect(mocks.canvas.editableFields).toEqual(fields);
