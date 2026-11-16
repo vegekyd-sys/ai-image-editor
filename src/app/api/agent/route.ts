@@ -20,7 +20,6 @@ import {
 import {
   DEFAULT_ATTEMPT_BUDGET_MS,
   DEFAULT_ATTEMPT_MAX_STEPS,
-  getAgentContextPolicy,
 } from '@/lib/agent-execution';
 import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-server';
@@ -495,7 +494,8 @@ export async function POST(req: NextRequest) {
           let agentAudioAttachments = audioAttachments;
           let agentExplicitMediaIndices: number[] = [];
           let agentNativeVisionImages: Array<{ source: string; mediaIndex?: number }> = [];
-          let agentCompactionRequired = false;
+          let compactionContext: Pick<import('@/lib/agent-context').PromptContextResult,
+            'applicationCompaction' | 'historyForProviderSwitch' | 'toolCallRuns'> | undefined;
           let agentHistoryBoundary: string | undefined;
           let agentStudioWorkflowStage: string | undefined;
 
@@ -538,7 +538,10 @@ export async function POST(req: NextRequest) {
             agentHistory = ctx.history;
             agentAudioAttachments = ctx.audioAttachments;
             agentExplicitMediaIndices = ctx.explicitMediaIndices;
-            agentCompactionRequired = ctx.contextStats.compactionRequired;
+            compactionContext = {
+              applicationCompaction: ctx.applicationCompaction, historyForProviderSwitch: ctx.historyForProviderSwitch,
+              toolCallRuns: ctx.toolCallRuns,
+            };
             agentHistoryBoundary = ctx.historyBoundary;
             agentStudioWorkflowStage = ctx.activeStudioWorkflowStage;
             agentNativeVisionImages = ctx.nativeVisionImages;
@@ -598,7 +601,7 @@ export async function POST(req: NextRequest) {
               // The timeline lookup started during admission and normally
               // resolves while prompt context is being built.
               const timelineVersion = await timelineVersionPromise;
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { deliverySurface: headless ? 'external' : 'app', analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, nativeVisionImages: agentNativeVisionImages, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, explicitMediaIndices: agentExplicitMediaIndices, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, codexSubscriptionAllowed, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, selectedElement, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, studioWorkflowStage: agentStudioWorkflowStage, agentRunId: runId || undefined })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { deliverySurface: headless ? 'external' : 'app', analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, nativeVisionImages: agentNativeVisionImages, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, explicitMediaIndices: agentExplicitMediaIndices, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, codexSubscriptionAllowed, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, selectedElement, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, ...compactionContext, historyBoundary: agentHistoryBoundary, studioWorkflowStage: agentStudioWorkflowStage, agentRunId: runId || undefined })) {
                 if (event.type === 'done') sawDone = true;
                 if (event.type === 'error') {
                   sawError = true;
@@ -608,6 +611,7 @@ export async function POST(req: NextRequest) {
                 if (event.type === 'context_compaction') {
                   latestProviderCompaction = {
                     provider: event.provider,
+                    originProvider: event.originProvider,
                     modelId: event.modelId,
                     compactedThrough: event.compactedThrough,
                     summary: event.summary,

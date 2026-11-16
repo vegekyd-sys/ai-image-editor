@@ -908,10 +908,13 @@ export async function runAgentExecutionAttempt(
           abortSignal: modelAbortController.signal,
           attemptBudgetMs: policy.attemptBudgetMs,
           maxSteps: policy.attemptMaxSteps,
-          contextCompactAtTokens: ctx.contextStats.compactionRequired
-            ? getAgentContextPolicy(resolvedModel.id).providerCompactAtTokens
-            : undefined,
+          applicationCompaction: ctx.applicationCompaction,
+          historyForProviderSwitch: ctx.historyForProviderSwitch,
+          toolCallRuns: ctx.toolCallRuns,
           historyBoundary: ctx.historyBoundary,
+          recoverDeepSeekHistory: typedPreviousAttempts.some(attempt =>
+            attempt.terminal_code === 'context_length_exceeded' && attempt.metadata?.inputEpoch === inputVersionAtAttemptStart
+          ),
           execution: {
             leaseToken: claim.lease_token,
             runId,
@@ -971,6 +974,7 @@ export async function runAgentExecutionAttempt(
         if (event.type === 'context_compaction') {
           providerCompaction = {
             provider: event.provider,
+            originProvider: event.originProvider,
             modelId: event.modelId,
             compactedThrough: event.compactedThrough,
             summary: event.summary,
@@ -978,6 +982,7 @@ export async function runAgentExecutionAttempt(
             item: event.item,
             inputTokens: event.inputTokens,
           };
+          await executionStore.saveCompaction(runId, attemptId, providerCompaction);
         }
         if (event.type === 'usage') {
           inputTokens += event.inputTokens || 0;
@@ -1077,7 +1082,6 @@ export async function runAgentExecutionAttempt(
         projectId: run.project_id,
         kind: 'execution_completed',
         snapshot: completedSnapshot,
-        providerCompaction: providerCompaction as Record<string, unknown> | undefined,
       });
       const { data: completedRun, error: completionError } = await admin.from('agent_runs').update({
         status: 'completed',
@@ -1135,7 +1139,6 @@ export async function runAgentExecutionAttempt(
         projectId: run.project_id,
         kind: providerCompaction ? 'provider_compaction_handoff' : 'attempt_handoff',
         snapshot,
-        providerCompaction: providerCompaction as Record<string, unknown> | undefined,
       });
       await writer.processAndEnqueue({
         type: 'status',

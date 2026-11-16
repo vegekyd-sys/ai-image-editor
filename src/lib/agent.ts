@@ -1,6 +1,7 @@
 import { activeSkillNameFromPrompt } from './template-skill-video-model';
 import { isOpenAIDirectFallbackError, isOpenAIQuotaExhausted, markOpenAIDirectExhausted, refreshOpenAIDirectBudget } from './openai-direct';
 import { streamText } from 'ai';
+import { CompactionError, createHistoryCompactor, fixedRequestBudget, nativeContinuation, summarizeHistory, type ApplicationCompaction } from './agent-history-compaction';
 import { initializeAgentSnapshotUrls } from './agent-media-index';
 import type { ModelMessage } from 'ai';
 import type { ModelId } from './models/types';
@@ -35,6 +36,8 @@ import {
   isCodexSubscriptionTerminalFailure,
   isGrokSubscriptionTerminalFailure,
   isRetryableProviderOutage,
+  AgentExecutionStore,
+  getAgentContextPolicy,
   type DurableExecutionRef,
 } from './agent-execution';
 import { buildDurableCompositionGuidance } from './studio-composition-guidance';
@@ -312,6 +315,10 @@ export interface RunMakaronAgentOptions {
   attemptBudgetMs?: number;
   maxSteps?: number;
   contextCompactAtTokens?: number;
+  applicationCompaction?: ApplicationCompaction;
+  historyForProviderSwitch?: () => ModelMessage[];
+  toolCallRuns?: Map<string, string | null>;
+  recoverDeepSeekHistory?: boolean;
   historyBoundary?: string;
   /** Started by the caller before prompt-context construction. */
   promptPrefetch?: AgentPromptPrefetch;
@@ -411,6 +418,9 @@ export async function* runMakaronAgent(
   // analysisOnly: multimodal Agents see the image in their first request;
   // text-only image Agents and all video analysis retain their analyzer tool.
   // normal chat / animation: all tools including workspace (agent.md controls behavior)
+  // Lightweight analysis and reaction modes intentionally skip history.
+  const sendHistory = !analysisOnly && !tipReactionOnly;
+  const history = sendHistory ? (options?.history ?? []) : [];
   const tools = tipReactionOnly ? undefined : analysisOnly
     ? nativeImageAnalysis
       ? undefined
@@ -514,11 +524,6 @@ export async function* runMakaronAgent(
         p?.type === 'image' || (p?.type === 'file' && p.mediaType?.startsWith('image/'))
       )).length
     : 0;
-  // analysis / tipReaction modes intentionally skip history to keep
-  // the request single-turn (matches prior behavior). Normal chat and video
-  // requests send it so read_file/tool results can be reused cross-turn.
-  const sendHistory = !analysisOnly && !tipReactionOnly;
-  const history = sendHistory ? (options?.history ?? []) : [];
   console.log(
     `[agent-req] systemChars=${systemPrompt.length} toolsChars=${toolsChars} userChars=${userContentChars} images=${userImagesCount} historyTurns=${history.length} mode=${tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal'}`
   );
@@ -676,6 +681,41 @@ export async function* runMakaronAgent(
       };
     };
 
+    const policy = getAgentContextPolicy(runtime.spec.id);
+    if (options?.contextCompactAtTokens) policy.providerCompactAtTokens = options.contextCompactAtTokens;
+    const runId = options?.execution?.runId ?? options?.agentRunId;
+    const store = options?.supabase && options?.userId && runId
+      ? new AgentExecutionStore(options.supabase, options.userId, projectId) : undefined;
+    let compactionFailed = false;
+    let recoveryResponses: ModelMessage[] = [];
+    const native = ['azure-openai', 'openai', 'codex-subscription'].includes(runtime.spec.provider);
+    const compactorConfig = {
+      history, current: msgs[msgs.length - 1], previous: options?.applicationCompaction,
+      policy, fixedTokens: 0, native, runId, toolCallRuns: options?.toolCallRuns, force: options?.recoverDeepSeekHistory,
+      summarize: (records: string, previous?: ApplicationCompaction['handoff']) => summarizeHistory({
+        model: runtime.model, records, previous, focus: prompt, signal: options?.abortSignal,
+        onRequestStart: () => { modelRequestStartedAt = new Date(); }, recordUsage: recordStepUsage,
+        providerOptions: runtime.spec.id === 'deepseek-flash'
+          ? { deepseek: { thinking: { type: 'disabled' } } } : getAgentProviderOptions(runtime),
+      }),
+      persist: async (application: ApplicationCompaction) => {
+        if (runId && !store) throw new CompactionError();
+        if (runId && store) await store.saveCompaction(runId, options?.execution?.attemptId, {
+          provider: 'application', application, modelId: runtime.spec.id,
+        });
+      },
+    };
+    let compactor = createHistoryCompactor(compactorConfig);
+    let usingCanonicalHistory = !options?.historyForProviderSwitch;
+    function rebuildForRoute() {
+      compactorConfig.history = options?.historyForProviderSwitch?.() ?? history;
+      compactorConfig.native = ['azure-openai', 'openai', 'codex-subscription'].includes(runtime.spec.provider);
+      compactor = createHistoryCompactor(compactorConfig);
+      if (sendHistory && tools) tools.read_compacted_history = compactor.reader;
+      usingCanonicalHistory = true;
+    }
+    if (sendHistory && tools) tools.read_compacted_history = compactor.reader;
+    if (sendHistory) compactorConfig.fixedTokens = await fixedRequestBudget(systemPrompt, tools);
     while (true) {
       let sawFinish = false;
       let finishReason: string | undefined;
@@ -735,11 +775,34 @@ export async function* runMakaronAgent(
           return true;
         },
       ],
-      prepareStep: ({ messages }: { messages: ModelMessage[] }) => {
-        // Capture before the request, rather than when its first stream event
-        // arrives: a slow first token may cross a peak/off-peak boundary.
+      prepareStep: async ({ messages, responseMessages }: { messages: ModelMessage[]; responseMessages: ModelMessage[] }) => {
+        let prepared = messages;
+        if (sendHistory) {
+          try {
+            const responses = [...recoveryResponses, ...responseMessages];
+            const compacted = compactorConfig.native
+              ? nativeContinuation(messages, compactorConfig.fixedTokens, policy.contextWindowTokens, runtime.spec.provider === 'azure-openai' ? 'azure' : 'openai') : undefined;
+            if (compacted?.fits) {
+              prepared = compacted.messages;
+            } else {
+              if (compacted && !usingCanonicalHistory) rebuildForRoute();
+              // Only plaintext source records go to an application summarizer.
+              const source = compacted ? responses.flatMap(m => {
+                if (m.role !== 'assistant' || !Array.isArray(m.content)) return [m];
+                const content = m.content.filter(p => p.type !== 'custom');
+                return content.length ? [{ ...m, content }] : [];
+              }) : responses;
+              prepared = await compactor.prepare(source);
+            }
+          } catch {
+            compactionFailed = true;
+            throw new CompactionError();
+          }
+        }
         modelRequestStartedAt = new Date();
-        return { messages: runtime.normalizeMessages(messages) };
+        const activeTools = sendHistory && tools && !compactor.hasHandoff
+          ? (recoveryActiveTools ?? Object.keys(tools)).filter(name => name !== 'read_compacted_history') : undefined;
+        return { messages: runtime.normalizeMessages(prepared), ...(activeTools ? { activeTools } : {}) };
       },
       onStepFinish: () => { stepCount++; },
       // Durable execution owns retry, failover, and checkpoint semantics. Letting
@@ -755,7 +818,7 @@ export async function* runMakaronAgent(
       },
       ...(options?.abortSignal ? { abortSignal: options.abortSignal } : {}),
       providerOptions: getAgentProviderOptions(runtime, {
-        compactAtTokens: options?.contextCompactAtTokens,
+        compactAtTokens: sendHistory ? policy.providerCompactAtTokens : undefined,
       }),
       });
       attemptResults.push(result);
@@ -883,6 +946,7 @@ export async function* runMakaronAgent(
           yield {
             type: 'context_compaction',
             provider: 'openai',
+            originProvider: runtime.spec.provider,
             modelId: runtime.spec.id,
             compactedThrough: options?.historyBoundary,
             item: {
@@ -1485,10 +1549,11 @@ export async function* runMakaronAgent(
               finalStepToolCalls,
               finalStepDeliveredArtifact,
               streamError,
+              provider: runtime.spec.provider,
             });
 
       if (
-        !nonRetryableToolFailure
+        !nonRetryableToolFailure && assessment.code !== 'context_length_exceeded'
         && (attemptBudgetReached || stepBudgetReached)
       ) {
         assessment = {
@@ -1507,6 +1572,13 @@ export async function* runMakaronAgent(
         return;
       }
 
+      if (compactionFailed) {
+        const usageEvent = buildUsageEvent();
+        if (usageEvent) yield usageEvent;
+        yield { type: 'error', code: 'context_compaction_failed', recoverable: false,
+          message: translate(responseLocale, 'agent.error.compactionFailed') };
+        return;
+      }
       if (assessment.ok) break;
 
       const subscriptionFailureDetail = streamError
@@ -1549,6 +1621,8 @@ export async function* runMakaronAgent(
               options?.userId,
             );
             Object.assign(runtime, fallbackRuntime);
+            rebuildForRoute();
+            attemptMessages = [...compactorConfig.history, msgs[msgs.length - 1]];
             recoveryAttempt++;
             yield { type: 'status', text: translate(responseLocale, 'agent.status.resuming') };
             console.warn(
@@ -1587,14 +1661,15 @@ export async function* runMakaronAgent(
         const recoveryInstruction = textOnlyRecovery
           ? 'A finished artifact was already delivered in the previous step. Do not call any tool, regenerate, republish, or create another task. Only provide the concise final reply for the existing delivered result.'
           : `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}. If the user should receive an editable composition, call publish_draft with this exact design_path after QA; do not use fromLastRunCode.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
-        attemptMessages = [
-          ...attemptMessages,
+        recoveryResponses = [
+          ...recoveryResponses,
           ...responseMessages,
           {
             role: 'user',
             content: `[System recovery] The previous model step ended before it delivered a usable response (${assessment.code || 'incomplete'}). ${recoveryInstruction}`,
           } as ModelMessage,
         ];
+        attemptMessages = [...msgs, ...recoveryResponses];
         yield { type: 'status', text: translate(responseLocale, 'agent.status.resuming') };
         console.warn(`[agent] recovering incomplete model step code=${assessment.code} finish=${finishReason || 'missing'} raw=${rawFinishReason || ''}`);
         continue;
@@ -1616,13 +1691,18 @@ export async function* runMakaronAgent(
           : {}),
         ...(assessment.detail ? { errorDetail: assessment.detail } : {}),
       };
-      const recoverable = assessment.retryable && Boolean(
-        checkpoint.draftPath
-        || checkpoint.streamedCodePath
-        || checkpoint.compositionPartPaths?.length
-        || checkpoint.studioRunId
-        || options?.execution,
-      );
+      const contextOverflow = assessment.code === 'context_length_exceeded';
+      // Only hand off a rejected input when a changed request is available.
+      // The runner remembers this terminal code across subsequent attempts.
+      const recoverable = contextOverflow
+        ? sendHistory && Boolean(options?.execution) && !options?.recoverDeepSeekHistory && (history.length > 0 || stepCount > 0)
+        : assessment.retryable && Boolean(
+            checkpoint.draftPath
+            || checkpoint.streamedCodePath
+            || checkpoint.compositionPartPaths?.length
+            || checkpoint.studioRunId
+            || options?.execution,
+          );
       const usageEvent = buildUsageEvent();
       if (usageEvent) yield usageEvent;
       yield {
@@ -1632,7 +1712,7 @@ export async function* runMakaronAgent(
         checkpoint,
         message: recoverable
           ? translate(responseLocale, 'agent.error.recoverable')
-          : translate(responseLocale, 'agent.error.fatal'),
+          : translate(responseLocale, contextOverflow ? 'agent.error.contextLength' : 'agent.error.fatal'),
       };
       return;
     }

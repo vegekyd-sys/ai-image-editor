@@ -383,6 +383,7 @@ export type AgentStreamEvent =
   | {
       type: 'context_compaction';
       provider: 'anthropic' | 'openai';
+      originProvider?: import('./agent-models').AgentModelProvider;
       modelId?: string;
       compactedThrough?: string;
       summary?: string;

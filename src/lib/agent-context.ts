@@ -103,6 +103,9 @@ export interface PromptContextResult {
   executionSnapshot?: DurableExecutionSnapshot;
   /** Persisted Studio workflow context for model guidance only. */
   activeStudioWorkflowStage?: string;
+  historyForProviderSwitch?: () => ModelMessage[];
+  toolCallRuns?: Map<string, string | null>;
+  applicationCompaction?: import('./agent-history-compaction').ApplicationCompaction;
   contextStats: ContextSelectionStats;
   /** Latest persisted input row represented by this context. */
   historyBoundary?: string;
@@ -412,6 +415,7 @@ export async function buildPromptContext(
         .from('agent_context_snapshots')
         .select('content, run_id')
         .eq('run_id', options.executionRunId)
+        .neq('kind', 'context_compaction')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -642,9 +646,7 @@ export async function buildPromptContext(
   // Conversation history — real AI SDK ModelMessage[] turns, including private
   // sanitized tool call/results. Drop trailing user messages so the current
   // turn's prompt isn't duplicated if the caller already wrote it to DB.
-  const compactionSnapshot = executionSnapshot?.providerCompaction
-    ? executionSnapshot
-    : projectCompactionSnapshot;
+  const compactionSnapshot = projectCompactionSnapshot ?? executionSnapshot;
   const typedCompaction = buildTypedCompactionMessage(
     compactionSnapshot,
     options.agentModelId,
@@ -659,7 +661,12 @@ export async function buildPromptContext(
   const historyTools = compactedThrough
     ? toolHistory.filter(row => row.created_at > compactedThrough)
     : toolHistory;
-  const rebuiltHistory = buildModelHistoryFromRows(historyMessages, historyTools);
+  const rebuiltHistory = buildModelHistoryFromRows(historyMessages, historyTools, userMessage);
+  const toolCallRuns = new Map<string, string | null>();
+  for (const row of toolHistory) {
+    // Providers can recycle call ids across runs. Ambiguous ids always replay.
+    toolCallRuns.set(row.tool_call_id, toolCallRuns.has(row.tool_call_id) ? null : row.run_id ?? null);
+  }
   const rawHistory = typedCompaction
     ? [typedCompaction, ...rebuiltHistory]
     : rebuiltHistory;
@@ -818,6 +825,9 @@ export async function buildPromptContext(
     activeStudioWorkflowStage: activeStudioRun?.currentStage || undefined,
     contextStats: selectedHistory.stats,
     historyBoundary,
+    toolCallRuns,
+    historyForProviderSwitch: typedCompaction ? () => buildModelHistoryFromRows(messages, toolHistory, userMessage) : undefined,
+    applicationCompaction: compactionSnapshot?.providerCompaction?.application,
   };
 }
 

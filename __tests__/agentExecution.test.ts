@@ -172,7 +172,8 @@ describe('durable Agent execution', () => {
       },
     };
 
-    const matching = buildTypedCompactionMessage(snapshot, 'gpt-5.6-sol');
+    const matching = buildTypedCompactionMessage(snapshot, 'gpt-5.6-sol', 'azure-openai');
+    expect(buildTypedCompactionMessage(snapshot, 'gpt-5.6-sol')).toBeNull();
     expect(JSON.stringify(matching)).toContain('openai.compaction');
     expect(JSON.stringify(matching)).toContain('encrypted-context');
     expect(buildTypedCompactionMessage(
@@ -202,6 +203,7 @@ describe('durable Agent execution', () => {
       providerCompaction: {
         provider: 'openai',
         modelId: 'gpt-5.6-terra',
+        originProvider: 'codex-subscription',
         item: {
           kind: 'openai.compaction',
           providerKey: 'openai',
@@ -211,6 +213,10 @@ describe('durable Agent execution', () => {
       },
     };
 
+    expect(buildTypedCompactionMessage(snapshot, 'gpt-5.6-terra', 'openai')).toBeNull();
+    const legacy = structuredClone(snapshot);
+    delete legacy.providerCompaction!.originProvider;
+    expect(buildTypedCompactionMessage(legacy, 'gpt-5.6-terra', 'codex-subscription')).toBeNull();
     expect(buildTypedCompactionMessage(
       snapshot,
       'gpt-5.6-terra',
