@@ -22,9 +22,14 @@ vi.mock('@/lib/agent-model-runtime', () => ({
 }));
 
 describe('streamed workspace checkpoint uploads', () => {
-  const requestId = '01910234-abcd-4321-8765-123456789abc';
+  const traceIds = [
+    { requestId: '01910234-abcd-4321-8765-123456789abc', cfRay: '0123456789abcdef-SIN' },
+    { requestId: '01910234-abcd-4321-8765-123456789abd', cfRay: '0123456789abcdee-NRT' },
+  ];
   let cacheDir: string;
   let server: ReturnType<typeof createServer>;
+  let serviceUrl: string;
+  let expectedBearer: string;
   let client: ReturnType<typeof createClient>;
   let accept: (text: string) => boolean;
   let uploads: number[];
@@ -35,11 +40,13 @@ describe('streamed workspace checkpoint uploads', () => {
     cacheDir = await mkdtemp(join(tmpdir(), 'workspace-checkpoint-'));
     vi.stubEnv('MAKARON_WORKSPACE_CACHE_DIR', cacheDir);
     accept = () => true;
+    expectedBearer = 'fixture';
     uploads = [];
     indexed = [];
     paths = [];
     const objects = new Map<string, string>();
     const index = new Map<string, { path: string; size_bytes: number }>();
+    let refusals = 0;
     server = createServer(async (req, res) => {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(chunk);
@@ -48,15 +55,17 @@ describe('streamed workspace checkpoint uploads', () => {
       const uploadPrefix = '/storage/v1/object/images/user/workspace/';
       const publicPrefix = '/storage/v1/object/public/images/user/workspace/';
       if (req.method === 'POST' && url.pathname.startsWith(uploadPrefix)) {
-        if (req.headers.authorization !== 'Bearer fixture' || req.headers.apikey !== 'fixture') {
-          res.writeHead(401).end();
-          return;
-        }
         const name = url.pathname.slice(uploadPrefix.length);
         paths.push(name);
         uploads.push(body.length);
+        if (req.headers.authorization !== `Bearer ${expectedBearer}` || req.headers.apikey !== 'fixture') {
+          res.writeHead(401).end();
+          return;
+        }
         if (!accept(body)) {
-          res.writeHead(403, { 'content-type': 'text/html', 'sb-request-id': requestId, 'cf-ray': '0123456789abcdef-SIN' });
+          const trace = traceIds[refusals % traceIds.length];
+          refusals++;
+          res.writeHead(403, { 'content-type': 'text/html', 'sb-request-id': trace.requestId, 'cf-ray': trace.cfRay });
           res.end('<html>private response body</html>');
           return;
         }
@@ -79,7 +88,8 @@ describe('streamed workspace checkpoint uploads', () => {
       res.writeHead(200, { 'content-type': 'application/json' }).end('{}');
     });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    client = createClient(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, 'fixture', {
+    serviceUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    client = createClient(serviceUrl, 'fixture', {
       global: { fetch: fetchWithWorkspaceReceipt }, auth: { persistSession: false, autoRefreshToken: false },
     });
   });
@@ -124,11 +134,10 @@ describe('streamed workspace checkpoint uploads', () => {
     await rm(fromIndex!.localPath!);
     workspace.clearWorkspaceCache();
     expect((await workspace.readFile(paths[0], client, 'user'))?.content).toBe(fromIndex?.content);
-    const receipt = ['[workspace] upload response', {
-      kind: 'checkpoint', status: 403, format: 'html', requestId, cfRay: '0123456789abcdef-SIN',
-    }];
     const receipts = warn.mock.calls.filter(([tag]) => tag === '[workspace] upload response');
-    expect(receipts).toStrictEqual([receipt, receipt]);
+    expect(receipts).toStrictEqual(traceIds.map(trace => ['[workspace] upload response', {
+      kind: 'checkpoint', status: 403, format: 'html', ...trace,
+    }]));
   });
 
   it('does not advertise a rejected first version or re-upload identical bytes at interruption', async () => {
@@ -149,16 +158,24 @@ describe('streamed workspace checkpoint uploads', () => {
     });
     const receipts = warn.mock.calls.filter(([tag]) => tag === '[workspace] upload response');
     expect(receipts).toStrictEqual([['[workspace] upload response', {
-      kind: 'file', status: 403, format: 'html', requestId, cfRay: '0123456789abcdef-SIN',
+      kind: 'file', status: 403, format: 'html', ...traceIds[0],
     }]]);
     expect(indexed).toEqual([]);
   });
 
-  it('records a later accepted version through the same authorized client and object path', async () => {
+  it('preserves a distinct user token on both a rejected and a later accepted upload', async () => {
+    expectedBearer = 'fixture-user-token';
+    client = createClient(serviceUrl, 'fixture', {
+      accessToken: async () => 'fixture-user-token', global: { fetch: fetchWithWorkspaceReceipt },
+    });
+    const warn = vi.spyOn(console, 'warn');
     accept = body => body.length >= 2_000;
     const checkpoint = await interruptAfter(['a'.repeat(1_000), 'b', 'c'.repeat(999)]);
     expect(uploads).toEqual([1_000, 2_000]);
     expect(indexed).toEqual([2_000]);
+    expect(warn.mock.calls.filter(([tag]) => tag === '[workspace] upload response')).toStrictEqual([
+      ['[workspace] upload response', { kind: 'checkpoint', status: 403, format: 'html', ...traceIds[0] }],
+    ]);
     expect(paths[0]).toBe(paths[1]);
     expect(checkpoint).toMatchObject({ streamedCodePath: paths[1], streamedCodeChars: 2_000 });
     const reopened = await workspace.readFile(paths[1], client, 'user');
