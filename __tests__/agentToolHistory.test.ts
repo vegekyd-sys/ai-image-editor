@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildModelHistoryFromRows,
+  type DbToolHistoryRow,
   sanitizeToolHistory,
   TOOL_HISTORY_MAX_OUTPUT_CHARS,
 } from '../src/lib/agentToolHistory';
@@ -178,6 +179,55 @@ describe('agent tool history sanitizer', () => {
 });
 
 describe('agent tool history reconstruction', () => {
+  it('keeps a saved source pointer and explains how to reuse it across repeated recovery', () => {
+    const source = `function Composition() { return '${'scene'.repeat(1_200)}'; }`;
+    const path = 'project/code/composition.js';
+    const saved = sanitizeToolHistory('write_code_file', { content: source }, {
+      success: true, path, message: 'Code file saved', codeChars: source.length,
+    }, { rows: 0, chars: 0 });
+    let row: DbToolHistoryRow = {
+      created_at: '2026-11-16T00:00:00.000Z', step: 0, seq: 0,
+      tool_call_id: 'saved-code', tool_name: 'write_code_file',
+      input: saved.input, output: saved.output,
+    };
+
+    for (let replay = 0; replay < 3; replay++) {
+      const history = buildModelHistoryFromRows([], [row]);
+      const call = (history[0].content as Array<{ input: Record<string, unknown> }>)[0];
+      const result = (history[1].content as Array<{ output: typeof saved.output }>)[0];
+      expect(call.input.content).toBe(`[source persisted in workspace: ${source.length} chars]`);
+      expect(result.output.type).toBe('json');
+      const output = result.output.value as Record<string, unknown>;
+      expect(output.path).toBe(path);
+      expect(output.message).toContain('read_file');
+      expect(output.message).toContain('Do not copy the history placeholder');
+      expect(String(output.message).match(/Do not copy the history placeholder/g)).toHaveLength(1);
+      expect(JSON.stringify(history)).not.toContain('scenescenescene');
+      row = { ...row, input: call.input, output: result.output };
+    }
+  });
+
+  it('compacts legacy source on recovery without presenting a failed save as a reusable file', () => {
+    const source = 'return { type: "text", content: "complete source" };';
+    const row: DbToolHistoryRow = {
+      created_at: '2026-11-16T00:00:00.000Z', step: 0, seq: 0,
+      tool_call_id: 'failed-code', tool_name: 'write_code_file',
+      input: { path: 'project/code/failed.js', content: source },
+      output: { type: 'json', value: { success: false, message: 'Write failed: Forbidden' } },
+    };
+    const history = buildModelHistoryFromRows([], [row]);
+    const call = (history[0].content as Array<{ input: Record<string, unknown> }>)[0];
+    expect(call.input.content).toBe(`[source persisted in workspace: ${source.length} chars]`);
+    expect((history[1].content as Array<{ output: typeof row.output }>)[0].output).toEqual(row.output);
+  });
+
+  it('counts literal placeholder input as newly written source at the persistence boundary', () => {
+    const content = '[source persisted in workspace: 5961 chars]';
+    const saved = sanitizeToolHistory('write_code_file', { content }, { success: true }, { rows: 0, chars: 0 });
+    expect((saved.input as Record<string, unknown>).content)
+      .toBe(`[source persisted in workspace: ${content.length} chars]`);
+  });
+
   it('normalizes legacy audio tool names before model replay', () => {
     const history = buildModelHistoryFromRows([], [
       {

@@ -47,6 +47,8 @@ export interface DbVisibleMessage {
 const DATA_URL_RE = /^data:(image|video|audio)\//i;
 const BASE64ISH_RE = /^[A-Za-z0-9+/=\r\n]+$/;
 const DANGEROUS_KEYS = new Set(['image', 'images', 'base64Data', 'data', 'buffer']);
+const PERSISTED_SOURCE_POINTER = /^\[source persisted in workspace: (\d+) chars\]$/;
+const SOURCE_HISTORY_HINT = 'Source text is omitted from history. Reuse the saved path with run_code(code_path), or read_file before editing it. Do not copy the history placeholder into write_code_file content.';
 const TRUNCATED_RUN_CODE_MARKERS = [
   /\.\.\. \(\d+ chars\)/,
   /\.\.\.\(truncated\)/,
@@ -415,17 +417,37 @@ function normalizeToolResultOutput(output: unknown): ToolResultOutput {
 
 function sanitizePersistedToolRow(row: DbToolHistoryRow): DbToolHistoryRow {
   const omitted: string[] = [];
-  const input = sanitizeInput(row.tool_name, row.input, omitted);
+  const sourcePointer = row.tool_name === 'write_code_file'
+    && row.input && typeof row.input === 'object'
+    && typeof (row.input as JsonRecord).content === 'string'
+    && PERSISTED_SOURCE_POINTER.test((row.input as JsonRecord).content as string);
+  // Already compacted source is a reference, not a new 41/43-character file.
+  // Keep write-time sanitization separate: a newly submitted literal marker
+  // still counts as the actual short source that was written.
+  const input = sourcePointer
+    ? sanitizeUnknown(row.input, omitted)
+    : sanitizeInput(row.tool_name, row.input, omitted);
   const normalizedOutput = normalizeToolResultOutput(row.output);
   const sanitizedValue = sanitizeUnknown(
     normalizedOutput.value,
     omitted,
     TOOL_HISTORY_MAX_OUTPUT_CHARS,
   );
-  const output: ToolResultOutput = normalizedOutput.type === 'text'
+  let output: ToolResultOutput = normalizedOutput.type === 'text'
     || normalizedOutput.type === 'error-text'
     ? { type: normalizedOutput.type, value: String(sanitizedValue ?? '') }
     : { type: normalizedOutput.type, value: sanitizedValue };
+  if (row.tool_name === 'write_code_file' && output.type === 'json'
+      && output.value && typeof output.value === 'object') {
+    const value = output.value as JsonRecord;
+    if (value.success === true && typeof value.path === 'string' && value.path.trim()) {
+      const message = typeof value.message === 'string' ? value.message : '';
+      output = { type: 'json', value: {
+        ...value,
+        message: message.includes(SOURCE_HISTORY_HINT) ? message : `${message}\n${SOURCE_HISTORY_HINT}`.trim(),
+      } };
+    }
+  }
   return {
     ...row,
     input,
