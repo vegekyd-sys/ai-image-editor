@@ -7,9 +7,11 @@ from contextlib import contextmanager
 import fcntl
 import json
 import os
+import plistlib
 from pathlib import Path
 import signal
 import subprocess
+import tempfile
 import time
 import uuid
 
@@ -29,6 +31,18 @@ def bounded_command(argv, timeout, cwd):
             pass
         process.communicate()
         return {'returncode': -1, 'error': 'command_deadline_exceeded'}
+
+
+def update_timeout(batch, now):
+    if batch.get('completed'):
+        return
+    if batch['phase'] in {'queued', 'dispatched', 'dispatch_uncertain', 'starting', 'executing', 'waiting_for_slot', 'waiting_for_chat_idle'} and not batch.get('received'):
+        requested = batch.get('model_requested_at', batch.get('dispatched_at', batch.get('queued_at', now)))
+        timeout = (600 if batch.get('selftest') else 3600) if batch['phase'] == 'waiting_for_chat_idle' else 180
+        if now - requested > timeout:
+            batch['phase'] = 'receipt_timeout'
+    elif batch['phase'] == 'working' and now - batch['receipt_at'] > 3600:
+        batch['phase'] = 'handler_timeout'
 
 
 def reconcile(state, checks, errors, now, thread_id):
@@ -64,18 +78,15 @@ def reconcile(state, checks, errors, now, thread_id):
         if current and (novel_errors or current != previous):
             state.setdefault('deferred_observations', []).append(
                 {'at': now, 'checks': checks, 'new_runtime_errors': errors, 'conditions': sorted(current)})
-        if batch['phase'] in {'queued', 'dispatched', 'starting', 'executing'} and now - batch.get('model_requested_at', batch.get('dispatched_at', batch.get('queued_at', now))) > 180 and not batch.get('received'):
-            batch['phase'] = 'receipt_timeout'
+        update_timeout(batch, now)
         return batch
     if batch and (not batch['observations'] or novel_errors or current != previous):
         batch['observations'].append({'at': now, 'checks': checks, 'new_runtime_errors': novel_errors})
         batch['conditions'] = sorted(set(batch['conditions']) | current)
         if len(batch['observations']) > 1:
             batch['revision'] += 1
-    if batch and batch['phase'] in {'queued', 'dispatched', 'starting', 'executing'} and now - batch.get('model_requested_at', batch.get('dispatched_at', batch.get('queued_at', now))) > 180 and not batch.get('received'):
-        batch['phase'] = 'receipt_timeout'
-    if batch and batch['phase'] == 'working' and now - batch['receipt_at'] > 3600:
-        batch['phase'] = 'handler_timeout'
+    if batch:
+        update_timeout(batch, now)
     # A cleared signal updates state only. No recovery or unchanged-alarm model wake.
     return batch
 
@@ -107,30 +118,54 @@ def enqueue(state, batch, config, directory, selftest=False):
     """One launchd-managed handler, never a passive Codex queue or daemon start."""
     if batch['phase'] != 'pending':
         return
-    batch.update(phase='dispatch_uncertain', dispatched_at=time.time(),
-                 dispatch_id=str(uuid.uuid4()), handler_label='com.tianyi.makaron-handler.' + batch['id'])
+    token = str(uuid.uuid4())
+    batch.update(phase='dispatch_uncertain', dispatched_at=time.time(), dispatch_id=token,
+                 handler_label='com.tianyi.makaron-handler.' + token, one_shot=True)
     write_private(directory / 'bridge-state.json', state)
     logdir = directory / 'handlers'
     logdir.mkdir(mode=0o700, exist_ok=True)
-    result = bounded_command([
-        '/bin/launchctl', 'submit', '-l', batch['handler_label'],
-        '-o', str(logdir / (batch['id'] + '.log')),
-        '-e', str(logdir / (batch['id'] + '.err.log')), '--',
-        '/usr/bin/python3', str(directory / 'makaron_event_worker.py'),
-        '--directory', str(directory), '--batch', batch['id'],
-        '--dispatch-id', batch['dispatch_id'],
-    ], 10, directory)
-    batch['dispatch_result'] = {key: result.get(key) for key in ['returncode', 'error'] if key in result}
-    batch['phase'] = 'dispatched' if result['returncode'] == 0 else 'dispatch_failed'
+    job = {'Label': batch['handler_label'], 'RunAtLoad': True, 'LaunchOnlyOnce': True,
+           'KeepAlive': False,
+           'StandardOutPath': str(logdir / (batch['id'] + '.log')),
+           'StandardErrorPath': str(logdir / (batch['id'] + '.err.log')),
+           'ProgramArguments': ['/usr/bin/python3', str(directory / 'makaron_event_worker.py'),
+                                '--directory', str(directory), '--batch', batch['id'],
+                                '--dispatch-id', token]}
+    with tempfile.NamedTemporaryFile(suffix='.plist', dir=logdir) as file:
+        plistlib.dump(job, file)
+        file.flush()
+        result = bounded_command(['/bin/launchctl', 'bootstrap', f'gui/{os.getuid()}', file.name],
+                                 10, directory)
+    batch['dispatch_result'] = {key: result[key] for key in ['returncode', 'error'] if key in result}
+    if result['returncode'] != -1:
+        batch['phase'] = 'dispatched' if result['returncode'] == 0 else 'dispatch_failed'
     write_private(directory / 'bridge-state.json', state)
 
 
+def retry_dispatch(state, args, config, directory):
+    # A new token fences even a delayed bootstrap. The new worker commits its
+    # submission marker under this same lock before calling either transport.
+    batch = state.get('batches', {}).get(args.batch)
+    if not state.get('enabled') or args.batch not in (state.get('active_batch'), state.get('selftest_batch')):
+        return {'accepted': False, 'reason': 'disabled_or_not_current'}
+    if not batch or not batch.get('one_shot') or batch.get('dispatch_id') != args.dispatch_id:
+        return {'accepted': False, 'reason': 'dispatch_mismatch_or_legacy'}
+    if (batch.get('received') or batch.get('completed') or 'model_requested_at' in batch
+            or batch['phase'] not in {'dispatch_failed', 'handler_failed', 'receipt_timeout', 'dispatch_uncertain'}):
+        return {'accepted': False, 'reason': 'not_retryable'}
+    fields = ['dispatch_id', 'dispatched_at', 'handler_label', 'dispatch_result', 'phase', 'worker', 'handler_error']
+    batch.setdefault('previous_dispatches', []).append({k: batch.pop(k) for k in fields if k in batch})
+    batch['phase'] = 'pending'
+    enqueue(state, batch, config, directory)
+    return {'accepted': True, 'dispatch_id': batch['dispatch_id'], 'phase': batch['phase']}
+
+
 @contextmanager
-def lock(directory):
+def lock(directory, blocking=False):
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (directory / 'bridge.lock').open('a') as handle:
         try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(handle, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         except BlockingIOError:
             yield False
             return
@@ -148,6 +183,8 @@ def receipt(state, args, enabled):
     if not batch or batch['id'] != args.batch:
         old = state.get('batches', {}).get(args.batch)
         return {'accepted': False, 'reason': 'completed' if old and old.get('completed') else 'not_current'}
+    if batch.get('completed'):
+        return {'accepted': False, 'reason': 'completed'}
     if not enabled:
         return {'accepted': False, 'reason': 'disabled'}
     token = getattr(args, 'dispatch_id', None)
@@ -184,12 +221,19 @@ def receipt(state, args, enabled):
             state['selftest_batch'] = None
         deferred = state.pop('deferred_observations', []) if batch.get('selftest') else []
         if deferred:
-            bid = str(uuid.uuid4())
-            state['batches'][bid] = {'id': bid, 'thread_id': batch['thread_id'],
-                'created_at': time.time(), 'revision': 1, 'phase': 'pending',
-                'received': False, 'completed': False, 'observations': deferred,
-                'conditions': sorted({c for o in deferred for c in o['conditions']})}
-            state['active_batch'] = bid
+            conditions = {c for o in deferred for c in o['conditions']}
+            active = state['batches'].get(state.get('active_batch'))
+            if active:
+                active['observations'].extend(deferred)
+                active['conditions'] = sorted(set(active['conditions']) | conditions)
+                active['revision'] += 1
+            else:
+                bid = str(uuid.uuid4())
+                state['batches'][bid] = {'id': bid, 'thread_id': batch['thread_id'],
+                    'created_at': time.time(), 'revision': 1, 'phase': 'pending',
+                    'received': False, 'completed': False, 'observations': deferred,
+                    'conditions': sorted(conditions)}
+                state['active_batch'] = bid
     return {'accepted': True, 'batch': batch}
 
 
@@ -203,6 +247,9 @@ def main():
     rearm.add_argument('--condition', required=True)
     test = sub.add_parser('selftest')
     test.add_argument('--defer', action='store_true', help='Dispatch on the next ordinary LaunchAgent tick')
+    retry = sub.add_parser('retry-dispatch')
+    retry.add_argument('--batch', required=True)
+    retry.add_argument('--dispatch-id', required=True)
     for name in ['claim', 'complete']:
         cmd = sub.add_parser(name)
         cmd.add_argument('--batch', required=True)
@@ -219,7 +266,7 @@ def main():
         logfile = directory / name
         if logfile.exists() and logfile.stat().st_size > 1_000_000:
             logfile.replace(directory / (name + '.previous'))
-    with lock(directory) as acquired:
+    with lock(directory, blocking=args.command in {'claim', 'complete', 'retry-dispatch'}) as acquired:
         if not acquired:
             print(json.dumps({'accepted': False, 'reason': 'bridge_busy_retry'}))
             return 0
@@ -241,15 +288,19 @@ def main():
             write_private(path, state)
             print(json.dumps(result, ensure_ascii=False))
             return 0
+        elif args.command == 'retry-dispatch':
+            print(json.dumps(retry_dispatch(state, args, config, directory)))
+            return 0
         elif args.command == 'selftest':
             if state.get('active_batch') or state.get('selftest_batch') or not state.get('enabled'):
                 print(json.dumps({'accepted': False, 'reason': 'disabled_or_batch_active'}))
                 return 0
-            batch = reconcile(state, [{'name': 'wake_selftest', 'ok': False, 'error': 'synthetic'}],
-                              [], time.time(), config['thread_id'])
-            batch['selftest'] = True
-            state['selftest_batch'] = state.pop('active_batch')
-            state['conditions'] = []
+            bid = str(uuid.uuid4())
+            batch = {'id': bid, 'thread_id': config['thread_id'], 'created_at': time.time(),
+                     'revision': 1, 'phase': 'pending', 'selftest': True, 'received': False,
+                     'completed': False, 'conditions': ['wake_selftest:synthetic'], 'observations': []}
+            state.setdefault('batches', {})[bid] = batch
+            state['selftest_batch'] = bid
             if not args.defer:
                 enqueue(state, batch, config, directory, selftest=True)
         elif args.command == 'tick' and state.get('enabled'):
@@ -260,6 +311,8 @@ def main():
                 write_private(path, state)
                 print(json.dumps({'selftest_dispatched': test['id'], 'phase': test['phase']}))
                 return 0
+            if test:
+                update_timeout(test, time.time())
             checks, errors = detect(config, state, directory)
             batch = reconcile(state, checks, errors, time.time(), config['thread_id'])
             if batch:

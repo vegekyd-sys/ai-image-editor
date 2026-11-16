@@ -126,3 +126,155 @@ print(json.dumps({{'type':'turn.completed','usage':{{'input_tokens':1,'output_to
     assert acceptance['makaron_probes_by_selftest'] == 0
     assert worker.run(tmp_path, 'test', 'attempt') == 0
     assert json.loads((tmp_path / 'wake-acceptance-test.json').read_text()) == acceptance
+
+
+def isolated_state(directory, phase='dispatched', **fields):
+    batch = dict(id='batch', thread_id='thread', dispatch_id='first', dispatched_at=100,
+                 revision=1, phase=phase, conditions=['error'], observations=[], one_shot=True)
+    batch.update(fields)
+    (directory / 'bridge-config.json').write_text(json.dumps({
+        'thread_id': 'thread', 'desktop_ipc_socket': str(directory / 'absent.sock'),
+        'handler_cwd': str(directory), 'codex_cli': str(directory / 'unused')}))
+    state = {'enabled': True, 'active_batch': 'batch', 'batches': {'batch': batch}}
+    (directory / 'bridge-state.json').write_text(json.dumps(state))
+    return state
+
+
+def test_completed_duplicate_never_contends_for_handler_slot(tmp_path):
+    import fcntl
+    isolated_state(tmp_path, phase='completed', completed=True, received=True, worker={'native_accepted': True})
+    path = tmp_path / 'bridge-state.json'
+    before = path.stat().st_ino, path.read_bytes()
+    with (tmp_path / 'handler.lock').open('a') as gate:
+        fcntl.flock(gate, fcntl.LOCK_EX)
+        assert worker.run(tmp_path, 'batch', 'first') == 0
+    assert (path.stat().st_ino, path.read_bytes()) == before
+
+
+def test_slot_timeout_races_with_claim_and_completion(tmp_path, monkeypatch):
+    import fcntl
+    from types import SimpleNamespace
+    import makaron_event_bridge as bridge
+    isolated_state(tmp_path)
+    path = tmp_path / 'bridge-state.json'
+    outcome = tmp_path / 'outcome'
+    outcome.write_text(json.dumps(dict(summary='ok', evidence=[], unresolved=[], next_action='done')))
+    def clock():
+        nonlocal calls
+        calls += 1
+        if calls == 2:  # Just after the waiter's eligibility check, before its timeout write.
+            with worker.state_lock(tmp_path):
+                s = json.loads(path.read_text())
+                args = SimpleNamespace(batch='batch', dispatch_id='first', command='claim')
+                assert bridge.receipt(s, args, True)['accepted']
+                args.command, args.revision, args.result = 'complete', 1, outcome
+                assert bridge.receipt(s, args, True)['accepted']
+                path.write_text(json.dumps(s))
+            return 181
+        return 0
+    calls = 0
+    monkeypatch.setattr(worker.time, 'monotonic', clock)
+    with (tmp_path / 'handler.lock').open('a') as gate:
+        fcntl.flock(gate, fcntl.LOCK_EX)
+        assert worker.run(tmp_path, 'batch', 'first') == 0
+    b = json.loads(path.read_text())['batches']['batch']
+    assert b['completed'] and b['phase'] == 'completed' and 'error' not in b['worker']
+
+
+def test_slot_failure_retry_fences_old_worker_and_receipts(tmp_path, monkeypatch):
+    import fcntl
+    from types import SimpleNamespace
+    import makaron_event_bridge as bridge
+    isolated_state(tmp_path)
+    path = tmp_path / 'bridge-state.json'
+    with (tmp_path / 'handler.lock').open('a') as gate, monkeypatch.context() as patch:
+        fcntl.flock(gate, fcntl.LOCK_EX)
+        patch.setattr(worker.time, 'monotonic', iter([0, 181]).__next__)
+        assert worker.run(tmp_path, 'batch', 'first') == 2
+    args = SimpleNamespace(command='claim', batch='batch', dispatch_id='first')
+    monkeypatch.setattr(bridge, 'bounded_command', lambda *a: {'returncode': 0})
+    state = json.loads(path.read_text())
+    assert bridge.retry_dispatch(state, args, {}, tmp_path)['accepted']
+    b = state['batches']['batch']
+    assert b['dispatch_id'] != 'first' and b['previous_dispatches'][0]['worker']['error'] == 'handler_slot_timeout'
+    original = path.read_bytes()
+    assert worker.run(tmp_path, 'batch', 'first') == 0 and original == path.read_bytes()
+    assert not bridge.receipt(state, args, True)['accepted']
+    assert not bridge.retry_dispatch(state, args, {}, tmp_path)['accepted']
+
+
+def test_old_worker_cannot_submit_on_owner_idle_after_dispatch_replaced(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import makaron_event_bridge as bridge
+    isolated_state(tmp_path)
+    monkeypatch.setattr(bridge, 'bounded_command', lambda *a: {'returncode': 0})
+    path = tmp_path / 'bridge-state.json'
+    def desktop(config, message, token, facts, cancelled, progress, enabled, timeout):
+        progress('waiting_for_chat_idle', facts)
+        with worker.state_lock(tmp_path):
+            state = json.loads(path.read_text())
+            bridge.update_timeout(state['batches']['batch'], 4000)
+            assert bridge.retry_dispatch(state, SimpleNamespace(batch='batch', dispatch_id='first'), {}, tmp_path)['accepted']
+        assert not enabled()
+        progress('executing', facts)
+        raise AssertionError('obsolete dispatch reached start_turn')
+    monkeypatch.setattr(worker, 'desktop_dispatch', desktop)
+    assert worker.run(tmp_path, 'batch', 'first') == 2
+    b = json.loads(path.read_text())['batches']['batch']
+    assert b['phase'] == 'dispatched' and 'worker' not in b and 'model_requested_at' not in b
+
+
+def test_owner_handoff_and_lost_reply_both_release_slot_without_replay(tmp_path, monkeypatch):
+    import fcntl
+    from types import SimpleNamespace
+    import makaron_event_bridge as bridge
+    for reply in ('native_accepted', 'native_submission_unconfirmed'):
+        isolated_state(tmp_path)
+        path = tmp_path / 'bridge-state.json'
+        calls = []
+        def desktop(config, message, token, facts, cancelled, progress, enabled, timeout):
+            progress('executing', facts)
+            calls.append(token)
+            # A second launch while the original is in start_turn.
+            assert worker.run(tmp_path, 'batch', token) == 0
+            facts[reply] = True
+            return True
+        monkeypatch.setattr(worker, 'desktop_dispatch', desktop)
+        assert worker.run(tmp_path, 'batch', 'first') == 0
+        assert calls == ['first']
+        with (tmp_path / 'handler.lock').open('a') as gate:
+            fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        s = json.loads(path.read_text())
+        b = s['batches']['batch']
+        assert b['phase'] == 'executing' and not b.get('received') and b['worker'][reply]
+        bridge.update_timeout(b, b['model_requested_at'] + 181)
+        args = SimpleNamespace(batch='batch', dispatch_id='first', command='claim')
+        assert b['phase'] == 'receipt_timeout' and not bridge.retry_dispatch(s, args, {}, tmp_path)['accepted']
+        assert bridge.receipt(s, args, True)['accepted'] and b['phase'] == 'working'
+
+
+def test_selftest_observer_timeout_keeps_claim_and_releases_slot(tmp_path, monkeypatch):
+    import fcntl
+    from types import SimpleNamespace
+    import makaron_event_bridge as bridge
+    isolated_state(tmp_path, selftest=True)
+    path = tmp_path / 'bridge-state.json'
+    def desktop(config, message, token, facts, cancelled, progress, enabled, timeout):
+        progress('executing', facts)
+        s = json.loads(path.read_text())
+        assert bridge.receipt(s, SimpleNamespace(batch='batch', dispatch_id=token, command='claim'), True)['accepted']
+        path.write_text(json.dumps(s))
+        facts['native_accepted'] = True
+        return True
+    monkeypatch.setattr(worker, 'desktop_dispatch', desktop)
+    times = iter([0, 0, 601])
+    def clock():
+        now = next(times)
+        if now == 601:
+            with (tmp_path / 'handler.lock').open('a') as gate:
+                fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return now
+    monkeypatch.setattr(worker.time, 'monotonic', clock)
+    assert worker.run(tmp_path, 'batch', 'first') == 2
+    assert json.loads(path.read_text())['batches']['batch']['phase'] == 'working'
+    assert not json.loads((tmp_path / 'wake-acceptance-batch.json').read_text())['passed']

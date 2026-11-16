@@ -27,12 +27,12 @@ def state_lock(directory):
         yield
 
 
-def edit_batch(directory, bid, token, change):
+def edit_batch(directory, bid, token, change, when=None):
     with state_lock(directory):
         path = directory / 'bridge-state.json'
         state = json.loads(path.read_text())
         batch = state.get('batches', {}).get(bid)
-        if not batch or batch.get('dispatch_id') != token:
+        if not batch or batch.get('dispatch_id') != token or (when and not when(state, batch)):
             return None
         change(state, batch)
         write_private(path, state)
@@ -182,64 +182,83 @@ def run(directory, bid, token):
     cancelled = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: cancelled.set())
     signal.signal(signal.SIGINT, lambda *_: cancelled.set())
+    def unstarted(state, batch):
+        return executable_batch(state, batch) and not batch.get('worker', {}).get('started_at')
+
+    # Reserve this dispatch *before* contending with unrelated jobs for the slot.
+    batch = edit_batch(directory, bid, token, lambda _, b: b.update(
+        phase='waiting_for_slot', worker=dict(facts)), when=unstarted)
+    if not batch:
+        return 0
+
+    def may_submit():
+        with state_lock(directory):
+            state = json.loads((directory / 'bridge-state.json').read_text())
+            current = state.get('batches', {}).get(bid)
+            return (current and current.get('dispatch_id') == token and not cancelled.is_set()
+                    and executable_batch(state, current))
+
+    def progress(phase, metadata):
+        def change(_, current):
+            current.update(phase=phase, worker=dict(metadata))
+            if phase == 'executing':
+                current['model_requested_at'] = time.time()
+        if not edit_batch(directory, bid, token, change,
+                          when=lambda st, b: not cancelled.is_set() and executable_batch(st, b)):
+            raise RuntimeError('dispatch_no_longer_executable')
+
     with (directory / 'handler.lock').open('a') as gate:
-        # A synthetic handler and a real incident cannot run models concurrently.
         wait_until = time.monotonic() + 180
         while True:
             try:
                 fcntl.flock(gate, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except BlockingIOError:
+                if not may_submit() and not cancelled.is_set():
+                    return 0
                 if time.monotonic() >= wait_until or cancelled.wait(0.5):
-                    edit_batch(directory, bid, token, lambda _, b: b.update(
-                        phase='dispatch_failed', worker={'error': 'handler_slot_timeout', **facts}))
-                    return 2
-        eligible = []
-        def begin(state, batch):
-            if executable_batch(state, batch) and not batch.get('worker', {}).get('started_at'):
-                eligible.append(True)
-                batch.update(phase='starting', worker=dict(facts))
-        batch = edit_batch(directory, bid, token, begin)
-        if not eligible:
-            return 0
+                    reason = 'cancelled' if cancelled.is_set() else 'handler_slot_timeout'
+                    failed = edit_batch(directory, bid, token, lambda _, b: b.update(
+                        phase='dispatch_failed', worker={**facts, 'finished_at': utc_now(), 'error': reason}),
+                        when=executable_batch)
+                    return 2 if failed else 0
         message = handler_message(batch, directory)
         process = None
         exit_code = None
+        handed_off = False
         try:
-            def enabled_now():
-                with state_lock(directory):
-                    return json.loads((directory / 'bridge-state.json').read_text()).get('enabled', False)
-            def native_progress(phase, progress):
-                def update(_, b):
-                    b['worker'] = dict(progress)
-                    if not b.get('received') and not b.get('completed'):
-                        b['phase'] = phase
-                    if phase == 'executing':
-                        b['model_requested_at'] = time.time()
-                edit_batch(directory, bid, token, update)
-            if desktop_dispatch(config, message, token, facts, cancelled, native_progress, enabled_now,
+            if desktop_dispatch(config, message, token, facts, cancelled, progress, may_submit,
                                 600 if batch.get('selftest') else 3600):
-                edit_batch(directory, bid, token, lambda _, b: b.update(worker=dict(facts)))
-                deadline = time.monotonic() + (600 if batch.get('selftest') else 3600)
-                while not facts.get('native_rejected'):
+                handed_off = not facts.get('native_rejected')
+                # The desktop owner controls this turn. A receipt observer does
+                # not own its execution slot and cannot terminate or replay it.
+                fcntl.flock(gate, fcntl.LOCK_UN)
+                if not handed_off:
+                    return 2
+                if not batch.get('selftest'):
+                    exit_code = 0
+                    return 0
+                deadline = time.monotonic() + 600
+                while True:
                     with state_lock(directory):
                         state = json.loads((directory / 'bridge-state.json').read_text())
                         observed = state['batches'][bid]
+                    if observed.get('dispatch_id') != token:
+                        return 0
                     if observed.get('completed'):
                         facts['receipt_completed_at'] = observed['completed_at']
                         exit_code = 0
-                        break
+                        return 0
                     if not state.get('enabled') or cancelled.is_set() or time.monotonic() >= deadline:
                         facts['stopped_reason'] = 'disabled_cancelled_or_receipt_deadline'
-                        break
+                        return 2
                     time.sleep(0.5)
-                return 0 if exit_code == 0 else 2
+            progress('executing', facts)
             process = subprocess.Popen(command(config, directory), stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        cwd=config['handler_cwd'])
             facts['cli_pid'] = process.pid
-            edit_batch(directory, bid, token, lambda _, b: b.update(
-                phase='executing', worker=dict(facts)))
+            edit_batch(directory, bid, token, lambda _, b: b.update(worker=dict(facts)))
             readers = [threading.Thread(target=observe_events,
                          args=(process.stdout, config['thread_id'], facts, cancelled), daemon=True),
                        threading.Thread(target=drain_stderr, args=(process.stderr, facts), daemon=True)]
@@ -250,7 +269,8 @@ def run(directory, bid, token):
             deadline = time.monotonic() + (600 if batch.get('selftest') else 3600)
             while process.poll() is None:
                 with state_lock(directory):
-                    enabled = json.loads((directory / 'bridge-state.json').read_text()).get('enabled')
+                    state = json.loads((directory / 'bridge-state.json').read_text())
+                    enabled = state.get('enabled') and state['batches'][bid].get('dispatch_id') == token
                 if cancelled.is_set() or not enabled or time.monotonic() >= deadline:
                     facts['stopped_reason'] = ('disabled' if not enabled else
                                               'cancelled_or_thread_mismatch' if cancelled.is_set()
@@ -266,10 +286,12 @@ def run(directory, bid, token):
         finally:
             if process is not None:
                 stop_process(process)
-            facts.update(finished_at=utc_now(), cli_exit_code=exit_code)
+            facts['finished_at'] = utc_now()
+            if process is not None:
+                facts['cli_exit_code'] = exit_code
             def finish(_, batch):
                 batch['worker'] = dict(facts)
-                if not batch.get('completed'):
+                if not handed_off and not batch.get('completed') and not batch.get('received'):
                     batch.update(phase='handler_failed', handler_error='exec_did_not_complete_receipt')
                 if batch.get('selftest'):
                     passed = bool(batch.get('received') and batch.get('completed')
