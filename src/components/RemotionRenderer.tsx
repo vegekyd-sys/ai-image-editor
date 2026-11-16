@@ -3,6 +3,7 @@
 import { layerizeFontsReference, layerizeFontRenderKey, layerizeUsesOriginalGlyphs, resolveLayerizeFontsForRender } from '@/lib/layerize-fonts';
 import { preloadDecodedImage } from '@/lib/image/presentation';
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import DesignErrorBoundary, { rethrowPlayerError } from '@/components/DesignErrorBoundary';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { usesThreeCanvas } from '@/lib/remotion-gl';
@@ -368,39 +369,6 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
 }
 
 // ─── Error Boundary (prevents design crash from taking down the whole page) ──
-
-function PreviewPlayerErrorFallback({
-  error,
-  fallback,
-  onError,
-}: {
-  error: Error;
-  fallback: React.ReactNode;
-  onError: (error: Error) => void;
-}) {
-  const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
-  useEffect(() => {
-    onErrorRef.current(error);
-  }, [error]);
-  return fallback;
-}
-
-class DesignErrorBoundary extends React.Component<
-  { children: React.ReactNode; fallback: React.ReactNode; onError?: (msg: string) => void },
-  { error: Error | null }
-> {
-  state: { error: Error | null } = { error: null };
-  static getDerivedStateFromError(error: Error) { return { error }; }
-  componentDidCatch(error: Error) {
-    console.error('[RemotionRenderer] ErrorBoundary caught:', error);
-    this.props.onError?.(error.message);
-  }
-  render() {
-    if (this.state.error) return this.props.fallback;
-    return this.props.children;
-  }
-}
 
 // ─── Player component (for interactive playback only) ───────────────────────
 
@@ -782,6 +750,7 @@ export default function RemotionRenderer({
   return (
     <DesignErrorBoundary
       key={retryToken}
+      resetKeys={[Component, inputProps, snapshotId]}
       fallback={previewFallback}
       onError={(message) => {
         reportPreviewFailureRef.current('player-runtime', message, { recovered: false });
@@ -814,15 +783,7 @@ export default function RemotionRenderer({
           showPosterWhenBuffering={false}
           posterFillMode="player-size"
           bufferStateDelayInMilliseconds={0}
-          errorFallback={({ error }) => (
-            <PreviewPlayerErrorFallback
-              error={error}
-              fallback={previewFallback}
-              onError={(playerError) => {
-                reportPreviewFailureRef.current('player-runtime', playerError, { recovered: false });
-              }}
-            />
-          )}
+          errorFallback={rethrowPlayerError}
         />
       </div>
     </DesignErrorBoundary>
