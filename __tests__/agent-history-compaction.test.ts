@@ -134,7 +134,7 @@ describe('automatic conversation compaction', () => {
   it.each([
     ['length', { ...handoff, evidence: 'cobalt' }],
     ['stop', { objective: 'partial', evidence: 'cobalt' }],
-    ['stop', { ...handoff, evidence: 'unseen proof' }],
+    ['stop', { ...handoff, constraints: ['invented'], evidence: 'unseen proof' }],
     ['stop', { ...handoff, constraints: [], approvedContent: [], completedActions: [], artifacts: [], pendingWork: [], evidence: 'cobalt' }],
   ])('rejects incomplete or ungrounded summary responses', async (finishReason, value) => {
     ai.generateText.mockReset().mockResolvedValue({ finishReason, text: JSON.stringify(value) });
@@ -144,12 +144,21 @@ describe('automatic conversation compaction', () => {
 
   it('accepts a list of literal source quotes and only repairs the invalid text summary', async () => {
     ai.generateText.mockReset()
-      .mockResolvedValueOnce({ finishReason: 'stop', text: JSON.stringify({ ...handoff, evidence: ['cobalt', 'invented'] }) })
+      .mockResolvedValueOnce({ finishReason: 'stop', text: JSON.stringify({ ...handoff, constraints: ['invented'], evidence: ['cobalt', 'invented'] }) })
       .mockResolvedValueOnce({ finishReason: 'stop', text: JSON.stringify({ ...handoff, evidence: ['cobalt', 'receipt17'] }) });
     const recordUsage = vi.fn();
     expect(await summarizeHistory({ model: 'dummy', records: 'cobalt receipt17', recordUsage })).toEqual(handoff);
     expect(recordUsage).toHaveBeenCalledTimes(2);
     expect(ai.generateText.mock.calls.every(([options]) => !options.tools && options.maxRetries === 0)).toBe(true);
+  });
+
+  it('recognizes verified content in a cumulative handoff without depending on quote formatting', async () => {
+    ai.generateText.mockReset().mockResolvedValue({ finishReason: 'stop', text: JSON.stringify({
+      ...handoff, evidence: 'a paraphrase of the previous chunk',
+    }) });
+    expect(await summarizeHistory({ model: 'dummy', previous: handoff, records: 'later housekeeping',
+      recordUsage: () => {} })).toEqual(handoff);
+    expect(ai.generateText).toHaveBeenCalledTimes(1);
   });
 
   it('consumes every chunk including the ending before publishing a handoff', async () => {

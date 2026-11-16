@@ -139,18 +139,26 @@ export class CompactionError extends Error {
   constructor() { super('Could not prepare a complete, budgeted history handoff. Original history retained.'); }
 }
 
-const evidenceSchema = z.union([z.string().trim().min(4), z.array(z.string().trim().min(4)).min(1)]);
-const summaryResponse = handoffSchema.extend({ evidence: evidenceSchema });
-
-function validateSummary(text: string, source: string): Handoff | undefined {
+function validateSummary(text: string, context: string): Handoff | undefined {
   let json: unknown;
   try { json = JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')); }
   catch { return undefined; }
-  const parsed = summaryResponse.safeParse(json);
+  const parsed = handoffSchema.safeParse(json);
   if (!parsed.success || !hasFacts(parsed.data)) return undefined;
-  const quotes = typeof parsed.data.evidence === 'string' ? [parsed.data.evidence] : parsed.data.evidence;
-  if (!quotes.every(q => source.includes(q) || source.includes(JSON.stringify(q).slice(1, -1)))) return undefined;
-  return handoffSchema.parse(parsed.data);
+  const appearsInSource = (s: string) => s.length >= 4 &&
+    (context.includes(s) || context.includes(JSON.stringify(s).slice(1, -1)));
+  // Ground the handoff itself. A correctly preserved path, approved quotation
+  // or receipt ID is evidence even when the model formats its extra quote as
+  // an array, or cites an earlier (already validated) chunk of the handoff.
+  const facts = Object.values(parsed.data).flat();
+  for (const fact of facts) {
+    const literals = fact.match(/["“「]([^"”」]+)["”」]/gu) ?? [];
+    const pointers = fact.match(/[\w.:-]+(?:\/[\w.:-]+)+|\b[A-Za-z]+[-_:][A-Za-z0-9_-]*\d[A-Za-z0-9_-]*\b/gu) ?? [];
+    if ([fact, ...literals.map(s => s.slice(1, -1)), ...pointers].some(appearsInSource)) return parsed.data;
+  }
+  const evidence = (json as Record<string, unknown>).evidence;
+  const quotes = Array.isArray(evidence) ? evidence : [evidence];
+  return quotes.length && quotes.every(q => typeof q === 'string' && appearsInSource(q)) ? parsed.data : undefined;
 }
 
 export async function summarizeHistory(input: {
@@ -182,7 +190,7 @@ export async function summarizeHistory(input: {
       });
       input.recordUsage(result);
       if (result.finishReason !== 'stop') throw new CompactionError();
-      validated = validateSummary(result.text, source);
+      validated = validateSummary(result.text, prompt);
       if (!validated) console.warn('[agent-compaction] invalid summary', { attempt: attempt + 1, sourceChars: source.length });
     }
     if (!validated) throw new CompactionError();
@@ -310,7 +318,11 @@ export function createHistoryCompactor(input: {
     if (prefix.some(m => m.role === 'assistant' && Array.isArray(m.content) &&
         m.content.some(p => p.type === 'custom' && p.kind === 'openai.compaction'))) throw new CompactionError();
     const seenBodies = new Map<string, number>();
-    const records = prefix.map((m, i) => i + ' ' + transcript(m, seenBodies, i)).join('\n');
+    const latestUser = input.history.findLast(m => m.role === 'user');
+    const records = [
+      ...(latestUser && !prefix.includes(latestUser) ? ['Latest user context (retained inline): ' + transcript(latestUser).slice(-8000)] : []),
+      ...prefix.map((m, i) => i + ' ' + transcript(m, seenBodies, i)),
+    ].join('\n');
     const handoff = handoffSchema.refine(hasFacts).parse(await input.summarize(records, state?.handoff));
     const receipts = [...new Set([...(state?.receipts ?? []), ...receiptLines(prefix)])];
     const prepared = assemble(handoff, receipts, history.slice(historyCut), steps.slice(stepCut));
