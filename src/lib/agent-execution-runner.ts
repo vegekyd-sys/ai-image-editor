@@ -288,29 +288,6 @@ async function buildHandoffSnapshot(input: {
   });
 }
 
-// append_agent_run_input increments the version only while status is running.
-// Exactly one of the append and the terminal update can win for this version.
-export async function finalizeAgentRunForInput(
-  admin: SupabaseClient, run: Pick<AgentRunRecord, 'id' | 'metadata'>, leaseToken: string,
-  inputVersionAtAttemptStart: number, paymentError?: Extract<AgentStreamEvent, { type: 'error' }>,
-): Promise<'completed' | 'failed' | undefined> {
-  const status = paymentError ? 'failed' : 'completed';
-  const { data, error } = await admin.from('agent_runs').update({
-    status,
-    ...(paymentError ? { metadata: { ...(run.metadata || {}), terminal: paymentError } } : { current_work_unit: 'completed' }),
-    ended_at: new Date().toISOString(),
-    lease_token: null, lease_owner: null, lease_expires_at: null, next_attempt_at: null,
-  })
-    .eq('id', run.id)
-    .eq('status', 'running')
-    .eq('lease_token', leaseToken)
-    .eq('input_version', inputVersionAtAttemptStart)
-    .select('id')
-    .maybeSingle();
-  if (error) throw new Error(`Failed to finalize Agent execution: ${error.message}`);
-  return data ? status : undefined;
-}
-
 async function finishAttempt(
   admin: SupabaseClient,
   attemptId: string,
@@ -1076,8 +1053,27 @@ export async function runAgentExecutionAttempt(
     }
 
     const paymentError = terminal?.code === 'image_provider_payment_required' ? terminal : undefined;
-    const completed = sawDone && !terminal;
-    if (completed) {
+    if (paymentError) {
+      const snapshot = await buildHandoffSnapshot({ store: executionStore, run, claim, attemptText, providerCompaction });
+      const decision = await writer.finalizeImageProviderRejection({
+        leaseToken: claim.lease_token, attemptId, inputEpoch: inputVersionAtAttemptStart,
+        terminal: paymentError, inputTokens, outputTokens, attemptMetadata: attemptSafetyMetadata(),
+        handoffSnapshot: {
+          ...snapshot,
+          nextAction: 'Handle the newly accepted user input. The previous image request was rejected with HTTP 402; do not resubmit it without an explicit new request.',
+        },
+      });
+      if (decision === 'handed_off') {
+        await dispatchAgentExecutionAttempt(runId, workerOrigin!);
+      }
+      if (decision !== 'aborted') noteSubscriptionRelayAttempt(resolvedModel.provider, { reachable: true });
+      return {
+        claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: decision,
+        ...(decision === 'aborted' ? {} : { terminalCode: decision === 'handed_off' ? 'agent_input_received' : paymentError.code }),
+      };
+    }
+
+    if (sawDone && !terminal) {
       await markAgentRunInputsApplied({
         supabase: admin,
         runId,
@@ -1108,22 +1104,30 @@ export async function runAgentExecutionAttempt(
         kind: 'execution_completed',
         snapshot: completedSnapshot,
       });
-    }
-    if (completed || paymentError) {
-      const status = await finalizeAgentRunForInput(admin, run, claim.lease_token, inputVersionAtAttemptStart, paymentError);
-      if (status) {
-        if (paymentError) {
-          await writer.processAndEnqueue(paymentError);
-          await writer.flush();
-        }
+      const { data: completedRun, error: completionError } = await admin.from('agent_runs').update({
+        status: 'completed',
+        current_work_unit: 'completed',
+        ended_at: new Date().toISOString(),
+        lease_token: null,
+        lease_owner: null,
+        lease_expires_at: null,
+        next_attempt_at: null,
+      })
+        .eq('id', runId)
+        .eq('status', 'running')
+        .eq('lease_token', claim.lease_token)
+        .eq('input_version', inputVersionAtAttemptStart)
+        .select('id')
+        .maybeSingle();
+      if (completionError) throw new Error(`Failed to finalize Agent execution: ${completionError.message}`);
+      if (completedRun) {
         noteSubscriptionRelayAttempt(resolvedModel.provider, { reachable: true });
-        await finishAttempt(admin, attemptId, status, {
-          ...(paymentError ? { terminal_code: paymentError.code } : {}),
+        await finishAttempt(admin, attemptId, 'completed', {
           input_tokens: inputTokens,
           output_tokens: outputTokens,
           metadata: attemptSafetyMetadata(),
         });
-        return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status, ...(paymentError ? { terminalCode: paymentError.code } : {}) };
+        return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'completed' };
       }
 
       terminal = {

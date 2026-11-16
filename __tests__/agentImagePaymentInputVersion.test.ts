@@ -1,23 +1,35 @@
 // @vitest-environment node
 import { createClient } from '@supabase/supabase-js';
-import { expect, it } from 'vitest';
-import { finalizeAgentRunForInput } from '@/lib/agent-execution-runner';
+import { expect, it, vi } from 'vitest';
+import { AgentDualWriter } from '@/lib/agentDualWriter';
+import { normalizeExecutionSnapshot } from '@/lib/agent-execution';
 
-it.each([1, 2])('only commits a terminal 402 for the submitted input version (current: %i)', async version => {
-  const run = { id: 'test-run', metadata: { locale: 'en' } };
-  const terminal = { type: 'error' as const, code: 'image_provider_payment_required', recoverable: false, message: 'Provider returned 402.' };
-  const db = createClient('https://example.com', 'fixture', {
-    global: { fetch: async (url, options) => {
-      const query = new URL(String(url)).searchParams;
-      expect(options?.method).toBe('PATCH');
-      expect(query.get('id')).toBe('eq.test-run');
-      expect(query.get('status')).toBe('eq.running');
-      expect(query.get('lease_token')).toBe('eq.lease');
-      expect(JSON.parse(String(options?.body))).toMatchObject({ status: 'failed', metadata: { ...run.metadata, terminal } });
-      return query.get('input_version') === `eq.${version}`
-        ? Response.json({ id: run.id })
-        : Response.json({ code: 'PGRST116', details: 'The result contains 0 rows', message: 'Cannot coerce the result to a single JSON object' }, { status: 406 });
-    } },
-  });
-  expect(await finalizeAgentRunForInput(db, run, 'lease', 1, terminal)).toBe(version === 1 ? 'failed' : undefined);
-});
+it.each(['failed', 'handed_off', 'aborted'] as const)(
+  'sends a live terminal error only after an atomic failure commit (%s)', async decision => {
+    const terminal = { type: 'error' as const, code: 'image_provider_payment_required', recoverable: false, message: 'Provider returned 402.' };
+    const fetch = vi.fn(async (url: RequestInfo | URL, options?: RequestInit) => {
+      if (String(url).includes('/rpc/')) {
+        expect(new URL(String(url)).pathname).toBe('/rest/v1/rpc/finalize_image_provider_rejection');
+        expect(JSON.parse(String(options?.body))).toMatchObject({
+          p_run_id: 'run', p_lease_token: 'lease', p_attempt_id: 'attempt', p_input_epoch: 1,
+          p_message_id: 'message', p_content: 'Editing.\nProvider returned 402.', p_seq: 1, p_terminal: terminal,
+        });
+        return Response.json(decision);
+      }
+      return new Response(null, { status: 201 });
+    });
+    const db = createClient('https://example.com', 'fixture', { global: { fetch } });
+    const writer = new AgentDualWriter('run', db, 'user', 'project', null, null, 'message');
+    await writer.processAndEnqueue({ type: 'content', text: 'Editing.\nProvider returned 402.' });
+    await writer.flush();
+    const enqueue = vi.spyOn(writer, 'tryEnqueue');
+    const snapshot = normalizeExecutionSnapshot({}, { objective: 'Edit text', currentWorkUnit: 'agent', nextAction: 'Handle the new input' });
+    const result = await writer.finalizeImageProviderRejection({
+      leaseToken: 'lease', attemptId: 'attempt', inputEpoch: 1, terminal, inputTokens: 1, outputTokens: 2,
+      attemptMetadata: { inputEpoch: 1 }, handoffSnapshot: snapshot,
+    });
+    expect(result).toBe(decision);
+    expect(enqueue).toHaveBeenCalledTimes(decision === 'failed' ? 1 : 0);
+    if (decision === 'failed') expect(enqueue).toHaveBeenCalledWith(terminal);
+  },
+);

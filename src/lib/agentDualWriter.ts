@@ -1,3 +1,4 @@
+import { EXECUTION_SCHEMA_VERSION, estimateTextTokens, type DurableExecutionSnapshot } from './agent-execution';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentStreamEvent } from './agent';
 import { uploadImage } from './supabase/storage';
@@ -491,6 +492,42 @@ export class AgentDualWriter {
   async beginContinuationTurn() {
     await this.insertEvent('new_turn', { messageId: this.currentMessageId });
     this.tryEnqueue({ type: 'new_turn', messageId: this.currentMessageId });
+  }
+
+  /** Commit the rejection against the owned input epoch before notifying the live client. */
+  async finalizeImageProviderRejection(input: {
+    leaseToken: string;
+    attemptId: string;
+    inputEpoch: number;
+    terminal: Extract<AgentStreamEvent, { type: 'error' }>;
+    inputTokens: number;
+    outputTokens: number;
+    attemptMetadata: Record<string, unknown>;
+    handoffSnapshot: DurableExecutionSnapshot;
+  }): Promise<'failed' | 'handed_off' | 'aborted'> {
+    const { data, error } = await this.supabase.rpc('finalize_image_provider_rejection', {
+      p_run_id: this.runId,
+      p_attempt_id: input.attemptId,
+      p_lease_token: input.leaseToken,
+      p_input_epoch: input.inputEpoch,
+      p_message_id: this.currentMessageId,
+      p_content: this.messageText,
+      p_has_image: this.currentMessageHasImage,
+      p_seq: this.seq++,
+      p_terminal: input.terminal,
+      p_input_tokens: input.inputTokens,
+      p_output_tokens: input.outputTokens,
+      p_attempt_metadata: input.attemptMetadata,
+      p_snapshot: input.handoffSnapshot,
+      p_snapshot_tokens: estimateTextTokens(JSON.stringify(input.handoffSnapshot)),
+      p_snapshot_version: EXECUTION_SCHEMA_VERSION,
+    });
+    if (error) throw new Error(`Failed to persist image provider rejection: ${error.message}`);
+    if (data === 'failed') this.tryEnqueue({ ...input.terminal });
+    if (data !== 'failed' && data !== 'handed_off' && data !== 'aborted') {
+      throw new Error('Unexpected image provider rejection outcome');
+    }
+    return data;
   }
 
   /** Durable liveness lease used to reconcile platform-killed runs. */
