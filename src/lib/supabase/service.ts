@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { fetchWithWorkspaceReceipt } from './workspace-fetch'
 
 // Server-only admin client with service_role key
 // Used for accessing tables without RLS (e.g. invite_codes)
@@ -14,7 +15,8 @@ export function getSupabaseAdmin() {
   if (!_admin) {
     _admin = createClient(
       readEnv('NEXT_PUBLIC_SUPABASE_URL'),
-      readEnv('SUPABASE_SERVICE_ROLE_KEY')
+      readEnv('SUPABASE_SERVICE_ROLE_KEY'),
+      { global: { fetch: fetchWithWorkspaceReceipt } },
     )
   }
   return _admin

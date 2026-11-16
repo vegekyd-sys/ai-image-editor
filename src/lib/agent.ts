@@ -835,7 +835,7 @@ export async function* runMakaronAgent(
       buffer: string;
       state: 'waiting' | 'in_code' | 'done';
       decoded: string;
-      lastSavedChars: number;
+      checkpointCursor: number;
       lastProgressChars: number;
       descriptionSent: number;
       codeStreamStarted: boolean;
@@ -843,8 +843,8 @@ export async function* runMakaronAgent(
     let completedCodeTargetPath: string | undefined;
     const persistStreamedCodeCheckpoint = async (force = false) => {
       if (!codeExtractor || !ctx.supabase || !ctx.userId) return;
-      const unsavedChars = codeExtractor.decoded.length - codeExtractor.lastSavedChars;
-      if (unsavedChars <= 0 || (!force && unsavedChars < 1_000)) return;
+      const newChars = codeExtractor.decoded.length - codeExtractor.checkpointCursor;
+      if (newChars <= 0 || (!force && newChars < 1_000)) return;
       const targetSlug = `${codeExtractor.targetPath?.split('/').at(-1) || 'inline'}-${codeExtractor.toolCallId}`
         .replace(/[^a-zA-Z0-9.-]+/g, '-')
         .slice(0, 80);
@@ -856,8 +856,9 @@ export async function* runMakaronAgent(
         ctx.userId,
         'text/javascript',
       );
+      // A refusal consumes this upload interval but does not advance the durable pointer.
+      if (saved.success || saved.uploadForbidden) codeExtractor.checkpointCursor = codeExtractor.decoded.length;
       if (saved.success) {
-        codeExtractor.lastSavedChars = codeExtractor.decoded.length;
         (ctx as any).__streamedCodeCheckpoint = {
           streamedCodePath: partialPath,
           streamedCodeChars: codeExtractor.decoded.length,
@@ -991,7 +992,7 @@ export async function* runMakaronAgent(
             buffer: '',
             state: 'waiting',
             decoded: '',
-            lastSavedChars: 0,
+            checkpointCursor: 0,
             lastProgressChars: 0,
             descriptionSent: 0,
             codeStreamStarted: false,

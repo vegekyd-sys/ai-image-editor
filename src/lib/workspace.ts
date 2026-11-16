@@ -95,6 +95,7 @@ export interface WorkspaceFileHandle {
 
 export interface WorkspaceWriteResult {
   success: boolean;
+  uploadForbidden?: boolean;
   storageUrl?: string;
   localPath?: string;
   size?: number;
@@ -536,7 +537,9 @@ async function dbWriteFile(
   if (uploadError) {
     const message=String((uploadError as {message?:unknown}).message||'Workspace upload failed');
     console.error('[workspace] upload error:', message);
-    return { success: false, error: message };
+    const { status, statusCode } = uploadError as { status?: number; statusCode?: string };
+    const forbidden = status === 403 || Number(statusCode) === 403 || message === 'Forbidden';
+    return { success: false, error: message, ...(forbidden ? { uploadForbidden: true } : {}) };
   }
 
   // Get public URL
