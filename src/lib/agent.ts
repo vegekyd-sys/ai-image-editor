@@ -725,6 +725,7 @@ export async function* runMakaronAgent(
       let finalStepDeliveredArtifact = false;
       let attemptDeliveredArtifact = false;
       const attemptCommittedTools = new Set<string>();
+      let providerPaymentError: Extract<AgentStreamEvent, { type: 'error' }> | undefined;
       let nonRetryableToolFailure: { message: string; code?: string } | undefined;
       let streamError: unknown;
       let lastTool = '';
@@ -1317,8 +1318,13 @@ export async function* runMakaronAgent(
               message: rawMessage,
               code: typeof outputRecord.errorCode === 'string' ? outputRecord.errorCode : undefined,
             };
-            finalStepTextChars += userFacingMessage.trim().length;
-            yield { type: 'content', text: `\n\n${userFacingMessage}` };
+            if (outputRecord.errorCode === 'image_provider_payment_required') {
+              // Drain the current SDK step for token usage before closing the run.
+              providerPaymentError = { type: 'error', code: outputRecord.errorCode, recoverable: false, message: userFacingMessage };
+            } else {
+              finalStepTextChars += userFacingMessage.trim().length;
+              yield { type: 'content', text: `\n\n${userFacingMessage}` };
+            }
           }
           if (completedCodeTargetPath && toolName === 'write_file') {
             const savedPath = typeof outputRecord?.path === 'string' ? outputRecord.path : undefined;
@@ -1572,6 +1578,12 @@ export async function* runMakaronAgent(
         return;
       }
 
+      if (providerPaymentError) {
+        const usageEvent = buildUsageEvent();
+        if (usageEvent) yield usageEvent;
+        yield providerPaymentError;
+        return;
+      }
       if (compactionFailed) {
         const usageEvent = buildUsageEvent();
         if (usageEvent) yield usageEvent;

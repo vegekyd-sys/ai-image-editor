@@ -84,12 +84,13 @@ export async function editImage(
     return { success: true, message, image: result.image, images: result.images, taskId: result.taskId, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage, recovery: result.recovery };
   } catch (error) {
     if (error instanceof MidjourneyRequestError || error instanceof Seedream55RequestError) return { success: false, taskId: error.taskId, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
-    if (error instanceof NanoBanana21RequestError && error.payment) {
-      return { success: false, errorCode: 'image_provider_payment_required', message: error.message };
-    }
     if (error instanceof ImageProviderRefusalError || error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
 
-      return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
+      return {
+        success: false,
+        ...(error instanceof NanoBanana21RequestError && error.payment ? { errorCode: 'image_provider_payment_required' as const } : {}),
+        message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.`,
+      };
     }
     // A paid outcome can be unknown: preserve a durable failure, never fan out or resubmit.
     return { success: false, message: 'Image generation did not complete. The provider outcome may be unknown. Do not retry automatically or silently switch models; explain the failure to the user. Do not bypass a failed required image edit by sending the unedited original into dependent video generation.' };
