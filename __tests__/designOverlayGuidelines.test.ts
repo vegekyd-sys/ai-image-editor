@@ -34,7 +34,9 @@ describe('DesignOverlay moveable guideline regression guards', () => {
   it('keeps fallback drag from stealing desktop Moveable drag events', () => {
     expect(source).toContain('if (targetEl.closest(\'.moveable-area\') && !touchGestures) return false;');
     expect(source).toContain("if (pointerType !== 'touch') return false;");
-    expect(source).not.toContain("addEventListener('mousedown'");
+    const touchFallback = source.slice(source.indexOf('const startDrag ='), source.indexOf("// Moveable's pinchable"));
+    expect(touchFallback).toContain('containerEl.addEventListener');
+    expect(touchFallback).not.toContain("addEventListener('mousedown'");
     expect(source).not.toContain("addEventListener('mousemove'");
     expect(source).not.toContain("addEventListener('mouseup', finishDrag");
     expect(source).toContain("window.addEventListener('mouseup', release);");
