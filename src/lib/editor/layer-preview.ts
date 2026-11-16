@@ -7,7 +7,12 @@ export function isLayerSnapshot(snapshot?: Snapshot): boolean {
   return !!snapshot && !snapshot.design?.animation && (
     !!snapshot.design?.layerizeManifestPath ||
     (!!snapshot.designPath && (snapshot.description === 'Layerized image' || /\/layerize\/[^/]+\/poster\./.test(snapshot.imageUrl ?? ''))) ||
-    (!!snapshot.design && isFixedCanvasDesign(snapshot.design) && !!snapshot.design.editables?.some(field => /^layer_\d+/.test(field.id)))
+    (!!snapshot.design && isFixedCanvasDesign(snapshot.design) && !!snapshot.design.editables?.some(field => /^layer_\d+/.test(field.id))) ||
+    // Agent-authored revisions can omit the original manifest and sizing tags.
+    // Retained layer image bindings still identify their Layerize origin.
+    !!snapshot.design?.editables?.some(field => field.type === 'image' && /^layer_\d+(?:_|$)/.test(field.id)
+      && typeof snapshot.design?.props?.[field.propKey] === 'string'
+      && (snapshot.design.props[field.propKey] as string).includes('/layerize/'))
   );
 }
 
