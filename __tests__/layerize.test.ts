@@ -28,6 +28,20 @@ describe('Layerize standard design contract', () => {
     expect(hasCompleteRasterLayerManifest({ ...design, code: design.code.replaceAll('layer_1', 'layer_0'),
       editables: [design.editables![0], design.editables![0], design.editables![2]] })).toBe(false);
   });
+  it('opens saved image layers even when text extraction retained its unused helper', () => {
+    const keptAsImages = { ...manifest, layers: manifest.layers.map(layer =>
+      layer.text ? { ...layer, text: { ...layer.text, preserveRaster: true } } : layer) };
+    const generated = buildLayerizeDesign(keptAsImages, true);
+    for (const prefix of ['', '/* makaron-layerize-async-fonts-v1 */\n']) {
+      const design = { ...generated, code: prefix + generated.code, layerizeManifestPath: 'layers/manifest.json' };
+      expect(normalizeLoadedDesignManifest(design)).toEqual(design);
+      expect(isRasterLayerizeDesign(design)).toBe(true);
+      expect(hasCompleteRasterLayerManifest(design)).toBe(true);
+      const custom = { ...design, code: design.code.replace('function LayerizeText(', 'function CustomText(') };
+      expect(hasCompleteRasterLayerManifest(custom)).toBe(false);
+      expect(isRasterLayerizeDesign(custom)).toBe(false);
+    }
+  });
   it('recognizes image-only saved layers without skipping fonts for native text or authored content', () => {
     const raster = buildLayerizeDesign(manifest);
     expect(isRasterLayerizeDesign({ ...raster, props: { ...raster.props, _editHistory: { label: '红色礼帽' } } })).toBe(true);

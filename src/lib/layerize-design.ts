@@ -30,14 +30,29 @@ function LayerizeText({value, original, source, width, height, fit, pending}) {
 }
 `;
 
+const LAYERIZE_TEXT_CODE_START = "/* fontWeight:400 fontWeight:500 fontWeight:600 fontWeight:700 fontWeight:800 fontWeight:900 */\n"
+  + LAYERIZE_CODE_START.replace('export default function', LAYERIZE_TEXT_RENDERER + '\nexport default function');
+
+// Text extraction can return only raster layers. Those saved compositions
+// still contain the generator's unused LayerizeText declaration.
+function generatedLayerBody(code: string): string | null {
+  if (!code.endsWith(LAYERIZE_CODE_END)) return null;
+  const asyncMarker = ASYNC_LAYERIZE_FONTS_MARKER + '\n';
+  const source = code.startsWith(asyncMarker) ? code.slice(asyncMarker.length) : code;
+  for (const prefix of [LAYERIZE_CODE_START, LAYERIZE_TEXT_CODE_START]) {
+    if (source.startsWith(prefix)) return source.slice(prefix.length, -LAYERIZE_CODE_END.length);
+  }
+  return null;
+}
+
 /** Recognize the image-only generated composition, including existing saved drafts.
  * Editable labels/history are UI metadata and must not trigger font downloads.
  * Any native text or authored composition continues through the pinned font path.
  */
 export function isRasterLayerizeDesign(design: DesignPayload): boolean {
   if (design.animation || !design.editables?.length || !design.editables.every(field => field.type === 'image')) return false;
-  if (!design.code.startsWith(LAYERIZE_CODE_START) || !design.code.endsWith(LAYERIZE_CODE_END)) return false;
-  const body = design.code.slice(LAYERIZE_CODE_START.length, -LAYERIZE_CODE_END.length);
+  const body = generatedLayerBody(design.code);
+  if (body === null) return false;
   const images = /<Img data-editable="layer_\d+" src=\{props\.layer_\d+\} style=\{\{[^{}<>]*\}\} \/>/g;
   return (body.match(images)?.length ?? 0) > 0 && !body.replace(images, '').trim();
 }
@@ -50,8 +65,9 @@ export function hasCompleteRasterLayerManifest(value: unknown): value is DesignP
   if (!value || typeof value !== 'object') return false;
   const design = value as DesignPayload;
   if (!design.layerizeManifestPath || design.animation || !Array.isArray(design.editables) || !design.editables.length) return false;
-  if (typeof design.code !== 'string' || !design.code.startsWith(LAYERIZE_CODE_START) || !design.code.endsWith(LAYERIZE_CODE_END)) return false;
-  const nodes = design.code.slice(LAYERIZE_CODE_START.length, -LAYERIZE_CODE_END.length).split('\n');
+  const body = typeof design.code === 'string' ? generatedLayerBody(design.code) : null;
+  if (body === null) return false;
+  const nodes = body.split('\n');
   if (nodes.length !== design.editables.length) return false;
   const seen = new Set<string>();
   return design.editables.every((field, index) => {
@@ -149,7 +165,7 @@ export function buildLayerizeDesign(manifest: LayerizeManifest, editableText = f
   if (fontMatching) props._layerizeTextFonts = { ...fontMatching, status: 'pending', originals: Object.fromEntries(editables.filter(field => field.type === 'text').map(field => [field.id, props[field.propKey]])) };
   return {
     width: manifest.width, height: manifest.height, props, editables,
-    code: `${(fontMatching ? ASYNC_LAYERIZE_FONTS_MARKER + "\n" : "") + (editableText ? "/* fontWeight:400 fontWeight:500 fontWeight:600 fontWeight:700 fontWeight:800 fontWeight:900 */\n" : "")}${editableText ? LAYERIZE_CODE_START.replace('export default function', LAYERIZE_TEXT_RENDERER + '\nexport default function') : LAYERIZE_CODE_START}${elements.join('\n')}${LAYERIZE_CODE_END}`,
+    code: `${fontMatching ? ASYNC_LAYERIZE_FONTS_MARKER + '\n' : ''}${editableText ? LAYERIZE_TEXT_CODE_START : LAYERIZE_CODE_START}${elements.join('\n')}${LAYERIZE_CODE_END}`,
   };
 }
 
