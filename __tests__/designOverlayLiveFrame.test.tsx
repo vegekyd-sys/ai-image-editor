@@ -1,9 +1,9 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const runtime = vi.hoisted(() => ({ target: null as HTMLElement | null, peer: null as HTMLElement | null, moveable: null as any, updateRect: vi.fn() }));
+const runtime = vi.hoisted(() => ({ target: null as HTMLElement | null, peer: null as HTMLElement | null, moveable: null as any, updateRect: vi.fn(), dragStart: vi.fn() }));
 vi.mock('react-moveable', () => ({ default: React.forwardRef(function MockMoveable(props: any, ref: any) {
-  runtime.moveable = props; React.useImperativeHandle(ref, () => ({ updateRect: runtime.updateRect, stopDrag() {} })); return null;
+  runtime.moveable = props; React.useImperativeHandle(ref, () => ({ updateRect: runtime.updateRect, stopDrag() {}, getTargets: () => [props.target], dragStart: runtime.dragStart })); return null;
 }) }));
 vi.mock('@/lib/editor/scene-registry', async original => ({ ...await original<any>(), buildLegacySceneRegistry: () => ({ activeInstances: () => runtime.target ? [{ id: 'shape', element: runtime.target }, ...(runtime.peer ? [{ id: 'ink', element: runtime.peer }] : [])] : [] }) }));
 vi.mock('@/lib/editor/editable-image-alpha', () => ({ editableMediaImage: () => null, warmEditableAlpha() {}, pickPaintedEditable: () => 'shape', isPaintedEditableHit: () => true, pendingEditableAlphaAtPoint: () => null }));
@@ -54,6 +54,25 @@ it('moves the native frame target during desktop drag before Moveable ends the g
   act(() => runtime.moveable.onDrag({ target, beforeTranslate: [40, 25] }));
   expect(frame()).toEqual({ left: 140, top: 175, width: 100, height: 80 }); expect(save).not.toHaveBeenCalled();
   act(() => runtime.moveable.onDragEnd()); expect(save).toHaveBeenCalledExactlyOnceWith('_pos_shape', { x: 40, y: 25 });
+});
+it('routes a mouse press through transparent sibling pixels to the selected H5 drag target', async () => {
+  await setup();
+  expect(runtime.moveable.draggable).toBe(true);
+  const front = document.createElement('img');
+  front.dataset.editable = 'front';
+  container.append(front);
+  const press = (el: HTMLElement, pointerType: string) => {
+    const e = new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 120, clientY: 170 });
+    Object.assign(e, { pointerType, pointerId: 1 });
+    act(() => el.dispatchEvent(e));
+    return e;
+  };
+  runtime.dragStart.mockClear();
+  press(target, 'mouse');
+  press(front, 'touch');
+  expect(runtime.dragStart).not.toHaveBeenCalled();
+  const e = press(front, 'mouse');
+  expect(runtime.dragStart).toHaveBeenCalledExactlyOnceWith(e, target);
 });
 it('resizes the native frame target during a two-finger pinch before either finger lifts', async () => {
   const { save, frame } = await setup();
