@@ -776,7 +776,9 @@ export default function DesignOverlay({
             target={selectedRect.domEl}
             rootContainer={containerEl ?? undefined}
             useAccuratePosition={true}
-            draggable={!touchGestures}
+            // Layout width must not disable mouse input on the mobile layout.
+            // onDragStart keeps touch gestures on the existing fallback path.
+            draggable={true}
             dragArea={!touchGestures}
             passDragArea={touchGestures}
             preventDefault={false}
@@ -806,8 +808,8 @@ export default function DesignOverlay({
               // Scalable emits a companion dragStart. It must not overwrite the
               // separate scale session with position values.
               if ((event.inputEvent?.target as HTMLElement | undefined)?.closest?.('.moveable-control')) return;
-              if (onBeforeEditRef.current?.() === false) { event.stopDrag(); return false; }
               if (touchGestures && event.inputEvent?.type?.startsWith('touch')) { event.stopDrag(); return false; }
+              if (onBeforeEditRef.current?.() === false) { event.stopDrag(); return false; }
               const input = event.inputEvent, point = input?.touches?.[0] || input;
               if (typeof point?.clientX === 'number' && !isPaintedEditableHit(selectedRect.domEl, point.clientX, point.clientY)) {
                 event.stopDrag(); return false;
