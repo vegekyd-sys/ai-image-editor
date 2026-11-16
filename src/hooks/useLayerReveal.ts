@@ -34,8 +34,12 @@ export function useLayerReveal(identity: object, enabled: boolean, playerReady: 
         setResult({ identity, phase: 'revealing' });
         animations = elements.map(element => {
           const rest = getComputedStyle(element).filter;
-          const pink = (rest === 'none' ? '' : rest + ' ') + 'sepia(.9) saturate(2.8) hue-rotate(286deg) brightness(1.14)';
-          return element.animate([{ filter: rest }, { filter: pink, offset: .4 }, { filter: rest }], { duration: 280, easing: 'ease-out' });
+          const glow = (rest === 'none' ? '' : rest + ' ')
+            + 'drop-shadow(0 0 1px rgba(244, 114, 182, .5)) drop-shadow(0 0 6px rgba(244, 114, 182, .18))';
+          return element.animate(
+            [{ filter: rest }, { filter: glow, offset: .28 }, { filter: rest }],
+            { duration: 360, easing: 'cubic-bezier(.25, .1, .25, 1)' },
+          );
         });
         await Promise.allSettled(animations.map(animation => animation.finished));
       }
