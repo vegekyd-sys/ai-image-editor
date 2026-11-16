@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from 'fs/promises'
+import { mkdir, writeFile } from 'fs/promises'
+import { planSandboxInputUpload, uploadMediaSandboxInputs } from './media-sandbox-upload'
 import path from 'path'
 import type { MediaInputFile, MediaItem } from './media-sandbox'
 
@@ -266,10 +267,25 @@ async function materializeOutputs(result) {
   }));
 }
 
+// The host sends large inputs in independently compressed SDK requests.
+async function joinInputParts() {
+  const {pipeline} = require('stream/promises');
+  for (const [i, count] of config.inputPartCounts.entries()) {
+    if (count <= 1) continue;
+    const target = config.inputFiles[i].inputPath;
+    for (let part = 0; part < count; part++) {
+      const chunk = target + '.part-' + part;
+      await pipeline(fs.createReadStream(chunk), fs.createWriteStream(target, {flags: part === 0 ? 'w' : 'a'}));
+      await fsp.unlink(chunk);
+    }
+  }
+}
+
 async function main() {
   await fsp.mkdir(INPUT_DIR, {recursive: true});
   await fsp.mkdir(OUTPUT_DIR, {recursive: true});
   await fsp.mkdir(WORK_DIR, {recursive: true});
+  await joinInputParts();
   if (!fs.existsSync(entryFile)) await fsp.writeFile(entryFile, source.originalCode || '');
 
   const ffmpegPath = await findFfmpeg();
@@ -339,9 +355,15 @@ export async function runNodeMediaCodeInVercelSandbox(
     resources: { vcpus: Math.max(1, Math.min(8, Number(process.env.MEDIA_SANDBOX_VCPUS || 4))) },
     timeout: Math.max(60_000, Math.min(5 * 60_000, options.timeoutMs + 60_000)),
   }
+  const start = Date.now()
+  function stage(name: string, details: Record<string, number> = {}) {
+    console.info('[media-sandbox] stage', { name, elapsedMs: Date.now() - start, rssBytes: process.memoryUsage.rss(), ...details })
+  }
+  stage('create')
   const sandbox = await Sandbox.create(createOptions)
 
   try {
+    stage('prepare_inputs')
     await sandbox.mkDir(SANDBOX_INPUT_DIR)
     await sandbox.mkDir(SANDBOX_OUTPUT_DIR)
     await sandbox.mkDir(SANDBOX_WORK_DIR)
@@ -351,7 +373,12 @@ export async function runNodeMediaCodeInVercelSandbox(
       inputPath: `${SANDBOX_INPUT_DIR}/${String(index + 1).padStart(2, '0')}-${safeFileName(input.fileName, `input-${index + 1}`)}`,
     }))
     const sourceFileName = safeFileName(options.codePath || 'agent-media-code.tsx', 'agent-media-code.tsx')
+    const plan = await planSandboxInputUpload(options.inputFiles.map((input, i) => ({
+      local: input.inputPath,
+      remote: remoteInputs[i].inputPath,
+    })))
     const context = {
+      inputPartCounts: plan.partCounts,
       projectId: options.projectId,
       userId: options.userId,
       description: options.description || '',
@@ -361,11 +388,8 @@ export async function runNodeMediaCodeInVercelSandbox(
       inputFiles: remoteInputs,
     }
 
-    await sandbox.writeFiles([
-      ...await Promise.all(options.inputFiles.map(async (input, index) => ({
-        path: remoteInputs[index].inputPath,
-        content: await readFile(input.inputPath),
-      }))),
+    stage('upload_inputs', { files: remoteInputs.length, bytes: plan.totalBytes, batches: plan.batches.length })
+    await uploadMediaSandboxInputs(sandbox, plan, [
       {
         path: `${SANDBOX_WORK_DIR}/agent-source.json`,
         content: JSON.stringify({
@@ -388,6 +412,7 @@ export async function runNodeMediaCodeInVercelSandbox(
       },
     ])
 
+    stage('vm_run')
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), options.timeoutMs)
     let command
@@ -418,6 +443,7 @@ export async function runNodeMediaCodeInVercelSandbox(
       clearTimeout(timer)
     }
 
+    stage('read_result', { exitCode: command.exitCode })
     const manifestBuffer = await sandbox.readFileToBuffer({ path: SANDBOX_RESULT_PATH })
     const stderr = await command.stderr().catch(() => '')
     if (!manifestBuffer) {
@@ -436,6 +462,7 @@ export async function runNodeMediaCodeInVercelSandbox(
       )
     }
 
+    stage('retrieve_outputs', { files: manifest.outputs.length })
     const pathMap = new Map<string, string>()
     for (const output of manifest.outputs) {
       const relativePath = output.relativePath
@@ -450,6 +477,7 @@ export async function runNodeMediaCodeInVercelSandbox(
       pathMap.set(output.path, localPath)
     }
 
+    stage('complete')
     return {
       result: rewriteSandboxPaths(manifest.result, pathMap),
       sandboxId: sandbox.sandboxId,
