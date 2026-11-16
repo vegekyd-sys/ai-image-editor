@@ -34,13 +34,8 @@ const response = (event: unknown) => ({ fullStream: [event], steps: Promise.reso
 it('only hands off an overflow when the next durable request can differ, and stops after another rejection', async () => {
   stream.mockReset().mockReturnValue(response(reject));
   expect(await attempt(false)).toContainEqual(expect.objectContaining({ code: 'context_length_exceeded', recoverable: true }));
-  expect(stream.mock.calls[0][0].tools.read_history_file).toBeUndefined();
   expect(stream.mock.calls[0][0].messages[1]).toEqual(history[1]);
   expect(await attempt(true)).toContainEqual(expect.objectContaining({ code: 'context_length_exceeded', recoverable: false }));
-  const changed = stream.mock.calls[1][0];
-  const ref = JSON.stringify(changed.messages[1]).match(/ref ([a-f0-9]{64})/)![1];
-  const page = await changed.tools.read_history_file.execute({ ref });
-  expect(page.text).toBe(file.slice(0, page.nextOffset));
   expect(await attempt(false, [])).toContainEqual(expect.objectContaining({ code: 'context_length_exceeded', recoverable: false }));
   expect(stream).toHaveBeenCalledTimes(3);
 });

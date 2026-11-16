@@ -941,6 +941,7 @@ const ja = {
   'agent.status.imageGenerationFailed': '画像の生成に失敗しました',
   'agent.status.resuming': '前の処理が停止しました — 保存した下書きから再開しています...',
   'agent.error.recoverable': 'モデルが変更を完了する前に停止しました。下書きは保存されています。「続ける」と送信すると再開できます。',
+  'agent.error.compactionFailed': '会話を安全に圧縮できませんでした。履歴と保存済みの作品は保持されています。',
   'agent.error.contextLength': 'プロジェクトの履歴がモデルの入力上限を超えたため、自動再開を停止しました。メッセージ、素材、下書きは保持されています。',
   'agent.error.fatal': 'モデルがリクエストを完了する前に停止し、再開可能な下書きも保存されませんでした。もう一度お試しください。',
   'agent.error.connectionEnded': 'Agentの接続が完了前に終了しました。保存済みの作業は保持されています。「続ける」と送信すると再開できます。',

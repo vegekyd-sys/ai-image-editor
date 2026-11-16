@@ -534,13 +534,15 @@ function groupToolRows(rows: DbToolHistoryRow[]) {
 export function buildModelHistoryFromRows(
   visibleMessages: DbVisibleMessage[],
   toolRows: DbToolHistoryRow[],
+  currentUserMessage?: string,
 ): ModelMessage[] {
   const visible = visibleMessages
     .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
     .map(m => ({ ...m }));
   // The current request is normally persisted before context construction.
   // Remove only that final duplicate, never a whole sequence of user turns.
-  if (visible[visible.length - 1]?.role === 'user') visible.pop();
+  const last = visible.at(-1);
+  if (last?.role === 'user' && (currentUserMessage === undefined || last.content === currentUserMessage)) visible.pop();
 
   const items = [
     ...visible.map(m => ({ kind: 'message' as const, created_at: m.created_at, value: m })),

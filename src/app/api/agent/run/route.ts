@@ -20,7 +20,6 @@ import {
   DEFAULT_ATTEMPT_BUDGET_MS,
   DEFAULT_ATTEMPT_LEASE_SECONDS,
   DEFAULT_ATTEMPT_MAX_STEPS,
-  getAgentContextPolicy,
 } from '@/lib/agent-execution';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-server';
 import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
@@ -354,9 +353,9 @@ export async function POST(req: NextRequest) {
           history: ctx.history,
           timelineVersion,
           abortSignal: modelAbortController.signal,
-          contextCompactAtTokens: ctx.contextStats.compactionRequired
-            ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens
-            : undefined,
+          applicationCompaction: ctx.applicationCompaction,
+          historyForProviderSwitch: ctx.historyForProviderSwitch,
+          toolCallRuns: ctx.toolCallRuns,
           historyBoundary: ctx.historyBoundary,
           studioWorkflowStage: ctx.activeStudioWorkflowStage,
           agentRunId: runId,

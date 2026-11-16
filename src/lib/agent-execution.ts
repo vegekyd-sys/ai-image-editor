@@ -1,4 +1,5 @@
 import { isOpenAIQuotaExhausted } from './openai-direct-state';
+import type { ApplicationCompaction } from './agent-history-compaction';
 import type { ModelMessage } from 'ai';
 import type { AgentModelProvider } from './agent-models';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -52,7 +53,9 @@ export interface DurableExecutionSnapshot {
   attemptSummary?: string;
   checkpoint?: Record<string, unknown>;
   providerCompaction?: {
-    provider?: 'anthropic' | 'openai';
+    provider?: 'anthropic' | 'openai' | 'application';
+    application?: ApplicationCompaction;
+    originProvider?: AgentModelProvider;
     modelId?: string;
     compactedThrough?: string;
     summary?: string;
@@ -342,8 +345,7 @@ export function selectModelHistoryWithinBudget(input: {
   );
   return {
     // Context selection must never become an implicit lossy compactor. The
-    // runner consumes compactionRequired and creates a persisted compaction
-    // checkpoint before it is allowed to submit a shorter history.
+    // complete per-step budget is evaluated when system, tools and prompt are available.
     messages: input.messages,
     stats: {
       estimatedTokens,
@@ -417,22 +419,15 @@ export function buildTypedCompactionMessage(
   agentProvider?: AgentModelProvider,
 ): ModelMessage | null {
   const compaction = snapshot?.providerCompaction;
+  if (compaction?.provider === 'application') return null;
   if (compaction?.modelId && modelId && compaction.modelId !== modelId) return null;
-  if (compaction?.item
-    && (!compaction.modelId || !modelId || compaction.modelId === modelId)) {
+  if (compaction?.item) {
     const { providerKey, itemId, encryptedContent } = compaction.item;
-    // Encrypted Responses compaction items are provider-bound. A product model
-    // can keep the same public id while moving between Azure, a personal Codex
-    // subscription, and OpenRouter, but opaque state must only return to the
-    // Responses transport that created it.
-    const expectedProviderKey = agentProvider === 'azure-openai'
-      ? 'azure'
-      : agentProvider === 'codex-subscription' || agentProvider === 'openai'
-        ? 'openai'
-        : undefined;
-    if (agentProvider && (!expectedProviderKey || providerKey !== expectedProviderKey)) {
-      return null;
-    }
+    // Direct OpenAI and personal Codex both serialize under "openai". A legacy
+    // record with that namespace alone has no trustworthy transport identity.
+    const origin = compaction.originProvider ?? (providerKey === 'azure' ? 'azure-openai' : undefined);
+    if (!compaction.modelId || compaction.modelId !== modelId || !origin || !['azure-openai', 'codex-subscription', 'openai'].includes(origin) || agentProvider !== origin || !itemId || !encryptedContent ||
+        providerKey !== (origin === 'azure-openai' ? 'azure' : 'openai')) return null;
     return {
       role: 'assistant',
       content: [{
@@ -517,6 +512,7 @@ export class AgentExecutionStore {
       .from('agent_context_snapshots')
       .select('content, run_id')
       .eq('run_id', runId)
+      .neq('kind', 'context_compaction')
       .order('created_at', { ascending: false })
       .limit(1);
     const { data, error } = await query.maybeSingle();
@@ -526,6 +522,19 @@ export class AgentExecutionStore {
       currentWorkUnit: 'agent',
       nextAction: 'Continue the unfinished objective.',
     });
+  }
+
+  async saveCompaction(runId: string, attemptId: string | undefined,
+    compaction: NonNullable<DurableExecutionSnapshot['providerCompaction']>) {
+    // Independent of execution checkpoints so a concurrent summary cannot roll
+    // back a newer objective, operation ledger or artifact handoff.
+    const id = await this.saveSnapshot({
+      runId, attemptId, kind: 'context_compaction',
+      snapshot: normalizeExecutionSnapshot({ providerCompaction: compaction }, {
+        objective: '', currentWorkUnit: 'agent', nextAction: '',
+      }), providerCompaction: compaction,
+    });
+    if (!id) throw new Error('Missing persisted compaction snapshot.');
   }
 
   async saveSnapshot(input: {
