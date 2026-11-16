@@ -319,6 +319,9 @@ const en = {
   'editor.trim.playhead': 'Trim playhead',
 
   // Changelog
+  'changelog.editableLayerOpening.title': "Editing layered images",
+  'changelog.editableLayerOpening.item1': "Layered images open faster. The layers briefly light up when they’re ready to edit.",
+  'changelog.editableLayerOpening.item2': "Drag layers with a mouse or your finger, even in a narrow browser window.",
   'changelog.autoLayerize.title': "Take a picture apart. Make it yours.",
   'changelog.autoLayerize.item1': "Use Auto Layerize to separate people, objects and the background. Move a ball, make a hat bigger, or select a poster headline and ask the Agent to rewrite it.",
   'changelog.autoLayerize.item2': "Give the image to your own agent, too. It can split the layers with Makaron CLI and send you a link that opens the editable result.",

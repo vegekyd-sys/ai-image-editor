@@ -361,6 +361,9 @@ const zhHant = {
   'editor.trim.playhead': '裁剪播放頭',
 
   // Changelog
+  'changelog.editableLayerOpening.title': "分層圖片編輯",
+  'changelog.editableLayerOpening.item1': "分層圖片開啟得更快了。圖層就緒時會短暫亮起，提示你可以開始編輯。",
+  'changelog.editableLayerOpening.item2': "在窄螢幕網頁上，用滑鼠或手指都能拖曳圖層。",
   'changelog.autoLayerize.title': "一張圖，拆開來玩",
   'changelog.autoLayerize.item1': "點「自動分層」，把照片裡的人物、物件和背景拆開。挪走一顆球、放大一頂帽子，或點選海報標題，請 Agent 幫你改字。",
   'changelog.autoLayerize.item2': "也可以把圖片交給自己的 Agent。它用 Makaron CLI 分好層，你點開專案連結，就能接著動手。",

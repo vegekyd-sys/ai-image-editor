@@ -354,6 +354,9 @@ const ja = {
   'editor.trim.playhead': 'トリム再生ヘッド',
 
   // Changelog
+  'changelog.editableLayerOpening.title': "レイヤー画像の編集",
+  'changelog.editableLayerOpening.item1': "レイヤー画像がより速く開くようになりました。編集の準備が整うと、各レイヤーが一瞬光ります。",
+  'changelog.editableLayerOpening.item2': "画面の幅が狭くても、マウスや指でレイヤーをドラッグできます。",
   'changelog.autoLayerize.title': "一枚の写真を、パーツごとに編集",
   'changelog.autoLayerize.item1': "自動レイヤー分割で、人物や小物、背景を個別に編集できます。ボールを動かす、帽子を大きくする、ポスターの見出しを選んで Agent に書き換えてもらう。",
   'changelog.autoLayerize.item2': "お使いの Agent に画像を渡すこともできます。Makaron CLI で分割したら、届いたリンクを開いてそのまま編集できます。",
