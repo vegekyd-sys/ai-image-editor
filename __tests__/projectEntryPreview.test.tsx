@@ -13,8 +13,23 @@ describe('early project media handoff', () => {
     canvas.dataset.projectCanvas = 'project'; canvas.dataset.canvasReady = 'false'
     document.body.appendChild(canvas)
     act(() => { document.dispatchEvent(new Event('makaron:canvas-ready')) })
-    expect(container.querySelector('#ssr-skeleton')).not.toBeNull()
+    expect(canvas.querySelector('#ssr-skeleton')).not.toBeNull()
+    expect(canvas.querySelector('#ssr-skeleton')?.parentElement).toBe(canvas)
+    expect(canvas.querySelector('#ssr-skeleton')?.classList.contains('overflow-hidden')).toBe(true)
+    expect(canvas.querySelector('#ssr-skeleton')?.classList.contains('fixed')).toBe(false)
     act(() => { canvas.dataset.canvasReady = 'true'; document.dispatchEvent(new Event('makaron:canvas-ready')) })
+    expect(container.querySelector('#ssr-skeleton')).toBeNull()
+    canvas.remove()
+  })
+
+  it('moves the cover into a late-mounted canvas before its media is ready', async () => {
+    const { container } = render(<ProjectEntryPreview projectId="late" imageUrl="https://media.example/poster.jpg" />)
+    expect(container.querySelector('#ssr-skeleton')?.classList.contains('fixed')).toBe(true)
+    const canvas = document.createElement('div')
+    canvas.dataset.projectCanvas = 'late'
+    canvas.dataset.canvasReady = 'false'
+    await act(async () => { document.body.appendChild(canvas) })
+    expect(canvas.querySelector('#ssr-skeleton')?.parentElement).toBe(canvas)
     expect(container.querySelector('#ssr-skeleton')).toBeNull()
     canvas.remove()
   })
