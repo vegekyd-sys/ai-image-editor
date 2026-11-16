@@ -120,6 +120,7 @@ export default function DesignOverlay({
   const overlayRef = useRef<HTMLDivElement>(null);
   const overlayMountedRef = useRef(false);
   const moveableRef = useRef<Moveable>(null);
+  const coveredMouseTarget = useRef<HTMLElement | null>(null);
 
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -379,6 +380,7 @@ export default function DesignOverlay({
     } | null = null;
 
     const handlePointerDown = (e: PointerEvent) => {
+      coveredMouseTarget.current = null;
       if (e.button !== 0 || isDraggingRef.current) return;
       pointerSequence++;
       const eventTarget = e.target as HTMLElement;
@@ -417,19 +419,18 @@ export default function DesignOverlay({
 
       if (!id || !hitTarget) return;
       disableNativeMediaDrag(hitTarget);
-      // In H5 the selection frame lets events through. A transparent sibling
-      // can receive the press even though the selected layer is painted here.
-      if (touchGestures && e.pointerType === 'mouse' && id === selectedFieldIdRef.current &&
-          directTarget && directTarget !== hitTarget && moveableRef.current?.getTargets()[0] === hitTarget) {
-        moveableRef.current.dragStart(e, hitTarget);
-        return;
-      }
       const intent = resolveEditablePointerIntent({
         hitFieldId: id,
         hitIsCanvasCover,
         selectedFieldId: selectedFieldIdRef.current,
         moved: false,
       });
+      // The H5 frame is transparent to input. A sibling's clear pixels can
+      // receive the press while the visible layer underneath is selected.
+      if (touchGestures && e.pointerType === 'mouse' && directTarget && directTarget !== hitTarget &&
+          (intent === 'select' || intent === 'manipulate')) {
+        coveredMouseTarget.current = hitTarget;
+      }
       // Touch taps select on release, so a version swipe cannot also select a layer.
       if (intent !== 'select' || e.pointerType === 'touch') return;
       if (selectedFieldIdRef.current !== id) {
@@ -440,12 +441,21 @@ export default function DesignOverlay({
         if (previous && directTarget && readEditableRuntimeId(directTarget) === previous) e.stopPropagation();
       }
     };
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = coveredMouseTarget.current;
+      coveredMouseTarget.current = null;
+      // The preceding pointerdown may have just mounted Moveable on a new layer.
+      if (target && e.button === 0 && moveableRef.current?.getTargets()[0] === target) {
+        moveableRef.current.dragStart(e, target);
+      }
+    };
     const handlePointerMove = (e: PointerEvent) => {
       if (!gesture || gesture.pointerId !== e.pointerId || gesture.moved) return;
       const distance = Math.hypot(e.clientX - gesture.startX, e.clientY - gesture.startY);
       if (distance > EDITABLE_POINTER_MOVE_THRESHOLD) gesture.moved = true;
     };
     const handlePointerUp = (e: PointerEvent) => {
+      coveredMouseTarget.current = null;
       if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
       if (!gesture || gesture.pointerId !== e.pointerId) return;
       if (interactionEl.dataset.editableGesture) { gesture = null; lastCompletedTap = null; return; }
@@ -494,6 +504,7 @@ export default function DesignOverlay({
       });
     };
     const handlePointerCancel = (e: PointerEvent) => {
+      coveredMouseTarget.current = null;
       if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
       if (gesture?.pointerId === e.pointerId) gesture = null;
     };
@@ -505,6 +516,7 @@ export default function DesignOverlay({
     };
 
     interactionEl.addEventListener('pointerdown', handlePointerDown, { capture: true });
+    if (touchGestures) interactionEl.addEventListener('mousedown', handleMouseDown, { capture: true });
     interactionEl.addEventListener('pointermove', handlePointerMove, { capture: true });
     interactionEl.addEventListener('pointerup', handlePointerUp, { capture: true });
     interactionEl.addEventListener('pointercancel', handlePointerCancel, { capture: true });
@@ -512,6 +524,7 @@ export default function DesignOverlay({
     return () => {
       disposed = true;
       interactionEl.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+      interactionEl.removeEventListener('mousedown', handleMouseDown, { capture: true });
       interactionEl.removeEventListener('pointermove', handlePointerMove, { capture: true });
       interactionEl.removeEventListener('pointerup', handlePointerUp, { capture: true });
       interactionEl.removeEventListener('pointercancel', handlePointerCancel, { capture: true });

@@ -65,7 +65,9 @@ it('routes a mouse press through transparent sibling pixels to the selected H5 d
     const e = new MouseEvent('pointerdown', { bubbles: true, cancelable: true, clientX: 120, clientY: 170 });
     Object.assign(e, { pointerType, pointerId: 1 });
     act(() => el.dispatchEvent(e));
-    return e;
+    const mouseDown = new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: 120, clientY: 170 });
+    act(() => el.dispatchEvent(mouseDown));
+    return mouseDown;
   };
   runtime.dragStart.mockClear();
   press(target, 'mouse');
