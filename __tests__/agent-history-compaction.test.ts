@@ -137,8 +137,19 @@ describe('automatic conversation compaction', () => {
     ['stop', { ...handoff, evidence: 'unseen proof' }],
     ['stop', { ...handoff, constraints: [], approvedContent: [], completedActions: [], artifacts: [], pendingWork: [], evidence: 'cobalt' }],
   ])('rejects incomplete or ungrounded summary responses', async (finishReason, value) => {
-    ai.generateText.mockResolvedValueOnce({ finishReason, text: JSON.stringify(value) });
+    ai.generateText.mockReset().mockResolvedValue({ finishReason, text: JSON.stringify(value) });
     await expect(summarizeHistory({ model: 'dummy', records: 'cobalt', recordUsage: () => {} })).rejects.toThrow();
+    expect(ai.generateText).toHaveBeenCalledTimes(finishReason === 'stop' ? 2 : 1);
+  });
+
+  it('accepts a list of literal source quotes and only repairs the invalid text summary', async () => {
+    ai.generateText.mockReset()
+      .mockResolvedValueOnce({ finishReason: 'stop', text: JSON.stringify({ ...handoff, evidence: ['cobalt', 'invented'] }) })
+      .mockResolvedValueOnce({ finishReason: 'stop', text: JSON.stringify({ ...handoff, evidence: ['cobalt', 'receipt17'] }) });
+    const recordUsage = vi.fn();
+    expect(await summarizeHistory({ model: 'dummy', records: 'cobalt receipt17', recordUsage })).toEqual(handoff);
+    expect(recordUsage).toHaveBeenCalledTimes(2);
+    expect(ai.generateText.mock.calls.every(([options]) => !options.tools && options.maxRetries === 0)).toBe(true);
   });
 
   it('consumes every chunk including the ending before publishing a handoff', async () => {
