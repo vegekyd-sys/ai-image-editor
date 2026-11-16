@@ -5,8 +5,18 @@ import { isImageBase64, parseImageDataUrl } from './image-data-url';
 
 export const NANO_BANANA_21_MODEL = 'google/gemini-nano-banana-2.1';
 
+function paymentRejection(metadata?: Record<string, unknown>) {
+  // OpenRouter messages, remedy hints and arbitrary metadata may echo user input.
+  const source = metadata?.limit_source;
+  const reason = metadata?.reason;
+  return {
+    limitSource: source === 'openrouter_in_flight_budget' || source === 'openrouter_key_limit' || source === 'openrouter_credits' ? source : 'unknown',
+    reason: reason === 'in_flight_budget_exhausted' || reason === 'weight_exceeds_budget' ? reason : undefined,
+  };
+}
+
 export class NanoBanana21RequestError extends Error {
-  constructor(message: string, public readonly contentBlocked = false) { super(message); }
+  constructor(message: string, public readonly contentBlocked = false, public readonly payment?: ReturnType<typeof paymentRejection>) { super(message); }
 }
 
 export function buildNanoBanana21Request(req: GenerateImageRequest) {
@@ -55,6 +65,7 @@ export const nanoBanana21Backend: ModelBackend = {
     let status: number | undefined;
     let contentType: string | null = null;
     let responseBytes: number | undefined;
+    let payment: ReturnType<typeof paymentRejection> | undefined;
     let firstCodePoint: number | undefined;
     const started = Date.now();
     try {
@@ -75,11 +86,13 @@ export const nanoBanana21Backend: ModelBackend = {
       firstCodePoint = responseText.trimStart().codePointAt(0);
       stage = 'response JSON';
       const data = JSON.parse(responseText);
-      requestId = typeof data.id === 'string' ? data.id : requestId;
-      if (!response.ok || data.error) {
-        const blocked = data.error?.metadata?.block_reason === 'PROHIBITED_CONTENT'
-          || data.error?.metadata?.finish_reason === 'PROHIBITED_CONTENT'
-          || data.error?.metadata?.error_type === 'content_policy_violation';
+      requestId = typeof data?.id === 'string' ? data.id : requestId;
+      if (!response.ok || data?.error) {
+        stage = 'provider rejection';
+        if (status === 402 || (response.ok && data.error?.code === 402)) payment = paymentRejection(data?.error?.metadata);
+        const blocked = data?.error?.metadata?.block_reason === 'PROHIBITED_CONTENT'
+          || data?.error?.metadata?.finish_reason === 'PROHIBITED_CONTENT'
+          || data?.error?.metadata?.error_type === 'content_policy_violation';
         throw new NanoBanana21RequestError(`Nano Banana 2.1 provider rejected the request (HTTP ${response.status}).`, blocked);
       }
       const images = data.data;
@@ -110,9 +123,14 @@ export const nanoBanana21Backend: ModelBackend = {
       // Do not log prompts, input images, response bodies or native error messages
       // (JSON parse errors can include excerpts of a base64 image).
       const code = error instanceof Error && 'cause' in error && error.cause && typeof error.cause === 'object' && 'code' in error.cause ? String(error.cause.code) : undefined;
-      console.error('[gemini-2.1] failed', { stage, status, contentType, responseBytes, firstCodePoint,
+      if (status === 402) payment ??= paymentRejection(); // A missing or unreadable body still has a known HTTP status.
+      console.error('[gemini-2.1] failed', { stage, status, ...(payment ? { payment, inputCount: body.input_references?.length ?? 0 } : {}), contentType, responseBytes, firstCodePoint,
         elapsedMs: Date.now() - started, requestId, resolution: body.resolution,
         errorType: error instanceof Error ? error.name : 'unknown', code: error instanceof RangeError && error.message === 'Maximum call stack size exceeded' ? 'stack_overflow' : code && /^[A-Z0-9_]+$/.test(code) ? code : undefined });
+      if (payment) {
+        const detail = payment.reason ? `${payment.limitSource}, reason: ${payment.reason}` : payment.limitSource;
+        throw new NanoBanana21RequestError(`OpenRouter rejected the Nano Banana 2.1 image request (${status === 402 ? 'HTTP 402' : 'provider code 402'}, limit source: ${detail}).${requestId ? ` Request: ${requestId}.` : ''} No automatic retry or model fallback.`, error instanceof NanoBanana21RequestError && error.contentBlocked, payment);
+      }
       const reason = error instanceof NanoBanana21RequestError ? error.message : `Nano Banana 2.1 request did not complete during ${stage}; provider outcome may be unknown.`;
       throw new NanoBanana21RequestError(`${reason}${requestId ? ` Request: ${requestId}.` : ''} No automatic retry or model fallback.`, error instanceof NanoBanana21RequestError && error.contentBlocked);
     }

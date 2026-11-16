@@ -43,7 +43,7 @@ export async function editImage(
   const finalPrompt = editPrompt;
 
   const t0 = Date.now();
-  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} hasReference=${hasReference} model=${requestedModel ?? 'auto'} background=${background ?? 'default'}\neditPrompt: ${editPrompt.slice(0, 200)}\n`);
+  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} hasReference=${hasReference} model=${requestedModel ?? 'auto'} background=${background ?? 'default'}`);
 
   // Build references array for multi-image mode
   let references: { url: string; role: string }[] | undefined;
@@ -86,7 +86,11 @@ export async function editImage(
     if (error instanceof MidjourneyRequestError || error instanceof Seedream55RequestError) return { success: false, taskId: error.taskId, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
     if (error instanceof ImageProviderRefusalError || error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
 
-      return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
+      return {
+        success: false,
+        ...(error instanceof NanoBanana21RequestError && error.payment ? { errorCode: 'image_provider_payment_required' as const } : {}),
+        message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.`,
+      };
     }
     // A paid outcome can be unknown: preserve a durable failure, never fan out or resubmit.
     return { success: false, message: 'Image generation did not complete. The provider outcome may be unknown. Do not retry automatically or silently switch models; explain the failure to the user. Do not bypass a failed required image edit by sending the unedited original into dependent video generation.' };

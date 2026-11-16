@@ -1462,7 +1462,7 @@ function createGenerateImageTool(
       description: `${generateImageToolPrompt}\n\n${formatImageCapabilitiesForAgent()}` + '\nRetake camera/content keyframes: use retake_source after inspect_retake to edit an actual source frame, rather than a video poster or contact sheet. The returned image is a visual checkpoint for H3 middle-frame control or an explicitly requested boundary-attribute correction. For a boundary correction use the corresponding inspected selected opening/closing source time; retain that exact composition and action phase except the requested correction. Read its actual pixels and verify the requested camera/content and action phase before passing its mediaIndex to retake_video.',
       inputSchema: z.object({
         retake_source: z.object({media_index:z.number().int().positive(),start:z.number().nonnegative(),end:z.number().positive(),source_time:z.number().nonnegative(),inspection_id:z.string(),model:z.enum(RETAKE_MODELS).default(DEFAULT_RETAKE_MODEL)}).optional().describe('Generate a Retake keyframe from a real inspected video frame inside start/end, in original-source seconds. Use the exact inspect_retake receipt. Omit ordinary media_index/reference_media_indices; the actual video frame supplies identity, pose, environment and motion phase. Write editPrompt as the requested new view/content while retaining that phase.'),
-        editPrompt: z.string().describe('For mj-v8.2, pass the original natural-language user brief verbatim; its adapter handles MJ scene conversion, so do not append source-preservation instructions. For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. Preserve requested fictional-character names and identity; do not disguise them as unnamed lookalikes. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
+        editPrompt: z.string().describe('For mj-v8.2, pass the original natural-language user brief verbatim; its adapter handles MJ scene conversion, so do not append source-preservation instructions. For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback, without inventing layout or colors. For ordinary edits, write specific English instructions. When replacing lettering, keep the target strings verbatim in their requested language. Preserve requested fictional-character names and identity; do not disguise them as unnamed lookalikes. When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
         isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
@@ -1523,7 +1523,7 @@ function createGenerateImageTool(
 
         // Resolve reference images: user-uploaded + snapshot indices
         const resolvedRefs = elementInput ? [elementInput.reference] : !retake_source && ctx.referenceImages ? [...ctx.referenceImages] : [];
-        console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
+        console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length}`);
         if (reference_media_indices?.length) {
           for (const refIdx of reference_media_indices) {
             const v = validateImageIndex(ctx.snapshotImages, refIdx);
@@ -1618,6 +1618,15 @@ function createGenerateImageTool(
             referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
           },
         );
+        if (skillResult.errorCode === 'image_provider_payment_required') return {
+          success: false, terminal: true, errorCode: skillResult.errorCode, message: skillResult.message,
+          userMessage: {
+            zh: 'Nano Banana 2.1 的图片服务返回了计费错误（402），这次未返回图片。',
+            'zh-Hant': 'Nano Banana 2.1 的圖片服務傳回計費錯誤（402），這次未傳回圖片。',
+            en: 'The Nano Banana 2.1 image service returned a billing error (402). No image was returned for this request.',
+            ja: 'Nano Banana 2.1 の画像サービスで課金エラー（402）が発生し、今回は画像が返されませんでした。',
+          },
+        };
         // Reuse the existing terminal-tool contract: the model must not start
         // another paid workflow after the bounded character attempt fails.
         // This is a result for this input, not a project/NSFW state mutation.
@@ -3686,6 +3695,7 @@ function createEditElementTool(scope: AgentToolFactoryScope) {
           if (!savedInput.success || !savedInput.storageUrl) throw new Error('Could not prepare the original element for editing.');
           const generator = createGenerateImageTool(scope, { source: savedInput.storageUrl, reference: source });
           const generated = await generator.execute!({ benignCharacterContent: false, editPrompt: `${operation.prompt}\nEdit ONLY the supplied FIRST crop in place: ${prepared.box.width} by ${prepared.box.height} pixels, at original-asset x=${prepared.box.left}, y=${prepared.box.top}. The SECOND image is the complete original element for identity/context ONLY, not the output canvas. Return only the edited crop, never copy the whole character or scene from the second image into it. Preserve the crop framing, contact points, pose and identity. ${prepared.hasAlpha ? "Transparent source pixels must remain alpha, never paint a solid backdrop." : "Keep the existing background."} Do not zoom, recenter or invent a different person.`, outputFormat: 'png', aspectRatio: formatAspectRatio(prepared.box.width, prepared.box.height), ...(prepared.hasAlpha ? { background: 'transparent' as const } : {}) }, executionOptions) as any;
+          if (generated.terminal) return generated;
           if (!generated.success || !generated.image) return { success: false, error: generated.message || 'Element image generation failed.' };
           const bytes = await finishElementImage(prepared, generated.image);
           const saved = await workspace.writeFile(`${ctx.projectId}/element-edits/${id}.png`, bytes, input.supabase, input.userId, 'image/png');

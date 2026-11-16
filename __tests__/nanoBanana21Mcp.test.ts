@@ -75,6 +75,15 @@ describe('Nano Banana 2.1 MCP → shared skill → provider → billing', () => 
     expect(state.fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(state.fetch.mock.calls[0][1].body).resolution).toBe('2K');
   });
+  it('reports a supplier 402 and stops dependent video work without charging the image', async () => {
+    state.fetch.mockResolvedValue(Response.json({ error: { code: 402 } }, { status: 402 }));
+    const { payload } = await callNano();
+    expect(payload.result.isError).toBe(true);
+    expect(payload.result.content[0].text).toContain('HTTP 402');
+    expect(payload.result.content[0].text).toContain('Do not bypass a failed required image edit');
+    expect(state.fetch).toHaveBeenCalledOnce();
+    expect(state.rpc.mock.calls.filter(([name]) => name === 'deduct_and_log')).toHaveLength(0);
+  });
   it('rejects missing exact pricing before a paid call', async () => {
     state.configured = false;
     const { payload } = await callNano();

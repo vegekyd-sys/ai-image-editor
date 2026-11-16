@@ -1033,6 +1033,28 @@ export async function runAgentExecutionAttempt(
       total_output_tokens: (run.total_output_tokens || 0) + outputTokens,
     }).eq('id', runId).eq('lease_token', claim.lease_token);
 
+    const paymentError = terminal?.code === 'image_provider_payment_required' ? terminal : undefined;
+    if (paymentError) {
+      const snapshot = await buildHandoffSnapshot({ store: executionStore, run, claim, attemptText, providerCompaction });
+      const decision = await writer.finalizeImageProviderRejection({
+        leaseToken: claim.lease_token, attemptId, inputEpoch: inputVersionAtAttemptStart,
+        appliedInputIds: pendingInputs.map(input => input.id),
+        terminal: paymentError, inputTokens, outputTokens, attemptMetadata: attemptSafetyMetadata(),
+        handoffSnapshot: {
+          ...snapshot,
+          nextAction: 'Handle the newly accepted user input. The previous image request was rejected with HTTP 402; do not resubmit it without an explicit new request.',
+        },
+      });
+      if (decision === 'handed_off') {
+        await dispatchAgentExecutionAttempt(runId, workerOrigin!);
+      }
+      if (decision !== 'aborted') noteSubscriptionRelayAttempt(resolvedModel.provider, { reachable: true });
+      return {
+        claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: decision,
+        ...(decision === 'aborted' ? {} : { terminalCode: decision === 'handed_off' ? 'agent_input_received' : paymentError.code }),
+      };
+    }
+
     const currentLease = await readExecutionLeaseState(admin, runId, 3);
     const confirmedOwnershipLoss = isConfirmedExecutionLeaseLoss({
       renewSucceeded: false,
