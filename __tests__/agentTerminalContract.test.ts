@@ -72,7 +72,7 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('checkpoint.compositionPartPaths?.length');
     expect(agentStreamSource).not.toContain('MAX_STUDIO_RUN_AUTO_RESUMES');
     expect(agentStreamSource).not.toContain('buildStudioRunAutoResumePrompt');
-    expect(agentSource).toContain('streamed-${codeExtractor.toolName}-${targetSlug}.partial.js');
+    expect(agentSource).toContain('streamed-${codeExtractor.toolName}-${targetSlug}-${codeExtractor.checkpointId}${slot}.partial.js');
     expect(agentSource).toContain('persistStreamedCodeCheckpoint(true)');
     expect(agentSource).toContain('function createWriteCodeFileTool(');
     expect(agentSource).toContain('Composition files may be natural Remotion modules');

@@ -829,7 +829,8 @@ export async function* runMakaronAgent(
     let codeExtractor: {
       toolName: 'run_code' | 'write_code_file' | 'write_file';
       valueKey: 'code' | 'content';
-      toolCallId: string;
+      checkpointId: string;
+      nextCheckpointSlot: 0 | 1;
       targetPath?: string;
       buffer: string;
       state: 'waiting' | 'in_code' | 'done';
@@ -844,10 +845,13 @@ export async function* runMakaronAgent(
       if (!codeExtractor || !ctx.supabase || !ctx.userId) return;
       const newChars = codeExtractor.decoded.length - codeExtractor.checkpointCursor;
       if (newChars <= 0 || (!force && newChars < 1_000)) return;
-      const targetSlug = `${codeExtractor.targetPath?.split('/').at(-1) || 'inline'}-${codeExtractor.toolCallId}`
+      const targetSlug = (codeExtractor.targetPath?.split('/').at(-1) || 'inline')
         .replace(/[^a-zA-Z0-9.-]+/g, '-')
-        .slice(0, 80);
-      const partialPath = `${ctx.projectId}/drafts/streamed-${codeExtractor.toolName}-${targetSlug}.partial.js`;
+        .slice(0, 40);
+      // Keep the last committed object readable if the next upload succeeds but
+      // its index write fails. Each tool stream reuses at most two workspace files.
+      const slot = codeExtractor.nextCheckpointSlot === 0 ? '' : '.next';
+      const partialPath = `${ctx.projectId}/drafts/streamed-${codeExtractor.toolName}-${targetSlug}-${codeExtractor.checkpointId}${slot}.partial.js`;
       const saved = await workspace.writeFile(
         partialPath,
         codeExtractor.decoded,
@@ -858,6 +862,7 @@ export async function* runMakaronAgent(
       // A refusal consumes this upload interval. Only committed bytes become a recovery pointer.
       if (saved.success || saved.uploadForbidden) codeExtractor.checkpointCursor = codeExtractor.decoded.length;
       if (saved.success) {
+        codeExtractor.nextCheckpointSlot = codeExtractor.nextCheckpointSlot === 0 ? 1 : 0;
         (ctx as any).__streamedCodeCheckpoint = {
           streamedCodePath: partialPath,
           streamedCodeChars: codeExtractor.decoded.length,
@@ -987,7 +992,8 @@ export async function* runMakaronAgent(
           codeExtractor = {
             toolName,
             valueKey: toolName === 'run_code' ? 'code' : 'content',
-            toolCallId: String((event as any).toolCallId || crypto.randomUUID()),
+            checkpointId: crypto.randomUUID(),
+            nextCheckpointSlot: 0,
             buffer: '',
             state: 'waiting',
             decoded: '',

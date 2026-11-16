@@ -371,8 +371,15 @@ async function writeLocalMirror(userId: string, filePath: string, body: string |
   return localPath;
 }
 
+function isStreamedCheckpoint(filePath: string): boolean {
+  return /(?:^|\/)drafts\/streamed-[^/]+\.partial\.js$/.test(filePath);
+}
+
 function workspaceMirrorPath(userId: string, file: WorkspaceFile): string {
   const ordinary = getLocalWorkspacePath(userId, file.path);
+  if (file.updatedAt && isStreamedCheckpoint(file.path)) {
+    return `${ordinary}.revision-${createHash('sha256').update(file.updatedAt).digest('hex').slice(0, 20)}`;
+  }
   return file.storageUrl?.includes('/marketplace-revisions/')
     ? `${ordinary}.revision-${createHash('sha256').update(file.storageUrl).digest('hex').slice(0, 20)}`
     : ordinary;
@@ -475,7 +482,7 @@ async function dbListFiles(supabase: SupabaseClient, userId: string, pattern?: s
   }
 
   return data.map((row) => {
-    const localPath = workspaceMirrorPath(userId, { path: row.path, storageUrl: row.storage_url, contentType: row.content_type });
+    const localPath = workspaceMirrorPath(userId, { path: row.path, storageUrl: row.storage_url, contentType: row.content_type, updatedAt: row.updated_at });
     return {
       path: row.path,
       contentType: row.content_type,
@@ -520,6 +527,19 @@ async function dbWriteFile(
   const isText = ct.startsWith('text/') || ct === 'application/json';
   const body = isText && typeof content === 'string' ? content : (Buffer.isBuffer(content) ? content : Buffer.from(content));
   const sizeBytes = typeof content === 'string' ? Buffer.byteLength(content, 'utf-8') : (Buffer.isBuffer(content) ? content.length : 0);
+  let localPath: string | undefined;
+  // Checkpoints are only read for recovery. Hydrate the indexed version on demand
+  // instead of exposing uncommitted bytes or racing a later write to the mirror.
+  const checkpoint = isStreamedCheckpoint(path);
+  if (!checkpoint) {
+    try {
+      localPath = await writeLocalMirror(userId, path, body);
+      console.log(`[workspace] local write ${path}`);
+    } catch (e) {
+      console.warn('[workspace] local write failed:', e);
+    }
+  }
+
   // Upload to Storage
   const { error: uploadError } = await retryIdempotentStorage(() => supabase.storage
     .from('images')
@@ -535,8 +555,10 @@ async function dbWriteFile(
 
   // Get public URL
   const { data: urlData } = supabase.storage.from('images').getPublicUrl(sp);
-  const publicUrl = urlData?.publicUrl;
   const updatedAt = new Date().toISOString();
+  // A reused checkpoint slot needs a fresh CDN read for each committed version.
+  const publicUrl = checkpoint && urlData?.publicUrl
+    ? `${urlData.publicUrl}?v=${encodeURIComponent(updatedAt)}` : urlData?.publicUrl;
 
   // Upsert index row
   const { error: dbError } = await retryIdempotentStorage(() => supabase.from('workspace_files').upsert({
@@ -553,14 +575,6 @@ async function dbWriteFile(
     const message=String((dbError as {message?:unknown}).message||'Workspace index failed');
     console.error('[workspace] db upsert error:', message);
     return { success: false, error: message };
-  }
-
-  // Readers trust a same-size mirror. Only expose bytes from a confirmed write.
-  let localPath: string | undefined;
-  try {
-    localPath = await writeLocalMirror(userId, path, body);
-  } catch {
-    console.warn('[workspace] local mirror write failed');
   }
 
   cache.clear();
