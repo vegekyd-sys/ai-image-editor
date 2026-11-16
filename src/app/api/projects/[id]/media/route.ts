@@ -5,6 +5,8 @@ import { publishExternalVideoRanges } from '@/lib/external-video-range'
 import { sourceRangeFromVideoMeta } from '@/lib/media-source-range'
 import type { VideoMeta } from '@/types'
 
+const PROJECT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 type ProjectRow = {
   id: string
   title?: string | null
@@ -137,6 +139,9 @@ export async function POST(
     const { id } = await params
     const authResult = await authenticateRequest(req)
     if ('error' in authResult) return authResult.error
+    if (!PROJECT_ID_PATTERN.test(id)) {
+      return NextResponse.json({ error: 'Invalid project ID' }, { status: 400 })
+    }
     const { userId, supabase } = authResult.auth
 
     const { data: project, error: projectError } = await supabase
