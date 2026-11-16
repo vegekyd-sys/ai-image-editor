@@ -744,6 +744,7 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       runNodeMediaCodeInVercelSandbox,
       shouldUseVercelMediaSandbox,
       VercelMediaSandboxExecutionError,
+      SandboxInputChangedError,
     } = await import('./media-sandbox-vercel')
     if (shouldUseVercelMediaSandbox()) {
       try {
@@ -765,7 +766,7 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
         usedIsolatedExecutor = true
         console.log(`[media-sandbox] Agent code completed in isolated Sandbox ${isolated.sandboxId}`)
       } catch (error) {
-        if (error instanceof VercelMediaSandboxExecutionError) throw error
+        if (error instanceof VercelMediaSandboxExecutionError || error instanceof SandboxInputChangedError) throw error
         // Availability/bootstrap failures must not strand the user. Preserve the
         // open local executor as a compatibility fallback so the Agent can keep
         // repairing its program. Production should normally stay on the true

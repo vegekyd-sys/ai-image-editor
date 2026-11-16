@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from 'fs/promises'
+import { mkdir, writeFile } from 'fs/promises'
+import { ASSEMBLE_SANDBOX_INPUTS, planSandboxInputUpload, SandboxInputChangedError, uploadMediaSandboxInputs } from './media-sandbox-upload'
 import path from 'path'
 import type { MediaInputFile, MediaItem } from './media-sandbox'
 
@@ -32,6 +33,8 @@ interface SandboxExecutionManifest {
   result: unknown
   outputs: SandboxOutputManifest[]
 }
+
+export { SandboxInputChangedError }
 
 export class VercelMediaSandboxExecutionError extends Error {
   constructor(message: string) {
@@ -339,9 +342,15 @@ export async function runNodeMediaCodeInVercelSandbox(
     resources: { vcpus: Math.max(1, Math.min(8, Number(process.env.MEDIA_SANDBOX_VCPUS || 4))) },
     timeout: Math.max(60_000, Math.min(5 * 60_000, options.timeoutMs + 60_000)),
   }
+  const start = Date.now()
+  function stage(name: string, details: Record<string, number> = {}) {
+    console.info('[media-sandbox] stage', { name, elapsedMs: Date.now() - start, rssBytes: process.memoryUsage.rss(), processPeakRssBytes: process.resourceUsage().maxRSS * 1024, ...details })
+  }
+  stage('create')
   const sandbox = await Sandbox.create(createOptions)
 
   try {
+    stage('prepare_inputs')
     await sandbox.mkDir(SANDBOX_INPUT_DIR)
     await sandbox.mkDir(SANDBOX_OUTPUT_DIR)
     await sandbox.mkDir(SANDBOX_WORK_DIR)
@@ -361,11 +370,10 @@ export async function runNodeMediaCodeInVercelSandbox(
       inputFiles: remoteInputs,
     }
 
-    await sandbox.writeFiles([
-      ...await Promise.all(options.inputFiles.map(async (input, index) => ({
-        path: remoteInputs[index].inputPath,
-        content: await readFile(input.inputPath),
-      }))),
+    const plan = await planSandboxInputUpload(options.inputFiles.map((input, i) => ({
+      local: input.inputPath,
+      remote: remoteInputs[i].inputPath,
+    })), [
       {
         path: `${SANDBOX_WORK_DIR}/agent-source.json`,
         content: JSON.stringify({
@@ -386,8 +394,28 @@ export async function runNodeMediaCodeInVercelSandbox(
         path: `${SANDBOX_ROOT}/media-sandbox-runner.cjs`,
         content: MEDIA_SANDBOX_RUNNER_SOURCE,
       },
-    ])
+    ], SANDBOX_INPUT_DIR)
+    stage('upload_inputs', { files: remoteInputs.length, inputBytes: plan.inputBytes, setupBytes: plan.setupBytes, batches: plan.batches.length })
+    try {
+      await uploadMediaSandboxInputs(sandbox, plan, stage)
+      if (plan.splitFiles > 0) {
+        stage('assemble_inputs', { files: plan.splitFiles })
+        const assembly = await sandbox.runCommand('node', ['-e', ASSEMBLE_SANDBOX_INPUTS, SANDBOX_INPUT_DIR, String(plan.splitFiles)])
+        if (assembly.exitCode !== 0) throw new Error('Sandbox input assembly failed before Agent execution')
+      }
+    } catch (error) {
+      if (error instanceof SandboxInputChangedError) throw error
+      // Infrastructure failures can use the existing local executor only with
+      // the same source versions that were selected for this attempt.
+      try {
+        await plan.verifyLocalInputs()
+      } catch {
+        throw new VercelMediaSandboxExecutionError('Sandbox inputs changed or became unavailable during staging')
+      }
+      throw error
+    }
 
+    stage('vm_run')
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), options.timeoutMs)
     let command
@@ -418,6 +446,7 @@ export async function runNodeMediaCodeInVercelSandbox(
       clearTimeout(timer)
     }
 
+    stage('read_result', { exitCode: command.exitCode })
     const manifestBuffer = await sandbox.readFileToBuffer({ path: SANDBOX_RESULT_PATH })
     const stderr = await command.stderr().catch(() => '')
     if (!manifestBuffer) {
@@ -436,6 +465,7 @@ export async function runNodeMediaCodeInVercelSandbox(
       )
     }
 
+    stage('retrieve_outputs', { files: manifest.outputs.length })
     const pathMap = new Map<string, string>()
     for (const output of manifest.outputs) {
       const relativePath = output.relativePath
@@ -450,6 +480,7 @@ export async function runNodeMediaCodeInVercelSandbox(
       pathMap.set(output.path, localPath)
     }
 
+    stage('complete')
     return {
       result: rewriteSandboxPaths(manifest.result, pathMap),
       sandboxId: sandbox.sandboxId,
