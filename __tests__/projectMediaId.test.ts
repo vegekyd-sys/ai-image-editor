@@ -37,24 +37,25 @@ beforeEach(() => {
 
 describe('project media publication identifiers', () => {
   it.each(['prj_00000000000000000000000000000000', 'not-a-project', '', `${projectId}x`])(
-    'returns 400 for malformed ID %s before querying or publishing', async id => {
+    'returns 400 for malformed ID %s after a UUID parse error without publishing', async id => {
       state.project = { data: null, error: { code: '22P02', message: 'invalid input syntax for type uuid' } }
       const response = await post(id)
       expect(response.status).toBe(400)
       expect(await response.json()).toEqual({ error: 'Invalid project ID' })
-      expect(state.from).not.toHaveBeenCalled()
+      expect(state.from).toHaveBeenCalledWith('projects')
       expect(state.publish).not.toHaveBeenCalled()
     },
   )
 
-  it('keeps authentication failures ahead of identifier validation', async () => {
+  it('keeps authentication failures ahead of the project lookup', async () => {
     state.authenticate.mockResolvedValue({ error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) })
     expect((await post('prj_invalid')).status).toBe(401)
     expect(state.from).not.toHaveBeenCalled()
     expect(state.publish).not.toHaveBeenCalled()
   })
 
-  it.each([projectId, projectId.toUpperCase(), '12345678-1234-7234-8234-123456789abc']) (
+  it.each([projectId, projectId.toUpperCase(), '12345678-1234-7234-8234-123456789abc',
+    projectId.replaceAll('-', ''), `{${projectId}}`])(
     'preserves publication for owned UUID %s', async id => {
       const response = await post(id)
       expect(response.status).toBe(201)
