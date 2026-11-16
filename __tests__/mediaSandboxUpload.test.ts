@@ -1,8 +1,9 @@
-import { mkdtemp, rm, truncate, writeFile } from 'fs/promises'
+import { mkdtemp, readFile, rm, truncate, writeFile } from 'fs/promises'
+import { execFileSync } from 'child_process'
 import { tmpdir } from 'os'
 import path from 'path'
 import { afterEach, expect, it, vi } from 'vitest'
-import { planSandboxInputUpload, uploadMediaSandboxInputs } from '@/lib/media-sandbox-upload'
+import { ASSEMBLE_SANDBOX_INPUTS, planSandboxInputUpload, uploadMediaSandboxInputs } from '@/lib/media-sandbox-upload'
 
 const dirs: string[] = []
 async function inputDir() {
@@ -20,10 +21,10 @@ it('retains the single SDK write for small files, empty files and runner setup',
   const inputs = ['small', 'empty'].map(name => ({ local: path.join(dir, name), remote: name }))
   await writeFile(inputs[0].local, 'abc')
   await writeFile(inputs[1].local, '')
-  const plan = await planSandboxInputUpload(inputs)
+  const plan = await planSandboxInputUpload(inputs, [{ path: 'runner', content: 'source' }], dir)
   const writeFiles = vi.fn(async () => {})
-  await uploadMediaSandboxInputs({ writeFiles }, plan, [{ path: 'runner', content: 'source' }])
-  expect(plan.partCounts).toEqual([1, 1])
+  await uploadMediaSandboxInputs({ writeFiles }, plan)
+  expect(plan.splitFiles).toBe(0)
   expect(writeFiles).toHaveBeenCalledTimes(1)
   expect(writeFiles).toHaveBeenCalledWith([
     { path: 'small', content: Buffer.from('abc') },
@@ -39,9 +40,11 @@ it('preserves every byte and input alias across bounded, overlapping writes', as
   const data = Buffer.alloc(limit + 4, 123)
   data.write('tail', limit)
   await writeFile(local, data)
-  const inputs = ['ref', 'workspace'].map(remote => ({ local, remote }))
-  const plan = await planSandboxInputUpload(inputs)
-  const parts = new Map<string, Uint8Array | string>()
+  const inputs = ['r'.repeat(254), 'workspace'].map(name => ({ local, remote: path.join(dir, name) }))
+  // The emoji crosses the proposed UTF-16 slice boundary.
+  const text = 'a'.repeat(limit / 4 - 1) + '🧪' + 'x'.repeat(limit)
+  const contextPath = path.join(dir, 'context.json')
+  const plan = await planSandboxInputUpload(inputs, [{ path: contextPath, content: text }], dir)
   let active = 0
   let peak = 0
   let releaseFirst!: () => void
@@ -53,27 +56,24 @@ it('preserves every byte and input alias across bounded, overlapping writes', as
       if (active === 2) releaseFirst()
       await overlap
       expect(files.reduce((sum, f) => sum + Buffer.byteLength(f.content), 0)).toBeLessThanOrEqual(limit)
-      for (const file of files) parts.set(file.path, file.content)
+      await Promise.all(files.map(file => writeFile(file.path, file.content)))
       active--
     },
-  }, plan, [])
+  }, plan)
   expect(peak).toBe(2)
-  expect(plan.partCounts).toEqual([2, 2])
-  for (const { remote } of inputs) {
-    expect(Buffer.compare(Buffer.concat([
-      parts.get(remote + '.part-0') as Uint8Array,
-      parts.get(remote + '.part-1') as Uint8Array,
-    ]), data)).toBe(0)
-  }
+  expect(plan.splitFiles).toBe(3)
+  execFileSync(process.execPath, ['-e', ASSEMBLE_SANDBOX_INPUTS, dir, '3'])
+  expect((await readFile(contextPath, 'utf8')) === text).toBe(true)
+  for (const { remote } of inputs) expect((await readFile(remote)).equals(data)).toBe(true)
 })
 
 it('rejects a changed source before executing the agent with partial bytes', async () => {
   const dir = await inputDir()
   const local = path.join(dir, 'video')
   await writeFile(local, 'original')
-  const plan = await planSandboxInputUpload([{ local, remote: 'input' }])
+  const plan = await planSandboxInputUpload([{ local, remote: 'input' }], [], dir)
   await truncate(local, 2)
   const writeFiles = vi.fn(async () => {})
-  await expect(uploadMediaSandboxInputs({ writeFiles }, plan, [])).rejects.toThrow('truncated')
+  await expect(uploadMediaSandboxInputs({ writeFiles }, plan)).rejects.toThrow('truncated')
   expect(writeFiles).not.toHaveBeenCalled()
 })

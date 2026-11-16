@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'fs/promises'
-import { planSandboxInputUpload, uploadMediaSandboxInputs } from './media-sandbox-upload'
+import { ASSEMBLE_SANDBOX_INPUTS, planSandboxInputUpload, SandboxInputChangedError, uploadMediaSandboxInputs } from './media-sandbox-upload'
 import path from 'path'
 import type { MediaInputFile, MediaItem } from './media-sandbox'
 
@@ -267,25 +267,10 @@ async function materializeOutputs(result) {
   }));
 }
 
-// The host sends large inputs in independently compressed SDK requests.
-async function joinInputParts() {
-  const {pipeline} = require('stream/promises');
-  for (const [i, count] of config.inputPartCounts.entries()) {
-    if (count <= 1) continue;
-    const target = config.inputFiles[i].inputPath;
-    for (let part = 0; part < count; part++) {
-      const chunk = target + '.part-' + part;
-      await pipeline(fs.createReadStream(chunk), fs.createWriteStream(target, {flags: part === 0 ? 'w' : 'a'}));
-      await fsp.unlink(chunk);
-    }
-  }
-}
-
 async function main() {
   await fsp.mkdir(INPUT_DIR, {recursive: true});
   await fsp.mkdir(OUTPUT_DIR, {recursive: true});
   await fsp.mkdir(WORK_DIR, {recursive: true});
-  await joinInputParts();
   if (!fs.existsSync(entryFile)) await fsp.writeFile(entryFile, source.originalCode || '');
 
   const ffmpegPath = await findFfmpeg();
@@ -357,7 +342,7 @@ export async function runNodeMediaCodeInVercelSandbox(
   }
   const start = Date.now()
   function stage(name: string, details: Record<string, number> = {}) {
-    console.info('[media-sandbox] stage', { name, elapsedMs: Date.now() - start, rssBytes: process.memoryUsage.rss(), ...details })
+    console.info('[media-sandbox] stage', { name, elapsedMs: Date.now() - start, rssBytes: process.memoryUsage.rss(), processPeakRssBytes: process.resourceUsage().maxRSS * 1024, ...details })
   }
   stage('create')
   const sandbox = await Sandbox.create(createOptions)
@@ -373,12 +358,7 @@ export async function runNodeMediaCodeInVercelSandbox(
       inputPath: `${SANDBOX_INPUT_DIR}/${String(index + 1).padStart(2, '0')}-${safeFileName(input.fileName, `input-${index + 1}`)}`,
     }))
     const sourceFileName = safeFileName(options.codePath || 'agent-media-code.tsx', 'agent-media-code.tsx')
-    const plan = await planSandboxInputUpload(options.inputFiles.map((input, i) => ({
-      local: input.inputPath,
-      remote: remoteInputs[i].inputPath,
-    })))
     const context = {
-      inputPartCounts: plan.partCounts,
       projectId: options.projectId,
       userId: options.userId,
       description: options.description || '',
@@ -388,8 +368,10 @@ export async function runNodeMediaCodeInVercelSandbox(
       inputFiles: remoteInputs,
     }
 
-    stage('upload_inputs', { files: remoteInputs.length, bytes: plan.totalBytes, batches: plan.batches.length })
-    await uploadMediaSandboxInputs(sandbox, plan, [
+    const plan = await planSandboxInputUpload(options.inputFiles.map((input, i) => ({
+      local: input.inputPath,
+      remote: remoteInputs[i].inputPath,
+    })), [
       {
         path: `${SANDBOX_WORK_DIR}/agent-source.json`,
         content: JSON.stringify({
@@ -410,7 +392,26 @@ export async function runNodeMediaCodeInVercelSandbox(
         path: `${SANDBOX_ROOT}/media-sandbox-runner.cjs`,
         content: MEDIA_SANDBOX_RUNNER_SOURCE,
       },
-    ])
+    ], SANDBOX_INPUT_DIR)
+    stage('upload_inputs', { files: remoteInputs.length, bytes: plan.totalBytes, batches: plan.batches.length })
+    try {
+      await uploadMediaSandboxInputs(sandbox, plan, stage)
+      if (plan.splitFiles > 0) {
+        stage('assemble_inputs', { files: plan.splitFiles })
+        const assembly = await sandbox.runCommand('node', ['-e', ASSEMBLE_SANDBOX_INPUTS, SANDBOX_INPUT_DIR, String(plan.splitFiles)])
+        if (assembly.exitCode !== 0) throw new Error('Sandbox input assembly failed before Agent execution')
+      }
+    } catch (error) {
+      if (error instanceof SandboxInputChangedError) throw new VercelMediaSandboxExecutionError(error.message)
+      // Infrastructure failures can use the existing local executor only with
+      // the same source versions that were selected for this attempt.
+      try {
+        await plan.verifyLocalInputs()
+      } catch {
+        throw new VercelMediaSandboxExecutionError('Sandbox inputs changed or became unavailable during staging')
+      }
+      throw error
+    }
 
     stage('vm_run')
     const controller = new AbortController()

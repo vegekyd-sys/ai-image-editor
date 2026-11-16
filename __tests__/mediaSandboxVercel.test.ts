@@ -1,7 +1,9 @@
 import { existsSync } from 'fs'
-import { mkdtemp, readFile, rm } from 'fs/promises'
+import { mkdtemp, readFile, rm, truncate, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import path from 'path'
+import * as workspace from '@/lib/workspace'
+import { runNodeMediaCode } from '@/lib/media-sandbox'
 import { Sandbox } from '@vercel/sandbox'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -94,6 +96,42 @@ describe('isolated Agent Node runtime', () => {
     expect(existsSync(localPath)).toBe(true)
     expect(await readFile(localPath)).toEqual(outputBody)
     expect(fakeSandbox.stop).toHaveBeenCalled()
+  })
+
+  it.each([true, false])('handles VM input assembly failure through run_code (source changed: %s)', async changed => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'media-assembly-'))
+    tempDirs.push(dir)
+    const localPath = path.join(dir, 'test.bin')
+    await writeFile(localPath, '')
+    await truncate(localPath, 16 * 1024 * 1024 + 1)
+    const handle = vi.spyOn(workspace, 'resolveWorkspaceFile').mockResolvedValue({
+      path: 'workspace/test.bin', localPath, localAvailable: true, contentType: 'application/octet-stream',
+    })
+    vi.stubEnv('MEDIA_SANDBOX_EXECUTOR', 'vercel')
+    vi.stubEnv('MAKARON_WORKSPACE_CACHE_DIR', dir)
+    const command = vi.fn(async () => {
+      if (changed) await truncate(localPath, 1)
+      return { exitCode: 1 }
+    })
+    vi.mocked(Sandbox.create).mockResolvedValue({
+      mkDir: async () => {}, writeFiles: async () => {}, stop: async () => {}, runCommand: command,
+    } as never)
+    try {
+      const result = await runNodeMediaCode({
+        code: 'return {type: "text", content: "local result"}',
+        workspacePaths: ['workspace/test.bin'], mediaItems: [], projectId: 'project', userId: 'user', supabase: {},
+      })
+      expect(command).toHaveBeenCalledTimes(1)
+      if (changed) {
+        expect(result.type).toBe('error')
+        expect(result.content).toContain('inputs changed')
+      } else {
+        expect(result).toMatchObject({ type: 'text', content: 'local result' })
+      }
+    } finally {
+      vi.unstubAllEnvs()
+      handle.mockRestore()
+    }
   })
 
   it('returns process stderr so the Agent can repair dependency and FFmpeg failures', async () => {
