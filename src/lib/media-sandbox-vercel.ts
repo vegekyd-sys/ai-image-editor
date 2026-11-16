@@ -34,6 +34,8 @@ interface SandboxExecutionManifest {
   outputs: SandboxOutputManifest[]
 }
 
+export { SandboxInputChangedError }
+
 export class VercelMediaSandboxExecutionError extends Error {
   constructor(message: string) {
     super(message)
@@ -393,7 +395,7 @@ export async function runNodeMediaCodeInVercelSandbox(
         content: MEDIA_SANDBOX_RUNNER_SOURCE,
       },
     ], SANDBOX_INPUT_DIR)
-    stage('upload_inputs', { files: remoteInputs.length, bytes: plan.totalBytes, batches: plan.batches.length })
+    stage('upload_inputs', { files: remoteInputs.length, inputBytes: plan.inputBytes, setupBytes: plan.setupBytes, batches: plan.batches.length })
     try {
       await uploadMediaSandboxInputs(sandbox, plan, stage)
       if (plan.splitFiles > 0) {
@@ -402,7 +404,7 @@ export async function runNodeMediaCodeInVercelSandbox(
         if (assembly.exitCode !== 0) throw new Error('Sandbox input assembly failed before Agent execution')
       }
     } catch (error) {
-      if (error instanceof SandboxInputChangedError) throw new VercelMediaSandboxExecutionError(error.message)
+      if (error instanceof SandboxInputChangedError) throw error
       // Infrastructure failures can use the existing local executor only with
       // the same source versions that were selected for this attempt.
       try {

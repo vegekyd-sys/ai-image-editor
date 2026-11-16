@@ -5,8 +5,14 @@ import type { Sandbox } from '@vercel/sandbox'
 // SDK 1.x buffers the complete compressed request before making the POST.
 const BATCH_BYTES = 16 * 1024 * 1024
 const UPLOAD_CONCURRENCY = 2
+const READ_CONCURRENCY = 8
 
 export class SandboxInputChangedError extends Error {}
+
+function handleSourceError(error: NodeJS.ErrnoException): never {
+  if (error.code === 'ENOENT' || error.code === 'ENOTDIR') throw new SandboxInputChangedError('Sandbox input is no longer available')
+  throw error
+}
 
 function checkVersion(current: Stats, expected: Stats) {
   if (current.ino !== expected.ino || current.size !== expected.size || current.mtimeMs !== expected.mtimeMs) {
@@ -33,7 +39,8 @@ export async function planSandboxInputUpload(
 ) {
   const batches: UploadEntry[][] = [[]]
   let batchBytes = 0
-  let totalBytes = 0
+  let inputBytes = 0
+  let setupBytes = 0
   let splitFiles = 0
 
   function add(path: string, content: string | FileSlice) {
@@ -56,10 +63,10 @@ export async function planSandboxInputUpload(
     add(prefix + '.json', JSON.stringify({ target, count: slices.length }))
   }
 
-  const versions = await Promise.all(inputs.map(input => stat(input.local)))
+  const versions = await Promise.all(inputs.map(input => stat(input.local).catch(handleSourceError)))
   inputs.forEach(({ local, remote }, i) => {
     const version = versions[i]
-    totalBytes += version.size
+    inputBytes += version.size
     const count = Math.max(1, Math.ceil(version.size / BATCH_BYTES))
     addFile(remote, Array.from({ length: count }, (_, part) => {
       const offset = part * BATCH_BYTES
@@ -68,7 +75,9 @@ export async function planSandboxInputUpload(
   })
   for (const file of setup) {
     // Inline media can make the JSON context itself larger than the media files.
-    if (Buffer.byteLength(file.content) <= BATCH_BYTES) {
+    const bytes = Buffer.byteLength(file.content)
+    setupBytes += bytes
+    if (bytes <= BATCH_BYTES) {
       add(file.path, file.content)
       continue
     }
@@ -84,15 +93,15 @@ export async function planSandboxInputUpload(
   }
   async function verifyLocalInputs() {
     await Promise.all(inputs.map(async (input, i) => {
-      const current = await stat(input.local).catch(() => { throw new SandboxInputChangedError('Sandbox input is no longer available') })
+      const current = await stat(input.local).catch(handleSourceError)
       checkVersion(current, versions[i])
     }))
   }
-  return { batches, splitFiles, totalBytes, verifyLocalInputs }
+  return { batches, splitFiles, inputBytes, setupBytes, verifyLocalInputs }
 }
 
 async function readSlice(slice: FileSlice): Promise<Buffer> {
-  const handle = await open(slice.local, 'r').catch(() => { throw new SandboxInputChangedError('Sandbox input is no longer available') })
+  const handle = await open(slice.local, 'r').catch(handleSourceError)
   try {
     const buffer = Buffer.allocUnsafe(slice.length)
     let read = 0
@@ -119,10 +128,14 @@ export async function uploadMediaSandboxInputs(
     while (next < plan.batches.length && !controller.signal.aborted) {
       const index = next++
       const entries = plan.batches[index]
-      const files = await Promise.all(entries.map(async ({ path, content }) => ({
-        path,
-        content: typeof content === 'string' ? content : await readSlice(content),
-      })))
+      const files: { path: string; content: string | Buffer }[] = []
+      for (let offset = 0; offset < entries.length; offset += READ_CONCURRENCY) {
+        const group = entries.slice(offset, offset + READ_CONCURRENCY)
+        files.push(...await Promise.all(group.map(async ({ path, content }) => ({
+          path,
+          content: typeof content === 'string' ? content : await readSlice(content),
+        }))))
+      }
       if (index === 0 && plan.batches.length > 1) onFirstBatch?.('input_batch_read')
       await sandbox.writeFiles(files, { signal: controller.signal })
       if (index === 0 && plan.batches.length > 1) onFirstBatch?.('input_batch_written')
