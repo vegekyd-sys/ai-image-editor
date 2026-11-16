@@ -17,6 +17,12 @@ it.each(['failed', 'handed_off', 'aborted'] as const)(
         });
         requests.push(String(options?.body));
         if (requests.length === 1) return Response.json({ code: '55P03', message: 'lock unavailable' }, { status: 409 });
+        if (requests.length === 2) {
+          const closed = Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' });
+          return new Response(new ReadableStream({
+            pull(controller) { controller.error(new TypeError('terminated', { cause: closed })); },
+          }), { status: 200 });
+        }
         return Response.json(decision);
       }
       return new Response(null, { status: 201 });
@@ -31,8 +37,8 @@ it.each(['failed', 'handed_off', 'aborted'] as const)(
       leaseToken: 'lease', attemptId: 'attempt', inputEpoch: 1, appliedInputIds: ['prior-input'], terminal, inputTokens: 1, outputTokens: 2,
       attemptMetadata: { inputEpoch: 1 }, handoffSnapshot: snapshot,
     });
-    expect(requests).toHaveLength(2);
-    expect(requests[1]).toBe(requests[0]);
+    expect(requests).toHaveLength(3);
+    expect(new Set(requests).size).toBe(1);
     expect(result).toBe(decision);
     expect(enqueue).toHaveBeenCalledTimes(decision === 'failed' ? 1 : 0);
     if (decision === 'failed') expect(enqueue).toHaveBeenCalledWith(terminal);

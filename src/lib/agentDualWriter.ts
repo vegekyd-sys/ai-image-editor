@@ -530,7 +530,11 @@ export class AgentDualWriter {
       if (delay) await sleep(delay);
       try {
         const { data, error, status } = await this.supabase.rpc('finalize_image_provider_rejection', params);
-        if (error) throw new Error(`Image rejection write failed (HTTP ${status}): ${error.message}`, { cause: error });
+        if (error) {
+          // PostgREST reports status 0 even if headers arrived but the body was lost.
+          if (status === 0 && index < WRITE_RETRY_DELAYS_MS.length - 1) continue;
+          throw new Error(`Image rejection write failed (HTTP ${status}): ${error.message}`, { cause: error });
+        }
         if (data === 'failed') this.tryEnqueue({ ...input.terminal });
         if (data === 'failed' || data === 'handed_off' || data === 'aborted') return data;
         throw new Error('Unexpected image provider rejection outcome');
