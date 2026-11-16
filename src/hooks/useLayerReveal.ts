@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { EDITABLE_RUNTIME_SELECTOR, readEditableRuntimeId } from '@/lib/editor/scene-registry';
 import type { EditableField } from '@/types';
 
 type Phase = 'loading' | 'revealing' | 'ready' | 'error';
 
 export function useLayerReveal(identity: object, enabled: boolean, playerReady: boolean, container: HTMLElement | null, fields?: EditableField[]) {
+  const tintId = 'layer-ready-' + useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const [result, setResult] = useState<{ identity: object; phase: Phase } | null>(null);
   const completed = useRef<{ identity: object; container: HTMLElement } | null>(null);
   // The parent filters out deleted layers. A new array with the same IDs is a normal editor render.
@@ -14,6 +15,8 @@ export function useLayerReveal(identity: object, enabled: boolean, playerReady: 
     if (completed.current?.identity === identity && completed.current.container === container) return;
     let cancelled = false;
     let animations: Animation[] = [];
+    let tintFrame = 0;
+    let tintSvg: SVGSVGElement | null = null;
     const expected: string[] = JSON.parse(ids);
     let decodeTimeout: number | undefined;
     const reveal = async (elements: HTMLElement[]) => {
@@ -32,22 +35,49 @@ export function useLayerReveal(identity: object, enabled: boolean, playerReady: 
       if (cancelled) return;
       if (elements.length && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         setResult({ identity, phase: 'revealing' });
+        // Mix the selection pink into RGB while preserving each layer's alpha.
+        // One shared matrix animates all layers without changing their image URLs.
+        const ns = 'http://www.w3.org/2000/svg';
+        tintSvg = document.createElementNS(ns, 'svg');
+        tintSvg.setAttribute('width', '0');
+        tintSvg.setAttribute('height', '0');
+        tintSvg.setAttribute('aria-hidden', 'true');
+        tintSvg.style.position = 'absolute';
+        tintSvg.style.pointerEvents = 'none';
+        const filter = document.createElementNS(ns, 'filter');
+        filter.id = tintId;
+        filter.setAttribute('color-interpolation-filters', 'sRGB');
+        const matrix = document.createElementNS(ns, 'feColorMatrix');
+        const paint = (amount: number) => {
+          const keep = 1 - amount;
+          matrix.setAttribute('values', `${keep} 0 0 0 ${amount} 0 ${keep} 0 0 ${amount * 130 / 255} 0 0 ${keep} 0 ${amount * 185 / 255} 0 0 0 1 0`);
+        };
+        paint(0);
+        filter.append(matrix);
+        tintSvg.append(filter);
+        document.body.append(tintSvg);
+        const started = performance.now();
+        const tick = (now: number) => {
+          const progress = Math.min(1, (now - started) / 480);
+          const amount = progress < .3
+            ? .28 * (1 - (1 - progress / .3) ** 3)
+            : .28 * (1 - (progress - .3) / .7) ** 2;
+          paint(amount);
+          if (progress < 1 && !cancelled) tintFrame = requestAnimationFrame(tick);
+        };
+        tintFrame = requestAnimationFrame(tick);
         animations = elements.map(element => {
           const rest = getComputedStyle(element).filter;
           const highlight = (rest === 'none' ? '' : rest + ' ')
-            + 'sepia(.65) saturate(2.2) hue-rotate(286deg) brightness(1.08)'
-            + ' drop-shadow(0 0 2px rgba(244, 114, 182, .4))';
+            + `url("#${tintId}")`;
           return element.animate(
-            [
-              { filter: rest },
-              { filter: highlight, offset: .22 },
-              { filter: highlight, offset: .4 },
-              { filter: rest },
-            ],
-            { duration: 480, easing: 'ease-in-out' },
+            [{ filter: highlight }, { filter: highlight }],
+            { duration: 480 },
           );
         });
         await Promise.allSettled(animations.map(animation => animation.finished));
+        cancelAnimationFrame(tintFrame);
+        tintSvg.remove();
       }
       if (!cancelled) {
         completed.current = { identity, container };
@@ -76,7 +106,9 @@ export function useLayerReveal(identity: object, enabled: boolean, playerReady: 
       clearTimeout(timeout);
       clearTimeout(decodeTimeout);
       animations.forEach(animation => animation.cancel());
+      cancelAnimationFrame(tintFrame);
+      tintSvg?.remove();
     };
-  }, [identity, enabled, playerReady, container, ids]);
+  }, [identity, enabled, playerReady, container, ids, tintId]);
   return enabled && playerReady && result?.identity === identity ? result.phase : 'loading';
 }
