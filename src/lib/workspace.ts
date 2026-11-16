@@ -482,7 +482,7 @@ async function dbListFiles(supabase: SupabaseClient, userId: string, pattern?: s
   }
 
   return data.map((row) => {
-    const localPath = workspaceMirrorPath(userId, { path: row.path, storageUrl: row.storage_url, contentType: row.content_type, updatedAt: row.updated_at });
+    const localPath = workspaceMirrorPath(userId, { path: row.path, storageUrl: row.storage_url, contentType: row.content_type, updatedAt: row.updated_at ?? undefined });
     return {
       path: row.path,
       contentType: row.content_type,
