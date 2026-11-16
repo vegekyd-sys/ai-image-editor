@@ -1,5 +1,6 @@
 """No healthy-loop model calls; launched execution is not a handler receipt."""
 import json
+import plistlib
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -48,14 +49,17 @@ def test_dispatch_launches_one_managed_worker_without_marking_received(tmp_path,
     b = bridge.reconcile(state, [{'name': 'media', 'ok': False, 'error': 'timeout'}], [], 100, 'thread')
     calls = []
     def command(argv, *args):
-        calls.append(argv)
+        calls.append((argv, plistlib.loads(Path(argv[-1]).read_bytes())))
         return {'returncode': 0, 'stdout': '', 'stderr': ''}
     monkeypatch.setattr(bridge, 'bounded_command', command)
     config = {'codex_cli': '/codex', 'thread_id': 'thread'}
     bridge.enqueue(state, b, config, tmp_path)
     bridge.enqueue(state, b, config, tmp_path)
-    assert len(calls) == 1 and calls[0][:2] == ['/bin/launchctl', 'submit']
-    assert '--dispatch-id' in calls[0] and 'queue' not in calls[0]
+    assert len(calls) == 1
+    argv, job = calls[0]
+    assert argv[:2] == ['/bin/launchctl', 'bootstrap']
+    assert job['RunAtLoad'] and job['LaunchOnlyOnce'] and not job['KeepAlive']
+    assert job['ProgramArguments'][-2:] == ['--dispatch-id', b['dispatch_id']]
     assert b['phase'] == 'dispatched' and not b['received'] and not b['completed']
     assert b['dispatch_id'] in bridge.handler_message(b, tmp_path)
 
@@ -70,7 +74,7 @@ def test_uncertain_enqueue_is_never_blindly_repeated(tmp_path, monkeypatch):
     monkeypatch.setattr(bridge, 'bounded_command', command)
     bridge.enqueue(state, b, {'codex_cli': '/codex', 'thread_id': 'thread'}, tmp_path)
     bridge.enqueue(state, b, {'codex_cli': '/codex', 'thread_id': 'thread'}, tmp_path)
-    assert len(calls) == 1 and b['phase'] == 'dispatch_failed'
+    assert len(calls) == 1 and b['phase'] == 'dispatch_uncertain'
 
 
 def test_dispatch_id_fences_duplicate_handlers_and_explicit_renewal(tmp_path):
@@ -141,3 +145,80 @@ def test_separate_selftest_receipt_never_clears_real_batch(tmp_path):
     args = SimpleNamespace(command='complete', batch='test', revision=1, result=path)
     assert bridge.receipt(state, args, True)['accepted']
     assert state['active_batch'] == real['id'] and not state.get('selftest_batch')
+
+
+def test_legacy_deferred_evidence_is_merged_into_current_real_batch(tmp_path):
+    state = {'selftest_batch': 'test', 'batches': {'test': {'id': 'test', 'selftest': True,
+             'thread_id': 'thread', 'revision': 1, 'received': True}}}
+    batch = bridge.reconcile(state, healthy(), [error('one')], 100, 'thread')
+    state['deferred_observations'] = [{'conditions': ['deferred'], 'at': 90}]
+    result = tmp_path / 'result'
+    result.write_text(json.dumps(dict(summary='done', evidence=[], unresolved=[], next_action='none')))
+    args = SimpleNamespace(command='complete', batch='test', revision=1, result=result)
+    assert bridge.receipt(state, args, True)['accepted']
+    assert state['active_batch'] == batch['id']
+    assert batch['revision'] == 2 and 'deferred' in batch['conditions']
+
+
+def test_reinstall_retires_only_completed_legacy_labels(monkeypatch):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('monitor_installer', Path(bridge.__file__).with_name('install-makaron-monitor.py'))
+    installer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(installer)
+    def legacy(bid):
+        return dict(completed=True, handler_label='com.tianyi.makaron-handler.' + bid)
+    state = {'batches': {'old': legacy('old'), 'new': {**legacy('new'), 'one_shot': True},
+                         'current': {**legacy('current'), 'completed': False}, 'foreign': legacy('other')}}
+    calls = []
+    def run(argv, **kw):
+        calls.append(argv)
+        return SimpleNamespace(returncode=3 if argv[1] == 'bootout' else 113)
+    monkeypatch.setattr(installer.subprocess, 'run', run)
+    installer.retire_legacy_handlers(state, 'gui/123')
+    assert calls == [['/bin/launchctl', cmd, 'gui/123/com.tianyi.makaron-handler.old'] for cmd in ['bootout', 'print']]
+    assert all('completed' in b for b in state['batches'].values())
+
+
+def test_owner_idle_timeout_starts_after_acquiring_slot():
+    b = dict(phase='waiting_for_chat_idle', selftest=True, dispatched_at=100, phase_started_at=250)
+    bridge.update_timeout(b, 710)
+    assert b['phase'] == 'waiting_for_chat_idle'
+    bridge.update_timeout(b, 851)
+    assert b['phase'] == 'receipt_timeout'
+
+
+def test_reinstall_defers_while_legacy_worker_finishes(tmp_path):
+    import fcntl
+    import runpy
+    import pytest
+    ensure_idle = runpy.run_path(str(Path(bridge.__file__).with_name('install-makaron-monitor.py')))['ensure_handler_idle']
+    with (tmp_path / 'handler.lock').open('a') as gate:
+        fcntl.flock(gate, fcntl.LOCK_EX)
+        with pytest.raises(SystemExit, match='still finishing'):
+            ensure_idle(tmp_path)
+    ensure_idle(tmp_path)
+
+
+def test_failed_legacy_cleanup_preserves_enabled_monitor(tmp_path, monkeypatch):
+    import importlib.util
+    import pytest
+    spec = importlib.util.spec_from_file_location('installer', Path(bridge.__file__).with_name('install-makaron-monitor.py'))
+    installer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(installer)
+    (tmp_path / '.vercel').mkdir()
+    (tmp_path / '.vercel/project.json').write_text(json.dumps({'projectName': 'ai-image-editor'}))
+    monitor = tmp_path / '.codex/monitors/makaron-production'
+    monitor.mkdir(parents=True)
+    state_path = monitor / 'bridge-state.json'
+    state_path.write_text(json.dumps({'enabled': True, 'batches': {'legacy': {'completed': True}}}))
+    before = state_path.read_bytes()
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    monkeypatch.setattr(installer.shutil, 'which', lambda name: '/fixture/vercel')
+    monkeypatch.setattr(sys, 'argv', ['install', '--thread', 'fixture', '--cwd', str(tmp_path), '--codex', sys.executable])
+    def cleanup_failure(*args):
+        raise SystemExit('fixture cleanup failure')
+    monkeypatch.setattr(installer, 'retire_legacy_handlers', cleanup_failure)
+    monkeypatch.setattr(installer.os, 'umask', lambda *args: None)
+    with pytest.raises(SystemExit, match='fixture cleanup failure'):
+        installer.main()
+    assert state_path.read_bytes() == before
