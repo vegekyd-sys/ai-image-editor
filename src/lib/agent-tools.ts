@@ -4617,7 +4617,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
           return { base64Data: raw, mimeType: result.contentType, path: filePath };
         }
 
-        const content = handle?.isBuiltIn && filePath === 'skills/tiktok-video/references/editorial-seeds.md'
+        const content = handle?.isBuiltIn && filePath === 'skills/tiktok-video/SKILL.md'
           ? resolveTikTokEditorialSeed(result.content, ctx.agentRunId || ctx.execution?.runId || ctx.projectId)
           : result.content;
         return { content: ctx.corePromptMode === 'legacy' ? content : bundleAgentPrompt(filePath, content), type: result.contentType, path: filePath };

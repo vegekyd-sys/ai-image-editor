@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import editorialSeeds from '../skills/tiktok-video/references/editorial-seeds.md';
 import videoWorkflow from './prompts/video-workflow.md';
 import videoSubmission from './prompts/video-submission.md';
 import codingWorkflow from './prompts/coding-workflow.md';
@@ -30,6 +31,14 @@ export function bundleAgentPrompt(path: string, content: string): string {
 /** Stable across retries of the same cut. Each axis uses a separate digest byte. */
 export function resolveTikTokEditorialSeed(content: string, runId: string): string {
   const bytes = createHash('sha256').update(runId).digest();
-  const suggestion = `A${1 + bytes[0] % 8} / B${1 + bytes[1] % 8} / C${1 + bytes[2] % 4}`;
-  return content.replace('{{editorial-seed}}', suggestion);
+  const sections = editorialSeeds.split(/^## [ABC]\. .*$/m).slice(1);
+  const suggestion = sections.map((section, i) => {
+    const choices = [...section.matchAll(/^\d+\. (.+)$/gm)];
+    const index = bytes[i] % choices.length;
+    return `${'ABC'[i]}${index + 1}. ${choices[index][1]}`;
+  });
+  return content.replace('{{editorial-seed}}', [
+    'Starting direction for this cut (adapt to the brief and available footage):',
+    ...suggestion,
+  ].join('\n'));
 }

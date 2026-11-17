@@ -15,15 +15,16 @@ const read = (relativePath: string) => readFileSync(path.join(root, relativePath
 
 describe('TikTok video guideline', () => {
   it('keeps a run’s suggested cut stable while sampling all three axes across runs', () => {
-    const reference = read('src/skills/tiktok-video/references/editorial-seeds.md');
+    const skill = read('src/skills/tiktok-video/SKILL.md');
     const suggestions = new Set<string>();
     for (let i = 0; i < 512; i++) {
       const runId = `sample-${i}`;
-      const rendered = resolveTikTokEditorialSeed(reference, runId);
-      expect(resolveTikTokEditorialSeed(reference, runId)).toBe(rendered);
-      const match = rendered.match(/Starting combination for this cut: \*\*(A[1-8] \/ B[1-8] \/ C[1-4])\*\*/);
-      expect(match).not.toBeNull();
-      suggestions.add(match![1]);
+      const rendered = resolveTikTokEditorialSeed(skill, runId);
+      expect(resolveTikTokEditorialSeed(skill, runId)).toBe(rendered);
+      expect(rendered).not.toContain('{{editorial-seed}}');
+      const prompts = [...rendered.matchAll(/^([ABC]\d+)\. \*\*[^*]+\*\* .+$/gm)];
+      expect(prompts.map(match => match[1][0])).toEqual(['A', 'B', 'C']);
+      suggestions.add(prompts.map(match => match[1]).join('/'));
     }
     expect(suggestions.size).toBeGreaterThan(180);
   });
