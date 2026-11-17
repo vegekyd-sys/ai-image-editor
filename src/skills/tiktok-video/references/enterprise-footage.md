@@ -10,6 +10,13 @@ supplied audio, brand assets and required layout from the client brief.
 Check the finished frames for the actual logo and the action named in the
 hook. A path mentioned in a brief alone does not supply an asset.
 
+Before recording copy about a particular action, preview the supplied time
+range at the final viewing size. A retrieval description can describe a
+whole shot while the selected seconds show a crowd or a booth from afar.
+If the action is too small to see, look for a clearer authorized range.
+When the available shot only establishes the setting, use it for that role
+and flag the missing evidence during review.
+
 Choose one question that the supplied ranges answer on screen. Find the shot
 that answers it before choosing the opening. A manifest row may include an
 earlier editor's proposed hook or cut position; use its observed action and
