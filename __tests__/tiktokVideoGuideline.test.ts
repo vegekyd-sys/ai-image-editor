@@ -8,11 +8,26 @@ import {
   scalePlatformSafeRegion,
 } from '@/lib/platform-safe-zones';
 import { parseSkillMd } from '@/lib/skill-registry';
+import { resolveTikTokEditorialSeed } from '@/lib/agent-prompt-bundles';
 
 const root = process.cwd();
 const read = (relativePath: string) => readFileSync(path.join(root, relativePath), 'utf8');
 
 describe('TikTok video guideline', () => {
+  it('keeps a run’s suggested cut stable while sampling all three axes across runs', () => {
+    const reference = read('src/skills/tiktok-video/references/editorial-seeds.md');
+    const suggestions = new Set<string>();
+    for (let i = 0; i < 512; i++) {
+      const runId = `sample-${i}`;
+      const rendered = resolveTikTokEditorialSeed(reference, runId);
+      expect(resolveTikTokEditorialSeed(reference, runId)).toBe(rendered);
+      const match = rendered.match(/Starting combination for this cut: \*\*(A[1-8] \/ B[1-8] \/ C[1-4])\*\*/);
+      expect(match).not.toBeNull();
+      suggestions.add(match![1]);
+    }
+    expect(suggestions.size).toBeGreaterThan(180);
+  });
+
   it('exposes a selectable 9:16 built-in Skill', () => {
     const source = read('src/skills/tiktok-video/SKILL.md');
     const skill = parseSkillMd(source);

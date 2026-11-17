@@ -107,7 +107,7 @@ import { isGrokSubscriptionAllowedUser } from './grok-subscription';
 import { compileVideoReplicationPrompt } from './video-replication-prompt';
 import { preserveOptionalToolFields } from './agent-tool-schema';
 import { createVideoValidationReporter } from './video-submission-validation';
-import { bundleAgentPrompt } from './agent-prompt-bundles';
+import { bundleAgentPrompt, resolveTikTokEditorialSeed } from './agent-prompt-bundles';
 import type { CorePromptMode } from './core-prompt-mode';
 import legacyVideoTool from './prompts/legacy/video-tool.md';
 import legacyCodingTool from './prompts/legacy/coding-tool.md';
@@ -4617,7 +4617,10 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
           return { base64Data: raw, mimeType: result.contentType, path: filePath };
         }
 
-        return { content: ctx.corePromptMode === 'legacy' ? result.content : bundleAgentPrompt(filePath, result.content), type: result.contentType, path: filePath };
+        const content = handle?.isBuiltIn && filePath === 'skills/tiktok-video/references/editorial-seeds.md'
+          ? resolveTikTokEditorialSeed(result.content, ctx.agentRunId || ctx.execution?.runId || ctx.projectId)
+          : result.content;
+        return { content: ctx.corePromptMode === 'legacy' ? content : bundleAgentPrompt(filePath, content), type: result.contentType, path: filePath };
       },
 
       toModelOutput({ output }: { output: any }) {

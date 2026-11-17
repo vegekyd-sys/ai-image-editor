@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import videoWorkflow from './prompts/video-workflow.md';
 import videoSubmission from './prompts/video-submission.md';
 import codingWorkflow from './prompts/coding-workflow.md';
@@ -24,4 +25,11 @@ export function bundleAgentPrompt(path: string, content: string): string {
   const dependencies = AGENT_PROMPT_BUNDLES[path];
   if (!dependencies) return content;
   return content + dependencies.map(part => `\n\n[Bundled contract: ${part.path}]\n\n${part.content}`).join('');
+}
+
+/** Stable across retries of the same cut. Each axis uses a separate digest byte. */
+export function resolveTikTokEditorialSeed(content: string, runId: string): string {
+  const bytes = createHash('sha256').update(runId).digest();
+  const suggestion = `A${1 + bytes[0] % 8} / B${1 + bytes[1] % 8} / C${1 + bytes[2] % 4}`;
+  return content.replace('{{editorial-seed}}', suggestion);
 }

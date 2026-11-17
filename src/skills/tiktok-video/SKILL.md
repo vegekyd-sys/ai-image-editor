@@ -73,11 +73,11 @@ translation, then captions, B-roll, platform layout, composition, and export in 
   not require wall-to-wall narration; keep useful BGM-led breathing room.
 
 ## Direct The Footage
-An underspecified TikTok request is an invitation to direct. Inspect the whole
-source set, propose genuinely different creator-native concepts, choose one
-emotional engine or point of view, and commit to it. The result may be playful,
-tactile, surprising, premium, intimate, urgent, quiet, or something else the
-material supports; the choice must be visible in the final frames.
+An underspecified TikTok request is an invitation to direct. Before proposing
+a cut, read `skills/tiktok-video/references/editorial-seeds.md`. Test the
+suggested direction against actual footage, carry the chosen opening, cut
+logic and payoff through Storyboard, then check them in the rendered frames.
+For a revision, preserve the accepted direction unless the user asks to recut.
 
 - Search for the strongest proof, reveal, reaction, human gesture, or tactile
   payoff before accepting source order as story order. A finished result may
