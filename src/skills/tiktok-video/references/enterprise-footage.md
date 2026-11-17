@@ -10,7 +10,12 @@ second pass reveals. For a guessing game, choose the first shot that conceals
 the object's identity and the later shot that reveals it. For a sample
 comparison, pick two visible finishes and give the buyer enough time to see
 the difference. Carry that decision into the middle and the ending; a new
-headline over the same factory tour will produce the same film.
+headline over the same factory tour will produce the same film. Before VO,
+choose which supplied clips to leave out. For a sample choice, compare the
+finishes at a similar scale, give the viewer time to choose, then reveal the
+names. The last frame can hold the choices together. For a handling replay,
+end on the observable result. Include a production line, carton or sample-book
+invitation only when it advances the chosen question or fulfills the brief.
 
 Before generating VO, check each product claim in the script, hook and CTA.
 Use facts the client supplied or an action the source actually shows:
