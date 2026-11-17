@@ -107,3 +107,24 @@ describe('requested composition canvas', () => {
     expect(tool.inputSchema.safeParse(payload(1080,1920,target)).success).toBe(false);
   });
 });
+
+describe('composition executable body feedback', () => {
+  it.each([
+    ['require("node:path")', 'require is not defined'],
+    ['await import("node:path")', 'dynamic import callback'],
+  ])('explains unavailable module loading after %s fails', async (code, originalError) => {
+    const { tool } = harness();
+    const result = await tool.execute({ code });
+    expect(result.content.toLowerCase()).toContain(originalError.toLowerCase());
+    expect(result.content).toContain('no require() or dynamic import()');
+    expect(result.content).toContain('runtime:"node"');
+  });
+
+  it('preserves unrelated errors and lets valid code mention require()', async () => {
+    const { tool } = harness();
+    const error = await tool.execute({ code: 'throw new Error("unrelated")' });
+    expect(error.content).toBe('Code execution error: Error: unrelated');
+    const ok = await tool.execute({ code: 'return {type:"text", content: Buffer.from("require()").toString()}' });
+    expect(ok.content).toBe('require()');
+  });
+});
