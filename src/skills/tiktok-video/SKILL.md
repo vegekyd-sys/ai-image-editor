@@ -14,6 +14,14 @@ metadata:
 ---
 
 # TikTok Video
+An underspecified TikTok request is an invitation to direct. For a new cut,
+take this commission into the first concept and the actual composition:
+{{editorial-seed}}
+In one sentence identify the opening image, the dominant visual treatment and
+the closing event. Commit to that treatment for the body of the cut. Check it
+in rendered frames. A user-specified seed or an accepted edit takes priority.
+For alternatives see `skills/tiktok-video/references/editorial-seeds.md`.
+
 Use this Skill after the Agent has chosen a source-led or explicitly editable
 Composition workflow for a TikTok/Douyin deliverable: organic edits,
 creator-style cuts, process footage, talking heads, product demos, UGC
@@ -73,12 +81,6 @@ translation, then captions, B-roll, platform layout, composition, and export in 
   not require wall-to-wall narration; keep useful BGM-led breathing room.
 
 ## Direct The Footage
-An underspecified TikTok request is an invitation to direct. {{editorial-seed}}
-Consult `skills/tiktok-video/references/editorial-seeds.md` for alternatives
-when the footage cannot support a choice. Build the edit around the selected
-picture operation. Identify its actual source ranges in Storyboard and locate
-it in the rendered frames. Keep the accepted direction on revisions.
-
 - Search for the strongest proof, reveal, reaction, human gesture, or tactile
   payoff before accepting source order as story order. A finished result may
   open and close the piece as a bookend.
@@ -92,9 +94,7 @@ it in the rendered frames. Keep the accepted direction on revisions.
   audio. If the user explicitly wants real ambience or a source-sound moment,
   preserve it as a deliberate exception rather than letting every clip leak
   into the VO/BGM mix.
-- Turn the selected proposal into a small set of signature moves and
-  scene-specific promises, then implement them. A rich Storyboard must not
-  collapse into one reusable caption plus one reusable step label.
+- Turn the selected proposal into signature moves and scene-specific promises.
 
 ## Keep Text Roles Distinct
 

@@ -2,21 +2,21 @@
 
 Use the selected prompts in Concept. Point to the first visible frame, a cut
 or hold, and the last visible event. Follow an explicit brief or an accepted
-edit on revision. If footage cannot support a choice, swap that axis and
+edit on revision. If B or C conflicts with A, preserve the commission and adapt the cut or close. If footage cannot support a choice, swap that axis and
 identify the missing shot. The codes stay in planning. For several variants
 in one run, change at least two axes between siblings. Keep the Skill's sound
 contract.
 
-## A. What is the viewer watching for?
+## A. The editorial commission
 
-1. **Prediction.** Stop just before contact. What does the viewer expect to happen?
-2. **Witness.** Stay with the person or object receiving the action. What changes for them?
-3. **Detective.** Show a trace of the outcome. Which earlier detail explains it?
-4. **Scale.** Start on something too close to identify. When does the whole become legible?
-5. **Test.** Set one visible criterion. Can the source show it being met or missed?
-6. **Collector.** Find a recurring gesture or shape in separate moments. What breaks the pattern?
-7. **Craft eye.** What adjustment would a first-time viewer overlook? Give it room to register.
-8. **Counterpoint.** Find two moments that suggest opposing readings of the same subject.
+1. **Photo zine.** Edit a moving contact sheet. Lift stills from the footage onto a light paper field, then let one print come alive. Reserve full bleed for the payoff.
+2. **Listening booth.** Stage a listening test. Use a nearly still close view and measured quiet; let two visible motions answer one another across a long pause. Use compatible cues from the requested soundtrack.
+3. **Sports replay.** Treat a tiny gesture as the deciding play. Establish it at speed, replay the decisive instant at detail scale, and let the viewer judge the outcome.
+4. **Spot the difference.** Start with two source moments on screen together. Hide which comes first. Reveal the small change by releasing motion on one side.
+5. **Silent comedy.** Find a setup and a late visual reply. Give the reaction a beat longer than expected; use a single deadpan intertitle only if the pictures need it.
+6. **Field notebook.** Catch something an observer might miss. Hold the source frame, point to a precise detail with one loose marginal mark, then return to moving evidence.
+7. **Portrait in one breath.** Give a person, object or place almost the entire frame. Start close, leave a conspicuously long uninterrupted hold, and let a glance or tiny movement finish the portrait.
+8. **Graphic rhythm study.** Cut repeated shapes or gestures into a visual score. Alternate full frame and narrow strips on the beat, then break the pattern with stillness.
 
 ## B. How does the footage move?
 

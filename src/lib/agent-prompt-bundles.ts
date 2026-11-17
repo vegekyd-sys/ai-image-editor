@@ -38,7 +38,7 @@ export function resolveTikTokEditorialSeed(content: string, runId: string): stri
     return `${'ABC'[i]}${index + 1}. ${choices[index][1]}`;
   });
   return content.replace('{{editorial-seed}}', [
-    'Starting direction for this cut (adapt to the brief and available footage):',
+    'Produce the A format. Use B for a passage and C for the ending where the footage permits.',
     ...suggestion,
   ].join('\n'));
 }
