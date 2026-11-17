@@ -120,6 +120,7 @@ export default function DesignOverlay({
   const overlayRef = useRef<HTMLDivElement>(null);
   const overlayMountedRef = useRef(false);
   const moveableRef = useRef<Moveable>(null);
+  const touchDragPreviewRef = useRef<((translation: number[]) => void) | null>(null);
   const coveredMouseTarget = useRef<HTMLElement | null>(null);
 
   const isDraggingRef = useRef(false);
@@ -532,8 +533,8 @@ export default function DesignOverlay({
     };
   }, [interactionEl, editables, pickEditable, allowCanvasCoverSelection, touchGestures]);
 
-  // Touch-only fallback drag, including the Moveable selection surface.
-  // Desktop drags stay on Moveable so alignment guidelines remain visible.
+  // Keep touch arbitration and frame coalescing, but use Moveable's drag
+  // requester for the same snapping, guidelines and coordinate transforms.
   useEffect(() => {
     const overlayEl = overlayRef.current;
     if (!overlayEl || !containerEl) return;
@@ -546,6 +547,9 @@ export default function DesignOverlay({
       baseX: number;
       baseY: number;
       sourcePerViewportPx: number;
+      lastX: number;
+      lastY: number;
+      requester?: ReturnType<Moveable['request']>;
     } | null = null;
     let pendingDragPoint: { x: number; y: number } | null = null;
     let dragRaf = 0;
@@ -585,7 +589,24 @@ export default function DesignOverlay({
         baseX: offset.x,
         baseY: offset.y,
         sourcePerViewportPx: getSourcePerViewportPx(target),
+        lastX: clientX,
+        lastY: clientY,
       };
+      const scale = readCssPair(target.style.scale || getComputedStyle(target).scale || '1') ?? { x: 1, y: 1 };
+      touchDragPreviewRef.current = translation => {
+        if (!dragState) return;
+        const position = {
+          x: dragState.baseX + translation[0] * scale.x,
+          y: dragState.baseY + translation[1] * scale.y,
+        };
+        previewPeers(dragState.fieldId, position);
+        dragState.target.style.translate = `${position.x}px ${position.y}px`;
+      };
+      dragState.requester = moveableRef.current?.request?.('draggable', { useSnap: true });
+      // Moveable suppresses guideline rendering for programmatic requests.
+      // This requester represents a real touch drag, so retain its native UI.
+      const snapRender = moveableRef.current?.getManager?.().state.snapRenderInfo;
+      if (snapRender) snapRender.request = false;
       isDraggingRef.current = true;
       setIsDragging(true);
       return true;
@@ -604,6 +625,15 @@ export default function DesignOverlay({
 
     const updateDrag = (clientX: number, clientY: number) => {
       if (!dragState) return;
+      if (dragState.requester) {
+        dragState.requester.request({
+          deltaX: clientX - dragState.lastX,
+          deltaY: clientY - dragState.lastY,
+        });
+        dragState.lastX = clientX;
+        dragState.lastY = clientY;
+        return;
+      }
       const dx = (clientX - dragState.startX) * dragState.sourcePerViewportPx;
       const dy = (clientY - dragState.startY) * dragState.sourcePerViewportPx;
       previewPeers(dragState.fieldId, { x: dragState.baseX + dx, y: dragState.baseY + dy });
@@ -616,7 +646,7 @@ export default function DesignOverlay({
       pendingDragPoint = null;
       if (!point) return;
       updateDrag(point.x, point.y);
-      moveableRef.current?.updateRect();
+      if (!dragState?.requester) moveableRef.current?.updateRect();
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -645,6 +675,8 @@ export default function DesignOverlay({
         dragRaf = 0;
       }
       flushDrag();
+      dragState.requester?.requestEnd();
+      touchDragPreviewRef.current = null;
       const finalOffset = readCssPair(dragState.target.style.translate);
       if (finalOffset) onUpdateProp(`_pos_${dragState.fieldId}`, finalOffset);
       dragState = null;
@@ -669,6 +701,8 @@ export default function DesignOverlay({
       window.removeEventListener('pointercancel', finishDrag);
       if (interactionEl) delete interactionEl.dataset.editableGesture;
       if (dragRaf) cancelAnimationFrame(dragRaf);
+      dragState?.requester?.requestEnd();
+      touchDragPreviewRef.current = null;
     };
   }, [containerEl, interactionEl, measure, onUpdateProp, previewPeers, props, touchGestures]);
 
@@ -825,6 +859,10 @@ export default function DesignOverlay({
             elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}
             /* ── Drag ── */
             onDragStart={(event) => {
+              if ('isRequest' in event && event.isRequest && touchDragPreviewRef.current) {
+                event.set([0, 0]);
+                return;
+              }
               // Scalable emits a companion dragStart. It must not overwrite the
               // separate scale session with position values.
               if ((event.inputEvent?.target as HTMLElement | undefined)?.closest?.('.moveable-control')) return;
@@ -846,7 +884,12 @@ export default function DesignOverlay({
               if (interactionEl) interactionEl.dataset.editableGesture = 'drag';
               event.set([0, 0]);
             }}
-            onDrag={({ target, beforeTranslate }) => {
+            onDrag={(event) => {
+              const { target, beforeTranslate } = event;
+              if ('isRequest' in event && event.isRequest && touchDragPreviewRef.current) {
+                touchDragPreviewRef.current(beforeTranslate);
+                return;
+              }
               const gesture = moveableGestureRef.current;
               if (!gesture || gesture.kind !== 'drag' || target !== gesture.target) return;
               gesture.position = { x: gesture.basePosition.x + beforeTranslate[0] * gesture.baseScale.w,

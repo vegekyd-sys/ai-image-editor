@@ -1,9 +1,9 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const runtime = vi.hoisted(() => ({ target: null as HTMLElement | null, peer: null as HTMLElement | null, moveable: null as any, updateRect: vi.fn(), dragStart: vi.fn() }));
+const runtime = vi.hoisted(() => ({ target: null as HTMLElement | null, peer: null as HTMLElement | null, moveable: null as any, updateRect: vi.fn(), dragStart: vi.fn(), requester: null as ((...args: any[]) => any) | null, snapRender: { request: true } }));
 vi.mock('react-moveable', () => ({ default: React.forwardRef(function MockMoveable(props: any, ref: any) {
-  runtime.moveable = props; React.useImperativeHandle(ref, () => ({ updateRect: runtime.updateRect, stopDrag() {}, getTargets: () => [props.target], dragStart: runtime.dragStart })); return null;
+  runtime.moveable = props; React.useImperativeHandle(ref, () => ({ updateRect: runtime.updateRect, stopDrag() {}, getTargets: () => [props.target], dragStart: runtime.dragStart, request: (...args: any[]) => runtime.requester?.(...args), getManager: () => ({ state: { snapRenderInfo: runtime.snapRender } }) })); return null;
 }) }));
 vi.mock('@/lib/editor/scene-registry', async original => ({ ...await original<any>(), buildLegacySceneRegistry: () => ({ activeInstances: () => runtime.target ? [{ id: 'shape', element: runtime.target }, ...(runtime.peer ? [{ id: 'ink', element: runtime.peer }] : [])] : [] }) }));
 vi.mock('@/lib/editor/editable-image-alpha', () => ({ editableMediaImage: () => null, warmEditableAlpha() {}, pickPaintedEditable: () => 'shape', isPaintedEditableHit: () => true, pendingEditableAlphaAtPoint: () => null }));
@@ -19,7 +19,7 @@ function pointer(type: string, x: number, y: number) {
   act(() => (type === 'pointerdown' ? target : window).dispatchEvent(e));
 }
 beforeEach(() => {
-  frames = new Map(); next = 0;
+  frames = new Map(); next = 0; runtime.requester = null; runtime.snapRender = { request: true };
   vi.stubGlobal('requestAnimationFrame', (fn: FrameRequestCallback) => { frames.set(++next, fn); return next; });
   vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
@@ -129,4 +129,34 @@ it.each([false, true])('authorizes the whole printed package before moving its p
   act(() => runtime.moveable.onDragEnd());
   if (allowed) expect(save).toHaveBeenCalledExactlyOnceWith('_pos_shape', { x: 30, y: 20 }, { _pos_ink: { x: 30, y: 20 } });
   else expect(save).not.toHaveBeenCalled();
+});
+
+
+it('feeds coalesced touch movement through native snapping and commits only once on release', async () => {
+  let x = 0, y = 0;
+  const move = vi.fn(({ deltaX, deltaY }) => {
+    x += deltaX; y += deltaY;
+    runtime.moveable.onDrag({ target, beforeTranslate: [x, y], isRequest: true });
+  });
+  const end = vi.fn(() => runtime.moveable.onDragEnd({ isRequest: true }));
+  const request = vi.fn(() => {
+    runtime.moveable.onDragStart({ isRequest: true, set() {} });
+    return { request: move, requestEnd: end };
+  });
+  runtime.requester = request;
+  const { save } = await setup();
+  pointer('pointerdown', 120, 170);
+  pointer('pointermove', 130, 180);
+  pointer('pointermove', 150, 190);
+  pointer('pointermove', 160, 200);
+  expect(request).toHaveBeenCalledExactlyOnceWith('draggable', { useSnap: true });
+  expect(runtime.snapRender.request).toBe(false);
+  expect(move).not.toHaveBeenCalled();
+  flush();
+  expect(move).toHaveBeenCalledExactlyOnceWith({ deltaX: 40, deltaY: 30 });
+  expect(target.style.translate).toBe('40px 30px');
+  expect(save).not.toHaveBeenCalled();
+  pointer('pointerup', 160, 200);
+  expect(end).toHaveBeenCalledTimes(1);
+  expect(save).toHaveBeenCalledExactlyOnceWith('_pos_shape', { x: 40, y: 30 });
 });
