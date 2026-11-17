@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { handleVideoFailure } from '@/lib/video-lifecycle'
 import type { VideoMeta } from '@/types'
 import { reconcileMcpVideos } from '@/lib/billing/mcp-video'
+import { isRemotionExportTaskId, remotionExportJobId } from '@/lib/remotion-export-flags'
 
 export const maxDuration = 1800
 
@@ -54,11 +55,43 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: true })
     .limit(20)
 
+  // An export can have a second pending timeline card after the worker has
+  // already published the canonical one. Resolve it from its own job.
+  const exportIds = [...new Set((stale || []).flatMap(snap => {
+    const id = remotionExportJobId((snap.video_meta as VideoMeta | null)?.taskId)
+    return id ? [id] : []
+  }))]
+  const exportRows = exportIds.length ? await admin.from('remotion_export_jobs')
+    .select('id, project_id, user_id, status, storage_url, workspace_path, duration_seconds, width, height, error')
+    .in('id', exportIds).eq('publish', true).eq('output_type', 'video') : null
+  if (exportRows?.error) console.error('[cron/video-poll] Remotion job lookup failed:', exportRows.error.message)
+  const exportsById = new Map((exportRows?.data || []).map(job => [job.id, job]))
+
   let processed = 0
   for (const snap of stale || []) {
     const vm = snap.video_meta as VideoMeta
     if (!vm?.taskId) continue
     const ownerUserId = getProjectInfo(snap.projects as SnapshotProject)?.user_id
+    if (isRemotionExportTaskId(vm.taskId)) {
+      const job = exportsById.get(remotionExportJobId(vm.taskId))
+      if (!job || job.project_id !== snap.project_id || job.user_id !== ownerUserId) continue
+      let meta: VideoMeta
+      if (job.status === 'completed' && job.storage_url) {
+        meta = { ...vm, taskId: `remotion-export-${job.id}`, status: 'completed',
+          videoUrl: job.storage_url, providerUrl: job.storage_url, videoPath: job.workspace_path || vm.videoPath,
+          duration: job.duration_seconds ?? vm.duration, width: job.width ?? vm.width, height: job.height ?? vm.height }
+      } else if (job.status === 'failed') {
+        meta = { ...vm, status: 'failed', error: job.error || 'Remotion export failed' }
+      } else continue
+      // The worker or the snapshot API may have settled this card since the scan.
+      const { data: changed, error } = await admin.from('snapshots').update({ video_meta: meta })
+        .eq('id', snap.id).eq('project_id', snap.project_id)
+        .eq('video_meta->>taskId', vm.taskId).eq('video_meta->>status', 'processing')
+        .select('id').maybeSingle()
+      if (error) console.error('[cron/video-poll] Remotion snapshot update failed:', error.message)
+      if (changed) processed++
+      continue
+    }
     const createdAt = vm.createdAt || snap.created_at
     const createdAtMs = new Date(createdAt).getTime()
     const age = Number.isFinite(createdAtMs) ? Date.now() - createdAtMs : 0
