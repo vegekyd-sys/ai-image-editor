@@ -14,13 +14,13 @@ metadata:
 ---
 
 # TikTok Video
-An underspecified TikTok request is an invitation to direct. For a new cut,
-take this commission into the first concept and the actual composition:
+A supplied campaign item already has a subject. Follow its buyer question, evidence, approved copy and client layout.
+For an open brief, use this commission to choose a direction. For a planned item, keep the choices that serve its subject:
 {{editorial-seed}}
 In one sentence identify the opening image, the dominant visual treatment and
 the closing event. Commit to that treatment for the body of the cut. Check it
 in rendered frames. A user-specified seed or an accepted edit takes priority.
-For product, factory or logistics footage, use A’s business-film prompt and read `skills/tiktok-video/references/enterprise-footage.md` before scripting. For alternative seeds see `skills/tiktok-video/references/editorial-seeds.md`.
+For product, factory, trade-show or logistics footage, read `skills/tiktok-video/references/enterprise-footage.md` before scripting. A’s business-film prompt can supply an open brief. For alternative seeds see `skills/tiktok-video/references/editorial-seeds.md`.
 
 Use this Skill after the Agent has chosen a source-led or explicitly editable
 Composition workflow for a TikTok/Douyin deliverable: organic edits,

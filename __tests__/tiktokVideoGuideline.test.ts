@@ -147,7 +147,8 @@ describe('TikTok video guideline', () => {
     const spokenCaption = read('src/skills/_shared/spoken-caption.md');
     const normalizedCaption = spokenCaption.replace(/\s+/g, ' ');
 
-    expect(source).toContain('invitation to direct');
+    expect(source).toContain('A supplied campaign item already has a subject.');
+    expect(source).toContain('For an open brief, use this commission to choose a direction.');
     expect(source).toContain('defaults to muted clip audio');
     expect(source).toContain('does\n  not require wall-to-wall narration');
     expect(source).toContain('full\nsentences covering nearly every scene is an over-written cut');

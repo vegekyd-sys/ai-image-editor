@@ -1,5 +1,15 @@
 # Source-led films for business buyers
 
+When a plan assigns a topic to this film, keep it through the cut. Find
+the visible detail that distinguishes this item from its neighbors in the
+campaign. Use it to motivate the opening, the change between shots and the
+last piece of evidence before the required CTA. A row of machines turning,
+parallel strands converging, and a conversation at a registration desk each
+need a different sequence of actions. Keep fixed runtimes, source windows,
+supplied audio, brand assets and required layout from the client brief.
+Check the finished frames for the actual logo and the action named in the
+hook. A path mentioned in a brief alone does not supply an asset.
+
 Choose one question that the supplied ranges answer on screen. Find the shot
 that answers it before choosing the opening. A manifest row may include an
 earlier editor's proposed hook or cut position; use its observed action and
