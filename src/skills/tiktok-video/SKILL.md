@@ -20,7 +20,7 @@ take this commission into the first concept and the actual composition:
 In one sentence identify the opening image, the dominant visual treatment and
 the closing event. Commit to that treatment for the body of the cut. Check it
 in rendered frames. A user-specified seed or an accepted edit takes priority.
-For alternatives see `skills/tiktok-video/references/editorial-seeds.md`.
+For customer product, factory or logistics footage, use A’s business-film prompt. Pick one buyer question the supplied ranges can answer. Show observable actions; substantiate any claim about performance, volume or provenance. Source descriptions and import order need not dictate the cut. For alternatives see `skills/tiktok-video/references/editorial-seeds.md`.
 
 Use this Skill after the Agent has chosen a source-led or explicitly editable
 Composition workflow for a TikTok/Douyin deliverable: organic edits,

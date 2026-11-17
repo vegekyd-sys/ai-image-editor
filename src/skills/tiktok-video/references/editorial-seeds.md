@@ -9,14 +9,14 @@ contract.
 
 ## A. The editorial commission
 
-1. **Photo zine.** Edit a moving contact sheet. Lift stills from the footage onto a light paper field, then let one print come alive. Reserve full bleed for the payoff.
-2. **Listening booth.** Stage a listening test. Use a nearly still close view and measured quiet; let two visible motions answer one another across a long pause. Use compatible cues from the requested soundtrack.
-3. **Sports replay.** Treat a tiny gesture as the deciding play. Establish it at speed, replay the decisive instant at detail scale, and let the viewer judge the outcome.
-4. **Spot the difference.** Start with two source moments on screen together. Hide which comes first. Reveal the small change by releasing motion on one side.
-5. **Silent comedy.** Find a setup and a late visual reply. Give the reaction a beat longer than expected; use a single deadpan intertitle only if the pictures need it.
-6. **Field notebook.** Catch something an observer might miss. Hold the source frame, point to a precise detail with one loose marginal mark, then return to moving evidence.
-7. **Portrait in one breath.** Give a person, object or place almost the entire frame. Start close, leave a conspicuously long uninterrupted hold, and let a glance or tiny movement finish the portrait.
-8. **Graphic rhythm study.** Cut repeated shapes or gestures into a visual score. Alternate full frame and narrow strips on the beat, then break the pattern with stillness.
+1. **Photo zine.** Edit a moving contact sheet. Lift stills from the footage onto a light paper field, then let one print come alive. Reserve full bleed for the payoff. For a business film, make a buyer's sample book: put two visible finishes or completed items together, then follow one into a real use or handling shot.
+2. **Listening booth.** Stage a listening test. Use a nearly still close view and measured quiet; let two visible motions answer one another across a long pause. Use compatible cues from the requested soundtrack. For a business film, make a floor observation: start on a repeated motion, interrupt it with a different real action, and let the viewer see what changed. Only attribute sound to a machine if source audio supports it.
+3. **Sports replay.** Treat a tiny gesture as the deciding play. Establish it at speed, replay the decisive instant at detail scale, and let the viewer judge the outcome. For a business film, replay the hands: show a single fold, press, fit or release at speed, then a closer replay so the viewer can judge exactly what happened.
+4. **Spot the difference.** Start with two source moments on screen together. Hide which comes first. Reveal the small change by releasing motion on one side. For a business film, make a side-by-side choice between two visible samples, tools or actions. Match scale and angle; let the viewer pick based on the visible difference.
+5. **Silent comedy.** Find a setup and a late visual reply. Give the reaction a beat longer than expected; use a single deadpan intertitle only if the pictures need it. For a business film, turn a surprising detail into a guessing game: withhold where it belongs, use one visual clue, then show the product in context.
+6. **Field notebook.** Catch something an observer might miss. Hold the source frame, point to a precise detail with one loose marginal mark, then return to moving evidence. For a business film, build one inspection note: isolate the contact point, edge, seam or surface the camera actually resolves. Show the check and its visible result.
+7. **Portrait in one breath.** Give a person, object or place almost the entire frame. Start close, leave a conspicuously long uninterrupted hold, and let a glance or tiny movement finish the portrait. For a business film, follow one person's hands through a complete task; let their decisions determine when to cut and finish on what they leave behind.
+8. **Graphic rhythm study.** Cut repeated shapes or gestures into a visual score. Alternate full frame and narrow strips on the beat, then break the pattern with stillness. For a business film, rhyme the shapes in different operations: a roll, a curve, a turn, then the same line in the product. Keep distinct materials and products identifiable.
 
 ## B. How does the footage move?
 
