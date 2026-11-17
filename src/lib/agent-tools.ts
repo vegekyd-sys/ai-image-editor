@@ -33,9 +33,9 @@ import {
   requireCredits,
 } from './billing/credits';
 import { FAL_ROTATE_CAMERA_TOOL, getToolPrice, resolveToolName } from './billing/pricing';
-import { deductAudioCredits } from './billing/audio';
+import { quoteAudioGeneration, settleAgentAudioCredits } from './billing/audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
-import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
+import { formatAudioCapabilitiesForAgent, getAudioModelCapability, resolveAudioRoute } from './audio-model-capabilities';
 import {
   isAsrTranscriptCacheCompatible,
   transcribeWithVolcengineAsr,
@@ -5805,6 +5805,19 @@ ${formatAudioCapabilitiesForAgent()}`,
           }
           imageUrls = [imageUrl];
         }
+        if (ctx.userId && await isBillingEnabled()) {
+          const route = resolveAudioRoute({ kind, model, instrumental,
+            audioReferenceCount: resolvedReferences.references?.length, imageReferenceCount: imageUrls?.length });
+          if ('error' in route) return { success: false as const, message: route.error };
+          const estimate = await quoteAudioGeneration({
+            provider: getAudioModelCapability(route.modelId).provider, durationSeconds: duration_seconds,
+          });
+          const check = await requireCredits(ctx.userId, estimate.credits);
+          if (!check.ok) return {
+            success: false as const,
+            message: `Insufficient credits. Estimated audio cost: ${estimate.credits} credits. Current balance: ${check.balance}.`,
+          };
+        }
         const result = await createAudio({
           kind,
           instrumental: kind === 'music' ? instrumental : undefined,
@@ -5857,8 +5870,8 @@ ${formatAudioCapabilitiesForAgent()}`,
           ].filter(Boolean).join('\n');
         }
         if (result.billing) {
-          deductAudioCredits(ctx.userId ?? '', result.billing)
-            .catch(e => console.error('[billing] generate_audio deduct error:', e));
+          const audioSettlement = await settleAgentAudioCredits(ctx.userId ?? '', result.billing, result.taskId);
+          return { ...result, takes, audioSettlement };
         }
         return { ...result, takes };
       },
