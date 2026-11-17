@@ -57,7 +57,7 @@ export function generateAnimationHarness(kind: 'generate' | 'upscale' = 'generat
     videoAuto: true, videoModel: 'fal-h3-max',
   };
   const context = vm.createContext({
-    ...capabilities, z, tool: (value: unknown) => value, crypto: webcrypto,
+    ...capabilities, z, Error, tool: (value: unknown) => value, crypto: webcrypto,
     createVideoValidationReporter, compileVideoReplicationPrompt, resolveAudioRefs,
     refreshSnapshotUrls: vi.fn(), createVideo, requireCredits, deductFixedCredits, refundCredits,
     quoteVideo: async (input: VideoQuoteInput) => {
@@ -84,7 +84,7 @@ export function generateAnimationHarness(kind: 'generate' | 'upscale' = 'generat
   const create = vm.runInContext(`${code}\n${upscaleCode}\n${kind === 'upscale' ? 'createUpscaleVideoTool' : 'createGenerateAnimationTool'}`, context);
   const tool = create({ ctx, serializeVideoSubmission: (operation: () => unknown) => operation() });
   preserveOptionalToolFields({ generate_animation: tool }, 'codex-subscription');
-  return { tool, ctx, rows, db, insert, createVideo, requireCredits, deductFixedCredits, refundCredits, probeVideoMetadataFromUrl, templateVideo };
+  return { tool, ctx, rows, db, insert, logs: context.console, createVideo, requireCredits, deductFixedCredits, refundCredits, probeVideoMetadataFromUrl, templateVideo };
 }
 
 // Reduced from the observed four failing calls: every unused optional field was

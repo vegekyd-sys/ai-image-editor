@@ -2187,11 +2187,18 @@ function createGenerateAnimationTool(
           });
 
           let creditsRequired = billingQuote.credits;
+          // Only our own balance rejection is an expected outcome. Provider or
+          // billing-service errors can contain the same words.
+          let balanceRejection: Error | undefined;
+          const insufficientVideoCredits = (required: number, balance: number) => {
+            balanceRejection = new Error(`Insufficient credits. This video needs ${required} credits, but the current balance is ${balance}.`);
+            return balanceRejection;
+          };
           const reserveGrokApiCredits = async () => {
             if (!ctx.userId || reservedVideoCredits > 0) return;
             const creditCheck = await requireCredits(ctx.userId, creditsRequired);
             if (!creditCheck.ok) {
-              throw new Error(`Insufficient credits. This video needs ${creditsRequired} credits, but the current balance is ${creditCheck.balance}.`);
+              throw insufficientVideoCredits(creditsRequired, creditCheck.balance);
             }
             try {
               const reservation = await deductFixedCredits(
@@ -2204,7 +2211,7 @@ function createGenerateAnimationTool(
               reservedVideoCredits = reservation.charged;
             } catch (error) {
               if (isInsufficientCreditsError(error)) {
-                throw new Error(`Insufficient credits. This video needs ${error.required} credits, but the current balance is ${error.balance}.`);
+                throw insufficientVideoCredits(error.required, error.balance);
               }
               throw error;
             }
@@ -2241,7 +2248,12 @@ function createGenerateAnimationTool(
             : await createVideo(createVideoInput);
 
           if (!skillResult.success || !skillResult.taskId) {
-            console.error('[generate_animation] createVideo failed:', skillResult.message);
+            if (balanceRejection && skillResult.submissionUncertain === false && !skillResult.taskId &&
+                skillResult.message === balanceRejection.message) {
+              console.log('[generate_animation] Video not submitted: insufficient account credits.');
+            } else {
+              console.error('[generate_animation] createVideo failed:', skillResult.message);
+            }
             if (videoModel === 'seedance-2.5-flash' && skillResult.submissionUncertain) {
               // A timeout is not a rejected POST. The durable Agent tool result
               // and usage row retain the original run and reservation for review.

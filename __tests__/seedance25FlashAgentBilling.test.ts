@@ -1,7 +1,29 @@
-import {describe,it,expect} from 'vitest'
+import {describe,it,expect,vi} from 'vitest'
+import {createVideo} from '@/lib/skills/create-video'
 import {generateAnimationHarness} from './helpers/generateAnimationHarness'
 const input={model:'seedance-2.5-flash',story_prompt:'<<<media_1>>> A paper boat flies',duration:4,video_resolution:'480p',aspect_ratio:'16:9'}
 describe('Flash Agent billing admission',()=>{
+ it('keeps a local low-balance refusal visible without reporting a runtime fault',async()=>{
+  const h=generateAnimationHarness();h.ctx.videoModel='seedance-2.5-flash'
+  h.requireCredits.mockResolvedValueOnce({ok:false,balance:5})
+  h.createVideo.mockImplementationOnce(createVideo)
+  const network=vi.spyOn(globalThis,'fetch').mockRejectedValue(new Error('unexpected network call'))
+  try {
+   const result=await h.tool.execute(input,{messages:[]})
+   expect(result).toMatchObject({success:false,message:'Insufficient credits. This video needs 96 credits, but the current balance is 5.'})
+   expect(h.logs.error).not.toHaveBeenCalled();expect(h.logs.log).toHaveBeenCalledWith(expect.stringContaining('not submitted'))
+   expect(network).not.toHaveBeenCalled();expect(h.deductFixedCredits).not.toHaveBeenCalled()
+   expect(h.refundCredits).not.toHaveBeenCalled();expect(h.insert).not.toHaveBeenCalled()
+  } finally { network.mockRestore() }
+ })
+ it('still reports a billing-service exception even with the same refusal message',async()=>{
+  const h=generateAnimationHarness();h.ctx.videoModel='seedance-2.5-flash'
+  const message='Insufficient credits. This video needs 96 credits, but the current balance is 5.'
+  h.requireCredits.mockRejectedValueOnce(new Error(message))
+  h.createVideo.mockImplementationOnce(createVideo)
+  expect(await h.tool.execute(input,{messages:[]})).toMatchObject({success:false,message})
+  expect(h.logs.error).toHaveBeenCalledWith('[generate_animation] createVideo failed:',message)
+ })
  it('does not debit when provider input validation rejects before admission',async()=>{
   const h=generateAnimationHarness();h.ctx.videoModel='seedance-2.5-flash'
   h.createVideo.mockImplementationOnce(async()=>{expect(h.deductFixedCredits).not.toHaveBeenCalled();return {success:false,message:'Invalid reference audio'}})
@@ -20,17 +42,20 @@ describe('Flash Agent billing admission',()=>{
   const h=generateAnimationHarness();h.ctx.videoModel='seedance-2.5-flash'
   h.createVideo.mockImplementationOnce(async i=>{await i.onBeforeProviderSubmit({model:i.videoModel,resolution:'480p',durationSec:4});return {success:false,submissionUncertain:false,message:'Provider rejected HTTP400'}})
   expect((await h.tool.execute(input,{messages:[]})).success).toBe(false)
+  expect(h.logs.error).toHaveBeenCalledWith('[generate_animation] createVideo failed:','Provider rejected HTTP400')
   expect(h.deductFixedCredits).toHaveBeenCalledTimes(1);expect(h.refundCredits).toHaveBeenCalledTimes(1);expect(h.refundCredits.mock.calls[0][1]).toBe(96)
  })
  it('retains the debit and stops retries when the POST outcome is unknown',async()=>{
   const h=generateAnimationHarness();h.ctx.videoModel='seedance-2.5-flash'
   h.createVideo.mockImplementationOnce(async i=>{await i.onBeforeProviderSubmit({model:i.videoModel,resolution:'480p',durationSec:4});return {success:false,submissionUncertain:true,message:'Timeout'}})
   expect(await h.tool.execute(input,{messages:[]})).toMatchObject({success:false,retryable:false,errorCode:'SUBMISSION_UNCERTAIN'})
+  expect(h.logs.error).toHaveBeenCalledWith('[generate_animation] createVideo failed:','Timeout')
   expect(h.deductFixedCredits).toHaveBeenCalledTimes(1);expect(h.refundCredits).not.toHaveBeenCalled();expect(h.createVideo).toHaveBeenCalledTimes(1)
  })
  it('retains the accepted task receipt if project persistence fails',async()=>{
   const h=generateAnimationHarness();h.ctx.videoModel='seedance-2.5-flash';h.insert.mockResolvedValueOnce({error:{message:'Storage unavailable'}})
   expect(await h.tool.execute(input,{messages:[]})).toMatchObject({success:false,retryable:false,taskId:'fal-h3max-turbo-test',errorCode:'PERSISTENCE_RECONCILIATION_REQUIRED'})
+  expect(h.logs.error).toHaveBeenCalledWith('[generate_animation] snapshot insert failed:','Storage unavailable')
   expect(h.deductFixedCredits).toHaveBeenCalledTimes(1);expect(h.refundCredits).not.toHaveBeenCalled();expect(h.createVideo).toHaveBeenCalledTimes(1)
  })
 
