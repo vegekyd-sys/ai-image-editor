@@ -29,18 +29,29 @@ describe('Sandbox preview media reuse',()=>{
   let requests=0;const f=await fixture((req,res)=>{requests++;res.end('real-source-bytes');});
   await f.run();await f.run();expect(requests).toBe(1);expect(await readFile(join(f.root,f.sources[0].path),'utf8')).toBe('real-source-bytes');
  });
+ it('reports an HTTP rejection without returning the source URL, response body, or a timeout',async()=>{
+  const f=await fixture((_req,res)=>{res.writeHead(403);res.end('private body');});
+  f.sources[0].url += '?signature=private-token';
+  await expect(f.run()).rejects.toMatchObject({code: 1, stdout: '', stderr: 'Preview source HTTP 403\n'});
+  expect(await readdir(join(f.root,'makaron-preview-media'))).toEqual([]);
+ });
+ it('reports an empty successful response and discards the temporary file',async()=>{
+  const f=await fixture((_req,res)=>res.end());
+  await expect(f.run()).rejects.toMatchObject({stderr: 'Preview source is empty\n'});
+  expect(await readdir(join(f.root,'makaron-preview-media'))).toEqual([]);
+ });
  it('bounds a chunked source with no Content-Length and removes partial files',async()=>{
   const f=await fixture((req,res)=>{res.writeHead(200);res.write('x'.repeat(120));res.end();});
-  await expect(f.run(50)).rejects.toThrow();expect(await readdir(join(f.root,'makaron-preview-media'))).toEqual([]);
+  await expect(f.run(50)).rejects.toMatchObject({stderr: 'Preview source exceeds disk cache budget\n'});expect(await readdir(join(f.root,'makaron-preview-media'))).toEqual([]);
  });
  it('times out a stalled response body and removes partial files',async()=>{
   const f=await fixture((req,res)=>{res.writeHead(200);res.write('first bytes');});
-  await expect(f.run(100,80)).rejects.toThrow();expect(await readdir(join(f.root,'makaron-preview-media'))).toEqual([]);
+  await expect(f.run(100,80)).rejects.toMatchObject({stderr: 'Preview source download timed out\n'});expect(await readdir(join(f.root,'makaron-preview-media'))).toEqual([]);
  });
  it('cancels an in-flight cache download on worker SIGTERM and removes partial files',async()=>{
   let entered!: ()=>void;const downloading=new Promise<void>(resolve=>{entered=resolve;});
   const f=await fixture((req,res)=>{res.writeHead(200);res.write('first bytes');entered();});
   const pending=f.run();await downloading;pending.child.kill('SIGTERM');
-  await expect(pending).rejects.toThrow();expect(await readdir(join(f.root,'makaron-preview-media'))).toEqual([]);
+  await expect(pending).rejects.toMatchObject({stderr: 'Preview source download cancelled\n'});expect(await readdir(join(f.root,'makaron-preview-media'))).toEqual([]);
  });
 });

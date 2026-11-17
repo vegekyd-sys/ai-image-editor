@@ -56,6 +56,7 @@ const root = process.argv[3] || '/vercel/sandbox/remotion-bundle';
 const maxBytes = Number(process.argv[4] || 2 * 1024 ** 3);
 const maxCacheBytes = Number(process.argv[5] || 4 * 1024 ** 3);
 const timeoutMs = Number(process.argv[6] || 120000);
+class PreviewSourceError extends Error {}
 const lifetime = new AbortController();
 process.once('SIGTERM', () => lifetime.abort());
 const cacheDir = path.join(root, 'makaron-preview-media');
@@ -71,24 +72,36 @@ for (const source of sources) {
   const signal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(timeoutMs)]);
   try {
     const response = await fetch(source.url, {signal});
-    if (!response.ok || !response.body) throw new Error('Preview source HTTP ' + response.status);
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new PreviewSourceError('Preview source HTTP ' + response.status);
+    }
+    if (!response.body) throw new PreviewSourceError('Preview source is empty');
     const declared = Number(response.headers.get('content-length'));
     if (declared > maxBytes || cacheBytes + declared > maxCacheBytes) {
-      await response.body.cancel(); throw new Error('Preview source exceeds disk cache budget');
+      await response.body.cancel(); throw new PreviewSourceError('Preview source exceeds disk cache budget');
     }
     let bytes = 0;
     const limit = new Transform({transform(chunk,encoding,done) {
       bytes += chunk.length;
-      done(bytes > maxBytes || cacheBytes + bytes > maxCacheBytes ? new Error('Preview source exceeds disk cache budget') : null,chunk);
+      done(bytes > maxBytes || cacheBytes + bytes > maxCacheBytes ? new PreviewSourceError('Preview source exceeds disk cache budget') : null,chunk);
     }});
     await pipeline(Readable.fromWeb(response.body), limit, createWriteStream(tmp), {signal});
-    if (!bytes) throw new Error('Preview source is empty');
+    if (!bytes) throw new PreviewSourceError('Preview source is empty');
     await fs.rename(tmp,dest); cacheBytes += bytes;
   } catch (error) {
     await fs.rm(tmp,{force:true});
-    // Fetch errors can contain signed source URLs. Keep those out of renderer errors.
-    throw new Error(signal.aborted ? 'Preview source download timed out' : 'Preview source could not be cached safely');
+    // Node echoes the throwing line in stderr. Emit only our own diagnostic so
+    // another branch's timeout text or a signed URL cannot reach the caller.
+    let message = 'Preview source could not be cached safely';
+    if (lifetime.signal.aborted) message = 'Preview source download cancelled';
+    else if (signal.aborted) message = 'Preview source download timed out';
+    else if (error instanceof PreviewSourceError) message = error.message;
+    else if (error.code === 'ENOSPC') message = 'Preview cache disk is full';
+    console.error(message);
+    process.exitCode = 1;
+    break;
   }
 }
-console.log(JSON.stringify({cachedSources:sources.length,cacheBytes}));
+if (!process.exitCode) console.log(JSON.stringify({cachedSources:sources.length,cacheBytes}));
 `;
