@@ -1387,6 +1387,10 @@ try {
   }
 
   {
+    await expectSuccess(['video','create','--script','Native4K candidate','--duration','4','--video-model','seedance-2.5-native','--video-resolution','4k','--request-id','2ec9ff1b-106c-486a-bb3e-d9c4e732f561']);
+    const native4kRequest=requests.filter(req=>req.pathname==='/api/mcp').at(-1).body.params.arguments;
+    assert.equal(native4kRequest.videoModel,'seedance-2.5-native');
+    assert.equal(native4kRequest.videoResolution,'4k');
     const result = await expectSuccess(['video', 'create', '--script', 'Makaron Launch\nShot 1 (30s): <<<media_1>>> becomes a living studio', '--image', 'https://cdn.example/home.png', '--duration', '30', '--video-model', 'seedance-2.5', '--video-resolution', '720p', '--output-format', 'mp4', '--web-search']);
     assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
     const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);

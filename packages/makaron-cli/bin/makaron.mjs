@@ -2141,6 +2141,7 @@ Inputs:
 
 Generation options:
   --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5-flash, seedance-2.5,
+                            seedance-2.5-eco (upscaled), seedance-2.5-native (native up to 4k),
                             wan-3.0, wan-3.0-prime, kling-4, kling-4-flash, grok, google-omni,
                             minimax-h3, minimax-h3-max, fal-h3-max, or sync-lipsync-v3.
   --duration <seconds>      Output duration supported by the selected model.
@@ -3522,7 +3523,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       console.error('--request-id must be a UUID. Reuse it only for the identical submission.'); process.exit(1);
     }
     const isFlash = selectedVideoModel === 'seedance-2.5-flash';
-    const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco'].includes(selectedVideoModel);
+    const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native'].includes(selectedVideoModel);
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25 || isFlash;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';

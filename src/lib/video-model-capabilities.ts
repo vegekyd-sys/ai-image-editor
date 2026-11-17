@@ -264,14 +264,16 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 10,
     maxAudioReferences: 10,
     maxTotalReferences: 50,
-    // EvoLink public rate card checked 2026-10-04. Standard image/audio-only
+    // EvoLink public rate card and native 4K contract checked 2026-11-17. Image/audio-only
     // requests bill output; video references bill max(input, output) + output.
     estimatedCostPerSecondUsd: 0.138,
     estimatedCostPerSecondUsdByResolution: {
       '480p': 0.138,
       '720p': 0.296,
+      '1080p': 0.739,
+      '4k': 1.182,
     },
-    supportedResolutions: ['480p', '720p'],
+    supportedResolutions: ['480p', '720p', '1080p', '4k'],
     defaultResolution: '480p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     provider: 'seedance',
@@ -1006,7 +1008,7 @@ export function estimateVideoProviderCostUsd(options: {
     return (options.operation === 'edit' ? 2 * source : options.durationSec + Math.max(source, options.durationSec)) * rate
   }
   if (normalizedModel === 'seedance-2.5' && (options.referenceVideoDurationSec ?? 0) > 0) {
-    const referenceRate = route.resolution === '480p' ? 0.084 : 0.180
+    const referenceRate = { '480p': 0.084, '720p': 0.180, '1080p': 0.450, '4k': 0.724 }[route.resolution as '480p' | '720p' | '1080p' | '4k']
     const billableInput = Math.max(options.referenceVideoDurationSec ?? 0, options.durationSec)
     return (billableInput + options.durationSec) * referenceRate * (options.contentFilter === false ? 1.1 : 1)
   }
