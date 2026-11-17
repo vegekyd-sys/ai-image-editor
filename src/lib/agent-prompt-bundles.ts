@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import editorialSeeds from '../skills/tiktok-video/references/editorial-seeds.md';
 import videoWorkflow from './prompts/video-workflow.md';
 import videoSubmission from './prompts/video-submission.md';
 import codingWorkflow from './prompts/coding-workflow.md';
@@ -24,4 +26,19 @@ export function bundleAgentPrompt(path: string, content: string): string {
   const dependencies = AGENT_PROMPT_BUNDLES[path];
   if (!dependencies) return content;
   return content + dependencies.map(part => `\n\n[Bundled contract: ${part.path}]\n\n${part.content}`).join('');
+}
+
+/** Stable across retries of the same cut. Each axis uses a separate digest byte. */
+export function resolveTikTokEditorialSeed(content: string, runId: string): string {
+  const bytes = createHash('sha256').update(runId).digest();
+  const sections = editorialSeeds.split(/^## [ABC]\. .*$/m).slice(1);
+  const suggestion = sections.map((section, i) => {
+    const choices = [...section.matchAll(/^\d+\. (.+)$/gm)];
+    const index = bytes[i] % choices.length;
+    return `${'ABC'[i]}${index + 1}. ${choices[index][1]}`;
+  });
+  return content.replace('{{editorial-seed}}', [
+    'Produce the A format. Use B for a passage and C for the ending where the footage permits.',
+    ...suggestion,
+  ].join('\n'));
 }

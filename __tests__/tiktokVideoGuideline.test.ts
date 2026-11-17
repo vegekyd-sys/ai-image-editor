@@ -8,11 +8,27 @@ import {
   scalePlatformSafeRegion,
 } from '@/lib/platform-safe-zones';
 import { parseSkillMd } from '@/lib/skill-registry';
+import { resolveTikTokEditorialSeed } from '@/lib/agent-prompt-bundles';
 
 const root = process.cwd();
 const read = (relativePath: string) => readFileSync(path.join(root, relativePath), 'utf8');
 
 describe('TikTok video guideline', () => {
+  it('keeps a run’s suggested cut stable while sampling all three axes across runs', () => {
+    const skill = read('src/skills/tiktok-video/SKILL.md');
+    const suggestions = new Set<string>();
+    for (let i = 0; i < 512; i++) {
+      const runId = `sample-${i}`;
+      const rendered = resolveTikTokEditorialSeed(skill, runId);
+      expect(resolveTikTokEditorialSeed(skill, runId)).toBe(rendered);
+      expect(rendered).not.toContain('{{editorial-seed}}');
+      const prompts = [...rendered.matchAll(/^([ABC]\d+)\. \*\*[^*]+\*\* .+$/gm)];
+      expect(prompts.map(match => match[1][0])).toEqual(['A', 'B', 'C']);
+      suggestions.add(prompts.map(match => match[1]).join('/'));
+    }
+    expect(suggestions.size).toBeGreaterThan(180);
+  });
+
   it('exposes a selectable 9:16 built-in Skill', () => {
     const source = read('src/skills/tiktok-video/SKILL.md');
     const skill = parseSkillMd(source);
@@ -131,7 +147,8 @@ describe('TikTok video guideline', () => {
     const spokenCaption = read('src/skills/_shared/spoken-caption.md');
     const normalizedCaption = spokenCaption.replace(/\s+/g, ' ');
 
-    expect(source).toContain('invitation to direct');
+    expect(source).toContain('A supplied campaign item already has a subject.');
+    expect(source).toContain('For an open brief, use this commission to choose a direction.');
     expect(source).toContain('defaults to muted clip audio');
     expect(source).toContain('does\n  not require wall-to-wall narration');
     expect(source).toContain('full\nsentences covering nearly every scene is an over-written cut');
