@@ -17,7 +17,7 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'klingImage4' | 'seedance25Native4k' | 'editableLayerOpening' | 'autoLayerize' | 'fasterMediaReplies' | 'seedance25Flash' | 'spatialExplainers' | 'seedream55' | 'characterImageRecovery' | 'klingFlashDefault' | 'googleOmni12' | 'kling4Flash' | 'fasterImage26Svg' | 'gifStickers' | 'fasterMediaDelivery' | 'gptImage26' | 'cliLargeUploads' | 'retakeChoices' | 'kling4' | 'videoFramingParity' | 'fasterFrameChecks' | 'reliable4kExport' | 'deepseekFlashDefault' | 'nativeAudiovisual' | 'marketplaceSkillUpdates' | 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'klingImage4' | 'seedance25Native4k' | 'editableLayerOpening' | 'autoLayerize' | 'fasterMediaReplies' | 'seedance25Flash' | 'spatialExplainers' | 'seedream55' | 'characterImageRecovery' | 'klingFlashDefault' | 'googleOmni12' | 'kling4Flash' | 'fasterImage26Svg' | 'gifStickers' | 'fasterMediaDelivery' | 'gptImage26' | 'cliLargeUploads' | 'retakeChoices' | 'kling4' | 'videoFramingParity' | 'fasterFrameChecks' | 'reliable4kExport' | 'deepseekFlashDefault' | 'nativeAudiovisual' | 'marketplaceSkillUpdates' | 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'openaiApiReliability' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
@@ -127,25 +127,7 @@ const CHANGELOG: ChangelogEntry[] = [
     date: '2026-08-08',
     localeKey: 'seedance25',
   },
-  {
-    date: '2026-08-08',
-    en: {
-      title: 'A More Reliable GPT-5.6 Agent Route',
-      items: [
-        'GPT-5.6 Terra, Sol, and Luna now run through OpenRouter by default while keeping the existing Azure provider available for an explicit rollback.',
-        'GPT Image 2 now uses the same reliable OpenRouter route by default for image generation and editing, while its Azure route remains available for an explicit rollback.',
-        'The Agent keeps the same streaming, tools, vision, reasoning, project history, and usage-based billing behavior across providers.',
-      ],
-    },
-    zh: {
-      title: 'GPT-5.6 Agent 路由更可靠',
-      items: [
-        'GPT-5.6 Terra、Sol 与 Luna 现在默认通过 OpenRouter 运行，同时保留现有 Azure Provider，随时可以显式回切。',
-        'GPT Image 2 的生图与编辑也默认切换到同一条 OpenRouter 路由，并保留 Azure 路由供显式回切。',
-        '切换 Provider 后，Agent 的流式输出、工具调用、视觉理解、推理、项目历史和按量计费保持一致。',
-      ],
-    },
-  },
+  { date: '2026-08-08', localeKey: 'openaiApiReliability' },
   {
     date: '2026-08-02',
     localeKey: 'minimaxH3',
@@ -1122,6 +1104,10 @@ const LOCALIZED_CHANGELOG_KEYS = {
     items: ['changelog.midjourney82.item1', 'changelog.midjourney82.item2'],
   },
   gpt61Sol: { title: 'changelog.gpt61Sol.title', items: ['changelog.gpt61Sol.item1'] },
+  openaiApiReliability: {
+    title: 'changelog.openaiApiReliability.title',
+    items: ['changelog.openaiApiReliability.item1', 'changelog.openaiApiReliability.item2'],
+  },
   gpt6AgentModels: {
     title: 'changelog.gpt6AgentModels.title',
     items: ['changelog.gpt6AgentModels.item1', 'changelog.gpt6AgentModels.item2'],
