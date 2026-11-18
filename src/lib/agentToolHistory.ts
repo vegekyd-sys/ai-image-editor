@@ -262,6 +262,7 @@ function compactSmallStatusOutput(output: JsonRecord, omitted: string[]): ToolRe
       trackIndex: safe.trackIndex,
       duration: safe.duration,
       generationSeconds: safe.generationSeconds,
+      ...(safe.audioSettlement ? { audioSettlement: safe.audioSettlement } : {}),
       tags: safe.tags,
       voiceId: safe.voiceId,
       resourceId: safe.resourceId,

@@ -122,7 +122,6 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain('waitForPreview: true')
     expect(agentTs).not.toContain("provider=\"suno\"")
     expect(agentTs).not.toContain("provider: z.enum(['auto', 'evolink-seed-audio', 'suno'])")
-    expect(agentTs).toContain('deductAudioCredits(ctx.userId ?? \'\', result.billing)')
     expect(agentTs).not.toContain('deductSeedAudioCredits')
     expect(agentTs).toContain("model: z.enum(['auto', 'evolink-seed-audio'])")
     expect(agentTs).not.toContain('suno-v6')

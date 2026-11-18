@@ -1,4 +1,4 @@
-import { deductFixedCredits } from './credits'
+import { deductFixedCredits, isInsufficientCreditsError } from './credits'
 import { deductSeedAudioCredits } from './seed-audio'
 import { quoteSeedAudio, quoteSunoMusic, type MediaQuote } from './media-pricing'
 
@@ -59,4 +59,18 @@ export async function deductAudioCredits(
     generationSeconds: usage.generationSeconds,
     apiKeyId: options.apiKeyId,
   })
+}
+
+/** Audio already exists. Preserve its provider receipt even if billing cannot finish. */
+export async function settleAgentAudioCredits(userId: string, usage: AudioBillingUsage, taskId?: string) {
+  try {
+    const { charged } = await deductAudioCredits(userId, usage)
+    return { status: 'settled' as const, charged }
+  } catch (error) {
+    const receipt = isInsufficientCreditsError(error)
+      ? { status: 'insufficient_credits' as const, required: error.required, balance: error.balance, usage }
+      : { status: 'unconfirmed' as const, usage }
+    console.error('[billing] generate_audio settlement requires reconciliation', { taskId, status: receipt.status }, error)
+    return receipt
+  }
 }
