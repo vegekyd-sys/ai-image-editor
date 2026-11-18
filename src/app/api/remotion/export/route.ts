@@ -18,11 +18,14 @@ function appUrl(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
+  let stage = 'authentication'
+  let jobId: string | undefined
   try {
     const authResult = await authenticateRequest(req)
     if ('error' in authResult) return authResult.error
     const { userId } = authResult.auth
 
+    stage = 'read_request'
     const body = await req.json()
     const projectId = body.projectId || body.project_id
     const snapshotId = body.snapshotId || body.snapshot_id
@@ -47,6 +50,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'renderProfile must be fast_720p or source' }, { status: 400 })
     }
 
+    stage = 'create_or_reuse_job'
     const job = await createRemotionExportJob({
       userId,
       projectId,
@@ -60,6 +64,8 @@ export async function POST(req: NextRequest) {
       name,
     })
 
+    jobId = job.id
+    stage = 'schedule_queue'
     if (shouldRunRemotionExportInline()) {
       after(async () => {
         try {
@@ -70,7 +76,9 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    stage = 'resolve_download'
     const downloadUrl = await resolveRemotionExportDownloadUrl(job)
+    stage = 'build_response'
     return NextResponse.json({
       jobId: job.id,
       id: job.id,
@@ -93,6 +101,10 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     const status = msg === 'Forbidden' ? 403 : msg === 'Project not found' ? 404 : 500
+    if (status === 500) {
+      // Error messages can contain user file paths or signed URLs.
+      console.error('[remotion/export] request failed', { stage, jobId })
+    }
     return NextResponse.json({ error: msg }, { status })
   }
 }
