@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { findFfmpeg, probeVideoFile, type VideoProbe } from './ffmpeg-runtime'
 import type { RetakePlan } from './video-retake-contract'
@@ -68,9 +68,9 @@ async function lastSourceFrameTime(file: string, fps: number, measured?: VideoPr
 
 const stillFilter = "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuvj420p"
 
-async function extractSourceStill(dir: string, ffmpeg: string, time: number, output: string, duration: number, quality = 3, signal?: AbortSignal) {
+async function extractSourceStill(sourcePath: string, ffmpeg: string, time: number, output: string, duration: number, quality = 3, signal?: AbortSignal) {
   await exec(ffmpeg, ['-v','error','-y','-protocol_whitelist','file,pipe','-ss',String(time),
-    '-i',join(dir,'source.mp4'),'-frames:v','1','-vf',stillFilter,'-q:v',String(quality),'-threads','1',output],
+    '-i',sourcePath,'-frames:v','1','-vf',stillFilter,'-q:v',String(quality),'-threads','1',output],
     {timeout:120_000,maxBuffer:1024*1024,signal})
   try { return {image:await readFile(output),time} } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || time < duration - 2) throw error
@@ -78,7 +78,7 @@ async function extractSourceStill(dir: string, ffmpeg: string, time: number, out
   // Serverless may have FFmpeg without FFprobe: container duration includes
   // audio padding. Decode only the tail and keep its last actual video frame.
   const {stderr} = await exec(ffmpeg,['-v','info','-y','-protocol_whitelist','file,pipe','-sseof','-2','-copyts',
-    '-i',join(dir,'source.mp4'),'-map','0:v:0','-an','-vf',stillFilter+',showinfo',
+    '-i',sourcePath,'-map','0:v:0','-an','-vf',stillFilter+',showinfo',
     '-fps_mode','passthrough','-q:v',String(quality),'-threads','1','-f','image2','-update','1',output],
     {timeout:120_000,maxBuffer:2*1024*1024,signal})
   const samples = Array.from(stderr.matchAll(/pts_time:([\d.-]+)/g),match=>Number(match[1]))
@@ -95,29 +95,34 @@ export async function extractRetakeInspectionFrames(source: Buffer, plan: Retake
     const last = await lastSourceFrameTime(join(dir, 'source.mp4'), fps)
     const timestamps = [...new Set(retakeInspectionTimestamps(plan, fps, extraTimes).map(time => Math.min(time, last)))]
     const sampled = await Promise.all(timestamps.map((time,index) =>
-      extractSourceStill(dir,ffmpeg,time,join(dir,`inspection-${index}.jpg`),plan.sourceDuration)))
+      extractSourceStill(join(dir,'source.mp4'),ffmpeg,time,join(dir,`inspection-${index}.jpg`),plan.sourceDuration)))
     return {timestamps:sampled.map(frame=>frame.time),frames:sampled.map(frame=>frame.image)}
   })
 }
 
 /** A source-led still for the Agent's Retake camera/content keyframe edit. */
 export async function extractRetakeSourceFrame(source: Buffer, time: number, quality = 3): Promise<Buffer> {
-  return (await extractRetakeSourceFrames(source, [time], quality))[0]
+  return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) =>
+    (await extractSourceFrameBatch(join(dir, 'source.mp4'), ffmpeg, [time], quality))[0])
 }
 
-/** One download, temporary file and measured visual tail for a preview batch. */
-export async function extractRetakeSourceFrames(source: Buffer, times: number[], quality = 3, signal?: AbortSignal): Promise<Buffer[]> {
-  return withFiles({ 'source.mp4': source }, async (dir, ffmpeg) => {
+/** Extract a preview batch from its temporary source file, with one measured visual tail. */
+export async function extractRetakeSourceFileFrames(sourcePath: string, times: number[], quality = 3, signal?: AbortSignal): Promise<Buffer[]> {
+  signal?.throwIfAborted()
+  return extractSourceFrameBatch(sourcePath, await findFfmpeg(), times, quality, signal)
+}
+
+async function extractSourceFrameBatch(sourcePath: string, ffmpeg: string, times: number[], quality: number, signal?: AbortSignal): Promise<Buffer[]> {
+  signal?.throwIfAborted()
+  const meta = await probeRetakeVideoFile(sourcePath,signal)
+  const last = await lastSourceFrameTime(sourcePath, meta.fps || 30, meta)
+  const images: Buffer[] = []
+  for (const [index,time] of times.entries()) {
     signal?.throwIfAborted()
-    const meta = await probeRetakeVideoFile(join(dir, 'source.mp4'),signal)
-    const last = await lastSourceFrameTime(join(dir, 'source.mp4'), meta.fps || 30, meta)
-    const images: Buffer[] = []
-    for (const [index,time] of times.entries()) {
-      signal?.throwIfAborted()
-      images.push((await extractSourceStill(dir,ffmpeg,Math.min(time,last),join(dir,`frame-${index}.jpg`),meta.duration!,quality,signal)).image)
-    }
-    return images
-  })
+    const output = join(dirname(sourcePath), `frame-${index}.jpg`)
+    images.push((await extractSourceStill(sourcePath,ffmpeg,Math.min(time,last),output,meta.duration!,quality,signal)).image)
+  }
+  return images
 }
 
 /** New H3 outputs represent only the selection; legacy jobs retain context anchors. */
@@ -128,7 +133,7 @@ export async function extractRetakeBoundaryFrames(source: Buffer, plan: RetakePl
     const end = plan.outputMode === 'selection' ? (Math.round(plan.end * fps) - 1) / fps : plan.contextEnd - 1 / fps
     const last = await lastSourceFrameTime(join(dir, 'source.mp4'), fps)
     const frames = await Promise.all([Math.min(start,last),Math.min(Math.max(start,end),last)].map((time,index)=>
-      extractSourceStill(dir,ffmpeg,time,join(dir,`boundary-${index}.jpg`),plan.sourceDuration)))
+      extractSourceStill(join(dir,'source.mp4'),ffmpeg,time,join(dir,`boundary-${index}.jpg`),plan.sourceDuration)))
     return {start:frames[0].image,end:frames[1].image}
   })
 }
