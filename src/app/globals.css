@@ -534,24 +534,12 @@ textarea {
 }
 
 .mkr-agent-model-group-header {
-  position: sticky;
-  top: 0;
-  z-index: 3;
   display: grid;
+  flex-shrink: 0;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 3px 10px;
   padding: 9px 10px 5px;
-  background: #17161c;
-}
-
-/* ModelSelector renders provider headers as siblings in one scroll container.
-   Keep them in normal flow there so later groups cannot cover earlier rows. */
-.model-selector-scroll > .mkr-agent-model-group-header {
-  position: static;
-  top: auto;
-  z-index: auto;
-  flex-shrink: 0;
 }
 
 .model-selector-scroll > .mkr-agent-model-group-header:not(:first-child) {
@@ -596,10 +584,7 @@ textarea {
   overflow: hidden;
   border: 0.5px solid rgba(232,121,249,0.13);
   border-radius: 11px;
-  background:
-    linear-gradient(120deg, rgba(217,70,239,0.075), rgba(34,211,238,0.025) 72%),
-    #17161c;
-  box-shadow: 0 5px 12px rgba(23,22,28,0.88);
+  background: linear-gradient(120deg, rgba(217,70,239,0.075), rgba(34,211,238,0.025) 72%);
 }
 
 .model-selector-scroll > .mkr-agent-model-group-header[data-agent-provider-group="codex"]:not(:first-child),
@@ -623,9 +608,7 @@ textarea {
 
 .mkr-agent-model-group-header[data-agent-provider-group="grok"] {
   border-color: rgba(103,232,249,0.14);
-  background:
-    linear-gradient(120deg, rgba(34,211,238,0.065), rgba(217,70,239,0.025) 72%),
-    #17161c;
+  background: linear-gradient(120deg, rgba(34,211,238,0.065), rgba(217,70,239,0.025) 72%);
 }
 
 .mkr-agent-model-group-header[data-agent-provider-group="grok"] .mkr-agent-model-group-signal {

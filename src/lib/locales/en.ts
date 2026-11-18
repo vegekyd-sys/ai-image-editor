@@ -1,4 +1,7 @@
 const en = {
+  "changelog.openaiApiModels.title": "OpenAI API updates",
+  "changelog.openaiApiModels.item1": "GPT-6.2 Sol, GPT-6.2 Astra, and GPT-6.1 Terra are now available through the API.",
+  "changelog.openaiApiModels.item2": "The Agent menu uses the OpenAI API label and blends group headings into the translucent panel.",
   "changelog.klingImage4.title": "Kling Image 4.0",
   "changelog.klingImage4.item1": "Choose Kling Image 4.0 for native 2K, 4K, or 8K PNGs.",
   "changelog.klingImage4.item2": "Create from a prompt or use up to 10 images to guide an edit.",

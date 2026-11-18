@@ -1,4 +1,7 @@
 const zh = {
+  "changelog.openaiApiModels.title": "OpenAI API 更新",
+  "changelog.openaiApiModels.item1": "GPT-6.2 Sol、GPT-6.2 Astra 和 GPT-6.1 Terra 现已支持通过 API 调用。",
+  "changelog.openaiApiModels.item2": "Agent 菜单统一显示 OpenAI API，分组标题融入半透明面板。",
   "changelog.klingImage4.title": "Kling Image 4.0",
   "changelog.klingImage4.item1": "在图片模型选择器选用 Kling Image 4.0，生成原生 2K、4K 或 8K PNG 图片。",
   "changelog.klingImage4.item2": "可以输入文字直接生成，也可以用最多 10 张图片作为编辑参考。",
