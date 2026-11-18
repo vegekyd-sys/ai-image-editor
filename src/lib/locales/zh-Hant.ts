@@ -1060,6 +1060,8 @@ const zhHant = {
   'model.qwen.desc': '人臉保真效果最佳，可處理 NSFW 內容。',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '獨立的 1–3 圖編輯模型，變化大膽並保留高解析度。',
+  'model.klingImage4.name': 'Kling Image 4.0',
+  'model.klingImage4.desc': '2K–8K 圖片與參考編輯，最多 10 張輸入圖',
   'model.seedream55.name': 'Seedream 5.5',
   'model.seedream55.desc': '原生透明 PNG、局部編輯，最多 10 張輸入圖',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',

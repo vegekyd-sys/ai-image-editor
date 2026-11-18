@@ -837,6 +837,8 @@ const en = {
   'model.qwen.desc': 'Best face preservation. Handles NSFW content.',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': 'Independent 1–3 image editor with bold, high-resolution results.',
+  'model.klingImage4.name': 'Kling Image 4.0',
+  'model.klingImage4.desc': '2K–8K generation and reference editing, up to 10 inputs',
   'model.seedream55.name': 'Seedream 5.5',
   'model.seedream55.desc': 'Native transparent PNG, local editing, up to 10 inputs',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',

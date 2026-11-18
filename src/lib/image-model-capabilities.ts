@@ -76,6 +76,13 @@ const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
     supportsTransparency: false, supportsNsfw: false, promptMode: 'scene', provider: 'evolink',
     notes: 'Explicit creative generation only. Fast returns 4 candidates; Draft returns 24 small drafts; HD returns 4 regenerated candidates, not lossless upscaling. 2K means native HD, approximate size, ratio <=4:1/1:4. Pass the original natural-language brief; the adapter prepares the concise scene prompt. Omit media_index: no precise source edit, alpha cutout, strict identity or Edit Model. Generic references are image prompts (loose inspiration); use midjourney style references for appearance. Do not switch to MJ for required edits. No automatic fallback or paid resubmission.',
   },
+  'kling-image-4.0': {
+    id: 'kling-image-4.0', label: 'Kling Image 4.0', maxInputImages: 10,
+    aspectRatio: { kind: 'enum', values: ['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3', '21:9'] },
+    resolutions: ['2K', '4K', '8K'], supportsTransparency: false, supportsNsfw: false,
+    promptMode: 'context', provider: 'fal',
+    notes: 'Explicit candidate only; never Auto. fal kling/v4/text-to-image or kling/v4/image-to-image; one native PNG, default 2K. Up to 10 ordered HTTPS original images, each <=30MiB, >=300px and ratio 0.4–2.5. Refer to inputs as @Image1, @Image2. 4K/8K only when requested. No native mask, background/alpha, format, quality or reasoning controls. outputFormat=png validates the native bytes; no conversion. background=transparent is rejected; opaque validates the result without a provider control. A local edit is prompt-guided and cannot promise unchanged pixels. Makaron currently exposes single output only, not series/elements/long-image. Do not claim a raster webpage is editable. Exact model and input constraints fail before submission; never substitute a model. Paid POST once; persist receipt and query only the accepted task after timeout. Final cost uses fal billable units, not Kling native Units.',
+  },
   'seedream-5.5': {
     id: 'seedream-5.5', label: 'Seedream 5.5', maxInputImages: 10,
     aspectRatio: { kind: 'enum', values: [...STANDARD_RATIOS, '9:21'] },
@@ -113,7 +120,7 @@ export function listImageModelCapabilities(): ImageModelCapability[] {
 /** Preserve the existing transparent-output override, including selected Sunburst. */
 export function resolveImageModel(model?: string, background?: ImageBackground): ActiveImageModelId | undefined {
   const id = normalizeImageModelId(model);
-  return background === 'transparent' && (!id || !getImageModelCapability(id).supportsTransparency)
+  return background === 'transparent' && id !== 'kling-image-4.0' && (!id || !getImageModelCapability(id).supportsTransparency)
     ? DEFAULT_IMAGE_MODEL : id;
 }
 
@@ -127,7 +134,7 @@ export function getImageRequestConflicts(req: GenerateImageRequest, capability: 
   const conflicts: string[] = [];
   const format = req.outputFormat ?? 'png';
   const is26 = capability.id.startsWith('gpt-image-2.6-');
-  if (((req.outputFormat && !(capability.id === 'seedream-5.5' && ['png', 'jpeg'].includes(req.outputFormat))) || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) && !is26) conflicts.push('explicit image format/quality/reasoning controls require GPT Image 2.6');
+  if (((req.outputFormat && !((capability.id === 'seedream-5.5' && ['png', 'jpeg'].includes(req.outputFormat)) || (capability.id === 'kling-image-4.0' && req.outputFormat === 'png'))) || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) && !is26) conflicts.push('explicit image format/quality/reasoning controls require GPT Image 2.6');
   if (!['png', 'jpeg', 'webp', 'gif', 'svg'].includes(format)) conflicts.push('unsupported outputFormat');
   if (format === 'svg' && (req.image || req.references?.length)) conflicts.push('SVG supports text-to-image only; omit source and references');
   if (req.background === 'transparent' && format === 'jpeg') conflicts.push('JPEG cannot preserve transparency');
@@ -215,6 +222,10 @@ export function prepareImageModelRequest(req: GenerateImageRequest, model: Activ
 /** Prefer delivering an image. Capabilities guide tradeoffs instead of blocking users. */
 export function planImageGeneration(req: GenerateImageRequest): ImageGenerationPlan {
   const normalized = normalizeImageModelId(req.model);
+  if (normalized === 'kling-image-4.0') {
+    validateImageModelRequest(req, normalized);
+    return { model: normalized, request: { ...req, model: normalized }, adjustments: [] };
+  }
   if (req.outputFormat || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) {
     const selected = resolveImageModel(req.model, req.background) ?? DEFAULT_IMAGE_MODEL;
     validateImageModelRequest(req, selected);
