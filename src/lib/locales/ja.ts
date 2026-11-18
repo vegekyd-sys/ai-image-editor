@@ -1,6 +1,9 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  "changelog.modelPriceQuotes.title": "生成前にクレジットを確認",
+  "changelog.modelPriceQuotes.item1": "画像、動画、音声の生成に必要なクレジットを Agent に見積もらせ、同じ設定でモデルを比較できます。",
+  "changelog.modelPriceQuotes.item2": "ターミナルの makaron price で、利用可能なモデルと生成前のクレジット見積もりを確認できます。",
   "changelog.openaiApiModels.title": "OpenAI API のアップデート",
   "changelog.openaiApiModels.item1": "GPT-6.2 Sol、GPT-6.2 Astra、GPT-6.1 Terra を API から利用できるようになりました。",
   "changelog.openaiApiModels.item2": "Agent メニューの表記を OpenAI API に統一し、グループ見出しを半透明パネルになじませました。",

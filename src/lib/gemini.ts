@@ -44,6 +44,10 @@ const MODEL = process.env.IMAGE_MODEL || 'gemini-3.1-flash-image-preview';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = `google/${MODEL}`;
+/** Exact billing ID used by the configured classic image adapter. */
+export function getClassicImageBillingId(): string {
+  return PROVIDER === 'openrouter' ? OPENROUTER_MODEL : MODEL;
+}
 const TIPS_OPENROUTER_MODEL = normalizeOpenRouterModel(process.env.TIPS_MODEL || OPENROUTER_MODEL);
 // Text and preview models have separate configuration, so either can be evaluated or rolled back.
 export const TIPS_PREVIEW_IMAGE_MODEL = normalizeOpenRouterModel(process.env.TIPS_PREVIEW_IMAGE_MODEL || NANO_BANANA_21_MODEL);

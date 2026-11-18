@@ -22,7 +22,8 @@ describe('native 4K Agent cost admission and receipts', () => {
   it('first returns a complete no-charge quote even if the Agent guesses a ceiling', async () => {
     const h = harness()
     const r = await run(h, { ...input, max_credits: 99999 })
-    expect(r).toMatchObject({ success: false, errorCode: 'NATIVE_4K_COST_DISCLOSURE_REQUIRED', costQuote: { supplierCostUsd: 4.728, credits: 946 } })
+    expect(r).toMatchObject({ success: false, errorCode: 'NATIVE_4K_COST_DISCLOSURE_REQUIRED' })
+    expect(r.costQuote).toEqual({ credits: 946, durationSec: 4, imageCount: 1, referenceVideoDurationSec: 0 })
     expect(Object.keys(r.userMessage)).toEqual(['en', 'zh', 'zh-Hant', 'ja'])
     expect(h.deductFixedCredits).not.toHaveBeenCalled()
     expect(h.insert).not.toHaveBeenCalled()

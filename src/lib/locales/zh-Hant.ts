@@ -4,6 +4,9 @@ import type { TranslationDictionary } from './index';
 const zhHant = {
 
   ...zh,
+  "changelog.modelPriceQuotes.title": "生成前先查價",
+  "changelog.modelPriceQuotes.item1": "可以請 Agent 估算圖片、影片或音訊生成需要多少點數，也可以用相同參數比較模型。",
+  "changelog.modelPriceQuotes.item2": "在終端機用 makaron price 查看可用模型，並在生成前估算點數。",
   "changelog.openaiApiModels.title": "OpenAI API 更新",
   "changelog.openaiApiModels.item1": "GPT-6.2 Sol、GPT-6.2 Astra 和 GPT-6.1 Terra 現已支援透過 API 呼叫。",
   "changelog.openaiApiModels.item2": "Agent 選單統一顯示 OpenAI API，群組標題融入半透明面板。",

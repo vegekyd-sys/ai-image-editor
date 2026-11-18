@@ -28,6 +28,16 @@ makaron responses get <runId> --wait --json
 获准自行审核中间环节时明确写入 brief；内部制作和检查要求仍须执行。
 详细流程由内部 Skill 负责，外部宿主无需重新编排。
 
+## 生成前估价
+
+用 `makaron price list` 查模型 ID 和可选分辨率。已知参数时，用 `makaron price` 直接查用户侧 credits。多个 `--model` 按相同参数比价，`--json` 返回逐项估价状态。
+
+```bash
+makaron price video --model kling-4-flash --model seedance-2.5-native --duration 5 --resolution 720p --json
+```
+
+带参考视频时传入数量和总时长。编辑图片时把底图计入输入数量。询价不会提交生成。
+
 ## 图片分层
 
 分层默认输出图片图层，文字也保留图片外观，可移动、缩放、调整顺序和删除/恢复。需要改字且保留原字形风格时，优先通过 `makaron chat` 对选中的图片图层使用图片模型编辑，具体效果仍需检查。只有用户明确需要原生可编辑文字字段时，才使用 `--editable-text`，并说明字体匹配是近似的，排版、纹理和风格可能变化。单纯要求分层或改字，不代表要开启此选项。

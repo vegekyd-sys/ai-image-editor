@@ -11,13 +11,16 @@ export interface AuthResult {
 }
 
 export async function authenticateRequest(
-  req: Request
+  req: Request,
+  options?: { recordApiKeyUsage?: boolean },
 ): Promise<{ auth: AuthResult } | { error: Response }> {
   const header = req.headers.get('authorization')
   const token = header?.startsWith('Bearer ') ? header.slice(7) : null
 
   if (token?.startsWith('mk_live_')) {
-    const result = await validateApiKey(token)
+    const result = options?.recordApiKeyUsage === false
+      ? await validateApiKey(token, { recordUsage: false })
+      : await validateApiKey(token)
     if (!result) {
       return { error: new Response(JSON.stringify({ error: 'Invalid API key' }), { status: 401, headers: { 'Content-Type': 'application/json' } }) }
     }

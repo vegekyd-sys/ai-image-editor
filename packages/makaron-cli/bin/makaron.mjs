@@ -17,6 +17,7 @@ import path from 'path';
 import { createInterface } from 'readline';
 import { execFileSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import { printPriceHelp, runPrice } from './price.mjs';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -2312,6 +2313,7 @@ Commands:
   claim                              Get claim URL for human to link account
   login                              Log in to Makaron (human interactive)
   credits                            Show current credit balance
+  price list|image|video|audio       Estimate generation credits and compare models
   usage [--run <id>] [--project <id>] Credit usage history (chat prints per-run usage)
   list (ls)                          List all projects
   project media <projectId> --json    List timeline media for a project
@@ -2418,6 +2420,7 @@ function setupMakaron(values = []) {
 }
 
 function printHelp(topic, subtopic) {
+  if (topic === 'price') { printPriceHelp(); return; }
   if (topic === 'layerize') { printLayerizeHelp(); return; }
   if (topic === 'login') {
     console.log('Usage: makaron login');
@@ -2589,6 +2592,13 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     } else {
       console.log('Subscription: none');
     }
+  }
+} else if (command === 'price') {
+  try {
+    await runPrice(args.slice(1), getAuth);
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
   }
 } else if (command === 'usage') {
   const { headers, baseUrl } = getAuth();

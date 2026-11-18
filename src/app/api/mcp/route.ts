@@ -1,14 +1,12 @@
-import { estimateKlingImage4Credits } from '@/lib/models/kling-image4';
-import { estimateSeedream55Credits } from '@/lib/models/seedream55';
-import { estimateGptImageCredits } from '@/lib/models/gpt-image-quote';
-import { isFalGptImage } from '@/lib/models/types';
-import { getTokenRate } from '@/lib/billing/token-rates';
+import { fixedImageBillingSku, imageAdmissionCredits } from '@/lib/billing/image-pricing';
+import { normalizeImageModelId } from '@/lib/image-model-capabilities';
 import { createMakaronMcpServer } from '@/mcp/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { validateApiKey } from '@/lib/billing/api-keys';
 import { enterBillingAttribution, resolveRequestBillingSource } from '@/lib/billing/attribution';
 import { checkBalance, deductCredits, deductByTokens, isBillingEnabled, recordSubscriptionUsage, requireCredits } from '@/lib/billing/credits';
-import { getToolPrice, resolveToolName } from '@/lib/billing/pricing';
+import { PricingUnavailableError } from '@/lib/billing/media-pricing';
+import { resolveToolName } from '@/lib/billing/pricing';
 import { deductAudioCredits, quoteAudioGeneration } from '@/lib/billing/audio';
 import { getAudioModelCapability } from '@/lib/audio-model-capabilities';
 import { submitMcpVideo, settleMcpVideoStatus } from '@/lib/billing/mcp-video';
@@ -92,38 +90,18 @@ async function handleMcp(req: Request): Promise<Response> {
     // Pre-check: ensure user has enough credits
     onToolStart: auth.type === 'user' ? async (toolName, model, meta) => {
       if (!(await isBillingEnabled())) return { allowed: true };
-      if (toolName === 'makaron_edit_image' && model === 'kling-image-4.0') {
-        const rate = await getTokenRate(model);
-        if (!rate || rate.model_id !== model || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Kling Image 4.0 pricing is not configured.' };
-        const check = await requireCredits(auth.userId!, estimateKlingImage4Credits(meta ?? {}, rate.markup));
-        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
-      }
-      if (toolName === 'makaron_edit_image' && model === 'seedream-5.5') {
-        const rate = await getTokenRate(model);
-        if (!rate || rate.model_id !== model || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Seedream 5.5 pricing is not configured.' };
-        const check = await requireCredits(auth.userId!, estimateSeedream55Credits(meta ?? {}, rate.markup));
-        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
-      }
-      if (toolName === 'makaron_edit_image' && model === 'mj-v8.2') {
-        const rate = await getTokenRate('mj-v8.2');
-        if (!rate || rate.model_id !== 'mj-v8.2' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Midjourney pricing is not configured.' };
-        const cost = (meta?.midjourneyQuality === 'hd' || meta?.imageResolution === '2K' ? 0.12 : 0.08) + 0.01;
-        const check = await requireCredits(auth.userId!, Math.ceil(cost * rate.markup / 0.01));
-        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
-      }
-      if (toolName === 'makaron_edit_image' && model === 'gemini-2.1') {
-        const rate = await getTokenRate('google/gemini-nano-banana-2.1');
-        if (!rate || rate.model_id !== 'google/gemini-nano-banana-2.1' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Nano Banana 2.1 pricing is not configured.' };
-        const outputCost = meta?.imageResolution === '4K' ? 0.0756 : meta?.imageResolution === '2K' ? 0.0504 : 0.0336;
-        const credits = Math.ceil((outputCost + (meta?.imageInputCount ?? 0) * 1120 * 1.5 / 1_000_000) * rate.markup / 0.01);
-        const check = await requireCredits(auth.userId!, credits);
-        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
-      }
-      if (toolName === 'makaron_edit_image' && isFalGptImage(model)) {
-        const rate = await getTokenRate(model);
-        if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Selected GPT Image pricing is not configured.' };
-        const check = await requireCredits(auth.userId!, estimateGptImageCredits(meta ?? {}, rate.markup));
-        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
+      if (toolName === 'makaron_edit_image') {
+        const id = normalizeImageModelId(model);
+        if (!id) return { allowed: false, message: 'Unknown image model.' };
+        try {
+          const credits = await imageAdmissionCredits(id, { ...meta, imageInputCount: meta?.imageInputCount ?? 0 });
+          if (credits === 0) return { allowed: true };
+          const check = await requireCredits(auth.userId!, credits);
+          return check.ok ? { allowed: true } : { allowed: false, message: `Insufficient credits. Need ${credits}, have ${check.balance}.` };
+        } catch (error) {
+          return { allowed: false, message: error instanceof PricingUnavailableError
+            ? error.message : 'Makaron pricing is not available for the selected image model.' };
+        }
       }
       // Video is atomically reserved after resolving provider inputs.
       if (toolName === 'makaron_create_video' || toolName === 'makaron_edit_video' || toolName === 'makaron_upscale_video') {
@@ -134,16 +112,7 @@ async function handleMcp(req: Request): Promise<Response> {
         const check = await requireCredits(auth.userId!, quote.credits);
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
-      if (toolName === 'makaron_edit_image' && model === 'qwen-spicy') {
-        // Quote only the selected provider; image ranking is not a fallback chain.
-        const spicyName = resolveToolName(toolName, 'qwen-spicy', meta?.imageInputCount);
-        const price = await getToolPrice(spicyName);
-        if (!price) return { allowed: false, message: `${spicyName} pricing is not configured.` };
-        const check = await requireCredits(auth.userId!, price.isFree ? 0 : price.credits);
-        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
-      }
-      if (['makaron_write_video_script', 'makaron_analyze_video'].includes(toolName)
-        || (toolName === 'makaron_edit_image' && !['qwen-spicy', 'wan2.7-image'].includes(model ?? ''))) {
+      if (['makaron_write_video_script', 'makaron_analyze_video'].includes(toolName)) {
         const check = await requireCredits(auth.userId!, 5);
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
@@ -210,9 +179,15 @@ async function handleMcp(req: Request): Promise<Response> {
           ...meta.audioUsage,
           generationSeconds: meta.audioUsage.generationSeconds ?? (durationMs ? durationMs / 1000 : undefined),
         }, { apiKeyId: auth.keyId }));
+      } else if (toolName === 'makaron_edit_image') {
+        if (!(await isBillingEnabled())) return;
+        const id = normalizeImageModelId(model);
+        if (!id) throw new Error('Unknown image model at settlement.');
+        const sku = fixedImageBillingSku(id, meta?.imagePricing ?? { imageInputCount: 0 });
+        trackCharge(await deductCredits(auth.userId!, auth.keyId!, sku, id, durationMs));
       } else {
-        // Per-action billing — ComfyUI, Suno etc.
-        const pricingName = resolveToolName(toolName, model, meta?.imageInputCount);
+        // Other fixed-price tools.
+        const pricingName = resolveToolName(toolName, model);
         trackCharge(await deductCredits(auth.userId!, auth.keyId!, pricingName, model, durationMs));
       }
     } : undefined,

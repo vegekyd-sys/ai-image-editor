@@ -14,10 +14,6 @@ vi.mock('@/lib/skills/get-video-status', () => ({ getVideoStatus: vi.fn() }));
 vi.mock('@/lib/skills/analyze-video', () => ({ analyzeVideo: vi.fn() }));
 vi.mock('@/lib/skills/create-audio', () => ({ createAudio: vi.fn() }));
 vi.mock('@/lib/skills/get-music-status', () => ({ getMusicStatus: vi.fn() }));
-vi.mock('@/lib/models', async () => {
-  const { nanoBanana21Backend } = await import('@/lib/models/nano-banana-21');
-  return { getBackend: (id: string) => id === 'gemini-2.1' ? nanoBanana21Backend : undefined };
-});
 // Force serverless inline-result mode; never write test images into the worktree.
 vi.mock('fs', async (importOriginal) => ({
   ...await importOriginal<typeof import('fs')>(),

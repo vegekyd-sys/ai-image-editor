@@ -16,7 +16,7 @@ vi.mock('@/lib/billing/pricing', () => ({
   getToolPrice: async () => ({ credits: 3, isFree: false }),
   resolveToolName: (_tool: string, model: string) => `generate_image_${model}`,
 }));
-vi.mock('@/lib/models', () => ({ getBackend: state.backend }));
+vi.mock('@/lib/models', async original => ({ ...await original<typeof import('@/lib/models')>(), getBackend: state.backend }));
 vi.mock('@/lib/skills/rotate-camera', () => ({ rotateCamera: vi.fn() }));
 vi.mock('@/lib/skills/write-video-script', () => ({ writeVideoScript: vi.fn() }));
 vi.mock('@/lib/skills/create-video', () => ({ createVideo: vi.fn() }));

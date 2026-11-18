@@ -87,6 +87,21 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify(data));
   };
 
+  if (req.method === 'POST' && url.pathname === '/api/billing/model-prices') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    const observedAt = '2026-11-18T00:00:00.000Z';
+    if (!body.requests.length) {
+      sendJson(200, { currency: 'credits', observedAt, catalog: { video: [{ model: 'kling-4-flash', resolutions: ['720p'] }] } });
+      return;
+    }
+    const estimates = body.requests.map(request => request.model === 'not-available'
+      ? { request, status: 'unknown', reason: 'A configured Makaron price is unavailable.' }
+      : { request, status: request.model === 'gpt-image-2.6-flare' ? 'preflight_only' : 'estimated',
+        credits: { 'kling-4-flash': 94, 'seedance-2.5-native': 325, 'gpt-image-2.6-flare': 12 }[request.model] });
+    sendJson(200, { currency: 'credits', observedAt, estimates });
+    return;
+  }
+
   if (url.pathname === '/api/layerize') {
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
     const jobId = body?.requestId || url.searchParams.get('jobId');
@@ -675,6 +690,32 @@ async function expectFailure(args, options) {
 }
 
 try {
+  {
+    await expectHelp(['price', '--help'], /estimate credits before generating media/);
+    const list = await expectSuccess(['price', 'list', '--json']);
+    assert.equal(JSON.parse(list.stdout).catalog.video[0].model, 'kling-4-flash');
+    const firstRequest = requests.length;
+    const comparison = await expectSuccess(['price', 'video', '--model', 'kling-4-flash', '--model', 'seedance-2.5-native', '--duration', '5', '--resolution', '720p', '--json']);
+    assert.deepEqual(JSON.parse(comparison.stdout).estimates.map(row => row.credits), [94, 325]);
+    assert.equal(comparison.stderr, '');
+    assert.deepEqual(requests.slice(firstRequest).map(r => r.pathname), ['/api/billing/model-prices']);
+    assert.deepEqual(requests.at(-1).body.requests[1], { kind: 'video', image_count: 0, model: 'seedance-2.5-native', duration_seconds: 5, resolution: '720p' });
+
+    const quoteFile = path.join(tmpHome, 'quotes.json');
+    writeFileSync(quoteFile, JSON.stringify({ requests: [
+      { kind: 'image', model: 'gpt-image-2.6-flare', image_count: 2 },
+      { kind: 'video', model: 'not-available', duration_seconds: 5, image_count: 0 },
+    ] }));
+    const partial = await runCli(['price', '--input', quoteFile]);
+    assert.equal(partial.code, 2);
+    assert.match(partial.stdout, /12 credits \(preflight estimate/);
+    assert.match(partial.stdout, /Price unavailable/);
+    const beforeInvalid = requests.length;
+    const invalid = await runCli(['price', 'video', '--model', 'kling-4-flash', '--duration', 'NaN']);
+    assert.equal(invalid.code, 1);
+    assert.equal(requests.length, beforeInvalid);
+  }
+
   {
     await expectHelp(['layerize', '--help'], /Split|standard Makaron design|normal Makaron design/);
     const project = '11111111-1111-4111-8111-111111111111';

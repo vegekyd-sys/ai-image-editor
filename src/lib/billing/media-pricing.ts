@@ -38,6 +38,20 @@ export interface MediaQuote {
   /** Separately refundable post-processing part of an Eco quote. */
   upscaleCredits?: number
   baseCredits?: number
+  /** Explanation of the same quantities/rates used above rounding, never a second tariff. */
+  billingBasis?: Array<{
+    priceId: string
+    outputQuantity: number
+    outputUnitUsd: number
+    inputVideoSeconds: number
+    inputVideoUnitUsd: number
+    inputImages: number
+    inputImageUnitUsd: number
+    inputTokens: number
+    inputTokenUnitUsd: number
+    multiplier: number
+    markup: number
+  }>
 }
 
 export interface VideoQuoteInput {
@@ -128,6 +142,20 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
     credits,
     referenceTokens, billableReferenceTokens,
     durationSec, imageCount, referenceVideoDurationSec, markup: price.markup, multiplier,
+    billingBasis: [{
+      priceId: price.id,
+      outputQuantity: hasVideoReferenceTariff && price.model_id === 'seedance-2.5-flash' && price.operation === 'edit' ? billableSourceSeconds : durationSec,
+      outputUnitUsd: hasVideoReferenceTariff ? price.video_reference_usd_per_second! : price.output_usd_per_second,
+      inputVideoSeconds: hasVideoReferenceTariff
+        ? price.model_id === 'seedance-2.5-flash' && price.operation === 'edit' ? billableSourceSeconds : Math.max(billableSourceSeconds, durationSec)
+        : referenceVideoDurationSec,
+      inputVideoUnitUsd: hasVideoReferenceTariff ? price.video_reference_usd_per_second! : price.input_usd_per_second,
+      inputImages: hasVideoReferenceTariff ? 0 : Math.max(0, imageCount - price.free_image_references),
+      inputImageUnitUsd: hasVideoReferenceTariff ? 0 : price.input_usd_per_image,
+      inputTokens: hasVideoReferenceTariff ? 0 : billableReferenceTokens,
+      inputTokenUnitUsd: hasVideoReferenceTariff ? 0 : (price.input_usd_per_1k_tokens ?? 0) / 1000,
+      multiplier, markup: price.markup,
+    }],
   }
 }
 
@@ -136,22 +164,22 @@ export function videoPriceId(input: Pick<VideoQuoteInput, 'model' | 'resolution'
   return `video:${normalizeVideoModelId(input.model)}:${route.resolution}:${input.operation ?? 'generate'}`
 }
 
-export async function quoteVideo(input: VideoQuoteInput): Promise<MediaQuote> {
+export async function quoteVideo(input: VideoQuoteInput, pricingSnapshot?: readonly MediaPrice[]): Promise<MediaQuote> {
+  const prices = pricingSnapshot ?? await getMediaPrices()
   if (normalizeVideoModelId(input.model) === 'seedance-2.5-eco') {
     const resolution = resolveVideoGenerationRoute(input).resolution
-    const prices = await getMediaPrices()
-    const ecoBase = prices.find(p => p.id === 'video:seedance-2.5-eco:480p:generate')
+    const ecoBase = prices.find(p => p.id === getVideoModelCapability(input.model).pricing?.basePriceId)
     if (!ecoBase) throw new PricingUnavailableError('Seedance Eco base pricing is not configured.')
     const [base, upscale] = await Promise.all([
       Promise.resolve(calculateMediaQuote({ ...ecoBase, model_id: 'seedance-2.5' }, input)),
-      quoteVideo({ model: 'bytedance-video-upscale', resolution, durationSec: input.durationSec }),
+      quoteVideo({ model: 'bytedance-video-upscale', resolution, durationSec: input.durationSec }, prices),
     ])
     return { ...base, priceId: videoPriceId(input), priceVersion: `${base.priceVersion}|${upscale.priceVersion}`,
       supplierCostUsd: base.supplierCostUsd + upscale.supplierCostUsd,
-      credits: base.credits + upscale.credits, baseCredits: base.credits, upscaleCredits: upscale.credits }
+      credits: base.credits + upscale.credits, baseCredits: base.credits, upscaleCredits: upscale.credits,
+      billingBasis: [...(base.billingBasis ?? []), ...(upscale.billingBasis ?? [])] }
   }
   const id = videoPriceId(input)
-  const prices = await getMediaPrices()
   const price = prices.find(row => row.id === id)
   if (!price) throw new PricingUnavailableError(`Video pricing is not configured: ${id}`)
   if (normalizeVideoModelId(input.model) === 'bytedance-video-upscale') {
