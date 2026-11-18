@@ -32,7 +32,7 @@ describe('configured DeepSeek default', () => {
         .toMatchObject({ id: 'deepseek-flash', provider: 'deepseek' });
     }
     expect(resolveAgentModelSpecForUser('gpt-6-luna', 'deepseek-flash', 'user', 'azure-openai', true))
-      .toMatchObject({ id: 'gpt-6-luna', provider: 'azure-openai' });
+      .toMatchObject({ id: 'gpt-6-luna', provider: 'openrouter', providerModelId: 'openai/gpt-6-luna' });
     expect(resolveAgentModelSpecForUser('gpt-6-luna-codex-subscription', 'deepseek-flash', 'user', 'azure-openai', true))
       .toMatchObject({ id: 'gpt-6-luna', provider: 'codex-subscription' });
   });

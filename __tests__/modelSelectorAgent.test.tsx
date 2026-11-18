@@ -95,7 +95,9 @@ describe('ModelSelector Agent tab', () => {
     const providerGroups = Array.from(agentPanel.querySelectorAll('[data-agent-provider-group]'));
     expect(providerGroups.map(group => (
       group.getAttribute('data-agent-provider-group')
-    ))).toEqual(['azure', 'codex', 'grok', 'other']);
+    ))).toEqual(['openai', 'codex', 'grok', 'other']);
+    expect(providerGroups[0]?.textContent).toContain('OpenAI API');
+    expect(agentPanel.textContent).not.toMatch(/Azure|OpenRouter/i);
     expect(providerGroups[1]?.textContent).toMatch(/Codex/);
     expect(providerGroups[2]?.textContent).toMatch(/Grok/);
     const codexUsage = screen.getByTestId('codex-subscription-usage');

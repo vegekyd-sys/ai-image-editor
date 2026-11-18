@@ -673,9 +673,9 @@ export default function ModelSelector({
   const subscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.codexAvailable !== false)
     || isCodexSubscriptionAgentModelPreference(agentModel);
   const baseAgentModels = getAgentModels();
-  const azureAgentModels = baseAgentModels.filter(model => model.id.startsWith('gpt-6'));
+  const openaiAgentModels = baseAgentModels.filter(model => model.id.startsWith('gpt-6'));
   const codexSubscriptionAgentModels: ModelInfo[] = subscriptionVisible
-    ? azureAgentModels.map(model => ({
+    ? openaiAgentModels.map(model => ({
         ...model,
         id: getCodexSubscriptionAgentModelPreference(model.id as GPT56AgentModelId),
         speedLabel: undefined,
@@ -697,7 +697,7 @@ export default function ModelSelector({
   }
   const otherAgentModels = baseAgentModels.filter(model => !model.id.startsWith('gpt-6'));
   const agentModels = [
-    ...azureAgentModels,
+    ...openaiAgentModels,
     ...codexSubscriptionAgentModels,
     ...grokSubscriptionAgentModels,
     ...otherAgentModels,
@@ -718,7 +718,7 @@ export default function ModelSelector({
     : preferredModel;
   const selectedAgentModel = agentModels.find(model => model.id === agentModel);
   const selectedAgentLabel = selectedAgentModel
-    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : /^gpt-(?:5\.6|6(?:\.1)?)-/.test(selectedAgentModel.id) ? ` · ${t('model.azureApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
+    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : /^gpt-(?:5\.6|6(?:\.1)?)-/.test(selectedAgentModel.id) ? ` · ${t('model.openaiApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`
     : agentModel;
   const selectedVideoModel = videoModels.find(model => model.id === videoModel);
   const selectedVideoLabel = selectedVideoModel
@@ -944,7 +944,7 @@ export default function ModelSelector({
                   && isCodexSubscriptionAgentModelPreference(model.id);
                 const isGrokSubscription = activeTab === 'agent'
                   && isGrokSubscriptionAgentModelPreference(model.id);
-                const isAzureAgent = activeTab === 'agent'
+                const isOpenAIAgent = activeTab === 'agent'
                   && /^gpt-(?:5\.6|6(?:\.1)?)-/.test(model.id)
                   && !isCodexSubscription;
                 const modelIndex = models.indexOf(model);
@@ -955,8 +955,8 @@ export default function ModelSelector({
                     ? 'codex'
                     : isGrokSubscription
                       ? 'grok'
-                    : isAzureAgent
-                      ? 'azure'
+                    : isOpenAIAgent
+                      ? 'openai'
                       : 'other';
                 const previousProviderGroup = activeTab !== 'agent' || !previousModel
                   ? undefined
@@ -965,18 +965,18 @@ export default function ModelSelector({
                     : isGrokSubscriptionAgentModelPreference(previousModel.id)
                       ? 'grok'
                     : /^gpt-(?:5\.6|6(?:\.1)?)-/.test(previousModel.id)
-                      ? 'azure'
+                      ? 'openai'
                       : 'other';
                 const showProviderHeader = providerGroup && providerGroup !== previousProviderGroup;
-                const providerLabel = providerGroup === 'azure'
-                  ? t('model.agentGroup.azure')
+                const providerLabel = providerGroup === 'openai'
+                  ? t('model.agentGroup.openai')
                   : providerGroup === 'codex'
                     ? t('model.agentGroup.codex')
                     : providerGroup === 'grok'
                       ? t('model.agentGroup.grok')
                     : t('model.agentGroup.other');
-                const providerDetail = providerGroup === 'azure'
-                  ? t('model.agentGroup.azureDesc')
+                const providerDetail = providerGroup === 'openai'
+                  ? t('model.agentGroup.openaiDesc')
                   : providerGroup === 'codex'
                     ? subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
                       ? t('model.codexSubscription.checking')
@@ -1027,7 +1027,7 @@ export default function ModelSelector({
                     )}
                     <ModelRow
                       model={model}
-                      name={`${t(model.nameKey as Parameters<typeof t>[0])}${isCodexSubscription ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscription ? ` · ${t('model.grokSubscription.suffix')}` : model.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`}
+                      name={`${t(model.nameKey as Parameters<typeof t>[0])}${isCodexSubscription ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscription ? ` · ${t('model.grokSubscription.suffix')}` : model.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`}
                       desc={t(model.descKey as Parameters<typeof t>[0])}
                       badge={activeTab === 'agent'
                         ? undefined
@@ -1042,8 +1042,8 @@ export default function ModelSelector({
                         ? 'codex-subscription'
                         : isGrokSubscription
                         ? 'grok-subscription'
-                        : isAzureAgent
-                        ? 'azure-openai'
+                        : isOpenAIAgent
+                        ? 'openai'
                         : model.id === 'grok-4.6'
                         ? 'openrouter'
                         : undefined}

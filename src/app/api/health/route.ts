@@ -1,11 +1,6 @@
 import { getOpenAIDirectApiKey, getOpenAIDirectBudget, isOpenAIDirectAvailable, isOpenAIDirectConfigured, refreshOpenAIDirectBudget } from '@/lib/openai-direct'
 import { NextResponse } from 'next/server'
 import {
-  assertRequiredGPT56Models,
-  isRequiredServiceDown,
-  resolveAzureOpenAIModelsRequest,
-} from '@/lib/azure-openai-health'
-import {
   resolveCodexSubscriptionFallbackProvider,
   resolveGPT56AgentProvider,
 } from '@/lib/agent-models'
@@ -156,19 +151,6 @@ async function checkPiAPI(): Promise<ServiceResult> {
   }, 3000)
 }
 
-async function checkAzureOpenAI(): Promise<ServiceResult> {
-  const request = resolveAzureOpenAIModelsRequest()
-  if (!request) return unavailable('AZURE_OPENAI_API_KEY not set')
-
-  return checkWithTimeout('azure_openai', async () => {
-    const res = await fetch(request.url, {
-      headers: { 'api-key': request.apiKey },
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    assertRequiredGPT56Models(await res.json())
-  }, 5000)
-}
-
 async function checkOpenAIDirect(): Promise<ServiceResult & { budget?: Record<string, unknown> }> {
   const apiKey = getOpenAIDirectApiKey()
   if (!apiKey || !isOpenAIDirectConfigured()) return unavailable('OPENAI_API_KEY not set or OPENAI_DIRECT_ENABLED=false')
@@ -226,7 +208,6 @@ export async function GET() {
     falRotation,
     kling,
     piapi,
-    azureOpenai,
     codexSubscription,
     huggingface,
     openaiDirect,
@@ -240,7 +221,6 @@ export async function GET() {
     checkImageProviderKey('FAL_KEY'),
     checkKling(),
     checkPiAPI(),
-    checkAzureOpenAI(),
     checkCodexSubscription(),
     checkHuggingFace(),
     checkOpenAIDirect(),
@@ -256,7 +236,7 @@ export async function GET() {
     fal_rotation: falRotation,
     kling,
     piapi,
-    azure_openai: azureOpenai,
+    azure_openai: unavailable('Replaced by OpenRouter'),
     codex_subscription: codexSubscription,
     huggingface,
     openai_direct: openaiDirect,
@@ -267,26 +247,18 @@ export async function GET() {
   const unhealthy = entries.filter(s => s.status === 'unhealthy').length
   const unavailableCount = entries.filter(s => s.status === 'unavailable').length
 
-  // Core services: if persistence, image generation, or the selected default
-  // Agent provider is down -> down. The retained standby provider may degrade
-  // independently without making the active OpenRouter Agent look unavailable.
   const selectedGPT56Provider = resolveGPT56AgentProvider(process.env.GPT56_AGENT_PROVIDER)
-  const codexOwnerConfigured = Boolean(process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim())
-  const codexFallbackHealth = resolveCodexSubscriptionFallbackProvider() === 'azure-openai'
-    ? azureOpenai
+  const codexFallbackHealth = resolveCodexSubscriptionFallbackProvider() === 'openai'
+    ? openaiDirect
     : openrouter
-  const selectedAgentHealth = selectedGPT56Provider === 'azure-openai'
-    ? azureOpenai
-    : selectedGPT56Provider === 'codex-subscription'
-      ? codexOwnerConfigured && codexSubscription.status !== 'healthy'
-        ? codexFallbackHealth
-        : codexSubscription
-      : openrouter
+  const selectedAgentHealth = selectedGPT56Provider === 'codex-subscription'
+    ? codexSubscription.status === 'healthy' ? codexSubscription : codexFallbackHealth
+    : selectedGPT56Provider === 'openai' ? openaiDirect : openrouter
   const coreDown =
     supabaseDb.status === 'unhealthy' ||
     supabaseAuth.status === 'unhealthy' ||
     gemini.status === 'unhealthy' ||
-    isRequiredServiceDown(selectedAgentHealth.status)
+    selectedAgentHealth.status !== 'healthy'
 
   const overallStatus = coreDown ? 'down' : unhealthy > 0 ? 'degraded' : 'healthy'
 

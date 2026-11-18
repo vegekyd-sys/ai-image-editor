@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { generateText } from 'ai';
-import { createAzureOpenAIWebSearchTool } from '@/lib/azure-openai-responses';
+import { createAgentWebSearchTool } from '@/lib/agent-web-search-tool';
 import {
   assertCodexSubscriptionRateLimitsAvailable,
   CODEX_RELAY_HEADERS,
@@ -38,7 +38,7 @@ describe('Codex subscription transport', () => {
     await generateText({
       model,
       prompt: 'Search the web for current official announcements.',
-      tools: { web_search: createAzureOpenAIWebSearchTool() } as any,
+      tools: { web_search: createAgentWebSearchTool() } as any,
       providerOptions: { openai: { store: false } },
     });
     expect(requestBody.tools).toContainEqual(expect.objectContaining({ type: 'web_search', search_context_size: 'low' }));

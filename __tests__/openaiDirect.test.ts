@@ -87,11 +87,11 @@ describe('monthly budget gate', () => {
 });
 
 describe('Agent routing priority', () => {
-  it('sends paid GPT traffic to direct OpenAI while budget remains, Azure otherwise', () => {
+  it('sends paid GPT traffic to direct OpenAI while budget remains, OpenRouter otherwise', () => {
     expect(resolveAgentModelSpecForUser('gpt-6-luna', undefined, 'user', undefined, false, true).provider).toBe('openai');
     expect(resolveAgentModelSpecForUser('gpt-6-sol', undefined, 'user', undefined, false, true).providerModelId).toBe('gpt-6-sol');
     expect(resolveAgentModelSpecForUser('gpt-5.6-terra', undefined, 'user', undefined, false, true).provider).toBe('openai');
-    expect(resolveAgentModelSpecForUser('gpt-6-luna', undefined, 'user', undefined, false, false).provider).toBe('azure-openai');
+    expect(resolveAgentModelSpecForUser('gpt-6-luna', undefined, 'user', undefined, false, false).provider).toBe('openrouter');
   });
 
   it('keeps the personal Codex plan first and leaves non-GPT models alone', () => {
@@ -104,13 +104,13 @@ describe('Agent routing priority', () => {
   it('honours an explicitly pinned provider (route decision or fallback) over the budget rule', () => {
     setOpenAIDirectStateForTests(fresh(0));
     expect(isOpenAIDirectAvailable()).toBe(true);
-    expect(resolveAgentModelSpecForUser('gpt-6-luna', undefined, 'user', 'azure-openai', false).provider).toBe('azure-openai');
+    expect(resolveAgentModelSpecForUser('gpt-6-luna', undefined, 'user', 'azure-openai', false).provider).toBe('openrouter');
     expect(resolveAgentModelSpecForUser('gpt-6-luna', undefined, 'user', undefined, false).provider).toBe('openai');
   });
 
   it('falls back from direct OpenAI to the configured paid API', () => {
-    expect(resolveOpenAIDirectFallbackProvider('azure')).toBe('azure-openai');
-    expect(resolveOpenAIDirectFallbackProvider('openrouter')).toBe('openrouter');
+    expect(resolveOpenAIDirectFallbackProvider()).toBe('openrouter');
+    expect(resolveOpenAIDirectFallbackProvider()).toBe('openrouter');
   });
 
   it('durable runs leave direct OpenAI immediately on quota/auth refusals', () => {

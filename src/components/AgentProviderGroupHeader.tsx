@@ -1,5 +1,5 @@
 interface AgentProviderGroupHeaderProps {
-  provider: 'azure' | 'codex' | 'grok' | 'other';
+  provider: 'openai' | 'codex' | 'grok' | 'other';
   label: string;
   detail: string;
   remainingLabel?: string;

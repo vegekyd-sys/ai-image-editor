@@ -88,19 +88,16 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
   const selected = models.find(model => model.id === selectedModelId);
   const ownerDefaultsToCodex = subscriptionUsage.defaultProvider === 'codex-subscription';
   const autoModel = models.find(model => model.id === subscriptionUsage.defaultModelId);
+  const autoUsesOpenAIApi = Boolean(autoModel?.id.startsWith('gpt-') && !ownerDefaultsToCodex);
   const autoProviderSuffix = ownerDefaultsToCodex
     ? t('model.codexSubscription.suffix')
-    : subscriptionUsage.defaultProvider === 'azure-openai'
-    ? t('model.azureApiBadge')
-    : subscriptionUsage.defaultProvider === 'openai'
-    ? t('model.openaiApiBadge')
-    : subscriptionUsage.defaultProvider === 'openrouter'
-    ? t('model.openRouterApiBadge')
-    : '';
+    : autoUsesOpenAIApi
+      ? t('model.openaiApiBadge')
+      : autoModel?.id === 'grok-4.6' ? t('model.grokApiBadge') : '';
   const autoLabel = autoModel
     ? `Auto · ${t(autoModel.nameKey as Parameters<typeof t>[0])}${autoProviderSuffix ? ` · ${autoProviderSuffix}` : ''}`
     : 'Auto';
-  const autoUsesOtherApi = Boolean(autoModel && !ownerDefaultsToCodex && subscriptionUsage.defaultProvider !== 'azure-openai' && subscriptionUsage.defaultProvider !== 'openai');
+  const autoUsesOtherApi = Boolean(autoModel && !ownerDefaultsToCodex && !autoUsesOpenAIApi);
   const label = isCodexSubscriptionAgentModelPreference(value) && selected
     ? `${t(selected.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`
     : isGrokSubscriptionAgentModelPreference(value) && selected
@@ -108,7 +105,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
     : value === 'auto'
     ? autoLabel
     : selected
-      ? `${t(selected.nameKey as Parameters<typeof t>[0])}${/^gpt-(?:5\.6|6(?:\.1)?)-/.test(selected.id) ? ` · ${t('model.azureApiBadge')}` : selected.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
+      ? `${t(selected.nameKey as Parameters<typeof t>[0])}${/^gpt-(?:5\.6|6(?:\.1)?)-/.test(selected.id) ? ` · ${t('model.openaiApiBadge')}` : selected.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`
       : value;
 
   useEffect(() => {
@@ -236,7 +233,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
     minute: '2-digit',
   }).format(new Date(seconds * 1_000));
 
-  const azureOptions = models
+  const openaiOptions = models
     .filter(model => model.id.startsWith('gpt-6'))
     .map((model) => ({
       id: model.id as AgentModelPreference,
@@ -272,7 +269,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
     .map(model => ({
       id: model.id as AgentModelPreference,
       name: model.id === 'grok-4.6'
-        ? `${t(model.nameKey as Parameters<typeof t>[0])} · ${t('model.openRouterApiBadge')}`
+        ? `${t(model.nameKey as Parameters<typeof t>[0])} · ${t('model.grokApiBadge')}`
         : t(model.nameKey as Parameters<typeof t>[0]),
       desc: t(model.descKey as Parameters<typeof t>[0]),
     }));
@@ -300,16 +297,16 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
 
   const optionGroups = [
     {
-      id: 'azure',
-      label: t('model.agentGroup.azure'),
-      detail: t('model.agentGroup.azureDesc'),
+      id: 'openai',
+      label: t('model.agentGroup.openai'),
+      detail: t('model.agentGroup.openaiDesc'),
       options: [
         ...(!ownerDefaultsToCodex && !autoUsesOtherApi ? [{
           id: 'auto' as AgentModelPreference,
           name: autoLabel,
           desc: t('model.agentAutoConfiguredDesc'),
         }] : []),
-        ...azureOptions,
+        ...openaiOptions,
       ],
     },
     ...(codexSubscriptionOptions.length > 0 ? [{
@@ -414,7 +411,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
               {optionGroups.map(group => (
                 <section key={group.id} className="mkr-agent-model-group">
                   <AgentProviderGroupHeader
-                    provider={group.id as 'azure' | 'codex' | 'grok' | 'other'}
+                    provider={group.id as 'openai' | 'codex' | 'grok' | 'other'}
                     label={group.label}
                     detail={group.detail}
                     remainingLabel={group.id === 'codex' && codexWeekly
@@ -453,7 +450,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
                           : isGrokSubscription
                           ? 'grok-subscription'
                           : model.id.startsWith('gpt-6') || model.id === 'auto'
-                          ? 'azure-openai'
+                          ? 'openai'
                           : model.id === 'grok-4.6'
                           ? 'openrouter'
                           : undefined}
