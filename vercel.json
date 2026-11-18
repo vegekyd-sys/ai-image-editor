@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "codex/remotion-bind-audio-index": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/agent-executions",
