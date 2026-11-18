@@ -2645,14 +2645,14 @@ function createAnalyzeVideoTool(
   return tool({
       description: `Analyze video content using Gemini vision.
 
-Default mode describes scenes/actions/pacing/audio cues in a timeline video. Current upload batches are pre-analyzed in parallel into the Verified current upload batch block. If any video evidence is missing or failed, pass all affected video indices together in media_indices so the tool analyzes them concurrently. Otherwise do not call this before clear direct video edits such as adding glasses, changing outfit, or using Omni to edit a referenced video; generate_animation already receives selected video references. Use analyze_video only for inspection, comparison, diagnosis, ambiguous targets, or frame-location workflows.
+Default mode describes scenes/actions/pacing/audio cues in a timeline video. Current upload batches are pre-analyzed in parallel into the Verified current upload batch block. If any video evidence is missing or failed, pass all affected video indices together in media_indices so one tool call covers the full batch. Otherwise do not call this before clear direct video edits such as adding glasses, changing outfit, or using Omni to edit a referenced video; generate_animation already receives selected video references. Use analyze_video only for inspection, comparison, diagnosis, ambiguous targets, or frame-location workflows.
 
 Before calling describe mode, read each item's Media Index description. A specific description may already contain upstream video understanding such as summary, editorial purpose, scene evidence, and temporal bounds. Treat it as available evidence regardless of provider and do not call this tool merely to rediscover covered content. Call describe mode only when the description/evidence is missing, generic, failed, uncertain, or a concrete visual question required by the user remains uncovered.
 
 Use mode="locate_frame" when the user provides a screenshot/frame and you need to find where that frame appears in a video. This is the primary locator for screenshot-based local video edits. Provide the video as media_index and the screenshot as image_url, image_media_index, or workspace_path. For checking a known timestamp visually, use preview_frame instead.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based snapshot index of one video to analyze (<<<media_1>>> = 1).'),
-        media_indices: z.array(z.number().int().positive()).max(20).optional().describe('For batch describe mode: all 1-based video Media Index entries to analyze concurrently in this one tool call.'),
+        media_indices: z.array(z.number().int().positive()).max(20).optional().describe('For batch describe mode: all 1-based video Media Index entries to analyze in this one tool call.'),
         question: z.string().optional().describe('Specific aspect to focus on. In locate_frame mode, use this for the user note about what is wrong in the screenshot.'),
         mode: z.enum(['describe', 'locate_frame']).optional().describe('describe = normal video analysis. locate_frame = locate a screenshot inside this video. Default describe.'),
         image_url: z.string().optional().describe('For locate_frame: screenshot/frame image URL or data:image URL.'),
@@ -2668,10 +2668,10 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
 
         if (mode !== 'locate_frame' && requestedIndices.length > 1) {
           const { analyzeVideoContent } = await import('./gemini');
-          const analyses = await Promise.all(requestedIndices.map(async (index) => {
-            const resolved = await resolveVideoUrlForMediaIndex(ctx, index);
-            if (!resolved.videoUrl) return { media_index: index, error: resolved.error || 'Video not found.' };
+          const analyze = async (index: number) => {
             try {
+              const resolved = await resolveVideoUrlForMediaIndex(ctx, index);
+              if (!resolved.videoUrl) return { media_index: index, error: resolved.error || 'Video not found.' };
               const analysis = await analyzeVideoContent(
                 resolved.videoUrl,
                 scopeVideoQuestionToSourceRange(question, resolved.sourceRange),
@@ -2681,7 +2681,20 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
             } catch (err) {
               return { media_index: index, error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };
             }
-          }));
+          };
+
+          // The provider can buffer the full video and additional copies for upload.
+          // Keep the number of live inputs bounded without dropping batch entries.
+          const maxConcurrentAnalyses = 4;
+          const analyses = new Array<Awaited<ReturnType<typeof analyze>>>(requestedIndices.length);
+          let nextIndex = 0;
+          const workers = Array.from({ length: Math.min(maxConcurrentAnalyses, requestedIndices.length) }, async () => {
+            while (nextIndex < requestedIndices.length) {
+              const position = nextIndex++;
+              analyses[position] = await analyze(requestedIndices[position]);
+            }
+          });
+          await Promise.all(workers);
           return { mode: 'batch_describe', analyses };
         }
 
