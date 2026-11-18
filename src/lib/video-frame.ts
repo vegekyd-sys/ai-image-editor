@@ -1,10 +1,10 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, open, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { findFfmpeg } from './ffmpeg-runtime'
-import { extractRetakeSourceFrames } from './video-retake-media'
+import { extractRetakeSourceFileFrames } from './video-retake-media'
 
 export const MAX_PREVIEW_SOURCE_BYTES = 64 * 1024 * 1024
 const exec = promisify(execFile)
@@ -16,24 +16,30 @@ export interface ExtractVideoFrameOptions {
   signal?: AbortSignal
 }
 
-/** Unknown-length bodies are bounded too; never arrayBuffer a remote source. */
-async function readSmallSource(response: Response, signal: AbortSignal): Promise<Buffer | null> {
+// Write each chunk before reading the next one so concurrent previews never
+// hold complete source videos or concatenated copies in memory.
+async function downloadSmallSource(response: Response, path: string, signal: AbortSignal): Promise<boolean> {
   if (!response.body) throw new Error('Video response has no body')
   const reader = response.body.getReader()
-  const chunks: Uint8Array[] = []
-  let bytes = 0
   try {
-    if (Number(response.headers.get('content-length')) > MAX_PREVIEW_SOURCE_BYTES) return null
-    while (true) {
-      signal.throwIfAborted()
-      const chunk = await reader.read()
-      if (chunk.done) break
-      bytes += chunk.value.byteLength
-      if (bytes > MAX_PREVIEW_SOURCE_BYTES) return null
-      chunks.push(chunk.value)
+    if (Number(response.headers.get('content-length')) > MAX_PREVIEW_SOURCE_BYTES) return false
+    const file = await open(path, 'wx', 0o600)
+    let bytes = 0
+    try {
+      while (true) {
+        signal.throwIfAborted()
+        const chunk = await reader.read()
+        signal.throwIfAborted()
+        if (chunk.done) break
+        bytes += chunk.value.byteLength
+        if (bytes > MAX_PREVIEW_SOURCE_BYTES) return false
+        await file.writeFile(chunk.value)
+      }
+      if (!bytes) throw new Error('Downloaded video is empty')
+      return true
+    } finally {
+      await file.close()
     }
-    if (!bytes) throw new Error('Downloaded video is empty')
-    return Buffer.concat(chunks, bytes)
   } finally {
     await reader.cancel().catch(() => undefined)
     reader.releaseLock()
@@ -41,8 +47,7 @@ async function readSmallSource(response: Response, signal: AbortSignal): Promise
 }
 
 /** Large sources seek over HTTP Range in FFmpeg, outside the Node heap. */
-async function extractRemoteFrames(url: string, times: number[], quality: number, signal: AbortSignal): Promise<Buffer[]> {
-  const dir = await mkdtemp(join(tmpdir(), 'makaron-preview-'))
+async function extractRemoteFrames(dir: string, url: string, times: number[], quality: number, signal: AbortSignal): Promise<Buffer[]> {
   try {
     const ffmpeg = await findFfmpeg()
     const images: Buffer[] = []
@@ -60,8 +65,6 @@ async function extractRemoteFrames(url: string, times: number[], quality: number
   } catch {
     // Child-process errors include the command line and signed source URL.
     throw new Error(signal.aborted ? 'Video preview cancelled or timed out' : 'Remote video frame extraction failed; check source access and seek support')
-  } finally {
-    await rm(dir,{recursive:true,force:true})
   }
 }
 
@@ -74,15 +77,23 @@ export async function extractVideoFrames(videoUrl: string, timestamps: number[],
   const signal = AbortSignal.any([AbortSignal.timeout(120_000),...(options.signal ? [options.signal] : [])])
   const quality = Number.isFinite(options.quality) ? Math.max(2,Math.min(31,Number(options.quality))) : 4
   signal.throwIfAborted()
-  const response = await fetch(videoUrl,{headers:{'User-Agent':USER_AGENT},signal})
-  if (!response.ok) {
-    await response.body?.cancel()
-    throw new Error(`Failed to download video: HTTP ${response.status}`)
+  const dir = await mkdtemp(join(tmpdir(), 'makaron-preview-'))
+  try {
+    const response = await fetch(videoUrl,{headers:{'User-Agent':USER_AGENT},signal})
+    if (!response.ok) {
+      await response.body?.cancel()
+      throw new Error(`Failed to download video: HTTP ${response.status}`)
+    }
+    const sourcePath = join(dir, 'source.mp4')
+    if (await downloadSmallSource(response, sourcePath, signal)) {
+      return await extractRetakeSourceFileFrames(sourcePath,timestamps,quality,signal)
+    }
+    // An unknown-length response can leave a partial copy behind.
+    await rm(sourcePath, {force:true})
+    return await extractRemoteFrames(dir,videoUrl,timestamps,quality,signal)
+  } finally {
+    await rm(dir,{recursive:true,force:true})
   }
-  const source = await readSmallSource(response,signal)
-  return source
-    ? extractRetakeSourceFrames(source,timestamps,quality,signal)
-    : extractRemoteFrames(videoUrl,timestamps,quality,signal)
 }
 
 /** Real videos, with exact visual-tail handling retained for small sources. */
