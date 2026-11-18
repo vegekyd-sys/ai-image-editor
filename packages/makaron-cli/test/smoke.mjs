@@ -970,6 +970,16 @@ try {
     assert.equal(runRequest?.body?.agentModel, 'gpt-6.1-sol-codex-subscription');
   }
 
+  for (const model of ['gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-terra']) {
+    for (const agentModel of [model, `${model}-codex-subscription`]) {
+      const requestStart = requests.length;
+      await expectSuccess(['chat', '--project', 'project-models-1', '--agent-model', agentModel,
+        '--json', '-b', 'use the selected Agent model']);
+      const runRequest = requests.slice(requestStart).find(request => request.pathname === '/api/agent/run');
+      assert.equal(runRequest?.body?.agentModel, agentModel);
+    }
+  }
+
   for (const partial of [false, true]) {
     const requestStart = requests.length;
     const result = await expectSuccess(['chat', '--project', 'project-models-1', '--stream',

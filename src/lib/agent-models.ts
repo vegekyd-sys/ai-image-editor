@@ -3,6 +3,9 @@ export const AGENT_MODEL_IDS = [
   'gpt-6-luna',
   'gpt-6-sol',
   'gpt-6.1-sol',
+  'gpt-6.2-sol',
+  'gpt-6.2-astra',
+  'gpt-6.1-terra',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
@@ -17,6 +20,9 @@ export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = [
   CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
   'gpt-6-sol-codex-subscription',
   'gpt-6.1-sol-codex-subscription',
+  'gpt-6.2-sol-codex-subscription',
+  'gpt-6.2-astra-codex-subscription',
+  'gpt-6.1-terra-codex-subscription',
   'gpt-5.6-terra-codex-subscription',
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
@@ -29,7 +35,7 @@ export type AgentModelProvider = 'azure-openai' | 'openai' | 'codex-subscription
 export type GPT56ApiProvider = Extract<AgentModelProvider, 'azure-openai' | 'openai' | 'openrouter'>;
 export type GPT56AgentProvider = GPT56ApiProvider | 'codex-subscription';
 export type AgentCacheStrategy = 'explicit' | 'automatic';
-export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface AgentModelSpec {
   id: AgentModelId;
@@ -48,6 +54,9 @@ const GPT56_AGENT_MODEL_IDS = [
   'gpt-6-luna',
   'gpt-6-sol',
   'gpt-6.1-sol',
+  'gpt-6.2-sol',
+  'gpt-6.2-astra',
+  'gpt-6.1-terra',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
@@ -64,6 +73,24 @@ export const GPT56_PROVIDER_MODEL_IDS: Record<
     'azure-openai': 'gpt-6-luna',
     openai: 'gpt-6-luna',
     'codex-subscription': 'gpt-6-luna',
+  },
+  'gpt-6.2-sol': {
+    openrouter: 'openai/gpt-6.2-sol',
+    'azure-openai': 'gpt-6.2-sol',
+    openai: 'gpt-6.2-sol',
+    'codex-subscription': 'gpt-6.2-sol',
+  },
+  'gpt-6.2-astra': {
+    openrouter: 'openai/gpt-6.2-astra',
+    'azure-openai': 'gpt-6.2-astra',
+    openai: 'gpt-6.2-astra',
+    'codex-subscription': 'gpt-6.2-astra',
+  },
+  'gpt-6.1-terra': {
+    openrouter: 'openai/gpt-6.1-terra',
+    'azure-openai': 'gpt-6.1-terra',
+    openai: 'gpt-6.1-terra',
+    'codex-subscription': 'gpt-6.1-terra',
   },
   'gpt-6.1-sol': {
     openrouter: 'openai/gpt-6.1-sol',
@@ -292,6 +319,33 @@ export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
     cacheStrategy: 'automatic',
     supportsImageInput: true,
     defaultReasoningEffort: 'high',
+  },
+  'gpt-6.2-sol': {
+    id: 'gpt-6.2-sol',
+    provider: 'azure-openai',
+    providerModelId: 'gpt-6.2-sol',
+    billingModelId: 'gpt-6.2-sol',
+    cacheStrategy: 'automatic',
+    supportsImageInput: true,
+    defaultReasoningEffort: 'high',
+  },
+  'gpt-6.2-astra': {
+    id: 'gpt-6.2-astra',
+    provider: 'azure-openai',
+    providerModelId: 'gpt-6.2-astra',
+    billingModelId: 'gpt-6.2-astra',
+    cacheStrategy: 'automatic',
+    supportsImageInput: true,
+    defaultReasoningEffort: 'high',
+  },
+  'gpt-6.1-terra': {
+    id: 'gpt-6.1-terra',
+    provider: 'azure-openai',
+    providerModelId: 'gpt-6.1-terra',
+    billingModelId: 'gpt-6.1-terra',
+    cacheStrategy: 'automatic',
+    supportsImageInput: true,
+    defaultReasoningEffort: 'medium',
   },
   'gpt-6.1-sol': {
     id: 'gpt-6.1-sol',

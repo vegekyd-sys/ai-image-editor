@@ -32,7 +32,7 @@ export function createAzureAgentPromptCacheKey(
   modelId: string,
   projectId: string,
 ): string {
-  const modelTier = modelId.replace(/^gpt-(?:5\.6|6(?:\.1)?)-/, '').replace(/[^a-z0-9-]/gi, '-');
+  const modelTier = modelId.replace(/^gpt-(?:5\.6|6(?:\.[12])?)-/, '').replace(/[^a-z0-9-]/gi, '-');
   const projectHash = createHash('sha256').update(projectId).digest('hex').slice(0, 40);
   return `mk-${modelTier}-${projectHash}`;
 }
@@ -138,6 +138,15 @@ export function createAgentModelRuntime(
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY is required for OpenRouter Agent models');
   }
+  if (requiresOpenRouterResponses(spec.id)) {
+    const openrouterResponses = createOpenAI({
+      name: 'openrouter',
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey,
+      headers: { 'HTTP-Referer': 'https://www.makaron.app', 'X-Title': 'Makaron' },
+    });
+    return { spec, model: openrouterResponses.responses(spec.providerModelId), normalizeMessages: normalizeToolCallInputs };
+  }
   const openrouter = createOpenRouter({
     apiKey,
     compatibility: 'strict',
@@ -157,15 +166,26 @@ export function createAgentModelRuntime(
   };
 }
 
+/** New GPT models require Responses for tools and reject legacy effort values. */
+export function getSupportedAgentReasoningEfforts(modelId: string): readonly AgentReasoningEffort[] {
+  if (modelId === 'gpt-6.2-sol' || modelId === 'gpt-6.2-astra') {
+    return ['low', 'medium', 'high', 'xhigh', 'max'];
+  }
+  if (modelId === 'gpt-6.1-terra') return ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+  if (modelId === 'gpt-6.1-sol') return ['low', 'medium', 'high', 'xhigh'];
+  return ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+}
+
+function requiresOpenRouterResponses(modelId: string): boolean {
+  return ['gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-terra'].includes(modelId);
+}
+
 export function getAgentProviderOptions(
   runtime: AgentModelRuntime,
   options?: { compactAtTokens?: number },
 ): Record<string, any> {
   if (runtime.spec.provider === 'azure-openai') {
-    const allowedEfforts = new Set<AgentReasoningEffort>([
-      ...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
-      'low', 'medium', 'high', 'xhigh',
-    ]);
+    const allowedEfforts = new Set(getSupportedAgentReasoningEfforts(runtime.spec.id));
     const configuredEffort = process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT
       ?.trim()
       .toLowerCase() as AgentReasoningEffort | undefined;
@@ -200,10 +220,7 @@ export function getAgentProviderOptions(
   }
 
   if (runtime.spec.provider === 'openai') {
-    const allowedEfforts = new Set<AgentReasoningEffort>([
-      ...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
-      'low', 'medium', 'high', 'xhigh',
-    ]);
+    const allowedEfforts = new Set(getSupportedAgentReasoningEfforts(runtime.spec.id));
     const configuredEffort = (process.env.OPENAI_AGENT_REASONING_EFFORT || process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT)
       ?.trim()
       .toLowerCase() as AgentReasoningEffort | undefined;
@@ -233,10 +250,7 @@ export function getAgentProviderOptions(
   }
 
   if (runtime.spec.provider === 'codex-subscription') {
-    const allowedEfforts = new Set<AgentReasoningEffort>([
-      ...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
-      'low', 'medium', 'high', 'xhigh',
-    ]);
+    const allowedEfforts = new Set(getSupportedAgentReasoningEfforts(runtime.spec.id));
     const configuredEffort = process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT
       ?.trim()
       .toLowerCase() as AgentReasoningEffort | undefined;
@@ -287,12 +301,15 @@ export function getAgentProviderOptions(
   // Keep OpenRouter reasoning independent from Azure so one provider's tuning
   // cannot silently add several minutes of latency to another provider.
   const configuredOpenRouterEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT?.trim().toLowerCase();
-  const allowedOpenRouterEfforts = new Set([...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
-      'low', 'medium', 'high', 'xhigh', 'max']);
+  const allowedOpenRouterEfforts = new Set<string>([...getSupportedAgentReasoningEfforts(runtime.spec.id), 'max']);
   const openRouterEffort = configuredOpenRouterEffort && allowedOpenRouterEfforts.has(configuredOpenRouterEffort)
     ? configuredOpenRouterEffort
     : runtime.spec.defaultReasoningEffort
       ?? (runtime.spec.id === 'grok-4.6' ? 'medium' : undefined);
+
+  if (requiresOpenRouterResponses(runtime.spec.id)) {
+    return { openrouter: { forceReasoning: true, parallelToolCalls: false, store: false, reasoningEffort: openRouterEffort } };
+  }
 
   return {
     openrouter: {
