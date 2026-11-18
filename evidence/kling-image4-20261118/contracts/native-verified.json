@@ -1,0 +1,83 @@
+{
+  "checkedAt": "2026-11-18T00:50:40.317151+00:00",
+  "method": "Chrome visible UI via cua_repl",
+  "pricingUrl": "https://kling.ai/dev/pricing?scrollTo=image",
+  "docsUrl": "https://kling.ai/document-api/api/image/4-0/image-generation",
+  "authUrl": "https://kling.ai/document-api/api/get-started/authentication",
+  "outputUnits": {
+    "2K": 16,
+    "4K": 24,
+    "8K": 40
+  },
+  "inputUnitsPerImageOrElement": 0.8,
+  "outputUsdDisplayed": {
+    "2K": 0.063,
+    "4K": 0.094,
+    "8K": 0.157
+  },
+  "inputUsdDisplayed": 0.003,
+  "webpageLong": {
+    "1K": {
+      "units": 140,
+      "usd": 0.549
+    },
+    "2K": {
+      "units": 152,
+      "usd": 0.596
+    }
+  },
+  "ecommerceLong": {
+    "short": {
+      "1K": [
+        60,
+        0.235
+      ],
+      "2K": [
+        72,
+        0.282
+      ]
+    },
+    "medium": {
+      "1K": [
+        120,
+        0.47
+      ],
+      "2K": [
+        140,
+        0.549
+      ]
+    },
+    "long": {
+      "1K": [
+        200,
+        0.784
+      ],
+      "2K": [
+        220,
+        0.862
+      ]
+    }
+  },
+  "discountPackages": [
+    {
+      "priceUsd": 300,
+      "units": 78216,
+      "discountUnitUsd": 0.00384
+    },
+    {
+      "priceUsd": 999,
+      "units": 262420,
+      "discountUnitUsd": 0.00381
+    },
+    {
+      "priceUsd": 4000,
+      "units": 1072866,
+      "discountUnitUsd": 0.00373
+    }
+  ],
+  "purchaseMade": false,
+  "nativeApi": "https://api-singapore.klingai.com/image-generation/kling-4.0",
+  "nativeQueries": "GET /tasks?task_ids=... or external_task_ids=...",
+  "nativeAuth": "New API Key required; AK/SK only legacy model_name API; verified current local/production env key names: no KLING_API_KEY, legacy pair only",
+  "nativeGenerationTested": false
+}

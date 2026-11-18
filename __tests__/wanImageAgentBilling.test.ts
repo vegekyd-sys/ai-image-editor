@@ -1,3 +1,4 @@
+import { estimateKlingImage4Credits } from '@/lib/models/kling-image4';
 import { estimateSeedream55Credits } from '@/lib/models/seedream55';
 import { estimateGptImageCredits } from '@/lib/models/gpt-image-quote';
 // @vitest-environment node
@@ -31,9 +32,10 @@ function setup(provider = 'azure') {
   const getToolPrice = vi.fn().mockResolvedValue({ credits: 6, isFree: false });
   const getTokenRate = vi.fn().mockResolvedValue({ model_id: 'gpt-image-2.6-flare', markup: 2, is_active: true });
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
-  const ctx = { preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined, isNsfw: false };
+  const ctx = { supabase: {} as unknown, preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined, isNsfw: false };
   const context = vm.createContext({
-    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, resolveModelChain, getTokenRate, estimateGptImageCredits, estimateSeedream55Credits,
+    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, resolveModelChain, getTokenRate, estimateGptImageCredits, estimateSeedream55Credits, estimateKlingImage4Credits,
+    createKlingImage4Journal: () => ({ beforeKlingImage4Submit: async () => {}, onKlingImage4Receipt: async () => {} }),
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration,
     validateImageIndex: (images: string[], index: number) => images[index - 1] ? { idx: index - 1 } : { error: 'Invalid media index' }, getToolPrice, isBillingEnabled,
     resolveToolName,
@@ -337,5 +339,37 @@ describe('Seedream 5.5 Agent billing integration', () => {
     expect(deductByTokens).toHaveBeenCalledExactlyOnceWith('test-user','generate_image','seedream-5.5',0,0,undefined,undefined,undefined,0.0288);
     expect(deductCredits).not.toHaveBeenCalled();
     expect((ctx as any).generatedImageMetadata.get(0).imageGeneration).toMatchObject({model:'seedream-5.5',provider:'evolink',providerModel:'doubao-seedream-5.5'});
+  });
+});
+
+
+describe('Kling Image 4.0 Agent billing', () => {
+  it('requires the exact active rate before submission', async () => {
+    const { tool, ctx, getTokenRate, editImage } = setup();
+    ctx.preferredModel = 'kling-image-4.0';
+    getTokenRate.mockResolvedValue({ model_id: 'other-image', markup: 2, is_active: true });
+    expect(await tool.execute({ editPrompt: 'Draw.' }, { toolCallId: 'stable-call' })).toMatchObject({ success: false, error: 'pricing_unavailable' });
+    expect(editImage).not.toHaveBeenCalled();
+  });
+  it('debits actual fal cost once before publishing the image', async () => {
+    const { tool, ctx, getTokenRate, editImage, deductByTokens, deductCredits, requireCredits } = setup();
+    ctx.preferredModel = 'kling-image-4.0';
+    getTokenRate.mockResolvedValue({ model_id: 'kling-image-4.0', markup: 2, is_active: true });
+    editImage.mockResolvedValue({ success: true, image: 'data:image/png;base64,YQ==', taskId: 'kling-task', usedModel: 'kling-image-4.0', provider: 'fal', usage: { modelId: 'kling-image-4.0', inputTokens: 0, outputTokens: 0, providerCostUsd: .0940023 } });
+    const result = await tool.execute({ editPrompt: 'Draw.', imageResolution: '4K' }, { toolCallId: 'stable-call' });
+    expect(requireCredits).toHaveBeenCalledWith('test-user', 19);
+    expect(deductByTokens).toHaveBeenCalledExactlyOnceWith('test-user', 'generate_image', 'kling-image-4.0', 0, 0, undefined, undefined, undefined, .0940023);
+    expect(deductCredits).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ success: true, usedModel: 'kling-image-4.0', providerModel: 'kling/v4/text-to-image' });
+    expect(ctx.generatedImages).toHaveLength(1);
+  });
+  it('never debits failed or uncertain generation, so no speculative refund is issued', async () => {
+    const { tool, ctx, getTokenRate, editImage, deductByTokens, deductCredits } = setup();
+    ctx.preferredModel = 'kling-image-4.0';
+    getTokenRate.mockResolvedValue({ model_id: 'kling-image-4.0', markup: 2, is_active: true });
+    editImage.mockResolvedValue({ success: false, taskId: 'pending-task', message: 'Query the same task only.' });
+    expect(await tool.execute({ editPrompt: 'Draw.' }, { toolCallId: 'stable-call' })).toMatchObject({ success: false, terminal: true, taskId: 'pending-task' });
+    expect(deductByTokens).not.toHaveBeenCalled(); expect(deductCredits).not.toHaveBeenCalled();
+    expect(ctx.generatedImages).toHaveLength(0);
   });
 });

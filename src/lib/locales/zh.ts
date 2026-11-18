@@ -1,4 +1,7 @@
 const zh = {
+  "changelog.klingImage4.title": "Kling Image 4.0",
+  "changelog.klingImage4.item1": "在图片模型选择器选用 Kling Image 4.0，生成原生 2K、4K 或 8K PNG 图片。",
+  "changelog.klingImage4.item2": "可以输入文字直接生成，也可以用最多 10 张图片作为编辑参考。",
   "changelog.seedance25Native4k.title": "Seedance 2.5 原生 4K",
   "changelog.seedance25Native4k.item1": "在视频模型中选择 Seedance 2.5 Native 和 4K，即可生成带同步音频的原生 4K 视频。",
   "changelog.seedance25Native4k.item2": "原生 4K 费用较高，生成前会显示预计总费用；普通请求继续使用原有模型。",
@@ -841,6 +844,8 @@ const zh = {
   'model.qwen.desc': '人脸保真最佳，可处理 NSFW 内容。',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '独立的 1–3 图编辑模型，变化大胆并保留高分辨率。',
+  'model.klingImage4.name': 'Kling Image 4.0',
+  'model.klingImage4.desc': '2K–8K 图片与参考编辑，最多 10 张输入图',
   'model.seedream55.name': 'Seedream 5.5',
   'model.seedream55.desc': '原生透明 PNG、局部编辑，最多 10 张输入图',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',

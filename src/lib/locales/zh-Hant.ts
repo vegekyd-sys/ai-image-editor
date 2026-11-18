@@ -4,6 +4,9 @@ import type { TranslationDictionary } from './index';
 const zhHant = {
 
   ...zh,
+  "changelog.klingImage4.title": "Kling Image 4.0",
+  "changelog.klingImage4.item1": "在圖片模型選擇器選用 Kling Image 4.0，生成原生 2K、4K 或 8K PNG 圖片。",
+  "changelog.klingImage4.item2": "可輸入文字直接生成，也可用最多 10 張圖片作為編輯參考。",
   "changelog.seedance25Native4k.title": "Seedance 2.5 原生 4K",
   "changelog.seedance25Native4k.item1": "在影片模型中選擇 Seedance 2.5 Native 與 4K，即可生成帶同步音訊的原生 4K 影片。",
   "changelog.seedance25Native4k.item2": "原生 4K 費用較高，生成前會顯示預計總費用；一般請求繼續使用原有模型。",
@@ -1064,6 +1067,8 @@ const zhHant = {
   'model.qwen.desc': '人臉保真效果最佳，可處理 NSFW 內容。',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '獨立的 1–3 圖編輯模型，變化大膽並保留高解析度。',
+  'model.klingImage4.name': 'Kling Image 4.0',
+  'model.klingImage4.desc': '2K–8K 圖片與參考編輯，最多 10 張輸入圖',
   'model.seedream55.name': 'Seedream 5.5',
   'model.seedream55.desc': '原生透明 PNG、局部編輯，最多 10 張輸入圖',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',

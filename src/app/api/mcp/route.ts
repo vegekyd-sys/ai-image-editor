@@ -1,3 +1,4 @@
+import { estimateKlingImage4Credits } from '@/lib/models/kling-image4';
 import { estimateSeedream55Credits } from '@/lib/models/seedream55';
 import { estimateGptImageCredits } from '@/lib/models/gpt-image-quote';
 import { isFalGptImage } from '@/lib/models/types';
@@ -73,6 +74,13 @@ async function handleMcp(req: Request): Promise<Response> {
     returnImageContent: true,
     userId: auth.userId,
     imageSignal: req.signal,
+    publishKlingImage4Result: auth.type === 'user' ? async (image, taskId) => {
+      const { uploadImage } = await import('@/lib/supabase/storage');
+      const { getSupabaseAdmin } = await import('@/lib/supabase/service');
+      const url = await uploadImage(getSupabaseAdmin(), auth.userId!, 'mcp-kling-image4', `${taskId}.png`, image);
+      if (!url) throw new Error('Kling Image 4.0 original could not be saved; retain the provider task and do not regenerate. No image credits were deducted.');
+      return url;
+    } : undefined,
     onSeedream55Receipt: auth.type === 'user' ? async receipt => {
       const { writeFile } = await import('@/lib/workspace');
       const { getSupabaseAdmin } = await import('@/lib/supabase/service');
@@ -84,6 +92,12 @@ async function handleMcp(req: Request): Promise<Response> {
     // Pre-check: ensure user has enough credits
     onToolStart: auth.type === 'user' ? async (toolName, model, meta) => {
       if (!(await isBillingEnabled())) return { allowed: true };
+      if (toolName === 'makaron_edit_image' && model === 'kling-image-4.0') {
+        const rate = await getTokenRate(model);
+        if (!rate || rate.model_id !== model || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Kling Image 4.0 pricing is not configured.' };
+        const check = await requireCredits(auth.userId!, estimateKlingImage4Credits(meta ?? {}, rate.markup));
+        return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
+      }
       if (toolName === 'makaron_edit_image' && model === 'seedream-5.5') {
         const rate = await getTokenRate(model);
         if (!rate || rate.model_id !== model || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'Seedream 5.5 pricing is not configured.' };

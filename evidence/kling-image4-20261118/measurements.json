@@ -1,0 +1,249 @@
+[
+  {
+    "file": "element-reference/output-0.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 7012964,
+    "sha256": "08654911638bef940e062ff69950df53f1aedaa97d7116a9368d78e0d72ab4e0",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "long-shop-long-1K/output-0.png",
+    "width": 1024,
+    "height": 19267,
+    "bytes": 11500513,
+    "sha256": "eb6151e378ffa1018388bc7cdbae7e7babcbaf817fe2cd54c686e0f3ebe8b2de",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "long-shop-long-2K/output-0.png",
+    "width": 2048,
+    "height": 53829,
+    "bytes": 82025308,
+    "sha256": "1fc6a922a960c61c3e1b6c83a88ee63a7c61e190f2564227e2b35aa06f44886c",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "long-shop-medium-1K/output-0.png",
+    "width": 1024,
+    "height": 11386,
+    "bytes": 11434924,
+    "sha256": "d7769835a75a3be9fa4bad5aeec1b43f95d36c64568793114b14b44a0a704967",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "long-shop-medium-2K/output-0.png",
+    "width": 2048,
+    "height": 24112,
+    "bytes": 30696984,
+    "sha256": "c895c27993a2428f6d8b6b26cf9f5f3f26fb6ac362b52b0cbcfba5ade91922e8",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "long-shop-short-1K/output-0.png",
+    "width": 1024,
+    "height": 5592,
+    "bytes": 3467249,
+    "sha256": "a760e3d076e2859b991b7c6d386ce674f788bf4200ae1b8e5818c702ed430e59",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "long-shop-short-2K/output-0.png",
+    "width": 2048,
+    "height": 20289,
+    "bytes": 23390425,
+    "sha256": "948ac3c2dc4a166252b1db66d23ec9e6f44a9e26880a946a855a1c9d8e07da4b",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "long-web-1K/output-0.png",
+    "width": 1024,
+    "height": 4257,
+    "bytes": 3570646,
+    "sha256": "38f6216fc175016a55e99b5abb1073a0fddf5cfd8d9b08eafdafc28e17cd2938",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "long-web-2K/output-0.png",
+    "width": 2048,
+    "height": 9025,
+    "bytes": 5463073,
+    "sha256": "9907daf12e54c8db306382fc970147501750a687d3da12596d71ccacced94339",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "mascot-full-scene/output-0.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 5670338,
+    "sha256": "fec6c71f333bda3e1a0f8d9e4006f8a9901370dbd330512c964449749a303935",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "mascot-local-hat-edit/output-0.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 7415896,
+    "sha256": "c760f0d7b455d0617ffd9e257ca8a9e077ccc345ff0661297a106e784e194376",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "mascot-native-alpha/output-0.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 4957700,
+    "sha256": "c259060ef010e9d92ba4f0d1fc46b578e92743122bc87731bec44200e5fb31d5",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "poster-2K/output-0.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 4773918,
+    "sha256": "066ff2d5ee78caaeb43cb788fb46d405c6d8c778072fddcb997458a8ab791b4a",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "poster-4K/output-0.png",
+    "width": 4096,
+    "height": 4096,
+    "bytes": 19398573,
+    "sha256": "dd87efeececec2ef1ac42033b940546a0b8003615ee1b9f0a23d381d2e2b0f3a",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "poster-8K/output-0.png",
+    "width": 8192,
+    "height": 8192,
+    "bytes": 69757706,
+    "sha256": "cbc12168236314e926ae23baaf5aed79d1eace71ce5fc02481ab9588f8a54472",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "poster-gpt.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 6650202,
+    "sha256": "859f886044fdb3ef0e3a445cd1baa416579c8f62574b259f8bf150dc1740f002",
+    "alpha": null
+  },
+  {
+    "file": "poster-kling-cli-8K.png",
+    "width": 8192,
+    "height": 8192,
+    "bytes": 67028220,
+    "sha256": "25488b5ddd1c7fe7ce7bae37f4c851a7c2e8b4c5131e31e87e2125e352d62f92",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "poster-kling-product.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 5035031,
+    "sha256": "5d733adb42d95add9642e08218ba9165c08ccaaf9f3b69d2af00fba1e67a0cd2",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "poster-seedream.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 5476609,
+    "sha256": "a003c5ac784c6b749bc50162b42c65c649085474e444bd6b81867fb456ce60b9",
+    "alpha": null
+  },
+  {
+    "file": "series-two/output-0.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 5098611,
+    "sha256": "54c9a278ca12998d6c82a33fd7ca3a7ef22987165a84ac95219dca0a3acc2eac",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "series-two/output-1.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 7462953,
+    "sha256": "3179ed083a560810a3adee0d074376aafb9a59d43d866d0b198827da8b448f17",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "two-independent/output-0.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 7204132,
+    "sha256": "b63a37a48459aef5dd6a7bc9a801cf64254bb0ff8f373c9b48e958c1e0c2ac23",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  },
+  {
+    "file": "two-independent/output-1.png",
+    "width": 2048,
+    "height": 2048,
+    "bytes": 6081142,
+    "sha256": "e38b65d20b6aef1851a89619f5097782e3ab573a0df590fe569e742c3aef5669",
+    "alpha": {
+      "min": 255,
+      "max": 255
+    }
+  }
+]

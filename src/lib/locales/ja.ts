@@ -1,6 +1,9 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  "changelog.klingImage4.title": "Kling Image 4.0",
+  "changelog.klingImage4.item1": "画像モデル選択で Kling Image 4.0 を選ぶと、ネイティブの 2K、4K、8K PNG 画像を生成できます。",
+  "changelog.klingImage4.item2": "テキストから直接生成でき、編集には最大10枚の参照画像を使えます。",
   "changelog.seedance25Native4k.title": "Seedance 2.5 のネイティブ 4K",
   "changelog.seedance25Native4k.item1": "動画モデルで Seedance 2.5 Native と 4K を選ぶと、同期音声付きのネイティブ 4K 動画を生成できます。",
   "changelog.seedance25Native4k.item2": "ネイティブ 4K は高額なため、生成前に合計見積もりを表示します。通常のリクエストは従来のモデルを使用します。",
@@ -1069,6 +1072,8 @@ const ja = {
   'model.qwen.desc': '顔の再現性に優れ、NSFWコンテンツにも対応します。',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '1〜3枚の画像編集に対応する独立モデル。大胆な変化と高解像度出力が特長です。',
+  'model.klingImage4.name': 'Kling Image 4.0',
+  'model.klingImage4.desc': '2K〜8K の画像生成・参照編集、入力は最大 10 枚',
   'model.seedream55.name': 'Seedream 5.5',
   'model.seedream55.desc': '透過 PNG・部分編集、入力画像は最大 10 枚',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',

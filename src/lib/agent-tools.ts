@@ -1,3 +1,5 @@
+import { estimateKlingImage4Credits } from './models/kling-image4';
+import { createKlingImage4Journal } from './models/kling-image4-journal';
 import { estimateSeedream55Credits } from './models/seedream55';
 import { estimateGptImageCredits } from './models/gpt-image-quote';
 import { validatePrimaryVideoFraming } from './composition-video-framing';
@@ -1475,7 +1477,7 @@ function createGenerateImageTool(
       frameCount: z.number().int().min(2).max(16).optional().describe('GIF frames 2–16, default 9. Frames share one native sheet: square frames are 960px up to 9 frames, 816px for 10–12, 720px for 13–16. Plan holds by repeating poses; see skills/gif-maker/SKILL.md.'),
       frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).optional().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
       gifFrameSize: z.enum(['sticker', 'full']).optional().describe('GIF frame canvas. sticker = ~512px frames, about half the cost and faster: use for chat stickers, 表情包, emoji/reaction memes. full (default) = largest native frames for GIFs viewed large.'),
-      imageResolution: z.string().optional().describe('Output resolution preference, 1K/2K/4K, or Seedream 5.5 1K/1.5K/2K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Use larger tiers only when requested. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
+      imageResolution: z.string().optional().describe('Output resolution preference; Kling Image 4.0 uses exact 2K/4K/8K (default 2K), 1K/2K/4K for other models, or Seedream 5.5 1K/1.5K/2K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Use larger tiers only when requested. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background preference. Set "transparent" for transparent/no background, background removal, 抠图/抠像/去背景 or reusable alpha assets. Also pass media_index for source-image cutout. Conflicts are resolved to deliver an image; see the capability table.'),
         midjourney: z.object({
@@ -1554,6 +1556,11 @@ function createGenerateImageTool(
         const imageInputCount = (imagePlan.request.image ? 1 : 0) + (imagePlan.request.references?.length ?? 0);
         if (ctx.userId && await isBillingEnabled()) {
           let requiredCredits = 0;
+          if (billingModel === 'kling-image-4.0') {
+            const rate = await getTokenRate(billingModel);
+            if (!rate || rate.model_id !== billingModel || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Kling Image 4.0 pricing is not configured.', error: 'pricing_unavailable' };
+            requiredCredits = estimateKlingImage4Credits({ ...imagePlan.request, imageInputCount }, rate.markup);
+          }
           if (billingModel === 'seedream-5.5') {
             const rate = await getTokenRate(billingModel);
             if (!rate || rate.model_id !== billingModel || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Seedream 5.5 pricing is not configured.', error: 'pricing_unavailable' };
@@ -1576,7 +1583,7 @@ function createGenerateImageTool(
             if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Selected GPT Image pricing is not configured.', error: 'pricing_unavailable' };
             requiredCredits = estimateGptImageCredits({ ...imagePlan.request, imageInputCount }, rate.markup);
           }
-          if (billingModel && billingModel !== 'seedream-5.5' && billingModel !== 'gemini-2.1' && billingModel !== 'mj-v8.2' && !isFalGptImage(billingModel)) {
+          if (billingModel && billingModel !== 'kling-image-4.0' && billingModel !== 'seedream-5.5' && billingModel !== 'gemini-2.1' && billingModel !== 'mj-v8.2' && !isFalGptImage(billingModel)) {
             const toolName = resolveToolName('edit_image', billingModel, imageInputCount);
             const price = await getToolPrice(toolName);
             if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {
@@ -1608,9 +1615,12 @@ function createGenerateImageTool(
               const saved = await writeFile(receiptPath, JSON.stringify({ ...receipt, createdAt: new Date().toISOString(), resolution: imagePlan.request.imageResolution ?? '1K', inputCount: imageInputCount }), ctx.supabase!, ctx.userId!, 'application/json');
               if (!saved.success) throw new Error('Receipt persistence failed');
             } : undefined;
+        if (billingModel === 'kling-image-4.0' && (!ctx.supabase || !ctx.userId || !executionOptions?.toolCallId)) return { success: false, terminal: true, message: 'Kling Image 4.0 needs an authenticated durable request before submission.' };
+        const klingJournal = billingModel === 'kling-image-4.0'
+          ? createKlingImage4Journal(ctx.supabase!, ctx.userId!, `${ctx.projectId}:${executionOptions!.toolCallId}`) : undefined;
         const imageStartedAt = Date.now();
         const skillResult = await editImage(
-          { editPrompt, onSeedream55Receipt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, preferredModel: resolvedModel, isNsfw: ctx.isNsfw,
+          { editPrompt, ...klingJournal, onSeedream55Receipt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, preferredModel: resolvedModel, isNsfw: ctx.isNsfw,
             benignCharacterContent, signal: executionOptions?.abortSignal,
             beforeImageRecovery: request => authorizeImageRecovery(ctx.userId, request),
           },
@@ -1642,6 +1652,7 @@ function createGenerateImageTool(
             ja: '今回は画像を生成できませんでした。説明を調整して、もう一度お試しください。',
           },
         };
+        if (billingModel === 'kling-image-4.0' && !skillResult.success) return { success: false, terminal: true, taskId: skillResult.taskId, message: skillResult.message };
         // Bill for image generation (separate from Agent LLM tokens)
         if (skillResult.usage) {
           const { deductByTokens } = await import('./billing/credits');
@@ -1677,7 +1688,8 @@ function createGenerateImageTool(
           model: skillResult.usedModel || billingModel,
           provider: skillResult.provider,
           ...(billingModel === 'seedream-5.5' ? { providerModel: 'doubao-seedream-5.5' } : {}),
-          imageResolution: imagePlan.request.imageResolution,
+          ...(billingModel === 'kling-image-4.0' ? { providerModel: `kling/v4/${imageInputCount ? 'image-to-image' : 'text-to-image'}` } : {}),
+          imageResolution: imagePlan.request.imageResolution ?? (billingModel === 'kling-image-4.0' ? '2K' : undefined),
           aspectRatio: imagePlan.request.aspectRatio,
           background: imagePlan.request.background,
           // Recovery uses Nano native tuning, not the refused GPT tuning.
@@ -1734,6 +1746,7 @@ function createGenerateImageTool(
           provider: skillResult.provider,
           usedModel: skillResult.usedModel,
           ...(skillResult.usedModel === 'seedream-5.5' ? { providerModel: 'doubao-seedream-5.5' } : {}),
+          ...(skillResult.usedModel === 'kling-image-4.0' ? { providerModel: `kling/v4/${imageInputCount ? 'image-to-image' : 'text-to-image'}` } : {}),
           contentBlocked: skillResult.contentBlocked,
         };
       },

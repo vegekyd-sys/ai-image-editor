@@ -5,6 +5,7 @@ import { geminiLiteBackend } from './gemini-lite';
 import { qwenSpicyBackend } from './qwen-spicy';
 import { createImage26Backend } from './openai-image26';
 import { midjourneyBackend } from './midjourney';
+import { klingImage4Backend } from './kling-image4';
 import { seedream55Backend } from './seedream55';
 import { wanImageBackend } from './wan-image';
 
@@ -19,6 +20,7 @@ const backends: Map<ModelId, ModelBackend> = new Map([
   ['wan2.7-image', wanImageBackend],
   ['mj-v8.2', midjourneyBackend],
   ['seedream-5.5', seedream55Backend],
+  ['kling-image-4.0', klingImage4Backend],
 ]);
 
 export function getBackend(id: ModelId): ModelBackend | undefined {

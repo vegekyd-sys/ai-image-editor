@@ -2020,10 +2020,10 @@ function validateVideoFileForAnalysis(videoPath) {
   return { ok: true, mime };
 }
 
-function saveMcpImage(result, outputPath) {
+async function saveMcpImage(result, outputPath) {
   const content = result?.content || [];
   const texts = content.filter(c => c.type === 'text');
-  const images = content.filter(c => c.type === 'image');
+  const images = content.filter(c => c.type === 'image' || (c.type === 'resource_link' && c.mimeType?.startsWith('image/')));
   for (const text of texts) process.stderr.write(`${text.text}\n`);
   if (result?.isError) { process.exitCode = 1; return null; }
   const saved = [];
@@ -2037,7 +2037,15 @@ function saveMcpImage(result, outputPath) {
     const suffix = images.length > 1 ? `-${index + 1}` : '';
     const out = `${stem}${suffix}.${compatible ? requestedExtension : extension}`;
     if (outputPath && !compatible) process.stderr.write(`Output is ${image.mimeType}; saving as ${out} so bytes and filename agree.\n`);
-    fs.writeFileSync(out, Buffer.from(image.data, 'base64'));
+    if (image.type === 'resource_link') {
+      const url = new URL(image.uri);
+      if (url.protocol !== 'https:' || url.username || url.password) throw new Error('Generated originals require a public HTTPS URL.');
+      const response = await fetch(url, { signal: AbortSignal.timeout(180_000), redirect: 'error' });
+      if (!response.ok) throw new Error(`Original download failed (${response.status}). Keep the image request ID; do not regenerate.`);
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length > 200 * 1024 * 1024) throw new Error('Generated original exceeds 200MiB.');
+      fs.writeFileSync(out, bytes);
+    } else fs.writeFileSync(out, Buffer.from(image.data, 'base64'));
     console.log(out);
     saved.push(out);
   }
@@ -2083,9 +2091,10 @@ Usage:
 Options:
   --image <file|url>        Base image to edit. Omit for text-to-image.
   --ref <file|url>          Additional reference image. Repeatable; model-specific limit (Nano Banana 2.1: 14 total inputs).
-  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.6-flare, gpt-image-2.6-sunburst, wan2.7-image, mj-v8.2, or seedream-5.5. Legacy qwen maps to qwen-spicy.
+  --image-request-id <uuid> Stable Kling Image 4.0 generation ID; reuse to inspect a repeated attempt.
+  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.6-flare, gpt-image-2.6-sunburst, wan2.7-image, mj-v8.2, seedream-5.5, or kling-image-4.0. Legacy qwen maps to qwen-spicy.
   --skill <id>              enhance, creative, wild, or captions.
-  --image-resolution <id>  1K, 2K, or 4K; Seedream 5.5 supports 1K, 1.5K and 2K. Auto remains Flare-first.
+  --image-resolution <id>  1K, 2K, or 4K; Kling Image 4.0 supports 2K/4K/8K; Seedream 5.5 supports 1K, 1.5K and 2K. Auto remains Flare-first.
   --nsfw                  Route NSFW directly to Qwen Spicy.
   --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
   --background <mode>       auto, opaque, or transparent.
@@ -3314,6 +3323,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       editSourceFile = args[++i];
       editArgs.image = imageToArg(editSourceFile);
     }
+    else if (args[i] === '--image-request-id' && args[i + 1]) editArgs.imageRequestId = args[++i];
     else if (args[i] === '--image-model' && args[i + 1]) editArgs.model = args[++i];
     else if (args[i] === '--model' && args[i + 1]) {
       warnLegacyModelFlag('--image-model');
@@ -3383,10 +3393,14 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     editArgs.midjourney = mjArgs;
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|wan2.7-image|mj-v8.2|seedream-5.5] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
-  if (editArgs.model === 'seedream-5.5') {
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|wan2.7-image|mj-v8.2|seedream-5.5|kling-image-4.0] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (editArgs.model === 'kling-image-4.0') {
+    editArgs.imageRequestId ||= randomUUID();
+    process.stderr.write(`Image request ID: ${editArgs.imageRequestId} (retain it; never repeat an uncertain paid submission with a new ID)\n`);
+  }
+  if (['seedream-5.5', 'kling-image-4.0'].includes(editArgs.model)) {
     const sources = [...(editSourceFile ? [editSourceFile] : []), ...editReferenceFiles];
-    if (sources.length > 10) { console.error('Seedream 5.5 accepts at most 10 inputs including the base.'); process.exit(1); }
+    if (sources.length > 10) { console.error('This model accepts at most 10 inputs including the base.'); process.exit(1); }
     const localFiles = sources.filter(source => !isHttpUrl(source));
     const uploaded = localFiles.length ? await uploadImageFilesViaSignedUrl(baseUrl, headers, undefined, localFiles) : [];
     const byPath = new Map(localFiles.map((source, index) => [source, uploaded[index]]));
@@ -3396,7 +3410,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
-  saveMcpImage(result, outputPath);
+  await saveMcpImage(result, outputPath);
 
 } else if (command === 'analyze') {
   const { headers, baseUrl } = getAuth();

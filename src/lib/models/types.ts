@@ -1,5 +1,5 @@
 /** Models offered to new Agent and MCP requests. */
-export const IMAGE_MODEL_IDS = ['gemini', 'gemini-2.1', 'gemini-lite', 'qwen-spicy', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'wan2.7-image', 'mj-v8.2', 'seedream-5.5'] as const;
+export const IMAGE_MODEL_IDS = ['gemini', 'gemini-2.1', 'gemini-lite', 'qwen-spicy', 'gpt-image-2.6-flare', 'gpt-image-2.6-sunburst', 'wan2.7-image', 'mj-v8.2', 'seedream-5.5', 'kling-image-4.0'] as const;
 /** Accept the old Qwen ID at API/tool boundaries; it is normalized before routing and billing. */
 export const IMAGE_MODEL_INPUT_IDS = [...IMAGE_MODEL_IDS, 'openai', 'qwen', 'gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'] as const;
 /** Keep old IDs at the input boundary so existing clients get a capability-aware migration. */
@@ -30,6 +30,9 @@ export interface GenerateImageRequest extends ImageGenerationOptions {
   midjourney?: Omit<import('../midjourney').MidjourneyRequest, 'prompt' | 'aspectRatio' | 'imageUrls'>;
   /** Persist accepted MJ receipt before polling; server-side only. */
   onMidjourneyReceipt?: (task: import('../midjourney').MidjourneyTask, request: import('../midjourney').MidjourneyRequest) => Promise<void>;
+  /** Server-only durable gate and receipt for one Kling Image 4.0 submission. */
+  beforeKlingImage4Submit?: (request: ReturnType<typeof import('./kling-image4').buildKlingImage4Request>) => Promise<void>;
+  onKlingImage4Receipt?: (receipt: import('./kling-image4').KlingImage4Receipt) => Promise<void>;
   /** Persist accepted EvoLink receipt before polling; server-side only. */
   onSeedream55Receipt?: (receipt: import('./seedream55').Seedream55Receipt) => Promise<void>;
   isNsfw?: boolean;         // project-level NSFW flag — skip Gemini entirely when true

@@ -1,4 +1,7 @@
 const en = {
+  "changelog.klingImage4.title": "Kling Image 4.0",
+  "changelog.klingImage4.item1": "Choose Kling Image 4.0 for native 2K, 4K, or 8K PNGs.",
+  "changelog.klingImage4.item2": "Create from a prompt or use up to 10 images to guide an edit.",
   "changelog.seedance25Native4k.title": "Seedance 2.5 native 4K",
   "changelog.seedance25Native4k.item1": "Choose Seedance 2.5 Native and 4K in the video model selector to generate native 4K video with synchronized audio.",
   "changelog.seedance25Native4k.item2": "Native 4K costs more. Makaron shows the estimated total before generating; ordinary requests keep their usual model.",
@@ -842,6 +845,8 @@ const en = {
   'model.qwen.desc': 'Best face preservation. Handles NSFW content.',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': 'Independent 1–3 image editor with bold, high-resolution results.',
+  'model.klingImage4.name': 'Kling Image 4.0',
+  'model.klingImage4.desc': '2K–8K generation and reference editing, up to 10 inputs',
   'model.seedream55.name': 'Seedream 5.5',
   'model.seedream55.desc': 'Native transparent PNG, local editing, up to 10 inputs',
   'model.image26Flare.name': 'GPT Image 2.6 Flare',

@@ -1,3 +1,4 @@
+import { createKlingImage4Journal } from '../lib/models/kling-image4-journal';
 import { formatImageCapabilitiesForAgent, getImageModelCapability, planImageGeneration } from '../lib/image-model-capabilities';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -72,6 +73,8 @@ function formatResult(image: string, message: string, prefix: string, saveToDisk
 }
 
 export interface McpServerOptions {
+  /** Store large original PNGs before billing; HTTP returns a link instead of base64. */
+  publishKlingImage4Result?: (image: string, taskId: string) => Promise<string>;
   /** HTTP user workspace receipt; saved before polling an accepted Seedream task. */
   onSeedream55Receipt?: import('../lib/models/types').GenerateImageRequest['onSeedream55Receipt'];
   /** HTTP clients receive original media bytes; stdio may save to disk. */
@@ -135,7 +138,7 @@ export function createMakaronMcpServer(options?: McpServerOptions) {
 ${formatImageCapabilitiesForAgent()}
 
 When skill is set, the caller reads the skill prompt and supplies its instructions in editPrompt.
-Input image can be a local file path (stdio), URL, or base64 data URL. Seedream 5.5 requires uploaded public HTTPS originals (the CLI uploads local files automatically). Omit image for text-to-image generation.
+Input image can be a local file path (stdio), URL, or base64 data URL. Kling Image 4.0 and Seedream 5.5 require uploaded public HTTPS originals (the CLI uploads local files automatically). Omit image for text-to-image generation.
 Generation timing varies; report actual completion. Unknown submissions are never repeated. An independently assessed benign-character request may use one compatible alternate after a terminal provider refusal; callers must not add retries.`,
     {
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
@@ -151,7 +154,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
       frameCount: z.number().int().min(2).max(16).nullish().describe('GIF frames 2–16, default 9. Square frames are 960px up to 9 frames, 816px for 10–12, 720px for 13–16.'),
       frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).nullish().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
       gifFrameSize: z.enum(['sticker', 'full']).nullish().describe('GIF frame canvas: sticker ~512px frames (about half cost, for chat stickers/memes), full largest frames (default).'),
-      imageResolution: z.string().nullish().describe('Output resolution preference, 1K/2K/4K, or Seedream 5.5 1K/1.5K/2K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
+      imageResolution: z.string().nullish().describe('Output resolution preference; Kling Image 4.0 uses exact 2K/4K/8K (default 2K), or Seedream 5.5 1K/1.5K/2K; other models commonly use 1K/2K/4K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
       midjourney: z.object({
         speed: z.enum(['fast', 'draft']).optional(), quality: z.enum(['standard', 'hd']).optional(),
         styleReferences: z.array(z.string()).max(20).optional(), styleWeight: z.number().int().min(0).max(1000).optional(),
@@ -159,7 +162,8 @@ Generation timing varies; report actual completion. Unknown submissions are neve
         seed: z.number().int().min(0).max(4294967295).optional(), raw: z.boolean().optional(),
       }).nullish().describe('Only for explicit mj-v8.2. Fast 4 / Draft 24 / HD 4 candidates. Style references require public HTTPS URLs. HD regenerates, not lossless upscaling. The natural-language brief is converted automatically.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
-      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background preference. Set transparent for cutout/alpha assets. Conflicts are resolved to deliver an image; see the capability table.'),
+      imageRequestId: z.string().uuid().optional().describe('Required for Kling Image 4.0: stable UUID per generation. Reuse on retry; the server never repeats an accepted or uncertain paid POST.'),
+      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background preference. Set transparent for cutout/alpha assets. Explicit Kling Image 4.0 rejects transparent backgrounds and unsupported resolutions without fallback; see the capability table.'),
     },
     async (params) => {
       try {
@@ -170,6 +174,9 @@ Generation timing varies; report actual completion. Unknown submissions are neve
           const check = await options.onToolStart('makaron_edit_image', plan.model, { imageInputCount, imageResolution: plan.request.imageResolution, imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, gifFrameSize: params.gifFrameSize ?? undefined, midjourneyQuality: params.midjourney?.quality });
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
+        if (plan.model === 'kling-image-4.0' && (!options?.userId || !params.imageRequestId || !options.publishKlingImage4Result)) return { isError: true, content: [{ type: 'text' as const, text: 'Kling Image 4.0 requires an authenticated hosted user and a stable imageRequestId UUID. Nothing was submitted.' }] };
+        const klingJournal = plan.model === 'kling-image-4.0'
+          ? createKlingImage4Journal((await import('../lib/supabase/service')).getSupabaseAdmin(), options!.userId!, params.imageRequestId!) : undefined;
         const t0 = Date.now();
         const image = params.image ? resolveImage(params.image) : undefined;
         const wrappedPrompt = getImageModelCapability(plan.model).promptMode !== 'edit' ? params.editPrompt : `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;
@@ -182,6 +189,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
         const result = await editImage(
           {
             editPrompt: wrappedPrompt,
+            ...klingJournal,
             midjourney: params.midjourney ?? undefined,
             skill: params.skill ?? undefined,
             preferredModel: params.model ?? undefined,
@@ -203,12 +211,18 @@ Generation timing varies; report actual completion. Unknown submissions are neve
         if (!result.success || !result.image) {
           return { isError: true, content: [{ type: 'text' as const, text: result.message }] };
         }
-        // Bill after success
+        const publishedKlingUrl = result.usedModel === 'kling-image-4.0'
+          ? await options!.publishKlingImage4Result!(result.image, result.taskId!) : undefined;
+        // Bill after successful original-byte persistence for Kling Image 4.0.
         await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage, { imageInputCount });
-        const receiptInfo = result.usedModel === 'seedream-5.5' && result.taskId ? ` Provider: evolink; provider model: doubao-seedream-5.5; task: ${result.taskId}.` : '';
+        const receiptInfo = result.usedModel === 'kling-image-4.0' && result.taskId ? ` Provider: fal; provider model: kling/v4/${imageInputCount ? 'image-to-image' : 'text-to-image'}; task: ${result.taskId}.` : result.usedModel === 'seedream-5.5' && result.taskId ? ` Provider: evolink; provider model: doubao-seedream-5.5; task: ${result.taskId}.` : '';
         const msg = (result.usedModel
           ? `${result.message} (model: ${result.usedModel})`
           : result.message) + receiptInfo;
+        if (publishedKlingUrl) return { content: [
+          { type: 'text' as const, text: msg },
+          { type: 'resource_link' as const, name: `kling-image4-${result.taskId}.png`, uri: publishedKlingUrl, mimeType: 'image/png' },
+        ] };
         const images = result.images ?? [result.image];
         if (images.length === 1) return formatResult(result.image, msg, 'edit', !options?.returnImageContent);
         // Preserve every candidate; one onToolComplete call bills the whole batch once.
