@@ -176,7 +176,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
         }
         if (plan.model === 'kling-image-4.0' && (!options?.userId || !params.imageRequestId || !options.publishKlingImage4Result)) return { isError: true, content: [{ type: 'text' as const, text: 'Kling Image 4.0 requires an authenticated hosted user and a stable imageRequestId UUID. Nothing was submitted.' }] };
         const klingJournal = plan.model === 'kling-image-4.0'
-          ? createKlingImage4Journal((await import('../lib/supabase/service')).getSupabaseAdmin(), options!.userId!, params.imageRequestId!) : undefined;
+          ? createKlingImage4Journal(options!.userId!, params.imageRequestId!) : undefined;
         const t0 = Date.now();
         const image = params.image ? resolveImage(params.image) : undefined;
         const wrappedPrompt = getImageModelCapability(plan.model).promptMode !== 'edit' ? params.editPrompt : `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;

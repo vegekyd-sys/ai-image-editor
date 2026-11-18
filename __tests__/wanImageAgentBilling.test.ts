@@ -368,7 +368,7 @@ describe('Kling Image 4.0 Agent billing', () => {
     ctx.preferredModel = 'kling-image-4.0';
     getTokenRate.mockResolvedValue({ model_id: 'kling-image-4.0', markup: 2, is_active: true });
     editImage.mockResolvedValue({ success: false, taskId: 'pending-task', message: 'Query the same task only.' });
-    expect(await tool.execute({ editPrompt: 'Draw.' }, { toolCallId: 'stable-call' })).toMatchObject({ success: false, terminal: true, taskId: 'pending-task' });
+    expect(await tool.execute({ editPrompt: 'Draw.', benignCharacterContent: true }, { toolCallId: 'stable-call' })).toMatchObject({ success: false, terminal: true, taskId: 'pending-task', message: 'Query the same task only.' });
     expect(deductByTokens).not.toHaveBeenCalled(); expect(deductCredits).not.toHaveBeenCalled();
     expect(ctx.generatedImages).toHaveLength(0);
   });
