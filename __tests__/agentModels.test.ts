@@ -29,9 +29,6 @@ describe('agent model catalog', () => {
       'gpt-6-luna',
       'gpt-6-sol',
       'gpt-6.1-sol',
-      'gpt-6.2-sol',
-      'gpt-6.2-astra',
-      'gpt-6.1-terra',
       'gpt-5.6-terra',
       'gpt-5.6-sol',
       'gpt-5.6-luna',
@@ -163,6 +160,8 @@ describe('agent model catalog', () => {
     'passes %s through older API and subscription contracts',
     (id) => {
       expect(normalizeRequestedAgentModelPreference(id)).toBe(id);
+      expect(normalizeRequestedAgentModelPreference(`${id}-codex-subscription`)).toBe(`${id}-codex-subscription`);
+      expect(resolveAgentModelSpec('auto', `openai/${id}`).id).toBe(id);
       expect(resolveAgentModelSpec(id, undefined, 'azure-openai')).toMatchObject({
         id, provider: 'openrouter', providerModelId: `openai/${id}`, billingModelId: `openai/${id}`,
       });
@@ -205,9 +204,9 @@ describe('agent model catalog', () => {
         [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[0], 'gpt-6-luna'],
         [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[1], 'gpt-6-sol'],
         [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[2], 'gpt-6.1-sol'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[6], 'gpt-5.6-terra'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[7], 'gpt-5.6-sol'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[8], 'gpt-5.6-luna'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[3], 'gpt-5.6-terra'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[4], 'gpt-5.6-sol'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[5], 'gpt-5.6-luna'],
       ] as const) {
         expect(resolveAgentModelSpecForUser(
           preference,

@@ -3,9 +3,6 @@ export const AGENT_MODEL_IDS = [
   'gpt-6-luna',
   'gpt-6-sol',
   'gpt-6.1-sol',
-  'gpt-6.2-sol',
-  'gpt-6.2-astra',
-  'gpt-6.1-terra',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
@@ -14,20 +11,23 @@ export const AGENT_MODEL_IDS = [
   'deepseek-flash',
 ] as const;
 
-export type AgentModelId = (typeof AGENT_MODEL_IDS)[number];
+// The existing picker and CLI catalog are released separately. The server
+// also accepts these IDs so requests can select newer models directly.
+const API_ONLY_AGENT_MODEL_IDS = ['gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-terra'] as const;
+const ALL_AGENT_MODEL_IDS = [...AGENT_MODEL_IDS, ...API_ONLY_AGENT_MODEL_IDS] as const;
+export type AgentModelId = (typeof ALL_AGENT_MODEL_IDS)[number];
 export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'gpt-6-luna-codex-subscription' as const;
 export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = [
   CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
   'gpt-6-sol-codex-subscription',
   'gpt-6.1-sol-codex-subscription',
-  'gpt-6.2-sol-codex-subscription',
-  'gpt-6.2-astra-codex-subscription',
-  'gpt-6.1-terra-codex-subscription',
   'gpt-5.6-terra-codex-subscription',
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
 ] as const;
-export type CodexSubscriptionAgentModelPreference = (typeof CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES)[number];
+export type CodexSubscriptionAgentModelPreference =
+  | (typeof CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES)[number]
+  | `${(typeof API_ONLY_AGENT_MODEL_IDS)[number]}-codex-subscription`;
 export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.6-grok-subscription' as const;
 export type GrokSubscriptionAgentModelPreference = typeof GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE;
 export type AgentModelPreference = 'auto' | AgentModelId | CodexSubscriptionAgentModelPreference | GrokSubscriptionAgentModelPreference;
@@ -117,7 +117,10 @@ export const GPT56_PROVIDER_MODEL_IDS: Record<
 
 const GPT56_AGENT_MODEL_ID_SET = new Set<string>(GPT56_AGENT_MODEL_IDS);
 const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE_SET = new Set<string>(
-  CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES,
+  [
+    ...CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES,
+    ...API_ONLY_AGENT_MODEL_IDS.map(id => `${id}-codex-subscription`),
+  ],
 );
 
 function isGPT56AgentModelId(id: AgentModelId): id is GPT56AgentModelId {
@@ -405,7 +408,7 @@ export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
   },
 };
 
-const AGENT_MODEL_ID_SET = new Set<string>(AGENT_MODEL_IDS);
+const AGENT_MODEL_ID_SET = new Set<string>(ALL_AGENT_MODEL_IDS);
 
 export function isAgentModelId(value: unknown): value is AgentModelId {
   return typeof value === 'string' && AGENT_MODEL_ID_SET.has(value);
@@ -484,7 +487,7 @@ function matchConfiguredModel(value: string | undefined): AgentModelId | undefin
   const replacement = getRetiredAgentModelReplacement(normalized);
   if (replacement) return replacement;
 
-  return AGENT_MODEL_IDS.find((id) => {
+  return ALL_AGENT_MODEL_IDS.find((id) => {
     const spec = AGENT_MODEL_SPECS[id];
     return spec.providerModelId.toLowerCase() === normalized
       || spec.billingModelId.toLowerCase() === normalized
