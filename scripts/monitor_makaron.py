@@ -198,6 +198,13 @@ def check_health(config):
             status = result['status']
             if status not in {'healthy', 'unhealthy', 'unavailable'}:
                 raise ValueError('invalid_service_schema')
+            retired_azure = (name == 'azure_openai' and status == 'unavailable'
+                             and result.get('error') == 'Replaced by OpenRouter'
+                             and services.get('openrouter', {}).get('status') == 'healthy')
+            if retired_azure:
+                checks.append({'name': 'health_' + name, 'ok': True,
+                               'status': status, 'reason': 'retired_replaced_by_openrouter'})
+                continue
             checks.append({'name': 'health_' + name, 'ok': status == 'healthy',
                            **({'error': status} if status != 'healthy' else {})})
         return checks

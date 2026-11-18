@@ -1,4 +1,7 @@
 import json
+from io import BytesIO
+
+import pytest
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -191,3 +194,32 @@ def test_completion_rejects_links_to_conditions_outside_batch(tmp_path):
     args = SimpleNamespace(command='complete', batch=batch['id'], revision=1, result=result)
     assert bridge.receipt(state, args, True)['reason'] == 'invalid_condition_pull_requests'
     assert not batch['completed'] and state['active_batch'] == batch['id']
+
+
+@pytest.mark.parametrize('service,status,reason,replacement,expected_ok', [
+    ('azure_openai', 'unavailable', 'Replaced by OpenRouter', 'healthy', True),
+    ('azure_openai', 'unavailable', 'AZURE_OPENAI_API_KEY not set', 'healthy', False),
+    ('azure_openai', 'unhealthy', 'Replaced by OpenRouter', 'healthy', False),
+    ('azure_openai', 'unavailable', 'Replaced by OpenRouter', 'unhealthy', False),
+    ('azure_openai', 'unavailable', 'Replaced by OpenRouter', None, False),
+    ('supabase_db', 'unavailable', 'Replaced by OpenRouter', 'healthy', False),
+])
+def test_retired_azure_requires_explicit_retirement_and_healthy_replacement(
+        monkeypatch, service, status, reason, replacement, expected_ok):
+    services = {service: {'status': status, 'error': reason}}
+    if replacement:
+        services['openrouter'] = {'status': replacement}
+    payload = json.dumps({'status': 'healthy', 'services': services}).encode()
+    monkeypatch.setattr(monitor, 'urlopen', lambda *a, **kw: BytesIO(payload))
+    checks = monitor.check_health({'base_url': 'https://www.makaron.app'})
+    check = next(row for row in checks if row['name'] == 'health_' + service)
+    assert check['ok'] == expected_ok
+    batch = bridge.reconcile({}, checks, [], 100, 'thread')
+    if expected_ok:
+        assert check['status'] == 'unavailable'
+        assert check['reason'] == 'retired_replaced_by_openrouter'
+        assert batch is None
+    else:
+        assert 'health_' + service + ':' + status in batch['conditions']
+    if replacement == 'unhealthy':
+        assert 'health_openrouter:unhealthy' in batch['conditions']
