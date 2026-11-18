@@ -7,7 +7,9 @@ import { editImage } from '../lib/skills/edit-image';
 import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
-import { getDefaultVideoModelId, isKling4FamilyModel, resolveProductVideoModelId } from '../lib/video-model-capabilities';
+import { quoteVideo } from '../lib/billing/media-pricing';
+import { native4kQuoteResult, native4kNeedsDisclosure } from '../lib/billing/seedance25-native4k';
+import { isSeedance25Native4k, getDefaultVideoModelId, isKling4FamilyModel, resolveProductVideoModelId } from '../lib/video-model-capabilities';
 import { getVideoStatus } from '../lib/skills/get-video-status';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from '../lib/video-retake-contract';
 import { analyzeVideo } from '../lib/skills/analyze-video';
@@ -106,6 +108,21 @@ export interface McpServerOptions {
 }
 
 export function createMakaronMcpServer(options?: McpServerOptions) {
+  // Hosted calls own reservation/idempotency. Local stdio still must disclose
+  // the live configured total before a native 4K supplier POST.
+  const submitVideoWithQuote = async (input: CreateVideoInput, toolName: string): Promise<CreateVideoResult> => {
+    if (options?.submitVideo) return options.submitVideo(input, toolName);
+    if (!isSeedance25Native4k(input.videoModel, input.videoResolution)) return createVideo(input);
+    let disclosure: ReturnType<typeof native4kQuoteResult> | undefined;
+    const result = await createVideo({ ...input, onBeforeProviderSubmit: async usage => {
+      const quote = await quoteVideo(usage);
+      if (native4kNeedsDisclosure(quote, input.maxCredits)) {
+        disclosure = native4kQuoteResult(quote);
+        throw new Error(disclosure.message);
+      }
+    } });
+    return disclosure ?? result;
+  };
   const server = new McpServer({
     name: 'makaron',
     version: '1.0.0',
@@ -340,7 +357,7 @@ Models:
 - seedance — SeeDance 2.0 standard via Evolink, supports 480p/720p/1080p
 - seedance-2.5-eco — Seedance 2.5 480p then automatic ByteDance Fast enhancement to 720p, 1080p (default), 2K or 4K, one root task; lower cost than native HD.
 - seedance-2.5-flash — EvoLink 4–30s, 480p/720p (default720p), 10 images/5 videos/5 audios, reference generation or edit (source 4–30s). No extend, draft, MOV or web search. First/last-frame mode requires imageWorkflow=image-to-video with1–2 images.
-- seedance-2.5 — Seedance 2.5 via Evolink, 4-30s, multimodal references, native audio, edit and extend
+- seedance-2.5 — public default remains Eco; use seedance-2.5-native explicitly for native480p(default)/720p/1080p/4k EvoLink generation, edit and extend. Native4K is not enhancement; native1080p/4k MP4 uses10bit HEVC and requires compatible playback.
 - wan-3.0 — Wan 3.0 via MuleRouter, 2-30s, 480p/720p/1080p/2k/4k, native audio, up to 10 image + 5 video + 5 audio feature references; 2k/4k use FlashVSR automatically
 - wan-3.0-prime — Wan 3.0 Prime fast tier via MuleRouter with the same duration, resolutions, and reference limits; 2k/4k use Prime FlashVSR automatically
 - grok — one Makaron selector with split xAI routing: Grok Imagine Video 1.5 for text generation (up to 1080p) or feature/reference generation (1-7 images or preset voices, up to 720p, native audio), and Grok Imagine Video for one-video edit/extend (up to 720p)
@@ -358,6 +375,7 @@ Shot 2 (3s): Close-up, <<<media_2>>> ...
 Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
+      maxCredits: z.number().int().positive().optional().describe('Native 4K only: omit first for a no-charge total quote. Disclose the total Makaron credits before setting this ceiling. Only explicit native 4K or explicit Native + 4K selection qualifies, never ordinary/HD requests or automatic failure recovery.'),
       billingRequestId: z.string().uuid().optional().describe('Optional stable request UUID. Reuse when retrying the same billed submission to avoid duplicate charges/jobs.'),
       images: z.array(z.string().url()).max(30).default([]).describe('Optional public image URLs. Seedance 2.5 accepts up to 30; older routes may accept fewer.'),
       videoUrls: z.array(z.string().url()).max(10).optional().describe('Public reference video URLs. Sync Lipsync v3 requires exactly one; Seedance 2.5 accepts up to 10 with 30 seconds combined.'),
@@ -367,13 +385,13 @@ Style: Cinematic, warm golden light.`,
       duration: z.number().optional().describe('Duration in seconds. fal H3 Max accepts integer 5-15s; fal H3 Turbo accepts exactly 5/10/15s. Both default to 5s. Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s; Kling 4.0 accepts integer 3-30s; Kling 4.0 Flash accepts integer 3-20s.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok reference-to-video supports fixed provider ratios.'),
       videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-flash', 'seedance-2.5-eco', 'seedance-2.5-native', 'wan-3.0', 'wan-3.0-prime', 'kling-4', 'kling-4-flash', 'grok', 'google-omni', 'minimax-h3', 'minimax-h3-max', 'fal-h3-max', 'sync-lipsync-v3']).optional().describe('Video model. Default fal-h3-max supports image/video/audio reference-to-video at 768p. Wan exposes wan-3.0 and wan-3.0-prime; minimax-h3-max is the near-real-time T2V/single-image I2V route and does not accept reference video or audio.'),
-      videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Shared output-resolution control for every video model. fal H3 Turbo supports 480p/768p and defaults to native 768p; MiniMax H3 supports 768p/2k; other capabilities follow the selected model.'),
+      videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Shared output-resolution control for every video model. Seedance2.5-native supports480p/720p/1080p/4k without enhancement; native1080p/4k MP4 requires HEVC playback. fal H3 Turbo supports 480p/768p and defaults to native 768p; MiniMax H3 supports 768p/2k; other capabilities follow the selected model.'),
       operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require videoUrls. Grok and Omni extend forward only.'),
       imageWorkflow: z.enum(['reference-to-video', 'image-to-video']).optional().describe('Flash images default to feature references; explicitly select image-to-video for1–2 first/last frames. Edit follows source duration/canvas.'),
       extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction. Omit or use forward for Gemini Omni.'),
       generateAudio: z.boolean().optional().describe('Generate synchronized model-native audio. Supported providers default to true. Set false only when the user explicitly requests a silent video; otherwise describe the desired sound naturally in the script.'),
       contentFilter: z.boolean().optional().describe('Seedance 2.5-only output content filter. Omit it for every other model. Seedance 2.5 defaults to true; false enables Mature Mode and costs 10% more, so use it only after explicit user confirmation, including the recovery action.'),
-      outputFormat: z.enum(['mp4', 'mov']).optional().describe('MP4/H264 for playback or MOV for grading.'),
+      outputFormat: z.enum(['mp4', 'mov']).optional().describe('MP4 for playback (Seedance2.5 native1080p/4k is10bit HEVC; lower resolutions H264), or MOV for grading.'),
       webSearch: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web search grounding.'),
     },
     async (params) => {
@@ -383,9 +401,10 @@ Style: Cinematic, warm golden light.`,
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
-        const result = await (options?.submitVideo ?? createVideo)({
+        const result = await submitVideoWithQuote({
           script: params.script,
           billingRequestId: params.billingRequestId,
+          maxCredits: params.maxCredits,
           images: params.images,
           videoUrls: params.videoUrls,
           audioUrls: params.audioUrls,
@@ -422,6 +441,7 @@ Style: Cinematic, warm golden light.`,
             provider: result.provider,
           });
         }
+        if (result.costQuote) return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTask ID: ${result.taskId}${result.videoUrl ? `\n\nProvider Video URL: ${result.videoUrl}` : ''}`
           : result.retryable === false
@@ -455,12 +475,13 @@ Example: Edit a video to add cinematic color grading:
     {
       videoUrl: z.string().url().describe('Public source video URL. Kling 4.0: MP4/MOV, 3-30s, <=200MB, 720-2160px per side, 24-60fps (Flash: 3-20s); other limits depend on selected model.'),
       editPrompt: z.string().describe('Editing instructions describing what to change'),
+      maxCredits: z.number().int().positive().optional().describe('Native 4K only: omit first for a no-charge total quote. Disclose the total Makaron credits before setting this ceiling. Only explicit native 4K or explicit Native + 4K selection qualifies, never ordinary/HD requests or automatic failure recovery.'),
       billingRequestId: z.string().uuid().optional().describe('Optional stable request UUID; reuse only for an identical submission retry.'),
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
       duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling 4.0 supports integer 3-30s in one call (Flash 3-20s); Grok edit retains a source up to 8.7s and Grok extend adds 2-10s to a 2-15s source; Gemini Omni supports 3-15s video editing in Makaron. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
       videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'seedance-2.5-flash', 'seedance-2.5-eco', 'seedance-2.5-native', 'kling-4', 'kling-4-flash', 'grok', 'google-omni', 'minimax-h3', 'fal-h3-max']).optional().describe('Video model. Seedance 2.5, Grok, and Google Omni use dedicated typed edit routes; MiniMax H3 supports feature/reference video.'),
-      videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Grok edit retains the source shape up to 720p. Use auto to follow the selected model default; Gemini Omni 1.2 supports 360p/720p/1080p/4k, and MiniMax H3 supports 768p/2k.'),
+      videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Seedance2.5-native supports480p/720p/1080p/4k; explicit Native required for native4K. Grok edit retains the source shape up to 720p. Use auto to follow the selected model default; Gemini Omni 1.2 supports 360p/720p/1080p/4k, and MiniMax H3 supports 768p/2k.'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Provider-native source-sound toggle. Use only when the selected route explicitly supports it, Kling 4.0 / Flash edit always retains source audio; otherwise describe the desired sound naturally in editPrompt.'),
     },
@@ -473,9 +494,10 @@ Example: Edit a video to add cinematic color grading:
         const t0 = Date.now();
         const resolvedModel = resolveProductVideoModelId(params.videoModel ?? getDefaultVideoModelId());
         const resolvedReferType = params.referType ?? (resolvedModel === 'seedance' || resolvedModel === 'seedance-fast' || resolvedModel === 'seedance-mini' || resolvedModel === 'minimax-h3' || resolvedModel === 'fal-h3-max' ? 'feature' : 'base');
-        const result = await (options?.submitVideo ?? createVideo)({
+        const result = await submitVideoWithQuote({
           script: params.editPrompt,
           billingRequestId: params.billingRequestId,
+          maxCredits: params.maxCredits,
           images: params.images ?? [],
           duration: params.duration,
           aspectRatio: params.aspectRatio,
@@ -502,6 +524,7 @@ Example: Edit a video to add cinematic color grading:
             provider: result.provider,
           });
         }
+        if (result.costQuote) return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTask ID: ${result.taskId}${result.videoUrl ? `\n\nProvider Video URL: ${result.videoUrl}` : ''}`
           : result.message }] };

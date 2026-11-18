@@ -1,4 +1,9 @@
 const en = {
+  "changelog.seedance25Native4k.title": "Seedance 2.5 native 4K",
+  "changelog.seedance25Native4k.item1": "Choose Seedance 2.5 Native and 4K in the video model selector to generate native 4K video with synchronized audio.",
+  "changelog.seedance25Native4k.item2": "Native 4K costs more. Makaron shows the estimated total before generating; ordinary requests keep their usual model.",
+
+
   "design.matchingFont": "Matching the font in the background. You can type now; the text preview will update when it is ready.",
   "design.approximateFont": "An approximate font is being used for edited text.",
   "design.editTextPlaceholder": (label: string) => `Edit ${label}…`,
@@ -872,8 +877,8 @@ const en = {
   'model.seedance25Flash.desc': '4–30s · 480p/720p · References and video editing',
   'model.seedance25Flash.badge': 'Fast iteration',
   'model.seedance25.name': 'Seedance 2.5 Native',
-  'model.seedance25.desc': 'New SOTA model with up to 30 seconds, image, video, and audio references, plus edit and extend modes.',
-  'model.seedance25.badge': 'NEW SOTA · 30s',
+  'model.seedance25.desc': 'Native 480p–4K, up to 30s. 4K is expensive: explicit choice only, total cost shown before generation. Video inputs add billable seconds; HEVC playback required.',
+  'model.seedance25.badge': 'High cost · Native 4K',
   'model.wan30.name': 'Wan 3.0 Standard',
   'model.wan30.desc': '2–30 second native-audio generation with multimodal references; 2K and 4K automatically use FlashVSR.',
   'model.wan30.badge': '4K · 30s',

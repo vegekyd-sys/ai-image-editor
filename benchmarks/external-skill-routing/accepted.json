@@ -1,5 +1,5 @@
 {
-  "routingFingerprint": "9712fa847dd84a8ec19bfa21a3b3608015fcc002ff9691dfb3d55e6dbefcef2b",
+  "routingFingerprint": "1c131bbd5e0b8d95ddd3cf80ba354e909e19361bc426087d82a05b2f70b95608",
   "catalogRevision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
   "kind": "controlled-live-natural-language-routing",
   "model": "deepseek-flash",
@@ -29,28 +29,23 @@
           "name": "read_file",
           "path": "skills/long-video-anchor/SKILL.md",
           "executed": true
-        },
-        {
-          "name": "read_file",
-          "path": "skills/long-video-storyboard/SKILL.md",
-          "executed": true
         }
       ],
-      "text": "我先读取长视频导演、人物锚点与分镜这三个 Skill，确认分段生产流程后再给出计划。**选定 Skill（3 个，按主从关系）**\n\n- **long-video-director**（主控）：60s 超过单次生成 15s 上限，必须拆成多段、跨段保持锚点一致、逐段分镜并由我统一审片，正是它的职责范围；它也规定 60s 通常切 4×15s。\n- **anchor**（人物锚点）：两张参考图需要先转成可复用的角色卡（正/侧/背 + 表情），否则每段各自解读参考图，人物与造型必然漂移。\n- **storyboard**（逐段分镜）：每段一张 6 格以上的分镜图，作为锚点与最终脚本之间的检查点。\n\n理由补充：全程是 provider 原生生成，不涉及可编辑时间线，所以不走 Remotion / Studio Run；也不属于单条 ≤15s 的直接生成，所以不用 `generate_animation` 单发流程。\n\n**制作计划（8 道闸门，逐道停下来等你确认）**\n\n- 闸门 1 故事方向：确认画幅/时长/基调/平台，给 2–3 个方向（每个含一句话概念、基调、段数、最小锚点集）。\n- 闸门 2 资产清单：列出不可漂移的视觉事实、复用素材 `<<<media_1>>>`/`<<<media_2>>>`、所需人物卡/场景卡/道具卡，以及哪段用哪个。\n- 闸门 3 人物锚点：用两张参考图分别生成角色卡，逐张自检并请你批准。\n- 闸门 4 分段与接缝：拟定 S1–S4 各 15s 的起止状态、资产引用和段间交接（如 S1 -> S2 的动作/视线对接）。\n- 闸门 5 导演节拍板：每段情绪曲线、秒级节奏、视觉冲击帧、镜头语法、接缝设计、风险点。\n- 闸门 6 分镜图：按段顺序生成，每段自检后请你批准。\n- 闸门 7 分段脚本：每段 ≤15s、自带锚点与分镜引用、接缝写进正文。\n- 闸门 8 真实生成：preflight 后逐段提交，再谈最终拼接。\n\n本轮到此为止：未分析媒体、未生成、未写任何文件。下一步只需要你给一句基调/画幅偏好，我就进入闸门 1 出三个故事方向。",
+      "text": "我先读一下长视频导演 Skill（以及配套的人物锚点和分镜 Skill），然后给你技能选择理由和简短计划。**选用的 Skill**\n\n- **long-video-director**（主控）：这支 60 秒片需要跨段保持人物与场景一致，单次生成上限 15 秒，必须分 4 段、逐段审批。它管故事方向 → 锚点 → 段落大纲 → 导演节拍板 → 分镜 → 脚本 → 生成八道闸门。\n- **long-video-anchor**（子流程）：把 <<<media_1>>>、<<<media_2>>> 转成可复用的角色卡，风格族锁定为源图同族，后续每段以 `<<<media_N>>>` 引用，这是人物不漂移的关键。\n- **long-video-storyboard**（子流程）：每段出一张多格分镜图，作为该段生成的构图与动作依据。\n- 段脚本阶段再读 `prompts/animate.md`，负责分段脚本、预检与真实提交。\n\n未选：Studio/Remotion（用户没要可编辑工程）、video-edit（无既有视频可改）、avatar-spokesperson（这不是单人口播）。\n\n**简短制作计划**\n\n1. 故事方向：给你 2–3 个方向（各一句话概念 + 基调 + 段数 + 最小锚点集），你选一个。\n2. 资产清单：列不可漂移的视觉事实（脸型、发型、服装、配饰、场景地标），确定最小锚点集——预计 2 张角色卡 + 1–2 张场景卡，共享道具只在跨段关键时加。\n3. 锚点生产与审核：角色卡先做，场景卡以其为风格基准顺序生成，逐张自检后再请你批准。\n4. 段落大纲：默认 4 × 15 秒，标注每段用途、所用锚点、起止状态与接缝（S1→S2 的视觉/情绪交接）。\n5. 导演节拍板：每段情绪弧、节奏秒数、记忆帧、镜头语法、接缝设计、风险点。\n6. 分镜图：每段一张，审核后批准。\n7. 分段脚本：≤15 秒、内嵌锚点与分镜引用、接缝写进正文、以 `Style:` 收尾。\n8. 你确认确切脚本后，才逐段提交生成。\n\n本轮不做任何分析、生成、上传或写入。请先给我题材方向（或直接说“你定”）、画幅（默认 9:16）与整体基调，我下一步出三个故事方向供你挑。",
       "usage": {
-        "inputTokens": 70080,
+        "inputTokens": 69239,
         "inputTokenDetails": {
-          "noCacheTokens": 7872,
-          "cacheReadTokens": 62208
+          "noCacheTokens": 3959,
+          "cacheReadTokens": 65280
         },
-        "outputTokens": 1108,
+        "outputTokens": 1401,
         "outputTokenDetails": {
-          "textTokens": 697,
-          "reasoningTokens": 411
+          "textTokens": 670,
+          "reasoningTokens": 731
         },
-        "totalTokens": 71188
+        "totalTokens": 70640
       },
-      "durationMs": 7859
+      "durationMs": 9973
     },
     {
       "id": "natural-reference-replication",
@@ -68,25 +63,30 @@
         },
         {
           "name": "read_file",
+          "path": "prompts/animate.md",
+          "executed": true
+        },
+        {
+          "name": "read_file",
           "path": "skills/video-edit/references/replication-protocol.md",
           "executed": true
         }
       ],
-      "text": "先读取 `video-edit` 技能文件，确认复刻（replication）流程与所需确认点。这是典型的「结构复刻」需求，我再读取 replication 协议确认镜头映射与确认门槛。**选用 Skill：`video-edit` → replication 档案（不是 source-edit，也不是 reference-video-studio）**\n\n**理由**：这支 12 秒参考片承担的是「结构权威」——镜头顺序、时长、构图、运镜、动作和节拍都要被照搬，人物则用 <<<media_2>>> 换掉。原片像素不必保留（所以不是 source-edit）；也不必只做松散灵感参考（所以不是 reference-video-studio）。这正是 replication 档案定义的场景：观察层的镜头语法保真，内容重新生成为品牌版本。\n\n**简短制作计划**\n\n1. **锁定范围与授权**：确认 12 秒原时长/画幅/帧率、<<<media_2>>> 作为唯一人物身份源、声音处理方式（沿用原片节拍结构 / 重新生成品牌音轨），以及品牌层是否只换人不换场景文字。私人素材送第三方模型前会先取得许可。\n2. **完整理解短片**：探测文件真值（时长、宽高、fps、音轨）+ 抽取镜头边界帧、动作阶段和音频包络/节拍；仅当语音时序影响复刻时才转写。12 秒连续片段可用紧凑版证据，不默认跑全量分析。\n3. **写 Shot Blueprint（Video DNA）**：逐段记录源范围、构图、运镜、动作相位、节拍点、置信度，以及「保留 / 替换」字段和验收优先级。\n4. **选执行路线**：整段落在单次生成能力内，走「直接参考复刻」——一次调用完成动作/运镜迁移。未指定模型时 replication 默认 `wan-3.0-prime` @720p（12s 在 2–30s 范围内）。我会用 `video_intent=\"replicate\"` 加 `replication_contract` 传入实测的人物身份映射，时序动作与声音方向写进 `story_prompt`。\n5. **付费前报备**：模型、实际计费时长、分辨率、成本与重试上限会先明示；一次完整尝试即为该片的代表性验证，只允许一次有证据支撑的修正。\n6. **QA**：对拍边界、顺序、各段时长、构图、运镜、主体动作、节拍对齐、品牌人物身份一致性、音画同步与可解码性；只修最小的失败层，不重跑已合格的层。\n\n**停在生成之前。** 需要你确认三点即可开工：声音是沿用原片节拍结构还是重做品牌音轨；输出是否保持原片画幅与 12 秒；除人物外是否还要替换品牌文字/logo。",
+      "text": "我先读 `video-edit` 的 Skill（复刻路径），再确认 `prompts/animate.md` 里对提供视频素材的分流约定。复刻（replication）档已确认，我再读它指定的复刻协议，好把计划写准。**选用 Skill：`video-edit` → replication 复刻档**\n\n理由：这支 12 秒参考片是「结构权威」，需要可测量的镜头顺序、时长、构图、运镜、动作和节拍全部保真，只替换人物为新品牌形象——这属于 replication，而不是保留源像素的 source-edit，也不是只借情绪风格的 `reference-video-studio`；12 秒在原模型单次范围内，不需要 `long-video-director` 分段。\n\n**制作计划（本轮不执行）**\n\n1. 素材真值：探明 <<<media_1>>> 的时长/画幅/帧率与音轨，按镜头切点与动作节拍写出 Shot Blueprint（源时间段、置信度、保留/替换字段）；仅在有人声且影响切点时转写。\n2. 角色映射：以 <<<media_2>>> 建立替换身份描述（脸、发型、体型、服装、配色、配饰），并为原片人物写稳定的动作锚点，写入 `replication_contract.characters`；环境/道具默认保留，不擅自替换。\n3. 执行路线：直连 reference replication（整片 12s 单次），未指定模型时按复刻默认 `wan-3.0-prime` 720p；注意 Wan 预算 12s 参考 + 12s 输出 = 24s，符合 ≤30s。\n4. 脚本：`story_prompt` 只写按输出时钟对齐的分镜动作、运镜与原生音效/音乐方向，不复述不变量模板。\n5. 提交前给出模型、可计费时长与重试上限；生成后按 `similarity-qa` 逐项核对切点、构图、动作相位、节拍与身份漂移，只做一次证据驱动的修正。\n\n一个待定项：新品牌版本是否保留原片的画面文字/字幕，还是替换为品牌文案？这决定 Blueprint 里文案层的替换范围。",
       "usage": {
-        "inputTokens": 102646,
+        "inputTokens": 133168,
         "inputTokenDetails": {
-          "noCacheTokens": 3574,
-          "cacheReadTokens": 99072
+          "noCacheTokens": 18224,
+          "cacheReadTokens": 114944
         },
-        "outputTokens": 1334,
+        "outputTokens": 1104,
         "outputTokenDetails": {
-          "textTokens": 717,
-          "reasoningTokens": 617
+          "textTokens": 610,
+          "reasoningTokens": 494
         },
-        "totalTokens": 103980
+        "totalTokens": 134272
       },
-      "durationMs": 9252
+      "durationMs": 9894
     },
     {
       "id": "natural-product-explainer",
@@ -101,28 +101,23 @@
           "name": "read_file",
           "path": "skills/explainer-video/SKILL.md",
           "executed": true
-        },
-        {
-          "name": "read_file",
-          "path": "skills/_shared/native-audiovisual.md",
-          "executed": true
         }
       ],
-      "text": "我先读一下 `explainer-video` Skill 的规范，再确定路由和计划。**选用的 Skill：`explainer-video`**（只读规范，未做任何生成）\n\n**理由**\n- 请求是 30s 产品讲解、面向首次用户、含旁白+字幕 → 正好是该 Skill 的核心场景；它同时规定了旁白节奏（中文 180–230 字/分钟）、字幕策略和声音设计标准。\n- 30s 在单次生成上限内（Seedance 2.5 支持 4–30s），按 `_shared/native-audiovisual.md`，应走**一条 `generate_animation` 原生音画**：画面、中文旁白、音乐、音效、字幕一次成型，而不是拆成 Remotion 幻灯片或单独配音。\n- 你未要求可编辑图层/图表，因此不需要 Studio Run 或 Remotion 组合；只有当你要求\"可改字幕/可编辑\"时，才改为\"生成无字画面 + 本地字幕层\"。\n- 不需要 `long-video-director`（非多段拼接）、不需要 `sticker-maker` 或音频工具（原生音画已覆盖）。\n\n**制作计划（确认后才执行）**\n1. 读 `prompts/animate.md`，确认模型与提交契约；模型按默认 21–30s 路由取 Seedance 2.5。\n2. 写 30s 中文分镜脚本（4 段，约 85–105 字旁白），第一行标题，画面上带简短中文字幕：\n   - 0–6s 钩子：一句话说清\"它解决什么麻烦\"（新人视角的痛点）\n   - 6–15s 它是什么：最简界面/形态，一个核心概念\n   - 15–24s 怎么工作：三步流程的连续视觉演示（输入 → 处理 → 结果）\n   - 24–30s 收束：一句记忆点 + 首次使用建议\n3. 把脚本**完整展示给你确认**（新视频生成需过脚本关，除非你要求直接提交）。\n4. 提交渲染后核对成片：中文字幕是否逐字正确、与口播对齐、不遮挡主体；不合格则用局部重拍修正而不是重做整片。\n\n**需要你补一个信息**：这个\"产品\"具体是什么（名称 + 一句话功能）？没有它我只能写通用空话，脚本会失真。",
+      "text": "我先读一下 explainer-video 这个 Skill，确认它的工作流与产出约束。已读取 `skills/explainer-video/SKILL.md`，本轮不做任何生成。\n\n**选定 Skill：`explainer-video`（Studio Run recipe: explainer-video / profile: generated-explainer）**\n理由：这是唯一覆盖「产品讲解 + 旁白 + 字幕 + 30 秒成片」的完整 Skill，且它自带 Studio 八阶段流程、音频与字幕契约。\n\n**为什么不用其它**\n- `video-edit` / `source-video-studio` / `talking-head` / `video-translate`：均要求已有源素材，本轮无 media。\n- `explainer-aesthetic-*`（Disney/LottieFiles/Rampstack）：是美学对照实验，不是常规讲解交付。\n- `generate_animation` 单次直出：30 秒在模型限制内，但「讲清产品如何工作」需要可控的流程/结构图，且中文精确字幕需要可编辑排版，因此走 Remotion 组合路线（Skill 已把「权威图示 + 明确可编辑」列为组合路线）。\n\n**简短制作计划（30s，16:9，30fps，中文旁白 + 同步字幕）**\n1. studio_run start：`approval_policy: guided`，delivery_promise 锁定 30s / 1920×1080 / 30fps / remotion / editable / 有旁白 / 有字幕。\n2. 创意包（brief + 2 个不同方向 + 选定方向 + 完整定时旁白 ≈ 90–110 中文字，避免超时）。\n3. 一次 `generate_audio(kind:\"mixed\")`：中文旁白 + 连续配乐 + 提示音效，单轨混音。\n4. `transcribe_audio` 取实测旁白时间轴，作为场景切分与字幕的唯一时间依据。\n5. Storyboard：5 段结构 — 钩子 / 使用前痛点 / 核心机制（主图式拆解）/ 一次完整操作流程 / 结尾一句结论；同时定版式契约与字幕安全区。\n6. Assets：按 cue sheet 只做必需资产（图标类走透明 PNG sticker）。\n7. Composition：流程图推进式动画 + 底部字幕条（半透明底、最多 2 行，避让主图与标签）。\n8. 校验（每个场景边界 + 末帧 + 字幕三元一致）→ `publish_draft` → `materialize_media` 出 MP4。\n\n**唯一需要你确认的输入**：这个产品是什么（名称 + 一句话用途），以及画面偏「真人/实拍感」还是「示意动画」——这两点决定第 5 步主图与文案，缺了会做偏。",
       "usage": {
-        "inputTokens": 110602,
+        "inputTokens": 71412,
         "inputTokenDetails": {
-          "noCacheTokens": 7178,
-          "cacheReadTokens": 103424
+          "noCacheTokens": 6260,
+          "cacheReadTokens": 65152
         },
-        "outputTokens": 1346,
+        "outputTokens": 1213,
         "outputTokenDetails": {
-          "textTokens": 629,
-          "reasoningTokens": 717
+          "textTokens": 661,
+          "reasoningTokens": 552
         },
-        "totalTokens": 111948
+        "totalTokens": 72625
       },
-      "durationMs": 10870
+      "durationMs": 9033
     },
     {
       "id": "natural-spatial-explainer",
@@ -137,23 +132,28 @@
           "name": "read_file",
           "path": "skills/explainer-video/SKILL.md",
           "executed": true
+        },
+        {
+          "name": "read_file",
+          "path": "skills/_shared/remotion-director-contract.md",
+          "executed": true
         }
       ],
-      "text": "先阅读讲解片 Skill 的路由规则，再给出选择与计划。**选定 Skill：`explainer-video`（内部已读）**\n\n理由：\n\n- 这个 Skill 自带「Explain with 3D」路径，**明确举例月相**：用帧驱动的 ThreeCanvas 搭建一个真实 3D 场景，同一场景里切换视角，可编辑文字标签放在画布之外。这正是\"同一套日地月模型、先太空后地球\"的需求，不必硬拆成两段生成视频。\n- 它同时覆盖你要的交付形态：30 秒硬性时长、解说、字幕、音效、可编辑 Remotion 合成，以及把合成发到时间线。\n- 排除项：`motion-design-video` 偏 2D 动态图形，撑不住真实立体光照；`explainer-aesthetic-*` 是受控对比实验，不是你的诉求；`long-video-director` 属于多段生成拼长片，30 秒单合成不需要；`video-edit` 需要原始素材，本轮没有；`sticker-maker` 仅在需要透明贴片时才介入，本轮计划用可编辑文字标签即可。\n\n**制片计划（30s / 1920×1080 / 30fps / 可编辑合成）**\n\n| 时间 | 画面 | 解说要点 |\n|---|---|---|\n| 0–5s | 太空视角开场：太阳侧固定平行光打向地球与月球 | 月球自己不发光，亮的那半永远朝太阳 |\n| 5–14s | 相机绕模型展轨，同一时刻月球被照亮的半球不变，朝向地球的那面在变 | 月球绕地球跑，我们看到的亮面比例就跟着变 |\n| 14–22s | 相机连续降轨到地球表面，同一颗月球的大特写，明暗界线推进 | 上弦、满月、下弦用同一模型的时间戳切换 |\n| 22–28s | 回到总览，标出\"太阳方向 / 观察方向\"两条参考线 | 变的是角度，不是地球影子（影子只在月食） |\n| 28–30s | 收束卡：一句总结 | 短句收尾 |\n\n技术关键：**一个持续存在的场景状态**（日、地、月位置由帧数驱动，确定性可复现），相机是 rig 上的连续插值而不是切镜；所有中文标注、字幕都是画布外的可编辑文本层，字幕按实测解说时间码对齐。音频按 Skill 默认一次 `mixed` 生成（解说＋持续配乐＋有意义的音效）。\n\n本轮到此为止：只读了 Skill 文件，没有分析媒体、没有生成图片/视频/音频、没有写项目或跑代码。确认方向后我再进入 Studio Run 的创意包与分镜。",
+      "text": "我先读一下适用的 Skill 文件，确认路由和制作约束，然后只给方案，不生成任何素材。## 选用的 Skill\n\n**主 Skill：`explainer-video`**（已读 `skills/explainer-video/SKILL.md`）\n**约束契约：`skills/_shared/remotion-director-contract.md`**（已读）\n\n**理由（为什么是它，不是别的）**\n\n1. 这个 Skill 里有一段专门写明的路由：\"Explain with 3D ... when spatial relationships carry the idea (moon phases, mechanisms, cutaways), use the authored composition route below with frame-driven ThreeCanvas. The same scene should support the needed viewpoints.\" 你的需求（月相 + 太空视角 / 地球视角两个视点）正好就是这段描述的样板场景。\n2. 你的核心诉求\"**同一套真实 3D 日地月模型**\"决定了不能用 `generate_animation`：视频模型生成的两次镜头之间无法保证是同一个几何体，光照方向、月球受照半球会漂移，而这恰恰是月相讲解唯一不能错的地方。代码驱动的 3D 场景里，\"同一个月球、同一个光源\"是构造上就成立的，不是靠提示词碰运气。\n3. \"**交付可编辑讲解片**\"正是该 Skill 的 Default Deliverable：发布一条 Remotion composition snapshot，而非一段 MP4 黑盒。\n4. 不需要 `motion-design-video`（那是平面动效/字体路线，无真实 3D 空间关系）；不需要 `photo-to-video` / `video-edit`（无源素材）。\n\n**不启用任何图片/视频生成**：全部画面由 ThreeCanvas 里的球体、平行光与相机轨迹构成，零素材、零几何不一致风险。\n\n## 制作计划（30s / 16:9 1080p / 30fps / 中文旁白 + 字幕）\n\n**世界观设定**：太阳在画面左侧 1.2e8 单位外，作为方向性平行光（不按比例，但**方向唯一**）；地球居中；月球绕地球公转，轨道半径与半径比做教学夸张。全程一个 `<ThreeCanvas>`，相机在场景内移动，而非切场景——这是\"同一颗月球\"在剪辑语言上的证据。\n\n| 时间 | 视点 | 画面 | 讲解 |\n|---|---|---|---|\n| 0–4s | 太空全景 | 日、地、月同时入画，光从左侧来，月球左半亮右半暗（亮面**始终**朝太阳） | 钩子：月亮为什么会有圆缺？ |\n| 4–11s | 太空侧俯视 | 相机贴近月球，暗面/亮面分界线（晨昏线）清晰，月球缓慢走位 | 关键认知：月球永远有一半被照亮，被照亮的量从没变过 |\n| 11",
       "usage": {
-        "inputTokens": 70915,
+        "inputTokens": 73071,
         "inputTokenDetails": {
-          "noCacheTokens": 6403,
-          "cacheReadTokens": 64512
+          "noCacheTokens": 7919,
+          "cacheReadTokens": 65152
         },
-        "outputTokens": 1600,
+        "outputTokens": 1907,
         "outputTokenDetails": {
-          "textTokens": 655,
-          "reasoningTokens": 945
+          "textTokens": 708,
+          "reasoningTokens": 1199
         },
-        "totalTokens": 72515
+        "totalTokens": 74978
       },
-      "durationMs": 10809
+      "durationMs": 13419
     }
   ]
 }

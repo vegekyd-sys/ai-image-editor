@@ -1,5 +1,5 @@
 import { VideoProviderRejection } from '../video-provider-error'
-import { GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS, GOOGLE_OMNI_MAX_EXTEND_SECONDS, getVideoModelRetirementError, RETIRED_KLING_MESSAGE } from '../video-model-capabilities';
+import { GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS, GOOGLE_OMNI_MAX_EXTEND_SECONDS, getVideoModelRetirementError, isSeedance25Native4k, RETIRED_KLING_MESSAGE } from '../video-model-capabilities';
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
 import type { VideoQuoteInput } from '../billing/media-pricing';
 import { getVideoModelCapability, isKling4FamilyModel, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoImageWorkflow, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
@@ -11,6 +11,8 @@ export interface CreateVideoInput {
   retake?: { start: number; end: number; audioMode?: 'original' | 'generated'; middleFrame?: {imageUrl:string;time:number}; endFrame?: {imageUrl:string}; correctedBoundaries?: {startUrl:string;endUrl:string}; cameraChange?: boolean; boundaryMode?: 'exact' | 'scene'; editMode?: 'modify' | 'replace' };
   /** Internal only, generated from the authenticated Retake source. */
   h3RetakeBoundaryFrames?: { startUrl: string; endUrl: string; lockEndpoints?: boolean; middle?: {imageUrl:string;time:number} };
+  /** Native 4K: omitted returns a no-charge quote; set only after disclosing it. */
+  maxCredits?: number;
   script: string;
   images: string[];          // public URLs only (no base64)
   duration?: number;         // Seconds within the selected model limits. Omit for smart mode
@@ -56,6 +58,7 @@ export interface CreateVideoInput {
 export interface CreateVideoResult {
   snapshotId?: string;
   sourceDuration?: number;
+  costQuote?: import('../billing/media-pricing').MediaQuote;
   success: boolean;
   taskId?: string;
   videoModel?: string;
@@ -345,6 +348,17 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const isFlash = provider === 'seedance-2.5-flash';
   const isWan30 = provider === 'wan-3.0' || provider === 'wan-3.0-prime';
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
+  const native4k = isSeedance25Native4k(provider, route.resolution);
+  // Variable-length generation cannot have a reliable fixed charge without
+  // duration settlement. Keep this candidate on explicit output lengths.
+  if (native4k && duration === -1 && videoOperation !== 'edit') return {
+    success: false, submissionUncertain: false, retryable: false,
+    message: 'Native 4K generation/extension requires a fixed 4–30 second output duration for an accurate total quote. Automatic duration is not enabled on this high-cost route; no fallback submitted.',
+  };
+  if (native4k && webSearch) return {
+    success: false, submissionUncertain: false, retryable: false,
+    message: 'Native 4K web-search add-on pricing is not configured. Disable web_search for a complete video quote; no fallback submitted.',
+  };
   const isKling4Family = isKling4FamilyModel(provider);
   if (isKling4Family && motionControl) return { success: false, message: `${route.label} does not expose motion control through this adapter. No fallback submitted.` };
   if (isKling4Family && videoOperation === 'edit' && (generateAudio === true || keepOriginalSound === false)) return { success: false, message: `${route.label} video edit preserves source audio; generated replacement audio is not supported.` };
@@ -545,7 +559,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       }
       billingUsage = {
         model: provider, resolution: route.resolution, operation: videoOperation,
-        durationSec: billsSourceDuration ? sourceSeconds : (resolvedDuration ?? Math.min(5, capability.maxOutputDuration)),
+        durationSec: billsSourceDuration ? (native4k ? Math.ceil(sourceSeconds * 10 - 1e-9) / 10 : sourceSeconds) : (resolvedDuration ?? Math.min(5, capability.maxOutputDuration)),
         imageCount: filteredImages.length, referenceVideoDurationSec: sourceSeconds,
         contentFilter,
         ...(h3References ? { referenceImagePixels: h3References.referenceImagePixels, referenceVideoDurationSec: h3References.referenceVideoDurationSec, referenceAudioDurationSec: h3References.referenceAudioDurationSec } : {}),

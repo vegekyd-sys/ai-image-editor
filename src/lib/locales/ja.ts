@@ -1,6 +1,10 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  "changelog.seedance25Native4k.title": "Seedance 2.5 のネイティブ 4K",
+  "changelog.seedance25Native4k.item1": "動画モデルで Seedance 2.5 Native と 4K を選ぶと、同期音声付きのネイティブ 4K 動画を生成できます。",
+  "changelog.seedance25Native4k.item2": "ネイティブ 4K は高額なため、生成前に合計見積もりを表示します。通常のリクエストは従来のモデルを使用します。",
+
   "design.matchingFont": "バックグラウンドでフォントを照合中です。先に入力できます。完了後に文字プレビューが更新されます。",
   "design.approximateFont": "編集後の文字には近似フォントが使用されます。",
   "design.editTextPlaceholder": (label: string) => `${label}を編集…`,
@@ -1100,8 +1104,8 @@ const ja = {
   'model.seedance25Flash.desc': '4〜30秒 · 480p/720p · 参照生成と動画編集',
   'model.seedance25Flash.badge': '高速試作',
   'model.seedance25.name': 'Seedance 2.5 Native',
-  'model.seedance25.desc': '最新 SOTA。最長30秒で、画像・動画・音声参照、編集、延長に対応します。',
-  'model.seedance25.badge': '最新 SOTA · 30秒',
+  'model.seedance25.desc': 'ネイティブ 480p–4K、最大 30 秒。4K は高額で、明示的に選択した場合のみ使用し、生成前に合計料金を表示します。動画入力時間も課金対象。HEVC 再生が必要です。',
+  'model.seedance25.badge': '高額 · ネイティブ 4K',
   'model.wan30.name': 'Wan 3.0 Standard',
   'model.wan30.desc': '2〜30秒、ネイティブ音声、マルチモーダル参照に対応。2K・4KではFlashVSRを自動使用します。',
   'model.wan30.badge': '4K · 30秒',
