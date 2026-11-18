@@ -1,0 +1,35 @@
+{
+  "testedAt": "2026-11-18T01:36:39.460Z",
+  "samples": [
+    {
+      "provider": "azure-openai",
+      "requestedModel": "gpt-6.2-sol",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_APICallError",
+      "statusCode": 401,
+      "message": "Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your re",
+      "elapsedMs": 1182
+    },
+    {
+      "provider": "azure-openai",
+      "requestedModel": "gpt-6.2-astra",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_APICallError",
+      "statusCode": 401,
+      "message": "Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your re",
+      "elapsedMs": 1197
+    },
+    {
+      "provider": "azure-openai",
+      "requestedModel": "gpt-6.1-terra",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_APICallError",
+      "statusCode": 401,
+      "message": "Access denied due to invalid subscription key or wrong API endpoint. Make sure to provide a valid key for an active subscription and use a correct regional API endpoint for your re",
+      "elapsedMs": 260
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "testedAt": "2026-11-18T01:40:09.958Z",
+  "samples": [
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.2-sol",
+      "ok": true,
+      "text": "MODEL_PROBE_OK",
+      "toolCalls": 1,
+      "firstTextMs": 5030,
+      "steps": 2,
+      "servedModels": [
+        "gpt-6.2-sol",
+        "gpt-6.2-sol"
+      ],
+      "inputTokens": 346,
+      "outputTokens": 26,
+      "elapsedMs": 5119
+    },
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.2-astra",
+      "ok": true,
+      "text": "MODEL_PROBE_OK",
+      "toolCalls": 1,
+      "firstTextMs": 9258,
+      "steps": 2,
+      "servedModels": [
+        "gpt-6.2-astra",
+        "gpt-6.2-astra"
+      ],
+      "inputTokens": 346,
+      "outputTokens": 26,
+      "elapsedMs": 9259
+    },
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.1-terra",
+      "ok": true,
+      "text": "MODEL_PROBE_OK",
+      "toolCalls": 1,
+      "firstTextMs": 3943,
+      "steps": 2,
+      "servedModels": [
+        "gpt-6.1-terra",
+        "gpt-6.1-terra"
+      ],
+      "inputTokens": 326,
+      "outputTokens": 26,
+      "elapsedMs": 3945
+    }
+  ]
+}
