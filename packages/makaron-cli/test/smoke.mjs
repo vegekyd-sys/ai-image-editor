@@ -308,6 +308,10 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+    if (body?.params?.name === 'makaron_create_video' && body.params.arguments.videoModel === 'seedance-2.5-native' && body.params.arguments.videoResolution === '4k' && body.params.arguments.maxCredits == null) {
+      sendJson(200, { jsonrpc: '2.0', id: body.id, result: { content: [{ type: 'text', text: JSON.stringify({ success: false, errorCode: 'NATIVE_4K_COST_DISCLOSURE_REQUIRED', costQuote: { credits: 946, durationSec: 4, referenceVideoDurationSec: 0 } }) }] } });
+      return;
+    }
     // Direct MCP tool calls report what they charged through response headers.
     res.writeHead(200, { 'Content-Type': 'application/json', 'X-Credits-Charged': '4', 'X-Credits-Remaining': '300' });
     res.end(JSON.stringify({
@@ -1391,6 +1395,21 @@ try {
     const native4kRequest=requests.filter(req=>req.pathname==='/api/mcp').at(-1).body.params.arguments;
     assert.equal(native4kRequest.videoModel,'seedance-2.5-native');
     assert.equal(native4kRequest.videoResolution,'4k');
+    assert.equal(native4kRequest.maxCredits, undefined);
+    const beforePaid = requests.filter(req => req.pathname === '/api/mcp').length;
+    const paid = await expectSuccess(['video','create','--script','Native4K candidate','--duration','4','--video-model','seedance-2.5-native','--video-resolution','4k','--max-credits','946']);
+    assert.match(paid.stderr, /Estimated total: 946 Makaron credits/);
+    const pair = requests.filter(req => req.pathname === '/api/mcp').slice(beforePaid).map(req => req.body.params.arguments);
+    assert.equal(pair.length, 2);
+    assert.equal(pair[0].maxCredits, undefined);
+    assert.equal(pair[1].maxCredits, 946);
+    assert.equal(pair[0].billingRequestId, pair[1].billingRequestId);
+    const beforeLow = requests.filter(req => req.pathname === '/api/mcp').length;
+    const low = await runCli(['video','create','--script','Native4K candidate','--duration','4','--video-model','seedance-2.5-native','--video-resolution','4k','--max-credits','900']);
+    assert.equal(low.code, 1);
+    assert.match(low.stderr, /Quote exceeds/);
+    assert.equal(requests.filter(req => req.pathname === '/api/mcp').length - beforeLow, 1);
+
     const result = await expectSuccess(['video', 'create', '--script', 'Makaron Launch\nShot 1 (30s): <<<media_1>>> becomes a living studio', '--image', 'https://cdn.example/home.png', '--duration', '30', '--video-model', 'seedance-2.5', '--video-resolution', '720p', '--output-format', 'mp4', '--web-search']);
     assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
     const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);

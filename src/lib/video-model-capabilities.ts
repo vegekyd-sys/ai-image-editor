@@ -38,6 +38,9 @@ export interface VideoModelCapability {
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
   provider?: 'evolink-kling4' | 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-h3-max' | 'fal-sync' | 'piapi'
   providerModel?: string
+  /** Selection policy is exposed with capabilities; live totals still come from quoteVideo. */
+  highCostResolutions?: VideoResolution[]
+  usagePolicy?: string
 }
 
 export type VideoResolution = '360p' | '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
@@ -264,6 +267,8 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 10,
     maxAudioReferences: 10,
     maxTotalReferences: 50,
+    highCostResolutions: ['4k'],
+    usagePolicy: 'Native 4K is high cost and opt-in only: use only for an explicit native 4K request or explicit model/resolution selection. Ordinary video, vague HD/high-quality requests and failed jobs must never upgrade to this route. Quote the complete request in Makaron credits before submission; supplier USD and supplier credits are not Makaron credits. No automatic fallback.',
     // EvoLink public rate card and native 4K contract checked 2026-11-17. Image/audio-only
     // requests bill output; video references bill max(input, output) + output.
     estimatedCostPerSecondUsd: 0.138,
@@ -607,6 +612,7 @@ MODEL_CAPABILITIES['seedance-2.5-flash'] = {
 MODEL_CAPABILITIES['seedance-2.5-eco'] = {
   ...MODEL_CAPABILITIES['seedance-2.5'], id: 'seedance-2.5-eco', label: 'Seedance 2.5 Eco',
   supportedResolutions: ['720p', '1080p', '2k', '4k'], defaultResolution: '1080p',
+  highCostResolutions: undefined, usagePolicy: undefined,
   estimatedCostPerSecondUsd: .1452,
   estimatedCostPerSecondUsdByResolution: { '720p': .1452, '1080p': .1452, '2k': .1524, '4k': .1668 },
 }
@@ -1369,4 +1375,9 @@ export function validateVideoReferenceSize(
   }
 
   return null
+}
+
+/** This policy applies only to EvoLink native 4K, never Eco or another provider. */
+export function isSeedance25Native4k(model?: string | null, resolution?: VideoResolutionInput): boolean {
+  return normalizeVideoModelId(model) === 'seedance-2.5' && resolution === '4k'
 }

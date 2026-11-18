@@ -1,5 +1,7 @@
 Seedance 2.5 4K 独立候选（2026-11-17）
 
+后续价格路由、隔离产品验收与当前阶段见 [2026-11-18 报告](seedance25-native4k-20261118.md)；以下保留11月17日的原始验证边界。
+
 EvoLink 的实际模型页、11月16日 changelog 与六份精确 API 正文已确认 `quality: "4k"`。用户此前指定的“只等 EvoLink 可调用4K，不能用Eco超分代替”条件已满足。本次通过 Makaron 的真实 `createVideo` 适配器，向 `seedance-2.5-text-to-video` 提交了一次显式4K请求；没有调用Eco、超分模型或其他供应商。官方依据：[模型与价格](https://evolink.ai/seedance-2-5)、[更新公告](https://evolink.ai/changelog)。
 
 | 本次真实生成 | 结果 |

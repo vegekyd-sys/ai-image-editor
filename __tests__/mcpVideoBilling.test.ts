@@ -127,3 +127,29 @@ it('still reserves through the original signature when the attribution migration
   expect(reserveCalls[1][1]).not.toHaveProperty('p_run_id')
   expect(reserveCalls[1][1]).toMatchObject({ p_user_id: 'owner', p_quote: { credits: 30 } })
 })
+it('native 4K returns the complete no-charge quote until a sufficient ceiling is supplied', async () => {
+  mocks.quote.mockResolvedValue({ credits: 946, supplierCostUsd: 4.728, durationSec: 4, referenceVideoDurationSec: 0, priceId: 'native4k', priceVersion: 'v1' })
+  const native = { ...input, videoModel: 'seedance-2.5-native', videoResolution: '4k' as const }
+  for (const maxCredits of [undefined, 900]) {
+    expect(await submitMcpVideo({ ...native, maxCredits }, owner)).toMatchObject({ errorCode: 'NATIVE_4K_COST_DISCLOSURE_REQUIRED', costQuote: { credits: 946 } })
+    expect(mocks.rpc).not.toHaveBeenCalled()
+    expect(mocks.balance).not.toHaveBeenCalled()
+  }
+  expect((await submitMcpVideo({ ...native, maxCredits: 946 }, owner)).success).toBe(true)
+  expect(mocks.rpc).toHaveBeenCalledWith('reserve_mcp_video', expect.objectContaining({ p_quote: expect.objectContaining({ credits: 946 }) }))
+})
+it('native 4K still discloses supplier expense when Makaron billing is disabled', async () => {
+  mocks.enabled.mockResolvedValue(false)
+  mocks.quote.mockResolvedValue({ credits: 946, supplierCostUsd: 4.728, durationSec: 4, referenceVideoDurationSec: 0 })
+  expect(await submitMcpVideo({ ...input, videoModel: 'seedance-2.5-native', videoResolution: '4k' }, owner)).toMatchObject({ errorCode: 'NATIVE_4K_COST_DISCLOSURE_REQUIRED' })
+  expect(mocks.rpc).not.toHaveBeenCalled()
+})
+it('native 4K receipt replay ignores a changed ceiling but never changed generation parameters', async () => {
+  const native = { ...input, videoModel: 'seedance-2.5-native', videoResolution: '4k' as const, maxCredits: 946 }
+  await submitMcpVideo(native, owner)
+  const reservation = mocks.rpc.mock.calls[0][1]
+  mocks.previous.mockResolvedValue({ data: { fingerprint: reservation.p_fingerprint, task_id: 'native-original', status: 'submitted' } })
+  mocks.create.mockClear()
+  expect(await submitMcpVideo({ ...native, maxCredits: undefined, billingRequestId: reservation.p_id }, owner)).toMatchObject({ taskId: 'native-original', retryable: false })
+  expect(mocks.create).not.toHaveBeenCalled()
+})

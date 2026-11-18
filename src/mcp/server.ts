@@ -7,7 +7,9 @@ import { editImage } from '../lib/skills/edit-image';
 import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
-import { getDefaultVideoModelId, isKling4FamilyModel, resolveProductVideoModelId } from '../lib/video-model-capabilities';
+import { quoteVideo } from '../lib/billing/media-pricing';
+import { native4kQuoteResult, native4kNeedsDisclosure } from '../lib/billing/seedance25-native4k';
+import { isSeedance25Native4k, getDefaultVideoModelId, isKling4FamilyModel, resolveProductVideoModelId } from '../lib/video-model-capabilities';
 import { getVideoStatus } from '../lib/skills/get-video-status';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from '../lib/video-retake-contract';
 import { analyzeVideo } from '../lib/skills/analyze-video';
@@ -106,6 +108,21 @@ export interface McpServerOptions {
 }
 
 export function createMakaronMcpServer(options?: McpServerOptions) {
+  // Hosted calls own reservation/idempotency. Local stdio still must disclose
+  // the live configured total before a native 4K supplier POST.
+  const submitVideoWithQuote = async (input: CreateVideoInput, toolName: string): Promise<CreateVideoResult> => {
+    if (options?.submitVideo) return options.submitVideo(input, toolName);
+    if (!isSeedance25Native4k(input.videoModel, input.videoResolution)) return createVideo(input);
+    let disclosure: ReturnType<typeof native4kQuoteResult> | undefined;
+    const result = await createVideo({ ...input, onBeforeProviderSubmit: async usage => {
+      const quote = await quoteVideo(usage);
+      if (native4kNeedsDisclosure(quote, input.maxCredits)) {
+        disclosure = native4kQuoteResult(quote);
+        throw new Error(disclosure.message);
+      }
+    } });
+    return disclosure ?? result;
+  };
   const server = new McpServer({
     name: 'makaron',
     version: '1.0.0',
@@ -358,6 +375,7 @@ Shot 2 (3s): Close-up, <<<media_2>>> ...
 Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
+      maxCredits: z.number().int().positive().optional().describe('Native 4K only: omit first for a no-charge total quote. Disclose the total Makaron credits before setting this ceiling. Only explicit native 4K or explicit Native + 4K selection qualifies, never ordinary/HD requests or automatic failure recovery.'),
       billingRequestId: z.string().uuid().optional().describe('Optional stable request UUID. Reuse when retrying the same billed submission to avoid duplicate charges/jobs.'),
       images: z.array(z.string().url()).max(30).default([]).describe('Optional public image URLs. Seedance 2.5 accepts up to 30; older routes may accept fewer.'),
       videoUrls: z.array(z.string().url()).max(10).optional().describe('Public reference video URLs. Sync Lipsync v3 requires exactly one; Seedance 2.5 accepts up to 10 with 30 seconds combined.'),
@@ -383,9 +401,10 @@ Style: Cinematic, warm golden light.`,
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
-        const result = await (options?.submitVideo ?? createVideo)({
+        const result = await submitVideoWithQuote({
           script: params.script,
           billingRequestId: params.billingRequestId,
+          maxCredits: params.maxCredits,
           images: params.images,
           videoUrls: params.videoUrls,
           audioUrls: params.audioUrls,
@@ -422,6 +441,7 @@ Style: Cinematic, warm golden light.`,
             provider: result.provider,
           });
         }
+        if (result.costQuote) return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTask ID: ${result.taskId}${result.videoUrl ? `\n\nProvider Video URL: ${result.videoUrl}` : ''}`
           : result.retryable === false
@@ -455,6 +475,7 @@ Example: Edit a video to add cinematic color grading:
     {
       videoUrl: z.string().url().describe('Public source video URL. Kling 4.0: MP4/MOV, 3-30s, <=200MB, 720-2160px per side, 24-60fps (Flash: 3-20s); other limits depend on selected model.'),
       editPrompt: z.string().describe('Editing instructions describing what to change'),
+      maxCredits: z.number().int().positive().optional().describe('Native 4K only: omit first for a no-charge total quote. Disclose the total Makaron credits before setting this ceiling. Only explicit native 4K or explicit Native + 4K selection qualifies, never ordinary/HD requests or automatic failure recovery.'),
       billingRequestId: z.string().uuid().optional().describe('Optional stable request UUID; reuse only for an identical submission retry.'),
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
       duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling 4.0 supports integer 3-30s in one call (Flash 3-20s); Grok edit retains a source up to 8.7s and Grok extend adds 2-10s to a 2-15s source; Gemini Omni supports 3-15s video editing in Makaron. Omit for smart mode.'),
@@ -473,9 +494,10 @@ Example: Edit a video to add cinematic color grading:
         const t0 = Date.now();
         const resolvedModel = resolveProductVideoModelId(params.videoModel ?? getDefaultVideoModelId());
         const resolvedReferType = params.referType ?? (resolvedModel === 'seedance' || resolvedModel === 'seedance-fast' || resolvedModel === 'seedance-mini' || resolvedModel === 'minimax-h3' || resolvedModel === 'fal-h3-max' ? 'feature' : 'base');
-        const result = await (options?.submitVideo ?? createVideo)({
+        const result = await submitVideoWithQuote({
           script: params.editPrompt,
           billingRequestId: params.billingRequestId,
+          maxCredits: params.maxCredits,
           images: params.images ?? [],
           duration: params.duration,
           aspectRatio: params.aspectRatio,
@@ -502,6 +524,7 @@ Example: Edit a video to add cinematic color grading:
             provider: result.provider,
           });
         }
+        if (result.costQuote) return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTask ID: ${result.taskId}${result.videoUrl ? `\n\nProvider Video URL: ${result.videoUrl}` : ''}`
           : result.message }] };

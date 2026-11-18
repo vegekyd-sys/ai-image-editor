@@ -26,6 +26,20 @@ higher reference limits, or edit/extend capabilities. A non-NSFW direct 21-30
 second request with no explicit model uses this model by default, but NSFW/adult-explicit intent has
 higher priority and defaults to Wan 3.0 Prime instead.
 
+## Native 4K cost policy
+
+Native 4K is expensive. Use it only when the user explicitly asks for native 4K
+or explicitly selects Native + 4K. Ordinary video, vague “HD/high quality” and
+failed tasks keep their existing routing; never upgrade or retry on native 4K.
+The capability registry exposes high-cost resolutions and usage conditions.
+For native 4K, first call `generate_animation` without `max_credits` to obtain a
+no-charge quote for the actual output and measured video inputs. Show the total
+Makaron credits before submitting the identical request with that ceiling.
+An already authorized generation needs disclosure, not another permission loop.
+If price or inputs exceed the ceiling, obtain and disclose the new quote first.
+Supplier USD, supplier credits and Makaron credits are distinct; live quotes use
+the configured price and markup. There is no automatic provider/Eco fallback.
+
 ## Provider contract
 
 - Output duration: 4-30 seconds, or smart duration where the mode allows it.

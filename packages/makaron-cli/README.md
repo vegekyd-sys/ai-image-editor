@@ -769,3 +769,12 @@ Both paths return a Makaron `projectUrl`. Open it to move/scale, reorder or dele
 Use `--editable-text` only when the user explicitly requests native editable text fields. It makes recognized text editable using approximate fonts; edited wording can differ in typography, texture and styling. A request to split layers or change wording alone does not imply this option. Describe the default result as image layers, including lettering, rather than promising native editable text. The original image and PNG layers remain in the project/workspace.
 
 `--project` reuses a project; otherwise the direct command creates a private project. `--max-outputs` is 2–100 including the background (default 8); quality is `auto|1K|1.5K|2K` (default `1K` for faster decomposition). One quality setting applies to the whole task; per-layer resolution controls are unavailable. Use an explicit higher tier or `auto` when preserving source resolution is required. The actual output count and pixel tiers determine one task charge. Failed or uncertain submissions are never replayed automatically; retain the printed job ID and query status. Repeated status reads preserve saved GUI edits and do not debit again. When the layers are ready, the edit link opens the resulting snapshot.
+
+Native Seedance 2.5 4K is high cost and explicit opt-in only. Ordinary video,
+vague HD requests and failed tasks must not upgrade to it. Run `makaron video
+create --video-model seedance-2.5-native --video-resolution 4k --duration 4
+--script "..."` without `--max-credits` first to obtain a no-charge complete quote.
+Show the quoted total Makaron credits before repeating the identical request with
+`--max-credits <quoted-total>` and a stable `--request-id <uuid>`. A higher fresh
+quote stops before charging. Input video adds billable seconds; supplier credits
+are different from Makaron credits. Native 4K uses EvoLink, never Eco enhancement.

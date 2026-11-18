@@ -35,10 +35,10 @@ describe('explicit Seedance 2.5 native 4K candidate', () => {
   it.each(['generate','edit','extend'] as const)('resolves native 4K %s and uses the video-input rate instead of output-only cost', operation => {
     expect(resolveVideoProviderModel({model:'seedance-2.5-native',resolution:'4k',operation,hasVideoReference:true})).toBe(operation==='generate'?'seedance-2.5-reference-to-video':`seedance-2.5-video-${operation}`)
     const price={id:`video:seedance-2.5:4k:${operation}`,kind:'video',model_id:'seedance-2.5',resolution:'4k',operation,output_usd_per_second:1.182,video_reference_usd_per_second:.724,input_usd_per_second:0,input_usd_per_image:0,free_image_references:0,markup:2,unfiltered_multiplier:1.1,is_active:true,updated_at:'candidate'} as MediaPrice
-    const input={model:'seedance-2.5-native',resolution:'4k' as const,operation,durationSec:4,referenceVideoDurationSec:8}
-    expect(calculateMediaQuote(price,input).supplierCostUsd).toBeCloseTo(8.688)
-    expect(calculateMediaQuote(price,input).credits).toBe(1738)
-    expect(estimateVideoProviderCostUsd(input)).toBeCloseTo(8.688)
+    const input={model:'seedance-2.5-native',resolution:'4k' as const,operation,durationSec:operation==='edit'?8:4,referenceVideoDurationSec:8}
+    expect(calculateMediaQuote(price,input).supplierCostUsd).toBeCloseTo(operation==='edit'?11.584:8.688)
+    expect(calculateMediaQuote(price,input).credits).toBe(operation==='edit'?2317:1738)
+    expect(estimateVideoProviderCostUsd(input)).toBeCloseTo(operation==='edit'?11.584:8.688)
     expect(() => calculateMediaQuote({...price,video_reference_usd_per_second:null},input)).toThrow('tariff')
   })
 })
