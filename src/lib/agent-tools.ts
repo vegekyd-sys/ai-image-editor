@@ -104,7 +104,7 @@ import { stableDraftPromotionSnapshotId } from './draft-promotion';
 import { layerizeModelOutput } from './layerize-delivery';
 import { sourceRangeFromVideoMeta } from './media-source-range';
 import { materializeSeedAudioReference } from './seed-audio-reference';
-import { resolveAudioRefs } from './audio-reference-resolver';
+import { resolveAudioRefs, resolveCompositionAudioProps } from './audio-reference-resolver';
 import { isGrokSubscriptionAllowedUser } from './grok-subscription';
 import { compileVideoReplicationPrompt } from './video-replication-prompt';
 import { preserveOptionalToolFields } from './agent-tool-schema';
@@ -4906,6 +4906,7 @@ Path is auto-generated from the current project and output type. Just provide a 
               workspaceId,
               partPath: savePath,
               snapshotImages: ctx.snapshotImages,
+              audioAttachments: ctx.audioAttachments,
               metadata: compositionMetadata,
             });
             (ctx as any).__compositionPartPaths = compiled.partPaths;
@@ -5454,7 +5455,7 @@ function createRunCodeTool(
                 code = code.replace(edit.old, edit.new);
               }
             }
-            const mergedProps = mergePatchProps(baseDesign.props, result.props);
+            const mergedProps = mergePatchProps(baseDesign.props, resolveCompositionAudioProps(result.props, ctx.audioAttachments));
             const patched = {
               ...baseDesign,
               code: resolveMediaMarkersInString(code, ctx.snapshotImages),
@@ -5534,7 +5535,11 @@ function createRunCodeTool(
             if (promiseError) return { type: 'text' as const, content: promiseError };
             // ── Composition harness: compile + image reference checks ──
             const resolvedCode = resolveMediaMarkersInString(result.code, ctx.snapshotImages);
-            const resolvedProps = resolveMediaMarkersInValue(result.props, ctx.snapshotImages) as Record<string, unknown> | undefined;
+            const inheritsDesignProps = resolvedComposition && !composition && !composition_parts;
+            const audioResolvedProps = inheritsDesignProps
+              ? result.props
+              : resolveCompositionAudioProps(result.props, ctx.audioAttachments);
+            const resolvedProps = resolveMediaMarkersInValue(audioResolvedProps, ctx.snapshotImages) as Record<string, unknown> | undefined;
             const normalizedComposition = {
               code: resolvedCode,
               props: resolvedProps,

@@ -157,6 +157,32 @@ describe('Composition workspace runner', () => {
     });
   });
 
+  it('keeps the authored Audio Index binding across later workspace writes', async () => {
+    const parts = {
+      projectId, userId, supabase, workspaceId: 'audio-draft', snapshotImages: [],
+    };
+    workspaceFiles.set(foundationPath, {
+      content: "const COLOR = '#0ea5e9';",
+      contentType: 'text/javascript',
+      storageUrl: 'https://workspace.test/foundation.js',
+    });
+    const audioUrl = 'https://workspace.test/narration.wav';
+    await compileSavedCompositionPart({
+      ...parts,
+      partPath: foundationPath,
+      audioAttachments: [{ audioUrl }],
+      metadata: { width: 320, height: 180, props: { narration: '<<<audio_1>>>' } },
+    });
+    workspaceFiles.set(rootPath, {
+      content: 'function Composition(props) { return <AbsoluteFill><Audio src={props.narration} /></AbsoluteFill>; }',
+      contentType: 'text/javascript',
+      storageUrl: 'https://workspace.test/root.js',
+    });
+    const result = await compileSavedCompositionPart({ ...parts, partPath: rootPath });
+
+    expect(result).toMatchObject({ status: 'ready', design: { props: { narration: audioUrl } } });
+  });
+
   it('merges later metadata updates without dropping first-part fields', async () => {
     workspaceFiles.set(foundationPath, {
       content: "const COLOR = '#0ea5e9';",
