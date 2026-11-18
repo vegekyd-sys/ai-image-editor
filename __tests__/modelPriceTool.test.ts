@@ -177,7 +177,7 @@ describe('read-only Agent price awareness', () => {
   });
   it('is wired into shared Agent tools and retains the routing policy', async () => {
     expect(readFileSync('src/lib/agent-tools.ts', 'utf8')).toContain('query_model_prices: createModelPriceTool()');
-    expect(readFileSync('src/lib/prompts/agent.md', 'utf8')).toContain('use `query_model_prices`');
+    expect(readFileSync('src/lib/prompts/agent.md', 'utf8')).toContain('For price inquiries, use `query_model_prices`. Otherwise route normally.');
     expect((await queryModelPrices({ requests: [] })).policy).toContain('keep existing defaults');
   });
 });

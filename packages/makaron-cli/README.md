@@ -73,9 +73,9 @@ npx makaron-cli claim
 Share the `claim_url` with a human. They log in and the API key gets linked to their account. Claim links are valid for 7 days. Run `claim` again anytime to get a new link.
 
 
-## Estimate generation credits
+## Check generation credits on demand
 
-Use `makaron price` for a quote before starting a generation. `price list` discovers model IDs and supported resolutions. The quote includes customer-facing credits and applicable billing factors. It does not start a run, upload media or read your balance.
+Use `makaron price` when the user asks about price, budget, or how models compare. For routine creation, go directly to the requested workflow. `price list` discovers model IDs and supported resolutions. The quote includes customer-facing credits and applicable billing factors. It does not start a run, upload media or read your balance.
 
 ```bash
 makaron price list --json

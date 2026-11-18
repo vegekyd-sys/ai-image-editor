@@ -691,7 +691,7 @@ async function expectFailure(args, options) {
 
 try {
   {
-    await expectHelp(['price', '--help'], /estimate credits before generating media/);
+    await expectHelp(['price', '--help'], /check media credits on demand/);
     const list = await expectSuccess(['price', 'list', '--json']);
     assert.equal(JSON.parse(list.stdout).catalog.video[0].model, 'kling-4-flash');
     const firstRequest = requests.length;
