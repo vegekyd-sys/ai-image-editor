@@ -20,8 +20,8 @@ const SERVICE_LABELS: Record<string, string> = {
   supabase_auth: 'Supabase Auth',
   supabase_storage: 'Supabase Storage',
   gemini: 'Google Gemini',
-  openrouter: 'OpenRouter',
-  azure_openai: 'Azure OpenAI · GPT-5.6',
+  openrouter: 'OpenAI API',
+  openai_direct: 'OpenAI API · Direct',
   comfyui_qwen: 'ComfyUI Qwen',
   comfyui_pony: 'ComfyUI Pony',
   kling: 'Kling Video',
@@ -101,7 +101,7 @@ export default function StatusPage() {
 
             {/* Service list */}
             <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {Object.entries(data.services).map(([key, svc]) => (
+              {Object.entries(data.services).filter(([key]) => key !== 'azure_openai').map(([key, svc]) => (
                 <div key={key} style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '12px 16px',
