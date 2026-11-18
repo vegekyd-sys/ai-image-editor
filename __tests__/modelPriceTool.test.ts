@@ -131,7 +131,8 @@ describe('read-only Agent price awareness', () => {
     ] });
     expect(result.currency).toBe('credits');
     expect(result.billingExplanation).toContain('both output seconds and billable reference seconds use the reference-video tariff');
-    expect(result.billingExplanation).toContain('does not report which per-second tariff is higher');
+    expect(result.billingExplanation).toContain('the quote totals do not establish a unit-rate comparison');
+    expect(result.billingExplanation).toContain('Keep internal field names');
     expect(result.scope).toContain('Agent conversation usage is billed separately');
     expect(result.estimates[0]).toMatchObject({ status: 'estimated', details: { baseCredits: expect.any(Number), upscaleCredits: expect.any(Number) } });
     expect(result.estimates.map(e => e.status)).toEqual(['estimated', 'estimated', 'estimated', 'estimated', 'preflight_only', 'usage_only']);
@@ -162,7 +163,8 @@ describe('read-only Agent price awareness', () => {
     expect(result.comparison!.rows[1].atLeastTwiceLowest).toBe(true);
     expect(result.comparison!.warning).toContain('not a quality/capability equivalence');
     expect(result.observedAt).toMatch(/^\d{4}-/);
-    expect(result.validity).toContain('no expiry/discount calendar');
+    expect(result.validity).toContain('No expiry/discount calendar');
+    expect(result.validity).toContain('If the user moves on to generation, follow normal routing');
   });
   it('does not rank unrelated task quantities as a cheapest-model decision', async () => {
     const mixed = await quoteRequests({ requests: [request(), request({ kind: 'audio', model: 'evolink-seed-audio' })] });
