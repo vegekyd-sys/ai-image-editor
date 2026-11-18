@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import type { LanguageModel, ModelMessage } from 'ai';
+import { wrapLanguageModel, type LanguageModel, type ModelMessage } from 'ai';
+import { openRouterResponsesUsage } from './openrouter-responses-usage';
 import {
   resolveAgentModelSpecForUser,
   type AgentModelPreference,
@@ -13,10 +14,9 @@ import {
 import { normalizeToolCallInputs } from './tool-inputs';
 import { normalizeDeepSeekToolVision } from './deepseek-tool-vision';
 import {
-  createAzureOpenAIResponsesModel,
-  createAzureOpenAIWebSearchTool as createNativeWebSearchTool,
-  isAzureOpenAIWebSearchEnabled as isAgentWebSearchEnabled,
-} from './azure-openai-responses';
+  createAgentWebSearchTool as createNativeWebSearchTool,
+  isAgentWebSearchEnabled,
+} from './agent-web-search-tool';
 import { createCodexSubscriptionResponsesModel } from './codex-subscription';
 import { createGrokSubscriptionFetch } from './grok-subscription';
 import { createOpenAIDirectFetch, getOpenAIDirectApiKey, OPENAI_API_BASE_URL } from './openai-direct';
@@ -32,7 +32,7 @@ export function createAzureAgentPromptCacheKey(
   modelId: string,
   projectId: string,
 ): string {
-  const modelTier = modelId.replace(/^gpt-(?:5\.6|6(?:\.1)?)-/, '').replace(/[^a-z0-9-]/gi, '-');
+  const modelTier = modelId.replace(/^gpt-(?:5\.6|6(?:\.[12])?)-/, '').replace(/[^a-z0-9-]/gi, '-');
   const projectHash = createHash('sha256').update(projectId).digest('hex').slice(0, 40);
   return `mk-${modelTier}-${projectHash}`;
 }
@@ -53,16 +53,6 @@ export function createAgentModelRuntime(
     configuredGPT56Provider,
     codexSubscriptionAllowed,
   );
-
-  if (spec.provider === 'azure-openai') {
-    const promptCacheKey = createAzureAgentPromptCacheKey(spec.id, projectId);
-    return {
-      spec,
-      model: createAzureOpenAIResponsesModel(spec.providerModelId),
-      promptCacheKey,
-      normalizeMessages: normalizeToolCallInputs,
-    };
-  }
 
   if (spec.provider === 'openai') {
     const apiKey = getOpenAIDirectApiKey();
@@ -138,6 +128,20 @@ export function createAgentModelRuntime(
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY is required for OpenRouter Agent models');
   }
+  if (usesOpenRouterResponses(spec)) {
+    const openrouterResponses = createOpenAI({
+      name: 'openrouter',
+      baseURL: 'https://openrouter.ai/api/v1',
+      apiKey,
+      headers: { 'HTTP-Referer': 'https://www.makaron.app', 'X-Title': 'Makaron' },
+    });
+    return {
+      spec,
+      model: wrapLanguageModel({ model: openrouterResponses.responses(spec.providerModelId), middleware: openRouterResponsesUsage }),
+      promptCacheKey: createAzureAgentPromptCacheKey(spec.id, projectId),
+      normalizeMessages: normalizeToolCallInputs,
+    };
+  }
   const openrouter = createOpenRouter({
     apiKey,
     compatibility: 'strict',
@@ -157,53 +161,23 @@ export function createAgentModelRuntime(
   };
 }
 
+function usesOpenRouterResponses(spec: AgentModelSpec): boolean {
+  return spec.provider === 'openrouter' && spec.providerModelId.startsWith('openai/gpt-');
+}
+
+function getSupportedAgentReasoningEfforts(modelId: string): readonly AgentReasoningEffort[] {
+  if (modelId === 'gpt-6.2-sol' || modelId === 'gpt-6.2-astra') return ['low', 'medium', 'high', 'xhigh', 'max'];
+  if (modelId === 'gpt-6.1-terra') return ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
+  if (modelId === 'gpt-6.1-sol') return ['low', 'medium', 'high', 'xhigh'];
+  return ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
+}
+
 export function getAgentProviderOptions(
   runtime: AgentModelRuntime,
   options?: { compactAtTokens?: number },
 ): Record<string, any> {
-  if (runtime.spec.provider === 'azure-openai') {
-    const allowedEfforts = new Set<AgentReasoningEffort>([
-      ...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
-      'low', 'medium', 'high', 'xhigh',
-    ]);
-    const configuredEffort = process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT
-      ?.trim()
-      .toLowerCase() as AgentReasoningEffort | undefined;
-    const reasoningEffort = runtime.spec.id === 'gpt-6-luna'
-      ? 'high'
-      : (configuredEffort && allowedEfforts.has(configuredEffort)
-        ? configuredEffort
-        : runtime.spec.defaultReasoningEffort);
-    return {
-      azure: {
-        // The pinned AI SDK predates GPT-6 and otherwise drops reasoning.effort.
-        ...(runtime.spec.id.startsWith('gpt-6') ? { forceReasoning: true } : {}),
-        parallelToolCalls: false,
-        maxToolCalls: resolveAzureOpenAIWebSearchMaxCalls(),
-        store: false,
-        promptCacheKey: runtime.promptCacheKey,
-        promptCacheOptions: {
-          mode: 'implicit',
-          ttl: '30m',
-        },
-        ...(reasoningEffort ? { reasoningEffort } : {}),
-        ...(options?.compactAtTokens
-          ? {
-              contextManagement: [{
-                type: 'compaction',
-                compactThreshold: options.compactAtTokens,
-              }],
-            }
-          : {}),
-      },
-    };
-  }
-
   if (runtime.spec.provider === 'openai') {
-    const allowedEfforts = new Set<AgentReasoningEffort>([
-      ...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
-      'low', 'medium', 'high', 'xhigh',
-    ]);
+    const allowedEfforts = new Set(getSupportedAgentReasoningEfforts(runtime.spec.id));
     const configuredEffort = (process.env.OPENAI_AGENT_REASONING_EFFORT || process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT)
       ?.trim()
       .toLowerCase() as AgentReasoningEffort | undefined;
@@ -233,10 +207,7 @@ export function getAgentProviderOptions(
   }
 
   if (runtime.spec.provider === 'codex-subscription') {
-    const allowedEfforts = new Set<AgentReasoningEffort>([
-      ...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
-      'low', 'medium', 'high', 'xhigh',
-    ]);
+    const allowedEfforts = new Set(getSupportedAgentReasoningEfforts(runtime.spec.id));
     const configuredEffort = process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT
       ?.trim()
       .toLowerCase() as AgentReasoningEffort | undefined;
@@ -284,15 +255,28 @@ export function getAgentProviderOptions(
     };
   }
 
-  // Keep OpenRouter reasoning independent from Azure so one provider's tuning
-  // cannot silently add several minutes of latency to another provider.
   const configuredOpenRouterEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT?.trim().toLowerCase();
-  const allowedOpenRouterEfforts = new Set([...(runtime.spec.id === 'gpt-6.1-sol' ? [] : ['none', 'minimal'] as const),
-      'low', 'medium', 'high', 'xhigh', 'max']);
-  const openRouterEffort = configuredOpenRouterEffort && allowedOpenRouterEfforts.has(configuredOpenRouterEffort)
-    ? configuredOpenRouterEffort
-    : runtime.spec.defaultReasoningEffort
-      ?? (runtime.spec.id === 'grok-4.6' ? 'medium' : undefined);
+  const supportedEfforts = new Set<string>(getSupportedAgentReasoningEfforts(runtime.spec.id));
+  if (!usesOpenRouterResponses(runtime.spec)) supportedEfforts.add('max');
+  const openRouterEffort = runtime.spec.id === 'gpt-6-luna'
+    ? 'high'
+    : configuredOpenRouterEffort && supportedEfforts.has(configuredOpenRouterEffort)
+      ? configuredOpenRouterEffort
+      : runtime.spec.defaultReasoningEffort ?? (runtime.spec.id === 'grok-4.6' ? 'medium' : undefined);
+
+  if (usesOpenRouterResponses(runtime.spec)) {
+    // The OpenAI-compatible Responses adapter reads this namespace.
+    return {
+      openai: {
+        forceReasoning: true,
+        parallelToolCalls: false,
+        store: false,
+        maxToolCalls: resolveAzureOpenAIWebSearchMaxCalls(),
+        promptCacheKey: runtime.promptCacheKey,
+        ...(openRouterEffort ? { reasoningEffort: openRouterEffort } : {}),
+      },
+    };
+  }
 
   return {
     openrouter: {
@@ -304,14 +288,15 @@ export function getAgentProviderOptions(
 }
 
 export function resolveAzureOpenAIWebSearchMaxCalls(
-  value = process.env.AZURE_OPENAI_WEB_SEARCH_MAX_CALLS,
+  value = process.env.AGENT_WEB_SEARCH_MAX_CALLS ?? process.env.AZURE_OPENAI_WEB_SEARCH_MAX_CALLS,
 ): number {
   const parsed = Number.parseInt(value || '', 10);
   return Number.isFinite(parsed) ? Math.min(5, Math.max(1, parsed)) : 2;
 }
 
 export function getAgentProviderTools(runtime: AgentModelRuntime): Record<string, any> {
-  if (!['azure-openai', 'openai', 'codex-subscription'].includes(runtime.spec.provider) || !isAgentWebSearchEnabled()) {
+  if (!isAgentWebSearchEnabled() || (!usesOpenRouterResponses(runtime.spec)
+    && !['openai', 'codex-subscription'].includes(runtime.spec.provider))) {
     return {};
   }
   return {
@@ -325,15 +310,12 @@ export function sumOpenRouterProviderCost(
 ): number | undefined {
   if (runtime.spec.provider !== 'openrouter') return undefined;
   let total = 0;
-  let found = false;
   for (const step of steps) {
     const openrouter = step.providerMetadata?.openrouter as Record<string, unknown> | undefined;
     const usage = openrouter?.usage as Record<string, unknown> | undefined;
     const cost = usage?.cost;
-    if (typeof cost === 'number' && Number.isFinite(cost) && cost >= 0) {
-      total += cost;
-      found = true;
-    }
+    if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) return undefined;
+    total += cost;
   }
-  return found ? total : undefined;
+  return steps.length ? total : undefined;
 }

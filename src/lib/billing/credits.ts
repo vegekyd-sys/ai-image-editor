@@ -368,7 +368,7 @@ export async function deductWebSearchCalls(
   userId: string,
   calls: number,
   model?: string,
-  provider = 'azure-openai',
+  provider = 'openrouter',
 ): Promise<void> {
   const safeCalls = Number.isFinite(calls) ? Math.min(5, Math.max(0, Math.floor(calls))) : 0
   for (let index = 0; index < safeCalls; index += 1) {

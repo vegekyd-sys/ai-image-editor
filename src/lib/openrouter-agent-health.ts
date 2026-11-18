@@ -1,11 +1,9 @@
+import { GPT56_PROVIDER_MODEL_IDS } from './agent-models';
+
 export const REQUIRED_OPENROUTER_MODEL_IDS = [
-  'openai/gpt-6-luna',
-  'openai/gpt-6-sol',
-  'openai/gpt-5.6-terra',
-  'openai/gpt-5.6-sol',
-  'openai/gpt-5.6-luna',
+  ...Object.values(GPT56_PROVIDER_MODEL_IDS).map(models => models.openrouter),
   'openai/gpt-image-2',
-] as const;
+];
 
 interface OpenRouterAgentHealthEnv {
   OPENROUTER_API_KEY?: string;

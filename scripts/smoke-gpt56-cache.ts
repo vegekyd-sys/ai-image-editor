@@ -33,14 +33,13 @@ interface SurfaceResult {
 }
 
 const MODEL_ID = process.env.GPT56_CACHE_SMOKE_MODEL?.trim() || 'gpt-5.6-terra';
-const API_KEY = process.env.AZURE_OPENAI_API_KEY?.trim();
-const RESPONSES_ENDPOINT = process.env.AZURE_OPENAI_RESPONSES_URL?.trim()
-  || 'https://meo-ultron.openai.azure.com/openai/responses?api-version=2025-04-01-preview';
+const API_KEY = process.env.OPENROUTER_API_KEY?.trim();
+const RESPONSES_ENDPOINT = 'https://openrouter.ai/api/v1/responses';
 const rawRunId = process.env.GPT56_CACHE_SMOKE_RUN_ID?.trim() || randomUUID();
 const CACHE_RUN_ID = createHash('sha256').update(rawRunId).digest('hex').slice(0, 16);
 const MODEL_TIER = MODEL_ID.replace(/^gpt-5\.6-/, '').replace(/[^a-z0-9-]/gi, '-');
 
-if (!API_KEY) throw new Error('AZURE_OPENAI_API_KEY is required');
+if (!API_KEY) throw new Error('OPENROUTER_API_KEY is required');
 
 // A unique prefix gives each invocation a genuine cold-cache candidate. The
 // logical samples vary only in their trailing user message, matching production.
@@ -73,7 +72,6 @@ function usageFromResponses(
   logicalSample: number,
   status: number,
   body: Record<string, any>,
-  headers: Headers,
 ): UsageSnapshot {
   const usage = body.usage || {};
   const details = usage.input_tokens_details || {};
@@ -87,7 +85,7 @@ function usageFromResponses(
     cacheWriteTokens: readNumber(details, 'cache_write_tokens', 'cache_written_tokens'),
     cacheHitRatio: cacheHitRatio(inputTokens, cachedTokens),
     detailKeys: Object.keys(details).sort(),
-    servedModel: headers.get('x-ms-served-model'),
+    servedModel: typeof body.model === 'string' ? body.model : null,
   };
 }
 
@@ -95,7 +93,6 @@ function usageFromChat(
   logicalSample: number,
   status: number,
   body: Record<string, any>,
-  headers: Headers,
 ): UsageSnapshot {
   const usage = body.usage || {};
   const details = usage.prompt_tokens_details || {};
@@ -109,7 +106,7 @@ function usageFromChat(
     cacheWriteTokens: readNumber(details, 'cache_write_tokens', 'cache_written_tokens'),
     cacheHitRatio: cacheHitRatio(inputTokens, cachedTokens),
     detailKeys: Object.keys(details).sort(),
-    servedModel: headers.get('x-ms-served-model'),
+    servedModel: typeof body.model === 'string' ? body.model : null,
   };
 }
 
@@ -136,7 +133,7 @@ async function postJson(
       response = await fetch(url, {
         method: 'POST',
         headers: {
-          'api-key': API_KEY!,
+          Authorization: `Bearer ${API_KEY}`,
           'content-type': 'application/json',
         },
         body: JSON.stringify(body),
@@ -196,7 +193,7 @@ async function sampleResponses(
   attempts: HttpAttempt[],
 ): Promise<UsageSnapshot> {
   const { response, payload } = await postJson(RESPONSES_ENDPOINT, {
-    model: MODEL_ID,
+    model: MODEL_ID.startsWith('openai/') ? MODEL_ID : `openai/${MODEL_ID}`,
     input: [
       {
         role: 'system',
@@ -210,7 +207,7 @@ async function sampleResponses(
     prompt_cache_options: { mode: 'implicit', ttl: '30m' },
     store: false,
   }, logicalSample, attempts);
-  return usageFromResponses(logicalSample, response.status, payload, response.headers);
+  return usageFromResponses(logicalSample, response.status, payload);
 }
 
 async function sampleChat(
@@ -219,7 +216,7 @@ async function sampleChat(
   attempts: HttpAttempt[],
 ): Promise<UsageSnapshot> {
   const { response, payload } = await postJson(chatEndpoint, {
-    model: MODEL_ID,
+    model: MODEL_ID.startsWith('openai/') ? MODEL_ID : `openai/${MODEL_ID}`,
     messages: [
       { role: 'system', content: stablePrefix },
       { role: 'user', content: `Reply with exactly CACHE_OK_${logicalSample}.` },
@@ -229,7 +226,7 @@ async function sampleChat(
     prompt_cache_key: `mk-c-${MODEL_TIER}-${CACHE_RUN_ID}`,
     prompt_cache_options: { mode: 'implicit', ttl: '30m' },
   }, logicalSample, attempts);
-  return usageFromChat(logicalSample, response.status, payload, response.headers);
+  return usageFromChat(logicalSample, response.status, payload);
 }
 
 async function collectSurface(
@@ -261,7 +258,7 @@ function coldState(result: SurfaceResult): string {
 
 async function main() {
   const origin = new URL(RESPONSES_ENDPOINT).origin;
-  const chatEndpoint = `${origin}/openai/v1/chat/completions`;
+  const chatEndpoint = `${origin}/api/v1/chat/completions`;
   const responses = await collectSurface(sampleResponses);
   const chat = await collectSurface((sample, attempts) =>
     sampleChat(chatEndpoint, sample, attempts));
@@ -279,7 +276,7 @@ async function main() {
     && responsesCacheHit;
 
   const report = {
-    model: MODEL_ID,
+    model: MODEL_ID.startsWith('openai/') ? MODEL_ID : `openai/${MODEL_ID}`,
     cacheRunIdHash: CACHE_RUN_ID,
     stablePrefixWords: 1_801,
     cacheKeyLength: `mk-r-${MODEL_TIER}-${CACHE_RUN_ID}`.length,

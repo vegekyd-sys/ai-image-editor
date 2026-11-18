@@ -597,6 +597,7 @@ export async function* runMakaronAgent(
     const billedStepMetadata: Array<{ providerMetadata?: Record<string, unknown> }> = [];
     let usageEmitted = false;
     const webSearchToolCallIds = new Set<string>();
+    let reportedWebSearchCalls = 0;
     const pendingWebSources: ReturnType<typeof extractWebSearchSources> = [];
     const emittedWebSourceIdsInStep = new Set<string>();
     let webSearchTurn = 0;
@@ -643,6 +644,8 @@ export async function* runMakaronAgent(
       billedCacheWriteTokens += cacheWrite;
       billedOutputTokens += usage.outputTokens ?? 0;
       billedStepMetadata.push({ providerMetadata: event.providerMetadata });
+      const reportedSearches = event.providerMetadata?.openrouter?.usage?.webSearchRequests;
+      if (typeof reportedSearches === 'number') reportedWebSearchCalls += reportedSearches;
       if (deepSeekRate) {
         deepSeekCostUsd += deepSeekFlashProviderCost(deepSeekRate, {
           noCacheInput: noCache, cacheRead, cacheWrite, output: usage.outputTokens ?? 0,
@@ -675,7 +678,7 @@ export async function* runMakaronAgent(
         cacheWriteTokens: billedCacheWriteTokens,
         cacheWriteTelemetryComplete,
         providerCostUsd,
-        webSearchCalls: webSearchToolCallIds.size,
+        webSearchCalls: Math.max(webSearchToolCallIds.size, reportedWebSearchCalls),
         model: modelId,
         provider: runtime.spec.provider,
       };
@@ -688,7 +691,7 @@ export async function* runMakaronAgent(
       ? new AgentExecutionStore(options.supabase, options.userId, projectId) : undefined;
     let compactionFailed = false;
     let recoveryResponses: ModelMessage[] = [];
-    const native = ['azure-openai', 'openai', 'codex-subscription'].includes(runtime.spec.provider);
+    const native = ['openai', 'codex-subscription'].includes(runtime.spec.provider);
     const compactorConfig = {
       history, current: msgs[msgs.length - 1], previous: options?.applicationCompaction,
       policy, fixedTokens: 0, native, runId, toolCallRuns: options?.toolCallRuns, force: options?.recoverDeepSeekHistory,
@@ -709,7 +712,7 @@ export async function* runMakaronAgent(
     let usingCanonicalHistory = !options?.historyForProviderSwitch;
     function rebuildForRoute() {
       compactorConfig.history = options?.historyForProviderSwitch?.() ?? history;
-      compactorConfig.native = ['azure-openai', 'openai', 'codex-subscription'].includes(runtime.spec.provider);
+      compactorConfig.native = ['openai', 'codex-subscription'].includes(runtime.spec.provider);
       compactor = createHistoryCompactor(compactorConfig);
       if (sendHistory && tools) tools.read_compacted_history = compactor.reader;
       usingCanonicalHistory = true;
@@ -782,7 +785,7 @@ export async function* runMakaronAgent(
           try {
             const responses = [...recoveryResponses, ...responseMessages];
             const compacted = compactorConfig.native
-              ? nativeContinuation(messages, compactorConfig.fixedTokens, policy.contextWindowTokens, runtime.spec.provider === 'azure-openai' ? 'azure' : 'openai') : undefined;
+              ? nativeContinuation(messages, compactorConfig.fixedTokens, policy.contextWindowTokens, 'openai') : undefined;
             if (compacted?.fits) {
               prepared = compacted.messages;
             } else {
@@ -939,7 +942,7 @@ export async function* runMakaronAgent(
       }
 
       if (event.type === 'custom' && (event as any).kind === 'openai.compaction') {
-        const providerKey = runtime.spec.provider === 'azure-openai' ? 'azure' : 'openai';
+        const providerKey = 'openai';
         const metadata = (event as any).providerMetadata?.[providerKey] as {
           itemId?: string;
           encryptedContent?: string;
@@ -1628,8 +1631,8 @@ export async function* runMakaronAgent(
           : subscriptionProvider === 'openai'
           ? resolveOpenAIDirectFallbackProvider()
           : 'openrouter';
-        const hasFallbackCredential = fallbackProvider === 'azure-openai'
-          ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
+        const hasFallbackCredential = fallbackProvider === 'openai'
+          ? Boolean(process.env.OPENAI_API_KEY?.trim())
           : Boolean(process.env.OPENROUTER_API_KEY?.trim());
         if (hasFallbackCredential) {
           try {

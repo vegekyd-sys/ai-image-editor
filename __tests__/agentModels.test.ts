@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   AGENT_MODEL_IDS,
   CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES,
@@ -29,6 +29,9 @@ describe('agent model catalog', () => {
       'gpt-6-luna',
       'gpt-6-sol',
       'gpt-6.1-sol',
+      'gpt-6.2-sol',
+      'gpt-6.2-astra',
+      'gpt-6.1-terra',
       'gpt-5.6-terra',
       'gpt-5.6-sol',
       'gpt-5.6-luna',
@@ -39,88 +42,81 @@ describe('agent model catalog', () => {
   });
 
   it('routes Sol 6.1 to the exact model and retains high reasoning with old unsupported overrides', () => {
-    const old = { key: process.env.AZURE_OPENAI_API_KEY, owner: process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
-      azure: process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT, codex: process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT };
-    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    const old = { key: process.env.OPENROUTER_API_KEY, owner: process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
+      azure: process.env.OPENROUTER_AGENT_REASONING_EFFORT, codex: process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT };
+    process.env.OPENROUTER_API_KEY = 'test-key';
     process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
-    process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT = 'minimal';
+    process.env.OPENROUTER_AGENT_REASONING_EFFORT = 'minimal';
     process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT = 'none';
     try {
       const api = createAgentModelRuntime('gpt-6.1-sol', 'sol61-api');
       const plan = createAgentModelRuntime('gpt-6.1-sol-codex-subscription', 'sol61-plan', undefined, 'owner-id', true);
-      expect(api.spec).toMatchObject({ provider: 'azure-openai', providerModelId: 'gpt-6.1-sol', billingModelId: 'gpt-6.1-sol' });
+      expect(api.spec).toMatchObject({ provider: 'openrouter', providerModelId: 'openai/gpt-6.1-sol', billingModelId: 'openai/gpt-6.1-sol' });
       expect(plan.spec).toMatchObject({ provider: 'codex-subscription', providerModelId: 'gpt-6.1-sol' });
-      expect(getAgentProviderOptions(api)).toMatchObject({ azure: { forceReasoning: true, reasoningEffort: 'high' } });
+      expect(getAgentProviderOptions(api)).toMatchObject({ openai: { forceReasoning: true, reasoningEffort: 'high' } });
       expect(getAgentProviderOptions(plan)).toMatchObject({ openai: { forceReasoning: true, reasoningEffort: 'high' } });
       expect(createAzureAgentPromptCacheKey('gpt-6.1-sol', 'test')).toMatch(/^mk-sol-/);
     } finally {
-      for (const [key, value] of Object.entries({ AZURE_OPENAI_API_KEY: old.key, CODEX_SUBSCRIPTION_OWNER_USER_ID: old.owner,
-        AZURE_OPENAI_AGENT_REASONING_EFFORT: old.azure, CODEX_SUBSCRIPTION_REASONING_EFFORT: old.codex })) {
+      for (const [key, value] of Object.entries({ OPENROUTER_API_KEY: old.key, CODEX_SUBSCRIPTION_OWNER_USER_ID: old.owner,
+        OPENROUTER_AGENT_REASONING_EFFORT: old.azure, CODEX_SUBSCRIPTION_REASONING_EFFORT: old.codex })) {
         if (value === undefined) delete process.env[key]; else process.env[key] = value;
       }
     }
   });
 
-  it('enables provider-native compaction only when a threshold is requested', () => {
-    const previousKey = process.env.AZURE_OPENAI_API_KEY;
-    const previousProvider = process.env.GPT56_AGENT_PROVIDER;
-    process.env.AZURE_OPENAI_API_KEY = 'test-key';
-    process.env.GPT56_AGENT_PROVIDER = 'azure-openai';
+  it('keeps OpenRouter on application compaction and keeps the direct OpenAI threshold', () => {
+    vi.stubEnv('OPENAI_API_KEY', 'test-key');
+    vi.stubEnv('OPENROUTER_API_KEY', 'test-key');
     try {
-      const runtime = createAgentModelRuntime('gpt-5.6-sol', 'project-compact');
-      expect(getAgentProviderOptions(runtime, { compactAtTokens: 650_000 }))
-        .toMatchObject({
-          azure: {
-            contextManagement: [{ type: 'compaction', compactThreshold: 650_000 }],
-          },
-        });
+      const routed = createAgentModelRuntime('gpt-5.6-sol', 'project', 'azure-openai');
+      const direct = createAgentModelRuntime('gpt-5.6-sol', 'project', 'openai');
+      expect(getAgentProviderOptions(routed, { compactAtTokens: 650_000 }).openai.contextManagement).toBeUndefined();
+      expect(getAgentProviderOptions(direct, { compactAtTokens: 650_000 }).openai.contextManagement)
+        .toEqual([{ type: 'compaction', compactThreshold: 650_000 }]);
     } finally {
-      if (previousKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
-      else process.env.AZURE_OPENAI_API_KEY = previousKey;
-      if (previousProvider === undefined) delete process.env.GPT56_AGENT_PROVIDER;
-      else process.env.GPT56_AGENT_PROVIDER = previousProvider;
+      vi.unstubAllEnvs();
     }
   });
 
-  it('maps GPT-5.6 product ids to Azure by default', () => {
+  it('maps GPT-5.6 product ids to OpenRouter by default', () => {
     expect(resolveAgentModelSpec('gpt-5.6-sol')).toMatchObject({
-      provider: 'azure-openai',
-      providerModelId: 'gpt-5.6-sol',
-      billingModelId: 'gpt-5.6-sol',
+      provider: 'openrouter',
+      providerModelId: 'openai/gpt-5.6-sol',
+      billingModelId: 'openai/gpt-5.6-sol',
     });
     expect(resolveAgentModelSpec('gpt-5.6-terra').providerModelId)
-      .toBe('gpt-5.6-terra');
+      .toBe('openai/gpt-5.6-terra');
     expect(resolveAgentModelSpec('gpt-5.6-luna').providerModelId)
-      .toBe('gpt-5.6-luna');
+      .toBe('openai/gpt-5.6-luna');
     expect(resolveAgentModelSpec('grok-4.6').providerModelId)
       .toBe('x-ai/grok-4.6');
     expect(resolveAgentModelSpec('deepseek-v4-pro').providerModelId)
       .toBe('deepseek-v4-pro');
   });
 
-  it('sends GPT-6 reasoning options through the pinned Azure SDK', () => {
-    const previousKey = process.env.AZURE_OPENAI_API_KEY;
-    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+  it('sends GPT-6 reasoning options through OpenRouter Responses', () => {
+    const previousKey = process.env.OPENROUTER_API_KEY;
+    process.env.OPENROUTER_API_KEY = 'test-key';
     try {
       const runtime = createAgentModelRuntime('gpt-6-luna', 'project-gpt6');
-      expect(runtime.spec).toMatchObject({ provider: 'azure-openai', providerModelId: 'gpt-6-luna' });
+      expect(runtime.spec).toMatchObject({ provider: 'openrouter', providerModelId: 'openai/gpt-6-luna' });
       expect(getAgentProviderOptions(runtime)).toMatchObject({
-        azure: { forceReasoning: true, reasoningEffort: 'high' },
+        openai: { forceReasoning: true, reasoningEffort: 'high' },
       });
     } finally {
-      if (previousKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
-      else process.env.AZURE_OPENAI_API_KEY = previousKey;
+      if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = previousKey;
     }
   });
 
   it('keeps Luna at high on both API and subscription routes', () => {
     const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
-    const previousAzureKey = process.env.AZURE_OPENAI_API_KEY;
-    const previousAzureEffort = process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
+    const previousAzureKey = process.env.OPENROUTER_API_KEY;
+    const previousOpenRouterEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT;
     const previousCodexEffort = process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT;
     process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
-    process.env.AZURE_OPENAI_API_KEY = 'test-key';
-    process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT = 'low';
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    process.env.OPENROUTER_AGENT_REASONING_EFFORT = 'low';
     process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT = 'low';
     try {
       const api = createAgentModelRuntime('gpt-6-luna', 'project-api');
@@ -128,7 +124,7 @@ describe('agent model catalog', () => {
         'gpt-6-luna-codex-subscription', 'project-plan', undefined, 'owner-id', true,
       );
       expect(getAgentProviderOptions(api)).toMatchObject({
-        azure: { forceReasoning: true, reasoningEffort: 'high' },
+        openai: { forceReasoning: true, reasoningEffort: 'high' },
       });
       expect(getAgentProviderOptions(subscription)).toMatchObject({
         openai: { forceReasoning: true, reasoningEffort: 'high' },
@@ -136,21 +132,21 @@ describe('agent model catalog', () => {
     } finally {
       if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
       else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
-      if (previousAzureKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
-      else process.env.AZURE_OPENAI_API_KEY = previousAzureKey;
-      if (previousAzureEffort === undefined) delete process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
-      else process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT = previousAzureEffort;
+      if (previousAzureKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = previousAzureKey;
+      if (previousOpenRouterEffort === undefined) delete process.env.OPENROUTER_AGENT_REASONING_EFFORT;
+      else process.env.OPENROUTER_AGENT_REASONING_EFFORT = previousOpenRouterEffort;
       if (previousCodexEffort === undefined) delete process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT;
       else process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT = previousCodexEffort;
     }
   });
 
-  it('keeps OpenRouter GPT-5.6 routes available as the explicit backup', () => {
-    expect(resolveGPT56AgentProvider()).toBe('azure-openai');
+  it('keeps OpenRouter GPT-5.6 routes available for legacy Azure configuration', () => {
+    expect(resolveGPT56AgentProvider()).toBe('openrouter');
     expect(resolveGPT56AgentProvider('openrouter')).toBe('openrouter');
-    expect(resolveGPT56AgentProvider('azure')).toBe('azure-openai');
-    expect(resolveGPT56AgentProvider('azure-openai')).toBe('azure-openai');
-    expect(resolveGPT56AgentProvider('unexpected-provider')).toBe('azure-openai');
+    expect(resolveGPT56AgentProvider('azure')).toBe('openrouter');
+    expect(resolveGPT56AgentProvider('azure-openai')).toBe('openrouter');
+    expect(resolveGPT56AgentProvider('unexpected-provider')).toBe('openrouter');
 
     for (const id of ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna'] as const) {
       expect(resolveAgentModelSpec(id, undefined, 'openrouter')).toMatchObject({
@@ -163,11 +159,24 @@ describe('agent model catalog', () => {
     }
   });
 
+  it.each(['gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-terra'] as const)(
+    'passes %s through older API and subscription contracts',
+    (id) => {
+      expect(normalizeRequestedAgentModelPreference(id)).toBe(id);
+      expect(resolveAgentModelSpec(id, undefined, 'azure-openai')).toMatchObject({
+        id, provider: 'openrouter', providerModelId: `openai/${id}`, billingModelId: `openai/${id}`,
+      });
+      expect(resolveAgentModelSpec(id, undefined, 'codex-subscription')).toMatchObject({
+        id, provider: 'codex-subscription', providerModelId: id,
+      });
+    },
+  );
+
   it('keeps the same product model ids when Codex subscription is selected', () => {
     expect(resolveGPT56AgentProvider('codex')).toBe('codex-subscription');
     expect(resolveGPT56AgentProvider('chatgpt')).toBe('codex-subscription');
     expect(resolveCodexSubscriptionFallbackProvider('openrouter')).toBe('openrouter');
-    expect(resolveCodexSubscriptionFallbackProvider('codex-subscription')).toBe('azure-openai');
+    expect(resolveCodexSubscriptionFallbackProvider('codex-subscription')).toBe('openrouter');
 
     for (const id of ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna'] as const) {
       expect(resolveAgentModelSpec(id, undefined, 'codex-subscription')).toMatchObject({
@@ -179,7 +188,7 @@ describe('agent model catalog', () => {
     }
   });
 
-  it('keeps GPT-5.6 on Azure by default and uses Codex only for explicit plan options', () => {
+  it('keeps GPT-5.6 on OpenRouter by default and uses Codex only for explicit plan options', () => {
     const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
     process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
     try {
@@ -190,15 +199,15 @@ describe('agent model catalog', () => {
         'azure-openai',
       )).toMatchObject({
         id: 'gpt-5.6-terra',
-        provider: 'azure-openai',
+        provider: 'openrouter',
       });
       for (const [preference, modelId] of [
         [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[0], 'gpt-6-luna'],
         [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[1], 'gpt-6-sol'],
         [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[2], 'gpt-6.1-sol'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[3], 'gpt-5.6-terra'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[4], 'gpt-5.6-sol'],
-        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[5], 'gpt-5.6-luna'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[6], 'gpt-5.6-terra'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[7], 'gpt-5.6-sol'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[8], 'gpt-5.6-luna'],
       ] as const) {
         expect(resolveAgentModelSpecForUser(
           preference,
@@ -262,7 +271,7 @@ describe('agent model catalog', () => {
         'azure-openai',
       )).toMatchObject({
         id: 'gpt-5.6-terra',
-        provider: 'azure-openai',
+        provider: 'openrouter',
       });
       expect(resolveAgentModelSpecForUser(
         'auto',
@@ -280,7 +289,7 @@ describe('agent model catalog', () => {
         'azure-openai',
       )).toMatchObject({
         id: 'gpt-5.6-terra',
-        provider: 'azure-openai',
+        provider: 'openrouter',
       });
     } finally {
       if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
@@ -397,7 +406,7 @@ describe('agent model catalog', () => {
       ownerUserId: 'owner-id',
       allowedUserIds: 'test-user-id',
       dynamicallyAllowed: false,
-    })).toBe('azure-openai');
+    })).toBe('openrouter');
     expect(resolveGPT56AgentProviderForUser({
       configuredProvider: 'codex-subscription',
       userId: 'test-user-id',
@@ -449,7 +458,7 @@ describe('agent model catalog', () => {
         undefined,
         'someone-else',
         'codex-subscription',
-      ).provider).toBe('azure-openai');
+      ).provider).toBe('openrouter');
     } finally {
       if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
       else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
@@ -462,7 +471,7 @@ describe('agent model catalog', () => {
     const previousAzureKey = process.env.AZURE_OPENAI_API_KEY;
     const previousOpenRouterKey = process.env.OPENROUTER_API_KEY;
     const previousProvider = process.env.GPT56_AGENT_PROVIDER;
-    process.env.AZURE_OPENAI_API_KEY = 'azure-key';
+    process.env.AZURE_OPENAI_API_KEY = 'stale-azure-key';
     process.env.OPENROUTER_API_KEY = 'openrouter-key';
     process.env.GPT56_AGENT_PROVIDER = 'azure-openai';
     try {
@@ -516,21 +525,6 @@ describe('agent model catalog', () => {
     expect(resolveAgentModelSpec('deepseek-v4-pro').supportsImageInput).toBe(false);
   });
 
-  it('fails clearly when Azure credentials are missing', () => {
-    const previousKey = process.env.AZURE_OPENAI_API_KEY;
-    const previousProvider = process.env.GPT56_AGENT_PROVIDER;
-    delete process.env.AZURE_OPENAI_API_KEY;
-    process.env.GPT56_AGENT_PROVIDER = 'azure-openai';
-    try {
-      expect(() => createAgentModelRuntime('gpt-5.6-terra', 'project-a'))
-        .toThrow('AZURE_OPENAI_API_KEY is required');
-    } finally {
-      if (previousKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
-      else process.env.AZURE_OPENAI_API_KEY = previousKey;
-      if (previousProvider === undefined) delete process.env.GPT56_AGENT_PROVIDER;
-      else process.env.GPT56_AGENT_PROVIDER = previousProvider;
-    }
-  });
 
   it('fails clearly when explicit OpenRouter backup credentials are missing', () => {
     const previousKey = process.env.OPENROUTER_API_KEY;
@@ -548,33 +542,30 @@ describe('agent model catalog', () => {
     }
   });
 
-  it('uses the product reasoning default for Azure GPT-5.6 models', () => {
-    const previousKey = process.env.AZURE_OPENAI_API_KEY;
-    const previousEffort = process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
+  it('uses the product reasoning default for OpenRouter GPT-5.6 models', () => {
+    const previousKey = process.env.OPENROUTER_API_KEY;
+    const previousEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT;
     const previousProvider = process.env.GPT56_AGENT_PROVIDER;
-    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    process.env.OPENROUTER_API_KEY = 'test-key';
     process.env.GPT56_AGENT_PROVIDER = 'azure-openai';
-    delete process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
+    delete process.env.OPENROUTER_AGENT_REASONING_EFFORT;
     try {
       const runtime = createAgentModelRuntime('gpt-5.6-terra', 'project-a');
       expect(getAgentProviderOptions(runtime)).toEqual({
-        azure: {
+        openai: {
+          forceReasoning: true,
           parallelToolCalls: false,
           maxToolCalls: 2,
           store: false,
           promptCacheKey: createAzureAgentPromptCacheKey('gpt-5.6-terra', 'project-a'),
-          promptCacheOptions: {
-            mode: 'implicit',
-            ttl: '30m',
-          },
           reasoningEffort: 'medium',
         },
       });
     } finally {
-      if (previousKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
-      else process.env.AZURE_OPENAI_API_KEY = previousKey;
-      if (previousEffort === undefined) delete process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
-      else process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT = previousEffort;
+      if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = previousKey;
+      if (previousEffort === undefined) delete process.env.OPENROUTER_AGENT_REASONING_EFFORT;
+      else process.env.OPENROUTER_AGENT_REASONING_EFFORT = previousEffort;
       if (previousProvider === undefined) delete process.env.GPT56_AGENT_PROVIDER;
       else process.env.GPT56_AGENT_PROVIDER = previousProvider;
     }
@@ -589,11 +580,11 @@ describe('agent model catalog', () => {
     delete process.env.OPENROUTER_AGENT_REASONING_EFFORT;
     try {
       expect(getAgentProviderOptions(createAgentModelRuntime('gpt-5.6-terra', 'project-a')))
-        .toMatchObject({ openrouter: { reasoning: { effort: 'medium' } } });
+        .toMatchObject({ openai: { reasoningEffort: 'medium' } });
       expect(getAgentProviderOptions(createAgentModelRuntime('gpt-5.6-sol', 'project-a')))
-        .toMatchObject({ openrouter: { reasoning: { effort: 'high' } } });
+        .toMatchObject({ openai: { reasoningEffort: 'high' } });
       expect(getAgentProviderOptions(createAgentModelRuntime('gpt-5.6-luna', 'project-a')))
-        .toMatchObject({ openrouter: { reasoning: { effort: 'low' } } });
+        .toMatchObject({ openai: { reasoningEffort: 'low' } });
     } finally {
       if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
       else process.env.OPENROUTER_API_KEY = previousKey;
@@ -604,12 +595,12 @@ describe('agent model catalog', () => {
     }
   });
 
-  it('exposes native web search to Azure and Codex subscription runtimes', () => {
+  it('exposes native web search to OpenRouter and Codex subscription runtimes', () => {
     const previousAzureKey = process.env.AZURE_OPENAI_API_KEY;
     const previousOpenRouterKey = process.env.OPENROUTER_API_KEY;
     const previousEnabled = process.env.AGENT_WEB_SEARCH_ENABLED;
     const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
-    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    process.env.OPENROUTER_API_KEY = 'test-key';
     process.env.OPENROUTER_API_KEY = 'test-key';
     process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner';
     delete process.env.AGENT_WEB_SEARCH_ENABLED;

@@ -242,7 +242,7 @@ describe('Responses optional-field wire contract', () => {
     expect(h.tool.inputSchema.safeParse({ story_prompt: 'A film', duration: 'five' }).success).toBe(false);
   });
 
-  it.each(['azure-openai', 'codex-subscription'])('fixes all optional tools on %s without overriding explicit strict tools', provider => {
+  it.each(['openrouter', 'codex-subscription'])('fixes all optional tools on %s without overriding explicit strict tools', provider => {
     const tools = { optional: { strict: undefined }, explicit: { strict: true } };
     expect(preserveOptionalToolFields(tools, provider)).toMatchObject({ optional: { strict: false }, explicit: { strict: true } });
   });

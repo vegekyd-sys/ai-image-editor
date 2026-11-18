@@ -3,6 +3,9 @@ export const AGENT_MODEL_IDS = [
   'gpt-6-luna',
   'gpt-6-sol',
   'gpt-6.1-sol',
+  'gpt-6.2-sol',
+  'gpt-6.2-astra',
+  'gpt-6.1-terra',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
@@ -17,6 +20,9 @@ export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = [
   CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
   'gpt-6-sol-codex-subscription',
   'gpt-6.1-sol-codex-subscription',
+  'gpt-6.2-sol-codex-subscription',
+  'gpt-6.2-astra-codex-subscription',
+  'gpt-6.1-terra-codex-subscription',
   'gpt-5.6-terra-codex-subscription',
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
@@ -26,10 +32,10 @@ export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.6-grok-subscript
 export type GrokSubscriptionAgentModelPreference = typeof GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE;
 export type AgentModelPreference = 'auto' | AgentModelId | CodexSubscriptionAgentModelPreference | GrokSubscriptionAgentModelPreference;
 export type AgentModelProvider = 'azure-openai' | 'openai' | 'codex-subscription' | 'grok-subscription' | 'openrouter' | 'deepseek';
-export type GPT56ApiProvider = Extract<AgentModelProvider, 'azure-openai' | 'openai' | 'openrouter'>;
+export type GPT56ApiProvider = Extract<AgentModelProvider, 'openai' | 'openrouter'>;
 export type GPT56AgentProvider = GPT56ApiProvider | 'codex-subscription';
 export type AgentCacheStrategy = 'explicit' | 'automatic';
-export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface AgentModelSpec {
   id: AgentModelId;
@@ -42,12 +48,15 @@ export interface AgentModelSpec {
 }
 
 export const DEFAULT_AGENT_MODEL_ID: AgentModelId = 'deepseek-flash';
-export const DEFAULT_GPT56_AGENT_PROVIDER: GPT56AgentProvider = 'azure-openai';
+export const DEFAULT_GPT56_AGENT_PROVIDER: GPT56AgentProvider = 'openrouter';
 
 const GPT56_AGENT_MODEL_IDS = [
   'gpt-6-luna',
   'gpt-6-sol',
   'gpt-6.1-sol',
+  'gpt-6.2-sol',
+  'gpt-6.2-astra',
+  'gpt-6.1-terra',
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
@@ -61,37 +70,46 @@ export const GPT56_PROVIDER_MODEL_IDS: Record<
 > = {
   'gpt-6-luna': {
     openrouter: 'openai/gpt-6-luna',
-    'azure-openai': 'gpt-6-luna',
     openai: 'gpt-6-luna',
     'codex-subscription': 'gpt-6-luna',
   },
+  'gpt-6.2-sol': {
+    openrouter: 'openai/gpt-6.2-sol',
+    openai: 'gpt-6.2-sol',
+    'codex-subscription': 'gpt-6.2-sol',
+  },
+  'gpt-6.2-astra': {
+    openrouter: 'openai/gpt-6.2-astra',
+    openai: 'gpt-6.2-astra',
+    'codex-subscription': 'gpt-6.2-astra',
+  },
+  'gpt-6.1-terra': {
+    openrouter: 'openai/gpt-6.1-terra',
+    openai: 'gpt-6.1-terra',
+    'codex-subscription': 'gpt-6.1-terra',
+  },
   'gpt-6.1-sol': {
     openrouter: 'openai/gpt-6.1-sol',
-    'azure-openai': 'gpt-6.1-sol',
     openai: 'gpt-6.1-sol',
     'codex-subscription': 'gpt-6.1-sol',
   },
   'gpt-6-sol': {
     openrouter: 'openai/gpt-6-sol',
-    'azure-openai': 'gpt-6-sol',
     openai: 'gpt-6-sol',
     'codex-subscription': 'gpt-6-sol',
   },
   'gpt-5.6-terra': {
     openrouter: 'openai/gpt-5.6-terra',
-    'azure-openai': 'gpt-5.6-terra',
     openai: 'gpt-5.6-terra',
     'codex-subscription': 'gpt-5.6-terra',
   },
   'gpt-5.6-sol': {
     openrouter: 'openai/gpt-5.6-sol',
-    'azure-openai': 'gpt-5.6-sol',
     openai: 'gpt-5.6-sol',
     'codex-subscription': 'gpt-5.6-sol',
   },
   'gpt-5.6-luna': {
     openrouter: 'openai/gpt-5.6-luna',
-    'azure-openai': 'gpt-5.6-luna',
     openai: 'gpt-5.6-luna',
     'codex-subscription': 'gpt-5.6-luna',
   },
@@ -136,9 +154,9 @@ export function resolveGPT56AgentProvider(value?: string): GPT56AgentProvider {
   if (normalized === 'codex' || normalized === 'codex-subscription' || normalized === 'chatgpt') {
     return 'codex-subscription';
   }
-  if (normalized === 'openrouter') return 'openrouter';
+  // Accept existing environment values and saved provider pins after the cutover.
+  if (normalized === 'openrouter' || normalized === 'azure' || normalized === 'azure-openai') return 'openrouter';
   if (normalized === 'openai' || normalized === 'openai-direct') return 'openai';
-  if (normalized === 'azure' || normalized === 'azure-openai') return 'azure-openai';
   return DEFAULT_GPT56_AGENT_PROVIDER;
 }
 
@@ -146,12 +164,12 @@ export function resolveCodexSubscriptionFallbackProvider(
   value: string | undefined = process.env.CODEX_SUBSCRIPTION_FALLBACK_PROVIDER,
 ): GPT56ApiProvider {
   const provider = resolveGPT56AgentProvider(value);
-  return provider === 'openrouter' || provider === 'openai' ? provider : 'azure-openai';
+  return provider === 'openai' ? 'openai' : 'openrouter';
 }
 
 /**
  * Paid-API provider for GPT Agent models: the owner's direct OpenAI key while
- * its monthly budget lasts, then the configured provider (Azure by default).
+ * its monthly budget lasts, then the configured provider (OpenRouter by default).
  */
 export function resolveGPT56ApiProviderWithOpenAIDirect(
   configured: GPT56ApiProvider,
@@ -161,13 +179,8 @@ export function resolveGPT56ApiProviderWithOpenAIDirect(
 }
 
 /** Fallback when the direct OpenAI key cannot serve a request (quota, auth, outage). */
-export function resolveOpenAIDirectFallbackProvider(
-  configured: string | undefined = process.env.GPT56_AGENT_PROVIDER,
-): Extract<GPT56ApiProvider, 'azure-openai' | 'openrouter'> {
-  const provider = resolveGPT56AgentProvider(configured);
-  if (provider === 'openrouter') return 'openrouter';
-  if (process.env.AZURE_OPENAI_API_KEY?.trim()) return 'azure-openai';
-  return process.env.OPENROUTER_API_KEY?.trim() ? 'openrouter' : 'azure-openai';
+export function resolveOpenAIDirectFallbackProvider(): 'openrouter' {
+  return 'openrouter';
 }
 
 export function isCodexSubscriptionOwner(
@@ -262,7 +275,7 @@ export function resolveGPT56AgentProviderForUser(options: {
   const provider = resolveGPT56AgentProvider(options.configuredProvider);
   const openAIDirect = options.openAIDirectAvailable ?? false;
   if (provider !== 'codex-subscription') {
-    return provider === 'azure-openai' || provider === 'openrouter'
+    return provider === 'openrouter'
       ? resolveGPT56ApiProviderWithOpenAIDirect(provider, openAIDirect)
       : provider;
   }
@@ -286,27 +299,54 @@ export function resolveGPT56AgentProviderForUser(options: {
 export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
   'gpt-6-luna': {
     id: 'gpt-6-luna',
-    provider: 'azure-openai',
-    providerModelId: 'gpt-6-luna',
-    billingModelId: 'gpt-6-luna',
+    provider: 'openrouter',
+    providerModelId: 'openai/gpt-6-luna',
+    billingModelId: 'openai/gpt-6-luna',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
     defaultReasoningEffort: 'high',
   },
+  'gpt-6.2-sol': {
+    id: 'gpt-6.2-sol',
+    provider: 'openrouter',
+    providerModelId: 'openai/gpt-6.2-sol',
+    billingModelId: 'openai/gpt-6.2-sol',
+    cacheStrategy: 'automatic',
+    supportsImageInput: true,
+    defaultReasoningEffort: 'high',
+  },
+  'gpt-6.2-astra': {
+    id: 'gpt-6.2-astra',
+    provider: 'openrouter',
+    providerModelId: 'openai/gpt-6.2-astra',
+    billingModelId: 'openai/gpt-6.2-astra',
+    cacheStrategy: 'automatic',
+    supportsImageInput: true,
+    defaultReasoningEffort: 'high',
+  },
+  'gpt-6.1-terra': {
+    id: 'gpt-6.1-terra',
+    provider: 'openrouter',
+    providerModelId: 'openai/gpt-6.1-terra',
+    billingModelId: 'openai/gpt-6.1-terra',
+    cacheStrategy: 'automatic',
+    supportsImageInput: true,
+    defaultReasoningEffort: 'medium',
+  },
   'gpt-6.1-sol': {
     id: 'gpt-6.1-sol',
-    provider: 'azure-openai',
-    providerModelId: 'gpt-6.1-sol',
-    billingModelId: 'gpt-6.1-sol',
+    provider: 'openrouter',
+    providerModelId: 'openai/gpt-6.1-sol',
+    billingModelId: 'openai/gpt-6.1-sol',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
     defaultReasoningEffort: 'high',
   },
   'gpt-6-sol': {
     id: 'gpt-6-sol',
-    provider: 'azure-openai',
-    providerModelId: 'gpt-6-sol',
-    billingModelId: 'gpt-6-sol',
+    provider: 'openrouter',
+    providerModelId: 'openai/gpt-6-sol',
+    billingModelId: 'openai/gpt-6-sol',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
     defaultReasoningEffort: 'high',
