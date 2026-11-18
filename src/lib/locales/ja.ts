@@ -1,6 +1,9 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  "changelog.openaiApiModels.title": "OpenAI API のアップデート",
+  "changelog.openaiApiModels.item1": "GPT-6.2 Sol、GPT-6.2 Astra、GPT-6.1 Terra を API から利用できるようになりました。",
+  "changelog.openaiApiModels.item2": "Agent メニューの表記を OpenAI API に統一し、グループ見出しを半透明パネルになじませました。",
   "changelog.klingImage4.title": "Kling Image 4.0",
   "changelog.klingImage4.item1": "画像モデル選択で Kling Image 4.0 を選ぶと、ネイティブの 2K、4K、8K PNG 画像を生成できます。",
   "changelog.klingImage4.item2": "テキストから直接生成でき、編集には最大10枚の参照画像を使えます。",

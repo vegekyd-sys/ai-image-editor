@@ -4,6 +4,9 @@ import type { TranslationDictionary } from './index';
 const zhHant = {
 
   ...zh,
+  "changelog.openaiApiModels.title": "OpenAI API 更新",
+  "changelog.openaiApiModels.item1": "GPT-6.2 Sol、GPT-6.2 Astra 和 GPT-6.1 Terra 現已支援透過 API 呼叫。",
+  "changelog.openaiApiModels.item2": "Agent 選單統一顯示 OpenAI API，群組標題融入半透明面板。",
   "changelog.klingImage4.title": "Kling Image 4.0",
   "changelog.klingImage4.item1": "在圖片模型選擇器選用 Kling Image 4.0，生成原生 2K、4K 或 8K PNG 圖片。",
   "changelog.klingImage4.item2": "可輸入文字直接生成，也可用最多 10 張圖片作為編輯參考。",
