@@ -71,41 +71,57 @@ try {
   } else {
     await fs.rm(input,{force:true}); await fs.rm(output,{force:true}); await fs.rm(manifestFile,{force:true});
     // A remote metadata read uses Range; ordinary H.264 sources need no full download/transcode.
-    const original = await probe(config.url,true);
+    let stagedSource = false;
+    const original = await probe(config.url,true).catch(async () => {
+      signal.throwIfAborted();
+      await download(config.url);
+      stagedSource = true;
+      return probe(input);
+    });
     const targetFps = Math.min(original.fps || config.fps, config.fps);
     const highResolution = original.width * original.height >= 3840 * 2160;
     const needsPreparation = !original.alpha && (original.codec !== 'h264' || original.pixelFormat !== 'yuv420p'
       || (highResolution && original.fps > config.fps + 0.1) || original.bitrate > 50000000);
-    if (!needsPreparation) {
+    if (!needsPreparation && (!stagedSource || original.alpha)) {
       await fs.writeFile(manifestFile,JSON.stringify({prepared:false,original,reason:original.alpha?'preserve-alpha':'compatible'}));
     } else {
-      await download(config.url);
-      const local = await probe(input);
+      if (!stagedSource) await download(config.url);
+      const local = stagedSource ? original : await probe(input);
       if (local.codec !== original.codec || local.width !== original.width || local.height !== original.height
         || !Number.isFinite(local.duration) || local.duration <= 0) throw new Error('Source changed while preparing export');
       const disk = await fs.statfs(root);
       const outputBudget = Math.min(maxBytes,Number(disk.bavail)*Number(disk.bsize)-reserveBytes);
       if (outputBudget <= 0) throw new Error('Insufficient temporary disk for prepared media');
-      const filters = [];
-      if (original.hdr) filters.push('zscale=t=linear:npl=100','format=gbrpf32le','tonemap=tonemap=hable:desat=0','zscale=p=bt709:t=bt709:m=bt709:r=tv');
-      filters.push('fps='+targetFps,'pad=ceil(iw/2)*2:ceil(ih/2)*2','format=yuv420p');
       const args = ['-hide_banner','-loglevel','error','-nostdin','-y','-protocol_whitelist','file,pipe','-i',input,
-        '-map','0:'+local.videoIndex,...local.audioIndexes.flatMap(i=>['-map','0:'+i]),'-vf',filters.join(','),'-c:v','libx264','-preset','veryfast','-crf','18',
-        '-g',String(Math.max(1,Math.round(targetFps))),'-keyint_min','1','-sc_threshold','0','-threads','4',
-        '-c:a','aac','-b:a','192k','-map_metadata','-1','-movflags','+faststart','-fs',String(Math.floor(outputBudget))];
-      if (original.hdr) args.push('-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709');
-      await exec(ffmpeg,[...args,output],{signal,timeout:config.timeoutMs||240000,maxBuffer:1024**2});
+        '-map','0:'+local.videoIndex,...local.audioIndexes.flatMap(i=>['-map','0:'+i])];
+      if (needsPreparation) {
+        const filters = [];
+        if (original.hdr) filters.push('zscale=t=linear:npl=100','format=gbrpf32le','tonemap=tonemap=hable:desat=0','zscale=p=bt709:t=bt709:m=bt709:r=tv');
+        filters.push('fps='+targetFps,'pad=ceil(iw/2)*2:ceil(ih/2)*2','format=yuv420p');
+        args.push('-vf',filters.join(','),'-c:v','libx264','-preset','veryfast','-crf','18',
+          '-g',String(Math.max(1,Math.round(targetFps))),'-keyint_min','1','-sc_threshold','0','-threads','4',
+          '-c:a','aac','-b:a','192k','-map_metadata','-1');
+        if (original.hdr) args.push('-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709');
+      } else {
+        // Stage a seekable cache copy without re-encoding compatible streams.
+        args.push('-c','copy');
+      }
+      await exec(ffmpeg,[...args,'-movflags','+faststart','-fs',String(Math.floor(outputBudget)),output],
+        {signal,timeout:config.timeoutMs||240000,maxBuffer:1024**2});
       const prepared = await probe(output);
       const bytes = (await fs.stat(output)).size;
+      const width = needsPreparation ? Math.ceil(original.width/2)*2 : original.width;
+      const height = needsPreparation ? Math.ceil(original.height/2)*2 : original.height;
       if (!bytes || bytes > outputBudget || prepared.codec !== 'h264' || prepared.pixelFormat !== 'yuv420p'
-        || prepared.width !== Math.ceil(original.width/2)*2 || prepared.height !== Math.ceil(original.height/2)*2
+        || prepared.width !== width || prepared.height !== height
         || prepared.audioStreams !== original.audioStreams || Math.abs(prepared.duration-original.duration) > Math.max(0.15,2/targetFps)) {
         throw new Error('Prepared media failed dimensions, audio or duration validation');
       }
       // Validate the complete file, not just its first packet / metadata.
       await exec(ffmpeg,['-v','error','-xerror','-protocol_whitelist','file,pipe','-i',output,'-f','null','-'],
         {signal,timeout:config.timeoutMs||240000,maxBuffer:1024**2});
-      await fs.writeFile(manifestFile,JSON.stringify({prepared:true,original,output:prepared,bytes}));
+      await fs.writeFile(manifestFile,JSON.stringify({prepared:true,original,output:prepared,bytes,
+        ...(!needsPreparation?{reason:'remote-probe-fallback'}:{})}));
     }
   }
 } catch (error) {

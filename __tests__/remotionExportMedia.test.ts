@@ -13,7 +13,7 @@ const exec = promisify(execFile);
 const cleanups: Array<() => Promise<unknown>> = [];
 afterEach(async () => {vi.unstubAllEnvs(); await Promise.all(cleanups.splice(0).map(fn => fn()));});
 
-async function fixture(options: {hevc?: boolean; rotate4k?: boolean; fps?: number; undecodableAudio?: boolean} = {}) {
+async function fixture(options: {hevc?: boolean; rotate4k?: boolean; fps?: number; undecodableAudio?: boolean; rejectRange?: boolean} = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'export-media-test-'));
   cleanups.push(() => rm(root, {recursive: true, force: true}));
   const ffmpeg = await findFfmpeg(), ffprobe = await findFfprobe();
@@ -31,8 +31,14 @@ async function fixture(options: {hevc?: boolean; rotate4k?: boolean; fps?: numbe
   await exec(ffmpeg, ['-v','error',...(modernRotation?['-display_rotation','90']:[]),'-i',encoded,'-map','0','-c','copy',
     ...(options.rotate4k && !modernRotation?['-metadata:s:v:0','rotate=90']:[]),source]);
   const bytes = await readFile(source);
+  let fullDownloads = 0;
   const server = createServer((req, res) => {
     const range = req.headers.range?.match(/bytes=(\d+)-(\d*)/);
+    if (options.rejectRange && range) {
+      res.writeHead(400).end();
+      return;
+    }
+    if (!range) fullDownloads++;
     const start = range ? Number(range[1]) : 0;
     const end = range?.[2] ? Math.min(Number(range[2]), bytes.length-1) : bytes.length-1;
     res.writeHead(range?206:200, {'Content-Type':'video/mp4','Accept-Ranges':'bytes','Content-Length':end-start+1,
@@ -67,7 +73,7 @@ process.stdout.write(JSON.stringify(json));
     await writeFile(path.join(work,'request.json'),JSON.stringify({action:'prepare',url,fps:30,timeoutMs:20000,...extra}));
     return exec(process.execPath,[script],{cwd:work,env:{...process.env,FFMPEG_PATH:ffmpeg,FFPROBE_PATH:probeBinary},timeout:25000});
   }
-  return {work, run, manifest:async()=>JSON.parse(await readFile(path.join(work,'result.json'),'utf8')) as ExportMediaManifest};
+  return {work, source, run, fullDownloads: () => fullDownloads, manifest:async()=>JSON.parse(await readFile(path.join(work,'result.json'),'utf8')) as ExportMediaManifest};
 }
 
 describe('export media preparation runtime', () => {
@@ -94,14 +100,33 @@ describe('export media preparation runtime', () => {
   it('keeps compatible originals and avoids a full download/transcode', async () => {
     const f = await fixture({fps:30}); await f.run();
     expect(await f.manifest()).toMatchObject({prepared:false,reason:'compatible'});
+    expect(f.fullDownloads()).toBe(0);
     expect(await readdir(f.work)).not.toContain('prepared.mp4');
+  },30000);
+  it('stages a compatible video when the origin rejects Range, preserving decoded frames and audio', async () => {
+    const f = await fixture({fps:30,rejectRange:true});
+    await f.run();
+    expect(await f.manifest()).toMatchObject({prepared:true,reason:'remote-probe-fallback',output:{codec:'h264',width:320,height:180,audioStreams:1}});
+    expect(f.fullDownloads()).toBe(1);
+    expect(await readdir(f.work)).not.toContain('source.bin');
+
+    const ffmpeg = await findFfmpeg();
+    const decode = (file: string) => exec(ffmpeg, ['-v','error','-i',file,'-map','0:v:0','-map','0:a:0','-f','framemd5','-']);
+    const [source, staged] = await Promise.all([decode(f.source), decode(path.join(f.work,'prepared.mp4'))]);
+    expect(staged.stdout).toBe(source.stdout);
+  },30000);
+  it('reuses the downloaded source for conversion after a failed remote probe', async () => {
+    const f = await fixture({hevc:true,rejectRange:true});
+    await f.run();
+    expect(await f.manifest()).toMatchObject({prepared:true,original:{codec:'hevc'},output:{codec:'h264',width:320,height:180,audioStreams:1}});
+    expect(f.fullDownloads()).toBe(1);
   },30000);
   it('does not transcode ordinary H.264 solely because its fps exceeds composition fps', async () => {
     const f = await fixture({fps:60}); await f.run();
     expect(await f.manifest()).toMatchObject({prepared:false,reason:'compatible'});
   },30000);
-  it('enforces the download budget, removes partials, and redacts signed URLs', async () => {
-    const f = await fixture({hevc:true});
+  it.each([false, true])('enforces the download budget and redacts URLs (origin rejects Range: %s)', async rejectRange => {
+    const f = await fixture({hevc:true,rejectRange});
     const error = await f.run({maxBytes:10}).catch(e=>e);
     expect(error.code).not.toBe(0); expect(error.stderr).not.toContain('private-source-token');
     expect(await readdir(f.work)).not.toContain('source.bin');
