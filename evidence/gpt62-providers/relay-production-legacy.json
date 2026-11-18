@@ -1,0 +1,37 @@
+{
+  "testedAt": "2026-11-18T01:40:52.973Z",
+  "samples": [
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6-luna",
+      "ok": true,
+      "text": "MODEL_PROBE_OK",
+      "toolCalls": 1,
+      "firstTextMs": 3729,
+      "steps": 2,
+      "servedModels": [
+        "gpt-6-luna",
+        "gpt-6-luna"
+      ],
+      "inputTokens": 326,
+      "outputTokens": 26,
+      "elapsedMs": 3843
+    },
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.1-sol",
+      "ok": true,
+      "text": "MODEL_PROBE_OK",
+      "toolCalls": 1,
+      "firstTextMs": 4978,
+      "steps": 2,
+      "servedModels": [
+        "gpt-6.1-sol",
+        "gpt-6.1-sol"
+      ],
+      "inputTokens": 326,
+      "outputTokens": 26,
+      "elapsedMs": 5066
+    }
+  ]
+}

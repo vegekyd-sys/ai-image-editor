@@ -88,6 +88,7 @@ marketing/meta-ads/
 !/scripts/makaron-worktree-fastpath.mjs
 !/scripts/editable-provenance-ab.ts
 !/scripts/remotion-lambda-runtime-regression.ts
+!/scripts/smoke-gpt62-providers.ts
 !/scripts/smoke-gpt56-agent.ts
 !/scripts/smoke-gpt56-cache.ts
 !/scripts/smoke-codex-subscription.ts

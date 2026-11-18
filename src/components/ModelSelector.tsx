@@ -718,7 +718,7 @@ export default function ModelSelector({
     : preferredModel;
   const selectedAgentModel = agentModels.find(model => model.id === agentModel);
   const selectedAgentLabel = selectedAgentModel
-    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : /^gpt-(?:5\.6|6(?:\.1)?)-/.test(selectedAgentModel.id) ? ` · ${t('model.azureApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
+    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : /^gpt-(?:5\.6|6(?:\.[12])?)-/.test(selectedAgentModel.id) ? ` · ${t('model.azureApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
     : agentModel;
   const selectedVideoModel = videoModels.find(model => model.id === videoModel);
   const selectedVideoLabel = selectedVideoModel
@@ -945,7 +945,7 @@ export default function ModelSelector({
                 const isGrokSubscription = activeTab === 'agent'
                   && isGrokSubscriptionAgentModelPreference(model.id);
                 const isAzureAgent = activeTab === 'agent'
-                  && /^gpt-(?:5\.6|6(?:\.1)?)-/.test(model.id)
+                  && /^gpt-(?:5\.6|6(?:\.[12])?)-/.test(model.id)
                   && !isCodexSubscription;
                 const modelIndex = models.indexOf(model);
                 const previousModel = modelIndex > 0 ? models[modelIndex - 1] : undefined;
@@ -964,7 +964,7 @@ export default function ModelSelector({
                     ? 'codex'
                     : isGrokSubscriptionAgentModelPreference(previousModel.id)
                       ? 'grok'
-                    : /^gpt-(?:5\.6|6(?:\.1)?)-/.test(previousModel.id)
+                    : /^gpt-(?:5\.6|6(?:\.[12])?)-/.test(previousModel.id)
                       ? 'azure'
                       : 'other';
                 const showProviderHeader = providerGroup && providerGroup !== previousProviderGroup;

@@ -1,0 +1,32 @@
+{
+  "testedAt": "2026-11-18T01:38:14.046Z",
+  "samples": [
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.2-sol",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_APICallError",
+      "message": "Cannot connect to API: connect ECONNREFUSED 127.0.0.1:35984",
+      "elapsedMs": 28
+    },
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.2-astra",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_APICallError",
+      "message": "Cannot connect to API: connect ECONNREFUSED 127.0.0.1:35984",
+      "elapsedMs": 2
+    },
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.1-terra",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_APICallError",
+      "message": "Cannot connect to API: connect ECONNREFUSED 127.0.0.1:35984",
+      "elapsedMs": 1
+    }
+  ]
+}

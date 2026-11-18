@@ -1,0 +1,78 @@
+{
+  "engine": "PGlite PostgreSQL",
+  "applications": 2,
+  "newRates": 6,
+  "existingControlPreserved": true,
+  "rows": [
+    {
+      "model_id": "gpt-6-luna",
+      "display_name": "control",
+      "input_per_1m": "0.1",
+      "output_per_1m": "0.5",
+      "cache_read_per_1m": "0.01",
+      "cache_write_per_1m": "0.125",
+      "markup": "2",
+      "is_active": true
+    },
+    {
+      "model_id": "gpt-6.1-terra",
+      "display_name": "GPT-6.1 Terra",
+      "input_per_1m": "1.00",
+      "output_per_1m": "5.00",
+      "cache_read_per_1m": "0.05",
+      "cache_write_per_1m": "1.25",
+      "markup": "2.0",
+      "is_active": true
+    },
+    {
+      "model_id": "gpt-6.2-astra",
+      "display_name": "GPT-6.2 Astra",
+      "input_per_1m": "8.00",
+      "output_per_1m": "40.00",
+      "cache_read_per_1m": "0.40",
+      "cache_write_per_1m": "10.00",
+      "markup": "2.0",
+      "is_active": true
+    },
+    {
+      "model_id": "gpt-6.2-sol",
+      "display_name": "GPT-6.2 Sol",
+      "input_per_1m": "2.00",
+      "output_per_1m": "10.00",
+      "cache_read_per_1m": "0.10",
+      "cache_write_per_1m": "2.50",
+      "markup": "2.0",
+      "is_active": true
+    },
+    {
+      "model_id": "openai/gpt-6.1-terra",
+      "display_name": "GPT-6.1 Terra (OpenRouter)",
+      "input_per_1m": "1.00",
+      "output_per_1m": "5.00",
+      "cache_read_per_1m": "0.05",
+      "cache_write_per_1m": "1.25",
+      "markup": "2.0",
+      "is_active": true
+    },
+    {
+      "model_id": "openai/gpt-6.2-astra",
+      "display_name": "GPT-6.2 Astra (OpenRouter)",
+      "input_per_1m": "8.00",
+      "output_per_1m": "40.00",
+      "cache_read_per_1m": "0.40",
+      "cache_write_per_1m": "10.00",
+      "markup": "2.0",
+      "is_active": true
+    },
+    {
+      "model_id": "openai/gpt-6.2-sol",
+      "display_name": "GPT-6.2 Sol (OpenRouter)",
+      "input_per_1m": "2.00",
+      "output_per_1m": "10.00",
+      "cache_read_per_1m": "0.10",
+      "cache_write_per_1m": "2.50",
+      "markup": "2.0",
+      "is_active": true
+    }
+  ]
+}

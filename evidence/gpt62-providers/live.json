@@ -1,0 +1,114 @@
+{
+  "testedAt": "2026-11-18T01:35:34.380Z",
+  "samples": [
+    {
+      "provider": "openai",
+      "requestedModel": "gpt-6.2-sol",
+      "ok": true,
+      "text": "MODEL_PROBE_OK",
+      "toolCalls": 1,
+      "firstTextMs": 7105,
+      "steps": 2,
+      "servedModels": [
+        "gpt-6.2-sol",
+        "gpt-6.2-sol"
+      ],
+      "inputTokens": 346,
+      "outputTokens": 26,
+      "elapsedMs": 7167
+    },
+    {
+      "provider": "openai",
+      "requestedModel": "gpt-6.2-astra",
+      "ok": true,
+      "text": "MODEL_PROBE_OK",
+      "toolCalls": 1,
+      "firstTextMs": 4467,
+      "steps": 2,
+      "servedModels": [
+        "gpt-6.2-astra",
+        "gpt-6.2-astra"
+      ],
+      "inputTokens": 346,
+      "outputTokens": 26,
+      "elapsedMs": 4554
+    },
+    {
+      "provider": "openai",
+      "requestedModel": "gpt-6.1-terra",
+      "ok": true,
+      "text": "MODEL_PROBE_OK",
+      "toolCalls": 1,
+      "firstTextMs": 2193,
+      "steps": 2,
+      "servedModels": [
+        "gpt-6.1-terra",
+        "gpt-6.1-terra"
+      ],
+      "inputTokens": 326,
+      "outputTokens": 26,
+      "elapsedMs": 2325
+    },
+    {
+      "provider": "azure-openai",
+      "requestedModel": "gpt-6.2-sol",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_NoOutputGeneratedError",
+      "message": "No output generated. Check the stream for errors.",
+      "elapsedMs": 1174
+    },
+    {
+      "provider": "azure-openai",
+      "requestedModel": "gpt-6.2-astra",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_NoOutputGeneratedError",
+      "message": "No output generated. Check the stream for errors.",
+      "elapsedMs": 2096
+    },
+    {
+      "provider": "azure-openai",
+      "requestedModel": "gpt-6.1-terra",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_NoOutputGeneratedError",
+      "message": "No output generated. Check the stream for errors.",
+      "elapsedMs": 262
+    },
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.2-sol",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_NoOutputGeneratedError",
+      "message": "No output generated. Check the stream for errors.",
+      "elapsedMs": 1314
+    },
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.2-astra",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_NoOutputGeneratedError",
+      "message": "No output generated. Check the stream for errors.",
+      "elapsedMs": 713
+    },
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.1-terra",
+      "ok": true,
+      "text": "MODEL_PROBE_OK",
+      "toolCalls": 1,
+      "firstTextMs": 2299,
+      "steps": 2,
+      "servedModels": [
+        "gpt-6.1-terra",
+        "gpt-6.1-terra"
+      ],
+      "inputTokens": 326,
+      "outputTokens": 26,
+      "elapsedMs": 2425
+    }
+  ]
+}

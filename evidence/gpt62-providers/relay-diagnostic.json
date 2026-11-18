@@ -1,0 +1,41 @@
+{
+  "testedAt": "2026-11-18T01:36:13.286Z",
+  "samples": [
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.2-sol",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_APICallError",
+      "statusCode": 400,
+      "message": "The 'gpt-6.2-sol' model is not supported when using Codex with a ChatGPT account.",
+      "elapsedMs": 703
+    },
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.2-astra",
+      "ok": false,
+      "toolCalls": 0,
+      "errorName": "AI_APICallError",
+      "statusCode": 400,
+      "message": "The 'gpt-6.2-astra' model is not supported when using Codex with a ChatGPT account.",
+      "elapsedMs": 726
+    },
+    {
+      "provider": "codex-subscription",
+      "requestedModel": "gpt-6.1-terra",
+      "ok": true,
+      "text": "MODEL_PROBE_OK",
+      "toolCalls": 1,
+      "firstTextMs": 2545,
+      "steps": 2,
+      "servedModels": [
+        "gpt-6.1-terra",
+        "gpt-6.1-terra"
+      ],
+      "inputTokens": 326,
+      "outputTokens": 26,
+      "elapsedMs": 2648
+    }
+  ]
+}
