@@ -6,7 +6,12 @@ export function native4kQuoteResult(quote: MediaQuote) {
     success: false as const,
     errorCode: 'NATIVE_4K_COST_DISCLOSURE_REQUIRED',
     submissionUncertain: false,
-    costQuote: quote,
+    costQuote: {
+      credits: quote.credits,
+      durationSec: quote.durationSec,
+      imageCount: quote.imageCount,
+      referenceVideoDurationSec: quote.referenceVideoDurationSec,
+    },
     message: `High-cost Seedance 2.5 native 4K: estimated total ${quote.credits} Makaron credits. Output ${quote.durationSec}s, video input ${quote.referenceVideoDurationSec}s. No credits reserved and no video submitted. Show this total to the user before proceeding. Only proceed for an explicit native 4K request or explicit model/resolution selection; do not ask again if that request already authorizes generation. Submit the same request with max_credits (Agent) / maxCredits (MCP) set to this total after disclosure. Never use this route for ordinary/HD requests or failure recovery. Supplier credits are not Makaron credits.`,
     userMessage: {
       en: `Native 4K is expensive. Estimated total: ${quote.credits} Makaron credits (${quote.durationSec}s output, ${quote.referenceVideoDurationSec}s video input). Nothing has been charged or submitted.`,

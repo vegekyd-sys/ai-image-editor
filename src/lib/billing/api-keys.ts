@@ -41,7 +41,7 @@ export async function generateApiKey(userId: string, name?: string): Promise<{ k
 /**
  * Validate an API key. Returns user_id and key record if valid.
  */
-export async function validateApiKey(key: string): Promise<{ userId: string; keyId: string } | null> {
+export async function validateApiKey(key: string, { recordUsage = true } = {}): Promise<{ userId: string; keyId: string } | null> {
   if (!key.startsWith(KEY_PREFIX)) return null
   const hash = hashKey(key)
 
@@ -55,7 +55,9 @@ export async function validateApiKey(key: string): Promise<{ userId: string; key
   if (!data) return null
 
   // Update last_used_at (fire-and-forget)
-  admin.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', data.id).then(() => {})
+  if (recordUsage) {
+    admin.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', data.id).then(() => {})
+  }
 
   return { userId: data.user_id, keyId: data.id }
 }

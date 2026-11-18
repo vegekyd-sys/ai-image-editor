@@ -1,4 +1,7 @@
 const en = {
+  "changelog.modelPriceQuotes.title": "Get a price before generating",
+  "changelog.modelPriceQuotes.item1": "Ask Agent to estimate credits for an image, video, or audio request, or compare models with the same settings.",
+  "changelog.modelPriceQuotes.item2": "Use makaron price in the terminal to check supported models and estimate credits before starting a generation.",
   "changelog.openaiApiModels.title": "OpenAI API updates",
   "changelog.openaiApiModels.item1": "Choose GPT-6.2 Sol, GPT-6.2 Astra, or GPT-6.1 Terra in the Agent model menu.",
   "changelog.openaiApiModels.item2": "The Agent menu uses the OpenAI API label and blends group headings into the translucent panel.",

@@ -7,7 +7,7 @@ import {
   generatePreviewImageOpenRouter,
 } from '../gemini';
 
-const GEMINI_LITE_IMAGE_MODEL = 'google/gemini-3.1-flash-lite-image';
+export const GEMINI_LITE_IMAGE_MODEL = 'google/gemini-3.1-flash-lite-image';
 
 export const geminiLiteBackend: ModelBackend = {
   id: 'gemini-lite',

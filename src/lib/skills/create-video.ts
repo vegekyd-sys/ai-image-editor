@@ -2,7 +2,7 @@ import { VideoProviderRejection } from '../video-provider-error'
 import { GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS, GOOGLE_OMNI_MAX_EXTEND_SECONDS, getVideoModelRetirementError, isSeedance25Native4k, RETIRED_KLING_MESSAGE } from '../video-model-capabilities';
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
 import type { VideoQuoteInput } from '../billing/media-pricing';
-import { getVideoModelCapability, isKling4FamilyModel, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoImageWorkflow, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, isKling4FamilyModel, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, validateVideoPricingInputCounts, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoImageWorkflow, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 
 const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
 
@@ -58,7 +58,7 @@ export interface CreateVideoInput {
 export interface CreateVideoResult {
   snapshotId?: string;
   sourceDuration?: number;
-  costQuote?: import('../billing/media-pricing').MediaQuote;
+  costQuote?: ReturnType<typeof import('../billing/seedance25-native4k').native4kQuoteResult>['costQuote'];
   success: boolean;
   taskId?: string;
   videoModel?: string;
@@ -666,11 +666,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       if (filteredImages.length > 0) {
         return { success: false, message: 'Sync Lipsync v3 accepts one source video and one replacement audio file, not image references.' };
       }
-      if (providerVideoUrls.length !== 1 || (audioUrls?.length || 0) !== 1) {
-        return {
-          success: false,
-          message: 'Sync Lipsync v3 requires exactly one source video and exactly one reference audio file.',
-        };
+      const invalidInputs = validateVideoPricingInputCounts(capability, providerVideoUrls.length, audioUrls?.length ?? 0);
+      if (invalidInputs) {
+        return { success: false, message: 'Sync Lipsync v3 requires exactly one source video and exactly one reference audio file.' };
       }
       const { createSyncLipsyncTask } = await import('../sync-lipsync');
       taskId = await createSyncLipsyncTask({

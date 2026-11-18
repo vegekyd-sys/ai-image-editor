@@ -41,6 +41,17 @@ export interface VideoModelCapability {
   /** Selection policy is exposed with capabilities; live totals still come from quoteVideo. */
   highCostResolutions?: VideoResolution[]
   usagePolicy?: string
+  /** Requirements for quoting a selected route, independent of its price amounts. */
+  pricing?: {
+    publicModel?: string
+    basePriceId?: string
+    requiresReferenceTariff?: boolean
+    requiresSourceFps?: boolean
+    requiredVideoInputs?: number
+    requiredAudioInputs?: number
+    billsSourceDuration?: 'always' | 'edit'
+    adaptiveEditDuration?: boolean
+  }
 }
 
 export type VideoResolution = '360p' | '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
@@ -89,7 +100,8 @@ export const DEFAULT_VIDEO_REPLICATION_RESOLUTION: VideoResolution = '720p'
 
 const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   'kling-4': {
-    id: 'kling-4', label: 'Kling 4.0', minOutputDuration: 3, maxOutputDuration: 30,
+    id: 'kling-4',
+    pricing: { requiresReferenceTariff: true }, label: 'Kling 4.0', minOutputDuration: 3, maxOutputDuration: 30,
     maxReferenceVideoDuration: 30, supportsVideoReference: true, supportsBaseVideoEdit: true,
     referenceVideoSize: { maxFileSizeMb: 200, minWidth: 720, minHeight: 720, maxWidth: 2160, maxHeight: 2160, description: 'MP4/MOV, 720–2160px per side, 24–60fps, 3–30s total, <=200MB per clip' },
     defaultImageWorkflow: 'reference-to-video', longVideoChunkSeconds: 30, maxPromptCharacters: 2500,
@@ -102,7 +114,8 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   // EvoLink Kling 4.0 Flash, checked 2026-11-06: same four-route contract as
   // Kling 4.0, but 720p only, 3–20s output and <=20s of reference/source video.
   'kling-4-flash': {
-    id: 'kling-4-flash', label: 'Kling 4.0 Flash', minOutputDuration: 3, maxOutputDuration: 20,
+    id: 'kling-4-flash',
+    pricing: { requiresReferenceTariff: true }, label: 'Kling 4.0 Flash', minOutputDuration: 3, maxOutputDuration: 20,
     maxReferenceVideoDuration: 20, supportsVideoReference: true, supportsBaseVideoEdit: true,
     referenceVideoSize: { maxFileSizeMb: 200, minWidth: 720, minHeight: 720, maxWidth: 2160, maxHeight: 2160, description: 'MP4/MOV, 720–2160px per side, 24–60fps, 3–20s total, <=200MB per clip' },
     defaultImageWorkflow: 'reference-to-video', longVideoChunkSeconds: 20, maxPromptCharacters: 2500,
@@ -241,6 +254,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   },
   'seedance-2.5': {
     id: 'seedance-2.5',
+    pricing: { publicModel: 'seedance-2.5-native', requiresReferenceTariff: true, billsSourceDuration: 'edit', adaptiveEditDuration: true },
     label: 'Seedance 2.5',
     minOutputDuration: 4,
     maxOutputDuration: 30,
@@ -372,6 +386,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   },
   'sync-lipsync-v3': {
     id: 'sync-lipsync-v3',
+    pricing: { requiredVideoInputs: 1, requiredAudioInputs: 1, billsSourceDuration: 'always' },
     label: 'Sync Lipsync v3',
     minOutputDuration: 2,
     maxOutputDuration: 60,
@@ -397,6 +412,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   },
   grok: {
     id: 'grok',
+    pricing: { billsSourceDuration: 'edit' },
     label: 'Grok Imagine Video',
     minOutputDuration: 1,
     maxOutputDuration: 15,
@@ -596,6 +612,7 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
 // Flash owns a distinct native contract and never uses the Eco pipeline.
 MODEL_CAPABILITIES['seedance-2.5-flash'] = {
   id: 'seedance-2.5-flash', label: 'Seedance 2.5 Flash',
+  pricing: { requiresReferenceTariff: true, billsSourceDuration: 'edit' },
   minOutputDuration: 4, maxOutputDuration: 30, maxReferenceVideoDuration: 30,
   referenceVideoDurationTolerance: 0,
   supportsVideoReference: true, supportsBaseVideoEdit: true,
@@ -613,10 +630,12 @@ MODEL_CAPABILITIES['seedance-2.5-eco'] = {
   ...MODEL_CAPABILITIES['seedance-2.5'], id: 'seedance-2.5-eco', label: 'Seedance 2.5 Eco',
   supportedResolutions: ['720p', '1080p', '2k', '4k'], defaultResolution: '1080p',
   highCostResolutions: undefined, usagePolicy: undefined,
+  pricing: { requiresReferenceTariff: true, basePriceId: 'video:seedance-2.5-eco:480p:generate', billsSourceDuration: 'edit', adaptiveEditDuration: true },
   estimatedCostPerSecondUsd: .1452,
   estimatedCostPerSecondUsdByResolution: { '720p': .1452, '1080p': .1452, '2k': .1524, '4k': .1668 },
 }
 MODEL_CAPABILITIES['bytedance-video-upscale'] = {
+  pricing: { requiresSourceFps: true },
   id: 'bytedance-video-upscale', label: 'ByteDance Fast', minOutputDuration: .1, maxOutputDuration: 60,
   maxReferenceVideoDuration: 60, referenceVideoDurationTolerance: .5,
   supportsVideoReference: true, supportsBaseVideoEdit: true, defaultImageWorkflow: 'none',
@@ -710,6 +729,14 @@ export function resolveVideoReplicationResolution(
 export function getVideoModelCapability(model?: string | null): VideoModelCapability {
   const id = normalizeVideoModelId(model)
   return MODEL_CAPABILITIES[id] || { ...GENERIC_VIDEO_MODEL, id, label: id }
+}
+
+/** Shared reference cardinality check for routes that require both input roles. */
+export function validateVideoPricingInputCounts(capability: VideoModelCapability, videoCount: number, audioCount: number): string | null {
+  const { requiredVideoInputs, requiredAudioInputs } = capability.pricing ?? {};
+  if (requiredVideoInputs != null && videoCount !== requiredVideoInputs) return `${capability.label} requires exactly ${requiredVideoInputs} source video.`;
+  if (requiredAudioInputs != null && audioCount !== requiredAudioInputs) return `${capability.label} requires exactly ${requiredAudioInputs} replacement audio file.`;
+  return null;
 }
 
 export function listVideoModelCapabilities(): VideoModelCapability[] {

@@ -59,6 +59,20 @@ npx makaron-cli usage --run <runId>                         # per-tool breakdown
 npx makaron-cli usage --limit 20                            # recent usage rows (all sources)
 ```
 
+
+## Estimate generation credits
+
+Use `makaron price` for a quote before starting a generation. `price list` discovers model IDs and supported resolutions. The quote includes customer-facing credits and applicable billing factors. It does not start a run, upload media or read your balance.
+
+```bash
+makaron price list --json
+makaron price video --model kling-4-flash --model seedance-2.5-native --duration 5 --resolution 720p
+makaron price image --model seedream-5.5 --operation edit --image-count 3 --resolution 2K --json
+makaron price audio --model evolink-seed-audio --duration 20
+```
+
+For video references, pass both `--video-reference-count` and the total `--reference-video-seconds`. Count an edit's base image in `--image-count`. Use `--input <file|-> --json` for up to six requests with different parameters. The JSON body is `{"requests":[{"kind":"video","model":"kling-4-flash","duration_seconds":5,"image_count":0,"resolution":"720p"}]}`. Exit `2` means at least one quote is unavailable, unsupported or missing inputs. A `preflight_only` amount is an estimate that may differ from the final charge.
+
 ## Core Workflow
 
 ```bash

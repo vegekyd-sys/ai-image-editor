@@ -1,4 +1,7 @@
 const zh = {
+  "changelog.modelPriceQuotes.title": "生成前先查价",
+  "changelog.modelPriceQuotes.item1": "可以请 Agent 估算图片、视频或音频生成需要多少积分，也可以用相同参数对比模型。",
+  "changelog.modelPriceQuotes.item2": "在终端用 makaron price 查看可用模型，并在生成前估算积分。",
   "changelog.openaiApiModels.title": "OpenAI API 更新",
   "changelog.openaiApiModels.item1": "Agent 模型菜单新增 GPT-6.2 Sol、GPT-6.2 Astra 和 GPT-6.1 Terra。",
   "changelog.openaiApiModels.item2": "Agent 菜单统一显示 OpenAI API，分组标题融入半透明面板。",

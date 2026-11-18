@@ -13,6 +13,7 @@ export interface TokenRate {
   cache_write_per_1m?: number | null
   markup: number         // e.g. 2.0
   is_active: boolean
+  updated_at?: string
 }
 
 export interface TokenBreakdown {

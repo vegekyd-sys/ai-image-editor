@@ -1,6 +1,3 @@
-import { estimateKlingImage4Credits } from '@/lib/models/kling-image4';
-import { estimateSeedream55Credits } from '@/lib/models/seedream55';
-import { estimateGptImageCredits } from '@/lib/models/gpt-image-quote';
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { webcrypto } from 'node:crypto';
@@ -12,7 +9,13 @@ import { IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, type ModelId } from 
 import { formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration, resolveImageModelChain as resolveModelChain } from '@/lib/image-model-capabilities';
 import { RETAKE_MODELS, DEFAULT_RETAKE_MODEL } from '@/lib/video-retake-contract';
 import { normalizeGenerateImageMediaIndex } from '@/lib/generate-image-input';
-import { resolveToolName } from '@/lib/billing/pricing';
+import { fixedImageBillingSku, imageAdmissionCredits } from '@/lib/billing/image-pricing';
+import { imagePricingInput } from '@/lib/billing/image-pricing-policy';
+import { normalizeImageModelId } from '@/lib/image-model-capabilities';
+
+const { getToolPrice, getTokenRate } = vi.hoisted(() => ({ getToolPrice: vi.fn(), getTokenRate: vi.fn() }));
+vi.mock('@/lib/billing/pricing', async original => ({ ...await original<typeof import('@/lib/billing/pricing')>(), getToolPrice }));
+vi.mock('@/lib/billing/token-rates', async original => ({ ...await original<typeof import('@/lib/billing/token-rates')>(), getTokenRate }));
 
 // Execute the actual factory in isolation: importing all unrelated Agent tools
 // would also boot their SDKs and load every raw Markdown prompt in this test.
@@ -29,16 +32,15 @@ function setup(provider = 'azure') {
   const deductByTokens = vi.fn().mockResolvedValue({ charged: 9, remaining: 91 });
   const requireCredits = vi.fn().mockResolvedValue({ ok: true, balance: 100 });
   const deductCredits = vi.fn().mockResolvedValue({ charged: 6, remaining: 94 });
-  const getToolPrice = vi.fn().mockResolvedValue({ credits: 6, isFree: false });
-  const getTokenRate = vi.fn().mockResolvedValue({ model_id: 'gpt-image-2.6-flare', markup: 2, is_active: true });
+  getToolPrice.mockReset().mockResolvedValue({ credits: 6, isFree: false });
+  getTokenRate.mockReset().mockResolvedValue({ model_id: 'gpt-image-2.6-flare', markup: 2, is_active: true });
   const isBillingEnabled = vi.fn().mockResolvedValue(true);
   const ctx = { supabase: {} as unknown, preferredModel: 'wan2.7-image' as ModelId | undefined, userId: 'test-user', projectId: 'test-project', currentImage: '', referenceImages: [] as string[], snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined, isNsfw: false };
   const context = vm.createContext({
-    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, resolveModelChain, getTokenRate, estimateGptImageCredits, estimateSeedream55Credits, estimateKlingImage4Credits,
+    tool: (definition: unknown) => definition, z, RETAKE_MODELS, DEFAULT_RETAKE_MODEL, IMAGE_MODEL_IDS, isFalGptImage, resolveImageModel, resolveModelChain, imageAdmissionCredits, imagePricingInput, fixedImageBillingSku, normalizeImageModelId,
     createKlingImage4Journal: () => ({ beforeKlingImage4Submit: async () => {}, onKlingImage4Receipt: async () => {} }),
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex, formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration,
     validateImageIndex: (images: string[], index: number) => images[index - 1] ? { idx: index - 1 } : { error: 'Invalid media index' }, getToolPrice, isBillingEnabled,
-    resolveToolName,
     editImage, requireCredits, deductCredits, refreshSnapshotUrls: vi.fn(), console, crypto: webcrypto,
     require: (name: string) => {
       if (name === './billing/credits') return { deductByTokens };
@@ -57,7 +59,7 @@ describe('App Agent Wan execution and billing', () => {
     expect(editImage.mock.calls[0][0].preferredModel).toBe('wan2.7-image');
     expect(requireCredits).toHaveBeenCalledWith('test-user', 6);
     expect(deductCredits).toHaveBeenCalledTimes(1);
-    expect(deductCredits).toHaveBeenCalledWith('test-user', null, 'edit_image', 'wan2.7-image', expect.any(Number));
+    expect(deductCredits).toHaveBeenCalledWith('test-user', null, 'edit_image_wan2.7-image', 'wan2.7-image', expect.any(Number));
     expect(ctx.generatedImages).toHaveLength(1);
     expect(ctx.lastUsedModel).toBe('wan2.7-image');
   });
@@ -238,7 +240,10 @@ describe('Image capability Agent integration cases', () => {
   it('R01/R17: Auto quotes Flare and delivers once', async () => {
     const { tool, ctx, getTokenRate, requireCredits, editImage } = setup();
     ctx.preferredModel = undefined;
-    editImage.mockResolvedValue({ success: true, image: 'image', usedModel: 'gpt-image-2.6-flare' });
+    editImage.mockResolvedValue({
+      success: true, image: 'image', usedModel: 'gpt-image-2.6-flare',
+      usage: { modelId: 'gpt-image-2.6-flare', inputTokens: 100, outputTokens: 200, providerCostUsd: 0.03 },
+    });
     expect((await tool.execute({ editPrompt: 'A portrait.' })).success).toBe(true);
     expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.6-flare');
     expect(requireCredits).toHaveBeenCalledWith('test-user', 6);

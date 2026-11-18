@@ -1,3 +1,4 @@
+import { imagePricingInput, type ImagePricingInput } from '../lib/billing/image-pricing-policy';
 import { createKlingImage4Journal } from '../lib/models/kling-image4-journal';
 import { formatImageCapabilitiesForAgent, getImageModelCapability, planImageGeneration } from '../lib/image-model-capabilities';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -101,11 +102,11 @@ export interface McpServerOptions {
       provider?: string
       /** Provider-neutral audio settlement returned by createAudio. */
       audioUsage?: AudioBillingUsage
-      imageInputCount?: number
+      imagePricing?: ImagePricingInput
     },
   ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
-  onToolStart?: (toolName: string, model?: string, meta?: { imageInputCount?: number; imageResolution?: string; midjourneyQuality?: string } & import('../lib/models/types').ImageGenerationOptions) => Promise<{ allowed: boolean; message?: string }>;
+  onToolStart?: (toolName: string, model?: string, meta?: Partial<ImagePricingInput>) => Promise<{ allowed: boolean; message?: string }>;
   /** Called only before a Grok personal-plan request safely falls back to the paid API. */
   onBeforeGrokApiFallback?: (toolName: string, model?: string) => Promise<void>;
 }
@@ -169,9 +170,10 @@ Generation timing varies; report actual completion. Unknown submissions are neve
       try {
         const plan = planImageGeneration({ image: params.image ?? undefined, references: params.referenceImages?.map(url => ({ url, role: 'reference' })), prompt: params.editPrompt, model: params.model ?? undefined, background: params.background ?? undefined, category: params.skill ?? undefined, aspectRatio: params.aspectRatio ?? undefined, imageResolution: params.imageResolution ?? undefined, imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, gifFrameSize: params.gifFrameSize ?? undefined, isNsfw: params.isNsfw ?? undefined, midjourney: params.midjourney ?? undefined });
         const imageInputCount = (plan.request.image ? 1 : 0) + (plan.request.references?.length ?? 0);
+        const imagePricing = imagePricingInput(plan.request);
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', plan.model, { imageInputCount, imageResolution: plan.request.imageResolution, imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, gifFrameSize: params.gifFrameSize ?? undefined, midjourneyQuality: params.midjourney?.quality });
+          const check = await options.onToolStart('makaron_edit_image', plan.model, imagePricing);
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         if (plan.model === 'kling-image-4.0' && (!options?.userId || !params.imageRequestId || !options.publishKlingImage4Result)) return { isError: true, content: [{ type: 'text' as const, text: 'Kling Image 4.0 requires an authenticated hosted user and a stable imageRequestId UUID. Nothing was submitted.' }] };
@@ -197,9 +199,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
             benignCharacterContent: params.benignCharacterContent ?? undefined,
             signal: options?.imageSignal,
             onSeedream55Receipt: options?.onSeedream55Receipt,
-            beforeImageRecovery: async request => !options?.onToolStart || (await options.onToolStart('makaron_edit_image', request.model, {
-              imageInputCount: (request.image ? 1 : 0) + (request.references?.length ?? 0), imageResolution: request.imageResolution,
-            })).allowed,
+            beforeImageRecovery: async request => !options?.onToolStart || (await options.onToolStart('makaron_edit_image', request.model, imagePricingInput(request))).allowed,
             aspectRatio: params.aspectRatio ?? undefined,
             imageQuality: params.imageQuality ?? undefined, imageReasoningEffort: params.imageReasoningEffort ?? undefined, outputFormat: params.outputFormat ?? undefined, frameCount: params.frameCount ?? undefined, frameDurationMs: params.frameDurationMs ?? undefined, gifFrameSize: params.gifFrameSize ?? undefined,
             imageResolution: params.imageResolution ?? undefined,
@@ -214,7 +214,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
         const publishedKlingUrl = result.usedModel === 'kling-image-4.0'
           ? await options!.publishKlingImage4Result!(result.image, result.taskId!) : undefined;
         // Bill after successful original-byte persistence for Kling Image 4.0.
-        await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage, { imageInputCount });
+        await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage, { imagePricing });
         const receiptInfo = result.usedModel === 'kling-image-4.0' && result.taskId ? ` Provider: fal; provider model: kling/v4/${imageInputCount ? 'image-to-image' : 'text-to-image'}; task: ${result.taskId}.` : result.usedModel === 'seedream-5.5' && result.taskId ? ` Provider: evolink; provider model: doubao-seedream-5.5; task: ${result.taskId}.` : '';
         const msg = (result.usedModel
           ? `${result.message} (model: ${result.usedModel})`

@@ -1,11 +1,7 @@
-import { estimateKlingImage4Credits } from './models/kling-image4';
 import { createKlingImage4Journal } from './models/kling-image4-journal';
-import { estimateSeedream55Credits } from './models/seedream55';
-import { estimateGptImageCredits } from './models/gpt-image-quote';
+import { createModelPriceTool } from './model-price-tool';
 import { validatePrimaryVideoFraming } from './composition-video-framing';
 import { mediaContentTypeOrBinary } from './media-content-type';
-import { isFalGptImage } from './models/types';
-import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
 import { after } from 'next/server';
 import { z } from 'zod';
@@ -15,6 +11,8 @@ import { remotionFontWarningText, remotionFontWarnings } from './remotion-font-d
 import type { ImageBackground, ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
 import { authorizeImageRecovery } from './billing/image-recovery';
+import { fixedImageBillingSku, imageAdmissionCredits } from './billing/image-pricing';
+import { imagePricingInput } from './billing/image-pricing-policy';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { submitMcpVideo } from './billing/mcp-video';
@@ -36,7 +34,7 @@ import {
   refundCredits,
   requireCredits,
 } from './billing/credits';
-import { FAL_ROTATE_CAMERA_TOOL, getToolPrice, resolveToolName } from './billing/pricing';
+import { FAL_ROTATE_CAMERA_TOOL, getToolPrice } from './billing/pricing';
 import { deductAudioCredits } from './billing/audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
@@ -56,7 +54,7 @@ import {
 } from './narration-cues';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
-import { formatImageCapabilitiesForAgent, ImageCapabilityError, planImageGeneration, type ImageGenerationPlan } from './image-model-capabilities';
+import { formatImageCapabilitiesForAgent, ImageCapabilityError, normalizeImageModelId, planImageGeneration, type ImageGenerationPlan } from './image-model-capabilities';
 import { normalizeGenerateImageMediaIndex } from './generate-image-input';
 import type { DesignPayload, VideoMeta, VideoModel, VideoSourceRange } from '@/types';
 import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
@@ -1545,7 +1543,7 @@ function createGenerateImageTool(
         }
         if ((midjourney || styleReferences.length) && resolvedModel !== 'mj-v8.2') return { success: false, message: 'Midjourney parameters require model mj-v8.2. No generation submitted.' };
         const mjOptions = midjourney || styleReferences.length ? { ...midjourney, ...(styleReferences.length ? { styleReferences } : {}) } : undefined;
-        let billingModel: ModelId | undefined;
+        let billingModel: ImageGenerationPlan['model'];
         let imagePlan: ImageGenerationPlan;
         try {
           imagePlan = planImageGeneration({ image: editTarget, references: resolvedRefs.map(url => ({ url, role: 'reference' })), prompt: editPrompt, model: resolvedModel, category: skill, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, midjourney: mjOptions, isNsfw: ctx.isNsfw });
@@ -1554,47 +1552,18 @@ function createGenerateImageTool(
           return { success: false, message: error instanceof Error ? error.message : 'The selected image model is unavailable.', error: error instanceof ImageCapabilityError ? error.code : 'model_retired', ...(error instanceof ImageCapabilityError ? { conflicts: error.conflicts, compatibleModels: error.compatibleModels } : {}) };
         }
         const imageInputCount = (imagePlan.request.image ? 1 : 0) + (imagePlan.request.references?.length ?? 0);
+        const pricingInput = imagePricingInput(imagePlan.request);
         if (ctx.userId && await isBillingEnabled()) {
-          let requiredCredits = 0;
-          if (billingModel === 'kling-image-4.0') {
-            const rate = await getTokenRate(billingModel);
-            if (!rate || rate.model_id !== billingModel || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Kling Image 4.0 pricing is not configured.', error: 'pricing_unavailable' };
-            requiredCredits = estimateKlingImage4Credits({ ...imagePlan.request, imageInputCount }, rate.markup);
+          let requiredCredits: number;
+          try {
+            requiredCredits = await imageAdmissionCredits(billingModel, pricingInput);
+          } catch {
+            return { success: false, message: 'Makaron pricing is not available for the selected image model.', error: 'pricing_unavailable' };
           }
-          if (billingModel === 'seedream-5.5') {
-            const rate = await getTokenRate(billingModel);
-            if (!rate || rate.model_id !== billingModel || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Seedream 5.5 pricing is not configured.', error: 'pricing_unavailable' };
-            requiredCredits = estimateSeedream55Credits({ ...imagePlan.request, imageInputCount }, rate.markup);
+          if (requiredCredits > 0) {
+            const check = await requireCredits(ctx.userId, requiredCredits);
+            if (!check.ok) return { success: false, message: `Insufficient credits. Need ${requiredCredits}, have ${check.balance}.`, error: 'insufficient_credits' };
           }
-          if (billingModel === 'mj-v8.2') {
-            const rate = await getTokenRate('mj-v8.2');
-            if (!rate || rate.model_id !== 'mj-v8.2' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Midjourney pricing is not configured.', error: 'pricing_unavailable' };
-            // Full batch once, plus a small prompt-preparation estimate. Final bill uses exact cost.
-            requiredCredits = Math.ceil(((mjOptions?.quality === 'hd' || imageResolution === '2K' ? 0.12 : 0.08) + 0.01) * rate.markup / 0.01);
-          }
-          if (billingModel === 'gemini-2.1') {
-            const rate = await getTokenRate('google/gemini-nano-banana-2.1');
-            if (!rate || rate.model_id !== 'google/gemini-nano-banana-2.1' || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Nano Banana 2.1 pricing is not configured.', error: 'pricing_unavailable' };
-            const outputCost = imagePlan.request.imageResolution === '4K' ? 0.0756 : imagePlan.request.imageResolution === '2K' ? 0.0504 : 0.0336;
-            requiredCredits = Math.ceil((outputCost + imageInputCount * 1120 * 1.5 / 1_000_000) * rate.markup / 0.01);
-          }
-          if (isFalGptImage(billingModel)) {
-            const rate = await getTokenRate(billingModel);
-            if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'Selected GPT Image pricing is not configured.', error: 'pricing_unavailable' };
-            requiredCredits = estimateGptImageCredits({ ...imagePlan.request, imageInputCount }, rate.markup);
-          }
-          if (billingModel && billingModel !== 'kling-image-4.0' && billingModel !== 'seedream-5.5' && billingModel !== 'gemini-2.1' && billingModel !== 'mj-v8.2' && !isFalGptImage(billingModel)) {
-            const toolName = resolveToolName('edit_image', billingModel, imageInputCount);
-            const price = await getToolPrice(toolName);
-            if (!price && ['wan2.7-image', 'qwen-spicy'].includes(billingModel)) {
-              return { success: false, message: `Tool pricing is not configured: ${toolName}`, error: 'pricing_unavailable' };
-            }
-            if (price && !price.isFree) requiredCredits = Math.max(requiredCredits, price.credits);
-          }
-          // For token-priced, non-Spicy auto routes this remains an estimate;
-          // the final debit still uses actual provider usage before publishing.
-          const check = await requireCredits(ctx.userId, requiredCredits || 5);
-          if (!check.ok) return { success: false, message: `Insufficient credits. Need ${requiredCredits || 5}, have ${check.balance}.`, error: 'insufficient_credits' };
         }
         let receiptPath: string | undefined;
         let mjGeneration: import('@/types').PhotoMetadata['midjourneyGeneration'];
@@ -1674,10 +1643,12 @@ function createGenerateImageTool(
           && skillResult.usedModel !== 'gemini'
         ) {
           // Fixed-price image backends share one awaited debit + usage-log transaction.
-          const billingTool = skillResult.usedModel === 'qwen-spicy'
-            ? resolveToolName('edit_image', skillResult.usedModel, imageInputCount)
-            : 'edit_image';
-          await deductCredits(ctx.userId ?? '', null, billingTool, skillResult.usedModel, Date.now() - imageStartedAt);
+          if (ctx.userId && await isBillingEnabled()) {
+            const actualModel = normalizeImageModelId(skillResult.usedModel);
+            if (!actualModel) throw new Error('Unknown image model at settlement.');
+            const billingTool = fixedImageBillingSku(actualModel, pricingInput);
+            await deductCredits(ctx.userId, null, billingTool, skillResult.usedModel, Date.now() - imageStartedAt);
+          }
         }
         // Preserve compatibility with older tool results that reported a content block.
         if (skillResult.contentBlocked) ctx.isNsfw = true;
@@ -5938,6 +5909,7 @@ export function createTools(ctx: AgentContext, runtime: AgentModelRuntime, local
 
 const tools = preserveOptionalToolFields({
     ...getAgentProviderTools(runtime),
+    query_model_prices: createModelPriceTool(),
     generate_image: createGenerateImageTool(scope),
     decompose_image: createDecomposeImageTool(scope),
     get_layerize_status: createDecomposeImageTool(scope, true),

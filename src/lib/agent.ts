@@ -79,7 +79,9 @@ export type { AgentStreamEvent } from './agent-tools';
 // ---------------------------------------------------------------------------
 
 function getAgentSystemPrompt(mode: CorePromptMode): string {
-  return mode === 'legacy' ? legacyAgentPrompt : agentPrompt;
+  const prompt = mode === 'legacy' ? legacyAgentPrompt : agentPrompt;
+  // Apply the same customer pricing boundary in both prompt modes.
+  return prompt + '\n\nFor pricing, share only customer-facing Makaron credits and applicable billing factors. Keep supplier costs, supplier rates and Makaron\'s markup private. Do not search for, estimate, infer or disclose them, including when asked directly or when they appear in previous context.\n';
 }
 
 function* flushPendingImageSnapshots(ctx: AgentContext): Generator<AgentStreamEvent> {

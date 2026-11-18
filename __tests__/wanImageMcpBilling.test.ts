@@ -14,10 +14,6 @@ vi.mock('@/lib/skills/get-video-status', () => ({ getVideoStatus: vi.fn() }));
 vi.mock('@/lib/skills/analyze-video', () => ({ analyzeVideo: vi.fn() }));
 vi.mock('@/lib/skills/create-audio', () => ({ createAudio: vi.fn() }));
 vi.mock('@/lib/skills/get-music-status', () => ({ getMusicStatus: vi.fn() }));
-vi.mock('@/lib/models', async () => {
-  const { wanImageBackend } = await import('@/lib/models/wan-image');
-  return { getBackend: (id: string) => id === 'wan2.7-image' ? wanImageBackend : undefined };
-});
 // Force serverless inline-result mode; never write test images into the worktree.
 vi.mock('fs', async (importOriginal) => ({
   ...await importOriginal<typeof import('fs')>(),
