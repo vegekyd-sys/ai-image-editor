@@ -24,7 +24,7 @@ import {
 } from '@/lib/agent-model-runtime';
 
 describe('agent model catalog', () => {
-  it('exposes the product model ids in selector order', () => {
+  it('keeps the published CLI model catalog compatible with older releases', () => {
     expect(AGENT_MODEL_IDS).toEqual([
       'gpt-6-luna',
       'gpt-6-sol',
