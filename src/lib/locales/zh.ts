@@ -1,4 +1,11 @@
 const zh = {
+  "changelog.klingImage4.title": "Kling Image 4.0",
+  "changelog.klingImage4.item1": "在图片模型选择器选用 Kling Image 4.0，生成原生 2K、4K 或 8K PNG 图片。",
+  "changelog.klingImage4.item2": "可以输入文字直接生成，也可以用最多 10 张图片作为编辑参考。",
+  "changelog.seedance25Native4k.title": "Seedance 2.5 原生 4K",
+  "changelog.seedance25Native4k.item1": "在视频模型中选择 Seedance 2.5 Native 和 4K，即可生成带同步音频的原生 4K 视频。",
+  "changelog.seedance25Native4k.item2": "原生 4K 费用较高，生成前会显示预计总费用；普通请求继续使用原有模型。",
+
   "design.matchingFont": "正在后台匹配字体。可以先输入，匹配完成后更新文字预览。",
   "design.approximateFont": "修改后的文字将使用相近字体。",
   "design.editTextPlaceholder": (label: string) => `编辑${label}…`,
@@ -874,8 +881,8 @@ const zh = {
   'model.seedance25Flash.desc': '4–30秒 · 480p/720p · 参考生成与视频编辑',
   'model.seedance25Flash.badge': '快速迭代',
   'model.seedance25.name': 'Seedance 2.5 Native',
-  'model.seedance25.desc': '全新 SOTA，最长 30 秒，支持多图、视频、音频参考以及编辑与续写。',
-  'model.seedance25.badge': '全新 SOTA · 30s',
+  'model.seedance25.desc': '原生 480p–4K，最长 30 秒。4K 费用较高，仅明确选择时使用，生成前说明总费用。视频输入另计时长；需支持 HEVC 播放。',
+  'model.seedance25.badge': '高费用 · 原生 4K',
   'model.wan30.name': 'Wan 3.0 标准版',
   'model.wan30.desc': '支持 2–30 秒、原生音频和多模态参考；选择 2K / 4K 时自动启用 FlashVSR 超分。',
   'model.wan30.badge': '4K · 30s',

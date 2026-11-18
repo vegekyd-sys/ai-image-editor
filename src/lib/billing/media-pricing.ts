@@ -100,6 +100,7 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
     if (price.video_reference_usd_per_second === 0) throw new PricingUnavailableError('Video reference rate must be positive.')
   }
   if (price.model_id === 'seedance-2.5-flash' && referenceVideoDurationSec > 0 && price.video_reference_usd_per_second == null) throw new PricingUnavailableError('Flash reference-video tariff is not configured.')
+  if (price.model_id === 'seedance-2.5' && ['1080p', '4k'].includes(price.resolution) && referenceVideoDurationSec > 0 && price.video_reference_usd_per_second == null) throw new PricingUnavailableError('Seedance native high-resolution reference tariff is not configured.')
   const hasVideoReferenceTariff = ['seedance-2.5', 'seedance-2.5-flash', 'kling-4', 'kling-4-flash'].includes(price.model_id)
     && referenceVideoDurationSec > 0 && price.video_reference_usd_per_second != null
   // Keep the original input duration in the quote for auditing/settlement.

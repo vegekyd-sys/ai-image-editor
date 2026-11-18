@@ -1298,6 +1298,13 @@ export async function* runMakaronAgent(
           const outputRecord = toolOutput && typeof toolOutput === 'object'
             ? toolOutput as Record<string, unknown>
             : undefined;
+          // Native 4K quotes must be visible before the next tool step can submit.
+          // Do not rely on the model choosing to repeat the quote in its prose.
+          if (outputRecord?.errorCode === 'NATIVE_4K_COST_DISCLOSURE_REQUIRED') {
+            const localized = outputRecord.userMessage as Record<string, string> | undefined;
+            const disclosure = localized?.[responseLocale] || localized?.en;
+            if (disclosure) yield { type: 'content', text: `\n\n${disclosure}\n\n` };
+          }
           const toolSucceeded = outputRecord?.success !== false
             && outputRecord?.status !== 'failed'
             && !(outputRecord?.error && outputRecord?.success !== true);

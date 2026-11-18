@@ -2150,6 +2150,7 @@ Inputs:
 
 Generation options:
   --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5-flash, seedance-2.5,
+                            seedance-2.5-eco (upscaled), seedance-2.5-native (high-cost native 4k: quote before submission),
                             wan-3.0, wan-3.0-prime, kling-4, kling-4-flash, grok, google-omni,
                             minimax-h3, minimax-h3-max, fal-h3-max, or sync-lipsync-v3.
   --duration <seconds>      Output duration supported by the selected model.
@@ -2182,6 +2183,8 @@ Recent model choices:
   seedance-2.5-flash  4-30s; 480p/720p;10 images/5 videos/5 audios; edit follows source.
   --image-workflow <id> Flash: reference-to-video (default) or image-to-video (1-2 first/last frames).
   --request-id <uuid> Reuse this ID with identical arguments to recover the original billed task.
+  --max-credits <integer> Native 4K spending ceiling; omit for a quote with no generation.
+  seedance-2.5-native Native 480p/720p/1080p/4k; 4k is high-cost, explicit opt-in only.
   seedance-2.5    Defaults to Eco; 4-30s; 1080p default, 720p/2k/4k; multimodal refs.
   seedance-2.5-eco  480p generation → ByteDance Fast; 1080p default, 2k/4k.
   minimax-h3      4-15s; 768p default or 2k; image/video/audio feature refs.
@@ -3488,7 +3491,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const referenceVoices = [];
     let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, videoResolution = undefined, imageWorkflow = undefined, wait = false;
     let keepOriginalSound = false, videoOperation = undefined, extendDirection = undefined, outputFormat = undefined;
-    let generateAudio = undefined, contentFilter = undefined, webSearch = false, billingRequestId = undefined;
+    let generateAudio = undefined, contentFilter = undefined, webSearch = false, billingRequestId = undefined, maxCredits = undefined;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
       else if (args[i] === '--video' && args[i + 1]) videos.push(args[++i]);
@@ -3508,6 +3511,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
       else if (args[i] === '--image-workflow' && args[i + 1]) imageWorkflow = args[++i];
       else if (args[i] === '--request-id' && args[i + 1]) billingRequestId = args[++i];
+      else if (args[i] === '--max-credits' && args[i + 1]) maxCredits = Number(args[++i]);
       else if (args[i] === '--video-operation' && args[i + 1]) videoOperation = args[++i];
       else if (args[i] === '--extend-direction' && args[i + 1]) extendDirection = args[++i];
       else if (args[i] === '--output-format' && args[i + 1]) outputFormat = args[++i];
@@ -3535,8 +3539,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (billingRequestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(billingRequestId)) {
       console.error('--request-id must be a UUID. Reuse it only for the identical submission.'); process.exit(1);
     }
+    if (maxCredits != null && (!Number.isSafeInteger(maxCredits) || maxCredits <= 0)) { console.error('--max-credits must be a positive integer.'); process.exit(1); }
     const isFlash = selectedVideoModel === 'seedance-2.5-flash';
-    const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco'].includes(selectedVideoModel);
+    const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native'].includes(selectedVideoModel);
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25 || isFlash;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
@@ -3676,6 +3681,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       : videoUrls[0]
         ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
         : { script, images, videoModel: selectedVideoModel, videoResolution };
+    if (maxCredits != null) vArgs.maxCredits = maxCredits;
     if (imageWorkflow) vArgs.imageWorkflow = imageWorkflow;
     if (billingRequestId) vArgs.billingRequestId = billingRequestId;
     if (inputVideoMeta?.duration) vArgs.referenceVideoDuration = inputVideoMeta.duration;
@@ -3683,6 +3689,29 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
     if (keepOriginalSound && videoUrls.length && !isSeedance25) vArgs.keepOriginalSound = true;
+    if (selectedVideoModel === 'seedance-2.5-native' && videoResolution === '4k') {
+      vArgs.billingRequestId ||= randomUUID();
+      const previewArgs = { ...vArgs };
+      delete previewArgs.maxCredits;
+      const preview = await callMcpTool(baseUrl, headers, 'makaron_create_video', previewArgs);
+      const previewText = preview?.content?.find(c => c.type === 'text')?.text;
+      let quote;
+      try { quote = JSON.parse(previewText); } catch { /* Existing receipt or pricing error. */ }
+      if (!quote?.costQuote) {
+        // Replays return their original receipt; never turn an unknown response into a new paid call.
+        if (previewText) console.log(previewText);
+        process.exit(previewText?.includes('Task ID:') ? 0 : 1);
+      }
+      process.stderr.write(`Native 4K is high cost. Estimated total: ${quote.costQuote.credits} Makaron credits (${quote.costQuote.durationSec}s output, ${quote.costQuote.referenceVideoDurationSec}s video input).\n`);
+      if (maxCredits == null) {
+        console.log(JSON.stringify({ ...quote, billingRequestId: vArgs.billingRequestId }, null, 2));
+        process.exit(0);
+      }
+      if (quote.costQuote.credits > maxCredits) {
+        console.error(`Quote exceeds --max-credits ${maxCredits}. No generation submitted.`);
+        process.exit(1);
+      }
+    }
     const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isFlash && !isWan30 && !isGrok && !isMinimaxH3 && !isFalReference && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) {

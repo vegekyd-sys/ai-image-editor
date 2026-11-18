@@ -238,7 +238,7 @@ describe('video model reference limits', () => {
       supportsVideoReference: true,
       supportsBaseVideoEdit: true,
       supportsVideoExtend: true,
-      supportedResolutions: ['480p', '720p'],
+      supportedResolutions: ['480p', '720p', '1080p', '4k'],
     })
   })
 

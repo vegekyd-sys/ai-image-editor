@@ -2,7 +2,14 @@ import zh from './zh';
 import type { TranslationDictionary } from './index';
 
 const zhHant = {
+
   ...zh,
+  "changelog.klingImage4.title": "Kling Image 4.0",
+  "changelog.klingImage4.item1": "在圖片模型選擇器選用 Kling Image 4.0，生成原生 2K、4K 或 8K PNG 圖片。",
+  "changelog.klingImage4.item2": "可輸入文字直接生成，也可用最多 10 張圖片作為編輯參考。",
+  "changelog.seedance25Native4k.title": "Seedance 2.5 原生 4K",
+  "changelog.seedance25Native4k.item1": "在影片模型中選擇 Seedance 2.5 Native 與 4K，即可生成帶同步音訊的原生 4K 影片。",
+  "changelog.seedance25Native4k.item2": "原生 4K 費用較高，生成前會顯示預計總費用；一般請求繼續使用原有模型。",
   "design.matchingFont": "正在背景匹配字體。可以先輸入，匹配完成後更新文字預覽。",
   "design.approximateFont": "修改後的文字將使用相近字體。",
   "design.editTextPlaceholder": (label: string) => `編輯${label}…`,
@@ -1088,8 +1095,8 @@ const zhHant = {
   'model.seedance25Flash.desc': '4–30秒 · 480p/720p · 參考生成與影片編輯',
   'model.seedance25Flash.badge': '快速迭代',
   'model.seedance25.name': 'Seedance 2.5 Native',
-  'model.seedance25.desc': '全新 SOTA，最長 30 秒，支援圖片、影片、音訊參考，以及編輯與延伸。',
-  'model.seedance25.badge': '全新 SOTA · 30s',
+  'model.seedance25.desc': '原生 480p–4K，最長 30 秒。4K 費用較高，僅明確選擇時使用，生成前說明總費用。影片輸入另計時長；需支援 HEVC 播放。',
+  'model.seedance25.badge': '高費用 · 原生 4K',
   'model.wan30.name': 'Wan 3.0 標準版',
   'model.wan30.desc': '支援 2–30 秒、原生音訊與多模態參考；選擇 2K / 4K 時自動啟用 FlashVSR 超分。',
   'model.wan30.badge': '4K · 30s',

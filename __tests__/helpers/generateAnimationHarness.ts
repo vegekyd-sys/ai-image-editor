@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { z } from 'zod';
 import { vi } from 'vitest';
+import { native4kQuoteResult, native4kNeedsDisclosure } from '@/lib/billing/seedance25-native4k';
 import * as capabilities from '@/lib/video-model-capabilities';
 import { validateVideoScript } from '@/lib/video-harness';
 import { resolveAudioRefs } from '@/lib/audio-reference-resolver';
@@ -57,7 +58,7 @@ export function generateAnimationHarness(kind: 'generate' | 'upscale' = 'generat
     videoAuto: true, videoModel: 'fal-h3-max',
   };
   const context = vm.createContext({
-    ...capabilities, z, tool: (value: unknown) => value, crypto: webcrypto,
+    ...capabilities, native4kQuoteResult, native4kNeedsDisclosure, z, tool: (value: unknown) => value, crypto: webcrypto,
     createVideoValidationReporter, compileVideoReplicationPrompt, resolveAudioRefs,
     refreshSnapshotUrls: vi.fn(), createVideo, requireCredits, deductFixedCredits, refundCredits,
     quoteVideo: async (input: VideoQuoteInput) => {

@@ -3,7 +3,8 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '@/lib/skills/create-video'
 import { getVideoStatus } from '@/lib/skills/get-video-status'
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
-import { normalizeVideoModelId } from '@/lib/video-model-capabilities'
+import { native4kQuoteResult, native4kNeedsDisclosure } from './seedance25-native4k'
+import { isSeedance25Native4k, normalizeVideoModelId } from '@/lib/video-model-capabilities'
 import { isBillingEnabled, recordSubscriptionUsage, requireCredits } from './credits'
 import { resolveBillingAttribution } from './attribution'
 import { quoteVideo, type MediaQuote, type VideoQuoteInput } from './media-pricing'
@@ -27,7 +28,7 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
   // The returned ID must be reusable even when the first call omitted it.
   // Normalize top-level key order so equivalent requests hash identically.
   const parameters = Object.fromEntries(Object.entries({ ...input, userId: owner.userId, toolName: owner.toolName })
-    .filter(([key, value]) => key !== 'billingRequestId' && typeof value !== 'function')
+    .filter(([key, value]) => key !== 'billingRequestId' && key !== 'maxCredits' && typeof value !== 'function')
     .sort(([left], [right]) => left.localeCompare(right)))
   const fingerprint = createHash('sha256').update(JSON.stringify(parameters)).digest('hex')
   if (input.billingRequestId) {
@@ -47,13 +48,22 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
   }
   const subscription = normalizeVideoModelId(input.videoModel) === 'grok' && await isGrokSubscriptionAllowedUser(owner.userId)
   let usage: VideoQuoteInput | undefined
+  let disclosureQuote: MediaQuote | undefined
+  const native4k = isSeedance25Native4k(input.videoModel, input.videoResolution)
   let reserved = false
   let reservedQuote: MediaQuote | undefined
   let replay: CreateVideoResult | undefined
   const reserve = async () => {
-    if (reserved || !(await isBillingEnabled())) return
+    if (reserved) return
+    const billingEnabled = await isBillingEnabled()
+    if (!billingEnabled && !native4k) return
     if (!usage) throw new Error('Resolved video usage is required before paid API submission.')
     const quote = await quoteVideo(usage)
+    if (native4k && native4kNeedsDisclosure(quote, input.maxCredits)) {
+      disclosureQuote = quote
+      throw new Error('Native 4K cost disclosure required before submission.')
+    }
+    if (!billingEnabled) return
     const balance = await requireCredits(owner.userId, quote.credits)
     if (!balance.ok) throw new Error(`Insufficient credits: need ${quote.credits}, have ${balance.balance}.`)
     const base = {
@@ -99,6 +109,7 @@ export async function submitMcpVideo(input: CreateVideoInput, owner: McpVideoOwn
     },
     onBeforeGrokApiFallback: reserve,
   }).catch((error): CreateVideoResult => ({ success: false, submissionUncertain: true, message: error instanceof Error ? error.message : String(error) }))
+  if (disclosureQuote) return native4kQuoteResult(disclosureQuote)
   if (replay) return replay
   if (reserved) {
     try {
