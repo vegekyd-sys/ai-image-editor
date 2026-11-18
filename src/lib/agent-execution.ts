@@ -265,18 +265,6 @@ export function isSafeToEnterCodexSubscriptionApiFallback(
   return isSafeToEnterSubscriptionApiFallback(attempts, inputEpoch, 'codex-subscription');
 }
 
-export function shouldFailoverAzureGPT56ToOpenRouter(input: {
-  requestedProvider: string;
-  hasOpenRouterKey: boolean;
-  previousProviderFailover: boolean;
-  retryableFailureCount: number;
-}): boolean {
-  return input.requestedProvider === 'azure-openai'
-    && input.hasOpenRouterKey
-    && (input.previousProviderFailover
-      || input.retryableFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS);
-}
-
 export interface ProviderAttemptObservation {
   terminal_code?: string | null;
   metadata?: Record<string, unknown> | null;

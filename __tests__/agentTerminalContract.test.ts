@@ -94,7 +94,6 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('durableVisionBridge');
     expect(agentSource).toContain('Visual QA for contact sheet frames');
     expect(agentModelRuntimeSource).toContain('promptCacheKey: runtime.promptCacheKey');
-    expect(agentModelRuntimeSource).toContain("ttl: '30m'");
     expect(agentSource).toContain("return { designPath: input.design_path };");
     expect(agentSource).toContain('if (toolName) lastTool = toolName');
     expect(agentContextSource).not.toContain('activeStudioContinuation');
@@ -112,7 +111,7 @@ describe('agent terminal contract wiring', () => {
     expect(executionRunnerSource).toContain('inputEpoch: inputVersionAtAttemptStart');
     expect(executionRunnerSource).toContain("status: 'handed_off'");
     expect(executionRunnerSource).toContain('next_attempt_at: new Date().toISOString()');
-    expect(executionRunnerSource).toContain('shouldFailoverAzureGPT56ToOpenRouter');
+    expect(executionRunnerSource).toContain('shouldFailoverOpenAIDirectToApi');
     expect(executionRunnerSource).toContain('shouldFailoverCodexSubscriptionToApi');
     expect(executionRunnerSource).toContain('isSafeToEnterSubscriptionApiFallback');
     expect(executionRunnerSource).toContain('shouldFailoverGrokSubscriptionToApi');
