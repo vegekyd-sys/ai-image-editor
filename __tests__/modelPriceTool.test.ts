@@ -50,7 +50,7 @@ describe('read-only Agent price awareness', () => {
     expect(await estimateModelPrice(request({ model: 'seedance-2.5', resolution: '720p' }))).toMatchObject({ status: 'estimated', model: 'seedance-2.5-eco' });
     expect(await estimateModelPrice(request({ model: 'seedance-2.5-native', resolution: '720p' }))).toMatchObject({ status: 'estimated', model: 'seedance-2.5' });
     expect(await estimateModelPrice(request({ model: 'seedance-2.5-native', resolution: '4k', duration_seconds: 4, video_reference_count: 1, reference_video_seconds: 8 }))).toMatchObject({
-      status: 'estimated', credits: 1738, billingBasis: [{ outputQuantity: 4, billableReferenceVideoSeconds: 8 }],
+      status: 'estimated', credits: 1738, billingBasis: [{ outputQuantity: 4, billableReferenceVideoSeconds: 8, referenceVideoTariffIncludesOutput: true }],
     });
     db.rows.media_pricing = db.rows.media_pricing.filter(row => row.id !== 'video:seedance-2.5:4k:generate');
     expect(await estimateModelPrice(request({ model: 'seedance-2.5-native', resolution: '4k' }))).toMatchObject({ status: 'unknown' });
@@ -58,7 +58,7 @@ describe('read-only Agent price awareness', () => {
   it('explains input floor with the authoritative quote, not just output seconds', async () => {
     const estimate = await estimateModelPrice(request({ model: 'seedance-2.5-native', resolution: '720p', duration_seconds: 10, video_reference_count: 1, reference_video_seconds: 3 }));
     expect(estimate).toMatchObject({ status: 'estimated', credits: 720,
-      billingBasis: [{ outputQuantity: 10, billableReferenceVideoSeconds: 10 }] });
+      billingBasis: [{ outputQuantity: 10, billableReferenceVideoSeconds: 10, referenceVideoTariffIncludesOutput: true }] });
   });
   it('covers native 4K candidate input+output contract without enabling it or asserting live price', () => {
     // Candidate fixture from the separate 4K worktree's 20261117053223 migration; NOT a live price.
@@ -130,6 +130,7 @@ describe('read-only Agent price awareness', () => {
       request({ kind: 'image', model: 'gemini-lite' }),
     ] });
     expect(result.currency).toBe('credits');
+    expect(result.billingExplanation).toContain('applies to BOTH the output');
     expect(result.estimates[0]).toMatchObject({ status: 'estimated', details: { baseCredits: expect.any(Number), upscaleCredits: expect.any(Number) } });
     expect(result.estimates.map(e => e.status)).toEqual(['estimated', 'estimated', 'estimated', 'estimated', 'preflight_only', 'usage_only']);
     expect(JSON.stringify(result)).not.toMatch(/usd|supplier|markup|multiplier|perMillion|\$\s*\d/i);

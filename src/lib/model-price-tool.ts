@@ -50,6 +50,7 @@ type Estimate = {
   billingBasis?: Array<{
     outputQuantity: number;
     billableReferenceVideoSeconds?: number;
+    referenceVideoTariffIncludesOutput?: true;
     billableInputImages?: number;
     referenceUsageAffectsCredits?: boolean;
   }>;
@@ -74,6 +75,7 @@ function mediaEstimate(request: ModelPriceRequest, model: string, quote: MediaQu
     // also holds commercial terms for server-side calculations and settlement.
     billingBasis: quote.billingBasis?.map(basis => ({
       outputQuantity: basis.outputQuantity,
+      ...(basis.usesVideoReferenceTariff ? { referenceVideoTariffIncludesOutput: true as const } : {}),
       ...(basis.inputVideoUnitUsd > 0 && basis.inputVideoSeconds > 0 ? { billableReferenceVideoSeconds: basis.inputVideoSeconds } : {}),
       ...(basis.inputImageUnitUsd > 0 && basis.inputImages > 0 ? { billableInputImages: basis.inputImages } : {}),
       ...(basis.inputTokenUnitUsd > 0 && basis.inputTokens > 0 ? { referenceUsageAffectsCredits: true } : {}),
@@ -203,6 +205,7 @@ export async function queryModelPrices(input: z.infer<typeof modelPriceInputSche
   const common = { observedAt, currency: 'credits',
     validity: 'Observed tariff only; no expiry/discount calendar is registered. Requote near submission. Credit purchase promotions and account balance are not queried.',
     authority: 'Makaron customer credit estimates. priceVersion is the price update time when available; observedAt is the read time.',
+    billingExplanation: 'Use total credits and the stated billable quantities. If referenceVideoTariffIncludesOutput is true, the reference-video tariff applies to BOTH the output and the billable source duration, replacing the ordinary output-only tariff. Use quote differences only to compare complete tasks. Do not derive component charges or per-second rates from quote differences.',
     scope: 'Media generation only; excludes Agent reasoning, analysis, retries and export. No media submitted, no account writes.',
     policy: 'Preserve explicit user/Skill choices and capability/quality requirements. Ordinary vague tasks keep existing defaults. Explain higher costs before an optional upgrade; price inquiries do not authorize generation. Unknown is not free. If the requested model/tier is unknown or unavailable, stop with that observed limitation. Do not speculate about billing units, rates or reasons for expense when no quote is available; do not explore or quote substitutes unless the user asks for alternatives. Registry resolution means output size, not proof of native rendering or equal quality; capability details remain owned by the existing model guides. Unavailable in this checkout says nothing about upstream availability.',
   };

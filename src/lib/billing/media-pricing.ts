@@ -45,6 +45,7 @@ export interface MediaQuote {
     outputUnitUsd: number
     inputVideoSeconds: number
     inputVideoUnitUsd: number
+    usesVideoReferenceTariff: boolean
     inputImages: number
     inputImageUnitUsd: number
     inputTokens: number
@@ -150,6 +151,7 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
         ? price.model_id === 'seedance-2.5-flash' && price.operation === 'edit' ? billableSourceSeconds : Math.max(billableSourceSeconds, durationSec)
         : referenceVideoDurationSec,
       inputVideoUnitUsd: hasVideoReferenceTariff ? price.video_reference_usd_per_second! : price.input_usd_per_second,
+      usesVideoReferenceTariff: hasVideoReferenceTariff,
       inputImages: hasVideoReferenceTariff ? 0 : Math.max(0, imageCount - price.free_image_references),
       inputImageUnitUsd: hasVideoReferenceTariff ? 0 : price.input_usd_per_image,
       inputTokens: hasVideoReferenceTariff ? 0 : billableReferenceTokens,
