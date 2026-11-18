@@ -1002,6 +1002,7 @@ const CHANGELOG: ChangelogEntry[] = [
 ];
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  klingImage4: { title: 'changelog.klingImage4.title', items: ['changelog.klingImage4.item1', 'changelog.klingImage4.item2'] },
   seedance25Native4k: { title: 'changelog.seedance25Native4k.title', items: ['changelog.seedance25Native4k.item1', 'changelog.seedance25Native4k.item2'] },
   editableLayerOpening: { title: 'changelog.editableLayerOpening.title', items: ['changelog.editableLayerOpening.item1', 'changelog.editableLayerOpening.item2'] },
   autoLayerize: {
