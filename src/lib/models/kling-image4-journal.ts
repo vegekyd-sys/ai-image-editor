@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { getSupabaseAdmin } from '../supabase/service';
 import { KlingImage4RequestError, type KlingImage4Receipt } from './kling-image4';
 import type { GenerateImageRequest } from './types';
 
@@ -7,13 +7,14 @@ import type { GenerateImageRequest } from './types';
  * Atomic Storage insert prevents duplicate paid POSTs for a stable tool/request ID.
  * Only hashes and provider receipts are stored; no prompts, input URLs or credentials.
  * A lost claim/POST/debit response is deliberately not retried. It needs reconciliation.
- * This uses the existing bucket and does not create a shared pricing row or new schema.
+ * The journal is server-owned. Browser sessions can insert workspace objects but cannot
+ * overwrite these receipt paths. Keep the same object paths and one atomic claim per request.
  */
-export function createKlingImage4Journal(client: SupabaseClient, userId: string, requestId: string): Pick<GenerateImageRequest, 'beforeKlingImage4Submit' | 'onKlingImage4Receipt'> {
+export function createKlingImage4Journal(userId: string, requestId: string): Pick<GenerateImageRequest, 'beforeKlingImage4Submit' | 'onKlingImage4Receipt'> {
   if (!userId || !requestId || requestId.length > 200) throw new KlingImage4RequestError('A stable authenticated request ID is required; nothing was submitted.');
   const id = createHash('sha256').update(`${userId}\0${requestId}`).digest('hex');
   const root = `workspace/${userId}/kling-image4/${id}`;
-  const bucket = client.storage.from('images');
+  const bucket = getSupabaseAdmin().storage.from('images');
   return {
     beforeKlingImage4Submit: async request => {
       const fingerprint = createHash('sha256').update(JSON.stringify(request)).digest('hex');

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
-const state = vi.hoisted(() => ({ read: vi.fn() }));
+const state = vi.hoisted(() => ({ read: vi.fn(), getSupabaseAdmin: vi.fn() }));
 vi.mock('@/lib/provider-image-preflight', () => ({ readProviderImage: state.read }));
+vi.mock('@/lib/supabase/service', () => ({ getSupabaseAdmin: state.getSupabaseAdmin }));
 vi.mock('@/lib/billing/token-rates', () => ({ providerCostToCredits: (cost: number, markup: number) => Math.ceil(cost * markup / 0.01) }));
 import { buildKlingImage4Request, estimateKlingImage4Credits, klingImage4Backend, queryKlingImage4Task } from '@/lib/models/kling-image4';
 import { createKlingImage4Journal } from '@/lib/models/kling-image4-journal';
@@ -100,15 +101,16 @@ describe('Kling durable request gate', () => {
       }),
       download: vi.fn(async (key: string) => ({ data: objects.has(key) ? new Blob([objects.get(key)!]) : null })),
     };
-    const client = { storage: { from: () => bucket } } as never;
+    state.getSupabaseAdmin.mockReturnValue({ storage: { from: () => bucket } });
     const request = buildKlingImage4Request({ prompt: 'private prompt must not be stored' });
-    const a = createKlingImage4Journal(client, 'owner', 'same-call');
-    const b = createKlingImage4Journal(client, 'owner', 'same-call');
+    const a = createKlingImage4Journal('owner', 'same-call');
+    const b = createKlingImage4Journal('owner', 'same-call');
     const results = await Promise.allSettled([a.beforeKlingImage4Submit!(request), b.beforeKlingImage4Submit!(request)]);
     expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+    await a.onKlingImage4Receipt!({ taskId: id, provider: 'fal', providerModel: request.endpoint, status: 'IN_QUEUE' });
     await a.onKlingImage4Receipt!({ taskId: id, provider: 'fal', providerModel: request.endpoint, status: 'COMPLETED', billableUnits: 1, providerCostUsd: .063 });
-    await expect(b.beforeKlingImage4Submit!(request)).rejects.toThrow(id);
+    await expect(b.beforeKlingImage4Submit!(request)).rejects.toThrow(/COMPLETED receipt/);
     expect([...objects.values()].join(' ')).not.toContain('private prompt');
-    await expect(createKlingImage4Journal(client, 'other-owner', 'same-call').beforeKlingImage4Submit!(request)).resolves.toBeUndefined();
+    await expect(createKlingImage4Journal('other-owner', 'same-call').beforeKlingImage4Submit!(request)).resolves.toBeUndefined();
   });
 });

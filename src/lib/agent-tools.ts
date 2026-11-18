@@ -1471,8 +1471,8 @@ function createGenerateImageTool(
         model: z.string().optional().describe('Explicit user/active Skill image model preference. Otherwise omit for capability-aware Auto; unknown IDs use Auto. See the generated Image Model Capability table.'),
         isNsfw: z.boolean().optional().describe('The main Agent assesses NSFW from the request and supplied media. Set true for NSFW; routes directly to Qwen Spicy and keeps NSFW context active. Do not probe a different provider first.'),
         benignCharacterContent: z.boolean().describe('Required assessment before generation: true only for harmless nonsexual fictional-character artwork (e.g. an ordinary cartoon-character scene). Enables at most one compatible model recovery after a terminal provider refusal. Set false for other content, unsafe/uncertain content, NSFW, or when the user requires only the selected model. Never infer this assessment from a refusal, and never change isNsfw because of copyright or a provider error.'),
-        imageQuality: z.enum(['auto', 'low', 'medium', 'high']).optional().describe('GPT Image 2.6 rendering quality. Default low; choose higher when the user asks for more visual detail.'),
-      imageReasoningEffort: z.enum(['low', 'medium', 'high']).optional().describe('GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high.'),
+        imageQuality: z.enum(['auto', 'low', 'medium', 'high']).optional().describe('Only for GPT Image 2.6 rendering quality. Default low. Omit for other models, including Kling Image 4.0. For Kling, describe fine detail in the prompt.'),
+      imageReasoningEffort: z.enum(['low', 'medium', 'high']).optional().describe('Only for GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high. Omit for Kling Image 4.0.'),
       outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).optional().describe('Default PNG. Seedream 5.5 supports PNG/JPEG only, transparent PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
       frameCount: z.number().int().min(2).max(16).optional().describe('GIF frames 2–16, default 9. Frames share one native sheet: square frames are 960px up to 9 frames, 816px for 10–12, 720px for 13–16. Plan holds by repeating poses; see skills/gif-maker/SKILL.md.'),
       frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).optional().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
@@ -1617,7 +1617,7 @@ function createGenerateImageTool(
             } : undefined;
         if (billingModel === 'kling-image-4.0' && (!ctx.supabase || !ctx.userId || !executionOptions?.toolCallId)) return { success: false, terminal: true, message: 'Kling Image 4.0 needs an authenticated durable request before submission.' };
         const klingJournal = billingModel === 'kling-image-4.0'
-          ? createKlingImage4Journal(ctx.supabase!, ctx.userId!, `${ctx.projectId}:${executionOptions!.toolCallId}`) : undefined;
+          ? createKlingImage4Journal(ctx.userId!, `${ctx.projectId}:${executionOptions!.toolCallId}`) : undefined;
         const imageStartedAt = Date.now();
         const skillResult = await editImage(
           { editPrompt, ...klingJournal, onSeedream55Receipt, midjourney: mjOptions, onMidjourneyReceipt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, imageResolution, background, imageQuality, imageReasoningEffort, outputFormat, frameCount, frameDurationMs, gifFrameSize, preferredModel: resolvedModel, isNsfw: ctx.isNsfw,
@@ -1639,6 +1639,7 @@ function createGenerateImageTool(
             ja: 'Nano Banana 2.1 の画像サービスで課金エラー（402）が発生し、今回は画像が返されませんでした。',
           },
         };
+        if (billingModel === 'kling-image-4.0' && !skillResult.success) return { success: false, terminal: true, taskId: skillResult.taskId, message: skillResult.message };
         // Reuse the existing terminal-tool contract: the model must not start
         // another paid workflow after the bounded character attempt fails.
         // This is a result for this input, not a project/NSFW state mutation.
@@ -1652,7 +1653,6 @@ function createGenerateImageTool(
             ja: '今回は画像を生成できませんでした。説明を調整して、もう一度お試しください。',
           },
         };
-        if (billingModel === 'kling-image-4.0' && !skillResult.success) return { success: false, terminal: true, taskId: skillResult.taskId, message: skillResult.message };
         // Bill for image generation (separate from Agent LLM tokens)
         if (skillResult.usage) {
           const { deductByTokens } = await import('./billing/credits');
