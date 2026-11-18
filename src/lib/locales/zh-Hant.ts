@@ -1,13 +1,12 @@
 import zh from './zh';
-import type {
- TranslationDictionary } from './index';
+import type { TranslationDictionary } from './index';
 
 const zhHant = {
+
+  ...zh,
   "changelog.seedance25Native4k.title": "Seedance 2.5 原生 4K",
   "changelog.seedance25Native4k.item1": "在影片模型中選擇 Seedance 2.5 Native 與 4K，即可生成帶同步音訊的原生 4K 影片。",
   "changelog.seedance25Native4k.item2": "原生 4K 費用較高，生成前會顯示預計總費用；一般請求繼續使用原有模型。",
-
-  ...zh,
   "design.matchingFont": "正在背景匹配字體。可以先輸入，匹配完成後更新文字預覽。",
   "design.approximateFont": "修改後的文字將使用相近字體。",
   "design.editTextPlaceholder": (label: string) => `編輯${label}…`,

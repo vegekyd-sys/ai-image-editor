@@ -1,5 +1,4 @@
-import type {
- TranslationDictionary } from './index';
+import type { TranslationDictionary } from './index';
 
 const ja = {
   "changelog.seedance25Native4k.title": "Seedance 2.5 のネイティブ 4K",

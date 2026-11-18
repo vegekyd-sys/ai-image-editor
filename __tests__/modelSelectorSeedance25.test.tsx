@@ -48,7 +48,7 @@ describe('ModelSelector Seedance 2.5', () => {
     const { rerender } = render(view('480p'));
     fireEvent.click(screen.getByTestId('model-selector'));
     fireEvent.click(await screen.findByText(/视频|Video/));
-    fireEvent.click(await screen.findByRole('button', { name: '4K', exact: true }));
+    fireEvent.click(await screen.findByRole('button', { name: /^4K$/ }));
     expect(onVideoResolutionChange).toHaveBeenCalledWith('4k');
     rerender(view('4k'));
     expect(screen.getByTestId('model-selector').getAttribute('aria-label')).toContain('Seedance 2.5 Native 4K');
