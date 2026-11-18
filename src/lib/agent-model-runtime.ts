@@ -162,7 +162,7 @@ export function createAgentModelRuntime(
 }
 
 function usesOpenRouterResponses(spec: AgentModelSpec): boolean {
-  return spec.provider === 'openrouter' && spec.providerModelId.startsWith('openai/gpt-');
+  return spec.provider === 'openrouter' && spec.providerModelId?.startsWith('openai/gpt-') === true;
 }
 
 function getSupportedAgentReasoningEfforts(modelId: string): readonly AgentReasoningEffort[] {

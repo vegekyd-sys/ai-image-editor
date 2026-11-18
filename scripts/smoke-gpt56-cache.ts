@@ -204,7 +204,6 @@ async function sampleResponses(
     max_output_tokens: 64,
     reasoning: { effort: 'none' },
     prompt_cache_key: `mk-r-${MODEL_TIER}-${CACHE_RUN_ID}`,
-    prompt_cache_options: { mode: 'implicit', ttl: '30m' },
     store: false,
   }, logicalSample, attempts);
   return usageFromResponses(logicalSample, response.status, payload);
@@ -224,7 +223,6 @@ async function sampleChat(
     max_completion_tokens: 64,
     reasoning_effort: 'none',
     prompt_cache_key: `mk-c-${MODEL_TIER}-${CACHE_RUN_ID}`,
-    prompt_cache_options: { mode: 'implicit', ttl: '30m' },
   }, logicalSample, attempts);
   return usageFromChat(logicalSample, response.status, payload);
 }
