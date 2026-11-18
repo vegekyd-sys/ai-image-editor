@@ -1,0 +1,251 @@
+{
+  "cases": [
+    {
+      "case": "element-reference",
+      "endpoint": "kling/v4/image-to-image",
+      "unitPriceUsd": 0.063,
+      "input": {
+        "resolution": "2K",
+        "aspect_ratio": "1:1",
+        "prompt": "Preserve the character from @Element1, floating above the art gallery table shown in @Image1. No lettering.",
+        "elements": "one element using the brand reference; exact upstream envelope kept in local raw case",
+        "inputEvidenceFiles": [
+          "inputs/brand-reference.png"
+        ]
+      }
+    },
+    {
+      "case": "long-shop-long-1K",
+      "endpoint": "kling/v4/long-image",
+      "unitPriceUsd": 0.235,
+      "input": {
+        "prompt": "Create a polished product detail long raster about Makaron creative editor featuring this exact small purple wizard and magenta/cyan Spark as a sidekick. Main product: the floating editor card shown in @Image1. Hero, reference editing demo, materials closeups, creative workflow, final call to action. Use readable English headings. Do not claim an editable website.",
+        "skill": "ecommerce",
+        "resolution": "1K",
+        "length": "long",
+        "inputEvidenceFiles": [
+          "inputs/fixed-edit-source.png"
+        ]
+      }
+    },
+    {
+      "case": "long-shop-long-2K",
+      "endpoint": "kling/v4/long-image",
+      "unitPriceUsd": 0.235,
+      "input": {
+        "prompt": "Create a polished product detail long raster about Makaron creative editor featuring this exact small purple wizard and magenta/cyan Spark as a sidekick. Main product: the floating editor card shown in @Image1. Hero, reference editing demo, materials closeups, creative workflow, final call to action. Use readable English headings. Do not claim an editable website.",
+        "skill": "ecommerce",
+        "resolution": "2K",
+        "length": "long",
+        "inputEvidenceFiles": [
+          "inputs/fixed-edit-source.png"
+        ]
+      }
+    },
+    {
+      "case": "long-shop-medium-1K",
+      "endpoint": "kling/v4/long-image",
+      "unitPriceUsd": 0.235,
+      "input": {
+        "prompt": "Create a polished product detail long raster about Makaron creative editor featuring this exact small purple wizard and magenta/cyan Spark as a sidekick. Main product: the floating editor card shown in @Image1. Hero, reference editing demo, materials closeups, creative workflow, final call to action. Use readable English headings. Do not claim an editable website.",
+        "skill": "ecommerce",
+        "resolution": "1K",
+        "length": "medium",
+        "inputEvidenceFiles": [
+          "inputs/fixed-edit-source.png"
+        ]
+      }
+    },
+    {
+      "case": "long-shop-medium-2K",
+      "endpoint": "kling/v4/long-image",
+      "unitPriceUsd": 0.235,
+      "input": {
+        "prompt": "Create a polished product detail long raster about Makaron creative editor featuring this exact small purple wizard and magenta/cyan Spark as a sidekick. Main product: the floating editor card shown in @Image1. Hero, reference editing demo, materials closeups, creative workflow, final call to action. Use readable English headings. Do not claim an editable website.",
+        "skill": "ecommerce",
+        "resolution": "2K",
+        "length": "medium",
+        "inputEvidenceFiles": [
+          "inputs/fixed-edit-source.png"
+        ]
+      }
+    },
+    {
+      "case": "long-shop-short-1K",
+      "endpoint": "kling/v4/long-image",
+      "unitPriceUsd": 0.235,
+      "input": {
+        "prompt": "Create a polished product detail long raster about Makaron creative editor featuring this exact small purple wizard and magenta/cyan Spark as a sidekick. Main product: the floating editor card shown in @Image1. Hero, reference editing demo, materials closeups, creative workflow, final call to action. Use readable English headings. Do not claim an editable website.",
+        "skill": "ecommerce",
+        "resolution": "1K",
+        "length": "short",
+        "inputEvidenceFiles": [
+          "inputs/fixed-edit-source.png"
+        ]
+      }
+    },
+    {
+      "case": "long-shop-short-2K",
+      "endpoint": "kling/v4/long-image",
+      "unitPriceUsd": 0.235,
+      "input": {
+        "prompt": "Create a polished product detail long raster about Makaron creative editor featuring this exact small purple wizard and magenta/cyan Spark as a sidekick. Main product: the floating editor card shown in @Image1. Hero, reference editing demo, materials closeups, creative workflow, final call to action. Use readable English headings. Do not claim an editable website.",
+        "skill": "ecommerce",
+        "resolution": "2K",
+        "length": "short",
+        "inputEvidenceFiles": [
+          "inputs/fixed-edit-source.png"
+        ]
+      }
+    },
+    {
+      "case": "long-web-1K",
+      "endpoint": "kling/v4/long-image",
+      "unitPriceUsd": 0.235,
+      "input": {
+        "prompt": "Design a premium long website raster for the fictional chair brand ORANGE FORM, sections: hero chair image, materials close up, philosophy, collection and footer. Precise readable English text, cream and orange visual identity.",
+        "skill": "webpage",
+        "resolution": "1K"
+      }
+    },
+    {
+      "case": "long-web-2K",
+      "endpoint": "kling/v4/long-image",
+      "unitPriceUsd": 0.235,
+      "input": {
+        "prompt": "Design a premium long website raster for the fictional chair brand ORANGE FORM, sections: hero chair image, materials close up, philosophy, collection and footer. Precise readable English text, cream and orange visual identity.",
+        "skill": "webpage",
+        "resolution": "2K"
+      }
+    },
+    {
+      "case": "mascot-full-scene",
+      "endpoint": "kling/v4/image-to-image",
+      "unitPriceUsd": 0.063,
+      "input": {
+        "prompt": "Use the Makaron Spark + Pixel Wizard reference sheet for brand identity. Spark is Makaron’s creative source and editing signature: magenta/cyan energy that emerges from the product UI and shows transformation. Pixel Wizard is Makaron’s small purple bubble-ghost mascot and the mischievous, slightly scared guide/personification of Spark. Pixel Wizard must actively interact with Spark using his whole squishy body, not simply hold a magic wand. Avoid making Spark just a wand glow. The mascot is a sidekick, not the protagonist. Create one polished square 2048x2048 full-scene campaign illustration. A large floating Makaron editor card is the hero, a magenta/cyan Spark ribbon bursts from its image preview into a luminous creative portal. A small translucent purple bubble-ghost Pixel Wizard with a pixel face and large floppy dark-purple hat is pulled sideways by the ribbon, wrapping his squishy body around it with a mischievous startled expression. His whole body and hat are visible, about 20 percent of the frame. Warm ivory studio background, carefully integrated light and shadows, premium 3D materials, no wand, no additional characters. The only lettering is MAKARON on the card.",
+        "resolution": "2K",
+        "aspect_ratio": "1:1",
+        "result_type": "single",
+        "num_images": 1,
+        "inputEvidenceFiles": [
+          "inputs/brand-reference.png"
+        ]
+      }
+    },
+    {
+      "case": "mascot-local-hat-edit",
+      "endpoint": "kling/v4/image-to-image",
+      "unitPriceUsd": 0.063,
+      "input": {
+        "prompt": "Edit this exact source image locally. Change ONLY the large floppy dark-purple wizard hat on the small purple bubble-ghost on the right into warm tangerine orange, including the crown and brim; retain the same hat shape, pixel edges, folds, material, light and shadow. Do not change the purple body, pixel face, expression, pose, the magenta/cyan Spark ribbon, the MAKARON editor card, its lettering, mountains, portal, ivory background, shadows, camera, composition, or canvas size. Preserve every area outside the hat as faithfully as possible. Do not regenerate the scene, add objects, add text, crop, or resize. Output the complete edited image at 2048x2048.",
+        "resolution": "2K",
+        "aspect_ratio": "1:1",
+        "result_type": "single",
+        "num_images": 1,
+        "inputEvidenceFiles": [
+          "inputs/fixed-edit-source.png"
+        ]
+      }
+    },
+    {
+      "case": "mascot-native-alpha",
+      "endpoint": "kling/v4/image-to-image",
+      "unitPriceUsd": 0.063,
+      "input": {
+        "prompt": "Use the Makaron Spark + Pixel Wizard reference sheet for brand identity. Spark is Makaron’s creative source and editing signature: magenta/cyan energy that emerges from the product UI and shows transformation. Pixel Wizard is Makaron’s small purple bubble-ghost mascot and the mischievous, slightly scared guide/personification of Spark. Pixel Wizard must actively interact with Spark using his whole squishy body, not simply hold a magic wand. Avoid making Spark just a wand glow. The mascot is a sidekick, not the protagonist. Create one square 2048x2048 isolated brand asset on a truly transparent background with native alpha, not a checkerboard painted in the image. Show a small floating Makaron editor card, a magenta/cyan translucent Spark ribbon emerging from its preview and turning into an open loop. The full-body translucent purple bubble-ghost Pixel Wizard, with a pixel face and a large floppy dark-purple hat, clings to this ribbon with his whole squishy body and a startled cheeky expression. Keep soft glasslike translucency in the purple body and Spark, delicate semitransparent glow edges, and fully transparent empty space outside the objects. All parts and hat fully inside the canvas with padding, no wand, no extra characters, no text, no floor or solid backdrop.",
+        "resolution": "2K",
+        "aspect_ratio": "1:1",
+        "result_type": "single",
+        "num_images": 1,
+        "inputEvidenceFiles": [
+          "inputs/brand-reference.png"
+        ]
+      }
+    },
+    {
+      "case": "poster-2K",
+      "endpoint": "kling/v4/text-to-image",
+      "unitPriceUsd": 0.063,
+      "input": {
+        "prompt": "Create a complete premium bilingual design exhibition poster. A sculptural orange chair inside a sunlit concrete gallery, cobalt blue vase and a small white table, realistic material texture. Crisp precise typography integrated with generous margins: top headline exactly “设计的温度”, second headline exactly “THE WARMTH OF DESIGN”, details exactly “2026.11.18 — 12.18”, “上海 · 创意空间”, and “FORM / LIGHT / LIFE”. No other text. Full objects in frame, precise perspective, subtle shadows. Include fine woven upholstery and brushed metal leg detail.",
+        "resolution": "2K",
+        "aspect_ratio": "1:1",
+        "result_type": "single",
+        "num_images": 1
+      }
+    },
+    {
+      "case": "poster-4K",
+      "endpoint": "kling/v4/text-to-image",
+      "unitPriceUsd": 0.063,
+      "input": {
+        "prompt": "Create a complete premium bilingual design exhibition poster. A sculptural orange chair inside a sunlit concrete gallery, cobalt blue vase and a small white table, realistic material texture. Crisp precise typography integrated with generous margins: top headline exactly “设计的温度”, second headline exactly “THE WARMTH OF DESIGN”, details exactly “2026.11.18 — 12.18”, “上海 · 创意空间”, and “FORM / LIGHT / LIFE”. No other text. Full objects in frame, precise perspective, subtle shadows. Include fine woven upholstery and brushed metal leg detail.",
+        "resolution": "4K",
+        "aspect_ratio": "1:1",
+        "result_type": "single",
+        "num_images": 1
+      }
+    },
+    {
+      "case": "poster-8K",
+      "endpoint": "kling/v4/text-to-image",
+      "unitPriceUsd": 0.063,
+      "input": {
+        "prompt": "Create a complete premium bilingual design exhibition poster. A sculptural orange chair inside a sunlit concrete gallery, cobalt blue vase and a small white table, realistic material texture. Crisp precise typography integrated with generous margins: top headline exactly “设计的温度”, second headline exactly “THE WARMTH OF DESIGN”, details exactly “2026.11.18 — 12.18”, “上海 · 创意空间”, and “FORM / LIGHT / LIFE”. No other text. Full objects in frame, precise perspective, subtle shadows. Include fine woven upholstery and brushed metal leg detail.",
+        "resolution": "8K",
+        "aspect_ratio": "1:1",
+        "result_type": "single",
+        "num_images": 1
+      }
+    },
+    {
+      "case": "series-two",
+      "endpoint": "kling/v4/text-to-image",
+      "unitPriceUsd": 0.063,
+      "input": {
+        "resolution": "2K",
+        "aspect_ratio": "1:1",
+        "prompt": "Create a coherent two-image series showing the same orange chair in the same concrete gallery: morning light then dusk light. No text.",
+        "result_type": "series",
+        "series_amount": 2
+      }
+    },
+    {
+      "case": "two-independent",
+      "endpoint": "kling/v4/text-to-image",
+      "unitPriceUsd": 0.063,
+      "input": {
+        "resolution": "2K",
+        "aspect_ratio": "1:1",
+        "prompt": "A blue ceramic vase on a white table in a concrete art gallery. No text.",
+        "result_type": "single",
+        "num_images": 2
+      }
+    }
+  ],
+  "baseline": "../seedream55-live-20261113/manifest.json",
+  "inputs": [
+    {
+      "file": "inputs/brand-reference.png",
+      "sha256": "70074b05c59b9b74040c36485823fb84f8eb73579fc3fc35f87db708e98c9993"
+    },
+    {
+      "file": "inputs/fixed-edit-source.png",
+      "sha256": "bbd9051dad42a91ab512b9b1ade7b2582e69545331fa02a0cbe6415fe44bb9fa"
+    }
+  ],
+  "posterBaselines": {
+    "models": [
+      "seedream-5.5",
+      "gpt-image-2.6-flare"
+    ],
+    "promptCase": "poster-2K",
+    "resolution": "2K",
+    "aspect": "1:1",
+    "background": "opaque",
+    "outputFormat": "png",
+    "gptQuality": "low",
+    "gptReasoning": "high"
+  }
+}

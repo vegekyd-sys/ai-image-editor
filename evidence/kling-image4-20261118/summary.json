@@ -1,0 +1,284 @@
+{
+  "candidate": "B-20261115-kling-image4-preview",
+  "checkedAt": "2026-11-18",
+  "codeReady": true,
+  "localProductLiveVerified": true,
+  "productionLiveVerified": false,
+  "nativeProviderGenerationVerified": false,
+  "merged": false,
+  "deployed": false,
+  "npmPublished": false,
+  "defaultChanged": false,
+  "directFalCases": [
+    {
+      "case": "element-reference",
+      "endpoint": "kling/v4/image-to-image",
+      "httpStatus": 200,
+      "billableUnits": 1.0952,
+      "providerCostUsd": 0.0689976,
+      "wallSeconds": 55.131,
+      "images": 1,
+      "receiptFile": "element-reference/result.json"
+    },
+    {
+      "case": "long-shop-long-1K",
+      "endpoint": "kling/v4/long-image",
+      "httpStatus": 200,
+      "billableUnits": 3.3489,
+      "providerCostUsd": 0.7869915,
+      "wallSeconds": 151.644,
+      "images": 1,
+      "receiptFile": "long-shop-long-1K/result.json"
+    },
+    {
+      "case": "long-shop-long-2K",
+      "endpoint": "kling/v4/long-image",
+      "httpStatus": 200,
+      "billableUnits": 3.6809,
+      "providerCostUsd": 0.8650115,
+      "wallSeconds": 376.699,
+      "images": 1,
+      "receiptFile": "long-shop-long-2K/result.json"
+    },
+    {
+      "case": "long-shop-medium-1K",
+      "endpoint": "kling/v4/long-image",
+      "httpStatus": 200,
+      "billableUnits": 2.0128,
+      "providerCostUsd": 0.473008,
+      "wallSeconds": 109.966,
+      "images": 1,
+      "receiptFile": "long-shop-medium-1K/result.json"
+    },
+    {
+      "case": "long-shop-medium-2K",
+      "endpoint": "kling/v4/long-image",
+      "httpStatus": 200,
+      "billableUnits": 2.3489,
+      "providerCostUsd": 0.5519915,
+      "wallSeconds": 169.551,
+      "images": 1,
+      "receiptFile": "long-shop-medium-2K/result.json"
+    },
+    {
+      "case": "long-shop-short-1K",
+      "endpoint": "kling/v4/long-image",
+      "httpStatus": 200,
+      "billableUnits": 1.0128,
+      "providerCostUsd": 0.238008,
+      "wallSeconds": 122.969,
+      "images": 1,
+      "receiptFile": "long-shop-short-1K/result.json"
+    },
+    {
+      "case": "long-shop-short-2K",
+      "endpoint": "kling/v4/long-image",
+      "httpStatus": 200,
+      "billableUnits": 1.2128,
+      "providerCostUsd": 0.285008,
+      "wallSeconds": 148.191,
+      "images": 1,
+      "receiptFile": "long-shop-short-2K/result.json"
+    },
+    {
+      "case": "long-web-1K",
+      "endpoint": "kling/v4/long-image",
+      "httpStatus": 200,
+      "billableUnits": 2.3362,
+      "providerCostUsd": 0.549007,
+      "wallSeconds": 85.768,
+      "images": 1,
+      "receiptFile": "long-web-1K/result.json"
+    },
+    {
+      "case": "long-web-2K",
+      "endpoint": "kling/v4/long-image",
+      "httpStatus": 200,
+      "billableUnits": 2.5362,
+      "providerCostUsd": 0.596007,
+      "wallSeconds": 103.796,
+      "images": 1,
+      "receiptFile": "long-web-2K/result.json"
+    },
+    {
+      "case": "mascot-full-scene",
+      "endpoint": "kling/v4/image-to-image",
+      "httpStatus": 200,
+      "billableUnits": 1.0476,
+      "providerCostUsd": 0.0659988,
+      "wallSeconds": 51.891,
+      "images": 1,
+      "receiptFile": "mascot-full-scene/result.json"
+    },
+    {
+      "case": "mascot-local-hat-edit",
+      "endpoint": "kling/v4/image-to-image",
+      "httpStatus": 200,
+      "billableUnits": 1.0476,
+      "providerCostUsd": 0.0659988,
+      "wallSeconds": 45.816,
+      "images": 1,
+      "receiptFile": "mascot-local-hat-edit/result.json"
+    },
+    {
+      "case": "mascot-native-alpha",
+      "endpoint": "kling/v4/image-to-image",
+      "httpStatus": 200,
+      "billableUnits": 1.0476,
+      "providerCostUsd": 0.0659988,
+      "wallSeconds": 44.363,
+      "images": 1,
+      "receiptFile": "mascot-native-alpha/result.json"
+    },
+    {
+      "case": "poster-2K",
+      "endpoint": "kling/v4/text-to-image",
+      "httpStatus": 200,
+      "billableUnits": 1.0,
+      "providerCostUsd": 0.063,
+      "wallSeconds": 45.585,
+      "images": 1,
+      "receiptFile": "poster-2K/result.json"
+    },
+    {
+      "case": "poster-4K",
+      "endpoint": "kling/v4/text-to-image",
+      "httpStatus": 200,
+      "billableUnits": 1.4921,
+      "providerCostUsd": 0.0940023,
+      "wallSeconds": 69.919,
+      "images": 1,
+      "receiptFile": "poster-4K/result.json"
+    },
+    {
+      "case": "poster-8K",
+      "endpoint": "kling/v4/text-to-image",
+      "httpStatus": 200,
+      "billableUnits": 2.4921,
+      "providerCostUsd": 0.1570023,
+      "wallSeconds": 125.631,
+      "images": 1,
+      "receiptFile": "poster-8K/result.json"
+    },
+    {
+      "case": "series-two",
+      "endpoint": "kling/v4/text-to-image",
+      "httpStatus": 200,
+      "billableUnits": 2.0,
+      "providerCostUsd": 0.126,
+      "wallSeconds": 123.754,
+      "images": 2,
+      "receiptFile": "series-two/result.json"
+    },
+    {
+      "case": "two-independent",
+      "endpoint": "kling/v4/text-to-image",
+      "httpStatus": 200,
+      "billableUnits": 2.0,
+      "providerCostUsd": 0.126,
+      "wallSeconds": 35.651,
+      "images": 2,
+      "receiptFile": "two-independent/result.json"
+    }
+  ],
+  "directFalTotalUsd": 5.1780311,
+  "productCredits": 63,
+  "productCreditsUsd": 0.63,
+  "routingEstimatedUsd": 0.010550274,
+  "conservativeBudgetUsd": 5.818581374,
+  "supplierMediaTotalUsd": 5.4766834,
+  "taskBudgetTargetUsd": 5,
+  "taskBudgetLimitUsd": 10,
+  "paidMediaRequests": 21,
+  "newOutputImages": 23,
+  "transparentProbe": {
+    "httpSuccess": true,
+    "semanticSuccess": false,
+    "allAlpha": 255,
+    "paintedCheckerboard": true
+  },
+  "projectReopen": {
+    "snapshots": [
+      {
+        "id": "50bfaf7f-0953-4f70-9bc7-7cc5145549e2",
+        "messageLinked": true,
+        "metadata": {
+          "imageGeneration": {
+            "id": "01a1ec27-7eb0-78a3-9920-e072ee2ff66c",
+            "model": "kling-image-4.0",
+            "prompt": "Create a complete premium bilingual design exhibition poster. A sculptural orange chair inside a sunlit concrete gallery, cobalt blue vase and a small white table, realistic material texture. Crisp precise typography integrated with generous margins: top headline exactly “设计的温度”, second headline exactly “THE WARMTH OF DESIGN”, details exactly “2026.11.18 — 12.18”, “上海 · 创意空间”, and “FORM / LIGHT / LIFE”. No other text. Full objects in frame, precise perspective, subtle shadows. Include fine woven upholstery and brushed metal leg detail.",
+            "provider": "fal",
+            "background": "opaque",
+            "aspectRatio": "1:1",
+            "inputImages": [],
+            "outputFormat": "png",
+            "providerModel": "kling/v4/text-to-image",
+            "imageResolution": "2K"
+          }
+        }
+      }
+    ],
+    "sameSnapshotId": true,
+    "shaMatchesSavedDownload": true,
+    "promptExact": true
+  },
+  "sharedKlingPriceRowPresent": false,
+  "sharedSeedreamPriceRowPresent": true,
+  "cli8k": {
+    "private": true,
+    "journal": {
+      "taskId": "01a1ec2a-1434-7582-a3f0-27806fd9b046",
+      "provider": "fal",
+      "providerModel": "kling/v4/text-to-image",
+      "status": "COMPLETED",
+      "billableUnits": 2.4921,
+      "providerCostUsd": 0.1570023,
+      "updatedAt": "2026-11-18T01:01:12.216Z"
+    },
+    "originalBytes": 67028220,
+    "cliBytes": 67028220,
+    "shaEqual": true,
+    "ledger": [
+      {
+        "model_used": "kling-image-4.0",
+        "tool_name": "generate_image",
+        "credits_charged": 13,
+        "duration_ms": null,
+        "created_at": "2026-11-18T00:57:10.597494+00:00"
+      },
+      {
+        "model_used": "kling-image-4.0",
+        "tool_name": "makaron_edit_image",
+        "credits_charged": 32,
+        "duration_ms": 147016,
+        "created_at": "2026-11-18T01:01:28.682108+00:00"
+      }
+    ]
+  },
+  "replay": "same UUID blocked, existing completed receipt returned; ledger still two Kling rows (13+32 credits)",
+  "nonPaidFailures": [
+    "initial CLI 8K test passed a non-UUID; schema rejected before paid POST",
+    "replay of completed UUID refused with existing receipt"
+  ],
+  "validation": {
+    "relatedTests": 107,
+    "finalMcpSubset": 45,
+    "typescript": "pass",
+    "cliSmokeUpload": "pass",
+    "i18n": "pass",
+    "skillBuildSync": "pass",
+    "controlledRouting": {
+      "passed": 4,
+      "mediaOperations": 0
+    },
+    "lint": "0 errors; pre-existing unused locale warning"
+  },
+  "remaining": [
+    "native generation unavailable with existing credentials",
+    "authenticated private GUI reopen unverified",
+    "batch stability not tested",
+    "production and npm not released",
+    "long image/multi-output/element API exploratory only",
+    "recovery uses durable receipt/GET-only reconciliation; no automated CLI resume"
+  ]
+}

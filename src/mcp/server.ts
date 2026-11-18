@@ -137,7 +137,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
       frameCount: z.number().int().min(2).max(16).nullish().describe('GIF frames 2–16, default 9. Square frames are 960px up to 9 frames, 816px for 10–12, 720px for 13–16.'),
       frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).nullish().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
       gifFrameSize: z.enum(['sticker', 'full']).nullish().describe('GIF frame canvas: sticker ~512px frames (about half cost, for chat stickers/memes), full largest frames (default).'),
-      imageResolution: z.string().nullish().describe('Output resolution preference, 1K/2K/4K, or Seedream 5.5 1K/1.5K/2K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
+      imageResolution: z.string().nullish().describe('Output resolution preference; Kling Image 4.0 uses exact 2K/4K/8K (default 2K), or Seedream 5.5 1K/1.5K/2K; other models commonly use 1K/2K/4K. GPT Image 2.6 and Nano Banana 2.1 support native high resolution; the capability table governs ratio/size limits and priority. Unsupported preferences relax before submission, including NSFW Spicy requests.'),
       midjourney: z.object({
         speed: z.enum(['fast', 'draft']).optional(), quality: z.enum(['standard', 'hd']).optional(),
         styleReferences: z.array(z.string()).max(20).optional(), styleWeight: z.number().int().min(0).max(1000).optional(),
@@ -146,7 +146,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
       }).nullish().describe('Only for explicit mj-v8.2. Fast 4 / Draft 24 / HD 4 candidates. Style references require public HTTPS URLs. HD regenerates, not lossless upscaling. The natural-language brief is converted automatically.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       imageRequestId: z.string().uuid().optional().describe('Required for Kling Image 4.0: stable UUID per generation. Reuse on retry; the server never repeats an accepted or uncertain paid POST.'),
-      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background preference. Set transparent for cutout/alpha assets. Conflicts are resolved to deliver an image; see the capability table.'),
+      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background preference. Set transparent for cutout/alpha assets. Explicit Kling Image 4.0 rejects transparent backgrounds and unsupported resolutions without fallback; see the capability table.'),
     },
     async (params) => {
       try {

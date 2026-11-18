@@ -1,0 +1,16 @@
+*
+!.gitignore
+!README.md
+!manifest.json
+!measurements.json
+!summary.json
+!comparison.html
+!contracts/
+contracts/*
+!contracts/native-verified.json
+!contracts/*-price.json
+!contracts/*-schema.json
+!qa/
+qa/*
+!qa/posters.png
+!qa/mascot-comparison.png
