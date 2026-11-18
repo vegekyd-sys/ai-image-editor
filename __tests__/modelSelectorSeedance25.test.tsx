@@ -26,8 +26,8 @@ describe('ModelSelector Seedance 2.5', () => {
     );
     fireEvent.click(screen.getByTestId('model-selector'));
     fireEvent.click(await screen.findByText(/视频|Video/));
-    expect(await screen.findByText('全新 SOTA · 30s')).toBeTruthy();
-    expect(screen.getByText(/全新 SOTA，最长 30 秒/)).toBeTruthy();
+    expect(await screen.findByText('高费用 · 原生 4K')).toBeTruthy();
+    expect(screen.getByText(/4K 费用较高，仅明确选择时使用/)).toBeTruthy();
     expect(screen.getByText('Wan 3.0 标准版')).toBeTruthy();
     expect(screen.getByText('4K · 30s')).toBeTruthy();
     expect(screen.getByText(/自动启用 FlashVSR/)).toBeTruthy();
@@ -40,6 +40,18 @@ describe('ModelSelector Seedance 2.5', () => {
       expect(onVideoModelChange).toHaveBeenCalledWith('seedance-2.5-eco');
       expect(onVideoResolutionChange).toHaveBeenCalledWith('1080p');
     });
+  });
+  it('exposes selectable native 4K and preserves the selected label', async () => {
+    localStorage.setItem('locale', 'zh');
+    const onVideoResolutionChange = vi.fn();
+    const view = (resolution: '480p' | '4k') => <LocaleProvider><ModelSelector preferredModel="auto" onModelChange={vi.fn()} videoAuto={false} videoModel="seedance-2.5-native" videoResolution={resolution} onVideoResolutionChange={onVideoResolutionChange} /></LocaleProvider>;
+    const { rerender } = render(view('480p'));
+    fireEvent.click(screen.getByTestId('model-selector'));
+    fireEvent.click(await screen.findByText(/视频|Video/));
+    fireEvent.click(await screen.findByRole('button', { name: '4K', exact: true }));
+    expect(onVideoResolutionChange).toHaveBeenCalledWith('4k');
+    rerender(view('4k'));
+    expect(screen.getByTestId('model-selector').getAttribute('aria-label')).toContain('Seedance 2.5 Native 4K');
   });
   it('keeps the explicit Native model name in the collapsed selector', () => {
     localStorage.setItem('locale', 'zh');

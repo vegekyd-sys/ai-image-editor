@@ -1,4 +1,9 @@
 const en = {
+  "changelog.seedance25Native4k.title": "Seedance 2.5 native 4K",
+  "changelog.seedance25Native4k.item1": "Choose Seedance 2.5 Native and 4K in the video model selector to generate native 4K video with synchronized audio.",
+  "changelog.seedance25Native4k.item2": "Native 4K costs more. Makaron shows the estimated total before generating; ordinary requests keep their usual model.",
+
+
   "design.matchingFont": "Matching the font in the background. You can type now; the text preview will update when it is ready.",
   "design.approximateFont": "An approximate font is being used for edited text.",
   "design.editTextPlaceholder": (label: string) => `Edit ${label}…`,

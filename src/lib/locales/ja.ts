@@ -1,6 +1,11 @@
-import type { TranslationDictionary } from './index';
+import type {
+ TranslationDictionary } from './index';
 
 const ja = {
+  "changelog.seedance25Native4k.title": "Seedance 2.5 のネイティブ 4K",
+  "changelog.seedance25Native4k.item1": "動画モデルで Seedance 2.5 Native と 4K を選ぶと、同期音声付きのネイティブ 4K 動画を生成できます。",
+  "changelog.seedance25Native4k.item2": "ネイティブ 4K は高額なため、生成前に合計見積もりを表示します。通常のリクエストは従来のモデルを使用します。",
+
   "design.matchingFont": "バックグラウンドでフォントを照合中です。先に入力できます。完了後に文字プレビューが更新されます。",
   "design.approximateFont": "編集後の文字には近似フォントが使用されます。",
   "design.editTextPlaceholder": (label: string) => `${label}を編集…`,

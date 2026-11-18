@@ -1,4 +1,8 @@
 const zh = {
+  "changelog.seedance25Native4k.title": "Seedance 2.5 原生 4K",
+  "changelog.seedance25Native4k.item1": "在视频模型中选择 Seedance 2.5 Native 和 4K，即可生成带同步音频的原生 4K 视频。",
+  "changelog.seedance25Native4k.item2": "原生 4K 费用较高，生成前会显示预计总费用；普通请求继续使用原有模型。",
+
   "design.matchingFont": "正在后台匹配字体。可以先输入，匹配完成后更新文字预览。",
   "design.approximateFont": "修改后的文字将使用相近字体。",
   "design.editTextPlaceholder": (label: string) => `编辑${label}…`,
