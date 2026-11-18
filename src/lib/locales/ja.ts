@@ -2,7 +2,7 @@ import type { TranslationDictionary } from './index';
 
 const ja = {
   "changelog.openaiApiModels.title": "OpenAI API のアップデート",
-  "changelog.openaiApiModels.item1": "GPT-6.2 Sol、GPT-6.2 Astra、GPT-6.1 Terra を API から利用できるようになりました。",
+  "changelog.openaiApiModels.item1": "Agent のモデル選択メニューで GPT-6.2 Sol、GPT-6.2 Astra、GPT-6.1 Terra を選べるようになりました。",
   "changelog.openaiApiModels.item2": "Agent メニューの表記を OpenAI API に統一し、グループ見出しを半透明パネルになじませました。",
   "changelog.klingImage4.title": "Kling Image 4.0",
   "changelog.klingImage4.item1": "画像モデル選択で Kling Image 4.0 を選ぶと、ネイティブの 2K、4K、8K PNG 画像を生成できます。",
@@ -1136,6 +1136,12 @@ const ja = {
   'model.gpt6Luna.name': 'GPT-6 Luna',
   'model.gpt6Luna.desc': '日常のクリエイティブ作業に使う高速で低コストな既定モデルです。',
   'model.gpt6Sol.name': 'GPT-6 Sol',
+  'model.gpt62Sol.name': 'GPT-6.2 Sol',
+  'model.gpt62Sol.desc': '複雑な制作やコーディング、複数ステップの作業に適しています。',
+  'model.gpt62Astra.name': 'GPT-6.2 Astra',
+  'model.gpt62Astra.desc': '深い推論が必要な複雑な作業に適しています。',
+  'model.gpt61Terra.name': 'GPT-6.1 Terra',
+  'model.gpt61Terra.desc': '日常の制作や下書き、分析に適しています。',
   'model.gpt61Sol.name': 'GPT-6.1 Sol',
   'model.gpt61Sol.desc': '複雑な制作とエージェント作業に適した新版 Sol。',
   'changelog.gpt61Sol.title': 'GPT-6.1 Sol が登場',

@@ -87,6 +87,11 @@ describe('ModelSelector Agent tab', () => {
     }
     expect(await screen.findByTestId('agent-model-gpt-6-luna-codex-subscription')).not.toBeNull();
     expect(await screen.findByTestId('agent-model-gpt-6.1-sol-codex-subscription')).not.toBeNull();
+    for (const id of ['gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-terra']) {
+      expect(screen.getByTestId(`agent-model-${id}`).getAttribute('data-agent-provider')).toBe('openai');
+      expect(screen.getByTestId(`agent-model-${id}-codex-subscription`).getAttribute('data-agent-provider'))
+        .toBe('codex-subscription');
+    }
     expect(await screen.findByTestId('agent-model-grok-4.6-grok-subscription')).not.toBeNull();
     expect(screen.getByTestId('agent-model-grok-4.6-grok-subscription').getAttribute('data-agent-provider'))
       .toBe('grok-subscription');
@@ -117,6 +122,9 @@ describe('ModelSelector Agent tab', () => {
 
     fireEvent.click(screen.getByTestId('agent-model-gpt-6.1-sol'));
     expect(onAgentModelChange).toHaveBeenCalledWith('gpt-6.1-sol');
+
+    fireEvent.click(screen.getByTestId('agent-model-gpt-6.2-astra'));
+    expect(onAgentModelChange).toHaveBeenLastCalledWith('gpt-6.2-astra');
 
     fireEvent.click(screen.getByTestId('agent-model-grok-4.6-grok-subscription'));
     expect(onAgentModelChange).toHaveBeenCalledWith('grok-4.6-grok-subscription');

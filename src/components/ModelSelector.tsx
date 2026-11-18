@@ -11,6 +11,7 @@ import {
   GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
   isCodexSubscriptionAgentModelPreference,
   isGrokSubscriptionAgentModelPreference,
+  isOpenAIAgentModelId,
   type AgentModelPreference,
   type GPT56AgentModelId,
 } from '@/lib/agent-models';
@@ -673,7 +674,7 @@ export default function ModelSelector({
   const subscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.codexAvailable !== false)
     || isCodexSubscriptionAgentModelPreference(agentModel);
   const baseAgentModels = getAgentModels();
-  const openaiAgentModels = baseAgentModels.filter(model => model.id.startsWith('gpt-6'));
+  const openaiAgentModels = baseAgentModels.filter(model => isOpenAIAgentModelId(model.id));
   const codexSubscriptionAgentModels: ModelInfo[] = subscriptionVisible
     ? openaiAgentModels.map(model => ({
         ...model,
@@ -695,7 +696,7 @@ export default function ModelSelector({
       });
     }
   }
-  const otherAgentModels = baseAgentModels.filter(model => !model.id.startsWith('gpt-6'));
+  const otherAgentModels = baseAgentModels.filter(model => !isOpenAIAgentModelId(model.id));
   const agentModels = [
     ...openaiAgentModels,
     ...codexSubscriptionAgentModels,
@@ -718,7 +719,7 @@ export default function ModelSelector({
     : preferredModel;
   const selectedAgentModel = agentModels.find(model => model.id === agentModel);
   const selectedAgentLabel = selectedAgentModel
-    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : /^gpt-(?:5\.6|6(?:\.1)?)-/.test(selectedAgentModel.id) ? ` · ${t('model.openaiApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`
+    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : isOpenAIAgentModelId(selectedAgentModel.id) ? ` · ${t('model.openaiApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`
     : agentModel;
   const selectedVideoModel = videoModels.find(model => model.id === videoModel);
   const selectedVideoLabel = selectedVideoModel
@@ -945,7 +946,7 @@ export default function ModelSelector({
                 const isGrokSubscription = activeTab === 'agent'
                   && isGrokSubscriptionAgentModelPreference(model.id);
                 const isOpenAIAgent = activeTab === 'agent'
-                  && /^gpt-(?:5\.6|6(?:\.1)?)-/.test(model.id)
+                  && isOpenAIAgentModelId(model.id)
                   && !isCodexSubscription;
                 const modelIndex = models.indexOf(model);
                 const previousModel = modelIndex > 0 ? models[modelIndex - 1] : undefined;
@@ -964,7 +965,7 @@ export default function ModelSelector({
                     ? 'codex'
                     : isGrokSubscriptionAgentModelPreference(previousModel.id)
                       ? 'grok'
-                    : /^gpt-(?:5\.6|6(?:\.1)?)-/.test(previousModel.id)
+                    : isOpenAIAgentModelId(previousModel.id)
                       ? 'openai'
                       : 'other';
                 const showProviderHeader = providerGroup && providerGroup !== previousProviderGroup;

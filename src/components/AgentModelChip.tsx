@@ -11,6 +11,7 @@ import {
   GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
   isCodexSubscriptionAgentModelPreference,
   isGrokSubscriptionAgentModelPreference,
+  isOpenAIAgentModelId,
   type AgentModelPreference,
   type AgentModelId,
   type AgentModelProvider,
@@ -88,7 +89,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
   const selected = models.find(model => model.id === selectedModelId);
   const ownerDefaultsToCodex = subscriptionUsage.defaultProvider === 'codex-subscription';
   const autoModel = models.find(model => model.id === subscriptionUsage.defaultModelId);
-  const autoUsesOpenAIApi = Boolean(autoModel?.id.startsWith('gpt-') && !ownerDefaultsToCodex);
+  const autoUsesOpenAIApi = Boolean(autoModel && isOpenAIAgentModelId(autoModel.id) && !ownerDefaultsToCodex);
   const autoProviderSuffix = ownerDefaultsToCodex
     ? t('model.codexSubscription.suffix')
     : autoUsesOpenAIApi
@@ -105,7 +106,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
     : value === 'auto'
     ? autoLabel
     : selected
-      ? `${t(selected.nameKey as Parameters<typeof t>[0])}${/^gpt-(?:5\.6|6(?:\.1)?)-/.test(selected.id) ? ` · ${t('model.openaiApiBadge')}` : selected.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`
+      ? `${t(selected.nameKey as Parameters<typeof t>[0])}${isOpenAIAgentModelId(selected.id) ? ` · ${t('model.openaiApiBadge')}` : selected.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`
       : value;
 
   useEffect(() => {
@@ -234,7 +235,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
   }).format(new Date(seconds * 1_000));
 
   const openaiOptions = models
-    .filter(model => model.id.startsWith('gpt-6'))
+    .filter(model => isOpenAIAgentModelId(model.id))
     .map((model) => ({
       id: model.id as AgentModelPreference,
       name: t(model.nameKey as Parameters<typeof t>[0]),
@@ -244,7 +245,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
     || isCodexSubscriptionAgentModelPreference(value);
   const codexSubscriptionOptions: Array<{ id: AgentModelPreference; name: string; desc: string }> = codexSubscriptionVisible
     ? models
-      .filter(model => model.id.startsWith('gpt-6'))
+      .filter(model => isOpenAIAgentModelId(model.id))
       .map(model => ({
         id: getCodexSubscriptionAgentModelPreference(model.id as GPT56AgentModelId),
         name: `${t(model.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`,
@@ -265,7 +266,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
     }
   }
   const otherOptions = models
-    .filter(model => !model.id.startsWith('gpt-6'))
+    .filter(model => !isOpenAIAgentModelId(model.id))
     .map(model => ({
       id: model.id as AgentModelPreference,
       name: model.id === 'grok-4.6'
@@ -449,7 +450,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
                           ? 'codex-subscription'
                           : isGrokSubscription
                           ? 'grok-subscription'
-                          : model.id.startsWith('gpt-6') || model.id === 'auto'
+                          : isOpenAIAgentModelId(model.id) || model.id === 'auto'
                           ? 'openai'
                           : model.id === 'grok-4.6'
                           ? 'openrouter'

@@ -23,6 +23,29 @@ describe('configured Auto model presentation', () => {
     expect(trigger.title).not.toContain('Luna');
   });
 
+  it('selects the new OpenAI API models from the creation menu', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ available: false, grokAvailable: false, defaultModelId: 'deepseek-flash', defaultProvider: 'deepseek' }),
+    }));
+    const onChange = vi.fn();
+    render(<LocaleProvider><AgentModelChip value="auto" onChange={onChange} /></LocaleProvider>);
+    const trigger = screen.getByTestId('create-agent-model-selector');
+    await waitFor(() => expect(trigger.title).toBe('Auto · DeepSeek V4.1 Flash'));
+
+    for (const [id, name] of [
+      ['gpt-6.2-sol', /GPT-6\.2 Sol/],
+      ['gpt-6.2-astra', /GPT-6\.2 Astra/],
+      ['gpt-6.1-terra', /GPT-6\.1 Terra/],
+    ] as const) {
+      fireEvent.click(trigger);
+      const option = await screen.findByRole('radio', { name });
+      expect(option.closest('section')?.querySelector('[data-agent-provider-group="openai"]')).not.toBeNull();
+      fireEvent.click(option);
+      expect(onChange).toHaveBeenLastCalledWith(id);
+    }
+  });
+
   it('retains an explicitly selected Luna subscription after Auto changes to DeepSeek', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
