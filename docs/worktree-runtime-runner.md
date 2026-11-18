@@ -61,9 +61,9 @@ The runner is machine-managed. Do not make source edits in it.
 ## Test Or Run A Commit
 
 ```bash
-pnpm run runner:test -- <commit>
-pnpm run runner:dev -- <commit>
-pnpm run runner:dev -- <commit> --port 3042
+pnpm run runner:test <commit>
+pnpm run runner:dev <commit>
+pnpm run runner:dev <commit> --port 3042
 ```
 
 `runner:test` runs the repository-native local release gates. With shared

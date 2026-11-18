@@ -2,6 +2,8 @@
 
 Use this for Makaron app releases, model launches, production deploys, and CLI publishes. The goal is to keep code, Vercel, production health, npm, changelog, and memory in one release loop instead of treating them as separate tasks.
 
+For model, provider, capability, or pricing changes, follow the [shared model update workflow](model-release-workflow.md).
+
 ## Release Surface
 
 Before changing or shipping anything, write down:
@@ -82,8 +84,8 @@ Feature worktrees stay lightweight and do not create their own Next.js runtime
 cache. Test committed feature refs and deploy Preview from the fixed runner:
 
 ```bash
-pnpm run runner:test -- <commit>
-pnpm run runner:preview -- <commit>
+pnpm run runner:test <commit>
+pnpm run runner:preview <commit>
 ```
 
 Production is only released from the clean canonical `dev` worktree:
