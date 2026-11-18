@@ -130,7 +130,9 @@ describe('read-only Agent price awareness', () => {
       request({ kind: 'image', model: 'gemini-lite' }),
     ] });
     expect(result.currency).toBe('credits');
-    expect(result.billingExplanation).toContain('applies to BOTH the output');
+    expect(result.billingExplanation).toContain('both output seconds and billable reference seconds use the reference-video tariff');
+    expect(result.billingExplanation).toContain('does not report which per-second tariff is higher');
+    expect(result.scope).toContain('Agent conversation usage is billed separately');
     expect(result.estimates[0]).toMatchObject({ status: 'estimated', details: { baseCredits: expect.any(Number), upscaleCredits: expect.any(Number) } });
     expect(result.estimates.map(e => e.status)).toEqual(['estimated', 'estimated', 'estimated', 'estimated', 'preflight_only', 'usage_only']);
     expect(JSON.stringify(result)).not.toMatch(/usd|supplier|markup|multiplier|perMillion|\$\s*\d/i);
