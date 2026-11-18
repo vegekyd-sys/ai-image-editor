@@ -130,7 +130,10 @@ describe('read-only Agent price awareness', () => {
       request({ kind: 'image', model: 'gemini-lite' }),
     ] });
     expect(result.currency).toBe('credits');
-    expect(result.billingExplanation).toContain('applies to BOTH the output');
+    expect(result.billingExplanation).toContain('both output seconds and billable reference seconds use the reference-video tariff');
+    expect(result.billingExplanation).toContain('the quote totals do not establish a unit-rate comparison');
+    expect(result.billingExplanation).toContain('Keep internal field names');
+    expect(result.scope).toContain('Agent conversation usage is billed separately');
     expect(result.estimates[0]).toMatchObject({ status: 'estimated', details: { baseCredits: expect.any(Number), upscaleCredits: expect.any(Number) } });
     expect(result.estimates.map(e => e.status)).toEqual(['estimated', 'estimated', 'estimated', 'estimated', 'preflight_only', 'usage_only']);
     expect(JSON.stringify(result)).not.toMatch(/usd|supplier|markup|multiplier|perMillion|\$\s*\d/i);
@@ -160,7 +163,8 @@ describe('read-only Agent price awareness', () => {
     expect(result.comparison!.rows[1].atLeastTwiceLowest).toBe(true);
     expect(result.comparison!.warning).toContain('not a quality/capability equivalence');
     expect(result.observedAt).toMatch(/^\d{4}-/);
-    expect(result.validity).toContain('no expiry/discount calendar');
+    expect(result.validity).toContain('No expiry/discount calendar');
+    expect(result.validity).toContain('If the user moves on to generation, follow normal routing');
   });
   it('does not rank unrelated task quantities as a cheapest-model decision', async () => {
     const mixed = await quoteRequests({ requests: [request(), request({ kind: 'audio', model: 'evolink-seed-audio' })] });
@@ -175,7 +179,7 @@ describe('read-only Agent price awareness', () => {
   });
   it('is wired into shared Agent tools and retains the routing policy', async () => {
     expect(readFileSync('src/lib/agent-tools.ts', 'utf8')).toContain('query_model_prices: createModelPriceTool()');
-    expect(readFileSync('src/lib/prompts/agent.md', 'utf8')).toContain('use `query_model_prices`');
+    expect(readFileSync('src/lib/prompts/agent.md', 'utf8')).toContain('For price inquiries, use `query_model_prices`. Otherwise route normally.');
     expect((await queryModelPrices({ requests: [] })).policy).toContain('keep existing defaults');
   });
 });

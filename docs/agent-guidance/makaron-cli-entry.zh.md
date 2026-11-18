@@ -28,9 +28,9 @@ makaron responses get <runId> --wait --json
 获准自行审核中间环节时明确写入 brief；内部制作和检查要求仍须执行。
 详细流程由内部 Skill 负责，外部宿主无需重新编排。
 
-## 生成前估价
+## 按需估价
 
-用 `makaron price list` 查模型 ID 和可选分辨率。已知参数时，用 `makaron price` 直接查用户侧 credits。多个 `--model` 按相同参数比价，`--json` 返回逐项估价状态。
+用户询问价格、预算或模型对比时按需估价。普通创作直接走对应流程。用 `makaron price list` 查模型 ID 和可选分辨率。已知参数时，用 `makaron price` 直接查用户侧 credits。多个 `--model` 按相同参数比价，`--json` 返回逐项估价状态。
 
 ```bash
 makaron price video --model kling-4-flash --model seedance-2.5-native --duration 5 --resolution 720p --json

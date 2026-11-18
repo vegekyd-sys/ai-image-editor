@@ -23,7 +23,7 @@ const statuses = {
 };
 
 export function printPriceHelp() {
-  console.log(`Makaron price — estimate credits before generating media
+  console.log(`Makaron price — check media credits on demand
 
 Usage:
   makaron price list [--json]

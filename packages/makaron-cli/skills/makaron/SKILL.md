@@ -60,9 +60,9 @@ npx makaron-cli usage --limit 20                            # recent usage rows 
 ```
 
 
-## Estimate generation credits
+## Check generation credits on demand
 
-Use `makaron price` for a quote before starting a generation. `price list` discovers model IDs and supported resolutions. The quote includes customer-facing credits and applicable billing factors. It does not start a run, upload media or read your balance.
+Use `makaron price` when the user asks about price, budget, or how models compare. For routine creation, go directly to the requested workflow. `price list` discovers model IDs and supported resolutions. The quote includes customer-facing credits and applicable billing factors. It does not start a run, upload media or read your balance.
 
 ```bash
 makaron price list --json

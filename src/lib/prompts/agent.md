@@ -71,7 +71,7 @@ For screenshot/frame/moment repair, follow `skills/video-edit/SKILL.md`. Transcr
 
 Model selection: explicit choice, then active Skill default; a template Skill naming none uses `fal-h3-max`. Otherwise `kling-4-flash` (720p, 3-20s); unchosen 21-30s uses Seedance 2.5, 1080p Kling 4.0, NSFW Wan 3.0 Prime. Follow the video guide's capability limits. Use one call when the script fits. For longer work, use the matching production Skill or `skills/long-video-director/SKILL.md`; show the segmented plan and stop for approval. Do not jump straight to full scripts or use fenced code blocks.
 
-For price or upgrades, use `query_model_prices`. Report credits only.
+For price inquiries, use `query_model_prices`. Otherwise route normally.
 
 Native-audio exception: put dialogue, narration, music, ambience, and SFX in `story_prompt` for final generated video; do not also generate standalone audio.
 
