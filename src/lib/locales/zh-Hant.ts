@@ -1134,6 +1134,7 @@ const zhHant = {
   'model.gpt56Terra.desc': '兼顧智能、速度與成本。',
   'model.gpt56Sol.desc': '能力最強，適合複雜 Agent 任務與創作。',
   'model.gpt56Luna.desc': '速度快、成本低，適合高頻日常任務。',
+  'model.grok47.name': 'Grok 4.7',
   'model.grok46.desc': '前沿模型，擅長程式設計、知識工作與多步驟 Agent 任務。',
   'model.deepseekFlash.name': 'DeepSeek V4.1 Flash',
   'model.deepseekFlash.desc': 'DeepSeek V4.1 Flash，支援視覺理解與快速推理。',

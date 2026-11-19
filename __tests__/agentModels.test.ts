@@ -345,9 +345,10 @@ describe('agent model catalog', () => {
         undefined,
         'owner-id',
       )).toMatchObject({
-        id: 'grok-4.6',
+        id: 'grok-4.7',
         provider: 'grok-subscription',
-        providerModelId: 'grok-4.6',
+        providerModelId: 'grok-4.7',
+        billingModelId: 'grok-4.7',
       });
       expect(resolveAgentModelSpecForUser(
         GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
@@ -505,11 +506,18 @@ describe('agent model catalog', () => {
     expect(normalizeAgentModelPreference('grok-4.5')).toBe('grok-4.6');
     expect(normalizeRequestedAgentModelPreference('grok-4.5')).toBe('grok-4.6');
     expect(normalizeRequestedAgentModelPreference('x-ai/grok-4.5')).toBe('grok-4.6');
-    expect(normalizeAgentModelPreference('grok-4.5-grok-subscription'))
-      .toBe('grok-4.6-grok-subscription');
     expect(resolveAgentModelSpec('auto', 'grok-4.5').id).toBe('grok-4.6');
     expect(resolveAgentModelSpec('auto', 'x-ai/grok-4.5').id).toBe('grok-4.6');
   });
+
+  it.each(['grok-4.5-grok-subscription', 'grok-4.6-grok-subscription'])(
+    'migrates the legacy %s preference to the Grok 4.7 plan',
+    (legacy) => {
+      expect(normalizeAgentModelPreference(legacy)).toBe(GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE);
+      expect(normalizeRequestedAgentModelPreference(legacy)).toBe(GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE);
+      expect(normalizeRequestedAgentModelPreference('grok-4.7')).toBeNull();
+    },
+  );
 
   it('rolls retired Claude requests to Auto/Flash but still rejects unknown API ids', () => {
     expect(normalizeRequestedAgentModelPreference('sonnet-5')).toBe('auto');

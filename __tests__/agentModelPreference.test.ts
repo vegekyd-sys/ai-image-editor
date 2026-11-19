@@ -60,6 +60,14 @@ describe('agent model preference persistence', () => {
     expect(loadCreateAgentModelPreference()).toBe('grok-4.6');
   });
 
+  it('migrates saved Grok 4.6 plan selections to the Grok 4.7 plan', () => {
+    const key = getAgentModelPreferenceStorageKey('project-a');
+    window.localStorage.setItem(key, JSON.stringify({ v: 2, agentModel: 'grok-4.6-grok-subscription' }));
+    window.localStorage.setItem('makaron:create-agent-model:v2', 'grok-4.6-grok-subscription');
+    expect(loadAgentModelPreference('project-a')).toBe('grok-4.7-grok-subscription');
+    expect(loadCreateAgentModelPreference()).toBe('grok-4.7-grok-subscription');
+  });
+
   it('migrates the old implicit Azure Luna default to account-aware Auto', () => {
     window.localStorage.setItem('makaron:model-preferences:v1:project-a', JSON.stringify({ v: 1, agentModel: 'gpt-6-luna' }));
     window.localStorage.setItem('makaron:create-agent-model:v1', 'gpt-6-luna');

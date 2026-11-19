@@ -27,7 +27,9 @@ export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = [
 export type CodexSubscriptionAgentModelPreference =
   | (typeof CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES)[number]
   | `${(typeof ADDITIONAL_GPT_AGENT_MODEL_IDS)[number]}-codex-subscription`;
-export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.6-grok-subscription' as const;
+const GROK_SUBSCRIPTION_AGENT_MODEL_ID = 'grok-4.7' as const;
+export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.7-grok-subscription' as const;
+const GROK_SUBSCRIPTION_FALLBACK_AGENT_MODEL_ID = 'grok-4.6' as const;
 export type GrokSubscriptionAgentModelPreference = typeof GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE;
 export type AgentModelPreference = 'auto' | AgentModelId | CodexSubscriptionAgentModelPreference | GrokSubscriptionAgentModelPreference;
 export type AgentModelProvider = 'azure-openai' | 'openai' | 'codex-subscription' | 'grok-subscription' | 'openrouter' | 'deepseek';
@@ -37,7 +39,7 @@ export type AgentCacheStrategy = 'explicit' | 'automatic';
 export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface AgentModelSpec {
-  id: AgentModelId;
+  id: AgentModelId | typeof GROK_SUBSCRIPTION_AGENT_MODEL_ID;
   provider: AgentModelProvider;
   providerModelId: string;
   billingModelId: string;
@@ -243,6 +245,10 @@ export function shouldRequireAgentCredits(provider: AgentModelProvider): boolean
   return provider !== 'codex-subscription' && provider !== 'grok-subscription';
 }
 
+export function getAgentApiFallbackModelId(modelId: AgentModelSpec['id']): AgentModelId {
+  return modelId === GROK_SUBSCRIPTION_AGENT_MODEL_ID ? GROK_SUBSCRIPTION_FALLBACK_AGENT_MODEL_ID : modelId;
+}
+
 function isGrokSubscriptionAgentAllowedUser(userId: string | undefined, dynamicallyAllowed?: boolean): boolean {
   if (!userId
     || !process.env.GROK_SUBSCRIPTION_RELAY_URL?.trim()
@@ -427,6 +433,7 @@ const RETIRED_AGENT_MODEL_REPLACEMENTS = new Map<string, AgentModelId>([
 
 const RETIRED_AGENT_MODEL_PREFERENCE_REPLACEMENTS = new Map<string, AgentModelPreference>([
   ['grok-4.5-grok-subscription', GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE],
+  ['grok-4.6-grok-subscription', GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE],
 ]);
 
 function getRetiredAgentModelReplacement(value: unknown): AgentModelId | undefined {
@@ -501,24 +508,23 @@ export function resolveAgentModelSpec(
   configuredDefault?: string,
   configuredGPT56Provider: string | undefined = process.env.GPT56_AGENT_PROVIDER,
 ): AgentModelSpec {
+  if (isGrokSubscriptionAgentModelPreference(preference)) {
+    return {
+      id: GROK_SUBSCRIPTION_AGENT_MODEL_ID,
+      provider: 'grok-subscription',
+      providerModelId: GROK_SUBSCRIPTION_AGENT_MODEL_ID,
+      billingModelId: GROK_SUBSCRIPTION_AGENT_MODEL_ID,
+      cacheStrategy: 'automatic',
+      supportsImageInput: true,
+    };
+  }
   const explicitlyUsesCodexSubscription = isCodexSubscriptionAgentModelPreference(preference);
-  const explicitlyUsesGrokSubscription = isGrokSubscriptionAgentModelPreference(preference);
   const selectedId = explicitlyUsesCodexSubscription
     ? getCodexSubscriptionAgentModelId(preference)
-    : explicitlyUsesGrokSubscription
-    ? 'grok-4.6'
     : preference && preference !== 'auto'
     ? preference
     : matchConfiguredModel(configuredDefault) ?? DEFAULT_AGENT_MODEL_ID;
   const baseSpec = AGENT_MODEL_SPECS[selectedId];
-  if (explicitlyUsesGrokSubscription) {
-    return {
-      ...baseSpec,
-      provider: 'grok-subscription',
-      providerModelId: 'grok-4.6',
-      billingModelId: 'grok-4.6',
-    };
-  }
   if (!isOpenAIAgentModelId(selectedId)) return baseSpec;
 
   const provider = explicitlyUsesCodexSubscription
@@ -550,7 +556,7 @@ export function resolveAgentModelSpecForUser(
     // allowlisted users through the owner's SuperGrok credential.
     return isGrokSubscriptionAgentAllowedUser(userId, codexSubscriptionAllowed)
       ? selected
-      : AGENT_MODEL_SPECS['grok-4.6'];
+      : AGENT_MODEL_SPECS[GROK_SUBSCRIPTION_FALLBACK_AGENT_MODEL_ID];
   }
   const explicitlyUsesCodexSubscription = isCodexSubscriptionAgentModelPreference(preference);
   const ownerUsesCodexByDefault = defaultsToCodexSubscription(

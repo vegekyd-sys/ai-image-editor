@@ -56,15 +56,15 @@ function signedRequest(overrides: { userId?: string; signature?: string } = {}) 
 }
 
 describe('Grok subscription relay boundary', () => {
-  it('builds the official Grok Build headless headers without exposing them to clients', () => {
-    expect(buildGrokAgentHeaders('oauth-access-token')).toMatchObject({
+  it.each(['grok-4.6', 'grok-4.7'])('builds Grok Build headless headers for %s', model => {
+    expect(buildGrokAgentHeaders('oauth-access-token', model)).toMatchObject({
       authorization: 'Bearer oauth-access-token',
       'x-xai-token-auth': 'xai-grok-cli',
-      'x-grok-model-override': 'grok-4.6',
+      'x-grok-model-override': model,
       'x-grok-client-identifier': 'grok-shell',
-      'x-grok-client-version': '1.0.13',
+      'x-grok-client-version': '1.0.40',
       'x-grok-client-mode': 'headless',
-      'user-agent': 'grok-shell/1.0.13',
+      'user-agent': 'grok-shell/1.0.40',
     })
   })
 

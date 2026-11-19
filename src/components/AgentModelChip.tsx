@@ -4,11 +4,10 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocale } from '@/lib/i18n';
 import AgentProviderGroupHeader from './AgentProviderGroupHeader';
-import { getAgentModels } from '@/lib/model-registry';
+import { getAgentModels, GROK_SUBSCRIPTION_AGENT_MODEL } from '@/lib/model-registry';
 import {
   getCodexSubscriptionAgentModelId,
   getCodexSubscriptionAgentModelPreference,
-  GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
   isCodexSubscriptionAgentModelPreference,
   isGrokSubscriptionAgentModelPreference,
   isOpenAIAgentModelId,
@@ -83,10 +82,10 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
   const models = getAgentModels();
   const selectedModelId = isCodexSubscriptionAgentModelPreference(value)
     ? getCodexSubscriptionAgentModelId(value)
-    : isGrokSubscriptionAgentModelPreference(value)
-    ? 'grok-4.6'
     : value;
-  const selected = models.find(model => model.id === selectedModelId);
+  const selected = isGrokSubscriptionAgentModelPreference(value)
+    ? GROK_SUBSCRIPTION_AGENT_MODEL
+    : models.find(model => model.id === selectedModelId);
   const ownerDefaultsToCodex = subscriptionUsage.defaultProvider === 'codex-subscription';
   const autoModel = models.find(model => model.id === subscriptionUsage.defaultModelId);
   const autoUsesOpenAIApi = Boolean(autoModel && isOpenAIAgentModelId(autoModel.id) && !ownerDefaultsToCodex);
@@ -254,17 +253,13 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
     : [];
   const grokSubscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.grokAvailable !== false)
     || isGrokSubscriptionAgentModelPreference(value);
-  const grokSubscriptionOptions: Array<{ id: AgentModelPreference; name: string; desc: string }> = [];
-  if (grokSubscriptionVisible) {
-    const grok = models.find(model => model.id === 'grok-4.6');
-    if (grok) {
-      grokSubscriptionOptions.push({
-        id: GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
-        name: `${t(grok.nameKey as Parameters<typeof t>[0])} · ${t('model.grokSubscription.suffix')}`,
-        desc: t('model.grokSubscription.desc'),
-      });
-    }
-  }
+  const grokSubscriptionOptions = grokSubscriptionVisible
+    ? [{
+        id: GROK_SUBSCRIPTION_AGENT_MODEL.id,
+        name: `${t(GROK_SUBSCRIPTION_AGENT_MODEL.nameKey)} · ${t('model.grokSubscription.suffix')}`,
+        desc: t(GROK_SUBSCRIPTION_AGENT_MODEL.descKey),
+      }]
+    : [];
   const otherOptions = models
     .filter(model => !isOpenAIAgentModelId(model.id))
     .map(model => ({

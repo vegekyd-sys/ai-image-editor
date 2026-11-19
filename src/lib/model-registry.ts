@@ -1,4 +1,5 @@
 import { getImageModelCapability } from './image-model-capabilities';
+import { GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE } from './agent-models';
 import type { TranslationKey } from '@/lib/locales';
 
 export type ModelCategory = 'image' | 'video' | 'agent';
@@ -14,6 +15,13 @@ export interface ModelInfo {
   unavailable?: boolean;
   speedLabelKey?: TranslationKey;
 }
+
+export const GROK_SUBSCRIPTION_AGENT_MODEL = {
+  id: GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
+  nameKey: 'model.grok47.name',
+  descKey: 'model.grokSubscription.desc',
+  category: 'agent',
+} as const satisfies ModelInfo;
 
 export const MODEL_REGISTRY: ModelInfo[] = [
   // Image

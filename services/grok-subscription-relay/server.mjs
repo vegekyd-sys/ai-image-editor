@@ -13,7 +13,8 @@ import { getValidXaiOAuthCredential } from './xai-oauth.mjs';
 const XAI_BASE_URL = process.env.XAI_API_BASE?.trim() || 'https://api.x.ai';
 const GROK_CLI_PROXY_BASE_URL = process.env.GROK_CLI_PROXY_BASE_URL?.trim()
   || 'https://cli-chat-proxy.grok.com';
-const GROK_BUILD_CLIENT_VERSION = process.env.GROK_BUILD_CLIENT_VERSION?.trim() || '1.0.13';
+const GROK_BUILD_CLIENT_VERSION = process.env.GROK_BUILD_CLIENT_VERSION?.trim() || '1.0.40';
+const GROK_AGENT_MODELS = new Set(['grok-4.6', 'grok-4.7']);
 const PORT = Number.parseInt(process.env.PORT || '25985', 10);
 const HOST = process.env.HOST?.trim() || '127.0.0.1';
 const RELAY_SECRET = process.env.GROK_SUBSCRIPTION_RELAY_SECRET?.trim();
@@ -177,7 +178,7 @@ function isAllowedPath(method, pathname) {
   );
 }
 
-export function buildGrokAgentHeaders(accessToken) {
+export function buildGrokAgentHeaders(accessToken, model) {
   return {
     authorization: `Bearer ${accessToken}`,
     accept: 'text/event-stream',
@@ -188,7 +189,7 @@ export function buildGrokAgentHeaders(accessToken) {
     'x-grok-client-mode': 'headless',
     'x-authenticateresponse': 'authenticate-response',
     'x-xai-token-auth': 'xai-grok-cli',
-    'x-grok-model-override': 'grok-4.6',
+    'x-grok-model-override': model,
   };
 }
 
@@ -256,15 +257,15 @@ function validateGrokAgentBody(body) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return { ok: false, error: 'invalid_payload' };
   }
-  if (payload.model !== 'grok-4.6') return { ok: false, error: 'unsupported_model' };
+  if (!GROK_AGENT_MODELS.has(payload.model)) return { ok: false, error: 'unsupported_model' };
   if (payload.stream !== true) return { ok: false, error: 'stream_required' };
-  return { ok: true };
+  return { ok: true, model: payload.model };
 }
 
-async function forwardGrokAgent(res, body) {
+async function forwardGrokAgent(res, body, model) {
   const send = async credential => fetch(`${GROK_CLI_PROXY_BASE_URL}/v1/chat/completions`, {
     method: 'POST',
-    headers: buildGrokAgentHeaders(credential.access),
+    headers: buildGrokAgentHeaders(credential.access, model),
     body,
   });
   let upstream = await send(await getValidXaiOAuthCredential());
@@ -411,7 +412,7 @@ export function createRelayServer() {
           sendJson(res, 400, { error: validation.error }, { 'x-makaron-relay-outcome': 'rejected-before-upstream' });
           return;
         }
-        await forwardGrokAgent(res, body);
+        await forwardGrokAgent(res, body, validation.model);
       } else {
         await forwardXai(req, res, url, body);
       }

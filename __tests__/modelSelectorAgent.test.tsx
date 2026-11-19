@@ -92,8 +92,9 @@ describe('ModelSelector Agent tab', () => {
       expect(screen.getByTestId(`agent-model-${id}-codex-subscription`).getAttribute('data-agent-provider'))
         .toBe('codex-subscription');
     }
-    expect(await screen.findByTestId('agent-model-grok-4.6-grok-subscription')).not.toBeNull();
-    expect(screen.getByTestId('agent-model-grok-4.6-grok-subscription').getAttribute('data-agent-provider'))
+    const grokPlan = await screen.findByTestId('agent-model-grok-4.7-grok-subscription');
+    expect(grokPlan.textContent).toContain('Grok 4.7');
+    expect(screen.getByTestId('agent-model-grok-4.7-grok-subscription').getAttribute('data-agent-provider'))
       .toBe('grok-subscription');
     expect(screen.getByTestId('agent-model-grok-4.6').getAttribute('data-agent-provider'))
       .toBe('openrouter');
@@ -126,8 +127,8 @@ describe('ModelSelector Agent tab', () => {
     fireEvent.click(screen.getByTestId('agent-model-gpt-6.2-astra'));
     expect(onAgentModelChange).toHaveBeenLastCalledWith('gpt-6.2-astra');
 
-    fireEvent.click(screen.getByTestId('agent-model-grok-4.6-grok-subscription'));
-    expect(onAgentModelChange).toHaveBeenCalledWith('grok-4.6-grok-subscription');
+    fireEvent.click(screen.getByTestId('agent-model-grok-4.7-grok-subscription'));
+    expect(onAgentModelChange).toHaveBeenCalledWith('grok-4.7-grok-subscription');
 
     fireEvent.keyDown(agentTab, { key: 'ArrowLeft' });
     expect(screen.getByTestId('model-tab-video').getAttribute('aria-selected')).toBe('true');

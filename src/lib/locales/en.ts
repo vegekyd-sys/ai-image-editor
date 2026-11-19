@@ -930,6 +930,7 @@ const en = {
   'model.gpt56Luna.name': 'GPT-5.6 Luna',
   'model.gpt56Luna.desc': 'Fast, affordable option for high-volume everyday work.',
   'model.grok46.name': 'Grok 4.6',
+  'model.grok47.name': 'Grok 4.7',
   'model.grok46.desc': 'Frontier model for coding, knowledge work, and multi-step agent tasks.',
   'model.deepseekFlash.name': 'DeepSeek V4.1 Flash',
   'model.deepseekFlash.desc': 'Fast multimodal reasoning with DeepSeek V4.1 Flash.',

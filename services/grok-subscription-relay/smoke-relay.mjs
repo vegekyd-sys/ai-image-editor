@@ -32,11 +32,11 @@ const preflight = await signedFetch('POST', '/v1/preflight', preflightBody);
 if (!preflight.ok) throw new Error(`preflight failed (${preflight.status}): ${await preflight.text()}`);
 
 if (process.argv.includes('--chat')) {
-  const expected = 'GROK_46_SUBSCRIPTION_OK';
+  const modelId = 'grok-4.7';
   const body = Buffer.from(JSON.stringify({
-    model: 'grok-4.6',
+    model: modelId,
     stream: true,
-    messages: [{ role: 'user', content: `Reply with exactly ${expected}.` }],
+    messages: [{ role: 'user', content: 'What is 2 + 3? Answer with just the number.' }],
   }));
   const response = await signedFetch('POST', '/v1/chat/completions', body, AbortSignal.timeout(30_000));
   const text = await response.text();
@@ -57,10 +57,10 @@ if (process.argv.includes('--chat')) {
     finishReason = choice?.finish_reason ?? finishReason;
     model = chunk.model ?? model;
   }
-  if (reply.trim() !== expected || finishReason !== 'stop') {
-    throw new Error('chat did not complete with the expected response');
+  if (model !== `${modelId}-build` || !/^5[.]?$/.test(reply.trim()) || finishReason !== 'stop') {
+    throw new Error(`chat smoke failed (upstream model: ${model || 'unreported'}, finish: ${finishReason || 'unreported'})`);
   }
-  process.stdout.write(`upstream_model=${model || 'unreported'}\nreply=${expected}\n`);
+  process.stdout.write(`upstream_model=${model}\nreply=${reply.trim()}\n`);
   process.exit(0);
 }
 

@@ -458,7 +458,7 @@ describe('credits', () => {
       const result = await recordAgentTokenUsage({
         userId: 'user-1',
         provider: 'grok-subscription',
-        modelId: 'grok-4.6',
+        modelId: 'grok-4.7',
         inputTokens: 500,
         outputTokens: 30,
         cacheReadTokens: 20,
@@ -469,7 +469,7 @@ describe('credits', () => {
       expect(result).toEqual({ charged: 0, remaining: 0 });
       expect(insert).toHaveBeenCalledWith(expect.objectContaining({
         tool_name: 'agent',
-        model_used: 'grok-4.6:grok-subscription',
+        model_used: 'grok-4.7:grok-subscription',
         credits_charged: 0,
         input_tokens: 500,
         output_tokens: 30,

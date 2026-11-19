@@ -817,7 +817,7 @@ try {
     assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-resolution/m);
     assert.match(result.stdout, /Image\/video\s+model routing\s+stays automatic in chat/);
-    assert.match(result.stdout, /grok-4\.6-grok-subscription/);
+    assert.match(result.stdout, /grok-4\.7-grok-subscription/);
     assert.match(result.stdout, /--media-manifest <file\|->/);
     assert.match(result.stdout, /typed image\/video media/);
     assert.doesNotMatch(result.stdout, /asset_id|asset-id|source_uri|source-uri/);
@@ -935,6 +935,18 @@ try {
     assert.equal(runRequest?.body?.agentModel, undefined);
     assert.equal(runRequest?.body?.preferredModel, undefined);
     assert.equal(runRequest?.body?.videoModel, undefined);
+  }
+
+  for (const route of ['grok-4.7-grok-subscription', 'grok-4.6-grok-subscription']) {
+    const requestStart = requests.length;
+    const result = await expectSuccess([
+      'chat', '--project', 'project-models-1', '--agent-model', route,
+      '--json', '-b', 'What is 2 + 3?',
+    ]);
+    assert.equal(JSON.parse(result.stdout).runId, 'run_mock_1');
+    const flow = requests.slice(requestStart);
+    assert.deepEqual(flow.map(request => `${request.method} ${request.pathname}`), ['POST /api/agent/run']);
+    assert.equal(flow[0].body.agentModel, route);
   }
 
   {

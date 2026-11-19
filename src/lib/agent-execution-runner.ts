@@ -10,6 +10,8 @@ import { getSupabaseAdmin } from './supabase/service';
 import { recordAgentTokenUsage, deductWebSearchCalls } from './billing/credits';
 import { billingAttributionFromRunMetadata, enterBillingAttribution } from './billing/attribution';
 import {
+  getAgentApiFallbackModelId,
+  normalizeRequestedAgentModelPreference,
   resolveAgentModelSpec,
   resolveAgentModelSpecForUser,
   resolveCodexSubscriptionFallbackProvider,
@@ -499,6 +501,7 @@ export async function runAgentExecutionAttempt(
       ...(((run.metadata || {}).executionRequest || {}) as ExecutionRequest),
       ...(options.requestOverrides || {}),
     } satisfies ExecutionRequest;
+    const requestedAgentModel = normalizeRequestedAgentModelPreference(request.requestedAgentModel) ?? undefined;
     // The start route resolved this authorization immediately before creating
     // the trusted run. Reuse it within the same run instead of repeating the
     // allowlist DB read milliseconds later; older/recovered rows still fail
@@ -508,7 +511,7 @@ export async function runAgentExecutionAttempt(
       : await isDynamicCodexSubscriptionUserAllowed(run.user_id, admin);
     await refreshOpenAIDirectBudget();
     const requestedModel = resolveAgentModelSpecForUser(
-      request.requestedAgentModel,
+      requestedAgentModel,
       process.env.AGENT_MODEL,
       run.user_id,
       undefined,
@@ -646,11 +649,10 @@ export async function runAgentExecutionAttempt(
       MAX_SAME_PROVIDER_ATTEMPTS,
       requestedProviderFailureCount + 1,
     );
-    const effectiveAgentModel = providerFailover
-      ? requestedModel.id
-      : request.requestedAgentModel;
+    const fallbackAgentModel = getAgentApiFallbackModelId(requestedModel.id);
+    const effectiveAgentModel = providerFailover ? fallbackAgentModel : requestedAgentModel;
     const resolvedModel = providerFailover
-      ? resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)
+      ? resolveAgentModelSpec(fallbackAgentModel, undefined, failoverProvider)
       : requestedModel;
     const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
     const continuation = claim.attempt_no > 1;

@@ -4,11 +4,10 @@ import { Fragment, useState, useRef, useEffect, useCallback, useId, type ReactNo
 import { createPortal } from 'react-dom';
 import type { PreferredModel } from './AgentChatView';
 import type { VideoModel, VideoResolution } from '@/types';
-import { getAgentModels, getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
+import { getAgentModels, getImageModels, getVideoModels, GROK_SUBSCRIPTION_AGENT_MODEL, type ModelInfo } from '@/lib/model-registry';
 import { DEFAULT_IMAGE_MODEL, resolveImageModel } from '@/lib/models/types';
 import {
   getCodexSubscriptionAgentModelPreference,
-  GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
   isCodexSubscriptionAgentModelPreference,
   isGrokSubscriptionAgentModelPreference,
   isOpenAIAgentModelId,
@@ -684,18 +683,7 @@ export default function ModelSelector({
     : [];
   const grokSubscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.grokAvailable !== false)
     || isGrokSubscriptionAgentModelPreference(agentModel);
-  const grokSubscriptionAgentModels: ModelInfo[] = [];
-  if (grokSubscriptionVisible) {
-    const grok = baseAgentModels.find(model => model.id === 'grok-4.6');
-    if (grok) {
-      grokSubscriptionAgentModels.push({
-        ...grok,
-        id: GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
-        descKey: 'model.grokSubscription.desc',
-        speedLabel: undefined,
-      });
-    }
-  }
+  const grokSubscriptionAgentModels: ModelInfo[] = grokSubscriptionVisible ? [GROK_SUBSCRIPTION_AGENT_MODEL] : [];
   const otherAgentModels = baseAgentModels.filter(model => !isOpenAIAgentModelId(model.id));
   const agentModels = [
     ...openaiAgentModels,
