@@ -31,7 +31,7 @@
   },
   "src/lib/prompts/audio.md": {
     "baselineSha256": "055fa794791fb1ae3aba28de7e871c4557c31328c9d1bd6f2e730051c801d0d6",
-    "sha256": "c65b491b0eb1b8fd4d99afb0b4f6fd12551b3a667e9438bc6df9154521763855",
-    "reason": "User decision 2026-11-07: Suno V6 BGM is switched off (its duration is only a soft target; slow styles asked for 15s returned 90+ seconds), so every audio kind uses Seed Audio again. Removed the Instrumental BGM (Suno V6) brief and Suno routing lines; kept the positive guidance that speech plus music for one deliverable is one kind=mixed generation. Seed Audio direction rules are unchanged. Regression: sunoMusicRouting.test.ts, audioModelCapabilities.test.ts, agentPromptPolicy.test.ts, explainerVideoSkill.test.ts."
+    "sha256": "e3c7e68f3d92a7de85f8df458a3da39624938b3c3ffbdc9846ef6cb4ed8e717e",
+    "reason": "User decision 2026-11-07: Suno V6 BGM is switched off (its duration is only a soft target; slow styles asked for 15s returned 90+ seconds), so every audio kind uses Seed Audio again. Removed the Instrumental BGM (Suno V6) brief and Suno routing lines; kept the positive guidance that speech plus music for one deliverable is one kind=mixed generation. Seed Audio direction rules are unchanged. Regression: sunoMusicRouting.test.ts, audioModelCapabilities.test.ts, agentPromptPolicy.test.ts, explainerVideoSkill.test.ts. 2026-11-19 user decision: Suno V6 instrumental BGM restored after a duration study (stating tempo, cue length, bar count and a final-chord ending in the style kept 23 of 24 takes within +/-2.8s across 15-90s; docs/research/music-vendors-2026-11 section 6). The Suno brief asks for a BPM number and the exact length; the adapter adds the bar-count wording and orders take 1 closest to the target. Regression: sunoMusicRouting.test.ts, audioModelCapabilities.test.ts."
   }
 }

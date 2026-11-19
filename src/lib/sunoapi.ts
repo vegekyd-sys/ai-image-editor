@@ -101,8 +101,26 @@ async function sunoFetch(path: string, init?: RequestInit): Promise<any> {
   }
 }
 
+const DEFAULT_BPM = 100
+
+/**
+ * Suno treats `duration` as a soft target. Stating the length musically in the
+ * style (tempo, "short N-second cue", total bar count, intro-theme-outro, final
+ * chord) keeps takes within a few seconds of the target with a composed ending:
+ * 23 of 24 test takes landed within +/-2.8s across 15-90s and four genres
+ * (docs/research/music-vendors-2026-11 section 6), versus 30s requests coming back
+ * at 58s with `duration` alone.
+ */
+export function sunoLengthDirection(style: string, durationSeconds: number): string {
+  const stated = Number(style.match(/(\d{2,3})\s*bpm/i)?.[1])
+  const bpm = Number.isFinite(stated) && stated >= 50 && stated <= 200 ? stated : DEFAULT_BPM
+  const bars = Math.max(4, Math.round(durationSeconds / (240 / bpm)))
+  const tempo = stated === bpm ? '' : `${bpm} BPM, `
+  return `${tempo}short ${Math.round(durationSeconds)}-second cue, ${bars} bars total, intro then theme then outro, ends on a final chord`
+}
+
 export function buildSunoGenerateBody(input: SunoMusicInput): Record<string, unknown> {
-  const style = input.style.trim()
+  let style = input.style.trim()
   if (!style) throw new Error('Suno style prompt is required.')
   if (style.length > SUNO_MAX_STYLE_CHARS) {
     throw new Error(`Suno music prompt must be ${SUNO_MAX_STYLE_CHARS} characters or less.`)
@@ -122,6 +140,9 @@ export function buildSunoGenerateBody(input: SunoMusicInput): Record<string, unk
       throw new Error(`Suno music duration must be between ${SUNO_MIN_DURATION_SECONDS} and ${SUNO_MAX_DURATION_SECONDS} seconds.`)
     }
     body.duration = duration
+    const direction = sunoLengthDirection(style, duration)
+    style = `${style.slice(0, SUNO_MAX_STYLE_CHARS - direction.length - 2).replace(/[\s,.;]+$/, '')}, ${direction}`
+    body.style = style
   }
   if (input.negativeTags?.trim()) body.negativeTags = input.negativeTags.trim().slice(0, 200)
   return body
@@ -188,6 +209,12 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
+/** Take 1 is the default asset, so lead with the take closest to the requested length. */
+export function orderTakesByTarget(takes: SunoTake[], targetSeconds?: number): SunoTake[] {
+  if (!targetSeconds) return takes
+  return [...takes].sort((a, b) => Math.abs(a.duration - targetSeconds) - Math.abs(b.duration - targetSeconds))
+}
+
 /** Generate instrumental BGM and wait until every take has a final audio URL. */
 export async function generateSunoMusic(input: SunoMusicInput): Promise<SunoMusicResult> {
   const startedAt = Date.now()
@@ -200,11 +227,12 @@ export async function generateSunoMusic(input: SunoMusicInput): Promise<SunoMusi
     if (result.status === 'failed') throw new Error(`Suno generation failed: ${result.error || 'unknown error'}`)
     if (result.status === 'completed') {
       if (!result.takes.length) throw new Error('Suno generation completed without audio.')
+      const takes = orderTakesByTarget(result.takes, input.durationSeconds)
       return {
         taskId,
         provider: 'sunoapi',
         model,
-        takes: result.takes,
+        takes,
         generationSeconds: (Date.now() - startedAt) / 1000,
       }
     }

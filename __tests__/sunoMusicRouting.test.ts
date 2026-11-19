@@ -14,7 +14,7 @@ vi.mock('@/lib/sunoapi', async (importOriginal) => {
 })
 
 import { formatAudioCapabilitiesForAgent, isSunoBgmEnabled, resolveAudioRoute, validateAudioRequest } from '@/lib/audio-model-capabilities'
-import { buildSunoGenerateBody, mapSunoRecord } from '@/lib/sunoapi'
+import { buildSunoGenerateBody, mapSunoRecord, orderTakesByTarget, sunoLengthDirection } from '@/lib/sunoapi'
 import { createAudio } from '@/lib/skills/create-audio'
 import { formatGeneratedAudioForCui } from '@/lib/agent-tools'
 
@@ -52,29 +52,21 @@ function fakeSupabase(lastTrackIndex: number | null) {
   return { client, upserts }
 }
 
-describe('audio routing: Suno V6 BGM is off by default', () => {
+describe('audio routing: only instrumental BGM leaves Seed Audio', () => {
   const originalKey = process.env.SUNOAPI_KEY
   const originalFlag = process.env.SUNO_BGM_ENABLED
   beforeEach(() => { process.env.SUNOAPI_KEY = 'test-key'; delete process.env.SUNO_BGM_ENABLED })
   afterEach(() => { process.env.SUNOAPI_KEY = originalKey; process.env.SUNO_BGM_ENABLED = originalFlag })
 
-  it('routes instrumental BGM, and even an explicit Suno request, to Seed Audio', () => {
+  it('is on by default when configured; SUNO_BGM_ENABLED=false sends everything to Seed Audio', () => {
+    expect(isSunoBgmEnabled()).toBe(true)
+    expect(formatAudioCapabilitiesForAgent()).toContain('suno-v6')
+    process.env.SUNO_BGM_ENABLED = 'false'
     expect(isSunoBgmEnabled()).toBe(false)
     expect(resolveAudioRoute({ kind: 'music' })).toMatchObject({ modelId: 'evolink-seed-audio' })
     expect(resolveAudioRoute({ kind: 'music', model: 'suno-v6' })).toMatchObject({ modelId: 'evolink-seed-audio' })
-    expect(resolveAudioRoute({ kind: 'mixed', model: 'suno' })).toMatchObject({ modelId: 'evolink-seed-audio' })
-  })
-
-  it('hides Suno from the Agent capability card', () => {
     expect(formatAudioCapabilitiesForAgent()).not.toContain('suno-v6')
   })
-})
-
-describe('audio routing with SUNO_BGM_ENABLED=true: only instrumental BGM leaves Seed Audio', () => {
-  const originalKey = process.env.SUNOAPI_KEY
-  const originalFlag = process.env.SUNO_BGM_ENABLED
-  beforeEach(() => { process.env.SUNOAPI_KEY = 'test-key'; process.env.SUNO_BGM_ENABLED = 'true' })
-  afterEach(() => { process.env.SUNOAPI_KEY = originalKey; process.env.SUNO_BGM_ENABLED = originalFlag })
 
   it('routes instrumental kind=music to Suno V6 with a Seed Audio fallback', () => {
     expect(resolveAudioRoute({ kind: 'music' })).toMatchObject({ modelId: 'suno-v6', fallbackModelId: 'evolink-seed-audio' })
@@ -122,13 +114,27 @@ describe('sunoapi adapter', () => {
       customMode: true,
       instrumental: true,
       model: 'V6',
-      style: 'lo-fi house, 110 BPM',
+      style: 'lo-fi house, 110 BPM, short 30-second cue, 14 bars total, intro then theme then outro, ends on a final chord',
       title: 'Trip',
       duration: 30,
       prompt: '',
     })
+    expect(buildSunoGenerateBody({ style: 'lo-fi house' }).style).toBe('lo-fi house')
+    expect(buildSunoGenerateBody({ style: 'x'.repeat(1000), durationSeconds: 60 }).style).toHaveLength(1000)
     expect(() => buildSunoGenerateBody({ style: 'x'.repeat(1001) })).toThrow('1000 characters')
     expect(() => buildSunoGenerateBody({ style: 'ok', durationSeconds: 400 })).toThrow('between 10 and 360')
+  })
+
+  it('states the length musically: stated tempo or 100 BPM, bars = seconds / bar length', () => {
+    expect(sunoLengthDirection('lo-fi, 80 BPM', 30)).toBe('short 30-second cue, 10 bars total, intro then theme then outro, ends on a final chord')
+    expect(sunoLengthDirection('ambient pads.', 20)).toBe('100 BPM, short 20-second cue, 8 bars total, intro then theme then outro, ends on a final chord')
+    expect(sunoLengthDirection('edm 128bpm', 15)).toContain('8 bars total')
+  })
+
+  it('puts the take closest to the target first', () => {
+    const take = (duration: number) => ({ audioUrl: `https://x/${duration}.mp3`, duration, title: '', tags: '' })
+    expect(orderTakesByTarget([take(41.6), take(31.2)], 30).map(t => t.duration)).toEqual([31.2, 41.6])
+    expect(orderTakesByTarget([take(41.6), take(31.2)]).map(t => t.duration)).toEqual([41.6, 31.2])
   })
 
   it('waits for SUCCESS before treating takes as final', () => {
@@ -143,10 +149,8 @@ describe('sunoapi adapter', () => {
 
 describe('createAudio provider dispatch and takes', () => {
   const originalKey = process.env.SUNOAPI_KEY
-  const originalFlag = process.env.SUNO_BGM_ENABLED
   beforeEach(() => {
     process.env.SUNOAPI_KEY = 'test-key'
-    process.env.SUNO_BGM_ENABLED = 'true'
     mocks.seed.mockReset().mockResolvedValue(seedResult)
     mocks.suno.mockReset().mockResolvedValue(sunoResult)
     mocks.upload.mockReset().mockImplementation(async (_s, _u, _p, taskId, trackIndex, _b, format) => `https://cdn.example/${taskId}-${trackIndex}.${format}`)
@@ -154,7 +158,6 @@ describe('createAudio provider dispatch and takes', () => {
   })
   afterEach(() => {
     process.env.SUNOAPI_KEY = originalKey
-    process.env.SUNO_BGM_ENABLED = originalFlag
     vi.unstubAllGlobals()
   })
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   formatAudioCapabilitiesForAgent,
   getAudioModelCapability,
@@ -38,11 +38,14 @@ describe('audio model capabilities', () => {
   })
 
   it('formats a compact capability card for the agent', () => {
+    vi.stubEnv('SUNOAPI_KEY', 'test-key')
+    vi.stubEnv('SUNO_BGM_ENABLED', '')
     const text = formatAudioCapabilitiesForAgent()
+    vi.unstubAllEnvs()
     expect(text).toContain('evolink-seed-audio')
     expect(text).not.toContain('volcengine-seed-tts')
     expect(text).toContain('default=wav/48000Hz')
-    // Suno V6 BGM is off by default, so the Agent only sees Seed Audio.
-    expect(text).not.toContain('suno-v6')
+    expect(text).toContain('suno-v6 (Suno V6)')
+    expect(text).toContain('2 takes per generation')
   })
 })

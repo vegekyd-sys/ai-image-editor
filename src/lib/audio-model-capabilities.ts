@@ -114,14 +114,11 @@ export function getAudioModelCapability(model?: string | null): AudioModelCapabi
 }
 
 /**
- * Suno V6 BGM is switched off by default (2026-11-07): its `duration` is only a
- * soft target (slow styles asked for 15s came back at 90+ seconds), which is not
- * acceptable for video beds. All audio uses Seed Audio until a music model with
- * reliable length control is available. Set SUNO_BGM_ENABLED=true (and
- * SUNOAPI_KEY) to route instrumental BGM to Suno again.
+ * Suno V6 instrumental BGM is on whenever SUNOAPI_KEY is configured.
+ * SUNO_BGM_ENABLED=false is the kill switch that sends all audio back to Seed Audio.
  */
 export function isSunoBgmEnabled(): boolean {
-  return process.env.SUNO_BGM_ENABLED?.trim().toLowerCase() === 'true' && isSunoConfigured()
+  return process.env.SUNO_BGM_ENABLED?.trim().toLowerCase() !== 'false' && isSunoConfigured()
 }
 
 /** Models the Agent may currently be routed to. */
@@ -156,7 +153,7 @@ export function isInstrumentalBgmRequest(input: AudioRouteInput): boolean {
 
 /**
  * Decide which audio model serves a request.
- * - Suno disabled (default): every request, including an explicit Suno request, uses Seed Audio;
+ * - Suno switched off (SUNO_BGM_ENABLED=false or no key): every request uses Seed Audio;
  * - explicit model: honored, Suno is rejected outside instrumental BGM;
  * - auto: instrumental BGM -> Suno V6 (falls back to Seed Audio), everything else -> Seed Audio.
  */
@@ -164,7 +161,7 @@ export function resolveAudioRoute(input: AudioRouteInput): AudioRoute | { error:
   const explicit = input.model && input.model !== 'auto' ? normalizeAudioModelId(input.model) : null
   const bgm = isInstrumentalBgmRequest(input)
   if (explicit === SUNO_MUSIC_MODEL_ID) {
-    if (!isSunoBgmEnabled()) return { modelId: SEED_AUDIO_MODEL_ID, reason: 'Suno V6 is disabled; using Seed Audio' }
+    if (!isSunoBgmEnabled()) return { modelId: SEED_AUDIO_MODEL_ID, reason: 'Suno V6 is switched off; using Seed Audio' }
     if (!bgm) {
       return { error: 'Suno V6 only generates instrumental background music without audio or image references. Use the default Seed Audio model for speech, vocals, sound design, mixed soundtracks, or conditioned audio.' }
     }
