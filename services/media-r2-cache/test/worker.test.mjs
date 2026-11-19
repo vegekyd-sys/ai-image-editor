@@ -410,3 +410,21 @@ test('octet-stream is only trusted as media on a media path; other types stay un
     assert.equal(r2.objects.has('v1/images/u1/p1/media/clip-abc.mp4'), false, type);
   }
 });
+
+test('cold HEAD passes through without pulling the whole file into R2; a later GET still fills', async () => {
+  const data = bytes(5000);
+  const { run, origin, r2 } = setup({ files: file(data) });
+  const { res } = await run(MEDIA, { method: 'HEAD' });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('x-makaron-cache'), 'MISS');
+  assert.equal(res.headers.get('content-length'), '5000');
+  assert.equal(origin.calls.length, 1, 'only the client HEAD reaches origin');
+  assert.equal(origin.calls[0].method, 'HEAD');
+  assert.equal(r2.objects.size, 0);
+
+  const get = await run(MEDIA);
+  assert.equal(get.res.headers.get('x-makaron-cache'), 'MISS');
+  assert.deepEqual(r2.objects.get('v1/images/u1/p1/media/clip-abc.mp4')?.data, data, 'GET miss still fills R2');
+  const head2 = await run(MEDIA, { method: 'HEAD' });
+  assert.match(head2.res.headers.get('x-makaron-cache'), /^HIT-/);
+});

@@ -380,11 +380,14 @@ export function createHandler(deps = {}) {
       }
 
       // Tier 3: origin, request forwarded unchanged. Fill R2 in the background.
+      // HEAD never fills: a HEAD sweep over cold objects would otherwise pull
+      // every whole file from origin (2026-11-06: 759 HEADs → 22.8 GB uncached).
       const response = await passthrough(request, env);
       const total = response.status === 206
         ? Number(/\/(\d+)$/.exec(response.headers.get('content-range') || '')?.[1])
         : Number(response.headers.get('content-length'));
-      if ((response.status === 200 || response.status === 206 || response.status === 304)
+      if (request.method !== 'HEAD'
+        && (response.status === 200 || response.status === 206 || response.status === 304)
         && (response.status === 304 || isMediaResponseType(response.headers.get('content-type'), url.pathname))
         && (response.status === 304 || (Number.isSafeInteger(total) && total <= num(env, 'MAX_FILL_BYTES')))) {
         const etag = response.headers.get('etag');

@@ -68,6 +68,12 @@ Worker 只挂 `/storage/v1/object/public/*`。`cdn.makaron.app` 每天的总请�
 
 后续可选优化：在边缘缓存命中后做后台复核，以便延长边缘 TTL；或者为美东单独加一个 ENAM R2 副本，减少跨太平洋冷读。
 
+## 2026-11-19 修复：HEAD 未命中不再补缓存
+
+旧版本里，透传到源站的 HEAD 只要返回 200 和 content-length，就会触发 `fill()`，去源站拉整个文件写进 R2。2026-11-06 21:10 UTC 一个 UA 为 `node` 的客户端 5 分钟内 HEAD 了 759 个冷对象，触发 22.8 GB 的 Supabase 未缓存 egress（约 $2）。
+
+修复：只有 GET 未命中才补缓存；HEAD 未命中原样透传，不拉正文。已在 R2 或边缘里的对象，HEAD 照常命中。单测新增「冷 HEAD 不补缓存、之后 GET 照常补」，20/20 通过；测试域名上冷对象连续两次 HEAD 都是 `MISS`，GET 后才变成 `HIT-EDGE`，`acceptance.sh` 15/15 通过。
+
 ## 2026-11-06 修复：R2 命中整对象回 206
 
 R2 的 `get()` / `head()` 不带 range 时也会返回 `range` 字段，旧版 `serveR2()` 因此把所有 `HIT-R2` 请求（包括不带 Range 的 GET 和 HEAD）都回成 206 + `content-range: bytes 0-(N-1)/N`。要求严格 200 的服务端读取（`readProviderImage`）会失败，影响 Retake 和 fal H3 Max 参考图预检，见 `docs/incidents/cdn-r2-206-impact-2026-11-06.md`。
