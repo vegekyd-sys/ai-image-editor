@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { APICallError } from 'ai';
+import { shouldScheduleNextAttempt } from '@/lib/agent-execution';
 import {
   classifyModelTermination,
   describeModelStreamError,
@@ -40,6 +42,41 @@ describe('agent terminal semantics', () => {
       finalStepDeliveredArtifact: false,
       streamError: error,
     })).toMatchObject({ ok: false, retryable: true, code: 'stream_error', detail });
+  });
+
+  it('ends a Grok subscription run on HTTP 426 without scheduling another attempt', () => {
+    const streamError = new APICallError({
+      message: 'Upgrade Required',
+      url: 'https://example.test/chat/completions',
+      requestBodyValues: {},
+      statusCode: 426,
+      isRetryable: false,
+    });
+    const observation = {
+      sawFinish: false,
+      finalStepTextChars: 0,
+      finalStepToolCalls: 0,
+      finalStepDeliveredArtifact: false,
+      streamError,
+    };
+    const assessment = classifyModelTermination({ ...observation, provider: 'grok-subscription' });
+    expect(assessment).toMatchObject({
+      ok: false,
+      retryable: false,
+      code: 'grok_subscription_upgrade_required',
+      detail: expect.stringContaining('status=426'),
+    });
+    expect(shouldScheduleNextAttempt({
+      executionStatus: 'running',
+      attemptNo: 1,
+      terminal: assessment.retryable ? 'retryable' : 'failed',
+    })).toBe(false);
+    expect(classifyModelTermination({ ...observation, provider: 'openrouter' }).retryable).toBe(true);
+    expect(classifyModelTermination({
+      ...observation,
+      provider: 'grok-subscription',
+      streamError: { statusCode: 503, message: 'Service Unavailable' },
+    }).retryable).toBe(true);
   });
 
   it('accepts a clean model final reply without consulting workflow state', () => {

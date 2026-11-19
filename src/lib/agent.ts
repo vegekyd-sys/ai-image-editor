@@ -1570,8 +1570,9 @@ export async function* runMakaronAgent(
               provider: runtime.spec.provider,
             });
 
+      const grokUpgradeRequired = assessment.code === 'grok_subscription_upgrade_required';
       if (
-        !nonRetryableToolFailure && assessment.code !== 'context_length_exceeded'
+        !nonRetryableToolFailure && !grokUpgradeRequired && assessment.code !== 'context_length_exceeded'
         && (attemptBudgetReached || stepBudgetReached)
       ) {
         assessment = {
@@ -1611,6 +1612,7 @@ export async function* runMakaronAgent(
       const canFallbackFromSubscription = (runtime.spec.provider === 'codex-subscription'
         || runtime.spec.provider === 'grok-subscription'
         || runtime.spec.provider === 'openai')
+        && !grokUpgradeRequired
         && !options?.execution
         && !firstContentAt
         && !attemptDeliveredArtifact
@@ -1729,14 +1731,15 @@ export async function* runMakaronAgent(
           );
       const usageEvent = buildUsageEvent();
       if (usageEvent) yield usageEvent;
+      const errorMessageKey = grokUpgradeRequired
+        ? 'agent.error.grokSubscriptionUnavailable'
+        : contextOverflow ? 'agent.error.contextLength' : 'agent.error.fatal';
       yield {
         type: 'error',
         code: assessment.code || 'incomplete_agent_step',
         recoverable,
         checkpoint,
-        message: recoverable
-          ? translate(responseLocale, 'agent.error.recoverable')
-          : translate(responseLocale, contextOverflow ? 'agent.error.contextLength' : 'agent.error.fatal'),
+        message: translate(responseLocale, recoverable ? 'agent.error.recoverable' : errorMessageKey),
       };
       return;
     }
