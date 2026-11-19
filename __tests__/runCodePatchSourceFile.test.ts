@@ -85,9 +85,54 @@ describe('run_code patches a write_code_file source', () => {
     expect(files.get(SOURCE_PATH)).toContain('opacity: 0.33');
   });
 
+  it('patches a script that returns a render result, re-runs it, and keeps the script in sync', async () => {
+    const SCRIPT_PATH = 'project/code/birthday-card.js';
+    files.set(SCRIPT_PATH, [
+      'const code = String.raw`',
+      'var CARD_END_OPACITY = 0.33;',
+      'function Composition(props) { return <AbsoluteFill style={{ opacity: CARD_END_OPACITY }}><div>{props.title}</div></AbsoluteFill>; }',
+      '`;',
+      'return {',
+      "  type: 'render',",
+      '  code,',
+      '  width: 1080,',
+      '  height: 1920,',
+      "  props: { title: '生日快乐', note: '岁岁平安' },",
+      '  animation: { fps: 30, durationInSeconds: 6 },',
+      '};',
+    ].join('\n'));
+    const run = makeTools();
+    await run({ runtime: 'composition', code_path: SCRIPT_PATH });
+
+    const patched = await run({
+      runtime: 'composition',
+      code_path: SCRIPT_PATH,
+      code: `return { type: 'patch', code_path: '${SCRIPT_PATH}', edits: [
+        { old: 'var CARD_END_OPACITY = 0.33;', new: 'var CARD_END_OPACITY = 1;' },
+        { old: "title: '生日快乐',", new: "title: '妈妈生日快乐'," },
+      ] };`,
+    });
+    expect(patched.content).toContain('Patched');
+    const draft = JSON.parse(files.get(patched.code_path!)!);
+    expect(draft.code).toContain('CARD_END_OPACITY = 1;');
+    expect(draft.props).toEqual({ title: '妈妈生日快乐', note: '岁岁平安' });
+    expect(draft).toMatchObject({ width: 1080, height: 1920, animation: { fps: 30, durationInSeconds: 6 } });
+    expect(files.get(SCRIPT_PATH)).toContain("title: '妈妈生日快乐',");
+
+    const rerun = await run({ runtime: 'composition', code_path: SCRIPT_PATH });
+    expect(JSON.parse(files.get(rerun.code_path!)!).props.title).toBe('妈妈生日快乐');
+
+    const broken = await run({
+      runtime: 'composition',
+      code: `return { type: 'patch', code_path: '${SCRIPT_PATH}', edits: [{ old: '\`;', new: '' }] };`,
+    });
+    expect(broken.content).toContain('no longer runs after the edits');
+    expect(files.get(SCRIPT_PATH)).toContain('CARD_END_OPACITY = 1;');
+  });
+
   it('explains why a non-composition file cannot be a patch base', () => {
     const base = resolveCompositionPatchBase('project/media-code/probe.js', 'const x = 1;\nreturn { type: "text", content: x };');
     expect(base).toHaveProperty('error');
-    expect((base as { error: string }).error).toContain('neither a saved composition draft nor a Remotion component source');
+    expect((base as { error: string }).error).toContain('is not a saved composition draft, a Remotion component source file, or a script');
   });
 });

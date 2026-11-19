@@ -82,7 +82,7 @@ import {
 import { compileSavedCompositionPart } from './composition-workspace-runner';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
 import { isDirectRemotionCompositionSource } from './remotion-code-normalization';
-import { resolveCompositionPatchBase } from './composition-patch-base';
+import { applyTextEdits, resolveCompositionPatchBase } from './composition-patch-base';
 import {
   getAgentProviderTools,
   type AgentModelRuntime,
@@ -5317,6 +5317,44 @@ function createRunCodeTool(
         ctx.snapshotImages.forEach((img, i) => {
           console.log(`  [${i}] ${img ? (img.startsWith('http') ? img : `base64:${img.length}chars`) : 'EMPTY'}`);
         });
+        // Run a code body in the vm sandbox — isolates from process.env, require, fs, etc.
+        const runSandboxedBody = async (body: string, preloadedImages: Buffer[] = []): Promise<any> => {
+          // Helper: save file to workspace directly from run_code (avoids passing large base64 back to Agent)
+          const saveToWorkspace = async (path: string, content: string | Buffer, contentType?: string) => {
+            if (!ctx.supabase || !ctx.userId) return { success: false, error: 'No Supabase connection' };
+            const result = await workspace.writeFile(path, content, ctx.supabase, ctx.userId, contentType);
+            return { ...result, storageUrl: result.storageUrl ? toPublicStorageUrl(result.storageUrl) : undefined };
+          };
+          const JSZip = (await import('jszip')).default;
+          const sandbox = {
+            sharp,
+            saveToWorkspace,
+            JSZip,
+            images: preloadedImages,
+            fetch: globalThis.fetch,
+            Buffer,
+            JSON,
+            Math,
+            Date,
+            console: { log: (...args: unknown[]) => console.log('[run_code]', ...args) },
+            ctx: {
+              snapshotImages: ctx.snapshotImages,
+              snapshotCount: ctx.snapshotImages.length,
+              projectId: ctx.projectId,
+              userId: ctx.userId || '',
+              supabase: ctx.supabase,
+            },
+          };
+          const vm = require('vm') as typeof import('vm');
+          const context = vm.createContext({
+            ...sandbox,
+            setTimeout, clearTimeout, Promise, // needed for async code
+          });
+          const wrappedCode = `(async () => { 'use strict';\n${body}\n})()`;
+          const script = new vm.Script(wrappedCode);
+          return await script.runInContext(context, { timeout: 30_000 });
+        };
+
         try {
           let result: any;
           if (resolvedComposition) {
@@ -5347,46 +5385,7 @@ function createRunCodeTool(
             }
           }
 
-          // Build sandbox context
-          // Helper: save file to workspace directly from run_code (avoids passing large base64 back to Agent)
-          const saveToWorkspace = async (path: string, content: string | Buffer, contentType?: string) => {
-            if (!ctx.supabase || !ctx.userId) return { success: false, error: 'No Supabase connection' };
-            const result = await workspace.writeFile(path, content, ctx.supabase, ctx.userId, contentType);
-            return { ...result, storageUrl: result.storageUrl ? toPublicStorageUrl(result.storageUrl) : undefined };
-          };
-
-          const JSZip = (await import('jszip')).default;
-
-          const sandbox = {
-            sharp,
-            saveToWorkspace,
-            JSZip,
-            images: preloadedImages,
-            fetch: globalThis.fetch,
-            Buffer,
-            JSON,
-            Math,
-            Date,
-            console: { log: (...args: unknown[]) => console.log('[run_code]', ...args) },
-            ctx: {
-              snapshotImages: ctx.snapshotImages,
-              snapshotCount: ctx.snapshotImages.length,
-              projectId: ctx.projectId,
-              userId: ctx.userId || '',
-              supabase: ctx.supabase,
-            },
-          };
-
-          // Execute in vm sandbox — isolates from process.env, require, fs, etc.
-          const vm = require('vm') as typeof import('vm');
-          const context = vm.createContext({
-            ...sandbox,
-            setTimeout, clearTimeout, Promise, // needed for async code
-          });
-
-          const wrappedCode = `(async () => { 'use strict';\n${executableCode}\n})()`;
-          const script = new vm.Script(wrappedCode);
-          result = await script.runInContext(context, { timeout: 30_000 });
+          result = await runSandboxedBody(executableCode, preloadedImages);
           }
 
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -5434,6 +5433,7 @@ function createRunCodeTool(
               ? result.code_path
               : code_path;
             let patchedSourceFile: string | null = null;
+            let patchedScriptText: string | null = null;
 
             // code_path: load a saved draft or a Remotion source file from workspace as patch base
             if (patchPath) {
@@ -5444,8 +5444,37 @@ function createRunCodeTool(
                 }
                 const base = resolveCompositionPatchBase(patchPath, file.content, (ctx as any).__lastDesignPayload);
                 if ('error' in base) return { type: 'text' as const, content: base.error };
-                baseDesign = base.design;
-                if (base.source === 'code-file') patchedSourceFile = patchPath;
+                if (base.source === 'executable-file') {
+                  // Edit the script text (inner code and returned props alike), then re-run it for the new composition.
+                  const edited = Array.isArray(result.edits) ? applyTextEdits(file.content, result.edits) : { text: file.content };
+                  if ('error' in edited) return { type: 'text' as const, content: edited.error };
+                  let rendered: any;
+                  try {
+                    rendered = await runSandboxedBody(edited.text);
+                  } catch (e) {
+                    return { type: 'text' as const, content: `Patch failed: "${patchPath}" no longer runs after the edits: ${e instanceof Error ? e.message : String(e)}` };
+                  }
+                  const renderedKind = typeof rendered?.type === 'string' ? rendered.type.trim().toLowerCase() : '';
+                  if (!['render', 'composition', 'design'].includes(renderedKind) || typeof rendered.code !== 'string') {
+                    return { type: 'text' as const, content: `Patch failed: after the edits "${patchPath}" must still return { type: "render", code, ... }.` };
+                  }
+                  baseDesign = {
+                    code: rendered.code,
+                    width: rendered.width || 1080,
+                    height: rendered.height || 1350,
+                    props: resolveCompositionAudioProps(rendered.props, ctx.audioAttachments),
+                    animation: rendered.animation ?? (rendered.fps || rendered.duration || rendered.durationInSeconds
+                      ? { fps: rendered.fps || 30, durationInSeconds: rendered.durationInSeconds || rendered.duration || 5 }
+                      : undefined),
+                    ...(rendered.editables ? { editables: rendered.editables } : {}),
+                    ...(rendered.fontSubstitutions ? { fontSubstitutions: rendered.fontSubstitutions } : {}),
+                    ...(rendered.videoLayout ? { videoLayout: rendered.videoLayout } : {}),
+                  };
+                  patchedScriptText = edited.text;
+                } else {
+                  baseDesign = base.design;
+                  if (base.source === 'code-file') patchedSourceFile = patchPath;
+                }
               } catch (e) {
                 return { type: 'text' as const, content: `Patch failed: could not read "${patchPath}": ${e instanceof Error ? e.message : String(e)}` };
               }
@@ -5455,16 +5484,10 @@ function createRunCodeTool(
               return { type: 'text' as const, content: 'Patch failed: no base composition. Provide code_path in the patch result, e.g. return { type: "patch", code_path: "code/...", edits: [...] }. Do not fall back to render unless the user asked for a new composition.' };
             }
             let code = baseDesign.code;
-            if (Array.isArray(result.edits)) {
-              for (const edit of result.edits) {
-                if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
-                  return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
-                }
-                const count = code.split(edit.old).length - 1;
-                if (count === 0) return { type: 'text' as const, content: `Patch failed: old_string not found in current code.\n"${edit.old.slice(0, 100)}"` };
-                if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
-                code = code.replace(edit.old, edit.new);
-              }
+            if (Array.isArray(result.edits) && patchedScriptText === null) {
+              const edited = applyTextEdits(code, result.edits);
+              if ('error' in edited) return { type: 'text' as const, content: edited.error };
+              code = edited.text;
             }
             const mergedProps = mergePatchProps(baseDesign.props, resolveCompositionAudioProps(result.props, ctx.audioAttachments));
             const patched = {
@@ -5496,11 +5519,14 @@ function createRunCodeTool(
             if (!ctx.supabase || !ctx.userId) {
               return { type: 'text' as const, content: 'Patch passed validation but cannot be safely autosaved because workspace access is unavailable.' };
             }
-            if (patchedSourceFile && Array.isArray(result.edits) && result.edits.length) {
-              // Keep the source file the single source of truth, so a later run_code({ code_path }) renders the patched code.
-              const saved = await workspace.writeFile(patchedSourceFile, code, ctx.supabase, ctx.userId, 'text/javascript');
+            const sourceUpdate = patchedSourceFile ? { path: patchedSourceFile, text: code }
+              : patchedScriptText !== null && patchPath ? { path: patchPath, text: patchedScriptText }
+              : null;
+            if (sourceUpdate && Array.isArray(result.edits) && result.edits.length) {
+              // Keep the code file the single source of truth, so a later run_code({ code_path }) renders the patched code.
+              const saved = await workspace.writeFile(sourceUpdate.path, sourceUpdate.text, ctx.supabase, ctx.userId, 'text/javascript');
               if (!saved.success) {
-                return { type: 'text' as const, content: `Patch passed validation but could not update ${patchedSourceFile}: ${saved.error || 'unknown error'}. Retry run_code before ending the turn.` };
+                return { type: 'text' as const, content: `Patch passed validation but could not update ${sourceUpdate.path}: ${saved.error || 'unknown error'}. Retry run_code before ending the turn.` };
               }
             }
             const autosave = await persistCompositionDraft({
@@ -5532,7 +5558,7 @@ function createRunCodeTool(
             }
 
             const draftIdx = drafts.length;
-            const patchSource = patchPath ? ` from ${patchPath}${patchedSourceFile ? ' (source file updated)' : ''}` : '';
+            const patchSource = patchPath ? ` from ${patchPath}${sourceUpdate ? ' (source file updated)' : ''}` : '';
             return { type: 'text' as const, code_path: autosave.path, content: `Patched${patchSource} — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. After QA, use publish_draft({ design_path: "${autosave.path}" }) when the editable composition should appear in the timeline.${remotionFontWarningText(patched)}` };
           }
 
