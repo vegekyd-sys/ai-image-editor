@@ -4,11 +4,10 @@ import { Fragment, useState, useRef, useEffect, useCallback, useId, type ReactNo
 import { createPortal } from 'react-dom';
 import type { PreferredModel } from './AgentChatView';
 import type { VideoModel, VideoResolution } from '@/types';
-import { getAgentModels, getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
+import { getAgentModels, getImageModels, getVideoModels, GROK_SUBSCRIPTION_AGENT_MODEL, type ModelInfo } from '@/lib/model-registry';
 import { DEFAULT_IMAGE_MODEL, resolveImageModel } from '@/lib/models/types';
 import {
   getCodexSubscriptionAgentModelPreference,
-  GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
   isCodexSubscriptionAgentModelPreference,
   isGrokSubscriptionAgentModelPreference,
   isOpenAIAgentModelId,
@@ -684,18 +683,7 @@ export default function ModelSelector({
     : [];
   const grokSubscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.grokAvailable !== false)
     || isGrokSubscriptionAgentModelPreference(agentModel);
-  const grokSubscriptionAgentModels: ModelInfo[] = [];
-  if (grokSubscriptionVisible) {
-    const grok = baseAgentModels.find(model => model.id === 'grok-4.6');
-    if (grok) {
-      grokSubscriptionAgentModels.push({
-        ...grok,
-        id: GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
-        descKey: 'model.grokSubscription.desc',
-        speedLabel: undefined,
-      });
-    }
-  }
+  const grokSubscriptionAgentModels: ModelInfo[] = grokSubscriptionVisible ? [GROK_SUBSCRIPTION_AGENT_MODEL] : [];
   const otherAgentModels = baseAgentModels.filter(model => !isOpenAIAgentModelId(model.id));
   const agentModels = [
     ...openaiAgentModels,
@@ -719,7 +707,7 @@ export default function ModelSelector({
     : preferredModel;
   const selectedAgentModel = agentModels.find(model => model.id === agentModel);
   const selectedAgentLabel = selectedAgentModel
-    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : isOpenAIAgentModelId(selectedAgentModel.id) ? ` · ${t('model.openaiApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`
+    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : isOpenAIAgentModelId(selectedAgentModel.id) ? ` · ${t('model.openaiApiBadge')}` : selectedAgentModel.id === 'grok-4.7' ? ` · ${t('model.grokApiBadge')}` : ''}`
     : agentModel;
   const selectedVideoModel = videoModels.find(model => model.id === videoModel);
   const selectedVideoLabel = selectedVideoModel
@@ -1028,7 +1016,7 @@ export default function ModelSelector({
                     )}
                     <ModelRow
                       model={model}
-                      name={`${t(model.nameKey as Parameters<typeof t>[0])}${isCodexSubscription ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscription ? ` · ${t('model.grokSubscription.suffix')}` : model.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`}
+                      name={`${t(model.nameKey as Parameters<typeof t>[0])}${isCodexSubscription ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscription ? ` · ${t('model.grokSubscription.suffix')}` : model.id === 'grok-4.7' ? ` · ${t('model.grokApiBadge')}` : ''}`}
                       desc={t(model.descKey as Parameters<typeof t>[0])}
                       badge={activeTab === 'agent'
                         ? undefined
@@ -1045,7 +1033,7 @@ export default function ModelSelector({
                         ? 'grok-subscription'
                         : isOpenAIAgent
                         ? 'openai'
-                        : model.id === 'grok-4.6'
+                        : model.id === 'grok-4.7'
                         ? 'openrouter'
                         : undefined}
                       compact={activeTab === 'agent'}

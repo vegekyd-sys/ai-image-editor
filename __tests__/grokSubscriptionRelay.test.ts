@@ -3,9 +3,11 @@ import { afterAll, describe, expect, it } from 'vitest'
 const previousSecret = process.env.GROK_SUBSCRIPTION_RELAY_SECRET
 const previousOwner = process.env.GROK_SUBSCRIPTION_OWNER_USER_ID
 const previousAllowed = process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS
+const previousBuildVersion = process.env.GROK_BUILD_CLIENT_VERSION
 process.env.GROK_SUBSCRIPTION_RELAY_SECRET = 'relay-secret'
 process.env.GROK_SUBSCRIPTION_OWNER_USER_ID = 'owner-id'
 process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS = 'test-user-id'
+delete process.env.GROK_BUILD_CLIENT_VERSION
 
 const relayModulePath = '../services/grok-subscription-relay/server.mjs?relay-auth-test'
 const {
@@ -22,6 +24,8 @@ afterAll(() => {
   else process.env.GROK_SUBSCRIPTION_OWNER_USER_ID = previousOwner
   if (previousAllowed === undefined) delete process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS
   else process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS = previousAllowed
+  if (previousBuildVersion === undefined) delete process.env.GROK_BUILD_CLIENT_VERSION
+  else process.env.GROK_BUILD_CLIENT_VERSION = previousBuildVersion
 })
 
 function signedRequest(overrides: { userId?: string; signature?: string } = {}) {
@@ -52,13 +56,15 @@ function signedRequest(overrides: { userId?: string; signature?: string } = {}) 
 }
 
 describe('Grok subscription relay boundary', () => {
-  it('builds the official Grok Build headless headers without exposing them to clients', () => {
-    expect(buildGrokAgentHeaders('oauth-access-token')).toMatchObject({
+  it.each(['grok-4.6', 'grok-4.7'])('builds Grok Build headless headers for %s', model => {
+    expect(buildGrokAgentHeaders('oauth-access-token', model)).toMatchObject({
       authorization: 'Bearer oauth-access-token',
       'x-xai-token-auth': 'xai-grok-cli',
-      'x-grok-model-override': 'grok-4.6',
+      'x-grok-model-override': model,
       'x-grok-client-identifier': 'grok-shell',
+      'x-grok-client-version': '1.0.40',
       'x-grok-client-mode': 'headless',
+      'user-agent': 'grok-shell/1.0.40',
     })
   })
 

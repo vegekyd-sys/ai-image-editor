@@ -168,7 +168,7 @@ function usesOpenRouterResponses(spec: AgentModelSpec): boolean {
 function getSupportedAgentReasoningEfforts(modelId: string): readonly AgentReasoningEffort[] {
   if (modelId === 'gpt-6.2-sol' || modelId === 'gpt-6.2-astra') return ['low', 'medium', 'high', 'xhigh', 'max'];
   if (modelId === 'gpt-6.1-terra') return ['none', 'low', 'medium', 'high', 'xhigh', 'max'];
-  if (modelId === 'gpt-6.1-sol') return ['low', 'medium', 'high', 'xhigh'];
+  if (modelId === 'gpt-6.1-sol' || modelId === 'grok-4.7') return ['low', 'medium', 'high', 'xhigh'];
   return ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
 }
 
@@ -257,12 +257,12 @@ export function getAgentProviderOptions(
 
   const configuredOpenRouterEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT?.trim().toLowerCase();
   const supportedEfforts = new Set<string>(getSupportedAgentReasoningEfforts(runtime.spec.id));
-  if (!usesOpenRouterResponses(runtime.spec)) supportedEfforts.add('max');
+  if (!usesOpenRouterResponses(runtime.spec) && runtime.spec.id !== 'grok-4.7') supportedEfforts.add('max');
   const openRouterEffort = runtime.spec.id === 'gpt-6-luna'
     ? 'high'
     : configuredOpenRouterEffort && supportedEfforts.has(configuredOpenRouterEffort)
       ? configuredOpenRouterEffort
-      : runtime.spec.defaultReasoningEffort ?? (runtime.spec.id === 'grok-4.6' ? 'medium' : undefined);
+      : runtime.spec.defaultReasoningEffort;
 
   if (usesOpenRouterResponses(runtime.spec)) {
     // The OpenAI-compatible Responses adapter reads this namespace.

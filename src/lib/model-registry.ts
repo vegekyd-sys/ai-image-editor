@@ -1,4 +1,5 @@
 import { getImageModelCapability } from './image-model-capabilities';
+import { GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE } from './agent-models';
 import type { TranslationKey } from '@/lib/locales';
 
 export type ModelCategory = 'image' | 'video' | 'agent';
@@ -14,6 +15,13 @@ export interface ModelInfo {
   unavailable?: boolean;
   speedLabelKey?: TranslationKey;
 }
+
+export const GROK_SUBSCRIPTION_AGENT_MODEL = {
+  id: GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
+  nameKey: 'model.grok47.name',
+  descKey: 'model.grokSubscription.desc',
+  category: 'agent',
+} as const satisfies ModelInfo;
 
 export const MODEL_REGISTRY: ModelInfo[] = [
   // Image
@@ -52,7 +60,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'gpt-5.6-terra', nameKey: 'model.gpt56Terra.name', descKey: 'model.gpt56Terra.desc', category: 'agent' },
   { id: 'gpt-5.6-sol', nameKey: 'model.gpt56Sol.name', descKey: 'model.gpt56Sol.desc', category: 'agent', speedLabel: 'Best' },
   { id: 'gpt-5.6-luna', nameKey: 'model.gpt56Luna.name', descKey: 'model.gpt56Luna.desc', category: 'agent', speedLabel: 'Fast' },
-  { id: 'grok-4.6', nameKey: 'model.grok46.name', descKey: 'model.grok46.desc', category: 'agent', speedLabel: 'Fast' },
+  { id: 'grok-4.7', nameKey: 'model.grok47.name', descKey: 'model.grok47.desc', category: 'agent', speedLabel: 'Fast' },
   { id: 'deepseek-flash', nameKey: 'model.deepseekFlash.name', descKey: 'model.deepseekFlash.desc', category: 'agent', speedLabel: 'Fast' },
   { id: 'deepseek-v4-pro', nameKey: 'model.deepseekV4Pro.name', descKey: 'model.deepseekV4Pro.desc', category: 'agent', speedLabel: 'Value' },
 ];

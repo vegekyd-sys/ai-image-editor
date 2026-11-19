@@ -7,7 +7,7 @@ const secret = process.env.GROK_SUBSCRIPTION_RELAY_SECRET?.trim();
 const userId = process.env.GROK_SUBSCRIPTION_OWNER_USER_ID?.trim();
 if (!secret || !userId) throw new Error('relay secret and owner user id are required');
 
-async function signedFetch(method, pathname, body = Buffer.alloc(0)) {
+async function signedFetch(method, pathname, body = Buffer.alloc(0), signal) {
   const timestamp = String(Date.now());
   const requestId = randomUUID();
   const bodyHash = createHash('sha256').update(body).digest('hex');
@@ -23,12 +23,46 @@ async function signedFetch(method, pathname, body = Buffer.alloc(0)) {
       ...(method === 'POST' ? { 'content-type': 'application/json' } : {}),
     },
     ...(method === 'POST' ? { body } : {}),
+    signal,
   });
 }
 
 const preflightBody = Buffer.from('{}');
 const preflight = await signedFetch('POST', '/v1/preflight', preflightBody);
 if (!preflight.ok) throw new Error(`preflight failed (${preflight.status}): ${await preflight.text()}`);
+
+if (process.argv.includes('--chat')) {
+  const modelId = 'grok-4.7';
+  const body = Buffer.from(JSON.stringify({
+    model: modelId,
+    stream: true,
+    messages: [{ role: 'user', content: 'What is 2 + 3? Answer with just the number.' }],
+  }));
+  const response = await signedFetch('POST', '/v1/chat/completions', body, AbortSignal.timeout(30_000));
+  const text = await response.text();
+  if (!response.ok) throw new Error(`chat failed (${response.status}): ${text}`);
+  if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+    throw new Error('chat did not return an event stream');
+  }
+  let reply = '';
+  let finishReason;
+  let model;
+  for (const line of text.split('\n')) {
+    if (!line.startsWith('data:')) continue;
+    const data = line.slice('data:'.length).trim();
+    if (data === '[DONE]') continue;
+    const chunk = JSON.parse(data);
+    const choice = chunk.choices?.[0];
+    reply += choice?.delta?.content ?? '';
+    finishReason = choice?.finish_reason ?? finishReason;
+    model = chunk.model ?? model;
+  }
+  if (model !== `${modelId}-build` || !/^5[.]?$/.test(reply.trim()) || finishReason !== 'stop') {
+    throw new Error(`chat smoke failed (upstream model: ${model || 'unreported'}, finish: ${finishReason || 'unreported'})`);
+  }
+  process.stdout.write(`upstream_model=${model}\nreply=${reply.trim()}\n`);
+  process.exit(0);
+}
 
 if (process.argv.includes('--usage')) {
   const usageResponse = await signedFetch('GET', '/v1/usage');

@@ -6,7 +6,7 @@ export const AGENT_MODEL_IDS = [
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
-  'grok-4.6',
+  'grok-4.7',
   'deepseek-v4-pro',
   'deepseek-flash',
 ] as const;
@@ -27,7 +27,7 @@ export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = [
 export type CodexSubscriptionAgentModelPreference =
   | (typeof CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES)[number]
   | `${(typeof ADDITIONAL_GPT_AGENT_MODEL_IDS)[number]}-codex-subscription`;
-export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.6-grok-subscription' as const;
+export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.7-grok-subscription' as const;
 export type GrokSubscriptionAgentModelPreference = typeof GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE;
 export type AgentModelPreference = 'auto' | AgentModelId | CodexSubscriptionAgentModelPreference | GrokSubscriptionAgentModelPreference;
 export type AgentModelProvider = 'azure-openai' | 'openai' | 'codex-subscription' | 'grok-subscription' | 'openrouter' | 'deepseek';
@@ -380,13 +380,14 @@ export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
     supportsImageInput: true,
     defaultReasoningEffort: 'low',
   },
-  'grok-4.6': {
-    id: 'grok-4.6',
+  'grok-4.7': {
+    id: 'grok-4.7',
     provider: 'openrouter',
-    providerModelId: 'x-ai/grok-4.6',
-    billingModelId: 'x-ai/grok-4.6',
+    providerModelId: 'x-ai/grok-4.7',
+    billingModelId: 'x-ai/grok-4.7',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
+    defaultReasoningEffort: 'medium',
   },
   'deepseek-flash': {
     id: 'deepseek-flash',
@@ -421,12 +422,15 @@ export function isAgentModelPreference(value: unknown): value is AgentModelPrefe
 }
 
 const RETIRED_AGENT_MODEL_REPLACEMENTS = new Map<string, AgentModelId>([
-  ['grok-4.5', 'grok-4.6'],
-  ['x-ai/grok-4.5', 'grok-4.6'],
+  ['grok-4.5', 'grok-4.7'],
+  ['x-ai/grok-4.5', 'grok-4.7'],
+  ['grok-4.6', 'grok-4.7'],
+  ['x-ai/grok-4.6', 'grok-4.7'],
 ]);
 
 const RETIRED_AGENT_MODEL_PREFERENCE_REPLACEMENTS = new Map<string, AgentModelPreference>([
   ['grok-4.5-grok-subscription', GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE],
+  ['grok-4.6-grok-subscription', GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE],
 ]);
 
 function getRetiredAgentModelReplacement(value: unknown): AgentModelId | undefined {
@@ -501,24 +505,23 @@ export function resolveAgentModelSpec(
   configuredDefault?: string,
   configuredGPT56Provider: string | undefined = process.env.GPT56_AGENT_PROVIDER,
 ): AgentModelSpec {
+  if (isGrokSubscriptionAgentModelPreference(preference)) {
+    return {
+      id: 'grok-4.7',
+      provider: 'grok-subscription',
+      providerModelId: 'grok-4.7',
+      billingModelId: 'grok-4.7',
+      cacheStrategy: 'automatic',
+      supportsImageInput: true,
+    };
+  }
   const explicitlyUsesCodexSubscription = isCodexSubscriptionAgentModelPreference(preference);
-  const explicitlyUsesGrokSubscription = isGrokSubscriptionAgentModelPreference(preference);
   const selectedId = explicitlyUsesCodexSubscription
     ? getCodexSubscriptionAgentModelId(preference)
-    : explicitlyUsesGrokSubscription
-    ? 'grok-4.6'
     : preference && preference !== 'auto'
     ? preference
     : matchConfiguredModel(configuredDefault) ?? DEFAULT_AGENT_MODEL_ID;
   const baseSpec = AGENT_MODEL_SPECS[selectedId];
-  if (explicitlyUsesGrokSubscription) {
-    return {
-      ...baseSpec,
-      provider: 'grok-subscription',
-      providerModelId: 'grok-4.6',
-      billingModelId: 'grok-4.6',
-    };
-  }
   if (!isOpenAIAgentModelId(selectedId)) return baseSpec;
 
   const provider = explicitlyUsesCodexSubscription
@@ -550,7 +553,7 @@ export function resolveAgentModelSpecForUser(
     // allowlisted users through the owner's SuperGrok credential.
     return isGrokSubscriptionAgentAllowedUser(userId, codexSubscriptionAllowed)
       ? selected
-      : AGENT_MODEL_SPECS['grok-4.6'];
+      : AGENT_MODEL_SPECS['grok-4.7'];
   }
   const explicitlyUsesCodexSubscription = isCodexSubscriptionAgentModelPreference(preference);
   const ownerUsesCodexByDefault = defaultsToCodexSubscription(

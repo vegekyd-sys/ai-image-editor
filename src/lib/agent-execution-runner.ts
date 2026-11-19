@@ -10,6 +10,7 @@ import { getSupabaseAdmin } from './supabase/service';
 import { recordAgentTokenUsage, deductWebSearchCalls } from './billing/credits';
 import { billingAttributionFromRunMetadata, enterBillingAttribution } from './billing/attribution';
 import {
+  normalizeRequestedAgentModelPreference,
   resolveAgentModelSpec,
   resolveAgentModelSpecForUser,
   resolveCodexSubscriptionFallbackProvider,
@@ -499,6 +500,7 @@ export async function runAgentExecutionAttempt(
       ...(((run.metadata || {}).executionRequest || {}) as ExecutionRequest),
       ...(options.requestOverrides || {}),
     } satisfies ExecutionRequest;
+    const requestedAgentModel = normalizeRequestedAgentModelPreference(request.requestedAgentModel) ?? undefined;
     // The start route resolved this authorization immediately before creating
     // the trusted run. Reuse it within the same run instead of repeating the
     // allowlist DB read milliseconds later; older/recovered rows still fail
@@ -508,7 +510,7 @@ export async function runAgentExecutionAttempt(
       : await isDynamicCodexSubscriptionUserAllowed(run.user_id, admin);
     await refreshOpenAIDirectBudget();
     const requestedModel = resolveAgentModelSpecForUser(
-      request.requestedAgentModel,
+      requestedAgentModel,
       process.env.AGENT_MODEL,
       run.user_id,
       undefined,
@@ -573,10 +575,13 @@ export async function runAgentExecutionAttempt(
         console.error('[agent-execution] composition scaffold unavailable; continuing without it:', error);
       }
     }
-    const latestRequestedProviderAttempt = typedPreviousAttempts
+    const requestedProviderAttempts = requestedModel.provider === 'grok-subscription'
+      ? typedPreviousAttempts.filter(item => item.metadata?.provider === 'grok-subscription')
+      : typedPreviousAttempts;
+    const latestRequestedProviderAttempt = requestedProviderAttempts
       .find(item => item.metadata?.model === requestedModel.id);
     const requestedProviderFailureCount = countConsecutiveRetryableProviderFailures(
-      typedPreviousAttempts,
+      requestedProviderAttempts,
       requestedModel.id,
     );
     const previousProviderFailover = typedPreviousAttempts.some(item => {
@@ -646,9 +651,7 @@ export async function runAgentExecutionAttempt(
       MAX_SAME_PROVIDER_ATTEMPTS,
       requestedProviderFailureCount + 1,
     );
-    const effectiveAgentModel = providerFailover
-      ? requestedModel.id
-      : request.requestedAgentModel;
+    const effectiveAgentModel = providerFailover ? requestedModel.id : requestedAgentModel;
     const resolvedModel = providerFailover
       ? resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)
       : requestedModel;

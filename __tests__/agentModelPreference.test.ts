@@ -51,13 +51,21 @@ describe('agent model preference persistence', () => {
     expect(loadCreateAgentModelPreference()).toBe('gpt-6-luna-codex-subscription');
   });
 
-  it('upgrades persisted Grok 4.5 selections to Grok 4.6', () => {
+  it.each(['grok-4.5', 'grok-4.6'])('upgrades persisted %s API selections to Grok 4.7', (agentModel) => {
     const key = getAgentModelPreferenceStorageKey('project-a');
-    window.localStorage.setItem(key, JSON.stringify({ v: 2, agentModel: 'grok-4.5' }));
-    expect(loadAgentModelPreference('project-a')).toBe('grok-4.6');
+    window.localStorage.setItem(key, JSON.stringify({ v: 2, agentModel }));
+    expect(loadAgentModelPreference('project-a')).toBe('grok-4.7');
 
-    window.localStorage.setItem('makaron:create-agent-model:v1', 'grok-4.5');
-    expect(loadCreateAgentModelPreference()).toBe('grok-4.6');
+    window.localStorage.setItem('makaron:create-agent-model:v1', agentModel);
+    expect(loadCreateAgentModelPreference()).toBe('grok-4.7');
+  });
+
+  it('migrates saved Grok 4.6 plan selections to the Grok 4.7 plan', () => {
+    const key = getAgentModelPreferenceStorageKey('project-a');
+    window.localStorage.setItem(key, JSON.stringify({ v: 2, agentModel: 'grok-4.6-grok-subscription' }));
+    window.localStorage.setItem('makaron:create-agent-model:v2', 'grok-4.6-grok-subscription');
+    expect(loadAgentModelPreference('project-a')).toBe('grok-4.7-grok-subscription');
+    expect(loadCreateAgentModelPreference()).toBe('grok-4.7-grok-subscription');
   });
 
   it('migrates the old implicit Azure Luna default to account-aware Auto', () => {
