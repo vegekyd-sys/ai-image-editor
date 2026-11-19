@@ -1,0 +1,530 @@
+[
+  {
+    "file": "out/final_bars_cinematic_30.mp3",
+    "n": 3,
+    "ending": 7,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 7,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Strong orchestral sports theme. Good natural ending and decay. Works well for promos.",
+      "Energetic orchestral track. Solid composed ending. Good for sports intros. No edits detected.",
+      "Good composed ending. Flows well. Useful for news promos."
+    ]
+  },
+  {
+    "file": "out/final_bars_cinematic_60.mp3",
+    "n": 3,
+    "ending": 8,
+    "seamless": 6,
+    "q": 7.7,
+    "mus": 7.3,
+    "use": 7.3,
+    "glitch": [
+      "none",
+      "none",
+      "0:16"
+    ],
+    "notes": [
+      "Heroic orchestral track with a natural, composed ending. No audible edits.",
+      "Epic orchestral track with a composed ending. No audible edits; suitable for heroic BGM.",
+      "Epic orchestral track with a strong composed ending. An abrupt edit at 0:16 cuts off the reverb tail, disrupting the flow."
+    ]
+  },
+  {
+    "file": "out/final_bars_edm_30.mp3",
+    "n": 3,
+    "ending": 7,
+    "seamless": 7,
+    "q": 6,
+    "mus": 5.7,
+    "use": 6.3,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "High-energy track with a composed ending. No edits heard. Good for sports videos.",
+      "Solid promo track with a resolved ending. No obvious edits.",
+      "Energetic promo track. Clean mix, seamless flow, and a solid composed ending. Good for sports."
+    ]
+  },
+  {
+    "file": "out/final_bars_edm_60.mp3",
+    "n": 3,
+    "ending": 8,
+    "seamless": 8,
+    "q": 7,
+    "mus": 6.7,
+    "use": 7.7,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Energetic synth-rock track with a strong composed ending. Seamless flow, good mix, and highly suitable for action-oriented short-form videos.",
+      "Energetic synth-rock track with a strong composed ending. Good audio quality and highly usable for action-oriented short-form content.",
+      "High-energy electronic rock track with a strong composed ending. Excellent for sports or action videos."
+    ]
+  },
+  {
+    "file": "out/final_bars_lofi_15.mp3",
+    "n": 3,
+    "ending": 7,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 6.3,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Solid lo-fi track with a proper composed ending. No edits heard.",
+      "Smooth lo-fi track with a natural ending. Good background music.",
+      "Good lo-fi beat. Composed ending resolves naturally. No edits detected. Usable for background."
+    ]
+  },
+  {
+    "file": "out/final_bars_lofi_30.mp3",
+    "n": 2,
+    "ending": 7,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 6.5,
+    "glitch": [
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Smooth lo-fi beat. Solid resolution. No edits heard.",
+      "Good lo-fi track. Natural decay at the end. Well-suited for background use."
+    ]
+  },
+  {
+    "file": "out/final_bars_lofi_60.mp3",
+    "n": 3,
+    "ending": 8.7,
+    "seamless": 10,
+    "q": 8.3,
+    "mus": 8.3,
+    "use": 9,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Excellent lo-fi track with a natural, composed ending. Perfect length and relaxing vibe for background use.",
+      "Perfect lofi track for BGM. Seamless arrangement with a beautiful, composed ending that resolves naturally.",
+      "Smooth fade-out ending. No audible edits. Good audio quality and musicality. Suitable for background music."
+    ]
+  },
+  {
+    "file": "out/final_bars_lofi_90.mp3",
+    "n": 3,
+    "ending": 10,
+    "seamless": 10,
+    "q": 9,
+    "mus": 9,
+    "use": 10,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Excellent lo-fi track. Features a composed ending with natural decay and seamless arrangement.",
+      "Relaxing lo-fi track with a perfect composed ending. Excellent for background use in short-form video.",
+      "Excellent lo-fi track. Features a composed, natural piano decay at the end and flows flawlessly throughout. Highly usable."
+    ]
+  },
+  {
+    "file": "out/final_bars_upbeat_15.mp3",
+    "n": 3,
+    "ending": 7,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 7,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Natural composed ending. Smooth flow without glitches. Good cheerful background track.",
+      "Clean track with a resolved ending. Good for cheerful background use.",
+      "Good track with a natural ending. No edits heard. Fits short videos well."
+    ]
+  },
+  {
+    "file": "out/final_bars_upbeat_30.mp3",
+    "n": 3,
+    "ending": 7,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 7,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Upbeat acoustic track. Good flow, natural ending. Highly usable for vlogs.",
+      "Upbeat acoustic track. Good resolution at the end. No edits heard. Works well as background music.",
+      "Upbeat acoustic track. Clean ending, no edits. Good for vlogs."
+    ]
+  },
+  {
+    "file": "out/final_bars_upbeat_60.mp3",
+    "n": 3,
+    "ending": 8,
+    "seamless": 8,
+    "q": 7.7,
+    "mus": 7,
+    "use": 8,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Upbeat acoustic track with a natural composed ending. No audible edits.",
+      "Cheerful, upbeat acoustic track with whistling and ukulele. Perfect for vlogs or commercials. Features an excellent composed ending.",
+      "Upbeat acoustic track with a natural composed ending. Excellent for vlogs or lighthearted content. No edit glitches."
+    ]
+  },
+  {
+    "file": "out/final_bars_upbeat_90.mp3",
+    "n": 3,
+    "ending": 8.7,
+    "seamless": 3,
+    "q": 8.7,
+    "mus": 7.3,
+    "use": 7,
+    "glitch": [
+      "01:00",
+      "1:00",
+      "01:00"
+    ],
+    "notes": [
+      "Obvious bad edit at 1:00 with a skipped beat. Otherwise, a highly usable, cheerful acoustic track with a great composed ending.",
+      "Features a perfect composed ending with natural decay, but a jarring rhythmic edit glitch at 1:00 ruins the flow.",
+      "Bad edit at 1:00 causes a noticeable rhythm skip. The ending is an acceptable smooth fade-out. Good acoustic vibe otherwise."
+    ]
+  },
+  {
+    "file": "out/base_lofi_30_1_fade.mp3",
+    "n": 3,
+    "ending": 5,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 7,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Smooth lo-fi track. Acceptable fade-out ending. Good for background use.",
+      "Smooth lofi track. Standard fade-out ending. Good background music.",
+      "Smooth lo-fi track. Good background utility. Fades out smoothly at the end without a composed resolution. No edits heard."
+    ]
+  },
+  {
+    "file": "out/base_lofi_30_1_splice.mp3",
+    "n": 3,
+    "ending": 7,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 7,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Smooth lo-fi track. Good composed ending. Works well as background music.",
+      "Smooth lo-fi track with a resolved ending. Good for background use.",
+      "Solid lo-fi track. Natural decay at the end. No edits detected."
+    ]
+  },
+  {
+    "file": "out/base_lofi_30_2_fade.mp3",
+    "n": 3,
+    "ending": 4.3,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 6.3,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Smooth lo-fi track with a clean fade-out. No edits detected. Works well as background music.",
+      "Chill lo-fi beat. Smooth fade-out ending. No glitches. Good background track.",
+      "Decent lo-fi beat, but ends with an abrupt cut. Requires manual fade."
+    ]
+  },
+  {
+    "file": "out/base_lofi_30_2_splice.mp3",
+    "n": 3,
+    "ending": 7,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 7,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Smooth lofi track with a natural resolution. Good background music.",
+      "Smooth lo-fi track. Natural ending decay. Good background utility.",
+      "Lofi track with a composed ending. No edit glitches. Good background utility."
+    ]
+  },
+  {
+    "file": "out/tagsI_lofi_30_2_fade.mp3",
+    "n": 3,
+    "ending": 3,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 6,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Abrupt ending cuts off mid-phrase. Otherwise, a standard lo-fi track suitable for background use.",
+      "Good lo-fi track but ends with an abrupt cut. Needs a proper fade.",
+      "Decent lo-fi beat, but ends abruptly mid-phrase."
+    ]
+  },
+  {
+    "file": "out/tagsI_lofi_30_2_splice.mp3",
+    "n": 3,
+    "ending": 3,
+    "seamless": 4.3,
+    "q": 6,
+    "mus": 6,
+    "use": 5,
+    "glitch": [
+      "00:19",
+      "0:19",
+      "00:19"
+    ],
+    "notes": [
+      "Abrupt cut at the end. Awkward splice mid-track. Decent lo-fi vibe.",
+      "Abrupt ending, noticeable edit glitch.",
+      "Abrupt cut at end. Noticeable rhythm stumble at 0:19."
+    ]
+  },
+  {
+    "file": "out/tagsL_lofi_30_2_fade.mp3",
+    "n": 3,
+    "ending": 4.3,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 6.3,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Good lo-fi beat for background. Abrupt cut at end hurts usability.",
+      "Good lo-fi track. Smooth flow, decent fade out. Works well as background music.",
+      "Standard lo-fi beat. Good background track with a basic fade-out ending. No editing issues."
+    ]
+  },
+  {
+    "file": "out/tagsL_lofi_30_2_splice.mp3",
+    "n": 3,
+    "ending": 7,
+    "seamless": 7,
+    "q": 6,
+    "mus": 6,
+    "use": 6.3,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Good lo-fi track. Smooth composed ending. No edits heard. Works well as background music.",
+      "Smooth lo-fi track. Natural resolution at the end. No edits detected.",
+      "Smooth lo-fi track. Good natural ending. Fits well as background music."
+    ]
+  },
+  {
+    "file": "out/base_upbeat_60_1_fade.mp3",
+    "n": 2,
+    "ending": 5.5,
+    "seamless": 7,
+    "q": 6.5,
+    "mus": 6.5,
+    "use": 7,
+    "glitch": [
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Cheerful acoustic track with a smooth fade-out. No audible edits. Excellent for vlog background music.",
+      "Cheerful ukulele and whistling track. Smooth fade-out ending. Highly suitable for lighthearted short-form videos."
+    ]
+  },
+  {
+    "file": "out/base_upbeat_60_1_splice.mp3",
+    "n": 3,
+    "ending": 9,
+    "seamless": 5.3,
+    "q": 7.7,
+    "mus": 7.3,
+    "use": 6.7,
+    "glitch": [
+      "00:50",
+      "none",
+      "0:50"
+    ],
+    "notes": [
+      "Upbeat acoustic track with a proper composed ending, but marred by a jarring edit glitch at 00:50.",
+      "Upbeat, cheerful acoustic track with a natural, composed ending. Excellent flow and high usability for positive short-form video content.",
+      "Cheerful acoustic track with a proper ending, but ruined by a jarring, abrupt edit at 0:50 that breaks the rhythm and flow."
+    ]
+  },
+  {
+    "file": "out/tagsI_upbeat_60_1_fade.mp3",
+    "n": 3,
+    "ending": 5.7,
+    "seamless": 7,
+    "q": 6.7,
+    "mus": 6,
+    "use": 7,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Cheerful acoustic track with a smooth fade-out. No audible edits; highly suitable for lighthearted vlogs.",
+      "Upbeat acoustic track with a smooth fade-out. No audible edits, good audio quality, and highly suitable for short-form video BGM.",
+      "Upbeat, clean acoustic track. Seamless flow with a smooth fade-out ending. Highly usable for short-form content."
+    ]
+  },
+  {
+    "file": "out/tagsI_upbeat_60_1_splice.mp3",
+    "n": 3,
+    "ending": 8,
+    "seamless": 3.3,
+    "q": 7,
+    "mus": 6.3,
+    "use": 5.7,
+    "glitch": [
+      "0:48",
+      "0:48",
+      "0:48"
+    ],
+    "notes": [
+      "Excellent composed ending, but a very jarring edit at 0:48 abruptly cuts the whistling melody mid-phrase.",
+      "Cheerful acoustic track with a proper composed ending, but marred by a jarring, abrupt edit at 0:48.",
+      "Upbeat acoustic track with a solid composed ending, but a very noticeable rhythmic skip and bad edit occurs at 0:48."
+    ]
+  },
+  {
+    "file": "out/tagsL_upbeat_60_2_fade.mp3",
+    "n": 3,
+    "ending": 5,
+    "seamless": 8,
+    "q": 7,
+    "mus": 6.7,
+    "use": 7.3,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Upbeat acoustic pop track. Good audio quality and highly usable for vlogs. Ends with a smooth fade-out. No audible edits detected.",
+      "Upbeat acoustic pop track. Good audio quality and seamless flow, but the ending is a rapid fade-out that chops the phrase mid-way.",
+      "Upbeat, cheerful acoustic pop track with clean production. Ends with a smooth, acceptable fade-out. Great for lifestyle vlogs."
+    ]
+  },
+  {
+    "file": "out/tagsL_upbeat_60_2_splice.mp3",
+    "n": 3,
+    "ending": 7.7,
+    "seamless": 8,
+    "q": 7.3,
+    "mus": 7,
+    "use": 8,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Cheerful, upbeat acoustic track with a perfect composed ending. Flawless flow and excellent mix make it highly usable for vlogs and short-form content.",
+      "Upbeat acoustic pop track with a smooth fade-out. Good audio quality and highly usable for short-form video backgrounds.",
+      "Upbeat acoustic folk-pop. Good structure, composed ending, highly usable for vlogs or commercials."
+    ]
+  },
+  {
+    "file": "out/tagsI_lofi_60_1_fade.mp3",
+    "n": 3,
+    "ending": 5.7,
+    "seamless": 7,
+    "q": 6.7,
+    "mus": 6.3,
+    "use": 7,
+    "glitch": [
+      "none",
+      "none",
+      "none"
+    ],
+    "notes": [
+      "Smooth lo-fi track. No audible edits. Ends with a standard, clean fade-out. Good audio quality and highly usable for background music.",
+      "Pleasant lo-fi track with a smooth fade-out. Good background music.",
+      "Relaxing lo-fi beat with a smooth fade-out. Great for vlogs or chill content. No noticeable edits."
+    ]
+  },
+  {
+    "file": "out/tagsI_lofi_60_1_splice.mp3",
+    "n": 3,
+    "ending": 6.7,
+    "seamless": 2.7,
+    "q": 6.3,
+    "mus": 5.7,
+    "use": 3.3,
+    "glitch": [
+      "0:49",
+      "0:49",
+      "0:49"
+    ],
+    "notes": [
+      "Pleasant lo-fi track, but severely compromised by a jarring, abrupt edit at 0:49 right before the fade-out.",
+      "Glaring edit at 0:49 where the beat abruptly cuts to a different piano tail. Otherwise, standard lo-fi BGM.",
+      "Abrupt, jarring edit at 0:49 switches to a completely different, quieter piano track. This ruins the flow, making it unusable for background music."
+    ]
+  }
+]

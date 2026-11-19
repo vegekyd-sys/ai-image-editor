@@ -1,0 +1,654 @@
+[
+  {
+    "id": "base_lofi_30",
+    "taskId": "3e485d53a84f34d640b950857935270f",
+    "secs": 34,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "lofi 30s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "lo-fi chill hop, mellow electric piano, warm vinyl crackle, relaxed, dreamy pads, instrumental",
+      "prompt": "",
+      "duration": 30
+    },
+    "takes": [
+      {
+        "file": "raw/base_lofi_30_1.mp3",
+        "duration": 41.56,
+        "audioId": "e4c706b8-6dcd-48f8-8ff6-4d652aa85347"
+      },
+      {
+        "file": "raw/base_lofi_30_2.mp3",
+        "duration": 57.72,
+        "audioId": "c2b35df1-e03e-4cd6-8857-dc1d603e0755"
+      }
+    ]
+  },
+  {
+    "id": "base_lofi_60",
+    "taskId": "86ec054d0823eccd6ef5450ed946e03f",
+    "secs": 30,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "lofi 60s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "lo-fi chill hop, mellow electric piano, warm vinyl crackle, relaxed, dreamy pads, instrumental",
+      "prompt": "",
+      "duration": 60
+    },
+    "takes": [
+      {
+        "file": "raw/base_lofi_60_1.mp3",
+        "duration": 60,
+        "audioId": "d9370800-2869-4417-8f3f-63098f20f56f"
+      },
+      {
+        "file": "raw/base_lofi_60_2.mp3",
+        "duration": 60,
+        "audioId": "8ed83d09-25ff-4866-a13f-f8ffc70bf5d2"
+      }
+    ]
+  },
+  {
+    "id": "base_upbeat_30",
+    "taskId": "6bcaf73780c68ae3382765686201f353",
+    "secs": 33,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "upbeat 30s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "upbeat travel vlog, acoustic guitar, ukulele, claps, light percussion, bright and playful, instrumental",
+      "prompt": "",
+      "duration": 30
+    },
+    "takes": [
+      {
+        "file": "raw/base_upbeat_30_1.mp3",
+        "duration": 30.64,
+        "audioId": "c55eb3ee-f57b-49d4-b26e-e051de7630a3"
+      },
+      {
+        "file": "raw/base_upbeat_30_2.mp3",
+        "duration": 30.48,
+        "audioId": "e6b25a50-caa9-4e37-ae35-c075e72696c6"
+      }
+    ]
+  },
+  {
+    "id": "base_upbeat_60",
+    "taskId": "fb48daf93b485ddc4cae796d477b650e",
+    "secs": 35,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "upbeat 60s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "upbeat travel vlog, acoustic guitar, ukulele, claps, light percussion, bright and playful, instrumental",
+      "prompt": "",
+      "duration": 60
+    },
+    "takes": [
+      {
+        "file": "raw/base_upbeat_60_1.mp3",
+        "duration": 67.56,
+        "audioId": "a91fba13-9463-4a00-bfdb-a660f207af01"
+      },
+      {
+        "file": "raw/base_upbeat_60_2.mp3",
+        "duration": 61.2,
+        "audioId": "0086797f-cf73-455d-9c48-5b10ff7bec34"
+      }
+    ]
+  },
+  {
+    "id": "tagsI_lofi_30",
+    "taskId": "b8b0ccda77d544bf24dcfff1df19a638",
+    "secs": 33,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "lofi 30s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "lo-fi chill hop, mellow electric piano, warm vinyl crackle, relaxed, dreamy pads, 80 BPM, instrumental",
+      "prompt": "[Intro: 2 bars]\n[Main Theme: 6 bars]\n[Outro: 2 bars, final chord]\n[End]",
+      "duration": 30
+    },
+    "takes": [
+      {
+        "file": "raw/tagsI_lofi_30_1.mp3",
+        "duration": 49.6,
+        "audioId": "33e79ae5-fc71-4555-9890-9d70324ff87f"
+      },
+      {
+        "file": "raw/tagsI_lofi_30_2.mp3",
+        "duration": 60,
+        "audioId": "eff27ec0-5dd0-4a85-9480-2c8a11ae0bf3"
+      }
+    ]
+  },
+  {
+    "id": "tagsI_lofi_60",
+    "taskId": "6fa913c59fe1e9c6ced01762e750136f",
+    "secs": 68,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "lofi 60s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "lo-fi chill hop, mellow electric piano, warm vinyl crackle, relaxed, dreamy pads, 80 BPM, instrumental",
+      "prompt": "[Intro: 4 bars]\n[Main Theme: 6 bars]\n[Variation: 6 bars]\n[Outro: 4 bars, final chord]\n[End]",
+      "duration": 60
+    },
+    "takes": [
+      {
+        "file": "raw/tagsI_lofi_60_1.mp3",
+        "duration": 158,
+        "audioId": "ada706b7-e040-4a38-bf3d-436731bea760"
+      },
+      {
+        "file": "raw/tagsI_lofi_60_2.mp3",
+        "duration": 159.16,
+        "audioId": "26eb44ef-00e4-42e7-8d4f-b26a83806848"
+      }
+    ]
+  },
+  {
+    "id": "tagsI_upbeat_30",
+    "taskId": "1306654f3df4f5133cbcc9c5e96a6b46",
+    "secs": 33,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "upbeat 30s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "upbeat travel vlog, acoustic guitar, ukulele, claps, light percussion, bright and playful, 110 BPM, instrumental",
+      "prompt": "[Intro: 2 bars]\n[Main Theme: 10 bars]\n[Outro: 2 bars, final chord]\n[End]",
+      "duration": 30
+    },
+    "takes": [
+      {
+        "file": "raw/tagsI_upbeat_30_1.mp3",
+        "duration": 30.72,
+        "audioId": "b93a57f2-2002-45cf-b9f0-40c57d460619"
+      },
+      {
+        "file": "raw/tagsI_upbeat_30_2.mp3",
+        "duration": 30,
+        "audioId": "937defef-164d-4eb2-987c-e33d6107c1ff"
+      }
+    ]
+  },
+  {
+    "id": "tagsI_upbeat_60",
+    "taskId": "a34ac2caf418ca648719a821ac7f1d58",
+    "secs": 63,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "upbeat 60s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "upbeat travel vlog, acoustic guitar, ukulele, claps, light percussion, bright and playful, 110 BPM, instrumental",
+      "prompt": "[Intro: 4 bars]\n[Main Theme: 10 bars]\n[Variation: 10 bars]\n[Outro: 4 bars, final chord]\n[End]",
+      "duration": 60
+    },
+    "takes": [
+      {
+        "file": "raw/tagsI_upbeat_60_1.mp3",
+        "duration": 85.52,
+        "audioId": "8a2cfcbd-288c-46e7-9fe3-4b50b1578bcc"
+      },
+      {
+        "file": "raw/tagsI_upbeat_60_2.mp3",
+        "duration": 59.92,
+        "audioId": "9370b6f5-2fb7-45e1-aea5-fee80abe6dc3"
+      }
+    ]
+  },
+  {
+    "id": "tagsL_lofi_30",
+    "taskId": "0f71caeae0317f6bfb437a5f688f4cf4",
+    "secs": 42,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "lofi 30s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": false,
+      "style": "lo-fi chill hop, mellow electric piano, warm vinyl crackle, relaxed, dreamy pads, 80 BPM, instrumental, no vocals",
+      "prompt": "[Instrumental]\n[Intro: 2 bars]\n[Main Theme: 6 bars]\n[Outro: 2 bars, final chord]\n[End]",
+      "negativeTags": "vocals, singing, voice, humming, choir, spoken word",
+      "duration": 30
+    },
+    "takes": [
+      {
+        "file": "raw/tagsL_lofi_30_1.mp3",
+        "duration": 38.2,
+        "audioId": "e2bfb4d6-663d-4df1-a229-a9826f0d4933"
+      },
+      {
+        "file": "raw/tagsL_lofi_30_2.mp3",
+        "duration": 46.8,
+        "audioId": "092027ce-feab-4b4b-95d7-b0e50048b002"
+      }
+    ]
+  },
+  {
+    "id": "tagsL_lofi_60",
+    "taskId": "f799ec652e64b1cace4fd67244a5ecce",
+    "secs": 62,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "lofi 60s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": false,
+      "style": "lo-fi chill hop, mellow electric piano, warm vinyl crackle, relaxed, dreamy pads, 80 BPM, instrumental, no vocals",
+      "prompt": "[Instrumental]\n[Intro: 4 bars]\n[Main Theme: 6 bars]\n[Variation: 6 bars]\n[Outro: 4 bars, final chord]\n[End]",
+      "negativeTags": "vocals, singing, voice, humming, choir, spoken word",
+      "duration": 60
+    },
+    "takes": [
+      {
+        "file": "raw/tagsL_lofi_60_1.mp3",
+        "duration": 152,
+        "audioId": "8e100d01-0afa-48d3-bcce-89bfa818c728"
+      },
+      {
+        "file": "raw/tagsL_lofi_60_2.mp3",
+        "duration": 132,
+        "audioId": "8938a118-751f-444b-aa9e-03942ee2b035"
+      }
+    ]
+  },
+  {
+    "id": "tagsL_upbeat_30",
+    "taskId": "c69e84cf0e1260a46a2f454b7f0991b4",
+    "secs": 32,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "upbeat 30s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": false,
+      "style": "upbeat travel vlog, acoustic guitar, ukulele, claps, light percussion, bright and playful, 110 BPM, instrumental, no vocals",
+      "prompt": "[Instrumental]\n[Intro: 2 bars]\n[Main Theme: 10 bars]\n[Outro: 2 bars, final chord]\n[End]",
+      "negativeTags": "vocals, singing, voice, humming, choir, spoken word",
+      "duration": 30
+    },
+    "takes": [
+      {
+        "file": "raw/tagsL_upbeat_30_1.mp3",
+        "duration": 30,
+        "audioId": "5361ee6c-7b1c-4cac-b216-a231dfe6d5a2"
+      },
+      {
+        "file": "raw/tagsL_upbeat_30_2.mp3",
+        "duration": 30,
+        "audioId": "d37880aa-c0a7-4385-bb22-f5f2aa5bace0"
+      }
+    ]
+  },
+  {
+    "id": "tagsL_upbeat_60",
+    "taskId": "c796ea9b0fb966a2f12efcb386fc2f01",
+    "secs": 38,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "upbeat 60s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": false,
+      "style": "upbeat travel vlog, acoustic guitar, ukulele, claps, light percussion, bright and playful, 110 BPM, instrumental, no vocals",
+      "prompt": "[Instrumental]\n[Intro: 4 bars]\n[Main Theme: 10 bars]\n[Variation: 10 bars]\n[Outro: 4 bars, final chord]\n[End]",
+      "negativeTags": "vocals, singing, voice, humming, choir, spoken word",
+      "duration": 60
+    },
+    "takes": [
+      {
+        "file": "raw/tagsL_upbeat_60_1.mp3",
+        "duration": 60.44,
+        "audioId": "d5c772d4-2f4c-4840-a725-01884d9f725e"
+      },
+      {
+        "file": "raw/tagsL_upbeat_60_2.mp3",
+        "duration": 71.6,
+        "audioId": "4bf8fde0-c5b3-47fa-9d94-3cd1bd263f8f"
+      }
+    ]
+  },
+  {
+    "id": "bars_lofi_30",
+    "taskId": "a2c4f47021f1ff0e2658ec060404d1b8",
+    "secs": 34,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "lofi 30s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "lo-fi chill hop, mellow electric piano, warm vinyl crackle, relaxed, dreamy pads, 80 BPM, short 30-second cue, 10 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 30
+    },
+    "takes": [
+      {
+        "file": "raw/bars_lofi_30_1.mp3",
+        "duration": 29.8,
+        "audioId": "829ddbcb-07b6-4aa8-9167-e8ec1158c968"
+      },
+      {
+        "file": "raw/bars_lofi_30_2.mp3",
+        "duration": 29.92,
+        "audioId": "ab6d2b08-b06b-4524-bb4a-96f799419fe3"
+      }
+    ]
+  },
+  {
+    "id": "bars_lofi_60",
+    "taskId": "77f9f971595ccdd0e61329d964c35f48",
+    "secs": 38,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "lofi 60s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "lo-fi chill hop, mellow electric piano, warm vinyl crackle, relaxed, dreamy pads, 80 BPM, short 60-second cue, 20 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 60
+    },
+    "takes": [
+      {
+        "file": "raw/bars_lofi_60_1.mp3",
+        "duration": 61.44,
+        "audioId": "30560fa2-3a05-422a-9f8f-001283c734cc"
+      },
+      {
+        "file": "raw/bars_lofi_60_2.mp3",
+        "duration": 62.8,
+        "audioId": "d466ddc8-53a1-4110-bf62-faa1a1b2e732"
+      }
+    ]
+  },
+  {
+    "id": "bars_upbeat_30",
+    "taskId": "1cc3f56e2c5fbfc2362971082d78df08",
+    "secs": 30,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "upbeat 30s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "upbeat travel vlog, acoustic guitar, ukulele, claps, light percussion, bright and playful, 110 BPM, short 30-second cue, 14 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 30
+    },
+    "takes": [
+      {
+        "file": "raw/bars_upbeat_30_1.mp3",
+        "duration": 31.2,
+        "audioId": "b43887ab-428a-4247-88ba-6da0d6f47612"
+      },
+      {
+        "file": "raw/bars_upbeat_30_2.mp3",
+        "duration": 29.2,
+        "audioId": "32ac2bf4-9e6c-4964-b190-91c812f8636c"
+      }
+    ]
+  },
+  {
+    "id": "bars_upbeat_60",
+    "taskId": "338532d7386d5f8bf5abe851be137766",
+    "secs": 31,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "upbeat 60s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "upbeat travel vlog, acoustic guitar, ukulele, claps, light percussion, bright and playful, 110 BPM, short 60-second cue, 28 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 60
+    },
+    "takes": [
+      {
+        "file": "raw/bars_upbeat_60_1.mp3",
+        "duration": 59.16,
+        "audioId": "75824d68-6a18-4f76-bffc-3c5f5dd68427"
+      },
+      {
+        "file": "raw/bars_upbeat_60_2.mp3",
+        "duration": 59.88,
+        "audioId": "04dd752e-c4f4-437b-ba10-d14de824c757"
+      }
+    ]
+  },
+  {
+    "id": "bars_edm_30",
+    "taskId": "ba98697285f2d8904ba70e60ccd335a6",
+    "secs": 32,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "edm 30s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "energetic EDM sports promo, punchy four-on-the-floor kick, side-chained synth chords, supersaw lead, 128 BPM, short 30-second cue, 16 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 30
+    },
+    "takes": [
+      {
+        "file": "raw/bars_edm_30_1.mp3",
+        "duration": 29.44,
+        "audioId": "57ec7e15-4777-4793-978a-a35f619c9dce"
+      },
+      {
+        "file": "raw/bars_edm_30_2.mp3",
+        "duration": 29.92,
+        "audioId": "6658dbf5-8370-47c6-9a0f-3843fe511f66"
+      }
+    ]
+  },
+  {
+    "id": "bars_cinematic_30",
+    "taskId": "6cf9d0e1ce90016051f2b80cec75db50",
+    "secs": 32,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "cinematic 30s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "epic cinematic orchestral trailer, taiko drums, low brass, rising strings, heroic, 90 BPM, short 30-second cue, 11 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 30
+    },
+    "takes": [
+      {
+        "file": "raw/bars_cinematic_30_1.mp3",
+        "duration": 29.32,
+        "audioId": "fbd2f982-71b9-4476-80d9-b1a6d4e34e97"
+      },
+      {
+        "file": "raw/bars_cinematic_30_2.mp3",
+        "duration": 29.56,
+        "audioId": "52f22bf2-0bc1-45dc-8eae-855193aa08e6"
+      }
+    ]
+  },
+  {
+    "id": "bars_edm_60",
+    "taskId": "8df2385b538cc2137afec63f57170900",
+    "secs": 35,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "edm 60s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "energetic EDM sports promo, punchy four-on-the-floor kick, side-chained synth chords, supersaw lead, 128 BPM, short 60-second cue, 32 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 60
+    },
+    "takes": [
+      {
+        "file": "raw/bars_edm_60_1.mp3",
+        "duration": 61.2,
+        "audioId": "3924fa95-a541-490f-b2e3-67510e9e7baa"
+      },
+      {
+        "file": "raw/bars_edm_60_2.mp3",
+        "duration": 60.76,
+        "audioId": "6df08b9a-715a-4a09-8c1f-47eb1788800e"
+      }
+    ]
+  },
+  {
+    "id": "bars_cinematic_60",
+    "taskId": "9fd2072c99c88b8cf61c72f6afdd91ce",
+    "secs": 31,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "cinematic 60s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "epic cinematic orchestral trailer, taiko drums, low brass, rising strings, heroic, 90 BPM, short 60-second cue, 23 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 60
+    },
+    "takes": [
+      {
+        "file": "raw/bars_cinematic_60_1.mp3",
+        "duration": 59.88,
+        "audioId": "d0fa18b6-fa82-438f-ac22-d55e4bb84272"
+      },
+      {
+        "file": "raw/bars_cinematic_60_2.mp3",
+        "duration": 58.8,
+        "audioId": "76dbd2a5-775d-4e71-8938-738ed39464bd"
+      }
+    ]
+  },
+  {
+    "id": "bars_lofi_15",
+    "taskId": "ea47b9fabc369079373e055705302b30",
+    "secs": 34,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "lofi 15s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "lo-fi chill hop, mellow electric piano, warm vinyl crackle, relaxed, dreamy pads, 80 BPM, short 15-second cue, 5 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 15
+    },
+    "takes": [
+      {
+        "file": "raw/bars_lofi_15_1.mp3",
+        "duration": 16.36,
+        "audioId": "4d0b36ac-bcdf-4f71-be2d-b8b04ba6c096"
+      },
+      {
+        "file": "raw/bars_lofi_15_2.mp3",
+        "duration": 15.6,
+        "audioId": "c68b80bf-1ec2-4c14-8adc-d0801f64abbf"
+      }
+    ]
+  },
+  {
+    "id": "bars_upbeat_15",
+    "taskId": "f2eed8a6411cd03c737b0a8da7e80bb2",
+    "secs": 27,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "upbeat 15s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "upbeat travel vlog, acoustic guitar, ukulele, claps, light percussion, bright and playful, 110 BPM, short 15-second cue, 7 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 15
+    },
+    "takes": [
+      {
+        "file": "raw/bars_upbeat_15_1.mp3",
+        "duration": 15.6,
+        "audioId": "fa4e3877-765e-49a9-a73c-006fe1cb92a7"
+      },
+      {
+        "file": "raw/bars_upbeat_15_2.mp3",
+        "duration": 14.72,
+        "audioId": "55e3697e-6c73-4646-bf63-1321489ddde4"
+      }
+    ]
+  },
+  {
+    "id": "bars_lofi_90",
+    "taskId": "b636ac18ce2ce847e8944e7644563c58",
+    "secs": 54,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "lofi 90s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "lo-fi chill hop, mellow electric piano, warm vinyl crackle, relaxed, dreamy pads, 80 BPM, short 90-second cue, 30 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 90
+    },
+    "takes": [
+      {
+        "file": "raw/bars_lofi_90_1.mp3",
+        "duration": 89.64,
+        "audioId": "739793da-036a-45ff-94ef-ba7ccdb48145"
+      },
+      {
+        "file": "raw/bars_lofi_90_2.mp3",
+        "duration": 89.84,
+        "audioId": "1704d2d6-7861-4199-85e2-c3c7fbaca814"
+      }
+    ]
+  },
+  {
+    "id": "bars_upbeat_90",
+    "taskId": "2c68744600cc1b59c268f2d80dc3ba3c",
+    "secs": 72,
+    "body": {
+      "customMode": true,
+      "model": "V6",
+      "title": "upbeat 90s",
+      "callBackUrl": "https://makaron.app/api/noop",
+      "instrumental": true,
+      "style": "upbeat travel vlog, acoustic guitar, ukulele, claps, light percussion, bright and playful, 110 BPM, short 90-second cue, 41 bars total, intro then theme then outro, ends on a final chord, instrumental",
+      "prompt": "",
+      "duration": 90
+    },
+    "takes": [
+      {
+        "file": "raw/bars_upbeat_90_1.mp3",
+        "duration": 43.12,
+        "audioId": "ca38fb17-410f-4c34-a2bc-cfcf3f59fc95"
+      },
+      {
+        "file": "raw/bars_upbeat_90_2.mp3",
+        "duration": 89.84,
+        "audioId": "23a309fd-3522-4368-9a2b-9545fab15b36"
+      }
+    ]
+  }
+]

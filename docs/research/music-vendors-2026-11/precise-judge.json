@@ -1,0 +1,614 @@
+[
+  {
+    "group": "lofi15",
+    "model": "el_v1",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 7,
+    "end": 5.3,
+    "use": 6.3,
+    "vocals": 0,
+    "notes": [
+      "Fits brief perfectly, nice vinyl texture, smooth fade out.",
+      "Soft and relaxed lo-fi. Fits the brief perfectly, acceptable fade.",
+      "Pleasant electric piano and solid groove. Resolves well at the end."
+    ],
+    "total": 6.12
+  },
+  {
+    "group": "lofi15",
+    "model": "sonilo",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 6.7,
+    "end": 5.3,
+    "use": 6,
+    "vocals": 0,
+    "notes": [
+      "Mellow electric piano, good tempo, solid BGM choice.",
+      "Dreamy lo-fi with warm crackle. Meets all prompt requirements, fades out.",
+      "Fits brief well. Mellow electric piano and vinyl crackle create a relaxing vibe. Good ending."
+    ],
+    "total": 6
+  },
+  {
+    "group": "lofi15",
+    "model": "seed",
+    "n": 3,
+    "q": 5.3,
+    "mus": 5.7,
+    "adh": 6.3,
+    "end": 4.3,
+    "use": 5.3,
+    "vocals": 0,
+    "notes": [
+      "Warm and relaxed, meets all requirements, gentle fade.",
+      "Mellow electric piano and dreamy pads. Solid background track, acceptable fade.",
+      "Standard lo-fi track. Cut off abruptly at the end, limiting its usefulness."
+    ],
+    "total": 5.38
+  },
+  {
+    "group": "lofi15",
+    "model": "el25_plan",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 6.3,
+    "end": 4.3,
+    "use": 5.3,
+    "vocals": 0,
+    "notes": [
+      "Dreamy pads and mellow keys, fits brief well.",
+      "Relaxed chill hop, good vinyl texture. Suitable for background, fades out.",
+      "Nice chords and vibe, but the sudden cut at the end is problematic."
+    ],
+    "total": 5.58
+  },
+  {
+    "group": "lofi15",
+    "model": "stableaudio3",
+    "n": 3,
+    "q": 5.3,
+    "mus": 5.3,
+    "adh": 6,
+    "end": 4.3,
+    "use": 5.3,
+    "vocals": 0,
+    "notes": [
+      "Relaxed tempo, warm crackle, standard lo-fi BGM.",
+      "Smooth chill hop groove. Good fidelity and arrangement, standard fade.",
+      "Good lo-fi elements, but the abrupt ending ruins usability for background music."
+    ],
+    "total": 5.24
+  },
+  {
+    "group": "lofi15",
+    "model": "elevenlabs",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 6.7,
+    "end": 5.3,
+    "use": 6,
+    "vocals": 0,
+    "notes": [
+      "Soft chill hop, dreamy pads, good background track.",
+      "Warm lo-fi beat with electric piano. Fits brief well, standard fade.",
+      "Smooth, relaxing track that hits all prompt requirements. Good natural ending."
+    ],
+    "total": 6
+  },
+  {
+    "group": "lofi30",
+    "model": "el25_plan",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 7,
+    "end": 5,
+    "use": 6,
+    "vocals": 0,
+    "notes": [
+      "Fits brief well, nice electric piano and vinyl crackle. Good BGM.",
+      "Relaxed lo-fi beat, hits all prompt elements, smooth fade out.",
+      "Hits brief well. Good electric piano and vinyl crackle. Nice fade ending."
+    ],
+    "total": 6
+  },
+  {
+    "group": "lofi30",
+    "model": "stableaudio3",
+    "n": 3,
+    "q": 5.7,
+    "mus": 5.7,
+    "adh": 6,
+    "end": 3.7,
+    "use": 5.3,
+    "vocals": 0,
+    "notes": [
+      "Relaxed groove, prominent vinyl crackle, mellow keys. Excellent background track.",
+      "Good lo-fi track but suffers from an abrupt cut at the end.",
+      "Too upbeat for brief. Lacks dreamy pads. Abrupt ending."
+    ],
+    "total": 5.28
+  },
+  {
+    "group": "lofi30",
+    "model": "seed",
+    "n": 3,
+    "q": 6,
+    "mus": 5.3,
+    "adh": 5.3,
+    "end": 5,
+    "use": 5.7,
+    "vocals": 0,
+    "notes": [
+      "Dreamy pads and mellow piano, fits the lo-fi chill hop style perfectly.",
+      "Beautiful ambient piano but missing the chill hop drum groove.",
+      "Lacks the hip-hop beat. Too ambient, missing the groove."
+    ],
+    "total": 5.46
+  },
+  {
+    "group": "lofi30",
+    "model": "el_v1",
+    "n": 3,
+    "q": 6,
+    "mus": 5.7,
+    "adh": 6,
+    "end": 5,
+    "use": 6,
+    "vocals": 0,
+    "notes": [
+      "Warm crackle, slow tempo, effective background music.",
+      "Lacks a distinct drum beat for chill hop, but very mellow and ambient.",
+      "Mellow and relaxed. Fits the lo-fi brief perfectly with a smooth fade."
+    ],
+    "total": 5.74
+  },
+  {
+    "group": "lofi30",
+    "model": "elevenlabs",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 7,
+    "end": 5,
+    "use": 6,
+    "vocals": 0,
+    "notes": [
+      "Mellow electric piano and dreamy pads create a nice vibe.",
+      "Fits brief well, nice vinyl crackle and electric piano, acceptable fade ending.",
+      "Solid lo-fi track. Good use of vinyl crackle and electric piano."
+    ],
+    "total": 6
+  },
+  {
+    "group": "lofi30",
+    "model": "sonilo",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 7,
+    "end": 6.3,
+    "use": 6.3,
+    "vocals": 0,
+    "notes": [
+      "Soft chill hop with warm crackle and relaxed tempo.",
+      "Solid chill hop groove, good prompt adherence, deliberate musical ending.",
+      "Great chill hop vibe. Resolves nicely at the end."
+    ],
+    "total": 6.32
+  },
+  {
+    "group": "upbeat15",
+    "model": "elevenlabs",
+    "n": 3,
+    "q": 6.3,
+    "mus": 6.3,
+    "adh": 6.7,
+    "end": 7,
+    "use": 6.7,
+    "vocals": 0,
+    "notes": [
+      "Perfect instrumentation and vibe for a vlog, with a clean resolution.",
+      "Cheerful and well-arranged, resolves nicely at the end.",
+      "Simple, bright arrangement. Fits the vlog style well with a proper musical ending."
+    ],
+    "total": 6.6
+  },
+  {
+    "group": "upbeat15",
+    "model": "el25_plan",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 6.7,
+    "end": 5.7,
+    "use": 5.3,
+    "vocals": 0,
+    "notes": [
+      "Solid upbeat track, good instrumentation, ends cleanly.",
+      "Good instrumentation but usability is hindered by an abrupt cut.",
+      "Solid acoustic track with good claps and percussion. Ends well and fits the vlog style."
+    ],
+    "total": 5.94
+  },
+  {
+    "group": "upbeat15",
+    "model": "sonilo",
+    "n": 3,
+    "q": 6.3,
+    "mus": 6.3,
+    "adh": 6.7,
+    "end": 7,
+    "use": 6.3,
+    "vocals": 0,
+    "notes": [
+      "Fits the brief well, nice ukulele and claps, good ending.",
+      "Bright and playful ukulele arrangement, excellent for vlogs.",
+      "Cheerful and bouncy. Good acoustic elements, clear claps, and a clean ending."
+    ],
+    "total": 6.52
+  },
+  {
+    "group": "upbeat15",
+    "model": "stableaudio3",
+    "n": 3,
+    "q": 5.7,
+    "mus": 5.7,
+    "adh": 5.3,
+    "end": 6.7,
+    "use": 5.7,
+    "vocals": 0,
+    "notes": [
+      "Slightly more relaxed but still works well as background music.",
+      "Solid acoustic track, fits brief perfectly with a natural ending.",
+      "Melody is slightly distracting for background use. Mix feels cluttered and less acoustic-focused."
+    ],
+    "total": 5.82
+  },
+  {
+    "group": "upbeat15",
+    "model": "seed",
+    "n": 3,
+    "q": 4.7,
+    "mus": 4.7,
+    "adh": 5.7,
+    "end": 4.3,
+    "use": 4.7,
+    "vocals": 0,
+    "notes": [
+      "Chaotic mix with abrupt ending; less usable for background music.",
+      "Slightly synthetic mix, but hits all prompt requirements well.",
+      "Slightly synthetic sounding with an awkward rhythm and an abrupt, unresolved ending."
+    ],
+    "total": 4.82
+  },
+  {
+    "group": "upbeat15",
+    "model": "el_v1",
+    "n": 3,
+    "q": 6.7,
+    "mus": 6.7,
+    "adh": 7,
+    "end": 7,
+    "use": 6.7,
+    "vocals": 0,
+    "notes": [
+      "Bouncy and bright, hits all prompt requirements with a clean ending.",
+      "Great groove and instrumentation, perfect background music.",
+      "Hits all brief requirements perfectly. Clean mix, playful arrangement, and a solid resolution."
+    ],
+    "total": 6.82
+  },
+  {
+    "group": "upbeat30",
+    "model": "stableaudio3",
+    "n": 3,
+    "q": 6.3,
+    "mus": 6.3,
+    "adh": 7,
+    "end": 7,
+    "use": 6.7,
+    "vocals": 0,
+    "notes": [
+      "Excellent fit. Upbeat, correct instrumentation, resolves perfectly.",
+      "Fits the brief well. Cheerful acoustic elements with a solid ending.",
+      "Bright, playful arrangement. Excellent prompt adherence and clean resolution."
+    ],
+    "total": 6.66
+  },
+  {
+    "group": "upbeat30",
+    "model": "sonilo",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 7,
+    "end": 6.3,
+    "use": 6.3,
+    "vocals": 0,
+    "notes": [
+      "Hits all prompt requirements with a solid, deliberate ending.",
+      "Hits brief perfectly. Bright, playful acoustic arrangement with a solid, deliberate ending.",
+      "Nice acoustic melody, fits the vibe well. Acceptable fade out."
+    ],
+    "total": 6.32
+  },
+  {
+    "group": "upbeat30",
+    "model": "seed",
+    "n": 3,
+    "q": 5.7,
+    "mus": 5.3,
+    "adh": 6.7,
+    "end": 7,
+    "use": 5.7,
+    "vocals": 0,
+    "notes": [
+      "Good energy, fits the vibe well, nice resolution.",
+      "Solid vlog track. Good tempo and instrumentation, ending is deliberate and clean.",
+      "Solid vlog track. Good energy and arrangement, deliberate ending."
+    ],
+    "total": 6.08
+  },
+  {
+    "group": "upbeat30",
+    "model": "elevenlabs",
+    "n": 3,
+    "q": 6.3,
+    "mus": 6,
+    "adh": 7,
+    "end": 7,
+    "use": 6.3,
+    "vocals": 0,
+    "notes": [
+      "Bouncy and playful, perfect instrumentation, ends neatly.",
+      "Very usable vlog BGM. Bright acoustic arrangement and a clear final resolution.",
+      "Playful and upbeat. Great instrumentation for a travel vlog, resolves cleanly."
+    ],
+    "total": 6.52
+  },
+  {
+    "group": "upbeat30",
+    "model": "el25_plan",
+    "n": 3,
+    "q": 6,
+    "mus": 5.7,
+    "adh": 7,
+    "end": 7,
+    "use": 6,
+    "vocals": 0,
+    "notes": [
+      "Solid background track, meets all criteria with clean finish.",
+      "Effective background track. Meets all prompt requirements with a proper musical ending.",
+      "Energetic and bright. Hits all required elements with a deliberate musical ending."
+    ],
+    "total": 6.34
+  },
+  {
+    "group": "upbeat30",
+    "model": "el_v1",
+    "n": 3,
+    "q": 6,
+    "mus": 6.3,
+    "adh": 7,
+    "end": 7,
+    "use": 6.7,
+    "vocals": 0,
+    "notes": [
+      "Bright, excellent for travel vlogs, resolves nicely on time.",
+      "Great acoustic instrumentation. Playful vibe with a clean, natural resolution.",
+      "Clean mix, hits all keywords, resolves nicely on the final beat."
+    ],
+    "total": 6.6
+  },
+  {
+    "group": "edm30",
+    "model": "seed",
+    "n": 3,
+    "q": 5.7,
+    "mus": 5.3,
+    "adh": 6.3,
+    "end": 3.7,
+    "use": 5.3,
+    "vocals": 0,
+    "notes": [
+      "Solid EDM energy, hits prompt elements well. Abrupt ending limits standalone use but fine for BGM.",
+      "Good energy and side-chaining. Acceptable fade out makes it usable for background.",
+      "Muddy mix and repetitive. Abrupt cut ruins usability."
+    ],
+    "total": 5.26
+  },
+  {
+    "group": "edm30",
+    "model": "sonilo",
+    "n": 3,
+    "q": 5.7,
+    "mus": 5.3,
+    "adh": 6.3,
+    "end": 3.7,
+    "use": 5.7,
+    "vocals": 0,
+    "notes": [
+      "Good drive and sidechaining. Slightly repetitive arrangement. Ends abruptly.",
+      "Generic composition with some artifacts. The abrupt ending limits its usability.",
+      "Solid EDM track, fits brief well. Acceptable fade ending."
+    ],
+    "total": 5.34
+  },
+  {
+    "group": "edm30",
+    "model": "stableaudio3",
+    "n": 3,
+    "q": 5.3,
+    "mus": 5.3,
+    "adh": 6.3,
+    "end": 5,
+    "use": 6,
+    "vocals": 0,
+    "notes": [
+      "Generic progression, mix slightly muddy. Fits brief but lacks standout character. Cut ending.",
+      "Standard EDM groove, fits the prompt but lacks standout elements. Acceptable fade.",
+      "Strong chord progression and energy. Good deliberate ending."
+    ],
+    "total": 5.58
+  },
+  {
+    "group": "edm30",
+    "model": "el_v1",
+    "n": 3,
+    "q": 6.3,
+    "mus": 6.3,
+    "adh": 7,
+    "end": 5.7,
+    "use": 6.7,
+    "vocals": 0,
+    "notes": [
+      "Strong supersaw lead and punchy kick. Good sports promo vibe. Abrupt finish.",
+      "Strong supersaw lead and deliberate ending make this highly usable for the brief.",
+      "High energy, punchy mix. Perfect for sports promos."
+    ],
+    "total": 6.4
+  },
+  {
+    "group": "edm30",
+    "model": "el25_plan",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 7,
+    "end": 3.7,
+    "use": 6.3,
+    "vocals": 0,
+    "notes": [
+      "High energy, clean mix, great for sports promos. Hits all requirements. Sudden cut at end.",
+      "Solid EDM track, hits the prompt well, but ends with an abrupt cut.",
+      "Standard arrangement, fits the sports promo vibe. Fade ending."
+    ],
+    "total": 5.8
+  },
+  {
+    "group": "edm30",
+    "model": "elevenlabs",
+    "n": 3,
+    "q": 5.7,
+    "mus": 5.7,
+    "adh": 6.7,
+    "end": 5,
+    "use": 6.3,
+    "vocals": 0,
+    "notes": [
+      "Standard EDM track, meets brief requirements. Mix is decent. Abrupt ending.",
+      "Nice progression and fits the sports promo vibe well. Standard fade ending.",
+      "Energetic, hits all brief requirements. Good mix and deliberate resolution."
+    ],
+    "total": 5.88
+  },
+  {
+    "group": "cinematic30",
+    "model": "elevenlabs",
+    "n": 3,
+    "q": 6,
+    "mus": 6,
+    "adh": 7,
+    "end": 7,
+    "use": 6,
+    "vocals": 0,
+    "notes": [
+      "Solid heroic orchestral track, fits the brief well with a good resolution.",
+      "Excellent taiko presence and heroic brass. Resolves perfectly.",
+      "Solid orchestration, hits all prompt elements, clean deliberate ending."
+    ],
+    "total": 6.4
+  },
+  {
+    "group": "cinematic30",
+    "model": "seed",
+    "n": 3,
+    "q": 5.7,
+    "mus": 5.7,
+    "adh": 6.3,
+    "end": 7,
+    "use": 5.7,
+    "vocals": 0,
+    "notes": [
+      "Driving and powerful, good use of brass and percussion.",
+      "Great arrangement and energy. Brass is powerful and cinematic.",
+      "Heroic feel, decent dynamics, meets brief requirements."
+    ],
+    "total": 6.08
+  },
+  {
+    "group": "cinematic30",
+    "model": "sonilo",
+    "n": 3,
+    "q": 6.3,
+    "mus": 6.3,
+    "adh": 7,
+    "end": 7,
+    "use": 6.3,
+    "vocals": 0,
+    "notes": [
+      "Strong build-up, heroic melody, excellent fit for the brief.",
+      "Punchy percussion and sweeping strings. Highly effective trailer cue.",
+      "Strong brass and percussion, very cinematic and powerful."
+    ],
+    "total": 6.58
+  },
+  {
+    "group": "cinematic30",
+    "model": "stableaudio3",
+    "n": 3,
+    "q": 5,
+    "mus": 5,
+    "adh": 5.7,
+    "end": 6,
+    "use": 5,
+    "vocals": 0,
+    "notes": [
+      "Slightly synthetic orchestration, functional but lacks dynamic range.",
+      "Slightly synthetic strings, but hits the heroic trailer vibe adequately.",
+      "Good elements but ends a bit early, leaving silence."
+    ],
+    "total": 5.34
+  },
+  {
+    "group": "cinematic30",
+    "model": "el25_plan",
+    "n": 3,
+    "q": 5.3,
+    "mus": 5,
+    "adh": 6,
+    "end": 6.3,
+    "use": 5.3,
+    "vocals": 0,
+    "notes": [
+      "Effective trailer track, hits all required elements with a solid ending.",
+      "Lacks the requested power and dynamic build. Mix is muddy.",
+      "Good trailer track, appropriate instrumentation, effective build."
+    ],
+    "total": 5.58
+  },
+  {
+    "group": "cinematic30",
+    "model": "el_v1",
+    "n": 3,
+    "q": 6,
+    "mus": 6.3,
+    "adh": 6.7,
+    "end": 7,
+    "use": 6,
+    "vocals": 0,
+    "notes": [
+      "Punchy percussion and good tension, very suitable for trailer BGM.",
+      "Strong orchestral build, fits brief well. Good brass and percussion.",
+      "Excellent arrangement, very powerful and fits the brief perfectly."
+    ],
+    "total": 6.4
+  }
+]

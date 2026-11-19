@@ -1,0 +1,48 @@
+{"src": "raw/bars_cinematic_30_1.mp3", "target": 30.0, "raw_len": 29.34, "natural_end": 28.1, "exact": "already within target"}
+{"src": "raw/bars_cinematic_30_2.mp3", "target": 30.0, "raw_len": 29.58, "natural_end": 27.85, "exact": "already within target"}
+{"src": "raw/bars_cinematic_60_1.mp3", "target": 60.0, "raw_len": 59.89, "natural_end": 59.89, "exact": "already within target"}
+{"src": "raw/bars_cinematic_60_2.mp3", "target": 60.0, "raw_len": 58.81, "natural_end": 58.81, "exact": "already within target"}
+{"src": "raw/bars_edm_30_1.mp3", "target": 30.0, "raw_len": 29.46, "natural_end": 29.46, "exact": "already within target"}
+{"src": "raw/bars_edm_30_2.mp3", "target": 30.0, "raw_len": 29.94, "natural_end": 29.94, "exact": "already within target"}
+{"src": "raw/bars_edm_60_1.mp3", "target": 60.0, "raw_len": 61.21, "natural_end": 61.21, "fade": {"fade_seconds": 4.0}, "splice": {"tempo": 132.1, "cut_at": 49.39, "ending_from": 51.21, "beats_removed": 4, "phrase_mod": 4, "similarity": 0.997, "pre_fit_len": 59.39}}
+{"src": "raw/bars_edm_60_2.mp3", "target": 60.0, "raw_len": 60.78, "natural_end": 60.78, "fade": {"fade_seconds": 4.0}, "splice": {"reason": "no aligned splice point"}}
+{"src": "raw/bars_lofi_15_1.mp3", "target": 15.0, "raw_len": 16.38, "natural_end": 16.38, "fade": {"fade_seconds": 3.0}, "splice": {"reason": "no aligned splice point"}}
+{"src": "raw/bars_lofi_15_2.mp3", "target": 15.0, "raw_len": 15.61, "natural_end": 15.61, "fade": {"fade_seconds": 3.0}, "splice": {"reason": "no aligned splice point"}}
+{"src": "raw/bars_lofi_30_1.mp3", "target": 30.0, "raw_len": 29.82, "natural_end": 29.82, "exact": "already within target"}
+{"src": "raw/bars_lofi_30_2.mp3", "target": 30.0, "raw_len": 29.94, "natural_end": 29.94, "exact": "already within target"}
+{"src": "raw/bars_lofi_60_1.mp3", "target": 60.0, "raw_len": 61.45, "natural_end": 61.45, "fade": {"fade_seconds": 4.0}, "splice": {"reason": "no aligned splice point"}}
+{"src": "raw/bars_lofi_60_2.mp3", "target": 60.0, "raw_len": 62.82, "natural_end": 62.82, "fade": {"fade_seconds": 4.0}, "splice": {"tempo": 79.2, "cut_at": 49.61, "ending_from": 52.64, "beats_removed": 4, "phrase_mod": 4, "similarity": 0.99, "pre_fit_len": 59.79}}
+{"src": "raw/bars_lofi_90_1.mp3", "target": 90.0, "raw_len": 89.65, "natural_end": 89.3, "exact": "already within target"}
+{"src": "raw/bars_lofi_90_2.mp3", "target": 90.0, "raw_len": 89.87, "natural_end": 86.95, "exact": "already within target"}
+{"src": "raw/bars_upbeat_15_1.mp3", "target": 15.0, "raw_len": 15.61, "natural_end": 15.61, "fade": {"fade_seconds": 3.0}, "splice": {"reason": "no aligned splice point"}}
+{"src": "raw/bars_upbeat_15_2.mp3", "target": 15.0, "raw_len": 14.75, "natural_end": 13.9, "exact": "already within target"}
+{"src": "raw/bars_upbeat_30_1.mp3", "target": 30.0, "raw_len": 31.21, "natural_end": 31.21, "fade": {"fade_seconds": 3.0}, "splice": {"tempo": 108.3, "cut_at": 20.06, "ending_from": 22.28, "beats_removed": 4, "phrase_mod": 4, "similarity": 0.997, "pre_fit_len": 29.0}}
+{"src": "raw/bars_upbeat_30_2.mp3", "target": 30.0, "raw_len": 29.22, "natural_end": 29.22, "exact": "already within target"}
+{"src": "raw/bars_upbeat_60_1.mp3", "target": 60.0, "raw_len": 59.17, "natural_end": 59.17, "exact": "already within target"}
+{"src": "raw/bars_upbeat_60_2.mp3", "target": 60.0, "raw_len": 59.89, "natural_end": 59.6, "exact": "already within target"}
+{"src": "raw/bars_upbeat_90_1.mp3", "target": 90.0, "raw_len": 43.14, "natural_end": 43.14, "exact": "already within target"}
+{"src": "raw/bars_upbeat_90_2.mp3", "target": 90.0, "raw_len": 89.87, "natural_end": 89.87, "exact": "already within target"}
+{"src": "raw/base_lofi_30_1.mp3", "target": 30.0, "raw_len": 41.58, "natural_end": 41.58, "fade": {"fade_seconds": 3.0}, "splice": {"tempo": 72.5, "cut_at": 15.7, "ending_from": 28.93, "beats_removed": 16, "phrase_mod": 16, "similarity": 0.984, "pre_fit_len": 28.35}}
+{"src": "raw/base_lofi_30_2.mp3", "target": 30.0, "raw_len": 57.73, "natural_end": 56.8, "fade": {"fade_seconds": 3.0}, "splice": {"tempo": 72.7, "cut_at": 21.42, "ending_from": 47.83, "beats_removed": 32, "phrase_mod": 16, "similarity": 0.975, "pre_fit_len": 30.39}}
+{"src": "raw/base_lofi_60_1.mp3", "target": 60.0, "raw_len": 60.01, "natural_end": 59.9, "exact": "already within target"}
+{"src": "raw/base_lofi_60_2.mp3", "target": 60.0, "raw_len": 60.01, "natural_end": 59.95, "exact": "already within target"}
+{"src": "raw/base_upbeat_30_1.mp3", "target": 30.0, "raw_len": 30.66, "natural_end": 30.66, "fade": {"fade_seconds": 3.0}, "splice": {"reason": "no aligned splice point"}}
+{"src": "raw/base_upbeat_30_2.mp3", "target": 30.0, "raw_len": 30.49, "natural_end": 30.49, "exact": "already within target"}
+{"src": "raw/base_upbeat_60_1.mp3", "target": 60.0, "raw_len": 67.57, "natural_end": 67.57, "fade": {"fade_seconds": 4.0}, "splice": {"tempo": 103.0, "cut_at": 50.32, "ending_from": 57.31, "beats_removed": 12, "phrase_mod": 4, "similarity": 0.993, "pre_fit_len": 60.58}}
+{"src": "raw/base_upbeat_60_2.mp3", "target": 60.0, "raw_len": 61.21, "natural_end": 61.05, "fade": {"fade_seconds": 4.0}, "splice": {"reason": "no aligned splice point"}}
+{"src": "raw/tagsI_lofi_30_1.mp3", "target": 30.0, "raw_len": 49.62, "natural_end": 49.62, "fade": {"fade_seconds": 3.0}, "splice": {"tempo": 80.0, "cut_at": 18.74, "ending_from": 39.74, "beats_removed": 28, "phrase_mod": 4, "similarity": 0.986, "pre_fit_len": 28.62}}
+{"src": "raw/tagsI_lofi_30_2.mp3", "target": 30.0, "raw_len": 60.01, "natural_end": 59.9, "fade": {"fade_seconds": 3.0}, "splice": {"tempo": 80.0, "cut_at": 20.24, "ending_from": 50.22, "beats_removed": 40, "phrase_mod": 8, "similarity": 0.97, "pre_fit_len": 29.91}}
+{"src": "raw/tagsI_lofi_60_1.mp3", "target": 60.0, "raw_len": 158.03, "natural_end": 158.03, "fade": {"fade_seconds": 4.0}, "splice": {"tempo": 80.2, "cut_at": 49.44, "ending_from": 148.16, "beats_removed": 132, "phrase_mod": 4, "similarity": 0.987, "pre_fit_len": 59.3}}
+{"src": "raw/tagsI_lofi_60_2.mp3", "target": 60.0, "raw_len": 159.18, "natural_end": 159.18, "fade": {"fade_seconds": 4.0}, "splice": {"tempo": 79.0, "cut_at": 49.38, "ending_from": 149.59, "beats_removed": 132, "phrase_mod": 4, "similarity": 0.937, "pre_fit_len": 58.96}}
+{"src": "raw/tagsI_upbeat_30_1.mp3", "target": 30.0, "raw_len": 30.73, "natural_end": 30.73, "fade": {"fade_seconds": 3.0}, "splice": {"reason": "no aligned splice point"}}
+{"src": "raw/tagsI_upbeat_30_2.mp3", "target": 30.0, "raw_len": 30.01, "natural_end": 30.01, "exact": "already within target"}
+{"src": "raw/tagsI_upbeat_60_1.mp3", "target": 60.0, "raw_len": 85.55, "natural_end": 85.55, "fade": {"fade_seconds": 4.0}, "splice": {"tempo": 108.0, "cut_at": 48.59, "ending_from": 75.24, "beats_removed": 48, "phrase_mod": 16, "similarity": 0.997, "pre_fit_len": 58.89}}
+{"src": "raw/tagsI_upbeat_60_2.mp3", "target": 60.0, "raw_len": 59.94, "natural_end": 59.15, "exact": "already within target"}
+{"src": "raw/tagsL_lofi_30_1.mp3", "target": 30.0, "raw_len": 38.22, "natural_end": 38.22, "fade": {"fade_seconds": 3.0}, "splice": {"tempo": 79.0, "cut_at": 18.62, "ending_from": 27.74, "beats_removed": 12, "phrase_mod": 4, "similarity": 0.991, "pre_fit_len": 29.11}}
+{"src": "raw/tagsL_lofi_30_2.mp3", "target": 30.0, "raw_len": 46.81, "natural_end": 46.0, "fade": {"fade_seconds": 3.0}, "splice": {"tempo": 78.4, "cut_at": 21.46, "ending_from": 36.76, "beats_removed": 20, "phrase_mod": 4, "similarity": 0.95, "pre_fit_len": 30.69}}
+{"src": "raw/tagsL_lofi_60_1.mp3", "target": 60.0, "raw_len": 152.03, "natural_end": 152.03, "fade": {"fade_seconds": 4.0}, "splice": {"tempo": 80.0, "cut_at": 46.54, "ending_from": 139.54, "beats_removed": 124, "phrase_mod": 4, "similarity": 0.964, "pre_fit_len": 59.03}}
+{"src": "raw/tagsL_lofi_60_2.mp3", "target": 60.0, "raw_len": 132.01, "natural_end": 131.75, "fade": {"fade_seconds": 4.0}, "splice": {"tempo": 78.5, "cut_at": 51.18, "ending_from": 121.45, "beats_removed": 92, "phrase_mod": 4, "similarity": 0.983, "pre_fit_len": 61.47}}
+{"src": "raw/tagsL_upbeat_30_1.mp3", "target": 30.0, "raw_len": 30.01, "natural_end": 30.0, "exact": "already within target"}
+{"src": "raw/tagsL_upbeat_30_2.mp3", "target": 30.0, "raw_len": 30.01, "natural_end": 30.01, "exact": "already within target"}
+{"src": "raw/tagsL_upbeat_60_1.mp3", "target": 60.0, "raw_len": 60.47, "natural_end": 60.47, "exact": "already within target"}
+{"src": "raw/tagsL_upbeat_60_2.mp3", "target": 60.0, "raw_len": 71.63, "natural_end": 71.63, "fade": {"fade_seconds": 4.0}, "splice": {"tempo": 108.5, "cut_at": 50.47, "ending_from": 61.51, "beats_removed": 20, "phrase_mod": 4, "similarity": 0.991, "pre_fit_len": 60.59}}
