@@ -963,6 +963,7 @@ const zhHant = {
   'agent.error.recoverable': '模型在完成剛才承諾的修改前停止了。草稿已儲存，傳送「繼續」即可從草稿恢復。',
   'agent.error.compactionFailed': '未能安全完成會話壓縮。原始歷史和已儲存的作品均已保留。',
   'agent.error.contextLength': '專案上下文超過了目前模型能讀取的長度，已停止自動接續。現有訊息、素材和草稿仍保留。',
+  'agent.error.grokSubscriptionUnavailable': 'Grok 個人方案暫時無法處理請求，已停止自動重試。請選擇其他模型，或稍後再試。',
   'agent.error.fatal': '模型在完成這次要求前停止，且沒有可恢復的草稿。請重新傳送要求。',
   'agent.error.connectionEnded': 'Agent 連線在完成結果前結束。已儲存的工作會保留，傳送「繼續」即可恢復。',
   'agent.error.runtimeDraftSaved': 'Agent 執行環境已停止，但草稿已儲存。傳送「繼續」即可從草稿恢復。',

@@ -1078,6 +1078,7 @@ const zh = {
   'agent.error.recoverable': '模型在完成刚才承诺的修改前中断了。草稿已经保存，发送“继续”会从这份草稿恢复。',
   'agent.error.compactionFailed': '会话压缩未能安全完成。原始历史和已保存的作品已保留。',
   'agent.error.contextLength': '项目上下文超过了当前模型能读取的长度，自动接续已停止。已有消息、素材和草稿仍保留。',
+  'agent.error.grokSubscriptionUnavailable': 'Grok 个人套餐暂时无法处理请求，自动重试已停止。请选择其他模型，或稍后再试。',
   'agent.error.fatal': '模型在完成本次请求前中断，且没有可恢复的草稿。请重新发送请求。',
   'agent.error.connectionEnded': 'Agent 在没有完成结果时结束了。已保存的工作会保留，发送“继续”即可恢复。',
   'agent.error.runtimeDraftSaved': 'Agent 运行环境已中断，但草稿已经保存。发送“继续”会从这份草稿恢复。',
