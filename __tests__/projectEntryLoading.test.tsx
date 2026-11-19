@@ -1,14 +1,20 @@
 import { renderHook, act, cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const state = vi.hoisted(() => ({ rows: {} as Record<string, unknown>, reads: [] as string[], uploads: vi.fn(), cache: vi.fn() }))
+const state = vi.hoisted(() => ({
+  rows: {} as Record<string, unknown>,
+  failures: {} as Record<string, { status: number; error: { code: string; message: string } }[]>,
+  reads: [] as string[],
+  uploads: vi.fn(),
+  cache: vi.fn(),
+}))
 vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({
   from: (table: string) => {
     const query: Record<string, unknown> = {}
-    for (const name of ['select', 'eq', 'order', 'in', 'single', 'maybeSingle']) query[name] = () => query
+    for (const name of ['select', 'eq', 'order', 'in', 'single', 'maybeSingle', 'abortSignal']) query[name] = () => query
     query.then = (resolve: (value: unknown) => void) => {
       state.reads.push(table)
-      return Promise.resolve({ data: state.rows[table] ?? [], error: null }).then(resolve)
+      return Promise.resolve(state.failures[table]?.shift() ?? { data: state.rows[table] ?? [], status: 200, error: null }).then(resolve)
     }
     return query
   },
@@ -21,7 +27,7 @@ import { useProject } from '@/hooks/useProject'
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 beforeEach(() => {
-  state.reads = []; state.uploads.mockReset(); state.cache.mockReset()
+  state.reads = []; state.failures = {}; state.uploads.mockReset(); state.cache.mockReset()
   state.rows = {
     projects: { user_id: 'owner', is_public: true, title: 'Demo', timeline_version: 2 },
     snapshots: [{ id: 'snap', type: 'design', image_url: 'https://poster.example/image.jpg', design_path: 'project/code/snap.json', message_id: 'message', tips: [] }],
@@ -67,5 +73,30 @@ describe('project entry loading', () => {
     const project = await result.current.loadProject()
     expect(project.animations[0].videoUrl).toContain('movie.mp4')
     expect(state.reads.indexOf('project_music')).toBeLessThan(state.reads.indexOf('project_animations'))
+  })
+
+  it('retries just the failed required read and restores the editor with its history', async () => {
+    state.rows.snapshots = []
+    state.failures.messages = [{ status: 503, error: { code: 'PGRST002', message: 'Service unavailable' } }]
+    const { result } = renderHook(() => useProject('project', 'viewer'))
+    const project = await result.current.loadProject()
+    expect(project.messages[0].content).toBe('Design')
+    expect(project.musicRows).toHaveLength(1)
+    expect(state.reads).toEqual(['snapshots', 'messages', 'projects', 'agent_events', 'project_music', 'messages'])
+  })
+
+  it('keeps a persistent error attributable to its resource after one retry', async () => {
+    const error = { status: 500, error: { code: '57014', message: 'canceling statement due to statement timeout' } }
+    state.failures.snapshots = [error, error]
+    const { result } = renderHook(() => useProject('project', 'viewer'))
+    await expect(result.current.loadProject()).rejects.toThrow('snapshots, HTTP 500): 57014')
+    expect(state.reads.filter(table => table === 'snapshots')).toHaveLength(2)
+  })
+
+  it('does not retry a permission error', async () => {
+    state.failures.projects = [{ status: 403, error: { code: '42501', message: 'Permission denied' } }]
+    const { result } = renderHook(() => useProject('project', 'viewer'))
+    await expect(result.current.loadProject()).rejects.toThrow('projects, HTTP 403): 42501')
+    expect(state.reads.filter(table => table === 'projects')).toHaveLength(1)
   })
 })
