@@ -1,4 +1,10 @@
 const zh = {
+  "changelog.sunoBgm.title": "背景音乐回归 Suno V6，时长更准",
+  "changelog.sunoBgm.item1": "纯背景音乐重新由 Suno V6 生成。告诉 Agent 需要多长，成品通常只和目标差一两秒，并以完整的收尾和弦结束。",
+  "changelog.sunoBgm.item2": "每次给你两版，默认用最接近目标时长的那一版；有旁白或对白的音轨仍然一次性整体生成。",
+  "changelog.reliableCompositionEdits.title": "改动更可靠，项目打开更稳",
+  "changelog.reliableCompositionEdits.item1": "Agent 分步修改视频或设计时，每次改动都会体现在它检查的预览帧里，不会再偶尔一直显示旧版本。",
+  "changelog.reliableCompositionEdits.item2": "打开项目时遇到短暂的网络或数据库波动，会自动恢复，不再直接显示出错页面。",
   "changelog.modelPriceQuotes.title": "按需查询生成积分",
   "changelog.modelPriceQuotes.item1": "想了解图片、视频或音频生成需要多少积分，可以直接问 Agent，也可以用相同参数比较模型。",
   "changelog.modelPriceQuotes.item2": "在终端用 makaron price 查模型、估算预算或比价。",

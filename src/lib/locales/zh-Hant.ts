@@ -4,6 +4,12 @@ import type { TranslationDictionary } from './index';
 const zhHant = {
 
   ...zh,
+  "changelog.sunoBgm.title": "背景音樂回歸 Suno V6，時長更準",
+  "changelog.sunoBgm.item1": "純背景音樂重新由 Suno V6 生成。告訴 Agent 需要多長，成品通常只和目標差一兩秒，並以完整的收尾和弦結束。",
+  "changelog.sunoBgm.item2": "每次提供兩版，預設使用最接近目標時長的那一版；有旁白或對白的音軌仍然一次整體生成。",
+  "changelog.reliableCompositionEdits.title": "修改更可靠，專案開啟更穩",
+  "changelog.reliableCompositionEdits.item1": "Agent 分步修改影片或設計時，每次改動都會反映在它檢查的預覽畫面中，不會再偶爾一直顯示舊版本。",
+  "changelog.reliableCompositionEdits.item2": "開啟專案時遇到短暫的網路或資料庫波動，會自動恢復，不再直接顯示錯誤頁面。",
   "changelog.modelPriceQuotes.title": "按需查詢生成點數",
   "changelog.modelPriceQuotes.item1": "想知道圖片、影片或音訊生成需要多少點數，可以直接問 Agent，也可以用相同參數比較模型。",
   "changelog.modelPriceQuotes.item2": "在終端機用 makaron price 查模型、估算預算或比價。",

@@ -1,4 +1,10 @@
 const en = {
+  "changelog.sunoBgm.title": "Background music with Suno V6, now on time",
+  "changelog.sunoBgm.item1": "Instrumental background music is generated with Suno V6 again. Tell Agent the length you need: tracks land within a couple of seconds of it and end on a real final chord.",
+  "changelog.sunoBgm.item2": "Every generation gives you two takes, and the one closest to your length is used by default. Soundtracks with narration or dialogue are still made in one pass.",
+  "changelog.reliableCompositionEdits.title": "More reliable edits and project opening",
+  "changelog.reliableCompositionEdits.item1": "When Agent revises a video or design step by step, every change now shows up in the preview frames it checks, instead of the previous version sometimes staying on screen.",
+  "changelog.reliableCompositionEdits.item2": "Projects that hit a brief network or database hiccup while opening now recover on their own instead of showing an error page.",
   "changelog.modelPriceQuotes.title": "On-demand credit estimates",
   "changelog.modelPriceQuotes.item1": "Ask Agent how many credits a generation would use, or ask it to compare models with the same settings.",
   "changelog.modelPriceQuotes.item2": "Use makaron price in the terminal when you want to look up models, check a budget, or compare estimates.",

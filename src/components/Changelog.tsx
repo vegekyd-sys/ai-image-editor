@@ -17,12 +17,14 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'modelPriceQuotes' | 'openaiApiModels' | 'klingImage4' | 'seedance25Native4k' | 'editableLayerOpening' | 'autoLayerize' | 'fasterMediaReplies' | 'seedance25Flash' | 'spatialExplainers' | 'seedream55' | 'characterImageRecovery' | 'klingFlashDefault' | 'googleOmni12' | 'kling4Flash' | 'fasterImage26Svg' | 'gifStickers' | 'fasterMediaDelivery' | 'gptImage26' | 'cliLargeUploads' | 'retakeChoices' | 'kling4' | 'videoFramingParity' | 'fasterFrameChecks' | 'reliable4kExport' | 'deepseekFlashDefault' | 'nativeAudiovisual' | 'marketplaceSkillUpdates' | 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'openaiApiReliability' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'sunoBgm' | 'reliableCompositionEdits' | 'modelPriceQuotes' | 'openaiApiModels' | 'klingImage4' | 'seedance25Native4k' | 'editableLayerOpening' | 'autoLayerize' | 'fasterMediaReplies' | 'seedance25Flash' | 'spatialExplainers' | 'seedream55' | 'characterImageRecovery' | 'klingFlashDefault' | 'googleOmni12' | 'kling4Flash' | 'fasterImage26Svg' | 'gifStickers' | 'fasterMediaDelivery' | 'gptImage26' | 'cliLargeUploads' | 'retakeChoices' | 'kling4' | 'videoFramingParity' | 'fasterFrameChecks' | 'reliable4kExport' | 'deepseekFlashDefault' | 'nativeAudiovisual' | 'marketplaceSkillUpdates' | 'midjourney82' | 'gpt61Sol' | 'localVideoEditing' | 'imageCapabilities' | 'nanoBanana21' | 'webSearch' | 'seedance25Eco' | 'byteDanceFastUpscale' | 'multiAngleVideo' | 'creativeHome' | 'gpt6AgentModels' | 'qwenSpicy' | 'cliRunCredits' | 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'openaiApiReliability' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-11-19', localeKey: 'sunoBgm' },
+  { date: '2026-11-19', localeKey: 'reliableCompositionEdits' },
   { date: '2026-11-18', localeKey: 'modelPriceQuotes' },
   { date: '2026-11-18', localeKey: 'openaiApiModels' },
   { date: '2026-11-18', localeKey: 'klingImage4' },
@@ -986,6 +988,8 @@ const CHANGELOG: ChangelogEntry[] = [
 ];
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  sunoBgm: { title: 'changelog.sunoBgm.title', items: ['changelog.sunoBgm.item1', 'changelog.sunoBgm.item2'] },
+  reliableCompositionEdits: { title: 'changelog.reliableCompositionEdits.title', items: ['changelog.reliableCompositionEdits.item1', 'changelog.reliableCompositionEdits.item2'] },
   modelPriceQuotes: { title: 'changelog.modelPriceQuotes.title', items: ['changelog.modelPriceQuotes.item1', 'changelog.modelPriceQuotes.item2'] },
   openaiApiModels: {
     title: 'changelog.openaiApiModels.title',
