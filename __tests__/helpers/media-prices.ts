@@ -59,7 +59,8 @@ export function seededMediaPrices(): MediaPrice[] {
 
 export function seededTokenRates(): TokenRate[] {
   const sql = readFileSync('supabase/migrations/20260903113857_media_pricing_catalog.sql', 'utf8').split('INSERT INTO public.token_rates')[1].split('ON CONFLICT')[0]
-  return sql.split('\n').filter(line => line.startsWith("('")).map(line => {
+  const grok47 = readFileSync('supabase/migrations/20261119062431_grok_47_openrouter_agent_rate.sql', 'utf8')
+  return [sql, grok47].join('\n').split('\n').filter(line => line.startsWith("('")).map(line => {
     const [model_id, display_name, input_per_1m, output_per_1m, cache_read_per_1m, cache_write_per_1m, markup, is_active] = JSON.parse(`[${line.slice(1, line.lastIndexOf(')')).replaceAll("'", '"')}]`)
     return { model_id, display_name, input_per_1m, output_per_1m, cache_read_per_1m, cache_write_per_1m, markup, is_active }
   })

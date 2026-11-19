@@ -17,7 +17,6 @@ import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { normalizeAgentErrorMessage } from './agent-error';
 import { compositionPartsPrefix } from './composition-parts';
 import {
-  getAgentApiFallbackModelId,
   resolveCodexSubscriptionFallbackProvider,
   resolveOpenAIDirectFallbackProvider,
   type AgentModelProvider,
@@ -1640,7 +1639,7 @@ export async function* runMakaronAgent(
         if (hasFallbackCredential) {
           try {
             const fallbackRuntime = createAgentModelRuntime(
-              getAgentApiFallbackModelId(runtime.spec.id),
+              runtime.spec.id,
               projectId,
               fallbackProvider,
               options?.userId,

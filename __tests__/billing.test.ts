@@ -319,6 +319,26 @@ describe('token-rates', () => {
     });
   });
 
+  it('uses the exact Grok 4.7 OpenRouter rate', async () => {
+    mockFrom.mockReturnValue(mockQuery(seededTokenRates()));
+    const { getTokenRate } = await import('@/lib/billing/token-rates');
+
+    expect(await getTokenRate('x-ai/grok-4.7')).toMatchObject({
+      display_name: 'Grok 4.7',
+      input_per_1m: 2,
+      output_per_1m: 6,
+      cache_read_per_1m: 0.5,
+      cache_write_per_1m: 0,
+      markup: 2,
+    });
+
+    mockFrom.mockReturnValue(mockQuery([{
+      ...seededTokenRates().find(rate => rate.model_id === 'x-ai/grok-4.6'),
+      model_id: 'x-ai/grok-4',
+    }]));
+    expect(await getTokenRate('x-ai/grok-4.7')).toBeNull();
+  });
+
   it('includes the migrated GPT-5.6 Terra rate and bills its usage', async () => {
     const chain = mockQuery([]);
     mockFrom.mockReturnValue(chain);

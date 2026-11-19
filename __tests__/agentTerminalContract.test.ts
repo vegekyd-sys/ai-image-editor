@@ -119,8 +119,8 @@ describe('agent terminal contract wiring', () => {
     expect(executionRunnerSource).toContain('attemptSafetyMetadata()');
     expect(executionRunnerSource).toContain('attemptMetadataError');
     expect(executionRunnerSource).toContain('.limit(policy.maxAttempts)');
-    expect(executionRunnerSource).toContain('getAgentApiFallbackModelId(requestedModel.id)');
-    expect(executionRunnerSource).toContain('resolveAgentModelSpec(fallbackAgentModel, undefined, failoverProvider)');
+    expect(executionRunnerSource).toContain("typedPreviousAttempts.filter(item => item.metadata?.provider === 'grok-subscription')");
+    expect(executionRunnerSource).toContain('resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)');
     expect(executionRunnerSource).toContain('agentProvider: resolvedModel.provider');
   });
 

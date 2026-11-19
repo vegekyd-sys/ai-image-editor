@@ -6,7 +6,7 @@ export const AGENT_MODEL_IDS = [
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
-  'grok-4.6',
+  'grok-4.7',
   'deepseek-v4-pro',
   'deepseek-flash',
 ] as const;
@@ -27,9 +27,7 @@ export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = [
 export type CodexSubscriptionAgentModelPreference =
   | (typeof CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES)[number]
   | `${(typeof ADDITIONAL_GPT_AGENT_MODEL_IDS)[number]}-codex-subscription`;
-const GROK_SUBSCRIPTION_AGENT_MODEL_ID = 'grok-4.7' as const;
 export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.7-grok-subscription' as const;
-const GROK_SUBSCRIPTION_FALLBACK_AGENT_MODEL_ID = 'grok-4.6' as const;
 export type GrokSubscriptionAgentModelPreference = typeof GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE;
 export type AgentModelPreference = 'auto' | AgentModelId | CodexSubscriptionAgentModelPreference | GrokSubscriptionAgentModelPreference;
 export type AgentModelProvider = 'azure-openai' | 'openai' | 'codex-subscription' | 'grok-subscription' | 'openrouter' | 'deepseek';
@@ -39,7 +37,7 @@ export type AgentCacheStrategy = 'explicit' | 'automatic';
 export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface AgentModelSpec {
-  id: AgentModelId | typeof GROK_SUBSCRIPTION_AGENT_MODEL_ID;
+  id: AgentModelId;
   provider: AgentModelProvider;
   providerModelId: string;
   billingModelId: string;
@@ -245,10 +243,6 @@ export function shouldRequireAgentCredits(provider: AgentModelProvider): boolean
   return provider !== 'codex-subscription' && provider !== 'grok-subscription';
 }
 
-export function getAgentApiFallbackModelId(modelId: AgentModelSpec['id']): AgentModelId {
-  return modelId === GROK_SUBSCRIPTION_AGENT_MODEL_ID ? GROK_SUBSCRIPTION_FALLBACK_AGENT_MODEL_ID : modelId;
-}
-
 function isGrokSubscriptionAgentAllowedUser(userId: string | undefined, dynamicallyAllowed?: boolean): boolean {
   if (!userId
     || !process.env.GROK_SUBSCRIPTION_RELAY_URL?.trim()
@@ -386,13 +380,14 @@ export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
     supportsImageInput: true,
     defaultReasoningEffort: 'low',
   },
-  'grok-4.6': {
-    id: 'grok-4.6',
+  'grok-4.7': {
+    id: 'grok-4.7',
     provider: 'openrouter',
-    providerModelId: 'x-ai/grok-4.6',
-    billingModelId: 'x-ai/grok-4.6',
+    providerModelId: 'x-ai/grok-4.7',
+    billingModelId: 'x-ai/grok-4.7',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
+    defaultReasoningEffort: 'medium',
   },
   'deepseek-flash': {
     id: 'deepseek-flash',
@@ -427,8 +422,10 @@ export function isAgentModelPreference(value: unknown): value is AgentModelPrefe
 }
 
 const RETIRED_AGENT_MODEL_REPLACEMENTS = new Map<string, AgentModelId>([
-  ['grok-4.5', 'grok-4.6'],
-  ['x-ai/grok-4.5', 'grok-4.6'],
+  ['grok-4.5', 'grok-4.7'],
+  ['x-ai/grok-4.5', 'grok-4.7'],
+  ['grok-4.6', 'grok-4.7'],
+  ['x-ai/grok-4.6', 'grok-4.7'],
 ]);
 
 const RETIRED_AGENT_MODEL_PREFERENCE_REPLACEMENTS = new Map<string, AgentModelPreference>([
@@ -510,10 +507,10 @@ export function resolveAgentModelSpec(
 ): AgentModelSpec {
   if (isGrokSubscriptionAgentModelPreference(preference)) {
     return {
-      id: GROK_SUBSCRIPTION_AGENT_MODEL_ID,
+      id: 'grok-4.7',
       provider: 'grok-subscription',
-      providerModelId: GROK_SUBSCRIPTION_AGENT_MODEL_ID,
-      billingModelId: GROK_SUBSCRIPTION_AGENT_MODEL_ID,
+      providerModelId: 'grok-4.7',
+      billingModelId: 'grok-4.7',
       cacheStrategy: 'automatic',
       supportsImageInput: true,
     };
@@ -556,7 +553,7 @@ export function resolveAgentModelSpecForUser(
     // allowlisted users through the owner's SuperGrok credential.
     return isGrokSubscriptionAgentAllowedUser(userId, codexSubscriptionAllowed)
       ? selected
-      : AGENT_MODEL_SPECS[GROK_SUBSCRIPTION_FALLBACK_AGENT_MODEL_ID];
+      : AGENT_MODEL_SPECS['grok-4.7'];
   }
   const explicitlyUsesCodexSubscription = isCodexSubscriptionAgentModelPreference(preference);
   const ownerUsesCodexByDefault = defaultsToCodexSubscription(

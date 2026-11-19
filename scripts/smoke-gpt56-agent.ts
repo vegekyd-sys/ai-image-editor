@@ -39,9 +39,7 @@ async function main() {
     ? configuredModel
     : 'auto';
   const runtime = createAgentModelRuntime(agentModel, 'gpt56-live-smoke');
-  const runtimeModelId = runtime.spec.id;
-  assert.ok(isAgentModelId(runtimeModelId));
-  if (agentModel === 'auto') assert.equal(runtimeModelId, 'gpt-6-luna');
+  if (agentModel === 'auto') assert.equal(runtime.spec.id, 'gpt-6-luna');
 
   const streamStartedAt = Date.now();
   const stream = streamText({
@@ -111,7 +109,7 @@ async function main() {
     '',
     'gpt56-main-agent-smoke',
     {
-      agentModel: runtimeModelId,
+      agentModel: runtime.spec.id,
       locale: 'en',
       disableToolCalls: true,
       snapshotImages: [],
@@ -135,7 +133,7 @@ async function main() {
     redDataUrl,
     'gpt56-analysis-smoke',
     {
-      agentModel: runtimeModelId,
+      agentModel: runtime.spec.id,
       analysisOnly: true,
       analysisContext: 'initial',
       locale: 'en',

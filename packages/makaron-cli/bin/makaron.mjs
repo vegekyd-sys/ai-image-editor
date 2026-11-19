@@ -44,7 +44,7 @@ const CHAT_AGENT_MODELS = [
   'gpt-5.6-terra-codex-subscription',
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
-  'grok-4.6',
+  'grok-4.7',
   'grok-4.7-grok-subscription',
   'deepseek-v4-pro',
   'deepseek-flash',
@@ -98,7 +98,7 @@ function warnLegacyModelFlag(replacement) {
 }
 
 function validateChatAgentModel(value) {
-  if (value === 'grok-4.6-grok-subscription') return value;
+  if (value === 'grok-4.6' || value === 'grok-4.6-grok-subscription') return value;
   if (!value || !CHAT_AGENT_MODELS.includes(value)) {
     process.stderr.write(`❌ Unknown Agent LLM: ${value || '(missing value)'}\n`);
     process.stderr.write(`Choose one of: ${CHAT_AGENT_MODELS.join(', ')}\n`);
@@ -533,7 +533,7 @@ Options:
   --media-manifest <file|-> Import typed image/video media before this run.
   --skill <id|label|name>   Select a built-in/installed skill or auto-install a marketplace skill.
   --agent-model <id>        Agent LLM only: auto, gpt-6-luna, gpt-6.1-sol, gpt-6-sol, gpt-5.6-terra, gpt-5.6-sol,
-                            gpt-5.6-luna, grok-4.6, deepseek-v4-pro, deepseek-flash, or a
+                            gpt-5.6-luna, grok-4.7, deepseek-v4-pro, deepseek-flash, or a
                             gpt-6.1-sol-codex-subscription, gpt-6-*-codex-subscription, gpt-5.6-*-codex-subscription or
                             grok-4.7-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.
@@ -548,7 +548,7 @@ Direct video model reference limits remain provider-specific.
 Agent LLM defaults to auto, following the server-configured Agent model.
 When that default is a GPT model, eligible accounts can use the Codex plan.
 GPT-5.6 and GPT-6 base ids select Azure API; append -codex-subscription to
-select the personal plan explicitly. Base grok-4.6 selects OpenRouter API;
+select the personal plan explicitly. Base grok-4.7 selects OpenRouter API;
 grok-4.7-grok-subscription selects the personal SuperGrok plan. Image/video
 model routing stays automatic in chat.
 

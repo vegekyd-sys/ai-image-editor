@@ -707,7 +707,7 @@ export default function ModelSelector({
     : preferredModel;
   const selectedAgentModel = agentModels.find(model => model.id === agentModel);
   const selectedAgentLabel = selectedAgentModel
-    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : isOpenAIAgentModelId(selectedAgentModel.id) ? ` · ${t('model.openaiApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`
+    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : isOpenAIAgentModelId(selectedAgentModel.id) ? ` · ${t('model.openaiApiBadge')}` : selectedAgentModel.id === 'grok-4.7' ? ` · ${t('model.grokApiBadge')}` : ''}`
     : agentModel;
   const selectedVideoModel = videoModels.find(model => model.id === videoModel);
   const selectedVideoLabel = selectedVideoModel
@@ -1016,7 +1016,7 @@ export default function ModelSelector({
                     )}
                     <ModelRow
                       model={model}
-                      name={`${t(model.nameKey as Parameters<typeof t>[0])}${isCodexSubscription ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscription ? ` · ${t('model.grokSubscription.suffix')}` : model.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`}
+                      name={`${t(model.nameKey as Parameters<typeof t>[0])}${isCodexSubscription ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscription ? ` · ${t('model.grokSubscription.suffix')}` : model.id === 'grok-4.7' ? ` · ${t('model.grokApiBadge')}` : ''}`}
                       desc={t(model.descKey as Parameters<typeof t>[0])}
                       badge={activeTab === 'agent'
                         ? undefined
@@ -1033,7 +1033,7 @@ export default function ModelSelector({
                         ? 'grok-subscription'
                         : isOpenAIAgent
                         ? 'openai'
-                        : model.id === 'grok-4.6'
+                        : model.id === 'grok-4.7'
                         ? 'openrouter'
                         : undefined}
                       compact={activeTab === 'agent'}

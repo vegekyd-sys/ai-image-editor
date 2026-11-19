@@ -10,7 +10,7 @@ If adult intent is ambiguous, ask one short question before choosing this lane.
 
 | Adult request | Route |
 |---|---|
-| Agent-driven work or a persistent Makaron project | `makaron chat` with Agent model `grok-4.6` |
+| Agent-driven work or a persistent Makaron project | `makaron chat` with Agent model `grok-4.7` |
 | Standalone image generation or editing | `makaron edit` with image model `qwen-spicy` |
 | Standalone video generation | `makaron video create` with video model `wan-3.0-prime` |
 
@@ -19,7 +19,7 @@ For project-based work, keep the complete request in one `chat` job. Because
 brief:
 
 ```bash
-npx makaron-cli chat --project <id|auto> --agent-model grok-4.6 --json \
+npx makaron-cli chat --project <id|auto> --agent-model grok-4.7 --json \
   -b "<complete adult request; use qwen-spicy for still images and wan-3.0-prime for video>"
 ```
 

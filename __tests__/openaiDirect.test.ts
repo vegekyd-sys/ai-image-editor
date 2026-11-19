@@ -98,7 +98,7 @@ describe('Agent routing priority', () => {
     expect(resolveAgentModelSpecForUser('auto', 'gpt-6-luna', 'owner', undefined, true, true).provider).toBe('codex-subscription');
     expect(resolveAgentModelSpecForUser('gpt-6-luna-codex-subscription', undefined, 'other', undefined, false, true).provider).toBe('openai');
     expect(resolveAgentModelSpecForUser('auto', undefined, 'user', undefined, false, true).id).toBe('deepseek-flash');
-    expect(resolveAgentModelSpecForUser('grok-4.6', undefined, 'user', undefined, false, true).provider).toBe('openrouter');
+    expect(resolveAgentModelSpecForUser('grok-4.7', undefined, 'user', undefined, false, true).provider).toBe('openrouter');
   });
 
   it('honours an explicitly pinned provider (route decision or fallback) over the budget rule', () => {

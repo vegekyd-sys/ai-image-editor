@@ -77,7 +77,7 @@ describe('ModelSelector Agent tab', () => {
     expect(agentTab.getAttribute('aria-controls')).toBe(agentPanel.id);
     expect(agentPanel.getAttribute('aria-labelledby')).toBe(agentTab.id);
 
-    for (const id of ['gpt-6-luna', 'gpt-6.1-sol', 'grok-4.6', 'deepseek-v4-pro', 'deepseek-flash']) {
+    for (const id of ['gpt-6-luna', 'gpt-6.1-sol', 'grok-4.7', 'deepseek-v4-pro', 'deepseek-flash']) {
       expect(await screen.findByTestId(`agent-model-${id}`)).not.toBeNull();
     }
     expect(screen.queryByTestId('agent-model-grok-4.5')).toBeNull();
@@ -96,7 +96,7 @@ describe('ModelSelector Agent tab', () => {
     expect(grokPlan.textContent).toContain('Grok 4.7');
     expect(screen.getByTestId('agent-model-grok-4.7-grok-subscription').getAttribute('data-agent-provider'))
       .toBe('grok-subscription');
-    expect(screen.getByTestId('agent-model-grok-4.6').getAttribute('data-agent-provider'))
+    expect(screen.getByTestId('agent-model-grok-4.7').getAttribute('data-agent-provider'))
       .toBe('openrouter');
     const providerGroups = Array.from(agentPanel.querySelectorAll('[data-agent-provider-group]'));
     expect(providerGroups.map(group => (

@@ -93,7 +93,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
     ? t('model.codexSubscription.suffix')
     : autoUsesOpenAIApi
       ? t('model.openaiApiBadge')
-      : autoModel?.id === 'grok-4.6' ? t('model.grokApiBadge') : '';
+      : autoModel?.id === 'grok-4.7' ? t('model.grokApiBadge') : '';
   const autoLabel = autoModel
     ? `Auto · ${t(autoModel.nameKey as Parameters<typeof t>[0])}${autoProviderSuffix ? ` · ${autoProviderSuffix}` : ''}`
     : 'Auto';
@@ -105,7 +105,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
     : value === 'auto'
     ? autoLabel
     : selected
-      ? `${t(selected.nameKey as Parameters<typeof t>[0])}${isOpenAIAgentModelId(selected.id) ? ` · ${t('model.openaiApiBadge')}` : selected.id === 'grok-4.6' ? ` · ${t('model.grokApiBadge')}` : ''}`
+      ? `${t(selected.nameKey as Parameters<typeof t>[0])}${isOpenAIAgentModelId(selected.id) ? ` · ${t('model.openaiApiBadge')}` : selected.id === 'grok-4.7' ? ` · ${t('model.grokApiBadge')}` : ''}`
       : value;
 
   useEffect(() => {
@@ -264,7 +264,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
     .filter(model => !isOpenAIAgentModelId(model.id))
     .map(model => ({
       id: model.id as AgentModelPreference,
-      name: model.id === 'grok-4.6'
+      name: model.id === 'grok-4.7'
         ? `${t(model.nameKey as Parameters<typeof t>[0])} · ${t('model.grokApiBadge')}`
         : t(model.nameKey as Parameters<typeof t>[0]),
       desc: t(model.descKey as Parameters<typeof t>[0]),
@@ -447,7 +447,7 @@ export default function AgentModelChip({ value, onChange, disabled = false, vari
                           ? 'grok-subscription'
                           : isOpenAIAgentModelId(model.id) || model.id === 'auto'
                           ? 'openai'
-                          : model.id === 'grok-4.6'
+                          : model.id === 'grok-4.7'
                           ? 'openrouter'
                           : undefined}
                       >

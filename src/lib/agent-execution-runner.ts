@@ -10,7 +10,6 @@ import { getSupabaseAdmin } from './supabase/service';
 import { recordAgentTokenUsage, deductWebSearchCalls } from './billing/credits';
 import { billingAttributionFromRunMetadata, enterBillingAttribution } from './billing/attribution';
 import {
-  getAgentApiFallbackModelId,
   normalizeRequestedAgentModelPreference,
   resolveAgentModelSpec,
   resolveAgentModelSpecForUser,
@@ -576,10 +575,13 @@ export async function runAgentExecutionAttempt(
         console.error('[agent-execution] composition scaffold unavailable; continuing without it:', error);
       }
     }
-    const latestRequestedProviderAttempt = typedPreviousAttempts
+    const requestedProviderAttempts = requestedModel.provider === 'grok-subscription'
+      ? typedPreviousAttempts.filter(item => item.metadata?.provider === 'grok-subscription')
+      : typedPreviousAttempts;
+    const latestRequestedProviderAttempt = requestedProviderAttempts
       .find(item => item.metadata?.model === requestedModel.id);
     const requestedProviderFailureCount = countConsecutiveRetryableProviderFailures(
-      typedPreviousAttempts,
+      requestedProviderAttempts,
       requestedModel.id,
     );
     const previousProviderFailover = typedPreviousAttempts.some(item => {
@@ -649,10 +651,9 @@ export async function runAgentExecutionAttempt(
       MAX_SAME_PROVIDER_ATTEMPTS,
       requestedProviderFailureCount + 1,
     );
-    const fallbackAgentModel = getAgentApiFallbackModelId(requestedModel.id);
-    const effectiveAgentModel = providerFailover ? fallbackAgentModel : requestedAgentModel;
+    const effectiveAgentModel = providerFailover ? requestedModel.id : requestedAgentModel;
     const resolvedModel = providerFailover
-      ? resolveAgentModelSpec(fallbackAgentModel, undefined, failoverProvider)
+      ? resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)
       : requestedModel;
     const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
     const continuation = claim.attempt_no > 1;

@@ -42,7 +42,7 @@ estimated API provider cost.
 Agent fallback follows the same fail-closed principle at the Makaron execution
 boundary: `grok-subscription` may change to the existing OpenRouter Grok 4.6 API
 route only before any visible text, delivered artifact, or committed tool call.
-The base `grok-4.6` preference selects the OpenRouter API. The explicit
+The base `grok-4.7` preference selects the OpenRouter API. The explicit
 personal-plan preference is `grok-4.7-grok-subscription`. Older Grok 4.5 and
 4.6 personal-plan preferences resolve to the Grok 4.7 plan in Makaron.
 Deploy the relay first during rollout so it can accept both Grok 4.6 and

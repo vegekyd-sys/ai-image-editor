@@ -855,9 +855,9 @@ try {
         'auto',
         ...appModels.filter(id => id.startsWith('gpt-')),
         ...subscriptionModels,
-        'grok-4.6',
+        'grok-4.7',
         ...grokSubscriptionModel,
-        ...appModels.filter(id => !id.startsWith('gpt-') && id !== 'grok-4.6'),
+        ...appModels.filter(id => !id.startsWith('gpt-') && id !== 'grok-4.7'),
       ],
       'CLI Agent LLM allowlist must stay in sync with the app catalog',
     );
@@ -937,7 +937,7 @@ try {
     assert.equal(runRequest?.body?.videoModel, undefined);
   }
 
-  for (const route of ['grok-4.7-grok-subscription', 'grok-4.6-grok-subscription']) {
+  for (const route of ['grok-4.7', 'grok-4.6', 'grok-4.7-grok-subscription', 'grok-4.6-grok-subscription']) {
     const requestStart = requests.length;
     const result = await expectSuccess([
       'chat', '--project', 'project-models-1', '--agent-model', route,
