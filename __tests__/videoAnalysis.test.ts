@@ -1,11 +1,18 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { deductByTokens, requireCredits } from '@/lib/billing/credits';
 import { analyzeVideoWithProvider } from '@/lib/video-analysis';
 import { getVideoAnalysisDefaultRate } from '@/lib/billing/video-analysis-rate';
+import { analyzeVideo } from '@/lib/skills/analyze-video';
 import { mp4Fixture } from './helpers/mp4Fixture';
 
 const files = vi.hoisted(() => ({ upload: vi.fn(), get: vi.fn(), delete: vi.fn() }));
 vi.mock('@google/genai', () => ({ GoogleGenAI: class { files = files; } }));
+vi.mock('@/lib/billing/credits', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/billing/credits')>(),
+  requireCredits: vi.fn(),
+  deductByTokens: vi.fn(),
+}));
 const success = {
   candidates: [{ finishReason: 'STOP', content: { parts: [{ text: 'Private thinking', thought: true }, { text: 'A person films a street.' }] } }],
   usageMetadata: { promptTokenCount: 5000, candidatesTokenCount: 100, thoughtsTokenCount: 40, cachedContentTokenCount: 2000 },
@@ -19,6 +26,39 @@ function setup(mode = 'static') {
   return fetchMock;
 }
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
+
+describe('video analysis credit admission', () => {
+  it('rejects a zero balance before downloading the video or calling Gemini', async () => {
+    const fetchMock = setup();
+    vi.mocked(requireCredits).mockResolvedValueOnce({
+      ok: false, balance: 0, response: new Response(null, { status: 402 }),
+    });
+
+    const result = await analyzeVideo({ videoUrl: 'https://example.com/source.mp4', userId: 'user-1' });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ success: false, message: expect.stringContaining('Insufficient credits') });
+    expect(requireCredits).toHaveBeenCalledWith('user-1', 1);
+    expect(deductByTokens).not.toHaveBeenCalled();
+  });
+
+  it('settles actual token usage for an admitted analysis', async () => {
+    const fetchMock = setup();
+    vi.mocked(requireCredits).mockResolvedValueOnce({ ok: true, balance: 1 });
+    vi.mocked(deductByTokens).mockResolvedValueOnce({ charged: 1, remaining: 0 });
+    fetchMock.mockResolvedValueOnce(new Response(mp4Fixture()))
+      .mockResolvedValueOnce(Response.json(success));
+
+    const result = await analyzeVideo({ videoUrl: 'https://example.com/source.mp4', userId: 'user-1' });
+
+    expect(result).toMatchObject({ success: true, analysis: 'A person films a street.' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(deductByTokens).toHaveBeenCalledExactlyOnceWith(
+      'user-1', 'analyze_video', 'gemini-3.8-flash', 3000, 140,
+      expect.any(Number), undefined, { cacheRead: 2000, cacheWrite: 0 },
+    );
+  });
+});
 
 describe('video analysis provider contract', () => {
   it('supplies real fractional duration to analysis instead of trusting summary timestamps', async () => {
