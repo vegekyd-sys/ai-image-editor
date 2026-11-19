@@ -10,6 +10,7 @@ import { formatAspectRatio } from '@/lib/media-aspect';
 import { validateDesign } from '@/lib/design-harness';
 import { normalizeCompositionAnimation } from '@/lib/composition-duration';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from '@/lib/media-markers';
+import { resolveCompositionAudioProps } from '@/lib/audio-reference-resolver';
 import { remotionFontWarningText } from '@/lib/remotion-font-diagnostics';
 
 // Run the actual tool factory and guard, isolating database writes and unrelated
@@ -39,6 +40,7 @@ function harness(dimensions = [[1280, 720], [1280, 720]]) {
     tool: (value: unknown) => value, ctx, formatAspectRatio, validateDesign,
     require: createRequire(import.meta.url), sharp: {}, setTimeout, clearTimeout,
     mergePatchProps, validatePrimaryVideoFraming, normalizeCompositionAnimation, resolveMediaMarkersInString, resolveMediaMarkersInValue,
+    resolveCompositionAudioProps,
     refreshSnapshotUrls: vi.fn(), getStudioRunCheckpoint: async () => null,
     studioCompositionPromiseError: () => null, persistCompositionDraft: persist,
     remotionFontWarningText,
