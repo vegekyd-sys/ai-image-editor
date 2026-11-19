@@ -37,6 +37,15 @@ describe('agent recovery context', () => {
     expect(context).toContain('preview_frame');
   });
 
+  it('directs a resumed turn to reuse the existing export and audio', () => {
+    const context = buildAgentRecoveryContext('继续', {
+      terminal: { recoverable: true, checkpoint: { exportJobId: 'job', exportStatus: 'completed' } },
+    });
+    expect(context).toContain('existing MP4 export job: job (last verified status: completed)');
+    expect(context).toContain('do not regenerate its source audio');
+    expect(context).not.toContain('Preview and publish');
+  });
+
   it('does not inject a stale checkpoint into an unrelated new request', () => {
     expect(buildAgentRecoveryContext('换成黑白风格', metadata)).toBe('');
   });

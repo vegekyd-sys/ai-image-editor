@@ -21,6 +21,7 @@ import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
 import { formatVideoMediaSpec } from './media-aspect';
 import { loadCompositionDraft } from './composition-draft';
+import { loadInterruptedAgentCheckpoint } from './agent-interruption-checkpoint';
 import { resolveExplicitTurnMediaIndices } from './media-provenance';
 import { formatSourceRangeHint, sourceRangeFromVideoMeta } from './media-source-range';
 import { WorkspaceStudioRunStore } from './studio-run';
@@ -348,14 +349,17 @@ function mergeAudioAttachments(
   return merged;
 }
 
+function isAgentContinuationRequest(userMessage: string): boolean {
+  return /^(?:请)?\s*(?:(?:继续|接着|恢复|重试|续上)(?:\s|$|[，。！？,.!?]|做|改|完成|刚才|之前|前面|上次|原来|原先|此前)|(?:continue|resume|retry)\b)/i.test(userMessage.trim());
+}
+
 export function buildAgentRecoveryContext(
   userMessage: string,
   metadata: Record<string, unknown> | null | undefined,
 ): string {
   const terminal = metadata?.terminal as Record<string, unknown> | undefined;
   const checkpoint = terminal?.checkpoint as Record<string, unknown> | undefined;
-  const resumeIntent = /^(?:请)?\s*(?:(?:继续|接着|恢复|重试|续上)(?:\s|$|[，。！？,.!?]|做|改|完成|刚才|之前|前面|上次|原来|原先|此前)|(?:continue|resume|retry)\b)/i.test(userMessage.trim());
-  if (!resumeIntent || terminal?.recoverable !== true || (!checkpoint?.draftPath && !checkpoint?.studioRunId)) return '';
+  if (!isAgentContinuationRequest(userMessage) || terminal?.recoverable !== true || (!checkpoint?.draftPath && !checkpoint?.studioRunId && !checkpoint?.exportJobId)) return '';
   const draftContext = checkpoint.draftPath
     ? `\ndraft path: ${String(checkpoint.draftPath)}${checkpoint.previewUrl ? `\nlast preview: ${String(checkpoint.previewUrl)}` : ''}`
     : '';
@@ -365,10 +369,15 @@ export function buildAgentRecoveryContext(
   const streamedCodeContext = checkpoint.streamedCodePath
     ? `\npartial streamed code: ${String(checkpoint.streamedCodePath)} (${Number(checkpoint.streamedCodeChars) || 0} chars)`
     : '';
-  const nextAction = checkpoint.studioRunId
+  const exportContext = checkpoint.exportJobId
+    ? `\nexisting MP4 export job: ${String(checkpoint.exportJobId)}${checkpoint.exportStatus ? ` (last verified status: ${String(checkpoint.exportStatus)})` : ''}. Use the existing project's delivery and its current status. Do not create another export for the same draft and do not regenerate its source audio.`
+    : '';
+  const nextAction = checkpoint.exportJobId
+    ? 'Continue delivery from the existing export and give the user a concise final status based on the available results.'
+    : checkpoint.studioRunId
     ? 'Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage. Do not reread skill, prompt, director, component-library, or reference files. In Composition, write numbered source files under <project-id>/drafts/composition-parts and salvage complete definitions from any partial stream. The workspace automatically assembles and autosaves after each write; continue until write_file reports compositionWorkspace.status="ready", then use its designPath directly. Do not restart a monolithic run_code payload or trim to an aggregate source-size target.'
     : 'Read the draft path and apply the pending modification.';
-  return `[Recoverable Agent Checkpoint]\nThe previous run stopped before completion, but durable work was saved. Resume from this exact checkpoint; do not recreate the work from the original media.${draftContext}${studioContext}${streamedCodeContext}${checkpoint.lastTool ? `\nlast completed tool: ${String(checkpoint.lastTool)}` : ''}\n${nextAction} Preview and publish the final artifact when that was the user's original request.\n\n`;
+  return `[Recoverable Agent Checkpoint]\nThe previous run stopped before completion, but durable work was saved. Resume from this exact checkpoint; do not recreate the work from the original media.${draftContext}${studioContext}${streamedCodeContext}${exportContext}${checkpoint.lastTool ? `\nlast completed tool: ${String(checkpoint.lastTool)}` : ''}\n${nextAction}${checkpoint.exportJobId ? '' : " Preview and publish the final artifact when that was the user's original request."}\n\n`;
 }
 
 export function selectPriorTerminalRun<T extends { id?: string; status?: string }>(
@@ -522,7 +531,14 @@ export async function buildPromptContext(
   const recoverableMetadata = priorRun?.status === 'failed'
     ? priorRun.metadata as Record<string, unknown> | null | undefined
     : undefined;
-  const recoveryContext = buildAgentRecoveryContext(userMessage, recoverableMetadata);
+  const priorTerminal = recoverableMetadata?.terminal as Record<string, unknown> | undefined;
+  const refreshedCheckpoint = priorRun?.id && priorTerminal?.code === 'execution_repeated_interruptions'
+    && isAgentContinuationRequest(userMessage)
+    ? await loadInterruptedAgentCheckpoint({ supabase, runId: priorRun.id, projectId, userId })
+    : undefined;
+  const recoveryContext = buildAgentRecoveryContext(userMessage, refreshedCheckpoint
+    ? { ...recoverableMetadata, terminal: { ...priorTerminal, checkpoint: refreshedCheckpoint } }
+    : recoverableMetadata);
   const activeAgentRunId = options.executionRunId || options.currentRunId;
   const activeStudioRun = activeAgentRunId
     ? studioRuns.find(run => (

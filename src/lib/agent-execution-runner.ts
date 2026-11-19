@@ -4,7 +4,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { prefetchAgentPrompt, runMakaronAgent, type AgentStreamEvent } from './agent';
 import { AgentDualWriter } from './agentDualWriter';
 import { AgentPerf } from './agent-perf';
-import { buildPromptContext } from './agent-context';
+import { buildAgentRecoveryContext, buildPromptContext } from './agent-context';
+import { loadInterruptedAgentCheckpoint } from './agent-interruption-checkpoint';
 import { isStudioResumeRequest } from './studio-run/resume';
 import { getSupabaseAdmin } from './supabase/service';
 import { recordAgentTokenUsage, deductWebSearchCalls } from './billing/credits';
@@ -530,11 +531,20 @@ export async function runAgentExecutionAttempt(
       terminal_code?: string | null;
       metadata?: Record<string, unknown> | null;
     }>;
-    if (countConsecutiveInterruptedAttempts(typedPreviousAttempts, inputVersionAtAttemptStart)
-      >= MAX_CONSECUTIVE_INTERRUPTED_ATTEMPTS) {
+    const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
+    const continuation = claim.attempt_no > 1;
+    const previousSnapshot = continuation ? await executionStore.latestSnapshot(runId) : undefined;
+    const interruptionCount = countConsecutiveInterruptedAttempts(typedPreviousAttempts, inputVersionAtAttemptStart);
+    const interruptedCheckpoint = interruptionCount > 0
+      ? await loadInterruptedAgentCheckpoint({
+        supabase: admin, runId, projectId: run.project_id, userId: run.user_id, snapshot: previousSnapshot,
+      })
+      : undefined;
+    if (interruptionCount >= MAX_CONSECUTIVE_INTERRUPTED_ATTEMPTS) {
       const terminal = {
         code: 'execution_repeated_interruptions',
         recoverable: true,
+        checkpoint: interruptedCheckpoint,
         message: translate(normalizeLocale(request.locale, 'en'), 'agent.error.repeatedInterruptions'),
       };
       await attemptReady;
@@ -655,15 +665,15 @@ export async function runAgentExecutionAttempt(
     const resolvedModel = providerFailover
       ? resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)
       : requestedModel;
-    const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
-    const continuation = claim.attempt_no > 1;
-    const previousSnapshot = continuation ? await executionStore.latestSnapshot(runId) : undefined;
     const baseAttemptPrompt = continuation
       ? `[System durable continuation] Resume execution ${runId}, attempt ${claim.attempt_no}. ${previousSnapshot?.nextAction || 'Continue the unfinished objective from durable artifacts.'}`
       : (run.objective || claim.objective || run.prompt || 'Continue the requested task.');
     const preflightInstruction = buildRecoverablePreflightInstruction(scaffoldWarning);
     const pendingInputInstruction = formatPendingAgentInputs(pendingInputs);
-    const attemptPrompt = [baseAttemptPrompt, preflightInstruction, pendingInputInstruction]
+    const interruptionContext = interruptedCheckpoint
+      ? buildAgentRecoveryContext('continue', { terminal: { recoverable: true, checkpoint: interruptedCheckpoint } })
+      : '';
+    const attemptPrompt = [baseAttemptPrompt, interruptionContext, preflightInstruction, pendingInputInstruction]
       .filter(Boolean)
       .join('\n\n');
 
