@@ -3,9 +3,11 @@ import { afterAll, describe, expect, it } from 'vitest'
 const previousSecret = process.env.GROK_SUBSCRIPTION_RELAY_SECRET
 const previousOwner = process.env.GROK_SUBSCRIPTION_OWNER_USER_ID
 const previousAllowed = process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS
+const previousBuildVersion = process.env.GROK_BUILD_CLIENT_VERSION
 process.env.GROK_SUBSCRIPTION_RELAY_SECRET = 'relay-secret'
 process.env.GROK_SUBSCRIPTION_OWNER_USER_ID = 'owner-id'
 process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS = 'test-user-id'
+delete process.env.GROK_BUILD_CLIENT_VERSION
 
 const relayModulePath = '../services/grok-subscription-relay/server.mjs?relay-auth-test'
 const {
@@ -22,6 +24,8 @@ afterAll(() => {
   else process.env.GROK_SUBSCRIPTION_OWNER_USER_ID = previousOwner
   if (previousAllowed === undefined) delete process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS
   else process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS = previousAllowed
+  if (previousBuildVersion === undefined) delete process.env.GROK_BUILD_CLIENT_VERSION
+  else process.env.GROK_BUILD_CLIENT_VERSION = previousBuildVersion
 })
 
 function signedRequest(overrides: { userId?: string; signature?: string } = {}) {
@@ -58,7 +62,9 @@ describe('Grok subscription relay boundary', () => {
       'x-xai-token-auth': 'xai-grok-cli',
       'x-grok-model-override': 'grok-4.6',
       'x-grok-client-identifier': 'grok-shell',
+      'x-grok-client-version': '1.0.13',
       'x-grok-client-mode': 'headless',
+      'user-agent': 'grok-shell/1.0.13',
     })
   })
 

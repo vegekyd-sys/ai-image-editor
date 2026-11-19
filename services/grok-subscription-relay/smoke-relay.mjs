@@ -7,7 +7,7 @@ const secret = process.env.GROK_SUBSCRIPTION_RELAY_SECRET?.trim();
 const userId = process.env.GROK_SUBSCRIPTION_OWNER_USER_ID?.trim();
 if (!secret || !userId) throw new Error('relay secret and owner user id are required');
 
-async function signedFetch(method, pathname, body = Buffer.alloc(0)) {
+async function signedFetch(method, pathname, body = Buffer.alloc(0), signal) {
   const timestamp = String(Date.now());
   const requestId = randomUUID();
   const bodyHash = createHash('sha256').update(body).digest('hex');
@@ -23,12 +23,46 @@ async function signedFetch(method, pathname, body = Buffer.alloc(0)) {
       ...(method === 'POST' ? { 'content-type': 'application/json' } : {}),
     },
     ...(method === 'POST' ? { body } : {}),
+    signal,
   });
 }
 
 const preflightBody = Buffer.from('{}');
 const preflight = await signedFetch('POST', '/v1/preflight', preflightBody);
 if (!preflight.ok) throw new Error(`preflight failed (${preflight.status}): ${await preflight.text()}`);
+
+if (process.argv.includes('--chat')) {
+  const expected = 'GROK_46_SUBSCRIPTION_OK';
+  const body = Buffer.from(JSON.stringify({
+    model: 'grok-4.6',
+    stream: true,
+    messages: [{ role: 'user', content: `Reply with exactly ${expected}.` }],
+  }));
+  const response = await signedFetch('POST', '/v1/chat/completions', body, AbortSignal.timeout(30_000));
+  const text = await response.text();
+  if (!response.ok) throw new Error(`chat failed (${response.status}): ${text}`);
+  if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+    throw new Error('chat did not return an event stream');
+  }
+  let reply = '';
+  let finishReason;
+  let model;
+  for (const line of text.split('\n')) {
+    if (!line.startsWith('data:')) continue;
+    const data = line.slice('data:'.length).trim();
+    if (data === '[DONE]') continue;
+    const chunk = JSON.parse(data);
+    const choice = chunk.choices?.[0];
+    reply += choice?.delta?.content ?? '';
+    finishReason = choice?.finish_reason ?? finishReason;
+    model = chunk.model ?? model;
+  }
+  if (reply.trim() !== expected || finishReason !== 'stop') {
+    throw new Error('chat did not complete with the expected response');
+  }
+  process.stdout.write(`upstream_model=${model || 'unreported'}\nreply=${expected}\n`);
+  process.exit(0);
+}
 
 if (process.argv.includes('--usage')) {
   const usageResponse = await signedFetch('GET', '/v1/usage');

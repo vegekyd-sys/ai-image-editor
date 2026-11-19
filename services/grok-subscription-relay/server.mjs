@@ -13,7 +13,7 @@ import { getValidXaiOAuthCredential } from './xai-oauth.mjs';
 const XAI_BASE_URL = process.env.XAI_API_BASE?.trim() || 'https://api.x.ai';
 const GROK_CLI_PROXY_BASE_URL = process.env.GROK_CLI_PROXY_BASE_URL?.trim()
   || 'https://cli-chat-proxy.grok.com';
-const GROK_BUILD_CLIENT_VERSION = process.env.GROK_BUILD_CLIENT_VERSION?.trim() || '1.0.12';
+const GROK_BUILD_CLIENT_VERSION = process.env.GROK_BUILD_CLIENT_VERSION?.trim() || '1.0.13';
 const PORT = Number.parseInt(process.env.PORT || '25985', 10);
 const HOST = process.env.HOST?.trim() || '127.0.0.1';
 const RELAY_SECRET = process.env.GROK_SUBSCRIPTION_RELAY_SECRET?.trim();
