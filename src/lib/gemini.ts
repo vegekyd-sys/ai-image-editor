@@ -1668,17 +1668,22 @@ export async function analyzeVideoContentWithUsage(
   userId?: string,
 ) {
   const { analyzeVideoWithProvider } = await import('./video-analysis');
+  if (!userId) return analyzeVideoWithProvider(videoUrl, question);
+
+  const { deductByTokens, InsufficientCreditsError, requireCredits } = await import('./billing/credits');
+  // The actual token charge can only be calculated after the provider responds.
+  const minimumCredits = 1;
+  const creditCheck = await requireCredits(userId, minimumCredits);
+  if (!creditCheck.ok) throw new InsufficientCreditsError(creditCheck.balance, minimumCredits);
+
   const result = await analyzeVideoWithProvider(videoUrl, question);
-  if (userId) {
-    const { deductByTokens } = await import('./billing/credits');
-    const usage = result.usage;
-    await deductByTokens(
-      userId, 'analyze_video', usage.modelId,
-      usage.inputTokens - usage.cacheReadTokens, usage.outputTokens,
-      result.elapsedMs, undefined,
-      { cacheRead: usage.cacheReadTokens, cacheWrite: 0 },
-    ).catch(error => console.error('[billing] analyze_video deduct error:', error));
-  }
+  const usage = result.usage;
+  await deductByTokens(
+    userId, 'analyze_video', usage.modelId,
+    usage.inputTokens - usage.cacheReadTokens, usage.outputTokens,
+    result.elapsedMs, undefined,
+    { cacheRead: usage.cacheReadTokens, cacheWrite: 0 },
+  ).catch(error => console.error('[billing] analyze_video deduct error:', error));
   return result;
 }
 
