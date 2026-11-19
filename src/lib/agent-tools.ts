@@ -82,6 +82,7 @@ import {
 import { compileSavedCompositionPart } from './composition-workspace-runner';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
 import { isDirectRemotionCompositionSource } from './remotion-code-normalization';
+import { resolveCompositionPatchBase } from './composition-patch-base';
 import {
   getAgentProviderTools,
   type AgentModelRuntime,
@@ -5071,8 +5072,8 @@ function createRunCodeTool(
   return tool({
       description: "Execute JavaScript. Before writing or executing code, read prompts/agent-coding.md once; it returns the full execution, persistence, runtime, and verification contracts. For editable Remotion also read prompts/remotion-composition.md and, for new or major visuals, skills/_shared/remotion-director-contract.md. For file-level MP4 work read skills/video-ffmpeg-lab/SKILL.md. Substantial code: write_code_file then run_code(code_path). Short patches/utilities may use inline code. Use composition for editable work (design is its legacy alias); node for file operations. Pass timeline indices in media_refs and workspace files in workspace_paths. Return one supported result object as documented by the coding guide. Do not fall back to node for imperfect editable previews; repair the saved composition.",
       inputSchema: z.object({
-        code: z.string().optional().describe('Inline executable JavaScript. For a short composition patch, send the patch program here. Its returned code_path, when supplied, identifies the saved composition JSON to patch.'),
-        code_path: z.string().optional().describe('Executable workspace source created by write_code_file. Supply either top-level code_path or inline code. For a natural Remotion source, composition may supply metadata with no composition.code.'),
+        code: z.string().optional().describe('JavaScript code to execute. Required for node, patch, image, and legacy calls. For a first Remotion draft prefer the direct composition input instead.'),
+        code_path: z.string().optional().describe('Workspace code file created by write_code_file. Preferred for substantial normal Agent Run coding; run_code reads and executes the saved source without repeating it in tool history. When inline code is also given, the inline code runs and code_path is the file it works on: a returned patch without its own code_path edits this file, and patching a source file updates the file too.'),
         composition: z.object({
           code: z.string().min(1).optional().describe('Direct Remotion component source. Natural imports/exports are accepted. Omit when code_path supplies the source and this object only supplies metadata.'),
           width: z.number().int().positive(),
@@ -5129,14 +5130,10 @@ function createRunCodeTool(
         message: 'Provide executable code, a code_path, a direct composition payload, or durable composition parts.',
       }),
       execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime, target_aspect_ratio, video_layout }) => {
-        if (code_path && code?.trim()) {
-          return {
-            type: 'text' as const,
-            content: 'run_code requires one executable source. Remove the top-level code_path to execute inline code. For a composition patch, use code that returns type: "patch" and include the saved composition JSON path inside that result, or omit the result path to patch the latest loaded draft. No draft was changed.',
-          };
-        }
         let executableCode = code || '';
-        if (code_path) {
+        // Inline code is what this call asked to run; code_path alone means "run the saved file".
+        // With both, the inline code runs and code_path is the file it works on (e.g. a patch base).
+        if (code_path && !executableCode.trim()) {
           if (!ctx.supabase || !ctx.userId) {
             return { type: 'text' as const, content: 'Workspace not available. Cannot read code_path.' };
           }
@@ -5145,8 +5142,8 @@ function createRunCodeTool(
           if (!executableCode.trim()) {
             return { type: 'text' as const, content: `Code file not found or empty: ${code_path}` };
           }
-          (ctx as any).__lastCodeFilePath = code_path;
         }
+        if (code_path) (ctx as any).__lastCodeFilePath = code_path;
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         let resolvedComposition = composition;
@@ -5432,21 +5429,25 @@ function createRunCodeTool(
             || result.fontSubstitutions !== undefined
           )) {
             let baseDesign = (ctx as any).__lastDesignPayload;
+            // The patch result names its base; otherwise the code_path this run_code call was given.
+            const patchPath = typeof result.code_path === 'string' && result.code_path
+              ? result.code_path
+              : code_path;
+            let patchedSourceFile: string | null = null;
 
-            // code_path: load a different design from workspace as patch base
-            if (result.code_path && typeof result.code_path === 'string') {
+            // code_path: load a saved draft or a Remotion source file from workspace as patch base
+            if (patchPath) {
               try {
-                const file = await workspace.readFile(result.code_path, ctx.supabase, ctx.userId);
+                const file = await workspace.readFile(patchPath, ctx.supabase, ctx.userId);
                 if (!file) {
-                  return { type: 'text' as const, content: `Patch failed: code_path "${result.code_path}" not found. Use read_file to verify the path.` };
+                  return { type: 'text' as const, content: `Patch failed: code_path "${patchPath}" not found. Use read_file to verify the path.` };
                 }
-                const savedDesign = JSON.parse(file.content);
-                if (typeof savedDesign?.code !== 'string' || !savedDesign.code.trim()) {
-                  return { type: 'text' as const, content: `Patch failed: "${result.code_path}" must contain a saved composition JSON object with code. Use the design_path from the latest draft or published snapshot.` };
-                }
-                baseDesign = savedDesign;
-              } catch {
-                return { type: 'text' as const, content: `Patch failed: could not load "${result.code_path}" as saved composition JSON. Use the design_path from the latest draft or published snapshot.` };
+                const base = resolveCompositionPatchBase(patchPath, file.content, (ctx as any).__lastDesignPayload);
+                if ('error' in base) return { type: 'text' as const, content: base.error };
+                baseDesign = base.design;
+                if (base.source === 'code-file') patchedSourceFile = patchPath;
+              } catch (e) {
+                return { type: 'text' as const, content: `Patch failed: could not read "${patchPath}": ${e instanceof Error ? e.message : String(e)}` };
               }
             }
 
@@ -5495,12 +5496,19 @@ function createRunCodeTool(
             if (!ctx.supabase || !ctx.userId) {
               return { type: 'text' as const, content: 'Patch passed validation but cannot be safely autosaved because workspace access is unavailable.' };
             }
+            if (patchedSourceFile && Array.isArray(result.edits) && result.edits.length) {
+              // Keep the source file the single source of truth, so a later run_code({ code_path }) renders the patched code.
+              const saved = await workspace.writeFile(patchedSourceFile, code, ctx.supabase, ctx.userId, 'text/javascript');
+              if (!saved.success) {
+                return { type: 'text' as const, content: `Patch passed validation but could not update ${patchedSourceFile}: ${saved.error || 'unknown error'}. Retry run_code before ending the turn.` };
+              }
+            }
             const autosave = await persistCompositionDraft({
               projectId: ctx.projectId,
               userId: ctx.userId,
               supabase: ctx.supabase,
               design: patched,
-              sourceDesignPath: typeof result.code_path === 'string' ? result.code_path : ctx.currentDesignPath,
+              sourceDesignPath: patchPath || ctx.currentDesignPath,
             });
             if (!autosave.success) {
               return { type: 'text' as const, content: `Patch passed validation but autosave failed after 3 attempts: ${autosave.error}. Retry run_code before ending the turn.` };
@@ -5524,7 +5532,7 @@ function createRunCodeTool(
             }
 
             const draftIdx = drafts.length;
-            const patchSource = result.code_path ? ` from ${result.code_path}` : '';
+            const patchSource = patchPath ? ` from ${patchPath}${patchedSourceFile ? ' (source file updated)' : ''}` : '';
             return { type: 'text' as const, code_path: autosave.path, content: `Patched${patchSource} — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. After QA, use publish_draft({ design_path: "${autosave.path}" }) when the editable composition should appear in the timeline.${remotionFontWarningText(patched)}` };
           }
 
