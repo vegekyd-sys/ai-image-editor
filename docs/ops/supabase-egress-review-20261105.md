@@ -166,3 +166,76 @@
 11-06 p50 回到基线内。失败率上升，但都和缓存无关：10 个 `Remotion render site version mismatch`（9 个是同一用户 18:12–18:15 连续重试）、6 个下载返回 400（返回体是 Supabase 自己的 `NoSuchKey`，11-02 上线前也出现过）、4 个导出素材准备失败。
 
 **结论**：缓存有效，美东暂不需要处理。render site 版本不一致需要单独排查。11-07 用完整一天的数据再复核一次 egress。
+
+## 11. 11-06 全天复核
+
+复核时间：2026-11-07 10:01–10:20 CST，定时任务 `r2-cache-egress-check-20261107`，只读，未改任何线上配置。
+
+**单位说明**：Supabase Usage 接口返回字节数。Usage 页图表显示的是 GiB（标为 GB），第 10 节的数字就是这个口径。下表两种都列；金额和第 10 节的 $137 基线一样按 GiB 口径、只算 Storage 部分计算。
+
+**Supabase egress（组织 Usage 接口 `usage/daily`，按 UTC 日）**
+
+| 日期（UTC） | Cached egress | 未缓存 egress（Storage） | 说明 |
+|---|---:|---:|---|
+| 11-03 | 114.3 GB / 106.4 GiB | 15.3 GB / 14.2 GiB | 上线前 |
+| 11-04 | 105.7 GB / 98.4 GiB | 20.8 GB / 19.4 GiB | 上线前 |
+| 11-05 | 163.3 GB / 152.1 GiB | 47.5 GB / 44.3 GiB | 前 13 小时未上线 |
+| **11-06** | **42.4 GB / 39.5 GiB** | **42.7 GB / 39.8 GiB** | 全天 |
+| 11-07 | 0.26 GB | 0.26 GB | 只有约 2 小时 |
+
+11-06 后半天（UTC 12–24 时）未缓存 egress 从半天的 9.4 GiB 涨到全天 39.8 GiB，原因见下面的「HEAD 扫描」。
+
+**用户实际下载量（CF `httpRequestsAdaptiveGroups`，cdn.makaron.app `/storage/v1/object/public/*`）**
+
+| 日期（UTC） | 请求 | 字节 | 构成 |
+|---|---:|---:|---|
+| 11-05 | 7.6 万 | 166.9 GB | dynamic 152.5 GB（基本是上线前），hit 8.2，miss 3.9，none 2.4 |
+| **11-06** | **7.5 万** | **217.5 GB** | 边缘 hit 146.6 GB，none（Worker 从 R2 直出）51.3 GB，miss 19.6 GB |
+| 11-07 0–2 时 | 163 | 1.3 GB | — |
+
+**金额**（cached $0.03/GB，uncached $0.09/GB）
+
+- 11-06 全天：39.5 × 0.03 + 39.8 × 0.09 ≈ **$4.77/天 ≈ $143/月**。绝对金额与上线前的 $137/月持平，但同期用户下载量是 11-04（102.2 GB）的 2.1 倍。
+- 每 GB 用户下载对应的 egress 费用：11-04 约 $0.046，11-06 约 $0.022，**降约 52%**。按上线前流量折算：约 $137 → $65/月，**约省 $70/月**。比第 10 节半天外推的 73%、$95–100/月 低。
+- 扣掉下面那次一次性 HEAD 扫描（约 21.2 GiB 未缓存，约 $1.9）：约 $0.013/GB，**降约 71%**，约省 $97/月，和第 10 节一致。
+
+**疑点结论：Supabase 计费比 CF 边缘 MISS 多，主因是 Worker 补 R2 拉整个文件；11-06 后半天还叠加了一次 HEAD 扫描触发的批量补缓存。**
+
+Supabase `edge_logs` 11-06 UTC 全天，公开对象（字节为 Content-Length 合计）：
+
+| 类别 | Supabase CDN | 请求 | 路径 | Content-Length |
+|---|---|---:|---:|---:|
+| Worker 补缓存（`r2c=`，整文件） | HIT | 2,273 | 2,268 | 33.4 GB |
+| Worker 补缓存（`r2c=`，整文件） | MISS | 907 | 907 | 24.1 GB |
+| 透传 GET | MISS | 2,577 | 2,418 | 26.7 GB |
+| 透传 GET | HIT | 16,690 | 693 | 11.4 GB |
+| 透传 HEAD（无正文） | DYNAMIC | 1,007 | 966 | — |
+| 复核（`bytes=0-0`） | HIT/MISS | 2,294 | — | ≈0 |
+
+- **补缓存约 57.4 GB，约占 11-06 计费（约 86.7 GB）的 66%**，和第 10 节的半天结论（65%）一致。仍然没有重复补缓存：3,180 次对应 3,175 个路径。
+- **新发现：HEAD 扫描放大。** 11-06 21:10–21:15 UTC（11-07 05:10 CST），一个 UA 为 `node` 的客户端（经 CF 新加坡出口）在 5 分钟内对 **759 个不同的公开媒体对象发了 HEAD**，涉及多个用户的 videos/uploads/workspace、`geelark/` 等路径。Worker 的 Tier 3 逻辑对透传的 HEAD 也会触发 `fill()`（`worker.mjs` 约 383–392 行：HEAD 透传返回 200 + content-length，满足补缓存条件），于是 5 分钟内补了 **765 个整文件，共 22.8 GB**，在 Supabase CDN 上全是 MISS，按 uncached 计费，约 $2.0。客户端只收到约 0.04 GB 的响应头。11-05 21:00 UTC 也有一次同样指纹的扫描（229 个路径）。发起方未能定位：查过 Claude/Codex 会话日志、scheduled-tasks、Codex automations、LaunchAgents 和 vercel.json 里的 cron，都没有匹配。
+  - 这批文件进了 R2，所以 R2 从 34.9 GB 涨到 69.8 GB。以后同样的 HEAD 会命中 R2 的 `head()`，不再回源。如果扫描每天都扫到新的冷文件，或者 30 天过期后再扫，就会再次放大。
+- **未缓存 egress 不降**：11-06 未缓存约 42.7 GB，约 24.1 来自补缓存 MISS（其中 22.8 来自 HEAD 扫描），其余来自透传 MISS，也就是新文件的第一次读取。扣掉 HEAD 扫描后约 20 GB/天，和上线前（15–21 GB/天）同级，符合第 10 节「结构性」的判断。
+- **候选③直连：排除。** 11-06 全天不经 Cloudflare 访问 supabase.co Storage 的 GET 只有 323 次、约 6 MB；cdn.makaron.app 非 Worker 路径（如 `/render/image`）约 0.17 GB。
+- **206 修复前后（修复时间 15:48 UTC）**：修复前 Worker 直出（`none`）是 206 12,310 次 / 200 0 次；修复后是 200 1,088 次（5.1 GB）/ 206 1,138 次（真实 Range 请求）。不带 Range 的请求已经改回 200。修复前后的请求量受时段影响（修复后是亚洲夜间），看不出重试放大；和 incident 文档一致，206 重试对 egress 的影响可以忽略。
+- Worker 子请求字节：`workersSubrequestsAdaptiveGroups` 用当前 token 查不到字节字段，只拿到调用数（11-06 调用 7.47 万次、子请求 2.64 万次）。回源字节以 Supabase `edge_logs` 为准。
+
+**R2**：`makaron-cdn-media` 共 7,677 个对象、69.8 GB（11-06 为 4,738 个、34.9 GB，增量主要来自 HEAD 扫描）。存储费约 $1.05/月，扣 10 GB 免费额度约 $0.90/月。
+
+**缓存与 206**：`c07.jpg` 不带 Range 连续 curl 3 次：HTTP 200 / 200 / 200，`x-makaron-cache` = HIT-R2 / HIT-EDGE / HIT-EDGE，content-length 325051，没有 content-range。正常。
+
+**美东 Lambda 导出**（`lambdaWallMs / duration_seconds`，completed，按 CST 日）
+
+| 日期 | 完成 | 失败 | p25 / p50 / p75（ms） |
+|---|---:|---:|---|
+| 11-06 | 195 | 23 | 574 / 693 / 942 |
+| 11-07（到 10:15） | 28 | 1 | 607 / 823 / 1205（样本少） |
+
+11-06 p50 在基线 673–777ms 内。失败 23 个（10.5%），都和缓存无关：10 个 render site version mismatch、7 个导出素材准备失败（Preview 渲染帧失败）、6 个下载返回 400（`NoSuchKey`）。**美东暂不需要处理**，11-07 样本还少，继续观察。
+
+**结论与待决定**
+
+1. 同等流量下 egress 降约 52%（约省 $70/月）；扣掉那次一次性 HEAD 扫描约降 71%（约省 $97/月）。缓存有效。
+2. 建议修 Worker：透传的 HEAD 不触发 `fill()`，或者 HEAD 未命中时只用 R2/边缘结果、不补缓存。改动很小，但要改线上 Worker，需要用户批准。
+3. 需要用户确认：每天约 05:00–05:15 CST 用 Node 批量 HEAD 公开媒体的是哪个脚本或服务（UA `node`，经 CF 新加坡出口）。
+4. render site version mismatch 仍需要单独排查。
