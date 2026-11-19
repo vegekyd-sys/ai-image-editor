@@ -32,3 +32,24 @@ export function resolveAudioRefs(
   }
   return { audioUrls }
 }
+
+/** Bind exact composition prop markers while their turn's Audio Index is available. */
+export function resolveCompositionAudioProps(
+  props: unknown,
+  attachments: ResolvableAudioReference[] | undefined,
+): unknown {
+  if (!attachments?.length) return props
+  if (typeof props === 'string') {
+    const label = /^<<<(audio_\d+)>>>$/i.exec(props)?.[1]
+    if (!label) return props
+    const { audioUrls: [url] } = resolveAudioRefs(attachments, [label])
+    return url && /^https?:\/\//i.test(url) ? url : props
+  }
+  if (Array.isArray(props)) return props.map(value => resolveCompositionAudioProps(value, attachments))
+  if (props && typeof props === 'object') {
+    return Object.fromEntries(
+      Object.entries(props).map(([key, value]) => [key, resolveCompositionAudioProps(value, attachments)]),
+    )
+  }
+  return props
+}

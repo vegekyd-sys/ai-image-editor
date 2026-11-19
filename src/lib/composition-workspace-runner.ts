@@ -15,6 +15,7 @@ import { normalizeCompositionAnimation } from './composition-duration';
 import { validateDesignReport, type DesignResult } from './design-harness';
 import { remotionFontWarningText } from './remotion-font-diagnostics';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
+import { resolveCompositionAudioProps, type ResolvableAudioReference } from './audio-reference-resolver';
 import * as workspace from './workspace';
 
 const WORKSPACE_STATE_VERSION = '1.0' as const;
@@ -210,6 +211,7 @@ export async function compileSavedCompositionPart(input: {
   workspaceId: string;
   partPath: string;
   snapshotImages: string[];
+  audioAttachments?: ResolvableAudioReference[];
   metadata?: CompositionWorkspaceMetadata;
 }): Promise<CompositionWorkspaceCompileResult> {
   const prefix = compositionPartsPrefix(input.projectId);
@@ -229,7 +231,13 @@ export async function compileSavedCompositionPart(input: {
     workspaceId: input.workspaceId,
     partPaths,
     metadata: input.metadata
-      ? { ...previousMetadata, ...input.metadata }
+      ? {
+        ...previousMetadata,
+        ...input.metadata,
+        ...(input.metadata.props !== undefined ? {
+          props: resolveCompositionAudioProps(input.metadata.props, input.audioAttachments) as Record<string, unknown>,
+        } : {}),
+      }
       : previousMetadata,
     updatedAt: new Date().toISOString(),
   };
