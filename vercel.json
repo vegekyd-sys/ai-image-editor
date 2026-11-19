@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "codex/remotion-export-probe-fallback": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/agent-executions",
