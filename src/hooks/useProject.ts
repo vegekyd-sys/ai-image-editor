@@ -28,6 +28,31 @@ interface LoadedProject {
 
 const MAX_UPLOAD_ATTEMPTS = 3
 
+type ProjectReadResult = { status: number; error: { code?: string; message: string } | null }
+
+async function readProjectResource<T extends ProjectReadResult>(
+  resource: string,
+  query: () => PromiseLike<T>,
+  signal?: AbortSignal,
+): Promise<T> {
+  signal?.throwIfAborted()
+  let result = await query()
+  if (result.error && !signal?.aborted && (
+    result.status >= 500 || result.status === 408 || result.error.code === '57014' ||
+    (result.status === 0 && /fetch|network|load failed/i.test(result.error.message))
+  )) {
+    console.warn('[project-load] retrying read', { resource, status: result.status, code: result.error.code })
+    await new Promise(resolve => setTimeout(resolve, 300))
+    signal?.throwIfAborted()
+    result = await query()
+  }
+  if (result.error) {
+    const code = result.error.code || result.error.message
+    throw new Error(`Project read failed (${resource}, HTTP ${result.status}): ${code}`, { cause: result.error })
+  }
+  return result
+}
+
 export function useProject(projectId: string, userId: string) {
   const supabaseRef = useRef<SupabaseClient | null>(null)
   const uploadAttemptsRef = useRef<Map<string, number>>(new Map())
@@ -48,19 +73,18 @@ export function useProject(projectId: string, userId: string) {
       if (options) query.abortSignal(options.signal)
       return query
     }
+    function requiredRead<T extends ProjectReadResult>(resource: string, query: () => PromiseLike<T>) {
+      return readProjectResource(resource, query, options?.signal)
+    }
     const [snapshotsRes, messagesRes, projectRes, agentMediaEventsRes, musicRes] = await Promise.all([
-      cancellable(supabase.from('snapshots').select('*').eq('project_id', projectId).order('sort_order', { ascending: true })),
-      cancellable(supabase.from('messages').select('*').eq('project_id', projectId).order('created_at', { ascending: true })),
-      cancellable(supabase.from('projects').select('title, timeline_version, user_id, is_public').eq('id', projectId)).maybeSingle(),
+      requiredRead('snapshots', () => cancellable(supabase.from('snapshots').select('*').eq('project_id', projectId).order('sort_order', { ascending: true }))),
+      requiredRead('messages', () => cancellable(supabase.from('messages').select('*').eq('project_id', projectId).order('created_at', { ascending: true }))),
+      requiredRead('projects', () => cancellable(supabase.from('projects').select('title, timeline_version, user_id, is_public').eq('id', projectId)).maybeSingle()),
       cancellable(supabase.from('agent_events').select('type, data, created_at, seq, run_id').eq('project_id', projectId)
         .in('type', ['preview_frame_captured', 'source', 'tool_call', 'image']).order('created_at', { ascending: true })),
       cancellable(supabase.from('project_music').select('suno_task_id, track_index, audio_url, duration, title, tags, status')
         .eq('project_id', projectId).order('created_at', { ascending: true })),
     ])
-
-    if (projectRes.error) throw projectRes.error
-    if (snapshotsRes.error) throw snapshotsRes.error
-    if (messagesRes.error) throw messagesRes.error
 
     const timelineVersion: number = (projectRes.data as Record<string, unknown>)?.timeline_version as number ?? 1
 
