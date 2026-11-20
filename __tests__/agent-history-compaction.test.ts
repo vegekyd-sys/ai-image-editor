@@ -179,13 +179,61 @@ describe('automatic conversation compaction', () => {
     expect(ai.generateText.mock.calls.every(([options]) => !options.tools && options.maxRetries === 0)).toBe(true);
   });
 
-  it('recognizes verified content in a cumulative handoff without depending on quote formatting', async () => {
-    ai.generateText.mockReset().mockResolvedValue({ finishReason: 'stop', text: JSON.stringify({
-      ...handoff, evidence: 'a paraphrase of the previous chunk',
-    }) });
+  it('requires evidence from each new chunk even when the prior handoff was verified', async () => {
+    ai.generateText.mockReset()
+      .mockResolvedValueOnce({ finishReason: 'stop', text: JSON.stringify({ ...handoff, evidence: 'card/v3' }) })
+      .mockResolvedValueOnce({ finishReason: 'stop', text: JSON.stringify({ ...handoff, evidence: 'later housekeeping' }) });
     expect(await summarizeHistory({ model: 'dummy', previous: handoff, records: 'later housekeeping',
       recordUsage: () => {} })).toEqual(handoff);
-    expect(ai.generateText).toHaveBeenCalledTimes(1);
+    expect(ai.generateText).toHaveBeenCalledTimes(2);
+  });
+
+  it('splits only the truncated chunk and carries validated progress through both halves', async () => {
+    const first = 'first line ' + 'a'.repeat(239_980);
+    const left = 'left marker ' + 'b'.repeat(30_000);
+    const right = 'right marker ' + 'c'.repeat(30_000);
+    const finish = (evidence: string) => ({ finishReason: 'stop', text: JSON.stringify({ ...handoff, evidence }) });
+    ai.generateText.mockReset()
+      .mockResolvedValueOnce(finish('first line'))
+      .mockResolvedValueOnce({ finishReason: 'length', text: '{' })
+      .mockResolvedValueOnce(finish('left marker'))
+      .mockResolvedValueOnce(finish('right marker'));
+    await expect(summarizeHistory({ model: 'dummy', records: [first, left, right].join('\n'), recordUsage: () => {} }))
+      .resolves.toEqual(handoff);
+    const prompts = ai.generateText.mock.calls.map(([options]) => options.prompt as string);
+    expect(prompts.map(prompt => prompt.includes('first line'))).toEqual([true, false, false, false]);
+    expect(prompts.map(prompt => prompt.includes('let the clock sing twice'))).toEqual([false, true, true, true]);
+    expect(prompts.slice(2).map(prompt => prompt.split('\nRecords:\n')[1].trimEnd())).toEqual([left, right]);
+  });
+
+  it('rejects a grounded stale receipt and carries the explicit replacement forward', async () => {
+    const finish = (receipt: string, evidence: string) => ({
+      finishReason: 'stop', text: JSON.stringify({ ...handoff, artifacts: [receipt], evidence }),
+    });
+    ai.generateText.mockReset()
+      .mockResolvedValueOnce(finish('RCP-508', 'Correction'))
+      .mockResolvedValueOnce(finish('RCP-971', 'Correction'));
+    const updated = await summarizeHistory({ model: 'dummy', records: 'Correction: the receipt is now RCP-971.',
+      previous: { ...handoff, currentReceipt: 'RCP-508' }, recordUsage: () => {} });
+    expect(updated.currentReceipt).toBe('RCP-971');
+    expect(updated.artifacts).toEqual(['RCP-971']);
+    expect(ai.generateText).toHaveBeenCalledTimes(2);
+
+    ai.generateText.mockReset().mockResolvedValue(finish('RCP-508', 'later housekeeping'));
+    await expect(summarizeHistory({ model: 'dummy', records: 'later housekeeping', previous: updated, recordUsage: () => {} }))
+      .rejects.toMatchObject({ stage: 'validation', reason: 'missing_current_receipt', diagnostics: { chunk: '1', attempt: 2 } });
+  });
+
+  it('classifies summary transport and snapshot failures without including raw error messages', async () => {
+    ai.generateText.mockReset().mockRejectedValue(Object.assign(new Error('private source'), { statusCode: 502 }));
+    await expect(summarizeHistory({ model: 'dummy', records: 'fixture', recordUsage: () => {} }))
+      .rejects.toMatchObject({ stage: 'summary', reason: 'provider_error', diagnostics: { chunk: '1', statusCode: 502 } });
+
+    const { session, persist } = setup(batch('old', 18_000));
+    persist.mockRejectedValueOnce(new Error('private snapshot'));
+    await expect(session.prepare([]))
+      .rejects.toMatchObject({ stage: 'persist', reason: 'snapshot_save_failed', diagnostics: { historyCount: 2 } });
+    expect(session.hasHandoff).toBe(false);
   });
 
   it('consumes every chunk including the ending before publishing a handoff', async () => {
