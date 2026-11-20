@@ -139,6 +139,12 @@ export class CompactionError extends Error {
   constructor() { super('Could not prepare a complete, budgeted history handoff. Original history retained.'); }
 }
 
+// Only these summary outcomes can defer proactive compaction. Provider errors,
+// refusals and persistence failures still follow their existing error paths.
+class IncompleteSummaryError extends CompactionError {
+  constructor(readonly reason: 'length' | 'invalid_summary') { super(); }
+}
+
 function validateSummary(text: string, context: string): Handoff | undefined {
   let json: unknown;
   try { json = JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')); }
@@ -189,11 +195,12 @@ export async function summarizeHistory(input: {
         abortSignal: input.signal, providerOptions: input.providerOptions,
       });
       input.recordUsage(result);
+      if (result.finishReason === 'length') throw new IncompleteSummaryError('length');
       if (result.finishReason !== 'stop') throw new CompactionError();
       validated = validateSummary(result.text, prompt);
       if (!validated) console.warn('[agent-compaction] invalid summary', { attempt: attempt + 1, sourceChars: source.length });
     }
-    if (!validated) throw new CompactionError();
+    if (!validated) throw new IncompleteSummaryError('invalid_summary');
     handoff = validated;
     start = end;
   }
@@ -212,6 +219,7 @@ export function createHistoryCompactor(input: {
   let { state, remaining } = restored;
   let liveCount = 0;
   let force = input.force;
+  let deferProactiveSummary = false;
   let live: ModelMessage[] = [];
   const reader = tool({
     description: 'Recover exact recorded creative copy, prior instructions or tool receipts from this conversation. Search by literal text, path or tool call ID, then page a matching record.',
@@ -292,9 +300,8 @@ export function createHistoryCompactor(input: {
     const threshold = input.native ? input.policy.contextWindowTokens : Math.min(input.policy.providerCompactAtTokens, input.policy.contextWindowTokens);
     const forced = force;
     const beforeTokens = total(full);
-    if (!force && beforeTokens < threshold) return full;
+    if (!forced && beforeTokens < (deferProactiveSummary ? input.policy.contextWindowTokens : threshold)) return full;
     if (input.fixedTokens + tokens(input.current) >= input.policy.contextWindowTokens) throw new CompactionError();
-    force = false;
 
     // Preserve a recent suffix, aligned before a whole assistant/tool batch.
     // Current user input is never part of the removable prefix.
@@ -323,7 +330,19 @@ export function createHistoryCompactor(input: {
       ...(latestUser && !prefix.includes(latestUser) ? ['Latest user context (retained inline): ' + transcript(latestUser).slice(-8000)] : []),
       ...prefix.map((m, i) => i + ' ' + transcript(m, seenBodies, i)),
     ].join('\n');
-    const handoff = handoffSchema.refine(hasFacts).parse(await input.summarize(records, state?.handoff));
+    let handoff: Handoff;
+    try {
+      handoff = handoffSchema.refine(hasFacts).parse(await input.summarize(records, state?.handoff));
+    } catch (error) {
+      if (!(error instanceof IncompleteSummaryError)) throw error;
+      const canDefer = !forced && beforeTokens < input.policy.contextWindowTokens;
+      console.warn('[agent-compaction] incomplete summary', {
+        reason: error.reason, beforeTokens, window: input.policy.contextWindowTokens, forced, canDefer,
+      });
+      if (!canDefer) throw error;
+      deferProactiveSummary = true;
+      return full;
+    }
     const receipts = [...new Set([...(state?.receipts ?? []), ...receiptLines(prefix)])];
     const prepared = assemble(handoff, receipts, history.slice(historyCut), steps.slice(stepCut));
     const afterTokens = total(prepared);
@@ -349,6 +368,8 @@ export function createHistoryCompactor(input: {
     };
     await input.persist(next);
     console.info('[agent-compaction] saved', { beforeTokens, afterTokens, historyCount, liveMessages: stepCut });
+    force = false;
+    deferProactiveSummary = false;
     state = next;
     remaining = remaining.slice(historyCut);
     liveCount += stepCut;

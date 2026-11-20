@@ -142,6 +142,33 @@ describe('automatic conversation compaction', () => {
     expect(ai.generateText).toHaveBeenCalledTimes(finishReason === 'stop' ? 2 : 1);
   });
 
+  it.each(['length', 'stop'])('retains the original input when proactive summarization is incomplete (%s)', async finishReason => {
+    ai.generateText.mockReset().mockResolvedValue({ finishReason, text: '{}' });
+    const history = batch('old', 18000);
+    const { config, persist } = setup(history);
+    const session = createHistoryCompactor({ ...config, policy: { ...config.policy, contextWindowTokens: 8000 }, summarize: records =>
+      summarizeHistory({ model: 'dummy', records, recordUsage: () => {} }) });
+    expect(await session.prepare([])).toEqual([...history, current]);
+    const calls = ai.generateText.mock.calls.length;
+    const next = batch('next', 10);
+    expect(await session.prepare(next)).toEqual([...history, current, ...next]);
+    expect(ai.generateText.mock.calls).toHaveLength(calls);
+    await expect(session.prepare(batch('large', 16000))).rejects.toThrow();
+    expect(ai.generateText.mock.calls.length).toBeGreaterThan(calls);
+    expect(persist).not.toHaveBeenCalled();
+    expect(session.hasHandoff).toBe(false);
+  });
+
+  it('keeps forced context recovery mandatory after an incomplete summary', async () => {
+    ai.generateText.mockReset().mockResolvedValue({ finishReason: 'length', text: '{}' });
+    const { config, persist } = setup([approved]);
+    const session = createHistoryCompactor({ ...config, force: true, summarize: records =>
+      summarizeHistory({ model: 'dummy', records, recordUsage: () => {} }) });
+    await expect(session.prepare([])).rejects.toThrow();
+    await expect(session.prepare([])).rejects.toThrow();
+    expect(persist).not.toHaveBeenCalled();
+  });
+
   it('accepts a list of literal source quotes and only repairs the invalid text summary', async () => {
     ai.generateText.mockReset()
       .mockResolvedValueOnce({ finishReason: 'stop', text: JSON.stringify({ ...handoff, constraints: ['invented'], evidence: ['cobalt', 'invented'] }) })
