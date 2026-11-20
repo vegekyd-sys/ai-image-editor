@@ -14,7 +14,7 @@ import {
   renderDesignVideo,
 } from '@/lib/remotion-server'
 import { resolveVideoUrlsInCode } from '@/lib/video-url-resolver'
-import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
+import { resolveAudioUrlsInCode, resolveExportAudioProp } from '@/lib/audio-url-resolver'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import type { RemotionLambdaOutputDestination } from '@/lib/remotion-lambda-renderer'
 import { normalizeCompositionAnimation } from '@/lib/composition-duration'
@@ -736,6 +736,7 @@ async function loadJobDesign(job: RemotionExportJob, supabase: SupabaseClient): 
 async function normalizeDesignForServer(
   design: DesignPayload,
   projectId: string,
+  userId: string,
   supabase: SupabaseClient,
 ): Promise<DesignPayload> {
   const videoResolved = await resolveVideoUrlsInCode(design.code, projectId, supabase)
@@ -743,6 +744,7 @@ async function normalizeDesignForServer(
   return {
     ...design,
     code: audioResolved.code,
+    props: await resolveExportAudioProp(design.props, projectId, userId, supabase),
   }
 }
 
@@ -838,7 +840,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
   try {
     const loadStart = Date.now()
     const { design, designPath } = await loadJobDesign(job, admin)
-    const resolvedDesign = await normalizeDesignForServer(design, job.project_id, admin)
+    const resolvedDesign = await normalizeDesignForServer(design, job.project_id, job.user_id, admin)
     stageTimings.resolveDesignMs = Date.now() - loadStart
     // Jobs queued before the source-resolution default may have no profile metadata.
     const renderProfile = job.metadata?.renderProfile === 'source' ? 'source' : 'fast_720p'
