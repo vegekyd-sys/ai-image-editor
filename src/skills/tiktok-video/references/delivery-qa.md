@@ -27,13 +27,17 @@ Before publishing or materializing the editable composition:
    empty frames.
 7. Treat an interactive Player frame as provisional until pinned fonts have
    settled. Use `preview_frame` for composition QA.
-8. Inspect the Composition audio graph: source video layers are explicitly
-   muted, one generated mixed master is audible, and every narrated cue maps to
+8. Inspect the Composition audio graph. In the default VO-plus-BGM route,
+   source video layers are explicitly muted, one generated mixed master is
+   audible, and every narrated cue maps to
    the measured `transcribe_audio` evidence used by its caption and scene.
    Check each cue's actual transcript for a complete ending; an aggregate
    passing score does not excuse a dropped final word or clipped clause.
    A generated narration master with failed or unavailable ASR blocks this gate;
    Script estimates and `explicit-audio-placement` cannot satisfy it.
+   For music-led edits, check the selected track, cue positions, intended source
+   sounds and ending fade against `skills/beat-sync-video/references/timing-and-review.md`.
+   Apply the speech checks to any speech included in the edit.
 9. Confirm the published Composition still owns authored caption typography and
    semantic emphasis. Do not accept a generic ASS/`drawtext` burn-in created
    only because a media-preparation renderer lacked the intended text filter.
@@ -68,8 +72,11 @@ later Agent turn has the final encoded file, run this acceptance:
    job reporting success is not delivery acceptance.
    Extract the final visible frame and the frame half a second before it; reject
    an unfinished closing phrase, CTA, or reveal that simply runs out of frames.
-   Listen for both VO and BGM and reject leaked source audio. Compare the spoken
-   line, visible caption, and linked picture at cue midpoints and boundaries;
+   When using the default soundtrack, listen for both VO and BGM and reject
+   leaked source audio. For a music-led cut, listen for the chosen track,
+   deliberate source sounds and the ending fade, and verify the important
+   visual hits against the encoded audio. If the edit contains speech, compare
+   the spoken line, visible caption, and linked picture at cue midpoints and boundaries;
    the spoken caption follows the actual transcript rather than paraphrasing a
    truncated take.
    Compare the Composition cue data with the encoded frame changes; a second

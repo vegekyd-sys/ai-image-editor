@@ -8,6 +8,7 @@
   {
     "id": "natural-reference-replication",
     "expected": "video-edit",
+    "excludedSkills": ["beat-sync-video"],
     "media": "<<<media_1>>> 12秒参考视频；<<<media_2>>> 替换人物参考图。当前只提供素材元信息用于规划。",
     "prompt": "把这支参考片复刻成新的品牌版本，用参考图替换人物，保留原片镜头顺序、时长、构图、运镜、动作和节拍。"
   },
@@ -22,5 +23,19 @@
     "expected": "explainer-video",
     "media": "No media.",
     "prompt": "给初中生做30秒月相讲解，用同一套真实3D日地月模型，先太空看光照，再从地球看同一颗月球。交付可编辑讲解片。"
+  },
+  {
+    "id": "natural-beat-sync-product",
+    "expected": "tiktok-video",
+    "additionalSkills": ["beat-sync-video"],
+    "media": "<<<media_1>>> 同一咖啡杯侧面实拍；<<<media_2>>> 俯拍手装杯盖；<<<media_3>>> 杯盖扣合的微距实拍。当前只提供素材元信息用于规划。",
+    "prompt": "剪一条15秒抖音带货卡点视频。"
+  },
+  {
+    "id": "natural-beat-sync-uploaded-mp3",
+    "expected": "tiktok-video",
+    "additionalSkills": ["beat-sync-video"],
+    "media": "<<<media_1>>> 工件脱模；<<<media_2>>> 操作员检查工件。\n\n[Audio Index - not Timeline Media]\n<<<audio_1>>> [audio] — 工业鼓点.mp3, 42s, https://example.com/workshop-beat.mp3",
+    "prompt": "用我上传的这首歌剪一条30秒抖音卡点视频。"
   }
 ]

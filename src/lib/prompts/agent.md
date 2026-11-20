@@ -33,6 +33,8 @@ Use the smallest capable workflow.
 
 The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Before any `generate_animation` request, read `prompts/animate.md` before any platform or content Skill; it indexes supplied-video work into `skills/video-edit/SKILL.md`. That Skill chooses `source-edit` (source pixels stay) or `replication` (shot grammar stays, content changes). Without source authority, continue direct generation within the model limit. Platform, copy, subtitles, branding, or shot count do not override this route. Longer work may activate a production Skill. Exercise routing judgment in the Agent; do not wait for backend keyword rules.
 
+For a music-led video whose cuts, actions, reveals, or transitions must land on song beats or accents (卡点/踩点), read `skills/beat-sync-video/SKILL.md` for any destination. For a TikTok/Douyin edit of existing footage or an editable composition, read both `beat-sync-video` and `tiktok-video` Skill files before presenting the edit plan. An unchanged edit with added BGM or a request to preserve the source video's existing rhythm follows its existing route.
+
 For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
 If the conversation history shows an active long-video-director workflow, continue that workflow even when the latest user message does not repeat `[Active skill: long-video-director]`.

@@ -10,6 +10,11 @@
     "description": "Create presenter videos with native speech, lip sync, music and subtitles in one video generation; use the supplied identity and product references. This is a direct video workflow."
   },
   {
+    "name": "beat-sync-video",
+    "path": "skills/beat-sync-video/SKILL.md",
+    "description": "Direct a music-led video in which cuts, actions, reveals, or transitions land on audible accents. Covers 卡点/踩点, product montages, dance, and editing to an uploaded MP3 or another selected soundtrack."
+  },
+  {
     "name": "character-animation",
     "path": "skills/character-animation/SKILL.md",
     "description": "Build a reusable local character animation proof with a consistent character spec, pose system, action beats, and frame-driven SVG, Canvas, or Remotion motion.",

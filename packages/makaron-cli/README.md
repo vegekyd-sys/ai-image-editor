@@ -347,7 +347,7 @@ npx makaron-cli chat --project auto \
   -b "use Seedance Mini at 480p to make a 15s beat-synced video"
 ```
 
-`--audio` accepts repeatable local files or public URLs. Local MP3/WAV files must be 2-15s and <=15MB; reference audio currently works with Seedance video generation.
+`chat --audio` accepts repeatable local MP3/WAV files (at least 2s and up to 15MB) or public audio URLs. Use an attached track as the soundtrack for a beat-synced edit of supplied footage. Video generation models have their own reference-audio duration limits.
 
 `chat` intentionally has no video model or resolution flags. State both in the chat message so the Agent selects a compatible provider and resolution together. Use `video create` only when you explicitly need direct provider controls.
 
