@@ -2,7 +2,8 @@
   "git": {
     "deploymentEnabled": {
       "codex/remotion-bind-audio-index": false,
-      "codex/remotion-export-probe-fallback": false
+      "codex/remotion-export-probe-fallback": false,
+      "codex/soft-compaction-recovery": false
     }
   },
   "crons": [
