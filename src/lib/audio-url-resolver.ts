@@ -48,3 +48,32 @@ export async function resolveAudioUrlsInCode(
 
   return { code: resolved, changed }
 }
+
+/** Repair a project-local audio prop only when the original is missing and its
+ * exact workspace media object exists. Existing drafts are resolved at export. */
+export async function resolveExportAudioProp(
+  props: Record<string, unknown> | undefined,
+  projectId: string,
+  userId: string,
+  supabase: SupabaseClient,
+): Promise<Record<string, unknown> | undefined> {
+  if (typeof props?.audio !== 'string' || !URL.canParse(props.audio)) return props
+  const source = new URL(props.audio)
+  const bucket = supabase.storage.from('images')
+  const root = new URL(bucket.getPublicUrl('').data.publicUrl)
+  if (source.origin !== root.origin && source.origin !== 'https://cdn.makaron.app') return props
+  const prefix = `/storage/v1/object/public/images/${userId}/${projectId}/audio/`
+  if (!source.pathname.startsWith(prefix) || source.search || source.hash || source.username || source.password) return props
+  const filename = source.pathname.slice(prefix.length)
+  // Generated workspace media uses plain filenames. Never interpret a nested or encoded path.
+  if (!/^[\w.-]+\.(wav|mp3|m4a|aac|ogg|flac)$/i.test(filename)) return props
+
+  const original = await bucket.info(`${userId}/${projectId}/audio/${filename}`)
+  if (original.error?.statusCode !== '404' && original.error?.statusCode !== 'NoSuchKey') return props
+
+  const workspaceKey = `${userId}/workspace/${projectId}/media/${filename}`
+  const { data } = await bucket.info(workspaceKey)
+  if (!data?.contentType?.startsWith('audio/')) return props
+  source.pathname = `/storage/v1/object/public/images/${workspaceKey}`
+  return { ...props, audio: source.href }
+}
