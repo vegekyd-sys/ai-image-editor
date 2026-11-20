@@ -23,6 +23,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 ## Router
 
+- For new cuts, actions, or reveals timed to music accents (卡点/踩点), read `skills/beat-sync-video/SKILL.md`. For TikTok/Douyin edits, also read `skills/tiktok-video/SKILL.md`. Requests to add BGM under an unchanged cut or preserve the reference rhythm follow their usual routes.
 - For edits to an existing video, read `skills/video-edit/SKILL.md`. Scope comes before model choice: whole-video content changes remain full-source edits; an explicit interval or resolved scene uses `inspect_retake` → `retake_video`. “Only change the person” restricts content, not time. A new source/scope overrides stale GUI or chat selections.
 - Choose the operation from intent: bounded visual changes → local editing; trim/delete/reorder/speed/crop → timeline/FFmpeg; actual editable layers, captions or fixed overlays → composition; standalone dubbing/music/lip-sync → audio tools; extend → native continuation; full-source restyling/replication → video-edit. Showing layers or integrating an image/logo naturally into a scene is a visual edit, not an implied editable composition.
 - Natural-language edits need no GUI selection. Never silently shorten an unsupported range or source. Judge completion by the actual requested change, preservation and audiovisual continuity in the delivered video, not provider completion.

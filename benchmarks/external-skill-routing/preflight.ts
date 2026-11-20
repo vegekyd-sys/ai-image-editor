@@ -10,6 +10,7 @@ import { createTools } from '../../src/lib/agent-tools';
 import { createAgentModelRuntime, getAgentProviderOptions } from '../../src/lib/agent-model-runtime';
 import { bundleAgentPrompt } from '../../src/lib/agent-prompt-bundles';
 import { buildCatalog, routingFingerprint } from '../../scripts/lib/external-skill-directory';
+import { matchesSkillReads } from '../../scripts/lib/skill-routing-evidence';
 
 const envIndex=process.argv.indexOf('--env');
 if(envIndex>=0)config({path:process.argv[envIndex+1],quiet:true});
@@ -48,8 +49,7 @@ async function main(){
    for await(const part of response.fullStream){if(part.type==='text-delta')text+=part.text;if(part.type==='error')throw part.error;}
    usage=await response.totalUsage;
   }catch(e){error=e instanceof Error?e.message:String(e);for(const [name,value]of Object.entries(process.env))if(value&&/(KEY|TOKEN|PASSWORD|SECRET|URL)/i.test(name))error=error.split(value).join('[redacted]');}
-  const selectedFile=`skills/${scenario.expected}/SKILL.md`;
-  const selected=calls.some(c=>c.name==='read_file'&&c.path===selectedFile&&c.executed);
+  const selected=matchesSkillReads(scenario,calls.filter(c=>c.name==='read_file'&&c.executed).map(c=>c.path));
   const stoppedBeforeProduction=!calls.some(c=>c.blocked);
   const allReadsSucceeded=calls.every(c=>c.name==='read_file'&&c.executed===true&&!c.error);
   const row={id:scenario.id,prompt:scenario.prompt,stopInstruction,expected:scenario.expected,selected,stoppedBeforeProduction,passed:selected&&stoppedBeforeProduction&&allReadsSucceeded&&!error,calls,text,usage,durationMs:Date.now()-start,...(error?{error}: {})};

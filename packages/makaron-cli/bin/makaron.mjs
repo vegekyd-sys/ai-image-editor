@@ -1855,8 +1855,7 @@ function getAudioMimeFromExt(ext) {
   return null;
 }
 
-function validateAudioReferenceFile(audioPath, options = {}) {
-  const maxDuration = options.maxDuration ?? MAX_AUDIO_REFERENCE_DURATION;
+function validateAudioReferenceFile(audioPath, { maxDuration = MAX_AUDIO_REFERENCE_DURATION } = {}) {
   if (!fs.existsSync(audioPath)) {
     return { ok: false, error: `Audio file not found: ${audioPath}` };
   }
@@ -1879,7 +1878,7 @@ function validateAudioReferenceFile(audioPath, options = {}) {
   if (duration < MIN_AUDIO_REFERENCE_DURATION) {
     return { ok: false, error: `Audio too short: ${formatSeconds(duration)}s (min ${MIN_AUDIO_REFERENCE_DURATION}s).` };
   }
-  if (duration > maxDuration + MAX_AUDIO_REFERENCE_DURATION_TOLERANCE) {
+  if (maxDuration != null && duration > maxDuration + MAX_AUDIO_REFERENCE_DURATION_TOLERANCE) {
     return { ok: false, error: `Audio too long: ${formatSeconds(duration)}s (max ${maxDuration}s, with ${MAX_AUDIO_REFERENCE_DURATION_TOLERANCE}s metadata tolerance).` };
   }
   return { ok: true, mime, meta: { duration, fileSizeBytes: stat.size } };
@@ -2773,7 +2772,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     prevalidatedAudioMetas.set(audioUrl, { ...valid, ...probed });
   }
   for (const audioPath of prevalidatedAudioFileList) {
-    const valid = validateAudioReferenceFile(audioPath);
+    // Chat imports a project track. Provider reference limits apply at generation.
+    const valid = validateAudioReferenceFile(audioPath, { maxDuration: null });
     if (!valid.ok) {
       process.stderr.write(`❌ ${valid.error}\n`);
       process.exit(1);

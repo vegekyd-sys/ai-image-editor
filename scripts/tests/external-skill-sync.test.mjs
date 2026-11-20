@@ -8,7 +8,7 @@ import { checkRoutingEvidence } from '../lib/skill-routing-evidence.ts';
 const root = process.cwd();
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(),'makaron-skill-sync-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
-  for(const relative of ['config','src/skills','src/generated','src/lib','packages/makaron-cli','docs/agent-guidance/makaron-cli-entry.zh.md','benchmarks/external-skill-routing']) {
+  for(const relative of ['config','src/skills','src/generated','src/lib','packages/makaron-cli','docs/agent-guidance/makaron-cli-entry.zh.md','benchmarks/external-skill-routing','scripts/lib/skill-routing-evidence.ts']) {
     fs.mkdirSync(path.dirname(path.join(dir,relative)),{recursive:true});fs.cpSync(path.join(root,relative),path.join(dir,relative),{recursive:true});
   }
   return dir;
@@ -48,6 +48,19 @@ test('routing receipt tampering and source drift fail the gate',t=>{
   const dir=fixture(t);const receipt=JSON.parse(fs.readFileSync(path.join(dir,'benchmarks/external-skill-routing/accepted.json'),'utf8'));
   checkRoutingEvidence(dir,receipt);receipt.rows[0].calls.push({name:'generate_animation',executed:true});assert.throws(()=>checkRoutingEvidence(dir,receipt),/unsafe/);
   receipt.rows[0].calls.pop();fs.appendFileSync(path.join(dir,'src/skills/_shared/native-audiovisual.md'),'\nUpdated shared routing rule.\n');assert.throws(()=>checkRoutingEvidence(dir,receipt),/stale/);
+});
+
+test('routing receipts distinguish added beat cuts from preserving reference rhythm', () => {
+  const receipt = JSON.parse(fs.readFileSync(path.join(root, 'benchmarks/external-skill-routing/accepted.json'), 'utf8'));
+  const beatSkill = 'skills/beat-sync-video/SKILL.md';
+  const product = receipt.rows.find(row => row.id === 'natural-beat-sync-product');
+  const productCalls = product.calls;
+  product.calls = product.calls.filter(call => call.path !== beatSkill);
+  assert.throws(() => checkRoutingEvidence(root, receipt), /wrong skills for natural-beat-sync-product/);
+  product.calls = productCalls;
+  const replication = receipt.rows.find(row => row.id === 'natural-reference-replication');
+  replication.calls.push({ name: 'read_file', path: beatSkill, executed: true });
+  assert.throws(() => checkRoutingEvidence(root, receipt), /wrong skills for natural-reference-replication/);
 });
 
 test('macOS Finder metadata does not invalidate source evidence',t=>{

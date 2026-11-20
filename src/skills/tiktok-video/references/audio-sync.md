@@ -15,6 +15,10 @@ contains natural VO plus continuous instrumental BGM, while every source video
 clip is muted. User direction for source sound, silence, music-only, isolated VO,
 or another audio treatment overrides this default.
 
+For music-led beat-sync edits, follow `skills/beat-sync-video/SKILL.md` for
+soundtrack selection and visual cue timing. Apply the Speech Clock to any
+included narration or source speech.
+
 1. Finish the concise Script first. Preserve speech-free beats; VO does not need
    to fill the runtime. Keep the last spoken line comfortably clear of the hard
    soundtrack boundary and leave an intentional BGM-only tail.

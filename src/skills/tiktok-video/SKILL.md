@@ -28,6 +28,7 @@ translation, then captions, B-roll, platform layout, composition, and export in 
 
 ## Read The Conditional References
 
+- For music-timed cuts or actions, read `skills/beat-sync-video/SKILL.md` if needed.
 - Before laying out any text, read
   `skills/tiktok-video/references/platform-layout.md`.
 - If the final piece contains narration or useful source speech, read
@@ -71,6 +72,7 @@ translation, then captions, B-roll, platform layout, composition, and export in 
   another audio treatment, a source-footage TikTok defaults to muted clip audio
   plus one finished soundtrack containing VO and instrumental BGM. This does
   not require wall-to-wall narration; keep useful BGM-led breathing room.
+- A music-led cut follows the beat-sync soundtrack route, with speech if called for.
 
 ## Direct The Footage
 An underspecified TikTok request is an invitation to direct. Inspect the whole
@@ -152,9 +154,7 @@ visible at phone size.
   export dimensions. Keep footage full-bleed unless the concept says otherwise.
 - Keep the result editable and preserve the shared Spoken Caption host,
   micro-cue, safe-placement, and text-integrity contract.
-- Use the final narration-containing audio master and its `transcribe_audio`
-  word timing. Do not invent caption intervals or reuse timestamps from an
-  earlier take.
+- For speech, use the final audio and its measured `transcribe_audio` word timing.
 - Persist the section evidence and its word-timed micro-cue partition as one
   data source, then derive spoken-caption Sequences, word emphasis, and linked
   visual ranges from it. Every measured word belongs to exactly one consecutive
@@ -166,8 +166,7 @@ visible at phone size.
 - Inspect every measured cue rather than trusting only the aggregate pass flag.
   A take with a dropped final meaningful word or clipped clause is not the final
   master: shorten or clarify that VO line and regenerate it before Storyboard.
-- Use that same measured cue sheet for captions, visual emphasis, and linked
-  scene ranges. Script estimates and BGM beats are not speech-sync evidence.
+- Script estimates and BGM beats are not speech-sync evidence.
 - Review the selected concept against the rendered contact sheet. If the frames
   are more generic than the proposal, repair the Composition.
 - Resolve any closing phrase or CTA before the timeline ends. Review both the

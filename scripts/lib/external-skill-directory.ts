@@ -64,7 +64,7 @@ export function routingFingerprint(root: string) {
   const files = [POLICY, 'src/generated/built-in-skill-manifest.json', 'src/lib/prompts/agent.md',
     'src/lib/agent-tools.ts', 'src/lib/agent.ts', 'src/lib/agent-model-runtime.ts', 'src/lib/workspace.ts',
     'src/lib/agent-prompt-bundles.ts', 'benchmarks/external-skill-routing/cases.json',
-    'benchmarks/external-skill-routing/preflight.ts'];
+    'benchmarks/external-skill-routing/preflight.ts', 'scripts/lib/skill-routing-evidence.ts'];
   const collect = (dir: string) => { for (const entry of fs.readdirSync(path.join(root,dir), {withFileTypes:true})) {
     if (entry.name === '.DS_Store') continue;
     const file = `${dir}/${entry.name}`; if(entry.isDirectory()) collect(file); else files.push(file);
