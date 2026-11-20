@@ -1,0 +1,92 @@
+{
+  "1-edit-h3": {
+    "requests/by-endpoint": 200,
+    "sent_at": "2026-11-20T01:31:46.024Z",
+    "started_at": "2026-11-20T01:31:46.149Z",
+    "ended_at": "2026-11-20T01:31:54.761Z",
+    "duration": 8.612773,
+    "queueMs": 125,
+    "billing-events": 403
+  },
+  "1-generate-h3": {
+    "requests/by-endpoint": 200,
+    "sent_at": "2026-11-20T01:30:53.210Z",
+    "started_at": "2026-11-20T01:30:53.248Z",
+    "ended_at": "2026-11-20T01:30:58.405Z",
+    "duration": 5.157738,
+    "queueMs": 38,
+    "billing-events": "skipped after HTTP 403"
+  },
+  "2-edit-h3": {
+    "requests/by-endpoint": 200,
+    "sent_at": "2026-11-20T01:34:05.792Z",
+    "started_at": "2026-11-20T01:34:05.872Z",
+    "ended_at": "2026-11-20T01:34:16.521Z",
+    "duration": 10.649867,
+    "queueMs": 80,
+    "billing-events": "skipped after HTTP 403"
+  },
+  "2-generate-h3": {
+    "requests/by-endpoint": 200,
+    "sent_at": "2026-11-20T01:33:19.500Z",
+    "started_at": "2026-11-20T01:33:19.583Z",
+    "ended_at": "2026-11-20T01:33:25.326Z",
+    "duration": 5.743839,
+    "queueMs": 83,
+    "billing-events": "skipped after HTTP 403"
+  },
+  "3-edit-h3": {
+    "requests/by-endpoint": 200,
+    "sent_at": "2026-11-20T01:35:43.109Z",
+    "started_at": "2026-11-20T01:35:43.174Z",
+    "ended_at": "2026-11-20T01:35:53.053Z",
+    "duration": 9.879359,
+    "queueMs": 65,
+    "billing-events": "skipped after HTTP 403"
+  },
+  "3-generate-h3": {
+    "requests/by-endpoint": 200,
+    "sent_at": "2026-11-20T01:34:43.533Z",
+    "started_at": "2026-11-20T01:34:43.582Z",
+    "ended_at": "2026-11-20T01:34:48.986Z",
+    "duration": 5.403591,
+    "queueMs": 49,
+    "billing-events": "skipped after HTTP 403"
+  },
+  "alpha": {
+    "requests/by-endpoint": 200,
+    "sent_at": "2026-11-20T01:36:48.089Z",
+    "started_at": "2026-11-20T01:36:48.156Z",
+    "ended_at": "2026-11-20T01:36:54.020Z",
+    "duration": 5.86404,
+    "queueMs": 67,
+    "billing-events": "skipped after HTTP 403"
+  },
+  "schema-edit-h3": {
+    "requests/by-endpoint": 200,
+    "sent_at": "2026-11-20T01:37:50.997Z",
+    "started_at": "2026-11-20T01:37:51.043Z",
+    "ended_at": "2026-11-20T01:37:59.645Z",
+    "duration": 8.602283,
+    "queueMs": 46,
+    "billing-events": "skipped after HTTP 403"
+  },
+  "schema2-edit-h3": {
+    "requests/by-endpoint": 200,
+    "sent_at": "2026-11-20T01:38:40.295Z",
+    "started_at": "2026-11-20T01:38:40.337Z",
+    "ended_at": "2026-11-20T01:38:49.324Z",
+    "duration": 8.986337,
+    "queueMs": 42,
+    "billing-events": "skipped after HTTP 403"
+  },
+  "schema3-edit-h3": {
+    "requests/by-endpoint": 200,
+    "sent_at": "2026-11-20T01:39:00.033Z",
+    "started_at": "2026-11-20T01:39:00.100Z",
+    "ended_at": "2026-11-20T01:39:08.538Z",
+    "duration": 8.438201,
+    "queueMs": 67,
+    "billing-events": "skipped after HTTP 403"
+  }
+}

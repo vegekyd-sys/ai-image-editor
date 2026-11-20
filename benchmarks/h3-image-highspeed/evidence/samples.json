@@ -1,0 +1,1817 @@
+[
+  {
+    "name": "1-generate-h3",
+    "model": "h3",
+    "op": "generate",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/highspeed/text-to-image",
+        "startMs": 1,
+        "http": 200,
+        "headersMs": 3030,
+        "bodyMs": 3031,
+        "queueStatus": "IN_QUEUE",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3033,
+        "http": 202,
+        "headersMs": 4886,
+        "bodyMs": 4886,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5138,
+        "http": 202,
+        "headersMs": 5462,
+        "bodyMs": 5462,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5714,
+        "http": 202,
+        "headersMs": 6041,
+        "bodyMs": 6042,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6294,
+        "http": 202,
+        "headersMs": 6692,
+        "bodyMs": 6693,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6945,
+        "http": 202,
+        "headersMs": 7261,
+        "bodyMs": 7262,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 7514,
+        "http": 202,
+        "headersMs": 7824,
+        "bodyMs": 7824,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 8076,
+        "http": 200,
+        "headersMs": 8402,
+        "bodyMs": 8402,
+        "queueStatus": "COMPLETED",
+        "metrics": {
+          "inference_time": 5.1570000648498535
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}",
+        "startMs": 8403,
+        "http": 200,
+        "headersMs": 8789,
+        "units": 31.2975,
+        "bodyMs": 8789,
+        "timings": {
+          "inference": 4.913177183000002
+        },
+        "usage": {
+          "generated_images": 1,
+          "total_tokens": 4169,
+          "input_tokens": 73,
+          "output_tokens": 4096,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 73
+          },
+          "output_tokens_details": {
+            "image_tokens": 4096
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "fal CDN",
+        "startMs": 8789,
+        "http": 200,
+        "headersMs": 10287,
+        "bodyMs": 11444
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:30:50.510Z",
+    "h3": {
+      "units": "31.2975",
+      "costUsd": 0.0312975,
+      "usage": {
+        "generated_images": 1,
+        "total_tokens": 4169,
+        "input_tokens": 73,
+        "output_tokens": 4096,
+        "input_tokens_details": {
+          "image_tokens": 0,
+          "text_tokens": 73
+        },
+        "output_tokens_details": {
+          "image_tokens": 4096
+        }
+      },
+      "inferenceSeconds": 4.913177183000002,
+      "flags": [
+        false
+      ]
+    },
+    "costUsd": 0.0312975,
+    "serverResultMs": 11446,
+    "file": "1-generate-h3.png",
+    "sha256": "88b034900dd0195ff2d538b278e83f2b3dcb790c4358eea88fb2b65848be67bf",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 352968,
+    "format": "png",
+    "firstPaintMs": 11487,
+    "persistedMs": 14226,
+    "verifiedMs": 15983,
+    "round": 1,
+    "visual": {
+      "nonOpaquePixels": 0
+    }
+  },
+  {
+    "name": "1-generate-nano",
+    "model": "nano",
+    "op": "generate",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://openrouter.ai/api/v1/images",
+        "startMs": 2527,
+        "http": 200,
+        "headersMs": 18184,
+        "bodyMs": 18672,
+        "usage": {
+          "prompt_tokens": 104,
+          "completion_tokens": 2566,
+          "total_tokens": 2670,
+          "cost": 0.044601,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.044601,
+            "upstream_inference_prompt_cost": 0.000156,
+            "upstream_inference_completions_cost": 0.044445
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 1144,
+            "image_tokens": 1120
+          }
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:31:06.495Z",
+    "credits": 9,
+    "costUsd": 0.044601,
+    "serverResultMs": 20318,
+    "file": "1-generate-nano.jpg",
+    "sha256": "e6870fadbe20dafb48aef4fd3b8e27e9e5f859e70362da2f8a6fd6f7827227a2",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 503015,
+    "format": "jpeg",
+    "firstPaintMs": 20352,
+    "persistedMs": 22691,
+    "verifiedMs": 24802,
+    "round": 1,
+    "visual": {
+      "nonOpaquePixels": 0
+    }
+  },
+  {
+    "name": "1-generate-flare",
+    "model": "flare",
+    "op": "generate",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://api.openai.com/v1/images/generations",
+        "startMs": 1561,
+        "http": 200,
+        "headersMs": 6864,
+        "bodyMs": 7252,
+        "usage": {
+          "input_tokens": 96,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 96
+          },
+          "output_tokens": 824,
+          "output_tokens_details": {
+            "image_tokens": 824,
+            "text_tokens": 0
+          },
+          "total_tokens": 920
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:31:31.298Z",
+    "credits": 6,
+    "costUsd": 0.0252,
+    "serverResultMs": 9153,
+    "file": "1-generate-flare.png",
+    "sha256": "aaa1632485eb4d07285d177dafb32dfedbd7c8c86945e4a9023d3d8b82e12fd8",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 923212,
+    "format": "png",
+    "firstPaintMs": 9199,
+    "persistedMs": 11300,
+    "verifiedMs": 13156,
+    "round": 1,
+    "visual": {
+      "nonOpaquePixels": 0
+    }
+  },
+  {
+    "name": "2-generate-h3",
+    "model": "h3",
+    "op": "generate",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/highspeed/text-to-image",
+        "startMs": 1,
+        "http": 200,
+        "headersMs": 1021,
+        "bodyMs": 1021,
+        "queueStatus": "IN_QUEUE",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 1023,
+        "http": 202,
+        "headersMs": 2068,
+        "bodyMs": 2068,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 2320,
+        "http": 202,
+        "headersMs": 2632,
+        "bodyMs": 2632,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 2883,
+        "http": 202,
+        "headersMs": 3202,
+        "bodyMs": 3203,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3454,
+        "http": 202,
+        "headersMs": 3768,
+        "bodyMs": 3768,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4020,
+        "http": 202,
+        "headersMs": 4328,
+        "bodyMs": 4329,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4579,
+        "http": 202,
+        "headersMs": 4900,
+        "bodyMs": 4900,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5152,
+        "http": 202,
+        "headersMs": 5522,
+        "bodyMs": 5522,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5775,
+        "http": 202,
+        "headersMs": 6083,
+        "bodyMs": 6083,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6335,
+        "http": 202,
+        "headersMs": 6637,
+        "bodyMs": 6638,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6889,
+        "http": 200,
+        "headersMs": 7193,
+        "bodyMs": 7193,
+        "queueStatus": "COMPLETED",
+        "metrics": {
+          "inference_time": 5.743000030517578
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}",
+        "startMs": 7194,
+        "http": 200,
+        "headersMs": 8143,
+        "units": 31.2975,
+        "bodyMs": 8143,
+        "timings": {
+          "inference": 5.511998410999979
+        },
+        "usage": {
+          "generated_images": 1,
+          "total_tokens": 4169,
+          "input_tokens": 73,
+          "output_tokens": 4096,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 73
+          },
+          "output_tokens_details": {
+            "image_tokens": 4096
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "fal CDN",
+        "startMs": 8145,
+        "http": 200,
+        "headersMs": 9497,
+        "bodyMs": 10099
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:33:18.789Z",
+    "h3": {
+      "units": "31.2975",
+      "costUsd": 0.0312975,
+      "usage": {
+        "generated_images": 1,
+        "total_tokens": 4169,
+        "input_tokens": 73,
+        "output_tokens": 4096,
+        "input_tokens_details": {
+          "image_tokens": 0,
+          "text_tokens": 73
+        },
+        "output_tokens_details": {
+          "image_tokens": 4096
+        }
+      },
+      "inferenceSeconds": 5.511998410999979,
+      "flags": [
+        false
+      ]
+    },
+    "costUsd": 0.0312975,
+    "serverResultMs": 10100,
+    "file": "2-generate-h3.png",
+    "sha256": "d8166520ce92ffee5129c6421ab577d8b43328e1eab376deb9ca438cdc194e1c",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 359400,
+    "format": "png",
+    "firstPaintMs": 10137,
+    "persistedMs": 12807,
+    "verifiedMs": 14682,
+    "round": 2,
+    "visual": {
+      "nonOpaquePixels": 0
+    }
+  },
+  {
+    "name": "2-generate-nano",
+    "model": "nano",
+    "op": "generate",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://openrouter.ai/api/v1/images",
+        "startMs": 1264,
+        "http": 200,
+        "headersMs": 16200,
+        "bodyMs": 16670,
+        "usage": {
+          "prompt_tokens": 104,
+          "completion_tokens": 2209,
+          "total_tokens": 2313,
+          "cost": 0.0419235,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.0419235,
+            "upstream_inference_prompt_cost": 0.000156,
+            "upstream_inference_completions_cost": 0.0417675
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 767,
+            "image_tokens": 1120
+          }
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:32:37.650Z",
+    "credits": 9,
+    "costUsd": 0.0419235,
+    "serverResultMs": 18857,
+    "file": "2-generate-nano.jpg",
+    "sha256": "21989382ed4b3b1a53d3aae1e3e7d6bf71020a7e233e9b0f866eb06044e59b61",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 495120,
+    "format": "jpeg",
+    "firstPaintMs": 18893,
+    "persistedMs": 26548,
+    "verifiedMs": 28423,
+    "round": 2,
+    "visual": {
+      "nonOpaquePixels": 0
+    }
+  },
+  {
+    "name": "2-generate-flare",
+    "model": "flare",
+    "op": "generate",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://api.openai.com/v1/images/generations",
+        "startMs": 1686,
+        "http": 200,
+        "headersMs": 6160,
+        "bodyMs": 6563,
+        "usage": {
+          "input_tokens": 96,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 96
+          },
+          "output_tokens": 824,
+          "output_tokens_details": {
+            "image_tokens": 824,
+            "text_tokens": 0
+          },
+          "total_tokens": 920
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:33:06.078Z",
+    "credits": 6,
+    "costUsd": 0.0252,
+    "serverResultMs": 8445,
+    "file": "2-generate-flare.png",
+    "sha256": "734d0c68a2448c34a243f56875359378052fc03b3e7ead0e0f848e37129ddab6",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 905474,
+    "format": "png",
+    "firstPaintMs": 8499,
+    "persistedMs": 10947,
+    "verifiedMs": 12709,
+    "round": 2,
+    "visual": {
+      "nonOpaquePixels": 0
+    }
+  },
+  {
+    "name": "3-generate-h3",
+    "model": "h3",
+    "op": "generate",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/highspeed/text-to-image",
+        "startMs": 0,
+        "http": 200,
+        "headersMs": 974,
+        "bodyMs": 975,
+        "queueStatus": "IN_QUEUE",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 976,
+        "http": 202,
+        "headersMs": 1930,
+        "bodyMs": 1931,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 2183,
+        "http": 202,
+        "headersMs": 2498,
+        "bodyMs": 2498,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 2750,
+        "http": 202,
+        "headersMs": 3057,
+        "bodyMs": 3058,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3309,
+        "http": 202,
+        "headersMs": 3632,
+        "bodyMs": 3632,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3885,
+        "http": 202,
+        "headersMs": 4191,
+        "bodyMs": 4191,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4444,
+        "http": 202,
+        "headersMs": 4768,
+        "bodyMs": 4769,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5021,
+        "http": 202,
+        "headersMs": 5358,
+        "bodyMs": 5358,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5609,
+        "http": 202,
+        "headersMs": 5944,
+        "bodyMs": 5945,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6195,
+        "http": 200,
+        "headersMs": 6517,
+        "bodyMs": 6517,
+        "queueStatus": "COMPLETED",
+        "metrics": {
+          "inference_time": 5.4040000438690186
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}",
+        "startMs": 6518,
+        "http": 200,
+        "headersMs": 7558,
+        "units": 31.2975,
+        "bodyMs": 7558,
+        "timings": {
+          "inference": 4.990390975000025
+        },
+        "usage": {
+          "generated_images": 1,
+          "total_tokens": 4169,
+          "input_tokens": 73,
+          "output_tokens": 4096,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 73
+          },
+          "output_tokens_details": {
+            "image_tokens": 4096
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "fal CDN",
+        "startMs": 7559,
+        "http": 200,
+        "headersMs": 8882,
+        "bodyMs": 10100
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:34:42.838Z",
+    "h3": {
+      "units": "31.2975",
+      "costUsd": 0.0312975,
+      "usage": {
+        "generated_images": 1,
+        "total_tokens": 4169,
+        "input_tokens": 73,
+        "output_tokens": 4096,
+        "input_tokens_details": {
+          "image_tokens": 0,
+          "text_tokens": 73
+        },
+        "output_tokens_details": {
+          "image_tokens": 4096
+        }
+      },
+      "inferenceSeconds": 4.990390975000025,
+      "flags": [
+        false
+      ]
+    },
+    "costUsd": 0.0312975,
+    "serverResultMs": 10100,
+    "file": "3-generate-h3.png",
+    "sha256": "2d6b286db5c20dd305fcf79e1508a00b40ae02885185030fe978e50b6e6dc230",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 315675,
+    "format": "png",
+    "firstPaintMs": 10136,
+    "persistedMs": 12489,
+    "verifiedMs": 14053,
+    "round": 3,
+    "visual": {
+      "nonOpaquePixels": 0
+    }
+  },
+  {
+    "name": "3-generate-nano",
+    "model": "nano",
+    "op": "generate",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://openrouter.ai/api/v1/images",
+        "startMs": 848,
+        "http": 200,
+        "headersMs": 21275,
+        "bodyMs": 21725,
+        "usage": {
+          "prompt_tokens": 104,
+          "completion_tokens": 2210,
+          "total_tokens": 2314,
+          "cost": 0.041931,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.041931,
+            "upstream_inference_prompt_cost": 0.000156,
+            "upstream_inference_completions_cost": 0.041775
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 560,
+            "image_tokens": 1120
+          }
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:34:56.892Z",
+    "credits": 9,
+    "costUsd": 0.041931,
+    "serverResultMs": 23572,
+    "file": "3-generate-nano.jpg",
+    "sha256": "6cde626726bfeda9c96bda78cfcd760223771969875e4307213f2b73059a0d51",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 409367,
+    "format": "jpeg",
+    "firstPaintMs": 23614,
+    "persistedMs": 25839,
+    "verifiedMs": 27765,
+    "round": 3,
+    "visual": {
+      "nonOpaquePixels": 0
+    }
+  },
+  {
+    "name": "3-generate-flare",
+    "model": "flare",
+    "op": "generate",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://api.openai.com/v1/images/generations",
+        "startMs": 2152,
+        "http": 200,
+        "headersMs": 10385,
+        "bodyMs": 10818,
+        "usage": {
+          "input_tokens": 96,
+          "input_tokens_details": {
+            "image_tokens": 0,
+            "text_tokens": 96
+          },
+          "output_tokens": 824,
+          "output_tokens_details": {
+            "image_tokens": 824,
+            "text_tokens": 0
+          },
+          "total_tokens": 920
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:34:25.348Z",
+    "credits": 6,
+    "costUsd": 0.0252,
+    "serverResultMs": 13038,
+    "file": "3-generate-flare.png",
+    "sha256": "aff425a09f6da4ffa6d34d9a4359c6f37348553bc33609c74920d8ff35f66dc5",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 922506,
+    "format": "png",
+    "firstPaintMs": 13076,
+    "persistedMs": 15582,
+    "verifiedMs": 17489,
+    "round": 3,
+    "visual": {
+      "nonOpaquePixels": 0
+    }
+  },
+  {
+    "name": "schema-edit-h3",
+    "model": "h3",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/highspeed/edit",
+        "startMs": 1,
+        "http": 200,
+        "headersMs": 4983,
+        "bodyMs": 4984,
+        "queueStatus": "IN_QUEUE",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4985,
+        "http": 202,
+        "headersMs": 7982,
+        "bodyMs": 7983,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 8235,
+        "http": 202,
+        "headersMs": 10392,
+        "bodyMs": 10392,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 10643,
+        "http": 202,
+        "headersMs": 11181,
+        "bodyMs": 11181,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 11434,
+        "http": 202,
+        "headersMs": 11743,
+        "bodyMs": 11744,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 11994,
+        "http": 202,
+        "headersMs": 12312,
+        "bodyMs": 12312,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 12563,
+        "http": 202,
+        "headersMs": 12885,
+        "bodyMs": 12886,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 13136,
+        "http": 202,
+        "headersMs": 13502,
+        "bodyMs": 13502,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 13754,
+        "http": 200,
+        "headersMs": 15077,
+        "bodyMs": 15077,
+        "queueStatus": "COMPLETED",
+        "metrics": {
+          "inference_time": 8.601999998092651
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}",
+        "startMs": 15077,
+        "http": 200,
+        "headersMs": 16125,
+        "units": 44.8673,
+        "bodyMs": 16125,
+        "timings": {
+          "inference": 7.987253075000012
+        },
+        "usage": {
+          "generated_images": 1,
+          "total_tokens": 9445,
+          "input_tokens": 5349,
+          "output_tokens": 4096,
+          "input_tokens_details": {
+            "image_tokens": 2050,
+            "text_tokens": 3299
+          },
+          "output_tokens_details": {
+            "image_tokens": 4096
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "fal CDN",
+        "startMs": 16126,
+        "http": 200,
+        "headersMs": 17313,
+        "bodyMs": 19117
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:37:46.279Z",
+    "h3": {
+      "units": "44.8673",
+      "costUsd": 0.0448673,
+      "usage": {
+        "generated_images": 1,
+        "total_tokens": 9445,
+        "input_tokens": 5349,
+        "output_tokens": 4096,
+        "input_tokens_details": {
+          "image_tokens": 2050,
+          "text_tokens": 3299
+        },
+        "output_tokens_details": {
+          "image_tokens": 4096
+        }
+      },
+      "providerRewrotePrompt": true,
+      "inferenceSeconds": 7.987253075000012,
+      "flags": [
+        false
+      ]
+    },
+    "costUsd": 0.0448673,
+    "serverResultMs": 19118,
+    "file": "schema-edit-h3.png",
+    "sha256": "106d1747d6b99f051df7a7f2739c5876aa4790dafc5700d5aab354715830f83c",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 738603,
+    "format": "png",
+    "firstPaintMs": 19169,
+    "persistedMs": 23207,
+    "verifiedMs": 25101,
+    "round": 1,
+    "visual": {
+      "nonOpaquePixels": 0,
+      "outsideChanged": 30667,
+      "outsidePixels": 1029568,
+      "buttonYellow": 8232,
+      "buttonPixels": 8400
+    }
+  },
+  {
+    "name": "1-edit-nano",
+    "model": "nano",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://openrouter.ai/api/v1/images",
+        "startMs": 1772,
+        "http": 200,
+        "headersMs": 11594,
+        "bodyMs": 11937,
+        "usage": {
+          "prompt_tokens": 1202,
+          "completion_tokens": 1549,
+          "total_tokens": 2751,
+          "cost": 0.0386205,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.0386205,
+            "upstream_inference_prompt_cost": 0.001803,
+            "upstream_inference_completions_cost": 0.0368175
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 169,
+            "image_tokens": 1120
+          }
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:32:03.955Z",
+    "credits": 8,
+    "costUsd": 0.0386205,
+    "serverResultMs": 14534,
+    "file": "1-edit-nano.jpg",
+    "sha256": "f9e799fee1a04277231cf9708ea155870f25bf196e276f9e88cda0555cd6a540",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 276686,
+    "format": "jpeg",
+    "firstPaintMs": 14575,
+    "persistedMs": 16817,
+    "verifiedMs": 18322,
+    "round": 1,
+    "visual": {
+      "nonOpaquePixels": 0,
+      "outsideChanged": 13680,
+      "outsidePixels": 1029568,
+      "buttonYellow": 8400,
+      "buttonPixels": 8400
+    }
+  },
+  {
+    "name": "1-edit-flare",
+    "model": "flare",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://api.openai.com/v1/images/edits",
+        "startMs": 1248,
+        "http": 200,
+        "headersMs": 7428,
+        "bodyMs": 8066,
+        "usage": {
+          "input_tokens": 1089,
+          "input_tokens_details": {
+            "image_tokens": 1024,
+            "text_tokens": 65
+          },
+          "output_tokens": 824,
+          "output_tokens_details": {
+            "image_tokens": 824,
+            "text_tokens": 0
+          },
+          "total_tokens": 1913
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:32:22.277Z",
+    "credits": 7,
+    "costUsd": 0.033237,
+    "serverResultMs": 10074,
+    "file": "1-edit-flare.png",
+    "sha256": "da78f97976a1d8080552ad121139371c4d349ac5d172e9720cfb4fabb6177bdb",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 944478,
+    "format": "png",
+    "firstPaintMs": 10117,
+    "persistedMs": 12580,
+    "verifiedMs": 15372,
+    "round": 1,
+    "visual": {
+      "nonOpaquePixels": 0,
+      "outsideChanged": 11051,
+      "outsidePixels": 1029568,
+      "buttonYellow": 8242,
+      "buttonPixels": 8400
+    }
+  },
+  {
+    "name": "schema2-edit-h3",
+    "model": "h3",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/highspeed/edit",
+        "startMs": 1,
+        "http": 200,
+        "headersMs": 1699,
+        "bodyMs": 1699,
+        "queueStatus": "IN_QUEUE",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 1701,
+        "http": 202,
+        "headersMs": 2706,
+        "bodyMs": 2706,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 2958,
+        "http": 202,
+        "headersMs": 3278,
+        "bodyMs": 3278,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3531,
+        "http": 202,
+        "headersMs": 3901,
+        "bodyMs": 3902,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4155,
+        "http": 202,
+        "headersMs": 4461,
+        "bodyMs": 4462,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4715,
+        "http": 202,
+        "headersMs": 5018,
+        "bodyMs": 5018,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5270,
+        "http": 202,
+        "headersMs": 5571,
+        "bodyMs": 5571,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5823,
+        "http": 202,
+        "headersMs": 6148,
+        "bodyMs": 6148,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6400,
+        "http": 202,
+        "headersMs": 6747,
+        "bodyMs": 6748,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6998,
+        "http": 202,
+        "headersMs": 7348,
+        "bodyMs": 7348,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 7599,
+        "http": 202,
+        "headersMs": 7899,
+        "bodyMs": 7899,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 8150,
+        "http": 202,
+        "headersMs": 8452,
+        "bodyMs": 8452,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 8704,
+        "http": 202,
+        "headersMs": 9517,
+        "bodyMs": 9517,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 9769,
+        "http": 202,
+        "headersMs": 10076,
+        "bodyMs": 10076,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 10327,
+        "http": 202,
+        "headersMs": 10620,
+        "bodyMs": 10621,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 10873,
+        "http": 200,
+        "headersMs": 11243,
+        "bodyMs": 11243,
+        "queueStatus": "COMPLETED",
+        "metrics": {
+          "inference_time": 8.986999988555908
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}",
+        "startMs": 11244,
+        "http": 200,
+        "headersMs": 12214,
+        "units": 44.9846,
+        "bodyMs": 12214,
+        "timings": {
+          "inference": 8.381965460000174
+        },
+        "usage": {
+          "generated_images": 1,
+          "total_tokens": 9496,
+          "input_tokens": 5400,
+          "output_tokens": 4096,
+          "input_tokens_details": {
+            "image_tokens": 2050,
+            "text_tokens": 3350
+          },
+          "output_tokens_details": {
+            "image_tokens": 4096
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "fal CDN",
+        "startMs": 12214,
+        "http": 200,
+        "headersMs": 13275,
+        "bodyMs": 14523
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:38:38.872Z",
+    "h3": {
+      "units": "44.9846",
+      "costUsd": 0.0449846,
+      "usage": {
+        "generated_images": 1,
+        "total_tokens": 9496,
+        "input_tokens": 5400,
+        "output_tokens": 4096,
+        "input_tokens_details": {
+          "image_tokens": 2050,
+          "text_tokens": 3350
+        },
+        "output_tokens_details": {
+          "image_tokens": 4096
+        }
+      },
+      "providerRewrotePrompt": true,
+      "inferenceSeconds": 8.381965460000174,
+      "flags": [
+        false
+      ]
+    },
+    "costUsd": 0.0449846,
+    "serverResultMs": 14524,
+    "file": "schema2-edit-h3.png",
+    "sha256": "a84175cbd3cf8b070c412a6b32fa078c011ef72c54470010e91c955e65ef2662",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 521105,
+    "format": "png",
+    "firstPaintMs": 14577,
+    "persistedMs": 17943,
+    "verifiedMs": 19666,
+    "round": 2,
+    "visual": {
+      "nonOpaquePixels": 0,
+      "outsideChanged": 21728,
+      "outsidePixels": 1029568,
+      "buttonYellow": 8397,
+      "buttonPixels": 8400
+    }
+  },
+  {
+    "name": "2-edit-nano",
+    "model": "nano",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://openrouter.ai/api/v1/images",
+        "startMs": 1441,
+        "http": 200,
+        "headersMs": 11917,
+        "bodyMs": 12219,
+        "usage": {
+          "prompt_tokens": 1202,
+          "completion_tokens": 1678,
+          "total_tokens": 2880,
+          "cost": 0.039588,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.039588,
+            "upstream_inference_prompt_cost": 0.001803,
+            "upstream_inference_completions_cost": 0.037785
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 288,
+            "image_tokens": 1120
+          }
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:33:33.472Z",
+    "credits": 8,
+    "costUsd": 0.039588,
+    "serverResultMs": 14362,
+    "file": "2-edit-nano.jpg",
+    "sha256": "96aae9fac9fe07bc5d4d89503611ebaffea7b64c9cb8be32c77e38123c537ff5",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 280024,
+    "format": "jpeg",
+    "firstPaintMs": 14404,
+    "persistedMs": 16311,
+    "verifiedMs": 17575,
+    "round": 2,
+    "visual": {
+      "nonOpaquePixels": 0,
+      "outsideChanged": 14458,
+      "outsidePixels": 1029568,
+      "buttonYellow": 8400,
+      "buttonPixels": 8400
+    }
+  },
+  {
+    "name": "2-edit-flare",
+    "model": "flare",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://api.openai.com/v1/images/edits",
+        "startMs": 1426,
+        "http": 200,
+        "headersMs": 7217,
+        "bodyMs": 7594,
+        "usage": {
+          "input_tokens": 1089,
+          "input_tokens_details": {
+            "image_tokens": 1024,
+            "text_tokens": 65
+          },
+          "output_tokens": 824,
+          "output_tokens_details": {
+            "image_tokens": 824,
+            "text_tokens": 0
+          },
+          "total_tokens": 1913
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:33:51.048Z",
+    "credits": 7,
+    "costUsd": 0.033237,
+    "serverResultMs": 9403,
+    "file": "2-edit-flare.png",
+    "sha256": "2703658a9b78f0d8b5b04dcbcce532c57657abe7b0d2bc36065c906b403724b4",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 878927,
+    "format": "png",
+    "firstPaintMs": 9444,
+    "persistedMs": 11754,
+    "verifiedMs": 13347,
+    "round": 2,
+    "visual": {
+      "nonOpaquePixels": 0,
+      "outsideChanged": 10132,
+      "outsidePixels": 1029568,
+      "buttonYellow": 8242,
+      "buttonPixels": 8400
+    }
+  },
+  {
+    "name": "schema3-edit-h3",
+    "model": "h3",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/highspeed/edit",
+        "startMs": 0,
+        "http": 200,
+        "headersMs": 1770,
+        "bodyMs": 1771,
+        "queueStatus": "IN_QUEUE",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 1772,
+        "http": 202,
+        "headersMs": 2798,
+        "bodyMs": 2798,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3050,
+        "http": 202,
+        "headersMs": 3379,
+        "bodyMs": 3379,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3630,
+        "http": 202,
+        "headersMs": 3948,
+        "bodyMs": 3949,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4201,
+        "http": 202,
+        "headersMs": 4547,
+        "bodyMs": 4547,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4802,
+        "http": 202,
+        "headersMs": 5101,
+        "bodyMs": 5102,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5352,
+        "http": 202,
+        "headersMs": 5721,
+        "bodyMs": 5721,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5972,
+        "http": 202,
+        "headersMs": 6290,
+        "bodyMs": 6291,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6542,
+        "http": 202,
+        "headersMs": 6860,
+        "bodyMs": 6860,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 7111,
+        "http": 202,
+        "headersMs": 7432,
+        "bodyMs": 7432,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 7683,
+        "http": 202,
+        "headersMs": 8041,
+        "bodyMs": 8041,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 8293,
+        "http": 202,
+        "headersMs": 8604,
+        "bodyMs": 8605,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 8857,
+        "http": 202,
+        "headersMs": 9170,
+        "bodyMs": 9170,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 9420,
+        "http": 202,
+        "headersMs": 9725,
+        "bodyMs": 9726,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 9983,
+        "http": 200,
+        "headersMs": 10308,
+        "bodyMs": 10308,
+        "queueStatus": "COMPLETED",
+        "metrics": {
+          "inference_time": 8.438000202178955
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}",
+        "startMs": 10309,
+        "http": 200,
+        "headersMs": 11295,
+        "units": 42.7927,
+        "bodyMs": 11295,
+        "timings": {
+          "inference": 8.006473086999904
+        },
+        "usage": {
+          "generated_images": 1,
+          "total_tokens": 8543,
+          "input_tokens": 4447,
+          "output_tokens": 4096,
+          "input_tokens_details": {
+            "image_tokens": 2050,
+            "text_tokens": 2397
+          },
+          "output_tokens_details": {
+            "image_tokens": 4096
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "fal CDN",
+        "startMs": 11295,
+        "http": 200,
+        "headersMs": 13519,
+        "bodyMs": 14640
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:38:58.539Z",
+    "h3": {
+      "units": "42.7927",
+      "costUsd": 0.0427927,
+      "usage": {
+        "generated_images": 1,
+        "total_tokens": 8543,
+        "input_tokens": 4447,
+        "output_tokens": 4096,
+        "input_tokens_details": {
+          "image_tokens": 2050,
+          "text_tokens": 2397
+        },
+        "output_tokens_details": {
+          "image_tokens": 4096
+        }
+      },
+      "providerRewrotePrompt": true,
+      "inferenceSeconds": 8.006473086999904,
+      "flags": [
+        false
+      ]
+    },
+    "costUsd": 0.0427927,
+    "serverResultMs": 14641,
+    "file": "schema3-edit-h3.png",
+    "sha256": "13cf68c35e9ba02fb7d1c315703c34a341afa9d462b41c378010e4c384a985d3",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 489738,
+    "format": "png",
+    "firstPaintMs": 14708,
+    "persistedMs": 17366,
+    "verifiedMs": 19269,
+    "round": 3,
+    "visual": {
+      "nonOpaquePixels": 0,
+      "outsideChanged": 19919,
+      "outsidePixels": 1029568,
+      "buttonYellow": 8393,
+      "buttonPixels": 8400
+    }
+  },
+  {
+    "name": "3-edit-nano",
+    "model": "nano",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://openrouter.ai/api/v1/images",
+        "startMs": 1740,
+        "http": 200,
+        "headersMs": 12524,
+        "bodyMs": 13023,
+        "usage": {
+          "prompt_tokens": 1202,
+          "completion_tokens": 1663,
+          "total_tokens": 2865,
+          "cost": 0.0394755,
+          "is_byok": false,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "audio_tokens": 0,
+            "video_tokens": 0
+          },
+          "cost_details": {
+            "upstream_inference_cost": 0.0394755,
+            "upstream_inference_prompt_cost": 0.001803,
+            "upstream_inference_completions_cost": 0.0376725
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 270,
+            "image_tokens": 1120
+          }
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:36:02.186Z",
+    "credits": 8,
+    "costUsd": 0.0394755,
+    "serverResultMs": 14879,
+    "file": "3-edit-nano.jpg",
+    "sha256": "7b0510913c5deb294ee8f8dbb433f5966844c11bae4508e9dcc965539dcefe98",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 267537,
+    "format": "jpeg",
+    "firstPaintMs": 14917,
+    "persistedMs": 17076,
+    "verifiedMs": 18661,
+    "round": 3,
+    "visual": {
+      "nonOpaquePixels": 0,
+      "outsideChanged": 14049,
+      "outsidePixels": 1029568,
+      "buttonYellow": 8400,
+      "buttonPixels": 8400
+    }
+  },
+  {
+    "name": "3-edit-flare",
+    "model": "flare",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://api.openai.com/v1/images/edits",
+        "startMs": 1395,
+        "http": 200,
+        "headersMs": 7273,
+        "bodyMs": 7909,
+        "usage": {
+          "input_tokens": 1089,
+          "input_tokens_details": {
+            "image_tokens": 1024,
+            "text_tokens": 65
+          },
+          "output_tokens": 824,
+          "output_tokens_details": {
+            "image_tokens": 824,
+            "text_tokens": 0
+          },
+          "total_tokens": 1913
+        }
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:35:24.658Z",
+    "credits": 7,
+    "costUsd": 0.033237,
+    "serverResultMs": 9639,
+    "file": "3-edit-flare.png",
+    "sha256": "53fbe0fed36a2c932aa2bd8ff9f22f9cba96056d8eaf832adf4ca8ca79bd0db1",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 874311,
+    "format": "png",
+    "firstPaintMs": 9697,
+    "persistedMs": 12761,
+    "verifiedMs": 14914,
+    "round": 3,
+    "visual": {
+      "nonOpaquePixels": 0,
+      "outsideChanged": 14131,
+      "outsidePixels": 1029568,
+      "buttonYellow": 8249,
+      "buttonPixels": 8400
+    }
+  }
+]

@@ -1,0 +1,26 @@
+{
+  "state": "complete",
+  "prompt": "只画一枚橙色复古闹钟图标。四周与背景全部真实透明，PNG alpha 为零，不要底色、阴影或棋盘格。",
+  "units": "31.2055",
+  "costUsd": 0.0312055,
+  "usage": {
+    "generated_images": 1,
+    "total_tokens": 4129,
+    "input_tokens": 33,
+    "output_tokens": 4096,
+    "input_tokens_details": {
+      "image_tokens": 0,
+      "text_tokens": 33
+    },
+    "output_tokens_details": {
+      "image_tokens": 4096
+    }
+  },
+  "inferenceSeconds": 5.582631023000431,
+  "flags": [
+    false
+  ],
+  "hasAlpha": false,
+  "nonOpaquePixels": 0,
+  "totalPixels": 1048576
+}
