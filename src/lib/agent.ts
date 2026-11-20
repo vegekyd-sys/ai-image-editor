@@ -704,7 +704,7 @@ export async function* runMakaronAgent(
           ? { deepseek: { thinking: { type: 'disabled' } } } : getAgentProviderOptions(runtime),
       }),
       persist: async (application: ApplicationCompaction) => {
-        if (runId && !store) throw new CompactionError();
+        if (runId && !store) throw new CompactionError('persist', 'snapshot_store_unavailable');
         if (runId && store) await store.saveCompaction(runId, options?.execution?.attemptId, {
           provider: 'application', application, modelId: runtime.spec.id,
         });
@@ -781,7 +781,7 @@ export async function* runMakaronAgent(
           return true;
         },
       ],
-      prepareStep: async ({ messages, responseMessages }: { messages: ModelMessage[]; responseMessages: ModelMessage[] }) => {
+      prepareStep: async ({ messages, responseMessages, stepNumber }: { messages: ModelMessage[]; responseMessages: ModelMessage[]; stepNumber: number }) => {
         let prepared = messages;
         if (sendHistory) {
           try {
@@ -800,9 +800,13 @@ export async function* runMakaronAgent(
               }) : responses;
               prepared = await compactor.prepare(source);
             }
-          } catch {
+          } catch (error) {
             compactionFailed = true;
-            throw new CompactionError();
+            const failure = error instanceof CompactionError ? error : new CompactionError('prepare', 'unexpected');
+            console.warn('[agent-compaction] failed', {
+              runId, model: runtime.spec.id, stepNumber, stage: failure.stage, reason: failure.reason, ...failure.diagnostics,
+            });
+            throw failure;
           }
         }
         modelRequestStartedAt = new Date();
