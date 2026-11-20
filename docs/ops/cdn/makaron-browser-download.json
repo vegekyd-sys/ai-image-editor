@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-20",
+  "surface": "Codex in-app browser using Makaron candidate download module",
+  "network": "local Mac; not a mainland three-ISP benchmark",
+  "bytes": 142048671,
+  "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121",
+  "parallel": { "seconds": 20.4249, "requests": 35, "rangeRequests": 35 },
+  "single": { "seconds": 20.4782, "requests": 1, "rangeRequests": 0 },
+  "conclusion": "No material throughput gain in this paired browser sample. Earlier curl and Nightshift timings are different samples and must not be presented as this comparison."
+}

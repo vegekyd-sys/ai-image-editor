@@ -1,0 +1,202 @@
+{
+  "started": "2026-10-20T13:29:32.455Z",
+  "candidate": "https://makaron-media-cdn.vegekyd.workers.dev",
+  "results": [
+    {
+      "label": "1-baseline",
+      "http": 200,
+      "seconds": 65.152705,
+      "ttfb": 0.742526,
+      "bytes": 142048671,
+      "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121",
+      "cache": null,
+      "cfCache": "DYNAMIC",
+      "ray": "a4d85f3d5cace61c-NRT",
+      "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\"",
+      "valid": true
+    },
+    {
+      "label": "1-cold",
+      "http": 200,
+      "seconds": 30.585267,
+      "ttfb": 1.395489,
+      "bytes": 64666432,
+      "sha256": "0c30741401036c4d202a23393eca90ca64511783d34c5ac0f855ded76a14504b",
+      "cache": "MISS",
+      "cfCache": null,
+      "ray": "a4d860d54a9faa18-NRT",
+      "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\"",
+      "valid": false,
+      "validationFailure": "Incomplete or mismatched body; HTTP 200 does not establish success"
+    },
+    {
+      "label": "1-warm",
+      "http": 200,
+      "seconds": 17.080044,
+      "ttfb": 0.770225,
+      "bytes": 34540519,
+      "sha256": "eefe6811f7a46cfb967acf8f66d362fdbb8ae59c10bf010ffe48af596d32630b",
+      "cache": "MISS",
+      "cfCache": null,
+      "ray": "a4d861946f04ded5-NRT",
+      "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\"",
+      "valid": false,
+      "validationFailure": "Incomplete or mismatched body; HTTP 200 does not establish success"
+    },
+    {
+      "label": "1-parallel",
+      "seconds": 16.88485962500001,
+      "bytes": 142048671,
+      "sha256": "7a56b6242a2bdf9601dfbf0678d906fd5f79bf35b84064bf900c30240db44121",
+      "parts": [
+        {
+          "label": "1-parallel-0",
+          "http": 206,
+          "seconds": 16.268693,
+          "ttfb": 0.887938,
+          "bytes": 35512168,
+          "sha256": "bb6b96e4e56ada4950fe0ceade64364929f0fc4d78dcb1e4a29ca5082c1288ed",
+          "cache": "MISS",
+          "cfCache": null,
+          "ray": "a4d861ff2b0aeb8d-NRT",
+          "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+        },
+        {
+          "label": "1-parallel-1",
+          "http": 206,
+          "seconds": 16.478183,
+          "ttfb": 0.676842,
+          "bytes": 35512168,
+          "sha256": "be1e76ff7d54a0a929741a4e3b4db270a97525db2bc68ca9752fa050143138f4",
+          "cache": "MISS",
+          "cfCache": null,
+          "ray": "a4d861ff6b04ffb6-NRT",
+          "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+        },
+        {
+          "label": "1-parallel-2",
+          "http": 206,
+          "seconds": 16.376766,
+          "ttfb": 0.753722,
+          "bytes": 35512168,
+          "sha256": "2576eebf176cd42f0db55be09329a3aa058dc01c1d1061bdc87e106b6a08acce",
+          "cache": "MISS",
+          "cfCache": null,
+          "ray": "a4d861ff2e95dff9-NRT",
+          "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+        },
+        {
+          "label": "1-parallel-3",
+          "http": 206,
+          "seconds": 16.794387,
+          "ttfb": 0.851221,
+          "bytes": 35512167,
+          "sha256": "f57c30d9b9174cb03f95c689293ee6d113f351375fbaff45a8210685ad334e75",
+          "cache": "MISS",
+          "cfCache": null,
+          "ray": "a4d862009fca0c15-NRT",
+          "etag": "\"3d8bd12439007a64efae84cf5e4d2736-28\""
+        }
+      ],
+      "valid": true
+    },
+    {
+      "label": "5-baseline",
+      "http": 200,
+      "seconds": 9.657547,
+      "ttfb": 0.702874,
+      "bytes": 19726445,
+      "sha256": "a393f0c381180afd71392ade7d554d3b250b313336e8bbe411904598e24368d7",
+      "cache": null,
+      "cfCache": "DYNAMIC",
+      "ray": "a4d86268fef995ba-NRT",
+      "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\"",
+      "valid": true
+    },
+    {
+      "label": "5-cold",
+      "http": 200,
+      "seconds": 9.898907,
+      "ttfb": 1.018238,
+      "bytes": 19726445,
+      "sha256": "a393f0c381180afd71392ade7d554d3b250b313336e8bbe411904598e24368d7",
+      "cache": "MISS",
+      "cfCache": null,
+      "ray": "a4d862a62d7ad4e4-NRT",
+      "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\"",
+      "valid": true
+    },
+    {
+      "label": "5-warm",
+      "http": 200,
+      "seconds": 9.76108,
+      "ttfb": 0.958778,
+      "bytes": 19726445,
+      "sha256": "a393f0c381180afd71392ade7d554d3b250b313336e8bbe411904598e24368d7",
+      "cache": "HIT",
+      "cfCache": "HIT",
+      "ray": "a4d862e38fc16855-NRT",
+      "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\"",
+      "valid": true
+    },
+    {
+      "label": "5-parallel",
+      "seconds": 3.4175257089999795,
+      "bytes": 19726445,
+      "sha256": "a393f0c381180afd71392ade7d554d3b250b313336e8bbe411904598e24368d7",
+      "parts": [
+        {
+          "label": "5-parallel-0",
+          "http": 206,
+          "seconds": 3.205179,
+          "ttfb": 0.914169,
+          "bytes": 4931612,
+          "sha256": "2fc7cc41dc38bb9ce5b3be5144c39e95aecb0d7bd43fb54bddcc4b2af2eb504d",
+          "cache": "HIT",
+          "cfCache": "HIT",
+          "ray": "a4d863227f12d768-NRT",
+          "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+        },
+        {
+          "label": "5-parallel-1",
+          "http": 206,
+          "seconds": 3.104133,
+          "ttfb": 0.771791,
+          "bytes": 4931612,
+          "sha256": "def0562ad5ea5f26d89595f06c523ffd273aa846e3480bcbbc1b01943acedb5f",
+          "cache": "HIT",
+          "cfCache": "HIT",
+          "ray": "a4d863212f1d8a5a-NRT",
+          "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+        },
+        {
+          "label": "5-parallel-2",
+          "http": 206,
+          "seconds": 2.919045,
+          "ttfb": 0.654671,
+          "bytes": 4931612,
+          "sha256": "6f7bf937e0944366a69780df12861357a73d81d52f28c936cde916964cf47e65",
+          "cache": "HIT",
+          "cfCache": "HIT",
+          "ray": "a4d86320eb7b31a1-NRT",
+          "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+        },
+        {
+          "label": "5-parallel-3",
+          "http": 206,
+          "seconds": 3.39163,
+          "ttfb": 0.914304,
+          "bytes": 4931609,
+          "sha256": "598c687d6bc24f1bd0768c13af6cfee5b29998caad2acb45802d8309d802ddcd",
+          "cache": "HIT",
+          "cfCache": "HIT",
+          "ray": "a4d863228bdc3018-NRT",
+          "etag": "\"2822c03e7fc9b7dfd2f68c0c8c7ac029-4\""
+        }
+      ],
+      "valid": true
+    }
+  ],
+  "candidateVersion": "30aab9be-e817-440d-886b-27984050e177",
+  "conclusion": "First implementation rejected: JavaScript stream fanout exceeded Worker CPU and silently truncated full responses. Range requests filled replicas but duplicated origin GET across isolates."
+}

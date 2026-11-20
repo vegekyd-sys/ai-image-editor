@@ -55,6 +55,37 @@ describe('iOS editor image save flow', () => {
     vi.unstubAllGlobals();
   });
 
+  it('prepares owned public videos with validated ranges before saving', async () => {
+    const source = 'https://cdn.makaron.app/storage/v1/object/public/images/video.mp4';
+    const size = 9 * 1024 * 1024;
+    const request = vi.fn(async (_url: string, init?: RequestInit) => {
+      const range = new Headers(init?.headers).get('Range');
+      const match = /^bytes=(\d+)-(\d+)$/.exec(range || '');
+      if (!match) throw new Error('Expected direct range');
+      const start = Number(match[1]), end = Number(match[2]);
+      return new Response(new Uint8Array(end - start + 1), { status: 206, headers: {
+        'Content-Range': `bytes ${start}-${end}/${size}`, ETag: '"original"', 'Content-Type': 'video/mp4',
+      } });
+    });
+    vi.stubGlobal('fetch', request);
+    const result = await prepareDownloadAsset(makeParams({ isViewingVideo: true, currentVideoUrl: source }));
+    expect(result.blob.size).toBe(size);
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(request.mock.calls.every(([url]) => url === source)).toBe(true);
+  });
+
+  it('retains the video proxy when the public CDN cannot be reached', async () => {
+    const source = 'https://cdn.makaron.app/storage/v1/object/public/images/video.mp4';
+    const request = vi.fn(async (url: string) => {
+      if (url === source) throw new TypeError('Network unavailable');
+      return new Response('proxy video', { headers: { 'Content-Type': 'video/mp4' } });
+    });
+    vi.stubGlobal('fetch', request);
+    const result = await prepareDownloadAsset(makeParams({ isViewingVideo: true, currentVideoUrl: source }));
+    expect(await result.blob.text()).toBe('proxy video');
+    expect(request).toHaveBeenLastCalledWith(`/api/proxy-video?url=${encodeURIComponent(source)}&full=1`);
+  });
+
   it.each([true, false])('returns server-confirmed paid download access: %s', async (paid) => {
     const result = { paid };
     const request = vi.fn().mockResolvedValue({ ok: true, json: async () => result });
