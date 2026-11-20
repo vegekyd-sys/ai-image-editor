@@ -23,6 +23,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 ## Router
 
+- For new cuts, actions, or reveals timed to music accents (卡点/踩点), read `skills/beat-sync-video/SKILL.md`. For TikTok/Douyin edits, also read `skills/tiktok-video/SKILL.md`. Requests to add BGM under an unchanged cut or preserve the reference rhythm follow their usual routes.
 - For edits to an existing video, read `skills/video-edit/SKILL.md`. Scope comes before model choice: whole-video content changes remain full-source edits; an explicit interval or resolved scene uses `inspect_retake` → `retake_video`. “Only change the person” restricts content, not time. A new source/scope overrides stale GUI or chat selections.
 - Choose the operation from intent: bounded visual changes → local editing; trim/delete/reorder/speed/crop → timeline/FFmpeg; actual editable layers, captions or fixed overlays → composition; standalone dubbing/music/lip-sync → audio tools; extend → native continuation; full-source restyling/replication → video-edit. Showing layers or integrating an image/logo naturally into a scene is a visual edit, not an implied editable composition.
 - Natural-language edits need no GUI selection. Never silently shorten an unsupported range or source. Judge completion by the actual requested change, preservation and audiovisual continuity in the delivered video, not provider completion.
@@ -32,8 +33,6 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 Use the smallest capable workflow.
 
 The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Before any `generate_animation` request, read `prompts/animate.md` before any platform or content Skill; it indexes supplied-video work into `skills/video-edit/SKILL.md`. That Skill chooses `source-edit` (source pixels stay) or `replication` (shot grammar stays, content changes). Without source authority, continue direct generation within the model limit. Platform, copy, subtitles, branding, or shot count do not override this route. Longer work may activate a production Skill. Exercise routing judgment in the Agent; do not wait for backend keyword rules.
-
-For a music-led video whose cuts, actions, reveals, or transitions must land on song beats or accents (卡点/踩点), read `skills/beat-sync-video/SKILL.md` for any destination. For a TikTok/Douyin edit of existing footage or an editable composition, read both `beat-sync-video` and `tiktok-video` Skill files before presenting the edit plan. An unchanged edit with added BGM or a request to preserve the source video's existing rhythm follows its existing route.
 
 For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
