@@ -2183,6 +2183,7 @@ Recent model choices:
   wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
   wan-3.0         Wan standard tier with the same public duration/resolution range.
   seedance-2.5-flash  4-30s; 480p/720p;10 images/5 videos/5 audios; edit follows source.
+  --h3-controls <json> Explicit H3 experiment. Example: '{"kind":"turbo-generation","frames":"last"}'.
   --image-workflow <id> Flash: reference-to-video (default) or image-to-video (1-2 first/last frames).
   --request-id <uuid> Reuse this ID with identical arguments to recover the original billed task.
   --max-credits <integer> Native 4K spending ceiling; omit for a quote with no generation.
@@ -3501,6 +3502,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const audios = [];
     const referenceVoices = [];
     let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, videoResolution = undefined, imageWorkflow = undefined, wait = false;
+    let h3Controls;
     let keepOriginalSound = false, videoOperation = undefined, extendDirection = undefined, outputFormat = undefined;
     let generateAudio = undefined, contentFilter = undefined, webSearch = false, billingRequestId = undefined, maxCredits = undefined;
     for (let i = 2; i < args.length; i++) {
@@ -3520,6 +3522,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
+      else if (args[i] === '--h3-controls') {
+        try { h3Controls = JSON.parse(args[++i]); } catch { throw new Error('--h3-controls requires a JSON object.'); }
+        if (!h3Controls || typeof h3Controls.kind !== 'string') throw new Error('--h3-controls requires an operation kind.');
+      }
       else if (args[i] === '--image-workflow' && args[i + 1]) imageWorkflow = args[++i];
       else if (args[i] === '--request-id' && args[i + 1]) billingRequestId = args[++i];
       else if (args[i] === '--max-credits' && args[i + 1]) maxCredits = Number(args[++i]);
@@ -3592,10 +3598,20 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (isMinimaxH3 && images.length > 9) { console.error('MiniMax H3 supports at most 9 image references.'); process.exit(1); }
     if (isMinimaxH3 && videos.length > 3) { console.error('MiniMax H3 supports at most 3 video references.'); process.exit(1); }
     if (isMinimaxH3 && audios.length > 3) { console.error('MiniMax H3 supports at most 3 audio references.'); process.exit(1); }
-    if (isFalH3Max && images.length > 1) { console.error('MiniMax H3 Max Turbo supports at most one start image.'); process.exit(1); }
-    if (isFalH3Max && (videos.length || audios.length)) { console.error('MiniMax H3 Max Turbo currently supports only text-to-video or one-image-to-video; remove video/audio references.'); process.exit(1); }
-    if (isFalH3Max && duration != null && ![5, 10, 15].includes(duration)) { console.error('MiniMax H3 Max Turbo duration must be 5, 10, or 15 seconds.'); process.exit(1); }
-    if (isFalH3Max && videoResolution && !['auto', '480p', '768p'].includes(videoResolution.toLowerCase())) { console.error('MiniMax H3 Max Turbo resolution must be auto, 480p, or 768p.'); process.exit(1); }
+    if (h3Controls) {
+      if (!(isFalReference || isFalH3Max)) throw new Error('Select fal-h3-max or minimax-h3-max for this operation.');
+      // Older MCP servers strip unknown optional parameters. Check before uploading or submitting.
+      const discovery = await fetch(`${baseUrl}/api/mcp`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', ...headers },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      });
+      const tool = discovery.ok && (await discovery.json()).result?.tools?.find(item => item.name === 'makaron_create_video');
+      if (!tool?.inputSchema?.properties?.h3Controls) throw new Error('This server does not expose H3 controls.');
+    }
+    if (isFalH3Max && !h3Controls && images.length > 1) { console.error('MiniMax H3 Max Turbo supports at most one start image.'); process.exit(1); }
+    if (isFalH3Max && !h3Controls && (videos.length || audios.length)) { console.error('MiniMax H3 Max Turbo currently supports only text-to-video or one-image-to-video; remove video/audio references.'); process.exit(1); }
+    if (isFalH3Max && !h3Controls && duration != null && ![5, 10, 15].includes(duration)) { console.error('MiniMax H3 Max Turbo duration must be 5, 10, or 15 seconds.'); process.exit(1); }
+    if (isFalH3Max && !h3Controls && videoResolution && !['auto', '480p', '768p'].includes(videoResolution.toLowerCase())) { console.error('MiniMax H3 Max Turbo resolution must be auto, 480p, or 768p.'); process.exit(1); }
     if (isGrok && images.length > 7) { console.error('Grok Imagine Video 1.5 supports at most 7 image references.'); process.exit(1); }
     if (isGrok && videos.length > 1) { console.error('Grok video edit/extend accepts exactly one source video.'); process.exit(1); }
     if (isGrok && referenceVoices.length > 3) { console.error('Grok Imagine Video 1.5 supports at most 3 preset voices.'); process.exit(1); }
@@ -3681,7 +3697,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     // Standalone MCP tool (no project timeline write)
     process.stderr.write(`🎬 Submitting video (${describeVideoModel(selectedVideoModel)})...\n`);
     const resolvedOperation = inferredOperation;
-    const vArgs = isSyncLipsync
+    const vArgs = h3Controls
+      ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution, h3Controls, operation: videoOperation }
+      : isSyncLipsync
       ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
       : isSeedance25 || isFlash || isWan30 || isGrok
       ? { script, images, videoUrls, audioUrls, referenceVoiceIds: referenceVoices, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
@@ -3692,6 +3710,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       : videoUrls[0]
         ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
         : { script, images, videoModel: selectedVideoModel, videoResolution };
+    if (h3Controls) vArgs.billingRequestId = billingRequestId || randomUUID();
     if (maxCredits != null) vArgs.maxCredits = maxCredits;
     if (imageWorkflow) vArgs.imageWorkflow = imageWorkflow;
     if (billingRequestId) vArgs.billingRequestId = billingRequestId;
@@ -3723,7 +3742,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         process.exit(1);
       }
     }
-    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isFlash && !isWan30 && !isGrok && !isMinimaxH3 && !isFalReference && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
+    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !h3Controls && !isSeedance25 && !isFlash && !isWan30 && !isGrok && !isMinimaxH3 && !isFalReference && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) {
       console.log(text);

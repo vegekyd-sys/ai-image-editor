@@ -1,6 +1,8 @@
 import { estimateH3MaxReferenceInput } from './h3-max-reference-estimate'
 
 export interface VideoModelCapability {
+  /** Explicit candidate controls; deployment admission is checked separately. */
+  h3Experiments?: readonly import('./h3-controls').H3Controls['kind'][]
   id: string
   label: string
   minOutputDuration: number
@@ -523,6 +525,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   'minimax-h3-max': {
     id: 'minimax-h3-max',
     label: 'fal H3 Turbo',
+    h3Experiments: ['turbo-generation', 'turbo-extend'],
     minOutputDuration: 5,
     maxOutputDuration: 15,
     supportedDurations: [5, 10, 15],
@@ -555,6 +558,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   },
   'fal-h3-max': {
     id: 'fal-h3-max', label: 'fal H3 Max',
+    h3Experiments: ['max-reference', 'camera', 'reframe', 'relight', 'recast', 'photo-lipsync'],
     minOutputDuration: 5, maxOutputDuration: 15,
     maxReferenceVideoDuration: 15,
     supportsVideoReference: true, supportsBaseVideoEdit: false,

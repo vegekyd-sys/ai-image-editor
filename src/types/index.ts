@@ -247,6 +247,7 @@ export interface VideoMeta {
   providerMode?: string;
   /** Actual transport used when a product model can route through a subscription or API. */
   provider?: string;
+  h3Controls?: import('@/lib/h3-controls').H3Controls;
   /** Provider operation used to create this snapshot. */
   operation?: 'generate' | 'edit' | 'extend';
   providerCostUsd?: number;
@@ -271,6 +272,7 @@ export interface VideoMeta {
 
 
 export interface ProjectAnimation {
+  h3Controls?: VideoMeta['h3Controls'];
   retake?: VideoMeta['retake'];
   id: string;
   projectId: string;

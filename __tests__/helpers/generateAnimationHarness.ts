@@ -3,6 +3,7 @@ import { webcrypto } from 'node:crypto';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { z } from 'zod';
+import { h3ControlsSchema, H3_CONTROLS_HELP } from '@/lib/h3-controls';
 import { vi } from 'vitest';
 import { native4kQuoteResult, native4kNeedsDisclosure } from '@/lib/billing/seedance25-native4k';
 import * as capabilities from '@/lib/video-model-capabilities';
@@ -58,6 +59,7 @@ export function generateAnimationHarness(kind: 'generate' | 'upscale' = 'generat
     videoAuto: true, videoModel: 'fal-h3-max',
   };
   const context = vm.createContext({
+    process: { env: { MAKARON_H3_EXPERIMENTS: process.env.MAKARON_H3_EXPERIMENTS } }, h3ControlsSchema, H3_CONTROLS_HELP,
     ...capabilities, native4kQuoteResult, native4kNeedsDisclosure, z, tool: (value: unknown) => value, crypto: webcrypto,
     createVideoValidationReporter, compileVideoReplicationPrompt, resolveAudioRefs,
     refreshSnapshotUrls: vi.fn(), createVideo, requireCredits, deductFixedCredits, refundCredits,

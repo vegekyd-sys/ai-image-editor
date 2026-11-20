@@ -41,7 +41,10 @@ export default function AnimateSheet({
   const { prompt, userHint, status, error, duration, videoModel = getDefaultVideoModelId(), videoResolution = 'auto' } = animationState;
   const videoModels = getVideoModels();
   const videoCapability = getVideoModelCapability(videoModel);
-  const resolutionOptions = videoCapability.supportedResolutions ?? [];
+  const showTurboControls = videoModel === 'minimax-h3-max' && process.env.NEXT_PUBLIC_H3_FRAME_EXPERIMENT === '1';
+  const [frameMode, setFrameMode] = useState<'default' | 'first' | 'last' | 'first-last'>(animationState.h3FrameExperiment ? 'first' : 'default');
+  const explicitFrames = showTurboControls && frameMode !== 'default' ? frameMode : undefined;
+  const resolutionOptions = explicitFrames ? ['480p', '768p', '1080p'] : videoCapability.supportedResolutions ?? [];
   const durationOptions = videoCapability.supportedDurations
     ?? [3, 4, 5, 7, 10, 15, 20, 30]
       .filter(seconds => seconds >= videoCapability.minOutputDuration && seconds <= videoCapability.maxOutputDuration);
@@ -69,7 +72,7 @@ export default function AnimateSheet({
   const activeUrls = activeSnapshots.map(s => s.imageUrl!);
   const imageCount = activeUrls.length;
   const [quote, setQuote] = useState<{ key: string; credits: number } | null>(null);
-  const quoteKey = JSON.stringify({ model: videoModel, resolution: videoResolution, durationSec: duration, imageCount, ...(videoModel === 'fal-h3-max' ? { imageUrls: activeUrls } : {}) });
+  const quoteKey = JSON.stringify({ model: videoModel, resolution: videoResolution, durationSec: duration, imageCount, ...(explicitFrames ? { h3Operation: 'turbo-generation' } : {}), ...(videoModel === 'fal-h3-max' ? { imageUrls: activeUrls } : {}) });
   useEffect(() => {
     if (isDetail || duration == null) return;
     const controller = new AbortController();
@@ -149,11 +152,12 @@ export default function AnimateSheet({
       const res = await fetch('/api/video-snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration, videoModel, videoResolution }),
+        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration, videoModel, videoResolution,
+          ...(explicitFrames ? { h3Controls: { kind: 'turbo-generation', frames: explicitFrames } } : {}) }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to create task');
-      onStateChange({ taskId: json.taskId, snapshotId: json.snapshotId, status: 'polling', pollSeconds: 0 });
+      onStateChange({ taskId: json.taskId, snapshotId: json.snapshotId, submittedMeta: json.videoMeta, status: 'polling', pollSeconds: 0 });
     } catch (err) {
       const raw = String(err);
       const friendly = raw.includes('523') || raw.includes('unreachable') ? t('animate.errUnavailable')
@@ -161,9 +165,10 @@ export default function AnimateSheet({
         : raw.replace(/Error:\s*/g, '').replace(/<[^>]+>/g, '').slice(0, 100);
       onStateChange({ error: friendly, status: 'error' });
     }
-  }, [prompt, projectId, activeUrls, duration, videoModel, videoResolution, onStateChange, t]);
+  }, [prompt, projectId, activeUrls, duration, videoModel, videoResolution, explicitFrames, onStateChange, t]);
 
-  const canGenerate = prompt.trim().length > 0 && status === 'ready' && activeUrls.length >= 1;
+  const canGenerate = prompt.trim().length > 0 && status === 'ready' && activeUrls.length >= 1
+    && (!explicitFrames || activeUrls.length === (explicitFrames === 'first-last' ? 2 : 1) && activeSnapshots.every(snap => snap.type !== 'video'));
   const canGenerateScript = activeUrls.length >= 1 && (status === 'idle' || status === 'error' || status === 'ready');
 
   // Detail filmstrip: use ALL snapshots (unfiltered) so @N matches Agent's Media Index
@@ -635,7 +640,7 @@ export default function AnimateSheet({
               </div>
 
               {/* Model selector */}
-              {status !== 'submitting' && (
+              {!animationState.h3FrameExperiment && status !== 'submitting' && (
                 <div style={{ marginBottom: 10 }}>
                   <div style={{
                     fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
@@ -643,7 +648,7 @@ export default function AnimateSheet({
                   }}>{t('animate.model')}</div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {videoModels.map(m => (
-                      <button key={m.id} onClick={() => onStateChange({ videoModel: m.id, videoResolution: 'auto' })}
+                      <button key={m.id} onClick={() => { setFrameMode('default'); onStateChange({ videoModel: m.id, videoResolution: 'auto' }); }}
                         style={{
                           flex: '1 1 120px', padding: '8px 12px', borderRadius: 10,
                           border: `1px solid ${videoModel === m.id ? 'rgba(232,121,249,0.5)' : 'rgba(255,255,255,0.08)'}`,
@@ -658,6 +663,19 @@ export default function AnimateSheet({
                 </div>
               )}
 
+              {showTurboControls && status !== 'submitting' && (
+                <label>{t('animate.h3Frames')}{' '}
+                  <select value={frameMode} onChange={event => {
+                    setFrameMode(event.target.value as typeof frameMode);
+                    if (event.target.value === 'default' && videoResolution === '1080p') onStateChange({ videoResolution: 'auto' });
+                  }}>
+                    {!animationState.h3FrameExperiment && <option value="default">{t('animate.h3Default')}</option>}
+                    <option value="first">{t('animate.h3First')}</option>
+                    <option value="last">{t('animate.h3Last')}</option>
+                    <option value="first-last">{t('animate.h3Pair')}</option>
+                  </select>
+                </label>
+              )}
               {/* Resolution selector */}
               {status !== 'submitting' && resolutionOptions.length > 0 && (
                 <div style={{ marginBottom: 10 }}>

@@ -9,35 +9,48 @@ import { readProviderImage, measureProviderImages } from './provider-image-prefl
 export class H3ReferenceInputError extends Error { readonly code = 'INVALID_REFERENCE_MEDIA' }
 
 /** Inspect locally downloaded bytes, never allow FFmpeg to fetch caller-controlled URLs. */
-async function inspectClip(url: string, kind: 'video' | 'audio') {
-  const bytes = await readProviderImage(url, 55 * 1024 * 1024)
+async function inspectClip(url: string, kind: 'video' | 'audio', maxBytes = 55 * 1024 * 1024, countFrames = false) {
+  const bytes = await readProviderImage(url, maxBytes)
   const dir = await mkdtemp(join(tmpdir(), 'h3-reference-'))
   try {
     const file = join(dir, 'source')
     await writeFile(file, bytes)
     let log = ''
     try {
-      await promisify(execFile)(await findFfmpeg(), ['-hide_banner', '-protocol_whitelist', 'file,pipe', '-i', file], { timeout: 15_000, maxBuffer: 512 * 1024 })
-    } catch (error) { log = (error as { stderr?: string }).stderr ?? '' }
+      const args = ['-hide_banner', '-protocol_whitelist', 'file,pipe', '-i', file]
+      if (countFrames && kind === 'video') args.push('-map', '0:v:0', '-c:v', 'copy', '-f', 'null', '-')
+      const result = await promisify(execFile)(await findFfmpeg(), args, { timeout: 15_000, maxBuffer: 512 * 1024 })
+      log = result.stderr
+    } catch (error) {
+      if (countFrames && kind === 'video') throw new H3ReferenceInputError('Cannot finish counting H3 input frames for pricing.')
+      // FFmpeg's metadata-only invocation exits without an output file.
+      log = (error as { stderr?: string }).stderr ?? ''
+    }
     const match = log.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/)
     const durationSec = match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) : NaN
     if (!Number.isFinite(durationSec) || durationSec < 2 || durationSec > 15) throw new H3ReferenceInputError(`FAL H3 Max reference ${kind} must be measurable and 2–15 seconds long.`)
     if (kind === 'video') {
       const fps = Number(log.match(/Video:.*?\b(\d+(?:\.\d+)?) fps/)?.[1])
+      if (countFrames) {
+        const size = log.match(/Stream #.*?Video:[^\n]*?\b(\d{2,5})x(\d{2,5})\b/)
+        const frameCount = Number([...log.matchAll(/frame=\s*(\d+)/g)].at(-1)?.[1])
+        if (!size || !frameCount || !Number.isFinite(fps) || fps < 23.899) throw new H3ReferenceInputError('Cannot measure H3 input frames for pricing.')
+        return { url, durationSec, width: Number(size[1]), height: Number(size[2]), frameCount, fps }
+      }
       if (!Number.isFinite(fps) || fps < 23.899) throw new H3ReferenceInputError('FAL H3 Max reference video must have a verified frame rate of at least 23.899fps. Normalize its frame rate before submitting.')
     } else if (!/Audio:/.test(log)) throw new H3ReferenceInputError('FAL H3 Max reference audio has no readable audio track.')
     return { url, durationSec }
   } finally { await rm(dir, { recursive: true, force: true }) }
 }
 
-export async function prepareH3ReferenceMedia(images: string[], videoUrls: string[], audioUrls: string[]) {
+export async function prepareH3ReferenceMedia(images: string[], videoUrls: string[], audioUrls: string[], audioMaxBytes?: number, measureFrames = false) {
   const dimensions = await measureProviderImages(images, 'fal-h3-max')
   const videos = []
   const audios = []
-  for (const url of videoUrls) videos.push(await inspectClip(url, 'video'))
-  for (const url of audioUrls) audios.push(await inspectClip(url, 'audio'))
+  for (const url of videoUrls) videos.push(await inspectClip(url, 'video', undefined, measureFrames))
+  for (const url of audioUrls) audios.push(await inspectClip(url, 'audio', audioMaxBytes))
   return {
-    videos, audios,
+    videos, audios, ...(measureFrames ? { dimensions } : {}),
     referenceImagePixels: dimensions.reduce((sum, image) => sum + image.width * image.height, 0),
     referenceVideoDurationSec: videos.reduce((sum, clip) => sum + clip.durationSec, 0),
     referenceAudioDurationSec: audios.reduce((sum, clip) => sum + clip.durationSec, 0),

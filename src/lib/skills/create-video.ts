@@ -7,6 +7,7 @@ import { getVideoModelCapability, isKling4FamilyModel, normalizeVideoModelId, re
 const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
 
 export interface CreateVideoInput {
+  h3Controls?: import('../h3-controls').H3Controls;
   /** Product Retake interval, in source-video seconds. */
   retake?: { start: number; end: number; audioMode?: 'original' | 'generated'; middleFrame?: {imageUrl:string;time:number}; endFrame?: {imageUrl:string}; correctedBoundaries?: {startUrl:string;endUrl:string}; cameraChange?: boolean; boundaryMode?: 'exact' | 'scene'; editMode?: 'modify' | 'replace' };
   /** Internal only, generated from the authenticated Retake source. */
@@ -334,6 +335,7 @@ async function inferKling4ImageAspectRatio(provider: string, images: string[]): 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
   const retirementError = getVideoModelRetirementError(input.videoModel);
   if (retirementError || input.motionControl) return { success: false, retryable: false, message: retirementError || RETIRED_KLING_MESSAGE };
+  if (input.h3Controls !== undefined) return (await import('../fal-h3-controlled-video')).createControlledH3Video(input);
   if (input.retake) return (await import('../video-retake')).createVideoRetake(input);
   const selected = normalizeVideoModelId(input.videoModel);
   if (selected === 'seedance-2.5-eco' || selected === 'bytedance-video-upscale') {
