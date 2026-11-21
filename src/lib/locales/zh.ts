@@ -1,4 +1,7 @@
 const zh = {
+  "changelog.zImageTurbo.title": "Z-Image Turbo 极速生图",
+  "changelog.zImageTurbo.item1": "在图片模型选择器中选择 Z-Image Turbo，即可快速生成 1K 图片。",
+  "changelog.zImageTurbo.item2": "也可以上传一张参考图重新绘制，默认输出 WebP。",
   "changelog.sunoBgm.title": "背景音乐回归 Suno V6，时长更准",
   "changelog.sunoBgm.item1": "纯背景音乐重新由 Suno V6 生成。告诉 Agent 需要多长，成品通常只和目标差一两秒，并以完整的收尾和弦结束。",
   "changelog.sunoBgm.item2": "每次给你两版，默认用最接近目标时长的那一版；有旁白或对白的音轨仍然一次性整体生成。",
@@ -859,6 +862,9 @@ const zh = {
   'model.qwen.desc': '人脸保真最佳，可处理 NSFW 内容。',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '独立的 1–3 图编辑模型，变化大胆并保留高分辨率。',
+  'model.zImageTurbo.name': 'Z-Image Turbo',
+  'model.zImageTurbo.desc': '极速 1K 文生图与单图重绘',
+  'model.zImageTurbo.badge': '极速',
   'model.klingImage4.name': 'Kling Image 4.0',
   'model.klingImage4.desc': '2K–8K 图片与参考编辑，最多 10 张输入图',
   'model.seedream55.name': 'Seedream 5.5',

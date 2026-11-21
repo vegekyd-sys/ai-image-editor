@@ -7,6 +7,7 @@ import { FalImage25RequestError } from '../models/fal-image25';
 import { NanoBanana21RequestError } from '../models/nano-banana-21';
 import { KlingImage4RequestError } from '../models/kling-image4';
 import { Seedream55RequestError } from '../models/seedream55';
+import { ZImageTurboRequestError } from '../models/fal-z-image-turbo';
 import { WanImageRequestError } from '../models/wan-image';
 import { MidjourneyRequestError, type MidjourneyRequest, type MidjourneyTask } from '../midjourney';
 import { ImageCapabilityError, planImageGeneration } from '../image-model-capabilities';
@@ -88,6 +89,7 @@ export async function editImage(
     return { success: true, message, image: result.image, images: result.images, taskId: result.taskId, usedModel: result.model, provider: result.provider, contentBlocked: result.contentBlocked, usage: result.usage, recovery: result.recovery };
   } catch (error) {
     if (error instanceof KlingImage4RequestError || error instanceof MidjourneyRequestError || error instanceof Seedream55RequestError) return { success: false, taskId: error.taskId, message: `${error.message}${error.taskId ? ` Task: ${error.taskId}. Query this accepted task; do not submit again.` : ''}` };
+    if (error instanceof ZImageTurboRequestError) return { success: false, message: error.message };
     if (error instanceof ImageProviderRefusalError || error instanceof ImageCapabilityError || error instanceof NanoBanana21RequestError || error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
 
       return {

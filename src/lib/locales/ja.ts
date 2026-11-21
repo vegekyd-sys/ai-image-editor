@@ -1,6 +1,9 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  "changelog.zImageTurbo.title": "Z-Image Turbo の高速画像生成",
+  "changelog.zImageTurbo.item1": "画像モデル選択欄で Z-Image Turbo を選ぶと、1K の画像をすばやく生成できます。",
+  "changelog.zImageTurbo.item2": "参照画像を1枚アップロードして描き直すこともでき、既定の出力形式は WebP です。",
   "changelog.sunoBgm.title": "BGM は Suno V6 に、長さもより正確に",
   "changelog.sunoBgm.item1": "インストゥルメンタル BGM を再び Suno V6 で生成します。必要な長さを Agent に伝えると、仕上がりは目標から 1〜2 秒ほどに収まり、きちんとした終止和音で終わります。",
   "changelog.sunoBgm.item2": "毎回 2 テイクを用意し、目標の長さに最も近いものを既定で使います。ナレーションや会話を含む音声は引き続き一度にまとめて生成します。",
@@ -1087,6 +1090,9 @@ const ja = {
   'model.qwen.desc': '顔の再現性に優れ、NSFWコンテンツにも対応します。',
   'model.qwenSpicy.name': 'Qwen Spicy',
   'model.qwenSpicy.desc': '1〜3枚の画像編集に対応する独立モデル。大胆な変化と高解像度出力が特長です。',
+  'model.zImageTurbo.name': 'Z-Image Turbo',
+  'model.zImageTurbo.desc': '高速 1K テキスト画像生成・1 枚の画像から描き直し',
+  'model.zImageTurbo.badge': '最速',
   'model.klingImage4.name': 'Kling Image 4.0',
   'model.klingImage4.desc': '2K〜8K の画像生成・参照編集、入力は最大 10 枚',
   'model.seedream55.name': 'Seedream 5.5',

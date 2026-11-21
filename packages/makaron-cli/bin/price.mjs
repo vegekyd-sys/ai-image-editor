@@ -48,6 +48,7 @@ Usage:
 
 Examples:
   makaron price video --model kling-4-flash --model seedance-2.5-native --duration 5 --resolution 720p
+  makaron price image --model z-image-turbo --resolution 1K --operation generate
   makaron price image --model seedream-5.5 --resolution 2K --operation edit --image-count 3
   makaron price audio --model evolink-seed-audio --duration 20
 

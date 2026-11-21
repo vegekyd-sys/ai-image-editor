@@ -1,3 +1,4 @@
+import { zImageTurboEndpoint } from './models/fal-z-image-turbo';
 import { createKlingImage4Journal } from './models/kling-image4-journal';
 import { createModelPriceTool } from './model-price-tool';
 import { validatePrimaryVideoFraming } from './composition-video-framing';
@@ -1472,7 +1473,7 @@ function createGenerateImageTool(
         benignCharacterContent: z.boolean().describe('Required assessment before generation: true only for harmless nonsexual fictional-character artwork (e.g. an ordinary cartoon-character scene). Enables at most one compatible model recovery after a terminal provider refusal. Set false for other content, unsafe/uncertain content, NSFW, or when the user requires only the selected model. Never infer this assessment from a refusal, and never change isNsfw because of copyright or a provider error.'),
         imageQuality: z.enum(['auto', 'low', 'medium', 'high']).optional().describe('Only for GPT Image 2.6 rendering quality. Default low. Omit for other models, including Kling Image 4.0. For Kling, describe fine detail in the prompt.'),
       imageReasoningEffort: z.enum(['low', 'medium', 'high']).optional().describe('Only for GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high. Omit for Kling Image 4.0.'),
-      outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).optional().describe('Default PNG. Seedream 5.5 supports PNG/JPEG only, transparent PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
+      outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).optional().describe('Default PNG; Z-Image Turbo defaults to WebP (also PNG/JPEG). Seedream 5.5 supports PNG/JPEG only, transparent PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
       frameCount: z.number().int().min(2).max(16).optional().describe('GIF frames 2–16, default 9. Frames share one native sheet: square frames are 960px up to 9 frames, 816px for 10–12, 720px for 13–16. Plan holds by repeating poses; see skills/gif-maker/SKILL.md.'),
       frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).optional().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
       gifFrameSize: z.enum(['sticker', 'full']).optional().describe('GIF frame canvas. sticker = ~512px frames, about half the cost and faster: use for chat stickers, 表情包, emoji/reaction memes. full (default) = largest native frames for GIFs viewed large.'),
@@ -1610,6 +1611,15 @@ function createGenerateImageTool(
           },
         };
         if (billingModel === 'kling-image-4.0' && !skillResult.success) return { success: false, terminal: true, taskId: skillResult.taskId, message: skillResult.message };
+        if (billingModel === 'z-image-turbo' && !skillResult.success) return {
+          success: false, terminal: true, message: skillResult.message,
+          userMessage: {
+            zh: 'Z-Image Turbo 这次未能交付图片。',
+            'zh-Hant': 'Z-Image Turbo 這次未能交付圖片。',
+            en: 'Z-Image Turbo could not deliver an image for this request.',
+            ja: '今回は Z-Image Turbo の画像を取得できませんでした。',
+          },
+        };
         // Reuse the existing terminal-tool contract: the model must not start
         // another paid workflow after the bounded character attempt fails.
         // This is a result for this input, not a project/NSFW state mutation.
@@ -1659,6 +1669,7 @@ function createGenerateImageTool(
           prompt: mjGeneration?.prompt || editPrompt,
           model: skillResult.usedModel || billingModel,
           provider: skillResult.provider,
+          ...(billingModel === 'z-image-turbo' ? { providerModel: zImageTurboEndpoint(imageInputCount) } : {}),
           ...(billingModel === 'seedream-5.5' ? { providerModel: 'doubao-seedream-5.5' } : {}),
           ...(billingModel === 'kling-image-4.0' ? { providerModel: `kling/v4/${imageInputCount ? 'image-to-image' : 'text-to-image'}` } : {}),
           imageResolution: imagePlan.request.imageResolution ?? (billingModel === 'kling-image-4.0' ? '2K' : undefined),
@@ -1717,6 +1728,7 @@ function createGenerateImageTool(
           ...(imageUrl?.startsWith('http') ? { imageUrl } : {}),
           provider: skillResult.provider,
           usedModel: skillResult.usedModel,
+          ...(skillResult.usedModel === 'z-image-turbo' ? { providerModel: zImageTurboEndpoint(imageInputCount) } : {}),
           ...(skillResult.usedModel === 'seedream-5.5' ? { providerModel: 'doubao-seedream-5.5' } : {}),
           ...(skillResult.usedModel === 'kling-image-4.0' ? { providerModel: `kling/v4/${imageInputCount ? 'image-to-image' : 'text-to-image'}` } : {}),
           contentBlocked: skillResult.contentBlocked,

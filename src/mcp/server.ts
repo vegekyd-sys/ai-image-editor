@@ -1,3 +1,4 @@
+import { zImageTurboEndpoint } from '../lib/models/fal-z-image-turbo';
 import { imagePricingInput, type ImagePricingInput } from '../lib/billing/image-pricing-policy';
 import { createKlingImage4Journal } from '../lib/models/kling-image4-journal';
 import { isImageBase64 } from '../lib/models/image-data-url';
@@ -155,7 +156,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.6 support up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
       imageQuality: z.enum(['auto', 'low', 'medium', 'high']).nullish().describe('GPT Image 2.6 rendering quality. Default low; choose higher when the user asks for more visual detail.'),
       imageReasoningEffort: z.enum(['low', 'medium', 'high']).nullish().describe('GPT Image 2.6 fal reasoning effort, separate from rendering quality. Default high.'),
-      outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).nullish().describe('Default PNG. Seedream 5.5 supports PNG/JPEG only, transparent PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
+      outputFormat: z.enum(['png', 'jpeg', 'webp', 'gif', 'svg']).nullish().describe('Default PNG; Z-Image Turbo defaults to WebP (also PNG/JPEG). Seedream 5.5 supports PNG/JPEG only, transparent PNG. GIF preserves animation. SVG is vector text-to-image only: omit source/references. Never substitute or flatten a requested format.'),
       frameCount: z.number().int().min(2).max(16).nullish().describe('GIF frames 2–16, default 9. Square frames are 960px up to 9 frames, 816px for 10–12, 720px for 13–16.'),
       frameDurationMs: z.number().int().min(20).max(2000).multipleOf(10).nullish().describe('GIF milliseconds per frame, default 200, in steps of 10.'),
       gifFrameSize: z.enum(['sticker', 'full']).nullish().describe('GIF frame canvas: sticker ~512px frames (about half cost, for chat stickers/memes), full largest frames (default).'),
@@ -220,7 +221,9 @@ Generation timing varies; report actual completion. Unknown submissions are neve
           ? await options!.publishKlingImage4Result!(result.image, result.taskId!) : undefined;
         // Bill after successful original-byte persistence for Kling Image 4.0.
         await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage, { imagePricing });
-        const receiptInfo = result.usedModel === 'kling-image-4.0' && result.taskId ? ` Provider: fal; provider model: kling/v4/${imageInputCount ? 'image-to-image' : 'text-to-image'}; task: ${result.taskId}.` : result.usedModel === 'seedream-5.5' && result.taskId ? ` Provider: evolink; provider model: doubao-seedream-5.5; task: ${result.taskId}.` : '';
+        const receiptInfo = result.usedModel === 'z-image-turbo' && result.taskId
+          ? ` Provider: fal; provider model: ${zImageTurboEndpoint(imageInputCount)}; request: ${result.taskId}.`
+          : result.usedModel === 'kling-image-4.0' && result.taskId ? ` Provider: fal; provider model: kling/v4/${imageInputCount ? 'image-to-image' : 'text-to-image'}; task: ${result.taskId}.` : result.usedModel === 'seedream-5.5' && result.taskId ? ` Provider: evolink; provider model: doubao-seedream-5.5; task: ${result.taskId}.` : '';
         const msg = (result.usedModel
           ? `${result.message} (model: ${result.usedModel})`
           : result.message) + receiptInfo;

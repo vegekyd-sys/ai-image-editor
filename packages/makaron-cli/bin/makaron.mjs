@@ -2093,9 +2093,9 @@ Options:
   --image <file|url>        Base image to edit. Omit for text-to-image.
   --ref <file|url>          Additional reference image. Repeatable; model-specific limit (Nano Banana 2.1: 14 total inputs).
   --image-request-id <uuid> Stable Kling Image 4.0 generation ID; reuse to inspect a repeated attempt.
-  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.6-flare, gpt-image-2.6-sunburst, wan2.7-image, mj-v8.2, seedream-5.5, or kling-image-4.0. Legacy qwen maps to qwen-spicy.
+  --image-model <id>        gemini, gemini-2.1, gemini-lite, qwen-spicy, openai, gpt-image-2.6-flare, gpt-image-2.6-sunburst, wan2.7-image, mj-v8.2, seedream-5.5, kling-image-4.0, or z-image-turbo. Legacy qwen maps to qwen-spicy.
   --skill <id>              enhance, creative, wild, or captions.
-  --image-resolution <id>  1K, 2K, or 4K; Kling Image 4.0 supports 2K/4K/8K; Seedream 5.5 supports 1K, 1.5K and 2K. Auto remains Flare-first.
+  --image-resolution <id>  1K, 2K, or 4K; Kling Image 4.0 supports 2K/4K/8K; Seedream 5.5 supports 1K, 1.5K and 2K. Z-Image Turbo supports 1K. Auto remains Flare-first.
   --nsfw                  Route NSFW directly to Qwen Spicy.
   --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
   --background <mode>       auto, opaque, or transparent.
@@ -2117,6 +2117,9 @@ Options:
   --help, -h                Show this help.
 
 Notes:
+  Z-Image Turbo supports fast 1K text-to-image and single-image redraw. Pass one
+  --image or one --ref for redraw. The short edge must be at least 512 pixels
+  on the 1K canvas. Default WebP. PNG and JPEG are also available.
   GPT Image 2.6 defaults to low rendering quality + high reasoning.
   New GIF art and animated memes: use makaron chat with GPT Image 2.6 Flare.
   animated-gif is for existing-frame assembly or explicit timing/export controls.
@@ -2129,6 +2132,8 @@ Notes:
   and fails instead of returning an opaque fallback.
 
 Examples:
+  makaron edit --image-model z-image-turbo --out poster.webp "a screen-print illustration of an alpine railway"
+  makaron edit --image poster.webp --image-model z-image-turbo --out variant.webp "redraw the poster in a two-color print style"
   makaron edit --image portrait.jpg --image-model qwen-spicy --out result.jpg "cinematic warm light"
   makaron edit --image product.jpg --ref style.png --aspect 1:1 "use this visual style"
   makaron edit --image-model gpt-image-2.6-flare --background transparent --out sticker.png "a magenta star sticker"
@@ -3404,7 +3409,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     editArgs.midjourney = mjArgs;
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|wan2.7-image|mj-v8.2|seedream-5.5|kling-image-4.0] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|wan2.7-image|mj-v8.2|seedream-5.5|kling-image-4.0|z-image-turbo] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (editArgs.model === 'z-image-turbo' && Number(Boolean(editSourceFile)) + editReferenceFiles.length > 1) {
+    console.error('Z-Image Turbo accepts one total input. Pass one --image or one --ref.');
+    process.exit(1);
+  }
   if (editArgs.model === 'kling-image-4.0') {
     editArgs.imageRequestId ||= randomUUID();
     process.stderr.write(`Image request ID: ${editArgs.imageRequestId} (retain it; never repeat an uncertain paid submission with a new ID)\n`);

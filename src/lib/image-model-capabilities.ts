@@ -1,5 +1,7 @@
 import type { GenerateImageRequest, ImageBackground, ModelId } from './models/types';
 
+export const Z_IMAGE_TURBO_DEFAULT_FORMAT = 'webp';
+
 export type ActiveImageModelId = Exclude<ModelId, 'openai' | 'qwen' | 'pony' | 'wai' | 'gpt-image-2.5-flare' | 'gpt-image-2.5-sunburst'>;
 export type ImageAspectRatioCapability =
   | { kind: 'enum'; values: readonly string[] }
@@ -90,6 +92,12 @@ const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
     promptMode: 'context', provider: 'evolink',
     notes: 'Explicit candidate only; never Auto. EvoLink doubao-seedream-5.5 for text-to-image and editing; up to 10 ordered HTTPS inputs including the base. PNG (default) or JPEG, native transparent PNG; no quality/reasoning/GIF/SVG controls. 1K/1.5K/2K; square outputs 1024/1536/2048 respectively, default 1K. No 3K. One paid submission only; save the accepted receipt and query the same task on failure/timeout. No provider/model fallback. Output resolution and each input image affect the Makaron credit estimate. prompt_priority=standard only.',
   },
+  'z-image-turbo': {
+    id: 'z-image-turbo', label: 'Z-Image Turbo', maxInputImages: 1,
+    aspectRatio: { kind: 'enum', values: STANDARD_RATIOS.filter(ratio => ratio !== '21:9') }, resolutions: ['1K'],
+    supportsTransparency: false, supportsNsfw: false, promptMode: 'context', provider: 'fal',
+    notes: 'Select explicitly for fast 1K text-to-image or image-to-image. Pass media_index for one base image, or one reference if there is no base. Omit all image inputs for new generation. 1K long edge. Square by default for text; image-to-image uses the source ratio by default when the short edge fits the 512px minimum. WebP by default. PNG and JPEG are also available. Image-to-image is a guided redraw, without mask or pixel-exact preservation. No alpha, GIF, SVG, or GPT quality/reasoning controls. Both modes use one synchronous fal request with safety checking. Incompatible requests fail before generation; no automatic retry or fallback.',
+  },
   'wan2.7-image': {
     id: 'wan2.7-image', label: 'Wan 2.7 Image', maxInputImages: 9,
     aspectRatio: { kind: 'range', min: 1 / 8, max: 8 },
@@ -120,7 +128,7 @@ export function listImageModelCapabilities(): ImageModelCapability[] {
 /** Preserve the existing transparent-output override, including selected Sunburst. */
 export function resolveImageModel(model?: string, background?: ImageBackground): ActiveImageModelId | undefined {
   const id = normalizeImageModelId(model);
-  return background === 'transparent' && id !== 'kling-image-4.0' && (!id || !getImageModelCapability(id).supportsTransparency)
+  return background === 'transparent' && id !== 'kling-image-4.0' && id !== 'z-image-turbo' && (!id || !getImageModelCapability(id).supportsTransparency)
     ? DEFAULT_IMAGE_MODEL : id;
 }
 
@@ -134,7 +142,13 @@ export function getImageRequestConflicts(req: GenerateImageRequest, capability: 
   const conflicts: string[] = [];
   const format = req.outputFormat ?? 'png';
   const is26 = capability.id.startsWith('gpt-image-2.6-');
-  if (((req.outputFormat && !((capability.id === 'seedream-5.5' && ['png', 'jpeg'].includes(req.outputFormat)) || (capability.id === 'kling-image-4.0' && req.outputFormat === 'png'))) || req.imageQuality || req.imageReasoningEffort || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined) && !is26) conflicts.push('explicit image format/quality/reasoning controls require GPT Image 2.6');
+  const acceptsRasterFormat = (capability.id === 'seedream-5.5' && ['png', 'jpeg'].includes(format))
+    || (capability.id === 'kling-image-4.0' && format === 'png')
+    || (capability.id === 'z-image-turbo' && ['png', 'jpeg', 'webp'].includes(format));
+  if (!is26 && ((req.outputFormat && !acceptsRasterFormat) || req.imageQuality || req.imageReasoningEffort
+    || req.frameCount !== undefined || req.frameDurationMs !== undefined || req.gifFrameSize !== undefined)) {
+    conflicts.push(capability.id === 'z-image-turbo' ? 'Z-Image Turbo accepts JPEG, PNG or WebP without quality, reasoning or frame controls' : 'explicit image format/quality/reasoning controls require GPT Image 2.6');
+  }
   if (!['png', 'jpeg', 'webp', 'gif', 'svg'].includes(format)) conflicts.push('unsupported outputFormat');
   if (format === 'svg' && (req.image || req.references?.length)) conflicts.push('SVG supports text-to-image only; omit source and references');
   if (req.background === 'transparent' && format === 'jpeg') conflicts.push('JPEG cannot preserve transparency');
@@ -222,6 +236,10 @@ export function prepareImageModelRequest(req: GenerateImageRequest, model: Activ
 /** Prefer delivering an image. Capabilities guide tradeoffs instead of blocking users. */
 export function planImageGeneration(req: GenerateImageRequest): ImageGenerationPlan {
   const normalized = normalizeImageModelId(req.model);
+  if (normalized === 'z-image-turbo') {
+    validateImageModelRequest(req, normalized);
+    return { model: normalized, request: { ...req, model: normalized, imageResolution: '1K', outputFormat: req.outputFormat ?? Z_IMAGE_TURBO_DEFAULT_FORMAT }, adjustments: [] };
+  }
   if (normalized === 'kling-image-4.0') {
     validateImageModelRequest(req, normalized);
     return { model: normalized, request: { ...req, model: normalized }, adjustments: [] };
