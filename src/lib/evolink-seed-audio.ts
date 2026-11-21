@@ -82,7 +82,12 @@ function withDurationHint(prompt: string, durationSeconds?: number): string {
   if (/约?\s*\d+(\.\d+)?\s*秒/.test(prompt) || /\b\d+(\.\d+)?\s*(s|sec|second|seconds)\b/i.test(prompt)) {
     return prompt
   }
-  return `Generate about ${Math.round(durationSeconds)} seconds of audio.\n${prompt}`
+  const seconds = Math.round(durationSeconds)
+  const durationHint = `Generate about ${seconds} seconds of audio.\n`
+  if (durationHint.length + prompt.length <= MAX_PROMPT_CHARS) return durationHint + prompt
+
+  // Use a compact hint before validating the complete gateway prompt.
+  return `Duration: ~${seconds} seconds.\n${prompt}`
 }
 
 function assertRate(name: string, value: number | undefined, min: number, max: number): void {

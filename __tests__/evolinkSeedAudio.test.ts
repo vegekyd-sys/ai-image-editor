@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { generateWithEvolinkSeedAudio } from '@/lib/evolink-seed-audio'
+import { createAudio } from '@/lib/skills/create-audio'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -56,6 +57,32 @@ describe('EvoLink Seed Audio client', () => {
       format: 'wav',
       creditsUsed: 1.36,
     })
+  })
+
+  it('preserves a valid maximum-length mixed brief and its duration in the gateway request', async () => {
+    vi.stubEnv('EVOLINK_API_KEY', 'sk-test')
+    vi.stubEnv('EVOLINK_SEED_AUDIO_POLL_INTERVAL_MS', '1')
+    const brief = 'Keep the spoken words clear over soft room tone. '.repeat(26).slice(0, 1250).trimEnd().padEnd(1250, '.')
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/v1/audios/generations')) {
+        const { prompt } = JSON.parse(String(init?.body))
+        expect(prompt.length).toBeLessThanOrEqual(1500)
+        expect(prompt).toMatch(/30 seconds/)
+        expect(prompt).toContain('Mode: one-pass unified finished soundtrack.')
+        expect(prompt.endsWith(brief)).toBe(true)
+        return Response.json({ id: 'mixed-audio-task' })
+      }
+      expect(url).toMatch(/\/v1\/tasks\/mixed-audio-task$/)
+      return Response.json({
+        status: 'completed',
+        result_data: [{ audio_url: 'https://example.com/mixed.wav', duration: 30, format: 'wav' }],
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(createAudio({ kind: 'mixed', prompt: brief, durationSeconds: 30 }))
+      .resolves.toMatchObject({ success: true, audioUrl: 'https://example.com/mixed.wav' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('fails fast when duration exceeds Seed Audio limit', async () => {
