@@ -16,6 +16,11 @@ export function transferProgressLabel(t: LocaleContextValue['t'], { received, to
 type MediaKind = 'image' | 'video' | 'audio';
 type OnProgress = (progress: TransferProgress) => void;
 
+export interface MediaWarmup {
+  signal: AbortSignal;
+  maxBytes: number;
+}
+
 export function isMobileMediaBrowser(): boolean {
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
     || (/Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
@@ -48,8 +53,12 @@ export function downloadBlob(blob: Blob, filename: string): void {
   finally { setTimeout(() => URL.revokeObjectURL(url), 60_000); }
 }
 
+export function supportsMobileFileShare(): boolean {
+  return isMobileMediaBrowser() && typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
+}
+
 export function shareableFile(blob: Blob, filename: string): File | undefined {
-  if (!isMobileMediaBrowser() || typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') return;
+  if (!supportsMobileFileShare()) return;
   const file = new File([blob], filename, { type: blob.type });
   try {
     return navigator.canShare({ files: [file] }) ? file : undefined;
@@ -58,12 +67,15 @@ export function shareableFile(blob: Blob, filename: string): File | undefined {
   }
 }
 
-async function readMedia(url: string, kind: MediaKind, onProgress?: OnProgress, firstByteMs = 30_000): Promise<Blob> {
+async function readMedia(url: string, kind: MediaKind, onProgress?: OnProgress, firstByteMs = 30_000, warmup?: MediaWarmup): Promise<Blob> {
   const controller = new AbortController();
   const cancel = () => controller.abort(new Error('Media transfer timed out'));
   let timer = setTimeout(cancel, firstByteMs);
 
+  const cancelWarmup = () => controller.abort(warmup?.signal.reason);
+  warmup?.signal.addEventListener('abort', cancelWarmup, { once: true });
   try {
+    warmup?.signal.throwIfAborted();
     const response = await fetch(url, { signal: controller.signal });
     const contentRange = /^bytes 0-(\d+)\/(\d+)$/.exec(response.headers.get('Content-Range') || '');
     const fullRange = contentRange && Number(contentRange[1]) + 1 === Number(contentRange[2]);
@@ -80,6 +92,7 @@ async function readMedia(url: string, kind: MediaKind, onProgress?: OnProgress, 
     // compressed in transit and the body is already decoded by Fetch.
     const total = contentType !== 'image/svg+xml' && !response.headers.get('Content-Encoding') && length > 0
       ? length : undefined;
+    if (warmup && length > warmup.maxBytes) throw new Error('Media exceeds warmup budget');
     const type = contentType && contentType !== 'application/octet-stream' ? contentType : kind === 'video' ? 'video/mp4' : '';
     if (!response.body) throw new Error('Empty media response');
     const reader = response.body.getReader();
@@ -92,8 +105,9 @@ async function readMedia(url: string, kind: MediaKind, onProgress?: OnProgress, 
       clearTimeout(timer);
       if (done) break;
       timer = setTimeout(cancel, 30_000);
-      chunks.push(value as Uint8Array<ArrayBuffer>);
       received += value.byteLength;
+      if (warmup && received > warmup.maxBytes) throw new Error('Media exceeds warmup budget');
+      chunks.push(value as Uint8Array<ArrayBuffer>);
       const now = performance.now();
       if (!lastUpdate || now - lastUpdate >= 120) {
         onProgress?.({ received, total });
@@ -106,11 +120,13 @@ async function readMedia(url: string, kind: MediaKind, onProgress?: OnProgress, 
     return new Blob(chunks, { type });
   } finally {
     clearTimeout(timer);
+    warmup?.signal.removeEventListener('abort', cancelWarmup);
     controller.abort();
   }
 }
 
-export async function fetchMediaBlob(source: string, kind: MediaKind, onProgress?: OnProgress): Promise<Blob> {
+export async function fetchMediaBlob(source: string, kind: MediaKind, onProgress?: OnProgress, warmup?: MediaWarmup): Promise<Blob> {
+  if (warmup) return readMedia(normalizeDomain(source), kind, onProgress, 8_000, warmup);
   const proxy = kind === 'video' && /^https?:\/\//i.test(source) ? `${buildVideoProxyUrl(source)}&full=1` : undefined;
   if (proxy && requiresAuthenticatedVideoProxy(source)) return readMedia(proxy, kind, onProgress);
 

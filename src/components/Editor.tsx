@@ -38,11 +38,12 @@ import { resolveContentType, type RendererContext, type ContentType } from '@/li
 const IOS_CUI_PAN_EDGE_PX = 36;
 const IOS_CUI_PAN_COMMIT_PX = 86;
 const IOS_CUI_PAN_MIN_DX = 10;
-import { downloadAsset, getDownloadAssetPreview, prepareDownloadAsset, PreparedDownloadCache, trySavePaidDownload, type DownloadAssetParams } from '@/lib/editor/download';
-import { transferProgressLabel, type TransferProgress } from '@/lib/editor/media-transfer';
-import { usePreparedMediaShare } from '@/hooks/usePreparedMediaShare';
+import { downloadAsset, getDownloadAssetPreview, prepareDownloadAsset, PreparedDownloadCache, trySavePaidDownload, warmDownloadAsset, type DownloadAssetParams, type PreparedDownload } from '@/lib/editor/download';
+import { managedDownloadUrl, transferProgressLabel, type MediaWarmup, type TransferProgress } from '@/lib/editor/media-transfer';
+import { canPrepareWebPhotoShare, usePreparedMediaShare } from '@/hooks/usePreparedMediaShare';
 import { isWatermarkSaveFlowEnabled } from '@/lib/free-media-policy';
-import { trySaveSmallImage } from '@/lib/editor/image-save';
+import { inspectImageExport } from '@/lib/editor/image-export';
+import { isDirectImageSave, trySaveSmallImage } from '@/lib/editor/image-save';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
@@ -208,6 +209,12 @@ export default function Editor({
   const [saveToast, setSaveToast] = useState(false);
   const [saveStatus, setSaveStatus] = useState<{ key: object; text: string } | null>(null);
   const saveInFlight = useRef(false);
+  const warmSave = useRef<{
+    key: object;
+    budget: MediaWarmup;
+    promise: Promise<PreparedDownload>;
+    onTransfer?: (progress: TransferProgress) => void;
+  } | null>(null);
   // Babel CDN loading status for UI feedback
   const [babelStatus, setBabelStatus] = useState<BabelStatus>(getBabelStatus().status);
   useEffect(() => subscribeBabelStatus(() => setBabelStatus(getBabelStatus().status)), []);
@@ -3040,10 +3047,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, []);
 
   const selectedSaveVideoUrl = isViewingVideoV2 ? currentSnap?.videoMeta?.videoUrl : currentVideo?.videoUrl;
+  const saveImageSource = isViewingVideo ? undefined : currentSnap?.imageUrl || timeline[viewIndex];
   const saveKey = useMemo(() => ({}), [
-    projectId, viewIndex, currentSnap?.id, currentSnap?.design, currentSnap?.imageUrl, selectedSaveVideoUrl,
+    projectId, viewIndex, currentSnap?.id, currentSnap?.design, saveImageSource, selectedSaveVideoUrl,
   ]);
-  const { file: readyToShare, status: shareStatus, offer: offerShare, share: shareFile,
+  const { file: readyToShare, showActions: showShareActions, status: shareStatus, warm: warmShare, offer: offerShare, share: shareFile,
     download: downloadSharedFile, isCurrent: isCurrentSave } = usePreparedMediaShare(saveKey);
   const setCurrentSaveStatus = useCallback((text: string) => {
     if (isCurrentSave()) setSaveStatus({ key: saveKey, text });
@@ -3069,6 +3077,40 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       projectTitle: initialTitle,
     };
   }, [timeline, viewIndex, isViewingVideo, selectedSaveVideoUrl, offerShare, isCurrentSave, setCurrentSaveStatus, showSaveToast, t, initialTitle]);
+  useEffect(() => {
+    if (inactive || (viewMode !== 'gui' && !isDesktop) || (currentSnap?.design && !isViewingVideo)
+      || !canPrepareWebPhotoShare() || isWatermarkSaveFlowEnabled()) return;
+    const source = isViewingVideo ? selectedSaveVideoUrl : saveImageSource;
+    if (!source || (!managedDownloadUrl(source, 'media') && !/^data:image\/|^blob:/i.test(source))) return;
+    const controller = new AbortController();
+    // Start after the current canvas has had a chance to paint. Only warm the
+    // visible original, and stop as soon as the user leaves it.
+    const timer = setTimeout(() => {
+      if (document.visibilityState === 'hidden' || saveInFlight.current) return;
+      const budget = { signal: controller.signal, maxBytes: 32 * 1024 * 1024 };
+      const params = downloadParams();
+      let entry: NonNullable<typeof warmSave.current>;
+      const onTransfer = (progress: TransferProgress) => entry?.onTransfer?.(progress);
+      const promise = warmDownloadAsset({ ...params, onTransfer }, budget);
+      entry = { key: saveKey, budget, promise };
+      warmSave.current = entry;
+      void promise.then(async asset => {
+        if (asset.kind === 'image') {
+          const info = await inspectImageExport(asset.blob).catch(() => null);
+          if (!isDirectImageSave(info)) return;
+        }
+        if (!controller.signal.aborted && !entry.onTransfer) warmShare(asset.blob, asset.filename);
+      }).catch(() => {
+        if (warmSave.current === entry) warmSave.current = null;
+      });
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+      if (warmSave.current?.key === saveKey) warmSave.current = null;
+    };
+  }, [currentSnap?.design, downloadParams, inactive, isDesktop, isViewingVideo, saveImageSource, saveKey, selectedSaveVideoUrl, viewMode, warmShare]);
+
   const handleDownload = useCallback(async () => {
     if (readyToShare) {
       if (await shareFile()) setCurrentSaveStatus('');
@@ -3076,7 +3118,13 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     }
     if (saveInFlight.current) return;
     saveInFlight.current = true;
-    const params = downloadParams();
+    const params: DownloadAssetParams = downloadParams();
+    const warm = warmSave.current;
+    if (warm?.key === saveKey) {
+      warm.onTransfer = params.onTransfer;
+      warm.budget.maxBytes = Infinity;
+      params.preparedOriginal = warm.promise;
+    }
     setCurrentSaveStatus(t('editor.savePreparing'));
     try {
       const generated = Boolean(currentSnap?.design || currentSnap?.messageId || isGeneratedVideoSnapshot(currentSnap) || draftParentIndexRef.current !== null);
@@ -3102,8 +3150,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     } finally {
       saveInFlight.current = false;
     }
-  }, [currentSnap, downloadParams, isViewingVideo, isCurrentSave, readyToShare, setCurrentSaveStatus, shareFile, t]);
-  const saveButtonMessage = readyToShare
+  }, [currentSnap, downloadParams, isViewingVideo, isCurrentSave, readyToShare, saveKey, setCurrentSaveStatus, shareFile, t]);
+  const saveButtonMessage = showShareActions
     ? t(shareStatus === 'failed' ? 'editor.shareFailed' : 'editor.savePhotosHint')
     : saveStatus?.key === saveKey ? saveStatus.text : '';
 
@@ -4063,7 +4111,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                           </svg>
                           {t('editor.saving')}
                         </span>
-                      ) : t(readyToShare ? 'editor.saveToPhotos' : 'project.save')}
+                      ) : t(showShareActions ? 'editor.saveToPhotos' : 'project.save')}
                     </button>
                     </>
                   )}
@@ -4071,7 +4119,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 {saveButtonMessage && (
                   <div className="absolute right-3 top-full mt-1 flex max-w-[min(22rem,85vw)] items-center gap-2 rounded-xl bg-black/85 px-3 py-2 text-xs text-white/80">
                     <span id="editor-save-status" role="status">{saveButtonMessage}</span>
-                    {readyToShare && <button type="button" className="shrink-0 underline underline-offset-2" onClick={downloadSharedFile}>
+                    {showShareActions && <button type="button" className="shrink-0 underline underline-offset-2" onClick={downloadSharedFile}>
                       {t('editor.downloadFile')}
                     </button>}
                   </div>

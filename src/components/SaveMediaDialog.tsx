@@ -159,7 +159,7 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
         const selected = ready.kind === 'image' && imageInfo
           ? await exportImageDownload(prepared, imageInfo, imageSize, imageFormat) : prepared;
         controller.signal.throwIfAborted();
-        if (offerShare(selected.blob, selected.filename)) return;
+        if (offerShare(selected.blob, selected.filename, onClose)) return;
         destination = await savePreparedDownload(selected);
       }
       controller.signal.throwIfAborted();

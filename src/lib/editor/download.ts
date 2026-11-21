@@ -4,7 +4,7 @@ import { isNativePhotoLibrarySaveAvailable, saveBlobToNativePhotoLibrary, saveUr
 import { snapFromTimeline } from './timeline-utils';
 import { requiresAuthenticatedVideoProxy, resolveNativeVideoPlaybackUrl } from '@/lib/video-playback-url';
 import { getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage';
-import { downloadBlob, fetchMediaBlob, isMobileMediaBrowser, managedDownloadUrl, startFileDownload, type TransferProgress } from './media-transfer';
+import { downloadBlob, fetchMediaBlob, isMobileMediaBrowser, managedDownloadUrl, startFileDownload, type MediaWarmup, type TransferProgress } from './media-transfer';
 
 export async function checkMediaDownload(): Promise<boolean> {
   const response = await fetch('/api/media/unlock', { cache: 'no-store' });
@@ -64,6 +64,7 @@ export interface DownloadAssetParams {
   snapshotsRef: { current: Snapshot[] };
   offerShare?: (blob: Blob, filename: string) => boolean;
   onTransfer?: (progress: TransferProgress) => void;
+  preparedOriginal?: Promise<PreparedDownload>;
   isCurrent?: () => boolean;
   setIsSaving: (v: boolean) => void;
   setSaveStatus: (msg: string) => void;
@@ -91,20 +92,28 @@ export function getDownloadAssetPreview(params: DownloadAssetParams): DownloadAs
 }
 
 export function prepareDownloadAsset(params: DownloadAssetParams, cache?: PreparedDownloadCache): Promise<PreparedDownload> {
-  if (!cache) return loadDownloadAsset(params);
+  const load = () => params.preparedOriginal?.catch(error => {
+    if (params.isCurrent?.() === false) throw error;
+    return loadDownloadAsset(params);
+  }) ?? loadDownloadAsset(params);
+  if (!cache) return load();
   const index = snapFromTimeline(params.viewIndex, params.draftParentIndex);
   const snap = index === null ? undefined : params.snapshotsRef.current[index];
   const key = JSON.stringify([params.isViewingVideo, params.isViewingVideo ? params.currentVideoUrl : snap?.design || snap?.imageUrl || params.timeline[params.viewIndex], snap?.id, params.projectTitle]);
-  return cache.get(key, () => loadDownloadAsset(params));
+  return cache.get(key, load);
 }
 
-async function loadDownloadAsset(params: DownloadAssetParams): Promise<PreparedDownload> {
+export function warmDownloadAsset(params: DownloadAssetParams, warmup: MediaWarmup): Promise<PreparedDownload> {
+  return loadDownloadAsset(params, warmup);
+}
+
+async function loadDownloadAsset(params: DownloadAssetParams, warmup?: MediaWarmup): Promise<PreparedDownload> {
   const { timeline, viewIndex, isViewingVideo, currentVideoUrl, draftParentIndex, snapshotsRef, projectTitle } = params;
   const index = snapFromTimeline(viewIndex, draftParentIndex);
   const snap = index === null ? undefined : snapshotsRef.current[index];
   if (isViewingVideo) {
     if (!currentVideoUrl) throw new Error('Video unavailable');
-    const blob = await fetchMediaBlob(currentVideoUrl, 'video', params.onTransfer);
+    const blob = await fetchMediaBlob(currentVideoUrl, 'video', params.onTransfer, warmup);
     return { blob, filename: videoFilename(currentVideoUrl, blob.type), kind: 'video' };
   }
   if (snap?.design?.animation) {
@@ -126,7 +135,7 @@ async function loadDownloadAsset(params: DownloadAssetParams): Promise<PreparedD
     }
   }
   if (!source) throw new Error('Image unavailable');
-  const blob = await fetchMediaBlob(source, 'image', params.onTransfer);
+  const blob = await fetchMediaBlob(source, 'image', params.onTransfer, warmup);
   const slug = (projectTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
   const ext = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : blob.type === 'image/gif' ? 'gif' : blob.type === 'image/svg+xml' ? 'svg' : 'jpg';
   return { blob, filename: `makaron-${slug}-${(index ?? viewIndex) + 1}.${ext}`, kind: 'image' };
