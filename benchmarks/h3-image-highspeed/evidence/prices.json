@@ -1,0 +1,35 @@
+{
+  "prices": {
+    "generate": {
+      "endpoint_id": "minimax/h3-image/highspeed/text-to-image",
+      "unit_price": 0.001,
+      "unit": "units",
+      "currency": "USD"
+    },
+    "edit": {
+      "endpoint_id": "minimax/h3-image/highspeed/edit",
+      "unit_price": 0.001,
+      "unit": "units",
+      "currency": "USD"
+    }
+  },
+  "flarePrices": {
+    "generate": {
+      "endpoint_id": "openai/gpt-image-2.6/flare/text-to-image",
+      "unit_price": 1,
+      "unit": "units",
+      "currency": "USD"
+    },
+    "edit": {
+      "endpoint_id": "openai/gpt-image-2.6/flare/edit",
+      "unit_price": 1,
+      "unit": "units",
+      "currency": "USD"
+    }
+  },
+  "prompts": {
+    "generate": "给我画张方形早起提醒卡。奶油色背景，远处青绿色小山和一轮橙色太阳，中央一台珊瑚橙色复古数字闹钟，蓝色顶钮，钟面准确显示“07:30”，底部深青色横条上只写“EARLY BIRD”。平面海报，主体和文字都要清楚。",
+    "edit": "只把闹钟顶部的蓝色按钮改成明黄色。保持闹钟外形、原有构图、所有其他颜色、时间“07:30”和底部“EARLY BIRD”文字原样。"
+  },
+  "inputSha256": "d607fac6770da36b0650bd0c7df9479bd610f317eb6258b232202228830796c9"
+}
