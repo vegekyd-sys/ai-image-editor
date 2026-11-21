@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { trySaveSmallImage } from '@/lib/editor/image-save';
 import type { DownloadAssetParams, PreparedDownloadCache } from '@/lib/editor/download';
 const mocks = vi.hoisted(() => ({ prepare: vi.fn(), save: vi.fn(), access: vi.fn(), inspect: vi.fn(), watermark: vi.fn(), export: vi.fn() }));
-vi.mock('@/lib/editor/download', () => ({ prepareDownloadAsset: mocks.prepare, savePreparedDownload: mocks.save, checkMediaDownload: mocks.access }));
+vi.mock('@/lib/editor/download', () => ({ prepareDownloadAsset: mocks.prepare, deliverPreparedDownload: async (request: DownloadAssetParams, asset: unknown) => { await mocks.save(asset); request.showSaveToast(); }, checkMediaDownload: mocks.access }));
 vi.mock('@/lib/editor/image-export', () => ({ inspectImageExport: mocks.inspect, exportImageDownload: mocks.export }));
 vi.mock('@/lib/editor/web-watermark', () => ({ watermarkImage: mocks.watermark }));
 const original = { blob: new Blob(['original'], { type: 'image/png' }), filename: 'image.png', kind: 'image' };
 const marked = new Blob(['marked'], { type: 'image/png' });
 const cache = {} as PreparedDownloadCache;
-function params() { return { setIsSaving: vi.fn(), setAgentStatus: vi.fn(), showSaveToast: vi.fn(), t: (key: string) => key } as unknown as DownloadAssetParams; }
+function params() { return { setIsSaving: vi.fn(), setSaveStatus: vi.fn(), showSaveToast: vi.fn(), t: (key: string) => key } as unknown as DownloadAssetParams; }
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.prepare.mockResolvedValue(original);mocks.save.mockResolvedValue(undefined);

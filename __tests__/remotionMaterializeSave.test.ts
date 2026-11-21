@@ -57,7 +57,7 @@ describe('downloadAsset animated Remotion Save', () => {
       return new Blob(['mp4-bytes'], { type: 'video/mp4' })
     })
     const setIsSaving = vi.fn()
-    const setAgentStatus = vi.fn()
+    const setSaveStatus = vi.fn()
     const showSaveToast = vi.fn()
 
     await downloadAsset({
@@ -67,9 +67,8 @@ describe('downloadAsset animated Remotion Save', () => {
       currentVideoUrl: null,
       draftParentIndex: null,
       snapshotsRef: { current: [animatedSnapshot] },
-      pendingVideoRef: { current: null },
       setIsSaving,
-      setAgentStatus,
+      setSaveStatus,
       showSaveToast,
       t: ((key: string) => key) as never,
       projectTitle: 'Project',
@@ -82,10 +81,10 @@ describe('downloadAsset animated Remotion Save', () => {
     expect(clickedHref).toBe(objectUrl)
     expect(setIsSaving).toHaveBeenNthCalledWith(1, true)
     expect(setIsSaving).toHaveBeenLastCalledWith(false)
-    expect(setAgentStatus).toHaveBeenCalledWith('Exporting video...')
-    expect(setAgentStatus).toHaveBeenCalledWith('Exporting video... 42%')
-    expect(setAgentStatus).toHaveBeenCalledWith('editor.done')
-    expect(showSaveToast).toHaveBeenCalled()
+    expect(setSaveStatus).toHaveBeenCalledWith('editor.saveRendering')
+    expect(setSaveStatus).toHaveBeenCalledWith('editor.saveRenderingProgress')
+    expect(setSaveStatus).toHaveBeenCalledWith('editor.downloadStarted')
+    expect(showSaveToast).not.toHaveBeenCalled()
   })
 
   it('keeps Save busy while browser-side Remotion export is still rendering', async () => {
@@ -93,7 +92,7 @@ describe('downloadAsset animated Remotion Save', () => {
       resolveExport = resolve
     }))
     const setIsSaving = vi.fn()
-    const setAgentStatus = vi.fn()
+    const setSaveStatus = vi.fn()
     const showSaveToast = vi.fn()
 
     const promise = downloadAsset({
@@ -103,9 +102,8 @@ describe('downloadAsset animated Remotion Save', () => {
       currentVideoUrl: null,
       draftParentIndex: null,
       snapshotsRef: { current: [animatedSnapshot] },
-      pendingVideoRef: { current: null },
       setIsSaving,
-      setAgentStatus,
+      setSaveStatus,
       showSaveToast,
       t: ((key: string) => key) as never,
       projectTitle: 'Project',
@@ -114,13 +112,13 @@ describe('downloadAsset animated Remotion Save', () => {
     await vi.waitFor(() => expect(resolveExport).toBeTruthy())
     expect(setIsSaving).toHaveBeenCalledWith(true)
     expect(setIsSaving).not.toHaveBeenCalledWith(false)
-    expect(setAgentStatus).toHaveBeenCalledWith('Exporting video...')
+    expect(setSaveStatus).toHaveBeenCalledWith('editor.saveRendering')
 
     expect(resolveExport).toBeDefined()
     resolveExport!(new Blob(['mp4-bytes'], { type: 'video/mp4' }))
     await promise
     expect(setIsSaving).toHaveBeenLastCalledWith(false)
     expect(clickedHref).toBe(objectUrl)
-    expect(showSaveToast).toHaveBeenCalled()
+    expect(showSaveToast).not.toHaveBeenCalled()
   })
 })

@@ -3,17 +3,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Download, LoaderCircle, Pause, Play, Sparkles, X } from 'lucide-react';
 import { useLocale } from '@/lib/i18n';
-import { checkMediaDownload, savePreparedDownload, type DownloadAssetPreview, type PreparedDownload } from '@/lib/editor/download';
+import { checkMediaDownload, savePreparedDownload, type DownloadAssetPreview, type DownloadDestination, type PreparedDownload } from '@/lib/editor/download';
+import { transferProgressLabel, type TransferProgress } from '@/lib/editor/media-transfer';
+import { usePreparedMediaShare } from '@/hooks/usePreparedMediaShare';
 import { preloadWatermarkVideo, watermarkDataUrl, watermarkGeometry, watermarkImage, watermarkVideo } from '@/lib/editor/web-watermark';
 import { isNativeVideoWatermarkAvailable, saveWatermarkedVideoToNativePhotoLibrary } from '@/lib/native-media';
 import { exportImageDownload, IMAGE_SHARE_LONG_EDGE, imageExportDimensions, inspectImageExport, type ImageExportInfo, type ImageSaveFormat, type ImageSaveSize } from '@/lib/editor/image-export';
 
 interface Props {
-  prepare: () => Promise<PreparedDownload>;
+  prepare: (onTransfer: (progress: TransferProgress) => void) => Promise<PreparedDownload>;
   preview?: DownloadAssetPreview;
   onClose: () => void;
   onUpgrade: () => void;
-  onSaved: () => void;
+  onSaved: (destination: DownloadDestination) => void;
   suspended: boolean;
   returningFromCheckout?: boolean;
   watermarkRequired?: boolean;
@@ -29,7 +31,8 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState<number | null>(null);
+  const [transfer, setTransfer] = useState<TransferProgress>({ received: 0 });
   const [size, setSize] = useState({ width: preview?.width || 1, height: preview?.height || 1 });
   const [imageInfo, setImageInfo] = useState<ImageExportInfo | null>(null);
   const [imageSize, setImageSize] = useState<ImageSaveSize>('original');
@@ -45,6 +48,8 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
   const preparedAsset = useRef<Promise<PreparedDownload> | null>(null);
   const kind = asset?.kind || preview?.kind;
   const loading = !previewUrl && !error;
+  const shareKey = `${attempt}:${imageSize}:${imageFormat}:${suspended}:${paid}`;
+  const { file: readyToShare, offer: offerShare, status: shareStatus, share, download } = usePreparedMediaShare(shareKey);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +57,8 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
     let knownAccess: boolean | undefined;
     let preparedKind = preview?.kind;
     setError('');setAsset(null);setImageInfo(null);setImageSize('original');setImageFormat('original');setAccessReady(false);setPreviewUrl(preview?.source || '');
-    const pending = prepare();
+    setTransfer({ received: 0 });
+    const pending = prepare(progress => { if (!cancelled) setTransfer(progress); });
     preparedAsset.current = pending;
     pending.then(next => {
       if (cancelled) return;
@@ -121,8 +127,12 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
   }, [suspended, onClose]);
 
   const save = async () => {
+    if (readyToShare) {
+      if (await share()) onClose();
+      return;
+    }
     if (!preparedAsset.current || !accessReady || saving) return;
-    setSaving(true);setError('');setProgress(0);
+    setSaving(true);setError('');setProgress(null);
     videoRef.current?.pause();
     const controller = new AbortController();
     exportController.current = controller;
@@ -134,6 +144,7 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
         phase = 'access';
         if (!(await checkMediaDownload())) {setPaid(false);setMarkVisible(true);throw new Error('Access changed');}
       }
+      let destination: DownloadDestination = 'photos';
       if (!paid && ready.kind === 'video' && isNativeVideoWatermarkAvailable()) {
         phase = 'native-watermark-save';
         await saveWatermarkedVideoToNativePhotoLibrary(ready.blob, ready.filename, markUrl, setProgress, controller.signal);
@@ -148,10 +159,11 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
         const selected = ready.kind === 'image' && imageInfo
           ? await exportImageDownload(prepared, imageInfo, imageSize, imageFormat) : prepared;
         controller.signal.throwIfAborted();
-        await savePreparedDownload(selected);
+        if (offerShare(selected.blob, selected.filename, onClose)) return;
+        destination = await savePreparedDownload(selected);
       }
       controller.signal.throwIfAborted();
-      onSaved();onClose();
+      onSaved(destination);onClose();
     } catch (error) {
       if (!controller.signal.aborted) {
         console.warn('[media-save]', { phase, kind, name: error instanceof Error ? error.name : 'UnknownError',
@@ -181,13 +193,13 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
         </div>
         <div className="px-5">
           {loading ? <div className="flex min-h-52 items-center justify-center gap-2 text-sm text-white/60" role="status">
-            <LoaderCircle size={18} className="animate-spin" aria-hidden="true" />{t('editor.savePreparing')}
+            <LoaderCircle size={18} className="animate-spin" aria-hidden="true" />{transferProgressLabel(t, transfer)}
           </div> : previewUrl && kind ? <>
             <div className={`mx-auto relative overflow-hidden ${kind === 'image' && imageFormat === 'jpeg' ? 'bg-white' : 'bg-black'}`} data-testid="save-media-preview"
               style={{ width: `min(100%, ${42 * size.width / size.height}dvh)`, aspectRatio: `${size.width} / ${size.height}` }}>
               {kind === 'image' ? <img src={previewUrl} alt={t('editor.savePreview')}
                 className="block w-full h-full object-contain" onLoad={event => setSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} />
-                : <video ref={videoRef} src={previewUrl} playsInline preload="auto" className="block w-full h-full"
+                : <video ref={videoRef} src={previewUrl} playsInline preload="metadata" className="block w-full h-full"
                   onLoadedMetadata={event => {const v = event.currentTarget;setSize({width:v.videoWidth,height:v.videoHeight});setDuration(v.duration);}}
                   onTimeUpdate={event => setTime(event.currentTarget.currentTime)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />}
               {watermarkRequired && <img src={markUrl} alt="" aria-hidden="true" data-testid="save-watermark" data-visible={markVisible}
@@ -236,16 +248,29 @@ export default function SaveMediaDialog({ prepare, preview, onClose, onUpgrade, 
             <p className="mt-2 text-xs tabular-nums text-white/60" data-testid="image-save-dimensions">{selectedSize?.width} × {selectedSize?.height}</p>
             {imageFormat === 'jpeg' && <p className="mt-1 text-xs text-white/50">{t('editor.saveJpgTransparency')}</p>}
           </div>}
+          {!asset && !loading && !error && !saving && <p className="pt-2 text-center text-xs text-white/60" role="status">
+            {transferProgressLabel(t, transfer)}
+          </p>}
+          {readyToShare && <p className="pt-2 text-center text-xs text-white/65" role="status">
+            {t(shareStatus === 'failed' ? 'editor.shareFailed' : 'editor.savePhotosHint')}
+          </p>}
           {error && <div className="py-3 text-sm text-red-300" role="alert">{error}
             {(!asset || !accessReady || (kind === 'image' && !imageInfo)) && <button type="button" className="ml-2 underline" onClick={() => setAttempt(value => value + 1)}>{t('misc.retry')}</button>}
           </div>}
         </div>
         <div className="px-5 pt-3 pb-5">
-          <button type="button" disabled={loading || saving || !accessReady || (!asset && !preview)} onClick={() => void save()}
+          <button type="button" disabled={loading || saving || !accessReady || (!asset && (!preview || Boolean(error))) || shareStatus === 'sharing'} onClick={() => void save()}
             data-testid={paid ? 'save-clean' : 'save-free'} className="mkr-liquid-pill flex min-h-12 w-full items-center justify-center gap-2 rounded-full border border-fuchsia-400/25 bg-fuchsia-500/20 px-5 text-sm font-medium text-white transition hover:bg-fuchsia-500/30 disabled:opacity-40">
             {saving ? <LoaderCircle size={17} className="animate-spin" aria-hidden="true" /> : <Download size={17} aria-hidden="true" />}
-            {saving ? t('editor.saveProcessing', Math.round(progress * 100)) : t('project.save')}
+            {saving
+              ? progress !== null ? t('editor.saveProcessing', Math.round(progress * 100))
+                : asset ? t('editor.saving') : transferProgressLabel(t, transfer)
+              : t(readyToShare ? 'editor.saveToPhotos' : 'project.save')}
           </button>
+          {readyToShare && <button type="button" onClick={() => { download(); onSaved('download'); onClose(); }}
+            className="mt-1 min-h-10 w-full text-sm text-white/65 underline underline-offset-2">
+            {t('editor.downloadFile')}
+          </button>}
           {!paid && <button type="button" disabled={loading || saving || !accessReady || (!asset && !preview)} onClick={onUpgrade}
             data-testid="save-upgrade" className="mt-1 flex min-h-12 w-full items-center justify-center gap-2 text-sm text-white/65 transition hover:text-white disabled:opacity-40">
             <Sparkles size={16} aria-hidden="true" />{t('editor.removeWatermark')}

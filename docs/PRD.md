@@ -202,8 +202,9 @@ Upload a photo, and the AI understands its content, mood, and atmosphere, proact
 
 **Video Playback**
 - Canvas renders `<video>` element with last snapshot as poster
-- Save button: server-side proxy download (bypasses CORS), iOS share sheet compatible
-- Loading state + success toast on save
+- Desktop Save sends completed public Makaron CDN videos to the browser’s download manager. The editor reports the handoff and the browser reports transfer progress.
+- File preparation reads the original media and reports bytes or a percentage when the response length is known. Video preparation retries through the existing proxy if the direct source fails. The proxy handles provider files that require server credentials.
+- Safari H5 prepares the visible original in advance within a transfer budget. Save opens the system share sheet on the first tap when the file is ready, or when preparation finishes while that tap is still active. If the tap expires first, Save to Photos opens the sheet on the next tap. After cancellation, Save can reopen the system share sheet with the prepared file. The Makaron iOS app uses its native Photos bridge for supported media.
 
 ### 3.6 Desktop Responsive Layout
 

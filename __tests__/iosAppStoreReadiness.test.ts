@@ -507,11 +507,12 @@ describe('iOS App Store readiness guardrails', () => {
     }
   });
 
-  it('saves editor images and videos through native Photos on iOS before web fallbacks', () => {
+  it('keeps the native Photos bridge and localized save feedback available in the editor', () => {
     const bridge = fs.readFileSync(path.join(root, 'ios/App/App/MakaronBridgeViewController.swift'), 'utf8');
     const plist = fs.readFileSync(path.join(root, 'ios/App/App/Info.plist'), 'utf8');
     const nativeMedia = fs.readFileSync(path.join(root, 'src/lib/native-media.ts'), 'utf8');
     const download = fs.readFileSync(path.join(root, 'src/lib/editor/download.ts'), 'utf8');
+    const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
 
     expect(plist).toContain('NSPhotoLibraryAddUsageDescription');
     expect(plist).toContain('NSPhotoLibraryUsageDescription');
@@ -559,16 +560,14 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeMedia).toContain('webkit?.messageHandlers?.makaronNative');
     expect(download).toContain('isNativePhotoLibrarySaveAvailable');
     expect(download).toContain('normalizeImageBlobForNativeSave');
-    expect(download).toContain('isRemoteHttpUrl(img)');
-    expect(download).toContain('saveUrlToNativePhotoLibrary(img');
-    expect(download).toContain("setAgentStatus('Saving to Photos...')");
-    expect(download).toContain("setAgentStatus('Native save failed, trying fallback...')");
-    expect(download).toContain('Save failed:');
+    expect(download).toContain("t('editor.saveToPhotosProgress')");
+    expect(editor).toContain("'editor.saveVideoFailed'");
+    expect(editor).toContain("'editor.saveFailed'");
     expect(download).toContain("canvas.toBlob((result) =>");
     expect(download).toContain("'image/png'");
     expect(download).toContain('preserves any decoded alpha');
-    expect(download).toContain('saveBlobToNativePhotoLibrary');
-    expect(download).toContain('saveUrlToNativePhotoLibrary');
+    expect(download).toContain('await saveBlobToNativePhotoLibrary(');
+    expect(download).toContain('await saveUrlToNativePhotoLibrary(');
   });
 
   it('routes native keyboard height into the CUI input bar', () => {

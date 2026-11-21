@@ -38,9 +38,12 @@ import { resolveContentType, type RendererContext, type ContentType } from '@/li
 const IOS_CUI_PAN_EDGE_PX = 36;
 const IOS_CUI_PAN_COMMIT_PX = 86;
 const IOS_CUI_PAN_MIN_DX = 10;
-import { downloadAsset, getDownloadAssetPreview, prepareDownloadAsset, PreparedDownloadCache, trySavePaidDownload, type DownloadAssetParams } from '@/lib/editor/download';
+import { downloadAsset, getDownloadAssetPreview, prepareDownloadAsset, PreparedDownloadCache, trySavePaidDownload, warmDownloadAsset, type DownloadAssetParams, type PreparedDownload } from '@/lib/editor/download';
+import { managedDownloadUrl, transferProgressLabel, type MediaWarmup, type TransferProgress } from '@/lib/editor/media-transfer';
+import { canPrepareWebPhotoShare, usePreparedMediaShare } from '@/hooks/usePreparedMediaShare';
 import { isWatermarkSaveFlowEnabled } from '@/lib/free-media-policy';
-import { trySaveSmallImage } from '@/lib/editor/image-save';
+import { inspectImageExport } from '@/lib/editor/image-export';
+import { isDirectImageSave, trySaveSmallImage } from '@/lib/editor/image-save';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
 import { mergeAnnotation } from '@/lib/annotationUtils';
 import { newAnnotationId } from '@/features/annotation/annotationIds';
@@ -204,7 +207,14 @@ export default function Editor({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
-  const pendingVideoRef = useRef<{ blob: Blob; filename: string } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<{ key: object; text: string } | null>(null);
+  const saveInFlight = useRef(false);
+  const warmSave = useRef<{
+    key: object;
+    budget: MediaWarmup;
+    promise: Promise<PreparedDownload>;
+    onTransfer?: (progress: TransferProgress) => void;
+  } | null>(null);
   // Babel CDN loading status for UI feedback
   const [babelStatus, setBabelStatus] = useState<BabelStatus>(getBabelStatus().status);
   useEffect(() => subscribeBabelStatus(() => setBabelStatus(getBabelStatus().status)), []);
@@ -3036,52 +3046,118 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     setTimeout(() => setSaveToast(false), 2000);
   }, []);
 
+  const selectedSaveVideoUrl = isViewingVideoV2 ? currentSnap?.videoMeta?.videoUrl : currentVideo?.videoUrl;
+  const saveImageSource = isViewingVideo ? undefined : currentSnap?.imageUrl || timeline[viewIndex];
+  const saveKey = useMemo(() => ({}), [
+    projectId, viewIndex, currentSnap?.id, currentSnap?.design, saveImageSource, selectedSaveVideoUrl,
+  ]);
+  const { file: readyToShare, showActions: showShareActions, status: shareStatus, warm: warmShare, offer: offerShare, share: shareFile,
+    isCurrent: isCurrentSave } = usePreparedMediaShare(saveKey);
+  const setCurrentSaveStatus = useCallback((text: string) => {
+    if (isCurrentSave()) setSaveStatus({ key: saveKey, text });
+  }, [isCurrentSave, saveKey]);
+
   const downloadParams = useCallback(() => {
     const video = isViewingVideo ? canvasAreaRef.current?.querySelector('video') : undefined;
     return {
       timeline,
       viewIndex,
       isViewingVideo,
-      currentVideoUrl: currentSnap?.videoMeta?.videoUrl || currentVideo?.videoUrl,
+      currentVideoUrl: selectedSaveVideoUrl,
       currentVideoSize: video?.videoWidth && video.videoHeight ? { width: video.videoWidth, height: video.videoHeight } : undefined,
       draftParentIndex: draftParentIndexRef.current,
       snapshotsRef,
-      pendingVideoRef,
+      offerShare,
+      isCurrent: isCurrentSave,
+      onTransfer: (progress: TransferProgress) => setCurrentSaveStatus(transferProgressLabel(t, progress)),
       setIsSaving,
-      setAgentStatus,
-      showSaveToast,
+      setSaveStatus: setCurrentSaveStatus,
+      showSaveToast: () => { if (isCurrentSave()) showSaveToast(); },
       t,
       projectTitle: initialTitle,
     };
-  }, [timeline, viewIndex, isViewingVideo, currentSnap?.videoMeta?.videoUrl, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
+  }, [timeline, viewIndex, isViewingVideo, selectedSaveVideoUrl, offerShare, isCurrentSave, setCurrentSaveStatus, showSaveToast, t, initialTitle]);
+  useEffect(() => {
+    if (inactive || (viewMode !== 'gui' && !isDesktop) || (currentSnap?.design && !isViewingVideo)
+      || !canPrepareWebPhotoShare() || isWatermarkSaveFlowEnabled()) return;
+    const source = isViewingVideo ? selectedSaveVideoUrl : saveImageSource;
+    if (!source || (!managedDownloadUrl(source, 'media') && !/^data:image\/|^blob:/i.test(source))) return;
+    const controller = new AbortController();
+    // Start after the current canvas has had a chance to paint. Only warm the
+    // visible original, and stop as soon as the user leaves it.
+    const timer = setTimeout(() => {
+      if (document.visibilityState === 'hidden' || saveInFlight.current) return;
+      const budget = { signal: controller.signal, maxBytes: 32 * 1024 * 1024 };
+      const params = downloadParams();
+      let entry: NonNullable<typeof warmSave.current>;
+      const onTransfer = (progress: TransferProgress) => entry?.onTransfer?.(progress);
+      const promise = warmDownloadAsset({ ...params, onTransfer }, budget);
+      entry = { key: saveKey, budget, promise };
+      warmSave.current = entry;
+      void promise.then(async asset => {
+        if (asset.kind === 'image') {
+          const info = await inspectImageExport(asset.blob).catch(() => null);
+          if (!isDirectImageSave(info)) return;
+        }
+        if (!controller.signal.aborted && !entry.onTransfer) warmShare(asset.blob, asset.filename);
+      }).catch(() => {
+        if (warmSave.current === entry) warmSave.current = null;
+      });
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+      if (warmSave.current?.key === saveKey) warmSave.current = null;
+    };
+  }, [currentSnap?.design, downloadParams, inactive, isDesktop, isViewingVideo, saveImageSource, saveKey, selectedSaveVideoUrl, viewMode, warmShare]);
+
   const handleDownload = useCallback(async () => {
-    const generated = Boolean(currentSnap?.design || currentSnap?.messageId || isGeneratedVideoSnapshot(currentSnap) || draftParentIndexRef.current !== null);
-    if (!isViewingVideo && !currentSnap?.design?.animation) {
+    if (readyToShare) {
+      if (await shareFile()) setCurrentSaveStatus('');
+      return;
+    }
+    if (saveInFlight.current) return;
+    saveInFlight.current = true;
+    const params: DownloadAssetParams = downloadParams();
+    const warm = warmSave.current;
+    if (warm?.key === saveKey) {
+      warm.onTransfer = params.onTransfer;
+      warm.budget.maxBytes = Infinity;
+      params.preparedOriginal = warm.promise;
+    }
+    setCurrentSaveStatus(t('editor.savePreparing'));
+    try {
+      const generated = Boolean(currentSnap?.design || currentSnap?.messageId || isGeneratedVideoSnapshot(currentSnap) || draftParentIndexRef.current !== null);
       const watermarkRequired = isWatermarkSaveFlowEnabled() && generated;
-      const params = downloadParams();
-      setSaveNeedsWatermark(watermarkRequired);
-      try {
-        if (!(await trySaveSmallImage(params, saveAssetCache.current!, watermarkRequired))) setSaveRequest(params);
-      } catch {
-        setAgentStatus(t('editor.saveFailed'));
+      if (!isViewingVideo && !currentSnap?.design?.animation) {
+        setSaveNeedsWatermark(watermarkRequired);
+        if (!(await trySaveSmallImage(params, saveAssetCache.current!, watermarkRequired)) && isCurrentSave()) {
+          setCurrentSaveStatus('');
+          setSaveRequest(params);
+        }
+      } else if (watermarkRequired) {
+        setSaveNeedsWatermark(true);
+        if (!(await trySavePaidDownload(params, saveAssetCache.current!)) && isCurrentSave()) {
+          setCurrentSaveStatus('');
+          setSaveRequest(params);
+        }
+      } else {
+        await downloadAsset(params);
       }
-      return;
+    } catch (error) {
+      console.warn('[media-save]', { kind: isViewingVideo ? 'video' : 'image', name: error instanceof Error ? error.name : 'UnknownError' });
+      setCurrentSaveStatus(t(isViewingVideo ? 'editor.saveVideoFailed' : 'editor.saveFailed'));
+    } finally {
+      saveInFlight.current = false;
     }
-    if (isWatermarkSaveFlowEnabled() && generated) {
-      setSaveNeedsWatermark(true);
-      const params = downloadParams();
-      try {
-        if (!(await trySavePaidDownload(params, saveAssetCache.current!))) setSaveRequest(params);
-      } catch {
-        setAgentStatus(t(isViewingVideo ? 'editor.saveVideoFailed' : 'editor.saveFailed'));
-      }
-      return;
-    }
-    await downloadAsset(downloadParams());
-  }, [currentSnap, downloadParams, isViewingVideo, t]);
+  }, [currentSnap, downloadParams, isViewingVideo, isCurrentSave, readyToShare, saveKey, setCurrentSaveStatus, shareFile, t]);
+  const saveButtonMessage = shareStatus === 'failed'
+    ? t('editor.saveFailed')
+    : !readyToShare && saveStatus?.key === saveKey ? saveStatus.text : '';
 
   const savePreview = useMemo(() => saveRequest ? getDownloadAssetPreview(saveRequest) : undefined, [saveRequest]);
-  const prepareSave = useCallback(() => prepareDownloadAsset(saveRequest!, saveAssetCache.current!), [saveRequest]);
+  const prepareSave = useCallback((onTransfer: (progress: TransferProgress) => void) =>
+    prepareDownloadAsset({ ...saveRequest!, onTransfer }, saveAssetCache.current!), [saveRequest]);
   const closeSaveDialog = useCallback(() => {
     setSaveRequest(null);setReturningToSave(false);
     sessionStorage.removeItem('mkr_save_checkout');
@@ -4013,7 +4089,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     <ShareButton projectId={projectId || ''} readOnly={readOnly} onRequestEdit={gateInteraction} readOnlyLabel={viewerSignedIn ? t('design.readOnly') : t('auth.login')} />
                     <button
                       onClick={handleDownload}
-                      disabled={isSaving}
+                      disabled={isSaving || shareStatus === 'sharing' || (isViewingVideo && !selectedSaveVideoUrl)}
+                      aria-describedby={saveButtonMessage ? 'editor-save-status' : undefined}
                       className={`mkr-liquid-pill px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer active:scale-95 disabled:cursor-default ${
                         isSaving
                           ? 'text-white/55'
@@ -4032,13 +4109,18 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                           </svg>
-                          Saving
+                          {t('editor.saving')}
                         </span>
-                      ) : pendingVideoRef.current && /iPhone|iPad|Android/i.test(navigator.userAgent) ? t('editor.share') : 'Save'}
+                      ) : t(showShareActions ? 'editor.saveToPhotos' : 'project.save')}
                     </button>
                     </>
                   )}
                 </div>
+                {saveButtonMessage && (
+                  <div className="absolute right-3 top-full mt-1 flex max-w-[min(22rem,85vw)] items-center gap-2 rounded-xl bg-black/85 px-3 py-2 text-xs text-white/80">
+                    <span id="editor-save-status" role="status">{saveButtonMessage}</span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -4644,7 +4726,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       })()}
 
       {saveRequest && <SaveMediaDialog prepare={prepareSave} preview={savePreview} onClose={closeSaveDialog}
-        onSaved={showSaveToast} suspended={creditPopupOpen} returningFromCheckout={returningToSave} watermarkRequired={saveNeedsWatermark}
+        onSaved={destination => {
+          if (destination === 'photos') showSaveToast();
+          else setCurrentSaveStatus(t('editor.downloadStarted'));
+        }} suspended={creditPopupOpen} returningFromCheckout={returningToSave} watermarkRequired={saveNeedsWatermark}
         onUpgrade={() => {
           const index = snapFromTimeline(saveRequest.viewIndex, saveRequest.draftParentIndex) ?? saveRequest.draftParentIndex;
           const snap = index === null ? undefined : snapshotsRef.current[index];
