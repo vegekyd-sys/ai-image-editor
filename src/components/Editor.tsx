@@ -39,6 +39,8 @@ const IOS_CUI_PAN_EDGE_PX = 36;
 const IOS_CUI_PAN_COMMIT_PX = 86;
 const IOS_CUI_PAN_MIN_DX = 10;
 import { downloadAsset, getDownloadAssetPreview, prepareDownloadAsset, PreparedDownloadCache, trySavePaidDownload, type DownloadAssetParams } from '@/lib/editor/download';
+import { transferProgressLabel, type TransferProgress } from '@/lib/editor/media-transfer';
+import { usePreparedMediaShare } from '@/hooks/usePreparedMediaShare';
 import { isWatermarkSaveFlowEnabled } from '@/lib/free-media-policy';
 import { trySaveSmallImage } from '@/lib/editor/image-save';
 import { cacheImage, updateCachedTips } from '@/lib/imageCache';
@@ -204,7 +206,8 @@ export default function Editor({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
-  const pendingVideoRef = useRef<{ blob: Blob; filename: string } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<{ key: object; text: string } | null>(null);
+  const saveInFlight = useRef(false);
   // Babel CDN loading status for UI feedback
   const [babelStatus, setBabelStatus] = useState<BabelStatus>(getBabelStatus().status);
   useEffect(() => subscribeBabelStatus(() => setBabelStatus(getBabelStatus().status)), []);
@@ -3036,52 +3039,77 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     setTimeout(() => setSaveToast(false), 2000);
   }, []);
 
+  const selectedSaveVideoUrl = isViewingVideoV2 ? currentSnap?.videoMeta?.videoUrl : currentVideo?.videoUrl;
+  const saveKey = useMemo(() => ({}), [
+    projectId, viewIndex, currentSnap?.id, currentSnap?.design, currentSnap?.imageUrl, selectedSaveVideoUrl,
+  ]);
+  const { file: readyToShare, status: shareStatus, offer: offerShare, share: shareFile,
+    download: downloadSharedFile, isCurrent: isCurrentSave } = usePreparedMediaShare(saveKey);
+  const setCurrentSaveStatus = useCallback((text: string) => {
+    if (isCurrentSave()) setSaveStatus({ key: saveKey, text });
+  }, [isCurrentSave, saveKey]);
+
   const downloadParams = useCallback(() => {
     const video = isViewingVideo ? canvasAreaRef.current?.querySelector('video') : undefined;
     return {
       timeline,
       viewIndex,
       isViewingVideo,
-      currentVideoUrl: currentSnap?.videoMeta?.videoUrl || currentVideo?.videoUrl,
+      currentVideoUrl: selectedSaveVideoUrl,
       currentVideoSize: video?.videoWidth && video.videoHeight ? { width: video.videoWidth, height: video.videoHeight } : undefined,
       draftParentIndex: draftParentIndexRef.current,
       snapshotsRef,
-      pendingVideoRef,
+      offerShare,
+      isCurrent: isCurrentSave,
+      onTransfer: (progress: TransferProgress) => setCurrentSaveStatus(transferProgressLabel(t, progress)),
       setIsSaving,
-      setAgentStatus,
-      showSaveToast,
+      setSaveStatus: setCurrentSaveStatus,
+      showSaveToast: () => { if (isCurrentSave()) showSaveToast(); },
       t,
       projectTitle: initialTitle,
     };
-  }, [timeline, viewIndex, isViewingVideo, currentSnap?.videoMeta?.videoUrl, currentVideo?.videoUrl, showSaveToast, t, initialTitle]);
+  }, [timeline, viewIndex, isViewingVideo, selectedSaveVideoUrl, offerShare, isCurrentSave, setCurrentSaveStatus, showSaveToast, t, initialTitle]);
   const handleDownload = useCallback(async () => {
-    const generated = Boolean(currentSnap?.design || currentSnap?.messageId || isGeneratedVideoSnapshot(currentSnap) || draftParentIndexRef.current !== null);
-    if (!isViewingVideo && !currentSnap?.design?.animation) {
+    if (readyToShare) {
+      if (await shareFile()) setCurrentSaveStatus('');
+      return;
+    }
+    if (saveInFlight.current) return;
+    saveInFlight.current = true;
+    const params = downloadParams();
+    setCurrentSaveStatus(t('editor.savePreparing'));
+    try {
+      const generated = Boolean(currentSnap?.design || currentSnap?.messageId || isGeneratedVideoSnapshot(currentSnap) || draftParentIndexRef.current !== null);
       const watermarkRequired = isWatermarkSaveFlowEnabled() && generated;
-      const params = downloadParams();
-      setSaveNeedsWatermark(watermarkRequired);
-      try {
-        if (!(await trySaveSmallImage(params, saveAssetCache.current!, watermarkRequired))) setSaveRequest(params);
-      } catch {
-        setAgentStatus(t('editor.saveFailed'));
+      if (!isViewingVideo && !currentSnap?.design?.animation) {
+        setSaveNeedsWatermark(watermarkRequired);
+        if (!(await trySaveSmallImage(params, saveAssetCache.current!, watermarkRequired)) && isCurrentSave()) {
+          setCurrentSaveStatus('');
+          setSaveRequest(params);
+        }
+      } else if (watermarkRequired) {
+        setSaveNeedsWatermark(true);
+        if (!(await trySavePaidDownload(params, saveAssetCache.current!)) && isCurrentSave()) {
+          setCurrentSaveStatus('');
+          setSaveRequest(params);
+        }
+      } else {
+        await downloadAsset(params);
       }
-      return;
+    } catch (error) {
+      console.warn('[media-save]', { kind: isViewingVideo ? 'video' : 'image', name: error instanceof Error ? error.name : 'UnknownError' });
+      setCurrentSaveStatus(t(isViewingVideo ? 'editor.saveVideoFailed' : 'editor.saveFailed'));
+    } finally {
+      saveInFlight.current = false;
     }
-    if (isWatermarkSaveFlowEnabled() && generated) {
-      setSaveNeedsWatermark(true);
-      const params = downloadParams();
-      try {
-        if (!(await trySavePaidDownload(params, saveAssetCache.current!))) setSaveRequest(params);
-      } catch {
-        setAgentStatus(t(isViewingVideo ? 'editor.saveVideoFailed' : 'editor.saveFailed'));
-      }
-      return;
-    }
-    await downloadAsset(downloadParams());
-  }, [currentSnap, downloadParams, isViewingVideo, t]);
+  }, [currentSnap, downloadParams, isViewingVideo, isCurrentSave, readyToShare, setCurrentSaveStatus, shareFile, t]);
+  const saveButtonMessage = readyToShare
+    ? t(shareStatus === 'failed' ? 'editor.shareFailed' : 'editor.savePhotosHint')
+    : saveStatus?.key === saveKey ? saveStatus.text : '';
 
   const savePreview = useMemo(() => saveRequest ? getDownloadAssetPreview(saveRequest) : undefined, [saveRequest]);
-  const prepareSave = useCallback(() => prepareDownloadAsset(saveRequest!, saveAssetCache.current!), [saveRequest]);
+  const prepareSave = useCallback((onTransfer: (progress: TransferProgress) => void) =>
+    prepareDownloadAsset({ ...saveRequest!, onTransfer }, saveAssetCache.current!), [saveRequest]);
   const closeSaveDialog = useCallback(() => {
     setSaveRequest(null);setReturningToSave(false);
     sessionStorage.removeItem('mkr_save_checkout');
@@ -4013,7 +4041,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     <ShareButton projectId={projectId || ''} readOnly={readOnly} onRequestEdit={gateInteraction} readOnlyLabel={viewerSignedIn ? t('design.readOnly') : t('auth.login')} />
                     <button
                       onClick={handleDownload}
-                      disabled={isSaving}
+                      disabled={isSaving || shareStatus === 'sharing' || (isViewingVideo && !selectedSaveVideoUrl)}
+                      aria-describedby={saveButtonMessage ? 'editor-save-status' : undefined}
                       className={`mkr-liquid-pill px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer active:scale-95 disabled:cursor-default ${
                         isSaving
                           ? 'text-white/55'
@@ -4032,13 +4061,21 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                           </svg>
-                          Saving
+                          {t('editor.saving')}
                         </span>
-                      ) : pendingVideoRef.current && /iPhone|iPad|Android/i.test(navigator.userAgent) ? t('editor.share') : 'Save'}
+                      ) : t(readyToShare ? 'editor.saveToPhotos' : 'project.save')}
                     </button>
                     </>
                   )}
                 </div>
+                {saveButtonMessage && (
+                  <div className="absolute right-3 top-full mt-1 flex max-w-[min(22rem,85vw)] items-center gap-2 rounded-xl bg-black/85 px-3 py-2 text-xs text-white/80">
+                    <span id="editor-save-status" role="status">{saveButtonMessage}</span>
+                    {readyToShare && <button type="button" className="shrink-0 underline underline-offset-2" onClick={downloadSharedFile}>
+                      {t('editor.downloadFile')}
+                    </button>}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -4644,7 +4681,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       })()}
 
       {saveRequest && <SaveMediaDialog prepare={prepareSave} preview={savePreview} onClose={closeSaveDialog}
-        onSaved={showSaveToast} suspended={creditPopupOpen} returningFromCheckout={returningToSave} watermarkRequired={saveNeedsWatermark}
+        onSaved={destination => {
+          if (destination === 'photos') showSaveToast();
+          else setCurrentSaveStatus(t('editor.downloadStarted'));
+        }} suspended={creditPopupOpen} returningFromCheckout={returningToSave} watermarkRequired={saveNeedsWatermark}
         onUpgrade={() => {
           const index = snapFromTimeline(saveRequest.viewIndex, saveRequest.draftParentIndex) ?? saveRequest.draftParentIndex;
           const snap = index === null ? undefined : snapshotsRef.current[index];

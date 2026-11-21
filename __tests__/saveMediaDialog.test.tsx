@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({ access: vi.fn(), save: vi.fn(), image: vi.fn()
 const translate = (key: string) => ({ 'project.save': 'Save', 'editor.removeWatermark': 'Remove watermark' }[key] || key);
 vi.mock('@/lib/i18n', () => ({ useLocale: () => ({ t: translate }) }));
 vi.mock('@/lib/editor/download', () => ({ checkMediaDownload: mocks.access, savePreparedDownload: mocks.save }));
-vi.mock('@/lib/native-media', () => ({ isNativeVideoWatermarkAvailable: mocks.nativeWatermark, saveWatermarkedVideoToNativePhotoLibrary: mocks.nativeVideo }));
+vi.mock('@/lib/native-media', () => ({ isNativePhotoLibrarySaveAvailable: mocks.native, isNativeVideoWatermarkAvailable: mocks.nativeWatermark, saveWatermarkedVideoToNativePhotoLibrary: mocks.nativeVideo }));
 vi.mock('@/lib/editor/image-export', async original => ({ ...await original<typeof import('@/lib/editor/image-export')>(), inspectImageExport: mocks.inspect, exportImageDownload: mocks.export }));
 vi.mock('@/lib/editor/web-watermark', () => ({
   watermarkImage: mocks.image, watermarkVideo: mocks.video, preloadWatermarkVideo: mocks.preload, watermarkDataUrl: () => 'data:image/png;base64,mark',
@@ -43,6 +43,26 @@ describe('SaveMediaDialog choices and checkout return', () => {
     fireEvent.click(screen.getByTestId('save-clean'));
     await waitFor(() => expect(mocks.export).toHaveBeenCalledWith(expect.objectContaining({ blob: original }), expect.objectContaining({ width: 4096 }), '2k', 'jpeg'));
     expect(mocks.image).not.toHaveBeenCalled();
+  });
+
+  it('uses a fresh iOS click for the prepared image and leaves it available after cancellation', async () => {
+    const share = vi.fn().mockRejectedValue(new DOMException('Cancelled', 'AbortError'));
+    vi.stubGlobal('navigator', { userAgent: 'iPhone Safari', share, canShare: () => true });
+    try {
+      render(<SaveMediaDialog {...props} watermarkRequired={false} />);
+      await screen.findByTestId('image-save-options');
+      fireEvent.click(screen.getByTestId('save-clean'));
+      await screen.findByRole('button', { name: 'editor.saveToPhotos' });
+      expect(share).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'editor.saveToPhotos' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'editor.saveToPhotos' }).hasAttribute('disabled')).toBe(false));
+      expect(share).toHaveBeenCalledWith({ files: [expect.objectContaining({ name: 'work.png', type: 'image/png', size: original.size })] });
+      expect(screen.getByRole('button', { name: 'editor.downloadFile' })).toBeTruthy();
+      expect(mocks.save).not.toHaveBeenCalled();
+      expect(props.onSaved).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('does not offer 2K or sharing sizes that would enlarge a smaller original', async () => {
@@ -120,7 +140,7 @@ describe('SaveMediaDialog choices and checkout return', () => {
     mocks.access.mockResolvedValue(paid);mocks.video.mockResolvedValue(marked);
     render(<SaveMediaDialog {...props} prepare={prepareVideo} preview={{ source: 'https://cdn.makaron.app/work.mp4', kind: 'video', width: 768, height: 768 }} />);
     expect(screen.getByTestId('save-media-preview').querySelector('video')?.getAttribute('src')).toBe('https://cdn.makaron.app/work.mp4');
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('editor.savePreparing');
     await waitFor(() => expect(screen.getByTestId(paid ? 'save-clean' : 'save-free').hasAttribute('disabled')).toBe(false));
     expect(screen.getByTestId('save-watermark').getAttribute('data-visible')).toBe(String(!paid));
     expect(mocks.video).not.toHaveBeenCalled();

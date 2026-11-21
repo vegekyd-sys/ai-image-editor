@@ -25,9 +25,8 @@ function makeParams(overrides: Partial<Parameters<typeof downloadAsset>[0]> = {}
     currentVideoUrl: null,
     draftParentIndex: null,
     snapshotsRef: { current: [] },
-    pendingVideoRef: { current: null },
     setIsSaving: vi.fn(),
-    setAgentStatus: vi.fn(),
+    setSaveStatus: vi.fn(),
     showSaveToast: vi.fn(),
     t,
     projectTitle: 'My Project',
@@ -73,8 +72,8 @@ describe('iOS editor image save flow', () => {
     vi.mocked(isNativePhotoLibrarySaveAvailable).mockReturnValue(native);
     const blob = new Blob(['original'], { type: 'image/png' });
     const request = vi.fn(async (url: string) => url === '/api/media/unlock'
-      ? { ok: true, json: async () => ({ paid: true }) }
-      : { ok: true, blob: async () => blob });
+      ? Response.json({ paid: true })
+      : new Response(blob));
     vi.stubGlobal('fetch', request);
     const createUrl = vi.fn(() => 'blob:original');
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createUrl });
@@ -86,14 +85,14 @@ describe('iOS editor image save flow', () => {
       expect(await trySavePaidDownload(params, cache)).toBe(true);
       expect(request.mock.calls.filter(([url]) => url !== '/api/media/unlock')).toHaveLength(1);
       if (native) {
-        expect(saveBlobToNativePhotoLibrary).toHaveBeenCalledWith(blob, expect.stringMatching(/\.png$/), 'image');
+        expect(saveBlobToNativePhotoLibrary).toHaveBeenCalledWith(expect.objectContaining({ type: 'image/png', size: blob.size }), expect.stringMatching(/\.png$/), 'image');
         expect(saveBlobToNativePhotoLibrary).toHaveBeenCalledTimes(2);
         expect(click).not.toHaveBeenCalled();
       } else {
-        expect(createUrl).toHaveBeenCalledWith(blob);
+        expect(createUrl).toHaveBeenCalledWith(expect.objectContaining({ type: 'image/png', size: blob.size }));
         expect(click).toHaveBeenCalledTimes(2);
       }
-      expect(params.showSaveToast).toHaveBeenCalledTimes(2);
+      expect(params.showSaveToast).toHaveBeenCalledTimes(native ? 2 : 0);
       expect(params.setIsSaving).toHaveBeenLastCalledWith(false);
     } finally { click.mockRestore(); }
   });
@@ -126,7 +125,7 @@ describe('iOS editor image save flow', () => {
   it('does not save directly when access changes during preparation', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce({ ok: true, json: async () => ({ paid: true }) })
-      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(['original']) })
+      .mockResolvedValueOnce(new Response(new Blob(['original'], { type: 'image/png' })))
       .mockResolvedValueOnce({ ok: true, json: async () => ({ paid: false }) }));
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     try {
@@ -145,72 +144,21 @@ describe('iOS editor image save flow', () => {
     expect(params.showSaveToast).not.toHaveBeenCalled();
   });
 
-  it('saves remote images through native Photos URL save before fetching blobs', async () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal('fetch', fetchSpy);
-    const params = makeParams();
-
-    await downloadAsset(params);
-
-    expect(saveUrlToNativePhotoLibrary).toHaveBeenCalledWith(
-      'https://cdn.makaron.app/image.jpg',
-      'makaron-my-project-1.jpg',
-      'image',
-    );
-    expect(fetchSpy).not.toHaveBeenCalled();
-    expect(saveBlobToNativePhotoLibrary).not.toHaveBeenCalled();
-    expect(params.setAgentStatus).toHaveBeenCalledWith('Saving to Photos...');
-    expect(params.setAgentStatus).toHaveBeenCalledWith('editor.done');
-    expect(params.showSaveToast).toHaveBeenCalledTimes(1);
-  });
-
-  it('falls back to native blob save when native URL save fails', async () => {
-    vi.mocked(saveUrlToNativePhotoLibrary).mockRejectedValueOnce(new Error('url save failed'));
-    const imageBlob = new Blob(['jpeg'], { type: 'image/jpeg' });
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      blob: async () => imageBlob,
-    })));
-    const params = makeParams();
-
-    await downloadAsset(params);
-
-    expect(saveUrlToNativePhotoLibrary).toHaveBeenCalledTimes(1);
-    expect(fetch).toHaveBeenCalledWith('https://cdn.makaron.app/image.jpg');
-    expect(saveBlobToNativePhotoLibrary).toHaveBeenCalledWith(
-      imageBlob,
-      'makaron-my-project-1.jpg',
-      'image',
-    );
-    expect(params.setAgentStatus).toHaveBeenCalledWith('Native save failed, trying fallback...');
-    expect(params.setAgentStatus).toHaveBeenCalledWith('editor.done');
-    expect(params.showSaveToast).toHaveBeenCalledTimes(1);
-  });
-
   it('saves the original transparent PNG instead of the transformed timeline preview', async () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal('fetch', fetchSpy);
+    const request = vi.fn(async () => new Response(new Blob(['transparent PNG'], { type: 'image/png' })));
+    vi.stubGlobal('fetch', request);
+    const source = 'https://example.supabase.co/storage/v1/object/public/images/u/p/sticker.png';
     const params = makeParams({
       timeline: ['https://example.supabase.co/storage/v1/render/image/public/images/u/p/sticker.png?width=2000'],
       snapshotsRef: {
-        current: [{
-          id: 'snap-alpha',
-          image: '',
-          imageUrl: 'https://example.supabase.co/storage/v1/object/public/images/u/p/sticker.png',
-          tips: [],
-          messageId: '',
-          metadata: { imageMimeType: 'image/png', hasAlpha: true, generationBackground: 'transparent' },
-        }],
+        current: [{ id: 'snap-alpha', image: '', imageUrl: source, tips: [], messageId: '',
+          metadata: { imageMimeType: 'image/png', hasAlpha: true, generationBackground: 'transparent' } }],
       },
     });
-
     await downloadAsset(params);
-
-    expect(saveUrlToNativePhotoLibrary).toHaveBeenCalledWith(
-      'https://example.supabase.co/storage/v1/object/public/images/u/p/sticker.png',
-      'makaron-my-project-1.png',
-      'image',
-    );
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(request).toHaveBeenCalledExactlyOnceWith(source, { signal: expect.any(AbortSignal) });
+    expect(saveBlobToNativePhotoLibrary).toHaveBeenCalledWith(expect.objectContaining({ type: 'image/png' }), 'makaron-my-project-1.png', 'image');
+    expect(params.showSaveToast).toHaveBeenCalledOnce();
   });
 
   it('saves remote videos through native Photos URL save before proxying downloads', async () => {
@@ -230,17 +178,16 @@ describe('iOS editor image save flow', () => {
     );
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(saveBlobToNativePhotoLibrary).not.toHaveBeenCalled();
-    expect(params.setAgentStatus).toHaveBeenCalledWith('Saving to Photos...');
-    expect(params.setAgentStatus).toHaveBeenCalledWith('editor.done');
+    expect(params.setSaveStatus).toHaveBeenCalledWith('editor.saveToPhotosProgress');
+    expect(params.setSaveStatus).toHaveBeenCalledWith('editor.done');
     expect(params.showSaveToast).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to the video proxy when native video URL save fails', async () => {
     vi.mocked(saveUrlToNativePhotoLibrary).mockRejectedValueOnce(new Error('video url save failed'));
-    vi.stubGlobal('fetch', vi.fn(async () => ({
-      ok: true,
-      blob: async () => new Blob(['mp4'], { type: 'video/mp4' }),
-    })));
+    vi.stubGlobal('fetch', vi.fn()
+      .mockRejectedValueOnce(new Error('Direct fetch unavailable'))
+      .mockResolvedValueOnce(new Response(new Blob(['mp4'], { type: 'video/mp4' }))));
     Object.defineProperty(URL, 'createObjectURL', {
       configurable: true,
       value: vi.fn(() => 'blob:video'),
@@ -261,13 +208,13 @@ describe('iOS editor image save flow', () => {
       expect.stringMatching(/^makaron-video-\d+\.mp4$/),
       'video',
     );
-    expect(fetch).toHaveBeenCalledWith('/api/proxy-video?url=https%3A%2F%2Fcdn.makaron.app%2Fvideo.mp4&download=1');
-    expect(params.setAgentStatus).toHaveBeenCalledWith('Native save failed, trying fallback...');
+    expect(fetch).toHaveBeenNthCalledWith(1, 'https://cdn.makaron.app/video.mp4', { signal: expect.any(AbortSignal) });
+    expect(fetch).toHaveBeenNthCalledWith(2, '/api/proxy-video?url=https%3A%2F%2Fcdn.makaron.app%2Fvideo.mp4&full=1', { signal: expect.any(AbortSignal) });
     expect(params.showSaveToast).toHaveBeenCalledTimes(1);
   });
 
   it('reuses the same video Blob across Save openings but invalidates a changed source', async () => {
-    const request = vi.fn(async () => Response.json({ video: true }));
+    const request = vi.fn(async () => new Response(new Blob(['video'], { type: 'video/mp4' })));
     vi.stubGlobal('fetch', request);
     const cache = new PreparedDownloadCache();
     const params = makeParams({ isViewingVideo: true, currentVideoUrl: 'https://cdn.makaron.app/one.mp4' });

@@ -13,6 +13,7 @@ import { useLocale } from '@/lib/i18n';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { Snapshot } from '@/types';
+import { downloadBlob, fetchMediaBlob, isMobileMediaBrowser, managedDownloadUrl, startFileDownload, transferProgressLabel } from '@/lib/editor/media-transfer';
 import { getSnapshotTimelineImage } from '@/lib/editor/timeline-derivations';
 import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
@@ -142,6 +143,9 @@ function MusicCard({ track, onSelect }: {
   track: { playUrl: string; finalUrl: string; duration: number; title: string; tags: string; trackIndex: number };
   onSelect: () => void;
 }) {
+  const { t } = useLocale();
+  const [download, setDownload] = useState<{ url: string; text: string } | null>(null);
+  const downloadInFlight = useRef(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -203,12 +207,30 @@ function MusicCard({ track, onSelect }: {
     return () => audio.removeEventListener('timeupdate', onTime);
   }, []);
 
-  const handleDownload = () => {
-    const a = document.createElement('a');
-    a.href = bestUrl;
-    const urlExtension = bestUrl.match(/\.(mp3|wav|pcm|ogg)(?:\?|$)/i)?.[1]?.toLowerCase();
-    a.download = `${track.title || 'audio'}.${urlExtension || 'wav'}`;
-    a.click();
+  const handleDownload = async () => {
+    if (!bestUrl || downloadInFlight.current) return;
+    downloadInFlight.current = true;
+    const update = (text: string) => setDownload({ url: bestUrl, text });
+    try {
+      const urlExtension = bestUrl.match(/\.(mp3|wav|pcm|ogg|m4a|aac|flac|opus)(?:[?#]|$)/i)?.[1]?.toLowerCase();
+      const title = (track.title || 'audio').replace(/[\\/:*?"<>|]/g, '-').slice(0, 100);
+      const filename = `${title}.${urlExtension || 'wav'}`;
+      const direct = urlExtension && !isMobileMediaBrowser() && managedDownloadUrl(bestUrl, filename);
+      if (direct) {
+        startFileDownload(direct, filename);
+      } else {
+        update(t('editor.savePreparing'));
+        const blob = await fetchMediaBlob(bestUrl, 'audio', progress => update(transferProgressLabel(t, progress)));
+        const extension = urlExtension || ({ 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/aac': 'aac',
+          'audio/ogg': 'ogg', 'application/ogg': 'ogg', 'audio/flac': 'flac' } as Record<string, string>)[blob.type] || 'wav';
+        downloadBlob(blob, `${title}.${extension}`);
+      }
+      update(t('editor.downloadStarted'));
+    } catch {
+      update(t('editor.saveFailed'));
+    } finally {
+      downloadInFlight.current = false;
+    }
   };
 
   const isStreaming = !track.finalUrl;
@@ -246,9 +268,9 @@ function MusicCard({ track, onSelect }: {
         </div>
 
         {/* Download */}
-        <button onClick={handleDownload} onTouchEnd={(e) => { e.preventDefault(); handleDownload(); }}
-          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 active:opacity-70 transition-all"
-          style={{ background: 'rgba(255,255,255,0.06)' }} title="Download">
+        <button onClick={handleDownload} disabled={!bestUrl}
+          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 active:scale-90 active:opacity-70 transition-all disabled:opacity-40"
+          style={{ background: 'rgba(255,255,255,0.06)' }} title={t('editor.downloadFile')} aria-label={t('editor.downloadFile')}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
           </svg>
@@ -265,6 +287,7 @@ function MusicCard({ track, onSelect }: {
           </svg>
         </button>
       </div>
+      {download?.url === bestUrl && <p className="px-3 pb-2 text-xs text-white/65" role="status">{download.text}</p>}
 
       {/* Progress bar — fused with bottom edge, thickens on touch/drag */}
       <div className="relative w-full" style={{ height: 2 }}>

@@ -1,4 +1,4 @@
-import { checkMediaDownload, prepareDownloadAsset, savePreparedDownload, type DownloadAssetParams, type PreparedDownloadCache } from './download';
+import { checkMediaDownload, prepareDownloadAsset, deliverPreparedDownload, type DownloadAssetParams, type PreparedDownloadCache } from './download';
 import { exportImageDownload, inspectImageExport, type ImageExportInfo } from './image-export';
 import { watermarkImage } from './web-watermark';
 
@@ -22,9 +22,7 @@ export async function trySaveSmallImage(params: DownloadAssetParams, cache: Prep
       selected = { ...original, blob: await watermarkImage(original.blob), filename: original.filename.replace(/\.[^.]+$/, '.png') };
       if (info) selected = await exportImageDownload(selected, info, 'original', 'original');
     }
-    await savePreparedDownload(selected);
-    params.setAgentStatus(params.t('editor.done'));
-    params.showSaveToast();
+    await deliverPreparedDownload(params, selected);
     return true;
   } finally { params.setIsSaving(false); }
 }
