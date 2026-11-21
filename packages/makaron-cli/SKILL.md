@@ -298,7 +298,7 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 npx makaron-cli edit --image-model gpt-image-2.6-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Select `z-image-turbo` for fast text-to-image or guided redraw. It returns one 1K image, WebP by default, with PNG/JPEG available through `--output-format`. For a redraw, pass one `--image` or one `--ref`. The redraw uses the source aspect ratio by default. For a current estimate, run `makaron price image --model z-image-turbo --resolution 1K --operation generate`.
+Select `z-image-turbo` for fast text-to-image or guided redraw. It returns one 1K image, WebP by default, with PNG/JPEG available through `--output-format`. For a redraw, pass one `--image` or one `--ref`. Redraw follows the source aspect ratio when the 1K canvas has a short edge of at least 512 pixels. For very wide or tall inputs, pass a supported aspect such as 16:9 or 9:16. For a current estimate, run `makaron price image --model z-image-turbo --resolution 1K --operation generate`.
 
 ```bash
 npx makaron-cli edit --image-model z-image-turbo --out poster.webp "a screen-print illustration of an alpine railway"

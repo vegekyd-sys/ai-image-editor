@@ -14,6 +14,7 @@ export function zImageTurboEndpoint(inputCount: number): string {
 
 const MODEL = 'z-image-turbo';
 const MAX_EDGE = 1024;
+const MIN_EDGE = 512;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 // Confirmed on the published fal price and the paid synchronous receipts.
 const USD_PER_MEGAPIXEL = 0.005;
@@ -57,8 +58,8 @@ async function buildZImageTurboRequest(req: GenerateImageRequest) {
     : [source?.width ?? 1, source?.height ?? 1];
   const scale = MAX_EDGE / Math.max(width, height);
   const imageSize = { width: Math.round(width * scale / 16) * 16, height: Math.round(height * scale / 16) * 16 };
-  if (Math.min(imageSize.width, imageSize.height) < 256) {
-    throw new ZImageTurboRequestError('This source is too wide or tall for the 1K canvas. Pass a supported aspect ratio. No generation was submitted.');
+  if (Math.min(imageSize.width, imageSize.height) < MIN_EDGE) {
+    throw new ZImageTurboRequestError('Z-Image Turbo requires a 512-pixel short edge on its 1K canvas. Pass a supported aspect ratio such as 16:9 or 9:16. No generation was submitted.');
   }
   return {
     endpoint: zImageTurboEndpoint(source ? 1 : 0),

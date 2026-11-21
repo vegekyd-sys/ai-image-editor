@@ -94,9 +94,9 @@ const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
   },
   'z-image-turbo': {
     id: 'z-image-turbo', label: 'Z-Image Turbo', maxInputImages: 1,
-    aspectRatio: { kind: 'enum', values: STANDARD_RATIOS }, resolutions: ['1K'],
+    aspectRatio: { kind: 'enum', values: STANDARD_RATIOS.filter(ratio => ratio !== '21:9') }, resolutions: ['1K'],
     supportsTransparency: false, supportsNsfw: false, promptMode: 'context', provider: 'fal',
-    notes: 'Select explicitly for fast 1K text-to-image or image-to-image. Pass media_index for one base image, or one reference if there is no base. Omit all image inputs for new generation. 1K long edge. Square by default for text; image-to-image uses the source ratio by default. WebP by default. PNG and JPEG are also available. Image-to-image is a guided redraw, without mask or pixel-exact preservation. No alpha, GIF, SVG, or GPT quality/reasoning controls. Both modes use one synchronous fal request with safety checking. Incompatible requests fail before generation; no automatic retry or fallback.',
+    notes: 'Select explicitly for fast 1K text-to-image or image-to-image. Pass media_index for one base image, or one reference if there is no base. Omit all image inputs for new generation. 1K long edge. Square by default for text; image-to-image uses the source ratio by default when the short edge fits the 512px minimum. WebP by default. PNG and JPEG are also available. Image-to-image is a guided redraw, without mask or pixel-exact preservation. No alpha, GIF, SVG, or GPT quality/reasoning controls. Both modes use one synchronous fal request with safety checking. Incompatible requests fail before generation; no automatic retry or fallback.',
   },
   'wan2.7-image': {
     id: 'wan2.7-image', label: 'Wan 2.7 Image', maxInputImages: 9,

@@ -2118,7 +2118,8 @@ Options:
 
 Notes:
   Z-Image Turbo supports fast 1K text-to-image and single-image redraw. Pass one
-  --image or one --ref for redraw. Default WebP. PNG and JPEG are also available.
+  --image or one --ref for redraw. The short edge must be at least 512 pixels
+  on the 1K canvas. Default WebP. PNG and JPEG are also available.
   GPT Image 2.6 defaults to low rendering quality + high reasoning.
   New GIF art and animated memes: use makaron chat with GPT Image 2.6 Flare.
   animated-gif is for existing-frame assembly or explicit timing/export controls.

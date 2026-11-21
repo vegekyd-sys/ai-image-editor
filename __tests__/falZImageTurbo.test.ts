@@ -20,7 +20,7 @@ describe('fal Z-Image Turbo', () => {
     for (const input of [
       { image: 'https://example.com/image.jpg', references: [{ url: 'https://example.com/ref.jpg', role: 'reference' }] },
       { background: 'transparent' as const }, { outputFormat: 'svg' as const }, { outputFormat: 'gif' as const },
-      { imageReasoningEffort: 'low' as const }, { imageResolution: '2K' }, { isNsfw: true }, { aspectRatio: '8:1' },
+      { imageReasoningEffort: 'low' as const }, { imageResolution: '2K' }, { isNsfw: true }, { aspectRatio: '8:1' }, { aspectRatio: '21:9' },
     ]) {
       expect(() => planImageGeneration({ ...request, ...input })).toThrow(/No generation was submitted/);
     }
@@ -62,6 +62,15 @@ describe('fal Z-Image Turbo', () => {
     expect(JSON.parse(options.body as string)).toMatchObject({
       image_size: { width: 1024, height: 576 }, output_format: 'webp', strength: 0.6, image_url: expect.stringMatching(/^data:image\/webp;base64,/),
     });
+  });
+
+  it('rejects a source panorama before fal if its short edge would be clamped', async () => {
+    const source = await sharp({ create: { width: 1024, height: 432, channels: 3, background: '#334455' } }).webp().toBuffer();
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    await expect(generateImage({ ...request, image: 'data:image/webp;base64,' + source.toString('base64') }))
+      .rejects.toThrow(/512-pixel short edge.*No generation was submitted/);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('rejects corrupt source bytes before contacting fal', async () => {
