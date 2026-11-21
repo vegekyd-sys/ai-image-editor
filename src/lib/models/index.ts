@@ -14,6 +14,7 @@ import { midjourneyBackend } from './midjourney';
 import { estimateKlingImage4Credits, klingImage4Backend } from './kling-image4';
 import { estimateSeedream55Credits, seedream55Backend } from './seedream55';
 import { wanImageBackend } from './wan-image';
+import { estimateZImageTurboCredits, falZImageTurboBackend } from './fal-z-image-turbo';
 
 interface ImageModelRegistration {
   backend: ModelBackend;
@@ -62,6 +63,10 @@ const models: Record<ActiveImageModelId, ImageModelRegistration> = {
   'seedream-5.5': {
     backend: seedream55Backend,
     pricing: { kind: 'estimated', billingId: 'seedream-5.5', estimate: estimateSeedream55Credits, billsInputImages: true, outputResolutionAffectsCredits: true },
+  },
+  'z-image-turbo': {
+    backend: falZImageTurboBackend,
+    pricing: { kind: 'estimated', billingId: 'z-image-turbo', estimate: estimateZImageTurboCredits },
   },
   'kling-image-4.0': {
     backend: klingImage4Backend,

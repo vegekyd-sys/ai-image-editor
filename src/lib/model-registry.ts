@@ -34,6 +34,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'gemini-lite', nameKey: 'model.geminiLite.name', descKey: 'model.geminiLite.desc', category: 'image', speedLabel: 'Lite' },
   { id: 'qwen-spicy', nameKey: 'model.qwenSpicy.name', descKey: 'model.qwenSpicy.desc', category: 'image', speedLabel: '~15s' },
   { id: 'seedream-5.5', nameKey: 'model.seedream55.name', descKey: 'model.seedream55.desc', category: 'image' },
+  { id: 'z-image-turbo', nameKey: 'model.zImageTurbo.name', descKey: 'model.zImageTurbo.desc', category: 'image', displayPriority: 4, speedLabelKey: 'model.zImageTurbo.badge' },
   { id: 'kling-image-4.0', nameKey: 'model.klingImage4.name', descKey: 'model.klingImage4.desc', category: 'image' },
   // Video (default first)
   { id: 'kling-4-flash', nameKey: 'model.kling4Flash.name', descKey: 'model.kling4Flash.desc', category: 'video', speedLabel: 'Flash · 720p' },

@@ -298,6 +298,13 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 npx makaron-cli edit --image-model gpt-image-2.6-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
+Select `z-image-turbo` for fast text-to-image or guided redraw. It returns one 1K image, JPEG by default, with PNG/WebP available through `--output-format`. For a redraw, pass one `--image` or one `--ref`. The redraw uses the source aspect ratio by default. For a current estimate, run `makaron price image --model z-image-turbo --resolution 1K --operation generate`.
+
+```bash
+npx makaron-cli edit --image-model z-image-turbo --out poster.jpg "a screen-print illustration of an alpine railway"
+npx makaron-cli edit --image poster.jpg --image-model z-image-turbo --out variant.jpg "redraw the poster in a two-color print style"
+```
+
 Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.6-flare|gpt-image-2.6-sunburst|wan2.7-image|mj-v8.2|seedream-5.5|kling-image-4.0`, `--skill enhance|creative|wild|captions`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output routes strictly to GPT Image 2.6 Flare and fails instead of returning an opaque fallback. Wan 2.7 Image is an explicit fast ~1K route; do not automatically retry failures/timeouts, and do not promise exact face preservation.
 
 Midjourney V8.2 (`mj-v8.2`) accepts natural-language briefs and prepares the English prompt automatically. Fast returns up to 4 images, Draft up to 24 smaller drafts, and HD regenerates up to 4 higher-resolution images. Every returned image is saved; `--out scene.png` produces `scene-1.png`, `scene-2.png`, etc. A single result keeps the requested filename. Provider filtering can reduce the batch size.

@@ -349,6 +349,13 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 npx makaron-cli edit --image-model gpt-image-2.6-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
+Select `z-image-turbo` for fast text-to-image or guided redraw. It returns one 1K image, JPEG by default, with PNG/WebP available through `--output-format`. For a redraw, pass one `--image` or one `--ref`. The redraw uses the source aspect ratio by default. For a current estimate, run `makaron price image --model z-image-turbo --resolution 1K --operation generate`.
+
+```bash
+npx makaron-cli edit --image-model z-image-turbo --out poster.jpg "a screen-print illustration of an alpine railway"
+npx makaron-cli edit --image poster.jpg --image-model z-image-turbo --out variant.jpg "redraw the poster in a two-color print style"
+```
+
 Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.6-flare|gpt-image-2.6-sunburst|wan2.7-image|mj-v8.2|seedream-5.5|kling-image-4.0`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--image-resolution 1K|2K|4K`, `--background auto|opaque|transparent`, `--nsfw`, `--out <path>`. Image Model Capability prefers matching requirements, then relaxes output conflicts to deliver an image: GPT Image 2.6 Flare → Nano Banana 2.1 → Qwen Spicy. Omit the model for Auto: an 8:1 banner or an explicit resolution tier selects Nano Banana 2.1. Native ratio presets do not promise exact mathematical ratios or user pixel dimensions. For Agent-assessed NSFW, pass `--nsfw` to route directly to Spicy; never probe another provider first. Unknown IDs use Flare-first Auto. Output conflicts relax before submission: transparent 8:1 normally keeps 8:1 with opaque output; NSFW always uses Spicy regardless of unsupported dimensions. Preserve input content first and explain actual adjustments. See current MCP tool descriptions for the generated capability table. Classic Nano Banana 2 (`gemini`), Lite, Sunburst and Wan are explicit routes; `openai` means Flare and legacy `qwen` means Spicy. Pony/WAI are retired. Transparent output prefers Flare or explicitly selected Sunburst, and may relax alpha when other requirements conflict. Supplier failures never trigger automatic image resubmission or model switching.
 
 Midjourney V8.2 (`mj-v8.2`) accepts natural-language briefs and prepares the English prompt automatically. Fast returns up to 4 images, Draft up to 24 smaller drafts, and HD regenerates up to 4 higher-resolution images. Every returned image is saved; `--out scene.png` produces `scene-1.png`, `scene-2.png`, etc. A single result keeps the requested filename. Provider filtering can reduce the batch size.
