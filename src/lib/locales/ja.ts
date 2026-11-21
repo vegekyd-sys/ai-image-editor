@@ -1,6 +1,9 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  "changelog.zImageTurbo.title": "Z-Image Turbo の高速画像生成",
+  "changelog.zImageTurbo.item1": "画像モデル選択欄で Z-Image Turbo を選ぶと、1K の画像をすばやく生成できます。",
+  "changelog.zImageTurbo.item2": "参照画像を1枚アップロードして描き直すこともでき、既定の出力形式は WebP です。",
   "changelog.sunoBgm.title": "BGM は Suno V6 に、長さもより正確に",
   "changelog.sunoBgm.item1": "インストゥルメンタル BGM を再び Suno V6 で生成します。必要な長さを Agent に伝えると、仕上がりは目標から 1〜2 秒ほどに収まり、きちんとした終止和音で終わります。",
   "changelog.sunoBgm.item2": "毎回 2 テイクを用意し、目標の長さに最も近いものを既定で使います。ナレーションや会話を含む音声は引き続き一度にまとめて生成します。",

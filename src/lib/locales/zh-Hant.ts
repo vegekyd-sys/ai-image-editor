@@ -4,6 +4,9 @@ import type { TranslationDictionary } from './index';
 const zhHant = {
 
   ...zh,
+  "changelog.zImageTurbo.title": "Z-Image Turbo 極速生圖",
+  "changelog.zImageTurbo.item1": "在圖片模型選擇器中選擇 Z-Image Turbo，即可快速生成 1K 圖片。",
+  "changelog.zImageTurbo.item2": "也可以上傳一張參考圖重新繪製，預設輸出 WebP。",
   "changelog.sunoBgm.title": "背景音樂回歸 Suno V6，時長更準",
   "changelog.sunoBgm.item1": "純背景音樂重新由 Suno V6 生成。告訴 Agent 需要多長，成品通常只和目標差一兩秒，並以完整的收尾和弦結束。",
   "changelog.sunoBgm.item2": "每次提供兩版，預設使用最接近目標時長的那一版；有旁白或對白的音軌仍然一次整體生成。",

@@ -1,4 +1,7 @@
 const en = {
+  "changelog.zImageTurbo.title": "Fast image generation with Z-Image Turbo",
+  "changelog.zImageTurbo.item1": "Select Z-Image Turbo in the image model picker to quickly generate 1K images.",
+  "changelog.zImageTurbo.item2": "You can also redraw a single reference image, with WebP as the default output.",
   "changelog.sunoBgm.title": "Background music with Suno V6, now on time",
   "changelog.sunoBgm.item1": "Instrumental background music is generated with Suno V6 again. Tell Agent the length you need: tracks land within a couple of seconds of it and end on a real final chord.",
   "changelog.sunoBgm.item2": "Every generation gives you two takes, and the one closest to your length is used by default. Soundtracks with narration or dialogue are still made in one pass.",

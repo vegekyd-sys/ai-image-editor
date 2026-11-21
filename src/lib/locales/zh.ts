@@ -1,4 +1,7 @@
 const zh = {
+  "changelog.zImageTurbo.title": "Z-Image Turbo 极速生图",
+  "changelog.zImageTurbo.item1": "在图片模型选择器中选择 Z-Image Turbo，即可快速生成 1K 图片。",
+  "changelog.zImageTurbo.item2": "也可以上传一张参考图重新绘制，默认输出 WebP。",
   "changelog.sunoBgm.title": "背景音乐回归 Suno V6，时长更准",
   "changelog.sunoBgm.item1": "纯背景音乐重新由 Suno V6 生成。告诉 Agent 需要多长，成品通常只和目标差一两秒，并以完整的收尾和弦结束。",
   "changelog.sunoBgm.item2": "每次给你两版，默认用最接近目标时长的那一版；有旁白或对白的音轨仍然一次性整体生成。",
