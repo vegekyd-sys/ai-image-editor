@@ -1,3 +1,4 @@
+import { h3ControlsSchema, H3_CONTROLS_HELP } from '@/lib/h3-controls';
 import { imagePricingInput, type ImagePricingInput } from '../lib/billing/image-pricing-policy';
 import { createKlingImage4Journal } from '../lib/models/kling-image4-journal';
 import { formatImageCapabilitiesForAgent, getImageModelCapability, planImageGeneration } from '../lib/image-model-capabilities';
@@ -389,6 +390,7 @@ Shot 2 (3s): Close-up, <<<media_2>>> ...
 Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
+      h3Controls: h3ControlsSchema.optional().describe(H3_CONTROLS_HELP),
       maxCredits: z.number().int().positive().optional().describe('Native 4K only: omit first for a no-charge total quote. Disclose the total Makaron credits before setting this ceiling. Only explicit native 4K or explicit Native + 4K selection qualifies, never ordinary/HD requests or automatic failure recovery.'),
       billingRequestId: z.string().uuid().optional().describe('Optional stable request UUID. Reuse when retrying the same billed submission to avoid duplicate charges/jobs.'),
       images: z.array(z.string().url()).max(30).default([]).describe('Optional public image URLs. Seedance 2.5 accepts up to 30; older routes may accept fewer.'),
@@ -417,6 +419,7 @@ Style: Cinematic, warm golden light.`,
         const t0 = Date.now();
         const result = await submitVideoWithQuote({
           script: params.script,
+          h3Controls: params.h3Controls,
           billingRequestId: params.billingRequestId,
           maxCredits: params.maxCredits,
           images: params.images,

@@ -94,6 +94,23 @@ export async function estimateModelPrice(request: ModelPriceRequest): Promise<Es
       const model = resolveProductVideoModelId(r.model);
       const capability = listVideoModelCapabilities().find(c => c.id === model);
       if (!capability) return unresolved(r, 'unsupported', 'Model is not in the active video registry; no substitution.');
+      if (r.options?.h3Controls !== undefined) {
+        const { h3ControlsSchema } = await import('./h3-controls');
+        const assets = z.object({
+          h3Controls: h3ControlsSchema, images: z.array(z.string().url()).max(9).default([]),
+          videoUrls: z.array(z.string().url()).max(3).default([]), audioUrls: z.array(z.string().url()).max(3).default([]),
+          aspectRatio: z.enum(['16:9','9:16','1:1','4:3','3:4','21:9']).optional(),
+        }).strict().safeParse(r.options);
+        if (!assets.success) return unresolved(r, 'unsupported', 'Invalid H3 operation or asset list.');
+        if (r.image_count !== assets.data.images.length) return unresolved(r, 'needs_inputs', 'Provide the selected H3 image URLs to measure input cost.', ['options.images']);
+        const { prepareControlledH3Request } = await import('./fal-h3-controlled-video');
+        const request = await prepareControlledH3Request({
+          ...assets.data, videoModel: model, videoResolution: r.resolution?.toLowerCase() as VideoResolution,
+          duration: r.duration_seconds, videoOperation: r.operation, script: 'H3 cost estimate',
+        });
+        const quote = await quoteVideo(request.usage);
+        return { ...mediaEstimate(r, model, quote, { unit: 'output-second' }), resolution: request.usage.resolution ?? undefined };
+      }
       const pricing = capability.pricing;
       if (r.options && Object.keys(r.options).length) return unresolved(r, 'unsupported', 'This model does not accept extra quote options. Pass output size in the resolution field.');
       const resolution = r.resolution?.toLowerCase() as VideoResolution | undefined;

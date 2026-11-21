@@ -56,12 +56,14 @@ export interface MediaQuote {
 }
 
 export interface VideoQuoteInput {
+  h3Operation?: import('../h3-controls').H3Controls['kind']
   model?: string | null
   resolution?: VideoResolutionInput
   operation?: VideoGenerationOperation
   durationSec: number
   imageCount?: number
   referenceVideoDurationSec?: number
+  measuredReferenceTokens?: number
   referenceImagePixels?: number
   referenceAudioDurationSec?: number
   contentFilter?: boolean
@@ -105,7 +107,9 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
   const referenceImagePixels = nonNegative(input.referenceImagePixels ?? 0, 'reference image pixels')
   const referenceAudioDurationSec = nonNegative(input.referenceAudioDurationSec ?? 0, 'reference audio duration')
   for (const field of ['input_usd_per_1k_tokens', 'free_input_tokens', 'input_tokens_per_image_pixel', 'input_tokens_per_video_second', 'input_tokens_per_audio_second'] as const) nonNegative(price[field] ?? 0, field)
-  const referenceTokens = referenceImagePixels * (price.input_tokens_per_image_pixel ?? 0)
+  const referenceTokens = input.measuredReferenceTokens != null
+    ? nonNegative(input.measuredReferenceTokens, 'measured H3 reference tokens')
+    : referenceImagePixels * (price.input_tokens_per_image_pixel ?? 0)
     + referenceVideoDurationSec * (price.input_tokens_per_video_second ?? 0)
     + referenceAudioDurationSec * (price.input_tokens_per_audio_second ?? 0)
   const billableReferenceTokens = Math.max(0, referenceTokens - (price.free_input_tokens ?? 0))
@@ -161,8 +165,11 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
   }
 }
 
-export function videoPriceId(input: Pick<VideoQuoteInput, 'model' | 'resolution' | 'operation'>): string {
+export function videoPriceId(input: Pick<VideoQuoteInput, 'model' | 'resolution' | 'operation' | 'h3Operation'>): string {
   const route = resolveVideoGenerationRoute(input)
+  if (input.h3Operation && input.h3Operation !== 'max-reference' && (input.h3Operation !== 'turbo-generation' || route.resolution === '1080p')) {
+    return `video:${route.model}:${input.h3Operation}:${route.resolution}`
+  }
   return `video:${normalizeVideoModelId(input.model)}:${route.resolution}:${input.operation ?? 'generate'}`
 }
 

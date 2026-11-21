@@ -89,34 +89,52 @@ async function readJson(response: Response, label: string): Promise<Record<strin
   return body
 }
 
-export async function createFalH3MaxVideoTask(input: FalH3MaxTaskInput): Promise<string> {
+export function buildFalH3TurboRequest(input: FalH3MaxTaskInput, controls?: {
+  frames?: 'first' | 'first-last' | 'last'; targetAudioUrl?: string; resolution?: '480p' | '768p' | '1080p'
+}) {
   const prompt = input.prompt.trim()
   const images = input.images || []
   const duration = input.duration ?? 5
 
   if (!prompt) throw new Error('MiniMax H3 Max Turbo requires a non-empty prompt.')
-  if (images.length > 1) throw new Error('MiniMax H3 Max Turbo currently supports exactly one start image, not multi-image references.')
+  if (controls?.frames) {
+    const expected = controls.frames === 'first-last' ? 2 : 1
+    if (images.length !== expected) throw new Error('Selected Turbo keyframe mode does not match the supplied images.')
+  } else if (images.length > 1) {
+    throw new Error('MiniMax H3 Max Turbo currently supports exactly one start image, not multi-image references.')
+  }
   if (![5, 10, 15].includes(duration)) throw new Error('MiniMax H3 Max Turbo duration must be one of 5, 10, or 15 seconds.')
-  await validateProviderImages(images, 'minimax-h3-max')
 
-  const endpoint = images.length === 1 ? IMAGE_ENDPOINT : TEXT_ENDPOINT
+  const endpoint = images.length ? IMAGE_ENDPOINT : TEXT_ENDPOINT
   const payload: Record<string, unknown> = {
-    prompt: normalizePrompt(prompt),
+    prompt: controls ? prompt.replace(/<<<(?:image|media)_(\d+)>>>/gi, (_, raw: string) => {
+      const index = Number(raw)
+      if (index < 1 || index > images.length) throw new Error('Turbo keyframe marker has no selected image.')
+      return controls.frames === 'last' || index === 2 ? 'the provided last frame' : 'the provided first frame'
+    }) : normalizePrompt(prompt),
     duration,
-    resolution: providerResolution(input.resolution),
+    resolution: controls?.resolution?.toUpperCase() ?? providerResolution(input.resolution),
     enable_safety_checker: true,
     prompt_expansion_mode: 'balanced',
     sync_mode: false,
   }
 
-  if (images.length === 1) {
-    payload.image_url = images[0]
+  if (controls?.targetAudioUrl) payload.target_audio_url = controls.targetAudioUrl
+  if (images.length) {
+    if (controls?.frames !== 'last') payload.image_url = images[0]
+    if (controls?.frames === 'last' || controls?.frames === 'first-last') payload.end_image_url = images[images.length - 1]
   } else {
     payload.aspect_ratio = input.aspectRatio && input.aspectRatio !== 'auto'
       ? input.aspectRatio
       : '16:9'
   }
 
+  return { endpoint, payload }
+}
+
+export async function createFalH3MaxVideoTask(input: FalH3MaxTaskInput): Promise<string> {
+  const { endpoint, payload } = buildFalH3TurboRequest(input)
+  await validateProviderImages(input.images || [], 'minimax-h3-max')
   const auth = headers()
   await input.onBeforeSubmit?.()
   const response = await fetch(`https://queue.fal.run/${endpoint}`, {

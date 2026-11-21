@@ -1,3 +1,4 @@
+import { h3ControlsSchema, H3_CONTROLS_HELP } from './h3-controls';
 import { createKlingImage4Journal } from './models/kling-image4-journal';
 import { createModelPriceTool } from './model-price-tool';
 import { validatePrimaryVideoFraming } from './composition-video-framing';
@@ -1743,6 +1744,10 @@ function createGenerateAnimationTool(
       inputSchema: z.object({
         max_credits: z.number().int().positive().optional().describe('Seedance native 4K only: first omit this field to obtain the complete no-charge quote. Show the returned total Makaron credits before submitting the same request with this ceiling. Use only if the user explicitly requested native 4K or explicitly selected Native + 4K. Never infer authorization from ordinary/HD/high-quality requests or a failed job. A higher fresh quote stops before charging.'),
         story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers. Gemini Omni 1.2, Kling 4.0 / Flash and H3 Max text-to-video follow the same no-marker rule; fal H3 Turbo image-to-video uses exactly one media marker; FAL H3 Max accepts image/video/audio references. Kling 4.0 / Flash story_prompt must be 2500 characters or fewer, markers included. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
+        ...(process.env.MAKARON_H3_EXPERIMENTS ? {
+          h3_media_indices: z.array(z.number().int().positive()).max(12).optional().describe('H3 experiment only: selected 1-based timeline image/video indices, in input order. Audio is selected separately through audio_refs.'),
+          h3_controls: h3ControlsSchema.optional().describe(H3_CONTROLS_HELP + ' Use h3_media_indices for selected timeline images/videos, media_refs for additional image URLs, video_ref_url for an external clip, audio_refs for selected attachments. Ordered positions are local to this selection.'),
+        } : {}),
         video_intent: z.enum(['generate', 'replicate']).nullish().describe('Default generate: ordinary new videos, photo animation, lookbooks, loose references, edits and extensions. Set replicate ONLY when the user wants to reproduce a supplied video\'s measured timing, action and camera with replaced content; requires replication_contract and an actual source video. Never select replicate merely to preserve a face.'),
         image_workflow: z.enum(['reference-to-video', 'image-to-video']).optional().describe('Flash only: default feature-reference semantics; image-to-video explicitly locks1–2 first/last frames. Omit aspect_ratio for first/last frames or edit.'),
         duration: z.number().optional().describe('Seedance2.5Flash generation uses4–30s integers; edit follows source duration and ignores output duration. Duration in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max accepts integer 5–15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling 4.0 accepts integer 3-30s in one call; Kling 4.0 Flash accepts integer 3-20s; Grok accepts 1-15s; Google Omni accepts 3-15s (extend adds 3-10s).'),
@@ -1789,7 +1794,9 @@ function createGenerateAnimationTool(
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ max_credits, story_prompt, video_intent, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, video_operation, extend_direction, generate_audio, image_workflow, content_filter, output_format, web_search, replication_contract: suppliedReplicationContract, completion_actions }) => serializeVideoSubmission(async () => {
+      execute: async ({ h3_controls: rawH3Controls, h3_media_indices: rawH3Indices, max_credits, story_prompt, video_intent, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, video_operation, extend_direction, generate_audio, image_workflow, content_filter, output_format, web_search, replication_contract: suppliedReplicationContract, completion_actions }) => serializeVideoSubmission(async () => {
+        const h3_controls = rawH3Controls ? h3ControlsSchema.parse(rawH3Controls) : undefined;
+        const h3_media_indices = Array.isArray(rawH3Indices) ? rawH3Indices as number[] : [];
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1894,6 +1901,7 @@ function createGenerateAnimationTool(
             }
           : selectedVideoRoute;
         const videoModel = videoSelection.model;
+        if (h3_controls && (!getVideoModelCapability(videoModel).h3Experiments?.includes(h3_controls.kind) || replication_contract || forceUpscale)) return invalidRequest(videoModel, 'Explicit H3 operation conflicts with the selected video model or workflow.');
         const native4k = isSeedance25Native4k(videoModel, videoSelection.resolution);
         const native4kRequestKey = JSON.stringify({ story_prompt, model: videoModel, resolution: videoSelection.resolution, duration, aspect_ratio, media_refs, audio_refs, video_ref_url, video_ref_type, video_operation, extend_direction, generate_audio, image_workflow, content_filter, output_format, web_search, snapshots: ctx.snapshotImages });
         if (native4k && native4kReceipts.has(native4kRequestKey)) return native4kReceipts.get(native4kRequestKey)!;
@@ -1921,7 +1929,7 @@ function createGenerateAnimationTool(
           if (resolvedAudioRefs.error) {
             return { success: false as const, message: resolvedAudioRefs.error };
           }
-          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'mulerouter' && videoRoute.provider !== 'minimax' && videoRoute.provider !== 'fal-sync' && videoModel !== 'fal-h3-max') {
+          if (!h3_controls && resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'mulerouter' && videoRoute.provider !== 'minimax' && videoRoute.provider !== 'fal-sync' && videoModel !== 'fal-h3-max') {
             return {
               success: false as const,
               message: videoRoute.provider === 'google-omni'
@@ -1932,7 +1940,7 @@ function createGenerateAnimationTool(
 
           // Video harness: validate before calling API
           const { validateVideoScript } = await import('./video-harness');
-          const harnessError = validateVideoScript({
+          const harnessError = !h3_controls && validateVideoScript({
             prompt: effectiveStoryPrompt,
             imageCount: imageUrls.length,
             availableMediaIndices: imageUrls.flatMap((url, index) =>
@@ -1961,7 +1969,7 @@ function createGenerateAnimationTool(
 
           // Auto-route video references: query DB for snapshot types
           const originalImageUrlsByIndex = [...imageUrls];
-          const scriptRefs = [...new Set(
+          const scriptRefs = h3_controls ? h3_media_indices : [...new Set(
             Array.from(effectiveStoryPrompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), m => Number(m[1]))
           )];
           const autoVideoUrls: string[] = [];
@@ -1981,6 +1989,7 @@ function createGenerateAnimationTool(
                 const snap = dbSnaps[ref - 1];
                 const meta = snap?.video_meta as Record<string, unknown> | null;
                 const videoUrl = meta?.videoUrl as string | undefined;
+                if (h3_controls && (!snap || snap.type === 'video' && !videoUrl)) return invalidRequest(videoModel, 'Selected H3 timeline input is missing or unfinished.');
                 if (snap?.type === 'video' && videoUrl) {
                   autoVideoUrls.push(videoUrl);
                   videoRefIndices.add(ref);
@@ -2083,7 +2092,7 @@ function createGenerateAnimationTool(
               console.warn('[generate_animation] Kling reference upscale failed:', error instanceof Error ? error.message : error);
             }
           }
-          const modelError = validateVideoModelRequest({
+          const modelError = !h3_controls && validateVideoModelRequest({
             model: videoModel,
             resolution: videoRoute.resolution,
             aspectRatio: selectedAspectRatio,
@@ -2132,7 +2141,8 @@ function createGenerateAnimationTool(
 
           const createVideoInput: Parameters<typeof createVideo>[0] = {
             script: effectiveStoryPrompt,
-            images: forceUpscale ? [] : imageUrls,
+            images: h3_controls ? [...scriptRefs.filter(ref => !videoRefIndices.has(ref)).map(ref => originalImageUrlsByIndex[ref - 1]), ...(media_refs ?? [])] : forceUpscale ? [] : imageUrls,
+            h3Controls: h3_controls,
             duration: effectiveDuration,
             aspectRatio: selectedAspectRatio,
             videoModel,
@@ -2162,14 +2172,14 @@ function createGenerateAnimationTool(
             return { success: false as const, message: 'Google Omni video jobs require an authenticated workspace so the completed video can be saved to Storage.' };
           }
 
-          const referencedImageUrls = scriptRefs
+          const referencedImageUrls = h3_controls ? createVideoInput.images : scriptRefs
             .filter(ref => !videoRefIndices.has(ref))
             .map(ref => originalImageUrlsByIndex[ref - 1])
             .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'));
           const videoSec = effectiveDuration === -1
             ? referenceVideoDuration ?? 10
             : effectiveDuration || 10;
-          let billingQuote = await quoteVideo({
+          let billingQuote = h3_controls ? undefined : await quoteVideo({
             model: videoModel,
             resolution: videoRoute.resolution,
             durationSec: videoSec,
@@ -2181,7 +2191,7 @@ function createGenerateAnimationTool(
             contentFilter: content_filter,
           });
 
-          let creditsRequired = billingQuote.credits;
+          let creditsRequired = billingQuote?.credits ?? 0;
           const reserveGrokApiCredits = async () => {
             if (!ctx.userId || reservedVideoCredits > 0) return;
             const creditCheck = await requireCredits(ctx.userId, creditsRequired);
@@ -2217,7 +2227,7 @@ function createGenerateAnimationTool(
                 throw new Error('Native 4K cost disclosure required before submission.');
               }
               await reserveGrokApiCredits();
-              return { reservedUpscaleCredits: reservedVideoCredits > 0 ? billingQuote.upscaleCredits ?? 0 : 0 };
+              return { reservedUpscaleCredits: reservedVideoCredits > 0 ? billingQuote?.upscaleCredits ?? 0 : 0 };
             };
           } else if (ctx.userId) {
             try {
@@ -2227,7 +2237,7 @@ function createGenerateAnimationTool(
             }
           }
 
-          createVideoInput.reservedUpscaleCredits = reservedVideoCredits > 0 ? billingQuote.upscaleCredits ?? 0 : 0;
+          createVideoInput.reservedUpscaleCredits = reservedVideoCredits > 0 ? billingQuote?.upscaleCredits ?? 0 : 0;
           const skillResult = isGoogleOmniAsync
             ? {
               success: true as const,
@@ -2245,7 +2255,7 @@ function createGenerateAnimationTool(
           }
           if (!skillResult.success || !skillResult.taskId) {
             console.error('[generate_animation] createVideo failed:', skillResult.message);
-            if ((videoModel === 'seedance-2.5-flash' || native4k) && skillResult.submissionUncertain) {
+            if ((h3_controls || videoModel === 'seedance-2.5-flash' || native4k) && skillResult.submissionUncertain) {
               // A timeout is not a rejected POST. The durable Agent tool result
               // and usage row retain the original run and reservation for review.
               const receipt = { ...skillResult, success: false as const, retryable: false as const,
@@ -2277,7 +2287,7 @@ function createGenerateAnimationTool(
           }
 
           const taskId = skillResult.taskId;
-          if (videoModel === 'seedance-2.5-flash' || native4k) acceptedProtectedTaskId = taskId;
+          if (h3_controls || videoModel === 'seedance-2.5-flash' || native4k) acceptedProtectedTaskId = taskId;
           const actualVideoModel = (skillResult.videoModel || videoModel) as string;
           const actualVideoRoute = resolveVideoGenerationRoute({
             model: actualVideoModel,
@@ -2312,7 +2322,8 @@ function createGenerateAnimationTool(
             providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
             providerMode: actualVideoRoute.providerMode,
             provider: skillResult.provider,
-            operation: video_operation || 'generate',
+            operation: h3_controls?.kind === 'turbo-extend' ? 'extend' : video_operation || 'generate',
+            ...(h3_controls ? { h3Controls: h3_controls } : {}),
             contentFilter: ['seedance-2.5', 'seedance-2.5-eco'].includes(actualVideoModel) ? content_filter !== false : undefined,
             providerUrl: skillResult.videoUrl,
             createdAt: new Date().toISOString(),
@@ -2346,7 +2357,7 @@ function createGenerateAnimationTool(
           }
           reservedVideoCredits = 0;
 
-          const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote.supplierCostUsd;
+          const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote?.supplierCostUsd;
           if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd;
 
           if (!isGoogleOmniAsync && skillResult.status === 'completed' && skillResult.videoUrl && ctx.userId && !isPermanentUrl(skillResult.videoUrl)) {

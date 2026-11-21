@@ -60,14 +60,15 @@ export async function POST(req: NextRequest) {
       contentFilter,
       outputFormat,
       webSearch,
-      maxCredits,
+      maxCredits, h3Controls,
     } = await req.json()
     const selectedVideoModel = resolveProductVideoModelId(videoModel)
+    if (h3Controls && (selectedVideoModel !== 'minimax-h3-max' || h3Controls.kind !== 'turbo-generation')) return NextResponse.json({ error: 'Unsupported H3 frame operation' }, { status: 400 })
     const videoCapability = getVideoModelCapability(selectedVideoModel)
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const native4k = isSeedance25Native4k(selectedVideoModel, videoRoute.resolution)
     let disclosureQuote: Awaited<ReturnType<typeof quoteVideo>> | undefined
-    let acceptedNativeTaskId: string | undefined
+    let protectedTaskId: string | undefined
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
     const inputVideoUrl = typeof videoUrl === 'string' && videoUrl.startsWith('http') ? videoUrl : undefined
 
@@ -106,7 +107,7 @@ export async function POST(req: NextRequest) {
     const videoRefIndices = new Set<number>()
     const referenceVideoMetas: Array<{ width?: number | null; height?: number | null; fileSizeBytes?: number | null }> = []
     let referenceVideoDuration: number | undefined
-    const scriptRefs = [...new Set(
+    const scriptRefs = h3Controls ? [] : [...new Set(
       Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), (m: RegExpMatchArray) => Number(m[1]))
     )]
     if (dbSnaps?.length) {
@@ -162,7 +163,7 @@ export async function POST(req: NextRequest) {
 
     const videoSec = effectiveDuration === -1 ? referenceVideoDuration ?? 10 : effectiveDuration || 10
     const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
-    let billingQuote = await quoteVideo({
+    let billingQuote = h3Controls ? undefined : await quoteVideo({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
@@ -171,7 +172,7 @@ export async function POST(req: NextRequest) {
       operation: videoOperation,
       contentFilter,
     })
-    let creditsRequired = billingQuote.credits
+    let creditsRequired = billingQuote?.credits ?? 0
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
     let reservedCredits = 0
     const reserveApiCredits = async () => {
@@ -180,7 +181,7 @@ export async function POST(req: NextRequest) {
       reservedCredits = reservation.charged
     }
     const grokSubscriptionPreferred = selectedVideoModel === 'grok' && await isGrokSubscriptionAllowedUser(userId)
-    if (!grokSubscriptionPreferred && !native4k) {
+    if (!grokSubscriptionPreferred && !native4k && !h3Controls) {
       try {
         const billingStartedAt = performance.now()
         await reserveApiCredits()
@@ -198,13 +199,14 @@ export async function POST(req: NextRequest) {
       const skillResult = await createVideo({
         script: prompt,
         images: inputImageUrls,
+        h3Controls,
         duration: effectiveDuration,
         aspectRatio,
         videoModel: selectedVideoModel,
         videoResolution: videoRoute.resolution,
         projectId,
         billingToolName: toolName,
-        reservedUpscaleCredits: reservedCredits > 0 ? billingQuote.upscaleCredits ?? 0 : 0,
+        reservedUpscaleCredits: reservedCredits > 0 ? billingQuote?.upscaleCredits ?? 0 : 0,
         videoUrl: providerInputVideoUrl,
         videoReferType,
         videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
@@ -219,10 +221,10 @@ export async function POST(req: NextRequest) {
         webSearch,
         userId,
         onBeforeGrokApiFallback: grokSubscriptionPreferred ? reserveApiCredits : undefined,
-        onBeforeProviderSubmit: native4k ? async usage => {
+        onBeforeProviderSubmit: native4k || h3Controls ? async usage => {
           billingQuote = await quoteVideo(usage)
           creditsRequired = billingQuote.credits
-          if (native4kNeedsDisclosure(billingQuote, maxCredits)) {
+          if (native4k && native4kNeedsDisclosure(billingQuote, maxCredits)) {
             disclosureQuote = billingQuote
             throw new Error('Native 4K cost disclosure required.')
           }
@@ -236,7 +238,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ...quote, error: quote.message }, { status: 409 })
       }
       if (!skillResult.success || !skillResult.taskId) {
-        if (native4k && skillResult.submissionUncertain) return NextResponse.json({
+        if ((native4k || h3Controls) && skillResult.submissionUncertain) return NextResponse.json({
           error: skillResult.message, code: 'SUBMISSION_UNCERTAIN', retryable: false,
           message: 'Credits remain reserved. Reconcile the original request; do not submit another paid job.',
         }, { status: 409 })
@@ -257,16 +259,16 @@ export async function POST(req: NextRequest) {
       }
 
       const taskId = skillResult.taskId
-      if (native4k) acceptedNativeTaskId = taskId
+      if (native4k || h3Controls) protectedTaskId = taskId
       const actualVideoModel = skillResult.videoModel || selectedVideoModel
       const actualVideoRoute = resolveVideoGenerationRoute({ model: actualVideoModel, resolution: videoRoute.resolution })
       const snapshotId = crypto.randomUUID()
-      const referencedImageUrls = scriptRefs
+      const referencedImageUrls = h3Controls ? inputImageUrls : scriptRefs
         .filter(ref => !videoRefIndices.has(ref))
         .map(ref => originalImageUrlsByIndex[ref - 1])
         .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'))
       const sourceUrls = [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
-      const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote.supplierCostUsd
+      const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote?.supplierCostUsd
 
       const videoMeta: VideoMeta = {
         taskId,
@@ -291,6 +293,7 @@ export async function POST(req: NextRequest) {
         providerMode: actualVideoRoute.providerMode,
         provider: skillResult.provider,
         operation: videoOperation || 'generate',
+        ...(h3Controls ? { h3Controls } : {}),
         contentFilter: actualVideoModel === 'seedance-2.5' ? contentFilter !== false : undefined,
         createdAt: new Date().toISOString(),
         creditsCharged: reservedCredits,
@@ -358,9 +361,9 @@ export async function POST(req: NextRequest) {
       }))
       return response
     } catch (error) {
-      if (acceptedNativeTaskId) return NextResponse.json({
+      if (protectedTaskId) return NextResponse.json({
         error: 'Native 4K was accepted but saving failed. Restore this task; do not resubmit.',
-        code: 'PERSISTENCE_RECONCILIATION_REQUIRED', taskId: acceptedNativeTaskId, retryable: false,
+        code: 'PERSISTENCE_RECONCILIATION_REQUIRED', taskId: protectedTaskId, retryable: false,
       }, { status: 409 })
       if (reservedCredits > 0) {
         await refundCredits(userId, reservedCredits, toolName)

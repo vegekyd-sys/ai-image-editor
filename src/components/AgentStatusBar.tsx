@@ -21,7 +21,7 @@ interface AgentStatusBarProps {
   onSeeNotification?: () => void;
 }
 
-export default function AgentStatusBar({ statusText, chatActionLabel, selectionText, isActive, onOpenChat, onAutoLayerize, isViewingDraft, hideChat, notification, onSeeNotification }: AgentStatusBarProps) {
+export default function AgentStatusBar({ statusText, chatActionLabel, selectionText, isActive, onOpenChat, onAutoLayerize, isViewingDraft, hideChat, onAnimate, notification, onSeeNotification }: AgentStatusBarProps) {
   const { t } = useLocale();
   // Determine dot color and breathe speed based on state
   const isGeneratingImages = PREVIEW_STATUS_PREFIXES.some((prefix) => statusText.startsWith(prefix));
@@ -77,6 +77,12 @@ export default function AgentStatusBar({ statusText, chatActionLabel, selectionT
         <div className={`min-w-0 flex-1 truncate text-[13px] ${notification ? 'text-white/80' : 'text-white/50'}`}>
           {displayText}
         </div>
+
+        {onAnimate && (
+          <button className="mkr-liquid-pill px-3 py-1.5 rounded-full text-xs" onClick={event => { event.stopPropagation(); onAnimate(); }}>
+            {t('animate.h3Frames')}
+          </button>
+        )}
 
         {/* "See" button — shown when there's a pending notification */}
         {notification && onSeeNotification && (

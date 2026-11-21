@@ -69,3 +69,20 @@ describe.each([['snapshot', snapshot], ['legacy animation', animate]] as const)(
     expect(mock.refund).toHaveBeenCalledWith('owner', 946, 'create_video')
   })
 })
+
+it('reserves the measured H3 frame quote once before submission and persists the actual charge', async () => {
+  mock.create.mockImplementationOnce(async input => {
+    expect(mock.reserve).not.toHaveBeenCalled()
+    await input.onBeforeProviderSubmit({ model: 'minimax-h3-max', resolution: '768p', h3Operation: 'turbo-generation', durationSec: 5 })
+    expect(mock.reserve).toHaveBeenCalledWith('owner', 40, 'create_video', 'minimax-h3-max', undefined)
+    return { success: true, taskId: 'fal-h3max-turbo-frame-fixture' }
+  })
+  const h3Controls = { kind: 'turbo-generation', frames: 'last' }
+  const response = await snapshot(new NextRequest('http://localhost/api/video-snapshot', { method: 'POST', body: JSON.stringify({
+    projectId: 'project', prompt: 'End on the reference.', videoModel: 'minimax-h3-max',
+    duration: 5, videoResolution: '768p', imageUrls: ['https://example.com/end.png'], h3Controls,
+  }) }))
+  expect(response.status).toBe(200)
+  expect((await response.json()).videoMeta).toMatchObject({ creditsCharged: 40, h3Controls })
+  expect(mock.reserve).toHaveBeenCalledTimes(1)
+})

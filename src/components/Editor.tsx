@@ -2917,6 +2917,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         status: 'processing',
         createdAt: new Date().toISOString(),
         duration: animationState.duration ?? null,
+        h3Controls: animationState.submittedMeta?.h3Controls,
         videoModel: animationState.videoModel,
         videoResolution: animationState.videoResolution,
       };
@@ -2929,7 +2930,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           tips: [],
           messageId: '',
           type: 'video',
-          videoMeta: {
+          videoMeta: animationState.submittedMeta ?? {
             taskId: animationState.taskId,
             videoUrl: null,
             prompt: animationState.prompt,
@@ -4181,7 +4182,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   snapshotCount={snapshots.length}
                   notification={creditExhausted ? { text: 'Credits exhausted · Top up' } : pendingNotification}
                   onSeeNotification={creditExhausted ? () => setCreditPopupOpen(true) : handleSeeNotification}
-                  onAnimate={undefined}
+                  onAnimate={process.env.NEXT_PUBLIC_H3_FRAME_EXPERIMENT === '1' && isV2 && videoModel === 'minimax-h3-max' && projectId && !isAgentActive
+                    ? () => {
+                      setDetailAnimation(null);
+                      setAnimationState({ h3FrameExperiment: true, imageUrls: [], prompt: '', userHint: '', duration: 5,
+                        taskId: null, videoUrl: null, status: 'ready', error: null, pollSeconds: 0, videoModel, videoResolution: 'auto' });
+                    } : undefined}
                   hasVideo={hasVideo}
                 />
                 {isViewingVideo ? (
@@ -4190,6 +4196,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       id: currentSnap.id,
                       projectId: projectId ?? '',
                       taskId: currentSnap.videoMeta.taskId,
+                      h3Controls: currentSnap.videoMeta.h3Controls,
                       videoUrl: currentSnap.videoMeta.videoUrl,
                       prompt: currentSnap.videoMeta.prompt,
                       snapshotUrls: currentSnap.videoMeta.sourceUrls || [],
@@ -4223,7 +4230,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         const res = await fetch('/api/video-snapshot', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId(), videoResolution: anim.videoResolution || 'auto', aspectRatio: anim.videoAspectRatio }),
+                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId(), videoResolution: anim.videoResolution || 'auto', aspectRatio: anim.videoAspectRatio, h3Controls: anim.h3Controls }),
                         });
                         const json = await res.json();
                         if (!res.ok) throw new Error(json.error || 'Retry failed');
@@ -4333,15 +4340,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               </div>
           )}
 
-          {/* AnimateSheet — detail mode only (view video info, no creation) */}
-          {detailAnimation && projectId && animationState && (
+          {(detailAnimation || animationState?.h3FrameExperiment) && projectId && animationState && (
             <AnimateSheet
-              snapshots={snapshots.filter(s => s.imageUrl || s.image)}
+              snapshots={snapshots.filter(s => (s.imageUrl || s.image) && (!animationState.h3FrameExperiment || s.type !== 'video'))}
               projectId={projectId}
               isDesktop={isDesktop}
               desktopWidth={cuiPanelWidth}
-              mode="detail"
-              detailAnimation={detailAnimation}
+              mode={detailAnimation ? 'detail' : 'create'}
+              detailAnimation={detailAnimation ?? undefined}
               onClose={() => { setDetailAnimation(null); setAnimationState(null); }}
               onOpenCUI={() => { if (!isDesktop) setViewMode('cui'); }}
               animationState={animationState}

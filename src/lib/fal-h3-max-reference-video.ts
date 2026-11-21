@@ -15,6 +15,8 @@ export interface H3MaxReferenceInput {
   duration?: number
   resolution?: H3MaxReferenceResolution
   aspectRatio?: string
+  referenceOrder?: Array<'image' | 'video' | 'audio'>
+  targetAudioUrl?: string
   seed?: number
   onBeforeSubmit?: () => Promise<void>
   /** Internal only: createVideo already measured and validated the selected images. */
@@ -58,18 +60,35 @@ export function buildH3MaxReferencePayload(input: H3MaxReferenceInput): Record<s
     || !Number.isFinite(middle.time) || Math.round(middle.time*24) <= 0 || Math.round(middle.time*24) >= duration*24-1)) {
     throw new Error('H3 middle frame requires validated imagery, native endpoint locks, 480p/768p and an interior output time.')
   }
+  if (input.targetAudioUrl && audios.length) throw new Error('Locked soundtrack cannot be combined with reference audio.')
+  const groups = { image: images, video: videos.map(clip => clip.url), audio: audios.map(clip => clip.url) }
+  const next = { image: 0, video: 0, audio: 0 }
+  const conditions = input.referenceOrder?.map(type => {
+    const url = groups[type][next[type]++]
+    if (!url) throw new Error('Reference order does not match the selected media.')
+    return { type, url }
+  })
+  if (conditions && conditions.length !== images.length + videos.length + audios.length) throw new Error('Reference order must cover every selected reference.')
+  const numbered = { image: 0, video: 0, audio: 0 }
+  const labels = conditions?.map(({ type }) => ({ image: 'Image', audio: 'Audio', video: 'Video' })[type] + ' ' + ++numbered[type])
   const counts = { image: images.length, media: images.length, video: videos.length, audio: audios.length }
   const prompt = input.prompt.trim().replace(/<<<(image|media|video|audio)_(\d+)>>>/gi, (_, kind: string, raw: string) => {
     const type = kind.toLowerCase() as keyof typeof counts
     const index = Number(raw)
+    if (type === 'media' && labels) {
+      if (!labels[index - 1]) throw new Error('Ordered media marker has no matching input.')
+      return labels[index - 1]
+    }
     if (index < 1 || index > counts[type]) throw new Error(`Reference marker ${kind}_${raw} has no matching input.`)
     const label = type === 'media' || type === 'image' ? 'Image' : type === 'video' ? 'Video' : 'Audio'
     return `${label} ${index}`
   })
   return {
     prompt, duration, resolution: resolution.toUpperCase(), aspect_ratio: aspectRatio,
-    reference_image_urls: images, reference_video_urls: videos.map(clip => clip.url),
-    reference_audio_urls: audios.map(clip => clip.url),
+    ...(conditions ? { reference_conditions: conditions } : {
+      reference_image_urls: images, reference_video_urls: groups.video, reference_audio_urls: groups.audio,
+    }),
+    ...(input.targetAudioUrl ? { target_audio_url: input.targetAudioUrl } : {}),
     enable_safety_checker: true, prompt_expansion_mode: input.boundaryFrames ? 'disabled' : 'balanced', sync_mode: false,
     ...(input.boundaryFrames?.lockEndpoints ? { image_url: input.boundaryFrames.startUrl, end_image_url: input.boundaryFrames.endUrl } : {}),
     ...(middle ? {middle_image_url:middle.imageUrl,middle_frame_time:Math.round(middle.time*24)/24} : {}),

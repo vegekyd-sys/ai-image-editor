@@ -8,6 +8,7 @@ export async function POST(req: Request) {
   if ('error' in auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const parsed = z.object({
     model: z.string(), resolution: z.enum(['auto','360p','480p','720p','768p','1080p','2k','4k']),
+    h3Operation: z.literal('turbo-generation').optional(),
     imageUrls: z.array(z.string().url()).max(9).optional(),
     durationSec: z.number().positive().max(120), imageCount: z.number().int().nonnegative().max(100),
   }).strict().safeParse(await req.json().catch(() => null))

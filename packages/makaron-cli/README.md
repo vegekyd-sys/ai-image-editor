@@ -794,3 +794,19 @@ quote stops before charging. Input video adds billable seconds; supplier credits
 are different from Makaron credits. Native 4K uses EvoLink, never Eco enhancement.
 
 Kling Image 4.0 (`--image-model kling-image-4.0`) generates or edits one native PNG at `--image-resolution 2K|4K|8K` (default 2K) on fal. You can include up to 10 ordered reference images, counting the source image. The CLI uploads local files automatically. Each input must be at most 30 MiB, at least 300 pixels on both sides, with an aspect ratio from 0.4 to 2.5. Refer to them as `@Image1`, `@Image2`. Keep the image request UUID printed by the CLI. If the response is uncertain, pass the same UUID with `--image-request-id <uuid>` to check the existing receipt without a second submission or charge. Hosted MCP requires `imageRequestId`. Pick a model with native transparency for cutouts. Kling Image 4.0 uses prompt-guided edits, so areas outside the requested edit can change.
+
+### Explicit H3 operations (candidate deployments)
+
+Use `video create --h3-controls '<json>'` on a candidate server with the operation enabled. Select `fal-h3-max` for Max or `minimax-h3-max` for Turbo. Inputs supplied with repeated `--image`, `--video` and `--audio` flags retain their order within each type.
+
+| Control | Inputs |
+|---|---|
+| `{"kind":"max-reference","order":["image","video","audio","image"]}` | Two images, one motion clip, one audio reference. The four `<<<media_N>>>` positions resolve to Image 1, Video 1, Audio 1, Image 2. |
+| `{"kind":"max-reference","lockAudio":true}` | One `--audio` as the output soundtrack. Can combine with ordered visual references. |
+| `{"kind":"turbo-generation","frames":"first-last","lockAudio":true}` | Two images in start/end order and one output soundtrack. Use `last` with one ending image. Request `--resolution 1080p` explicitly for refinement. |
+| `{"kind":"camera","trajectory":[{"time":0,"azimuth":0,"elevation":0,"distance":1},{"time":1,"azimuth":35,"elevation":5,"distance":1}]}` | One still image. Times are normalized across the shot. |
+| `{"kind":"turbo-extend"}` | One short source clip and a continuation prompt. The returned video includes the full source tail. |
+| `{"kind":"relight"}`, `{"kind":"reframe"}`, `{"kind":"photo-lipsync"}` | Lighting sphere + video, target aspect + short video, or portrait + speech respectively. |
+| `{"kind":"recast"}` | Per-shot billing and latency gate outstanding. Customer submissions are closed. |
+
+For an explicit quote, use `makaron price --input quote.json` with the same control in `requests[].options.h3Controls`. Supply `images`, `videoUrls`, `audioUrls` and optional `aspectRatio` in `options`, the actual `image_count`, and the requested output duration and resolution. Quote-only requests measure the selected media. Ordinary generation performs its existing credit check.

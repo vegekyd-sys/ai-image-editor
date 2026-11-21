@@ -1,6 +1,8 @@
 import type { VideoModel, VideoResolution } from '@/types'
 
 export interface AnimationState {
+  h3FrameExperiment?: boolean
+  submittedMeta?: import('@/types').VideoMeta
   imageUrls: string[]
   prompt: string
   userHint: string
