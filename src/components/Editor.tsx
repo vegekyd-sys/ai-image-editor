@@ -3052,7 +3052,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     projectId, viewIndex, currentSnap?.id, currentSnap?.design, saveImageSource, selectedSaveVideoUrl,
   ]);
   const { file: readyToShare, showActions: showShareActions, status: shareStatus, warm: warmShare, offer: offerShare, share: shareFile,
-    download: downloadSharedFile, isCurrent: isCurrentSave } = usePreparedMediaShare(saveKey);
+    isCurrent: isCurrentSave } = usePreparedMediaShare(saveKey);
   const setCurrentSaveStatus = useCallback((text: string) => {
     if (isCurrentSave()) setSaveStatus({ key: saveKey, text });
   }, [isCurrentSave, saveKey]);
@@ -3151,9 +3151,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       saveInFlight.current = false;
     }
   }, [currentSnap, downloadParams, isViewingVideo, isCurrentSave, readyToShare, saveKey, setCurrentSaveStatus, shareFile, t]);
-  const saveButtonMessage = showShareActions
-    ? t(shareStatus === 'failed' ? 'editor.shareFailed' : 'editor.savePhotosHint')
-    : saveStatus?.key === saveKey ? saveStatus.text : '';
+  const saveButtonMessage = shareStatus === 'failed'
+    ? t('editor.saveFailed')
+    : !readyToShare && saveStatus?.key === saveKey ? saveStatus.text : '';
 
   const savePreview = useMemo(() => saveRequest ? getDownloadAssetPreview(saveRequest) : undefined, [saveRequest]);
   const prepareSave = useCallback((onTransfer: (progress: TransferProgress) => void) =>
@@ -4119,9 +4119,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 {saveButtonMessage && (
                   <div className="absolute right-3 top-full mt-1 flex max-w-[min(22rem,85vw)] items-center gap-2 rounded-xl bg-black/85 px-3 py-2 text-xs text-white/80">
                     <span id="editor-save-status" role="status">{saveButtonMessage}</span>
-                    {showShareActions && <button type="button" className="shrink-0 underline underline-offset-2" onClick={downloadSharedFile}>
-                      {t('editor.downloadFile')}
-                    </button>}
                   </div>
                 )}
               </div>
