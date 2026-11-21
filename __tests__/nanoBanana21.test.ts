@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 import { buildNanoBanana21Request, nanoBanana21Backend } from '@/lib/models/nano-banana-21';
@@ -6,14 +7,41 @@ import { buildNanoBanana21Request, nanoBanana21Backend } from '@/lib/models/nano
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 describe('Nano Banana 2.1 OpenRouter contract', () => {
-  it('keeps all labeled references, panorama ratio and requested resolution; omits unsupported sampling', () => {
-    const body = buildNanoBanana21Request({ image: 'https://example.com/base.png', references: [{ url: 'https://example.com/mask.png', role: 'red drawing marks the area to change' }], prompt: 'Change only the marked background.', aspectRatio: '8:1', imageResolution: '4K', thinkingEffort: 'high' });
+  it('keeps all labeled references, panorama ratio and requested resolution; omits unsupported sampling', async () => {
+    const body = await buildNanoBanana21Request({ image: 'https://example.com/base.png', references: [{ url: 'https://example.com/mask.png', role: 'red drawing marks the area to change' }], prompt: 'Change only the marked background.', aspectRatio: '8:1', imageResolution: '4K', thinkingEffort: 'high' });
     expect(body).toMatchObject({ resolution: '4K', aspect_ratio: '8:1' });
     expect(body.input_references).toHaveLength(2);
     expect(body.prompt).toContain('red drawing marks the area to change');
     expect(body).not.toHaveProperty('temperature');
     expect(body).not.toHaveProperty('seed');
     expect(body).not.toHaveProperty('reasoning');
+  });
+
+  it('labels bare and mislabeled references by their actual bytes', async () => {
+    const source = sharp({ create: { width: 8, height: 8, channels: 3, background: 'red' } });
+    const png = (await source.clone().png().toBuffer()).toString('base64');
+    const webp = (await source.webp().toBuffer()).toString('base64');
+    const body = await buildNanoBanana21Request({ image: png, references: [{ url: `data:image/jpeg;base64,${webp}`, role: 'reference' }], prompt: 'Edit' });
+    expect(body.input_references).toEqual([
+      { type: 'image_url', image_url: { url: `data:image/png;base64,${png}` } },
+      { type: 'image_url', image_url: { url: `data:image/webp;base64,${webp}` } },
+    ]);
+  });
+
+  it('rejects unrecognizable inline bytes before a paid POST', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', 'test');
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    await expect(nanoBanana21Backend.generate({ image: 'data:image/png;base64,aW52YWxpZA==', prompt: 'Edit' })).rejects.toThrow('Unsupported input image format');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('preserves an HEIF declaration for HEVC bytes and rejects AVIF bytes', async () => {
+    const heic = readFileSync('__tests__/fixtures/external-image.heic').toString('base64');
+    const body = await buildNanoBanana21Request({ image: `data:image/heif;base64,${heic}`, prompt: 'Edit' });
+    expect(body.input_references?.[0].image_url.url).toBe(`data:image/heif;base64,${heic}`);
+
+    const avif = await sharp({ create: { width: 8, height: 8, channels: 3, background: 'red' } }).avif().toBuffer();
+    await expect(buildNanoBanana21Request({ image: `data:image/heic;base64,${avif.toString('base64')}`, prompt: 'Edit' })).rejects.toThrow('Unsupported input image format');
   });
 
   it('validates reference count and resolution before a paid POST', async () => {

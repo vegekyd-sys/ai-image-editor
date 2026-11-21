@@ -36,11 +36,11 @@ import { POST } from '@/app/api/mcp/route';
 import { invalidateBillingCache } from '@/lib/billing/credits';
 import { invalidatePricingCache } from '@/lib/billing/pricing';
 
-async function callNano(model: string | undefined = 'gemini-2.1', aspectRatio = '16:9') {
+async function callNano(model: string | undefined = 'gemini-2.1', aspectRatio = '16:9', imageArgs: { image?: string; referenceImages?: string[]; imageResolution?: string } = {}) {
   const response = await POST(new Request('http://localhost/api/mcp', {
     method: 'POST',
     headers: { Authorization: 'Bearer mk_live_test', 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'makaron_edit_image', arguments: { editPrompt: 'A red mug.', model: model === 'auto-omitted' ? undefined : model, aspectRatio, imageResolution: '2K' } } }),
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'makaron_edit_image', arguments: { editPrompt: 'A red mug.', model: model === 'auto-omitted' ? undefined : model, aspectRatio, imageResolution: '2K', ...imageArgs } } }),
   }));
   return { response, payload: await response.json() };
 }
@@ -70,6 +70,31 @@ describe('Nano Banana 2.1 MCP → shared skill → provider → billing', () => 
     expect(debits[0][1]).toMatchObject({ p_user_id: 'test-user', p_api_key_id: 'test-key', p_source: 'mcp', p_model_used: 'google/gemini-nano-banana-2.1', p_amount: 11, p_input_tokens: 100, p_output_tokens: 1800 });
     expect(state.fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(state.fetch.mock.calls[0][1].body).resolution).toBe('2K');
+  });
+  it.each(['image', 'referenceImages'])('sends one normalized reference from MCP %s and settles its reported cost once', async field => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: 'red' } }).png().toBuffer();
+    const base64 = png.toString('base64');
+    state.fetch.mockResolvedValue(Response.json({ data: [{ b64_json: base64, media_type: 'image/png' }], usage: { prompt_tokens: 1220, completion_tokens: 1602, cost: 0.039045 } }));
+    const imageArgs = field === 'image' ? { image: base64 } : { referenceImages: [`data:image/jpeg;base64,${base64}`] };
+    const { payload, response } = await callNano('gemini-2.1', '1:1', { ...imageArgs, imageResolution: '1K' });
+    expect(payload.result.content[1]).toMatchObject({ type: 'image', mimeType: 'image/png' });
+    expect(state.fetch).toHaveBeenCalledOnce();
+    expect(JSON.parse(state.fetch.mock.calls[0][1].body)).toMatchObject({
+      resolution: '1K', aspect_ratio: '1:1',
+      input_references: [{ type: 'image_url', image_url: { url: `data:image/png;base64,${base64}` } }],
+    });
+    expect(response.headers.get('X-Credits-Charged')).toBe('8');
+    expect(response.headers.get('X-Credits-Remaining')).toBe('92');
+    expect(state.rpc.mock.calls.filter(([name]) => name === 'deduct_and_log')).toHaveLength(1);
+  });
+  it('does not submit or charge when a labeled reference contains invalid image bytes', async () => {
+    const { payload, response } = await callNano('gemini-2.1', '1:1', {
+      imageResolution: '1K', referenceImages: ['data:image/png;base64,aW52YWxpZA=='],
+    });
+    expect(payload.result.isError).toBe(true);
+    expect(state.fetch).not.toHaveBeenCalled();
+    expect(response.headers.get('X-Credits-Charged')).toBe('0');
+    expect(state.rpc.mock.calls.filter(([name]) => name === 'deduct_and_log')).toHaveLength(0);
   });
   it('reports a supplier 402 and stops dependent video work without charging the image', async () => {
     state.fetch.mockResolvedValue(Response.json({ error: { code: 402 } }, { status: 402 }));

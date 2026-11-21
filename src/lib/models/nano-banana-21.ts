@@ -19,27 +19,46 @@ export class NanoBanana21RequestError extends Error {
   constructor(message: string, public readonly contentBlocked = false, public readonly payment?: ReturnType<typeof paymentRejection>) { super(message); }
 }
 
-export function buildNanoBanana21Request(req: GenerateImageRequest) {
+async function resolveNanoBanana21Reference(url: string): Promise<string> {
+  if (url.startsWith('https://')) {
+    const parsed = new URL(url);
+    if (parsed.username || parsed.password) throw new NanoBanana21RequestError('Input image URLs must not contain credentials.');
+    return url;
+  }
+
+  const dataUrl = url.startsWith('data:') ? parseImageDataUrl(url) : null;
+  const encoded = dataUrl?.base64 ?? url;
+  if (!isImageBase64(encoded)) throw new NanoBanana21RequestError('Input images require HTTPS URLs or valid base64 image data.');
+
+  const bytes = Buffer.from(encoded, 'base64');
+  const image = await sharp(bytes).metadata().catch(() => null);
+  let mimeType: string;
+  switch (image?.format) {
+    case 'png':
+    case 'jpeg':
+    case 'webp':
+      mimeType = `image/${image.format}`;
+      break;
+    case 'heif':
+      if (image.compression !== 'hevc') throw new NanoBanana21RequestError('Unsupported input image format.');
+      mimeType = dataUrl?.mimeType === 'image/heif' ? 'image/heif' : 'image/heic';
+      break;
+    default:
+      throw new NanoBanana21RequestError('Unsupported input image format.');
+  }
+  return `data:${mimeType};base64,${bytes.toString('base64')}`;
+}
+
+export async function buildNanoBanana21Request(req: GenerateImageRequest) {
   validateImageModelRequest(req, 'gemini-2.1');
   const images = [...(req.image ? [{ url: req.image, role: 'Base image to edit' }] : []), ...(req.references ?? [])];
   if (!req.prompt.trim()) throw new NanoBanana21RequestError('Nano Banana 2.1 requires a non-empty prompt.');
   const aspectRatio = req.aspectRatio ?? 'auto';
   const resolution = req.imageResolution ?? '1K';
-  const inputReferences = images.map(image => {
-    let url = image.url;
-    if (!url.startsWith('data:') && !url.startsWith('https://')) {
-      if (!isImageBase64(url)) throw new NanoBanana21RequestError('Input images require HTTPS URLs or base64 image data.');
-      url = `data:image/jpeg;base64,${url}`;
-    }
-    if (url.startsWith('https://')) {
-      const parsed = new URL(url);
-      if (parsed.username || parsed.password) throw new NanoBanana21RequestError('Input image URLs must not contain credentials.');
-    } else {
-      const parsed = parseImageDataUrl(url);
-      if (!parsed || !['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'].includes(parsed.mimeType)) throw new NanoBanana21RequestError('Unsupported input image format.');
-    }
-    return { type: 'image_url', image_url: { url } };
-  });
+  const inputReferences = await Promise.all(images.map(async image => ({
+    type: 'image_url',
+    image_url: { url: await resolveNanoBanana21Reference(image.url) },
+  })));
   // Image API discovery advertises the full extended-ratio and reference contract.
   // Chat completions currently rejects new 2.1 panoramic ratios in its legacy validator.
   return {
@@ -59,7 +78,7 @@ export const nanoBanana21Backend: ModelBackend = {
   async generate(req) {
     const key = process.env.OPENROUTER_API_KEY?.trim();
     if (!key) throw new NanoBanana21RequestError('Nano Banana 2.1 requires OPENROUTER_API_KEY.');
-    const body = buildNanoBanana21Request(req);
+    const body = await buildNanoBanana21Request(req);
     let requestId: string | undefined;
     let stage = 'submission';
     let status: number | undefined;

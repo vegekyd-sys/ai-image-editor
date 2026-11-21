@@ -1,5 +1,6 @@
 import { imagePricingInput, type ImagePricingInput } from '../lib/billing/image-pricing-policy';
 import { createKlingImage4Journal } from '../lib/models/kling-image4-journal';
+import { isImageBase64 } from '../lib/models/image-data-url';
 import { formatImageCapabilitiesForAgent, getImageModelCapability, planImageGeneration } from '../lib/image-model-capabilities';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -21,12 +22,15 @@ import type { AudioBillingUsage } from '../lib/billing/audio';
 import { getMusicStatus } from '../lib/skills/get-music-status';
 
 /** Resolve image input to data URL or HTTP URL for AI APIs. */
-function resolveImage(input: string): string {
+function resolveImage(input: string, allowBareBase64 = false): string {
   if (input.startsWith('data:') || input.startsWith('http')) return input;
   // Local file path — only works in stdio mode (not serverless)
   try {
     const filePath = input.startsWith('file://') ? input.slice(7) : input;
-    if (!existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
+    if (!existsSync(filePath)) {
+      if (allowBareBase64 && isImageBase64(input)) return input;
+      throw new Error(`File not found: ${filePath}`);
+    }
     const buf = readFileSync(filePath);
     const lower = filePath.toLowerCase();
     const mimeType = lower.endsWith('.png')
@@ -180,12 +184,13 @@ Generation timing varies; report actual completion. Unknown submissions are neve
         const klingJournal = plan.model === 'kling-image-4.0'
           ? createKlingImage4Journal(options!.userId!, params.imageRequestId!) : undefined;
         const t0 = Date.now();
-        const image = params.image ? resolveImage(params.image) : undefined;
+        const allowBareBase64 = plan.model === 'gemini-2.1';
+        const image = params.image ? resolveImage(params.image, allowBareBase64) : undefined;
         const wrappedPrompt = getImageModelCapability(plan.model).promptMode !== 'edit' ? params.editPrompt : `Directly GENERATE the edited image based on this request. Do NOT output text descriptions — output ONLY the image.\n\nRequest: ${params.editPrompt}`;
 
         const ctx = {
           currentImage: image,
-          referenceImages: params.referenceImages?.map(resolveImage),
+          referenceImages: params.referenceImages?.map(reference => resolveImage(reference, allowBareBase64)),
         };
 
         const result = await editImage(
