@@ -1,5 +1,7 @@
 import type { GenerateImageRequest, ImageBackground, ModelId } from './models/types';
 
+export const Z_IMAGE_TURBO_DEFAULT_FORMAT = 'webp';
+
 export type ActiveImageModelId = Exclude<ModelId, 'openai' | 'qwen' | 'pony' | 'wai' | 'gpt-image-2.5-flare' | 'gpt-image-2.5-sunburst'>;
 export type ImageAspectRatioCapability =
   | { kind: 'enum'; values: readonly string[] }
@@ -94,7 +96,7 @@ const IMAGE_CAPABILITIES: Record<ActiveImageModelId, ImageModelCapability> = {
     id: 'z-image-turbo', label: 'Z-Image Turbo', maxInputImages: 1,
     aspectRatio: { kind: 'enum', values: STANDARD_RATIOS }, resolutions: ['1K'],
     supportsTransparency: false, supportsNsfw: false, promptMode: 'context', provider: 'fal',
-    notes: 'Select explicitly for fast 1K text-to-image or image-to-image. Pass media_index for one base image, or one reference if there is no base. Omit all image inputs for new generation. 1K long edge. Square by default for text; image-to-image uses the source ratio by default. JPEG by default; PNG or WebP when requested. Image-to-image is a guided redraw, without mask or pixel-exact preservation. No alpha, GIF, SVG, or GPT quality/reasoning controls. Both modes use one synchronous fal request with safety checking. Incompatible requests fail before generation; no automatic retry or fallback.',
+    notes: 'Select explicitly for fast 1K text-to-image or image-to-image. Pass media_index for one base image, or one reference if there is no base. Omit all image inputs for new generation. 1K long edge. Square by default for text; image-to-image uses the source ratio by default. WebP by default. PNG and JPEG are also available. Image-to-image is a guided redraw, without mask or pixel-exact preservation. No alpha, GIF, SVG, or GPT quality/reasoning controls. Both modes use one synchronous fal request with safety checking. Incompatible requests fail before generation; no automatic retry or fallback.',
   },
   'wan2.7-image': {
     id: 'wan2.7-image', label: 'Wan 2.7 Image', maxInputImages: 9,
@@ -236,7 +238,7 @@ export function planImageGeneration(req: GenerateImageRequest): ImageGenerationP
   const normalized = normalizeImageModelId(req.model);
   if (normalized === 'z-image-turbo') {
     validateImageModelRequest(req, normalized);
-    return { model: normalized, request: { ...req, model: normalized, imageResolution: '1K', outputFormat: req.outputFormat ?? 'jpeg' }, adjustments: [] };
+    return { model: normalized, request: { ...req, model: normalized, imageResolution: '1K', outputFormat: req.outputFormat ?? Z_IMAGE_TURBO_DEFAULT_FORMAT }, adjustments: [] };
   }
   if (normalized === 'kling-image-4.0') {
     validateImageModelRequest(req, normalized);

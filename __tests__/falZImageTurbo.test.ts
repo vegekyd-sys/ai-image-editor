@@ -15,6 +15,8 @@ afterEach(() => {
 describe('fal Z-Image Turbo', () => {
   it('keeps Auto on Flare and rejects incompatible options on an explicit selection', () => {
     expect(planImageGeneration({ prompt: request.prompt }).model).toBe('gpt-image-2.6-flare');
+    expect(planImageGeneration(request).request.outputFormat).toBe('webp');
+    expect(planImageGeneration({ ...request, outputFormat: 'jpeg' }).request.outputFormat).toBe('jpeg');
     for (const input of [
       { image: 'https://example.com/image.jpg', references: [{ url: 'https://example.com/ref.jpg', role: 'reference' }] },
       { background: 'transparent' as const }, { outputFormat: 'svg' as const }, { outputFormat: 'gif' as const },
@@ -45,20 +47,20 @@ describe('fal Z-Image Turbo', () => {
     }));
   });
 
-  it('uses the single-image endpoint and preserves source aspect by default', async () => {
+  it('uses the single-image endpoint with WebP and the source aspect by default', async () => {
     const source = await sharp({ create: { width: 800, height: 450, channels: 3, background: '#334455' } }).png().toBuffer();
-    const png = await sharp({ create: { width: 1024, height: 576, channels: 3, background: '#eecc44' } }).png().toBuffer();
+    const webp = await sharp({ create: { width: 1024, height: 576, channels: 3, background: '#eecc44' } }).webp().toBuffer();
     const fetch = vi.fn((_url: string, _options: RequestInit) => Promise.resolve(Response.json({
-      images: [{ url: `data:image/png;base64,${png.toString('base64')}` }],
+      images: [{ url: `data:image/webp;base64,${webp.toString('base64')}` }],
     }, { headers: { 'x-fal-billable-units': '1' } })));
     vi.stubGlobal('fetch', fetch);
-    await expect(generateImage({ ...request, image: `data:image/png;base64,${source.toString('base64')}`, outputFormat: 'png' }))
+    await expect(generateImage({ ...request, image: `data:image/png;base64,${source.toString('base64')}` }))
       .resolves.toMatchObject({ provider: 'fal', usage: { providerCostUsd: 0.005 } });
     expect(fetch).toHaveBeenCalledTimes(1);
     const [url, options] = fetch.mock.calls[0];
     expect(url).toBe('https://fal.run/fal-ai/z-image/turbo/image-to-image');
     expect(JSON.parse(options.body as string)).toMatchObject({
-      image_size: { width: 1024, height: 576 }, strength: 0.6, image_url: expect.stringMatching(/^data:image\/webp;base64,/),
+      image_size: { width: 1024, height: 576 }, output_format: 'webp', strength: 0.6, image_url: expect.stringMatching(/^data:image\/webp;base64,/),
     });
   });
 
@@ -74,11 +76,13 @@ describe('fal Z-Image Turbo', () => {
     vi.stubGlobal('fetch', fetch);
     fetch.mockRejectedValueOnce(new Error('Connection reset'));
     await expect(generateImage(request)).rejects.toThrow(/outcome may be unknown/);
+    fetch.mockResolvedValueOnce(new Response('{"images":['));
+    await expect(generateImage(request)).rejects.toThrow(/could not read the provider response body.*outcome may be unknown/);
     fetch.mockResolvedValueOnce(Response.json({ detail: [{ type: 'content_policy_violation' }] }, { status: 422 }));
     await expect(generateImage({ ...request, benignCharacterContent: true })).rejects.toMatchObject({ providerCode: 'content_policy_violation' });
     fetch.mockResolvedValueOnce(Response.json({ images: [{ url: 'https://invalid.example.com/generated.jpg' }] }));
     await expect(generateImage(request)).rejects.toThrow(/missing billing receipt/);
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenCalledTimes(4);
   });
 
   it('stops before submission on a cancelled request', async () => {

@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { providerCostToCredits } from '../billing/token-rates';
-import { validateImageModelRequest } from '../image-model-capabilities';
+import { validateImageModelRequest, Z_IMAGE_TURBO_DEFAULT_FORMAT } from '../image-model-capabilities';
 import { readProviderImage } from '../provider-image-preflight';
 import { parseImageDataUrl } from './image-data-url';
 import { ImageProviderRefusalError } from './image-provider-refusal';
@@ -71,7 +71,7 @@ async function buildZImageTurboRequest(req: GenerateImageRequest) {
       enable_safety_checker: true,
       enable_prompt_expansion: false,
       sync_mode: true,
-      output_format: req.outputFormat ?? 'jpeg',
+      output_format: req.outputFormat ?? Z_IMAGE_TURBO_DEFAULT_FORMAT,
     },
   };
 }
@@ -112,7 +112,12 @@ export const falZImageTurboBackend: ModelBackend = {
     }
     const rawRequestId = response.headers.get('x-fal-request-id');
     const requestId = rawRequestId && /^[a-z0-9-]{1,100}$/i.test(rawRequestId) ? rawRequestId : undefined;
-    const data = await response.json().catch(() => null) as FalZImageResponse | null;
+    const data = await response.json().catch(() => {
+      if (response.ok) {
+        throw new ZImageTurboRequestError('Z-Image Turbo could not read the provider response body. The paid outcome may be unknown. Do not retry automatically.');
+      }
+      return null;
+    }) as FalZImageResponse | null;
     if ((!response.ok && Array.isArray(data?.detail) && data.detail.some(item => item?.type === 'content_policy_violation'))
       || (Array.isArray(data?.has_nsfw_concepts) && data.has_nsfw_concepts.includes(true))) {
       throw new ImageProviderRefusalError('fal', 'content_policy_violation', requestId);

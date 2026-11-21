@@ -423,11 +423,11 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 npx makaron-cli edit --image-model gpt-image-2.6-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Select `z-image-turbo` for fast text-to-image or guided redraw. It returns one 1K image, JPEG by default, with PNG/WebP available through `--output-format`. For a redraw, pass one `--image` or one `--ref`. The redraw uses the source aspect ratio by default. For a current estimate, run `makaron price image --model z-image-turbo --resolution 1K --operation generate`.
+Select `z-image-turbo` for fast text-to-image or guided redraw. It returns one 1K image, WebP by default, with PNG/JPEG available through `--output-format`. For a redraw, pass one `--image` or one `--ref`. The redraw uses the source aspect ratio by default. For a current estimate, run `makaron price image --model z-image-turbo --resolution 1K --operation generate`.
 
 ```bash
-npx makaron-cli edit --image-model z-image-turbo --out poster.jpg "a screen-print illustration of an alpine railway"
-npx makaron-cli edit --image poster.jpg --image-model z-image-turbo --out variant.jpg "redraw the poster in a two-color print style"
+npx makaron-cli edit --image-model z-image-turbo --out poster.webp "a screen-print illustration of an alpine railway"
+npx makaron-cli edit --image poster.webp --image-model z-image-turbo --out variant.webp "redraw the poster in a two-color print style"
 ```
 
 Options: `--image`, `--image-model gemini|gemini-2.1|gemini-lite|qwen-spicy|openai|gpt-image-2.6-flare|gpt-image-2.6-sunburst|wan2.7-image|mj-v8.2|seedream-5.5|kling-image-4.0`, `--ref <file>` (model-specific limit), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Nano Banana 2.1 (`gemini-2.1`) supports up to 14 total input images and `--image-resolution 1K|2K|4K` (default 1K); it uses OpenRouter and does not retry or switch models automatically. Qwen Spicy supports 0–3 input images; legacy `qwen` requests map to it. Pony and WAI are retired. Transparent output defaults to GPT Image 2.6 Flare; an explicitly selected GPT Image 2.6 variant is retained. Output is returned only when the provider supplies real alpha.

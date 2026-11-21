@@ -2118,7 +2118,7 @@ Options:
 
 Notes:
   Z-Image Turbo supports fast 1K text-to-image and single-image redraw. Pass one
-  --image or one --ref for redraw. Default JPEG; PNG/WebP are optional.
+  --image or one --ref for redraw. Default WebP. PNG and JPEG are also available.
   GPT Image 2.6 defaults to low rendering quality + high reasoning.
   New GIF art and animated memes: use makaron chat with GPT Image 2.6 Flare.
   animated-gif is for existing-frame assembly or explicit timing/export controls.
@@ -2131,8 +2131,8 @@ Notes:
   and fails instead of returning an opaque fallback.
 
 Examples:
-  makaron edit --image-model z-image-turbo --out poster.jpg "a screen-print illustration of an alpine railway"
-  makaron edit --image poster.jpg --image-model z-image-turbo --out variant.jpg "redraw the poster in a two-color print style"
+  makaron edit --image-model z-image-turbo --out poster.webp "a screen-print illustration of an alpine railway"
+  makaron edit --image poster.webp --image-model z-image-turbo --out variant.webp "redraw the poster in a two-color print style"
   makaron edit --image portrait.jpg --image-model qwen-spicy --out result.jpg "cinematic warm light"
   makaron edit --image product.jpg --ref style.png --aspect 1:1 "use this visual style"
   makaron edit --image-model gpt-image-2.6-flare --background transparent --out sticker.png "a magenta star sticker"
