@@ -58,7 +58,7 @@ test('superseded, duplicate and ordinary turns cannot enqueue extra directions',
   assert.equal(api.current(s.id).phase, 'ended');
 });
 
-test('a direct host stop closes the broadcast even with a pending draft and returns the same receipt on retry', async (t) => {
+test('a semantic host end decision closes a pending draft and returns its receipt on retry', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'director-'));
   const api = createSessions(dir);
   t.after(() => { api.close(); rmSync(dir, { recursive: true, force: true }); });
@@ -67,9 +67,9 @@ test('a direct host stop closes the broadcast even with a pending draft and retu
     const result = await api.input(show, { text, turnId: text, host: true }, async () => ({ action: 'wait' }));
     assert.equal(result.action, 'wait');
   }
-  const turn = { text: '结束直播，我们继续聊。', turnId: 'end', host: true };
+  const turn = { text: '今天就播到这儿。', turnId: 'end', host: true };
   for (let attempt = 0; attempt < 2; attempt++) {
-    assert.deepEqual(await api.input(show, turn, () => assert.fail()), { action: 'end' });
+    assert.deepEqual(await api.input(show, turn, () => attempt === 0 ? {action:'end'} : assert.fail()), { action: 'end' });
     assert.equal(api.current(show.id).phase, 'ended');
   }
 });
