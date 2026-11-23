@@ -1,5 +1,4 @@
 import { createPlayoutCues } from './playout.mjs';
-import { openDirector } from './transport.mjs';
 const $ = (selector) => document.querySelector(selector);
 const [id, token] = location.hash.slice(1).split('.');
 const embedded = new URLSearchParams(location.search).has('embed');
@@ -145,11 +144,15 @@ async function poll() {
 }
 async function start() {
   if (!id || !token) throw Error('请从 Makaron CLI 打开本场播放器');
-  const initial = await post('poll');
+  const [initial, {openDirector}] = await Promise.all([
+    post('poll', { prepare: true }),
+    import('./transport.mjs'),
+  ]);
   if (initial.phase !== 'waiting')
     throw Error(initial.phase === 'ended' ? '直播已结束' : '本场已有播放器');
   playout.expect(1, initial.config.prompt);
   handle = await openDirector(url('signal'), token, {
+    iceServers: initial.iceServers,
     onMedia(stream) {
       if (ended) return;
       video.srcObject = stream;

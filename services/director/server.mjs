@@ -41,6 +41,27 @@ export function createDirectorServer({
   organize = organizeVoice,
 }) {
   const shows = createSessions(directory);
+  // Start only non-billable ICE discovery here. The browser still exchanges its own
+  // offer, and retrieving these short-lived TURN credentials requires its live ticket.
+  const iceByShow = new Map();
+  const providerPost = (target, body, timeout) => fetcher(target, {
+    method: 'POST',
+    redirect: 'error',
+    headers: {authorization: 'Key ' + providerKey, 'content-type': 'application/json'},
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(timeout),
+  });
+  function prepareIce(id) {
+    if (iceByShow.has(id)) return;
+    const pending = providerPost(bridge + '/ice', {app_id: endpoint}, 3500)
+      .then(async response => {
+        if (!response.ok) { await response.body?.cancel(); return null; }
+        const {ice_servers: servers} = await response.json();
+        return Array.isArray(servers) && servers.length ? servers : null;
+      }).catch(() => null);
+    iceByShow.set(id, pending);
+    setTimeout(() => iceByShow.delete(id), 15000).unref();
+  }
   const playerPath = (s) => '/director/player.html#' + s.id + '.' + s.token;
   const server = http.createServer(async (req, res) => {
     const json = (status, data) => {
@@ -101,6 +122,7 @@ export function createDirectorServer({
         const body = await jsonBody(req);
         if (body.action === 'start') {
           const s = shows.start(actor, body);
+          if (s.phase === 'waiting') prepareIce(s.id);
           return json(200, { ...shows.present(s), playerPath: playerPath(s) });
         }
         const s = shows.owned(body.id, actor);
@@ -175,9 +197,11 @@ export function createDirectorServer({
       if (op === 'poll') {
         if (!shows.alive(s)) return json(200, shows.present(s));
         shows.receipt(s, body);
+        const iceServers = body.prepare === true && s.phase === 'waiting' ? await iceByShow.get(s.id) : null;
         return json(200, {
           ...shows.present(shows.current(s.id)),
           config: JSON.parse(s.config),
+          ...(iceServers ? {iceServers} : {}),
           directions: shows.changes(s, body.after ?? 0),
         });
       }
@@ -213,13 +237,7 @@ export function createDirectorServer({
         if (!s.provider_session || s.provider_session !== body.session_id) fail(409, '会话不匹配');
         request = { session_id: s.provider_session };
       } else request = target === bridge + '/ice' ? { app_id: endpoint } : {};
-      const upstream = await fetcher(target, {
-        method: 'POST',
-        redirect: 'error',
-        headers: { authorization: 'Key ' + providerKey, 'content-type': 'application/json' },
-        body: JSON.stringify(request),
-        signal: AbortSignal.timeout(90000),
-      });
+      const upstream = await providerPost(target, request, 90000);
       if (!upstream.ok) {
         await upstream.body?.cancel();
         if (target === bridge + '/session') shows.stop(s.id, 'failed');
