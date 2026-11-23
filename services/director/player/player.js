@@ -75,6 +75,7 @@ function record(stream) {
       tell('ended');
       return;
     }
+    tell('recorded', {blob});
     const a = $('#save');
     a.href = URL.createObjectURL(blob);
     a.download = id + (type === 'video/mp4' ? '.mp4' : '.webm');
@@ -92,6 +93,13 @@ function record(stream) {
 async function finish(message = '直播已结束') {
   if (ended) return;
   ended = true;
+  if (embedded && video.videoWidth) {
+    const still = document.createElement('canvas');
+    still.width=video.videoWidth; still.height=video.videoHeight;
+    let poster;
+    try { still.getContext('2d').drawImage(video,0,0); poster=still.toDataURL('image/jpeg',0.9); } catch {}
+    tell('stopped',{poster});
+  }
   clearTimeout(timer);
   recognizer?.stop();
   setStatus(message);
