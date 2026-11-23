@@ -6,7 +6,7 @@
 node --env-file=/path/to/private.env --import tsx services/director/start.ts
 ```
 
-环境文件提供 Makaron 既有 Supabase 服务配置、开发环境 FAL_KEY、DEEPSEEK_API_KEY 和独立播放器语音所用 DASHSCOPE_API_KEY。设置 MAKARON_DIRECTOR_PREVIEW_KEY_IDS（已启用的 Makaron key 记录 ID）、MAKARON_DIRECTOR_STATE_DIR（服务账户的专用目录），以及可选的 MAKARON_DIRECTOR_PORT（默认 43936）。服务只监听 loopback。客户端通过 MAKARON_DIRECTOR_URL 访问隔离实例，普通图片上传和固定时长视频保持原 Makaron 地址。
+环境文件提供 Makaron 既有 Supabase 服务配置、开发环境 FAL_KEY、DEEPSEEK_API_KEY 和独立播放器语音所用 DASHSCOPE_API_KEY。设置 MAKARON_DIRECTOR_PREVIEW_KEY_IDS（已启用的 Makaron key 记录 ID）、MAKARON_DIRECTOR_STATE_DIR（服务账户的专用目录），以及可选的 MAKARON_DIRECTOR_PORT（默认 43936）。服务只监听 loopback。客户端通过 MAKARON_DIRECTOR_URL 访问隔离实例，CLI 的首图走同一预览服务上的 Makaron 签名上传接口。
 
 ```sh
 export MAKARON_DIRECTOR_URL=http://127.0.0.1:43936

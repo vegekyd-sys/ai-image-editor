@@ -103,6 +103,7 @@ async function poll() {
         });
         sent = direction.version;
         setStatus('下一幕正在准备');
+        tell('direction', {state:'sent'});
       }
     timer = setTimeout(poll, 600);
   } catch (error) {
@@ -134,8 +135,9 @@ async function start() {
       if (e.type === 'prompt_applied') {
         applied = Math.max(applied, e.prompt_version);
         setStatus('导演已采用新指令');
+        tell('direction', {state:'applied'});
       }
-      if (e.type === 'prompt_rejected') setStatus('这条指令未被采用');
+      if (e.type === 'prompt_rejected') {setStatus('这条指令未被采用');tell('direction',{state:'rejected'});}
       if (e.type === 'stream_exhausted' || e.type === 'error') void finish();
     },
     onError() {

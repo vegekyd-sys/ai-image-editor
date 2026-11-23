@@ -54,7 +54,7 @@ export async function runDirector(argv, getAuth, uploadImage) {
     throw Error('Director requires HTTPS or loopback');
   let image = values.image;
   if (image && !/^https:\/\//i.test(image)) {
-    image = await uploadImage(baseUrl, headers, image);
+    image = await uploadImage(directorUrl.origin, headers, image);
     if (!image) throw Error('Opening image upload failed');
   }
   const payload =

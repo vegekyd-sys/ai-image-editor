@@ -35,6 +35,7 @@ export function createDirectorServer({
   directory,
   authenticate,
   activeKey,
+  openingUpload,
   providerKey,
   fetcher = fetch,
   organize = organizeVoice,
@@ -75,6 +76,24 @@ export function createDirectorServer({
         return;
       }
       if (req.method !== 'POST') fail(404, '没有这个接口');
+      if (url.pathname === '/api/storage/upload-url' && openingUpload) {
+        const actor = await authenticate(req.headers.authorization);
+        if (!actor) fail(403, '需要已启用的 Makaron key');
+        const { filename, contentType } = await jsonBody(req);
+        if (
+          typeof filename !== 'string' ||
+          filename.length > 255 ||
+          !['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'].includes(contentType)
+        )
+          fail(400, '首图格式无效');
+        const result = await openingUpload(
+          req.headers.authorization,
+          path.basename(filename),
+          contentType,
+        );
+        if (!result.ok) fail(result.status, '无法上传首图');
+        return json(200, await result.json());
+      }
       if (url.pathname === '/api/director') {
         const actor = await authenticate(req.headers.authorization);
         if (!actor) fail(403, '需要本次 Preview 已启用的 Makaron key');
