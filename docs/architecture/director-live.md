@@ -31,7 +31,7 @@ makaron director export <session> --output show.mp4
 | --- | --- |
 | `director/semantic.js` | 每段转写保留 ID 与修订号。final 后并行做语义整理和 650 ms 自我纠正窗口。新发言使旧整理作废；已提交内容去重。 |
 | `lib/voice-organizer.mjs` | 模型判断 send、wait、discard，保留主体、否定、动作顺序和自我纠正。最近三条已发指令仅用于消歧。失败保留草稿。 |
-| `director/app.js` 和 `public/director-state.js` | 支持首图、开场、画幅、分辨率、seed 和记忆长度。连接中暂存指令；递增版本、合并尚未采用的改动、replan、停止、留帧、录制。 |
+| `director/app.js` 和 `public/director-state.js` | 支持首图、开场、画幅、分辨率、seed 和记忆长度。连接中暂存指令；递增版本、跟踪待采用与已采用的改动、replan、停止、留帧、录制。 |
 | `lib/director-proxy.mjs` | 限定信令目的地，由服务端提供 fal 凭据。媒体仍走浏览器 WebRTC，实时视频字节无需经过 CLI 标准输出。 |
 
 V 适配已有的用户转写，在直播状态下把创作输入交给同一整理器。补半句、改口、纯口头语、普通聊天和结束直播走不同分支。单独运行的 CLI 可从文字或独立播放器的语音输入驱动同一场会话。V 接入时复用现有麦克风和 ASR，只消费用户轮次。
@@ -50,3 +50,5 @@ V 适配已有的用户转写，在直播状态下把创作输入交给同一整
 ## 已验证的语义部分
 
 PR 中的 `src/lib/director/` 提取了 TV 的语义缓冲、原生提示版本和整理器；通话宿主新增 chat 和 end 两种结果。独立 Director 的整理仍使用原来的三种结果。测试入口为 `node --test __tests__/director/semantic.test.mjs`。覆盖未说完、改口使旧结果作废、聊天不进入提示历史，以及生成回执和播放事实的区别。以开发环境 DeepSeek V4 Flash 单独跑过六条合成语音转写，得到两次场景指令、一次知识问题、一次等待、一次口头语和一次收播。这个结果只验证意图层。
+
+独立 CLI 的私有预览已实现。账户控制在 Makaron worker，Voice 用受限的 CLI 参数调用。播放器在用户打开时创建媒体连接，并把实际收到的音视频保存到这场会话。独立模式使用 TV 原有实时 ASR，V 模式沿用通话里的用户转写。浏览器凭单场票据请求媒体信令，不持有供应商 key。运行方式见 [Director worker](../../services/director/README.md)。
