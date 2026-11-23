@@ -60,10 +60,11 @@ async function handleMcp(req: Request): Promise<Response> {
   const trackCharge = (result: { charged: number } | void) => {
     if (result && Number.isFinite(result.charged)) creditsCharged += result.charged;
   };
+  const cli = auth.type === 'user' && resolveRequestBillingSource(req, { apiKeyId: auth.keyId }) === 'cli';
   if (auth.type === 'user') {
     // makaron-cli announces itself; other API-key callers stay 'mcp'.
     enterBillingAttribution({
-      source: resolveRequestBillingSource(req, { apiKeyId: auth.keyId }) === 'cli' ? 'cli' : 'mcp',
+      source: cli ? 'cli' : 'mcp',
       apiKeyId: auth.keyId ?? null,
     });
   }
@@ -72,6 +73,13 @@ async function handleMcp(req: Request): Promise<Response> {
     returnImageContent: true,
     userId: auth.userId,
     imageSignal: req.signal,
+    // The existing Voice CLI speaks the ordinary edit protocol. Only explicitly enrolled
+    // API-key IDs opt into permanent projects; the owner always comes from authentication.
+    saveVoiceImage: cli && auth.keyId && process.env.MAKARON_VOICE_IMAGE_KEY_IDS?.split(',').some(id => id.trim() === auth.keyId)
+      ? async image => {
+        const { saveVoiceImageProject } = await import('@/lib/voice-image-project');
+        return saveVoiceImageProject(auth.userId!, image);
+      } : undefined,
     publishKlingImage4Result: auth.type === 'user' ? async (image, taskId) => {
       const { uploadImage } = await import('@/lib/supabase/storage');
       const { getSupabaseAdmin } = await import('@/lib/supabase/service');

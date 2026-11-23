@@ -2,7 +2,8 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
 
-const state = vi.hoisted(() => ({ balance: 100, credits: 6, configured: true, enabled: true, free: false, rpc: vi.fn(), fetch: vi.fn() }));
+const state = vi.hoisted(() => ({ balance: 100, credits: 6, configured: true, enabled: true, free: false, rpc: vi.fn(), fetch: vi.fn(), saveVoiceImage: vi.fn() }));
+vi.mock('@/lib/voice-image-project', () => ({ saveVoiceImageProject: state.saveVoiceImage }));
 vi.mock('@/lib/billing/api-keys', () => ({ validateApiKey: async () => ({ userId: 'test-user', keyId: 'test-key' }) }));
 vi.mock('@/lib/grok-subscription', () => ({ isGrokSubscriptionAllowedUser: async () => false }));
 vi.mock('@/lib/gemini', () => ({ ContentBlockedError: class extends Error {} }));
@@ -36,16 +37,17 @@ import { POST } from '@/app/api/mcp/route';
 import { invalidateBillingCache } from '@/lib/billing/credits';
 import { invalidatePricingCache } from '@/lib/billing/pricing';
 
-async function callNano(model: string | undefined = 'gemini-2.1', aspectRatio = '16:9', imageArgs: { image?: string; referenceImages?: string[]; imageResolution?: string } = {}) {
+async function callNano(model: string | undefined = 'gemini-2.1', aspectRatio = '16:9', imageArgs: { image?: string; referenceImages?: string[]; imageResolution?: string } = {}, cli = false) {
   const response = await POST(new Request('http://localhost/api/mcp', {
     method: 'POST',
-    headers: { Authorization: 'Bearer mk_live_test', 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+    headers: { ...(cli ? { 'X-Makaron-Client': 'makaron-cli/0.17.28' } : {}), Authorization: 'Bearer mk_live_test', 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'makaron_edit_image', arguments: { editPrompt: 'A red mug.', model: model === 'auto-omitted' ? undefined : model, aspectRatio, imageResolution: '2K', ...imageArgs } } }),
   }));
   return { response, payload: await response.json() };
 }
 
 beforeEach(async () => {
+  state.saveVoiceImage.mockReset();
   state.balance = 100; state.credits = 6; state.configured = true; state.enabled = true; state.free = false;
   state.rpc.mockReset().mockImplementation(async (name, params) => {
     if (name === 'deduct_and_log') state.balance -= params.p_amount;
@@ -70,6 +72,28 @@ describe('Nano Banana 2.1 MCP → shared skill → provider → billing', () => 
     expect(debits[0][1]).toMatchObject({ p_user_id: 'test-user', p_api_key_id: 'test-key', p_source: 'mcp', p_model_used: 'google/gemini-nano-banana-2.1', p_amount: 11, p_input_tokens: 100, p_output_tokens: 1800 });
     expect(state.fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(state.fetch.mock.calls[0][1].body).resolution).toBe('2K');
+  });
+  it.each([
+    { enrolled: true, cli: true, fails: false, saves: true },
+    { enrolled: true, cli: true, fails: true, saves: true },
+    { enrolled: false, cli: true, fails: false, saves: false },
+    { enrolled: true, cli: false, fails: false, saves: false },
+  ])('delivers the same billed original for saved URL rollout %o', async ({ enrolled, cli, fails, saves }) => {
+    vi.stubEnv('MAKARON_VOICE_IMAGE_KEY_IDS', enrolled ? 'another, test-key' : 'test-key-other');
+    const url = 'https://cdn.example/snapshot.png';
+    if (fails) state.saveVoiceImage.mockRejectedValue(new Error('save failed'));
+    else state.saveVoiceImage.mockResolvedValue(url);
+    const { payload, response } = await callNano('gemini-2.1', '1:1', {}, cli);
+    const [text, image] = payload.result.content;
+    expect(image).toMatchObject({ type: 'image', mimeType: 'image/png' });
+    expect(text.text.includes(url)).toBe(saves && !fails);
+    expect(state.saveVoiceImage).toHaveBeenCalledTimes(Number(saves));
+    if (saves) expect(state.saveVoiceImage).toHaveBeenCalledWith('test-user', 'data:image/png;base64,' + image.data);
+    expect(response.headers.get('X-Credits-Charged')).toBe('11');
+    const debits = state.rpc.mock.calls.filter(([name]) => name === 'deduct_and_log');
+    expect(debits).toHaveLength(1);
+    expect(debits[0][1]).toMatchObject({ p_user_id: 'test-user', p_api_key_id: 'test-key', p_source: cli ? 'cli' : 'mcp' });
+    expect(state.fetch).toHaveBeenCalledOnce();
   });
   it.each(['image', 'referenceImages'])('sends one normalized reference from MCP %s and settles its reported cost once', async field => {
     const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: 'red' } }).png().toBuffer();
