@@ -10,6 +10,9 @@ export const fail = (status, message) => {
   throw Object.assign(Error(message), { status });
 };
 const MAX_MS = 120_000;
+// An unambiguous host control can arrive while a previous scene is still being organized.
+// Keep questions, quoted dialogue and delayed instructions on the semantic path.
+const stopNow = /^(?:(?:小何|小V|好了|好|那就|现在|请|帮我)[，,、\s]*)*(?:(?:结束|停止|关掉)(?:这场|本场)?直播|(?:这场)?直播(?:结束|停掉)|收播)(?:吧|啦|了)?[，,。！!\s]*(?:(?:咱们|我们)?(?:继续|接着)(?:聊天|聊聊|聊)(?:吧)?|谢谢)?[。！!\s]*$/iu;
 
 export function createSessions(directory, { now = Date.now } = {}) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -118,7 +121,6 @@ export function createSessions(directory, { now = Date.now } = {}) {
       .all(s.id, after);
   }
   async function input(s, { text, turnId, host = false }, organize) {
-    if (!alive(current(s.id))) fail(409, '直播已结束');
     if (
       typeof text !== 'string' ||
       !text.trim() ||
@@ -130,6 +132,13 @@ export function createSessions(directory, { now = Date.now } = {}) {
     const prior = db.prepare('SELECT result FROM turns WHERE show=? AND id=?').get(s.id, turnId);
     if (prior) return prior.result ? JSON.parse(prior.result) : { action: 'pending' };
     s = current(s.id);
+    if (!alive(s)) fail(409, '直播已结束');
+    if (host && stopNow.test(text.trim())) {
+      stop(s.id);
+      const result = { action: 'end' };
+      db.prepare('INSERT INTO turns(show,id,result) VALUES(?,?,?)').run(s.id, turnId, JSON.stringify(result));
+      return result;
+    }
     const draft = [s.draft, text.trim()].filter(Boolean).join(' ');
     if (draft.length > 8000) fail(400, '请缩短本次导演输入');
     db.prepare('INSERT INTO turns(show,id) VALUES(?,?)').run(s.id, turnId);
