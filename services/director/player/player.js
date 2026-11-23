@@ -12,7 +12,15 @@ let handle,
   frames = 0,
   applied = 0,
   sent = 1,
+  pollFailures = 0,
   timer;
+const captions = new Map();
+function acknowledge(version) {
+  if (!Number.isInteger(version) || version < applied || !captions.has(version)) return;
+  applied = version;
+  tell('direction', {state: 'applied', version, text: captions.get(version)});
+  for (const key of captions.keys()) if (key <= version) captions.delete(key);
+}
 const setStatus = (text) => ($('#status').textContent = text);
 const url = (op) => {
   const u = new URL('../api/director/player/' + op, location.href);
@@ -27,7 +35,7 @@ async function post(op, body = {}, type = 'application/json') {
     redirect: 'error',
   });
   const data = await response.json();
-  if (!response.ok) throw Error(data.error || '直播连接失败');
+  if (!response.ok) throw Object.assign(Error(data.error || '直播连接失败'), {status: response.status});
   return data;
 }
 function tell(action, extra = {}) {
@@ -92,9 +100,11 @@ async function poll() {
     if (!video.requestVideoFrameCallback)
       frames = video.getVideoPlaybackQuality?.().totalVideoFrames || frames;
     const data = await post('poll', { after: sent, applied, frames });
+    pollFailures = 0;
     if (['ended', 'failed'].includes(data.phase)) return finish();
     if (configured)
       for (const direction of data.directions) {
+        captions.set(direction.version, direction.text);
         handle.send({
           type: 'prompt',
           prompt_version: direction.version,
@@ -107,6 +117,10 @@ async function poll() {
       }
     timer = setTimeout(poll, 600);
   } catch (error) {
+    if (!ended && (error instanceof TypeError || error.status >= 500) && ++pollFailures <= 3) {
+      timer = setTimeout(poll, 600 * pollFailures);
+      return;
+    }
     void finish(error.message);
   }
 }
@@ -115,6 +129,7 @@ async function start() {
   const initial = await post('poll');
   if (initial.phase !== 'waiting')
     throw Error(initial.phase === 'ended' ? '直播已结束' : '本场已有播放器');
+  captions.set(1, initial.config.prompt);
   handle = await openDirector(url('signal'), token, {
     onMedia(stream) {
       if (ended) return;
@@ -130,12 +145,11 @@ async function start() {
       const e = typeof raw === 'string' ? JSON.parse(raw) : raw;
       if (e.type === 'configured') {
         configured = true;
-        applied = 1;
+        acknowledge(1);
       }
       if (e.type === 'prompt_applied') {
-        applied = Math.max(applied, e.prompt_version);
+        acknowledge(e.prompt_version);
         setStatus('导演已采用新指令');
-        tell('direction', {state:'applied'});
       }
       if (e.type === 'prompt_rejected') {setStatus('这条指令未被采用');tell('direction',{state:'rejected'});}
       if (e.type === 'stream_exhausted' || e.type === 'error') void finish();
@@ -185,25 +199,8 @@ $('#sound').onclick = () => {
   video.muted = !video.muted;
   $('#sound').textContent = video.muted ? '开启声音' : '静音';
 };
-function snapshot() {
-  if (!video.videoWidth) return;
-  const c = document.createElement('canvas');
-  c.width = video.videoWidth;
-  c.height = video.videoHeight;
-  c.getContext('2d').drawImage(video, 0, 0);
-  if (embedded) {
-    tell('still', { image: c.toDataURL('image/jpeg', 0.9) });
-    return;
-  }
-  const a = document.createElement('a');
-  a.download = id + '.jpg';
-  a.href = c.toDataURL('image/jpeg', 0.9);
-  a.click();
-}
-$('#still').onclick = snapshot;
 window.addEventListener('message', (e) => {
   if (e.source !== parent || e.origin !== location.origin || e.data?.id !== id) return;
-  if (e.data.action === 'keep') snapshot();
   if (e.data.action === 'end') void finish();
 });
 if (!embedded) {
@@ -245,5 +242,5 @@ if (!embedded) {
 }
 start().catch((error) => {
   setStatus(error.message);
-  tell('ended');
+  tell('ended', {failed: true});
 });
