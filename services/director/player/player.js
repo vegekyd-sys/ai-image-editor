@@ -1,3 +1,4 @@
+import { createPlayoutCues } from './playout.mjs';
 import { openDirector } from './transport.mjs';
 const $ = (selector) => document.querySelector(selector);
 const [id, token] = location.hash.slice(1).split('.');
@@ -15,12 +16,9 @@ let handle,
   sent = 1,
   pollFailures = 0,
   timer;
-const captions = new Map();
+const playout = createPlayoutCues();
 function acknowledge(version) {
-  if (!Number.isInteger(version) || version < applied || !captions.has(version)) return;
-  applied = version;
-  tell('direction', {state: 'applied', version, text: captions.get(version)});
-  for (const key of captions.keys()) if (key <= version) captions.delete(key);
+  if (Number.isInteger(version)) applied = Math.max(applied, version);
 }
 const setStatus = (text) => ($('#status').textContent = text);
 const url = (op) => {
@@ -43,9 +41,11 @@ function tell(action, extra = {}) {
   if (embedded && window.parent !== window)
     parent.postMessage({ source: 'makaron-director', id, action, ...extra }, location.origin);
 }
-function count() {
+function count(_time, metadata) {
   if (ended) return;
   if (video.srcObject && video.videoWidth && !recordingAttempted) startRecording();
+  const cue = playout.frame(metadata.mediaTime);
+  if (cue) tell('direction', {state: 'playing', ...cue, rtpTimestamp: metadata.rtpTimestamp});
   frames++;
   video.requestVideoFrameCallback?.(count);
 }
@@ -115,7 +115,7 @@ async function poll() {
     if (['ended', 'failed'].includes(data.phase)) return finish();
     if (configured)
       for (const direction of data.directions) {
-        captions.set(direction.version, direction.text);
+        playout.expect(direction.version, direction.text);
         handle.send({
           type: 'prompt',
           prompt_version: direction.version,
@@ -140,7 +140,7 @@ async function start() {
   const initial = await post('poll');
   if (initial.phase !== 'waiting')
     throw Error(initial.phase === 'ended' ? '直播已结束' : '本场已有播放器');
-  captions.set(1, initial.config.prompt);
+  playout.expect(1, initial.config.prompt);
   handle = await openDirector(url('signal'), token, {
     onMedia(stream) {
       if (ended) return;
@@ -152,6 +152,7 @@ async function start() {
     },
     onData(raw) {
       const e = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (e.type === 'chunk') playout.chunk(e);
       if (e.type === 'configured') {
         configured = true;
         acknowledge(1);
@@ -176,7 +177,8 @@ async function start() {
   }
   handle.ready.catch(() => finish('直播连接失败'));
   handle.send(initial.config);
-  video.requestVideoFrameCallback?.(count);
+  if(video.requestVideoFrameCallback) video.requestVideoFrameCallback(count);
+  else video.addEventListener('timeupdate',()=>{if(video.readyState>=2 && video.videoWidth)count(0,{mediaTime:video.currentTime});});
   void poll();
 }
 async function direct(text) {

@@ -59,6 +59,7 @@ export function createDirectorServer({
           '/director/player.html',
           '/director/player.js',
           '/director/transport.mjs',
+          '/director/playout.mjs',
           '/director/voice.js',
           '/director/voice-state.js',
           '/director/voice-worklet.js',
