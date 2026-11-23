@@ -6,6 +6,7 @@ document.body.classList.toggle('embedded', embedded);
 const video = $('video');
 let handle,
   recorder,
+  recordingAttempted = false,
   recognizer,
   ended = false,
   configured = false,
@@ -44,8 +45,18 @@ function tell(action, extra = {}) {
 }
 function count() {
   if (ended) return;
+  if (video.srcObject && video.videoWidth && !recordingAttempted) startRecording();
   frames++;
   video.requestVideoFrameCallback?.(count);
+}
+function startRecording() {
+  if (ended || recordingAttempted) return;
+  recordingAttempted = true;
+  try {
+    record(video.srcObject);
+  } catch {
+    setStatus('当前浏览器无法录制');
+  }
 }
 function record(stream) {
   if (recorder || !window.MediaRecorder) return;
@@ -135,11 +146,9 @@ async function start() {
       if (ended) return;
       video.srcObject = stream;
       video.play().catch(() => setStatus('点击画面开始播放'));
-      try {
-        record(stream);
-      } catch {
-        setStatus('当前浏览器无法录制');
-      }
+      // Director can deliver audio several seconds before the first picture.
+      // Start both recording tracks together on the first displayed frame.
+      if (!video.requestVideoFrameCallback) video.addEventListener('playing',startRecording,{once:true});
     },
     onData(raw) {
       const e = typeof raw === 'string' ? JSON.parse(raw) : raw;
