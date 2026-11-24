@@ -30,6 +30,10 @@ export const DEFAULTS = {
   // plain passthrough, e.g. "NA" to keep Remotion Lambda on the old path.
   // Off by default: a 2026-11-05 A/B showed equal Lambda export times.
   BYPASS_CONTINENTS: '',
+  // Rendered images are keyed by source etag, so edge copies can live longer.
+  RENDER_EDGE_TTL_SECONDS: '86400',
+  RENDER_PAUSE_SECONDS: '600',
+  RENDER_DISABLED: '0',
 };
 
 const num = (env, name) => Number(env[name] ?? DEFAULTS[name]);
@@ -129,6 +133,75 @@ export function fillableOrigin(response, maxBytes, pathname = '') {
   if (!etag || etag.startsWith('W/')) return false;
   const size = Number(h.get('content-length'));
   return Number.isSafeInteger(size) && size > 0 && size <= maxBytes;
+}
+
+// --- Image transformations (Supabase /render/image compatible) -------------
+//
+// `/storage/v1/render/image/public/<bucket>/<path>?width&height&quality&resize&format`
+// is served by the Cloudflare Images binding from the R2 replica of the source,
+// so Supabase no longer bills it as a transformed source image (2026-11-24).
+// Output mirrors Supabase (probed 2026-11-24):
+//   - never enlarges;
+//   - resize=cover (default) with one dimension keeps the other dimension at
+//     the source size and center-crops (width=200 on 736x1207 → 200x1207);
+//   - resize=contain fits inside the box;
+//   - WebP when Accept allows it, else the source format; format=origin keeps
+//     the source format, format=webp forces WebP; `Vary: Accept` unless format=origin;
+//   - etag and cache-control are the source object's.
+// Anything else (other params, fill, gif/svg, HEAD, >20 MB, binding errors)
+// is forwarded to Supabase unchanged.
+const RENDER_IMAGE = /^\/storage\/v1\/render\/image\/public\/([^/]+)\/(.+)$/;
+const RENDER_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
+const RENDER_PARAMS = new Set(['width', 'height', 'quality', 'resize', 'format']);
+const RENDER_MAX_INPUT = 20 * 1024 ** 2; // Images binding input limit
+const RENDER_DEFAULT_QUALITY = 80;       // Supabase default
+
+const intParam = (v, min, max) => (/^\d{1,5}$/.test(v) && Number(v) >= min && Number(v) <= max ? Number(v) : null);
+
+/** Parse a render URL into {source, opts}, or null when it must pass through. */
+export function renderTarget(url, method) {
+  if (method !== 'GET') return null;
+  const match = RENDER_IMAGE.exec(url.pathname);
+  if (!match) return null;
+  const keys = [...url.searchParams.keys()];
+  if (keys.some(k => !RENDER_PARAMS.has(k)) || new Set(keys).size !== keys.length) return null;
+  const p = Object.fromEntries(url.searchParams);
+  const opts = {
+    width: p.width === undefined ? null : intParam(p.width, 1, 2500),
+    height: p.height === undefined ? null : intParam(p.height, 1, 2500),
+    quality: p.quality === undefined ? RENDER_DEFAULT_QUALITY : intParam(p.quality, 20, 100),
+    resize: p.resize ?? 'cover',
+    format: p.format ?? null,
+  };
+  if ((p.width !== undefined && !opts.width) || (p.height !== undefined && !opts.height)) return null;
+  if (!opts.width && !opts.height) return null;
+  if (opts.quality === null || !['cover', 'contain'].includes(opts.resize)) return null;
+  if (opts.format !== null && !['origin', 'webp'].includes(opts.format)) return null;
+  const sourceUrl = new URL(`https://${url.host}/storage/v1/object/public/${match[1]}/${match[2]}`);
+  const source = cacheTarget(sourceUrl, 'GET');
+  if (!source || /\.(?:gif|svg)$/i.test(source.path)) return null;
+  return { source, sourceUrl, opts };
+}
+
+/**
+ * Map Supabase render options to Images binding transform/output options.
+ * Returns null when the source type is not transformable here.
+ */
+export function planRender(opts, src, accept) {
+  const type = (src.contentType || '').split(';')[0].trim().toLowerCase();
+  if (!RENDER_TYPES.has(type)) return null;
+  let transform;
+  if (opts.resize === 'contain') {
+    transform = { fit: 'scale-down', ...(opts.width && { width: opts.width }), ...(opts.height && { height: opts.height }) };
+  } else {
+    // "crop" = cover without enlarging; a missing side is the source side.
+    transform = { fit: 'crop', width: opts.width || src.width, height: opts.height || src.height };
+  }
+  const webp = opts.format === 'webp' || (opts.format === null && /image\/webp/i.test(accept || ''));
+  const format = webp ? 'image/webp' : type;
+  const output = { format, ...(format !== 'image/png' && { quality: opts.quality }) };
+  // Supabase sends `Vary: Accept` unless format=origin (even for format=webp).
+  return { transform, output, vary: opts.format !== 'origin' };
 }
 
 function log(event, fields = {}) {
@@ -321,12 +394,97 @@ export function createHandler(deps = {}) {
     return new Response(request.method === 'HEAD' ? null : object.body, { status: 200, headers: h });
   }
 
+  // Free Images plan returns error 9422 after 5,000 unique transformations a
+  // month; stop trying for a while instead of failing every request first.
+  let renderPausedUntil = 0;
+
+  async function handleRender(request, env, ctx, url, target) {
+    const { source, sourceUrl, opts } = target;
+    const bucket = env.MEDIA_R2;
+    let head = await bucket.head(source.r2Key);
+    if (!head) {
+      await fill(source, sourceUrl, env, null);
+      head = await bucket.head(source.r2Key);
+      if (!head) return null;
+    }
+    const meta = metaFromR2(head);
+    if (meta.size > RENDER_MAX_INPUT) return null;
+    once(`check:${source.r2Key}`, ctx, async () => {
+      if (now() - await lastChecked(source, meta, env) > num(env, 'REVALIDATE_SECONDS') * 1000) {
+        await revalidate(source, sourceUrl, meta, env);
+      }
+    });
+
+    const accept = request.headers.get('accept');
+    // Output format depends only on the source type, so the edge key is known
+    // before reading dimensions. The source etag in the key keeps an
+    // overwritten source from serving an old rendition.
+    const pre = planRender(opts, { contentType: meta.contentType, width: 1, height: 1 }, accept);
+    if (!pre) return null;
+    const respond = (body, contentType, status) => {
+      const h = clientHeaders(meta, status);
+      h.set('content-type', contentType);
+      if (pre.vary) h.set('vary', 'Accept');
+      if (etagMatches(request.headers.get('if-none-match'), meta.etag)) {
+        return new Response(null, { status: 304, headers: h });
+      }
+      h.set('content-length', String(body.byteLength));
+      return new Response(body, { status: 200, headers: h });
+    };
+    const q = new URLSearchParams({
+      w: String(opts.width || ''), h: String(opts.height || ''), q: String(opts.quality),
+      r: opts.resize, f: pre.output.format, e: meta.etag.replace(/"/g, ''),
+    });
+    const edgeKey = `https://${url.host}/__r2c/img/${KEY_VERSION}/${source.bucket}/${encodeURI(source.path)}?${q}`;
+    const edge = await edgeCache().match(new Request(edgeKey));
+    if (edge) {
+      const body = await edge.arrayBuffer();
+      return respond(body, edge.headers.get('content-type') || pre.output.format, 'HIT-IMAGE-EDGE');
+    }
+
+    const object = await bucket.get(source.r2Key);
+    if (!object) return null;
+    const input = await object.arrayBuffer();
+    let width = 0, height = 0;
+    if (opts.resize === 'cover' && !(opts.width && opts.height)) {
+      ({ width, height } = await env.IMAGES.info(new Blob([input]).stream()));
+    }
+    const plan = planRender(opts, { contentType: meta.contentType, width, height }, accept);
+    const result = await env.IMAGES.input(new Blob([input]).stream()).transform(plan.transform).output(plan.output);
+    const out = await result.response().arrayBuffer();
+    const contentType = result.contentType?.() || plan.output.format;
+    const h = new Headers({ 'content-type': contentType, 'cache-control': `public, max-age=${num(env, 'RENDER_EDGE_TTL_SECONDS')}` });
+    ctx.waitUntil(edgeCache().put(new Request(edgeKey), new Response(out, { headers: h }))
+      .catch(e => log('render_edge_put_error', { name: e?.name })));
+    log('render', { in: meta.size, out: out.byteLength });
+    return respond(out, contentType, 'IMAGE');
+  }
+
   return async function handle(request, env, ctx) {
     env = { ...DEFAULTS, ...env };
     const url = new URL(request.url);
 
     if (url.pathname === '/__r2c/purge' && request.method === 'POST') {
       return handlePurge(request, env, url);
+    }
+
+    if (url.pathname.startsWith('/storage/v1/render/image/')) {
+      const target = env.RENDER_DISABLED === '1' || env.R2C_DISABLED === '1' || !env.MEDIA_R2 || !env.IMAGES
+        || now() < renderPausedUntil ? null : renderTarget(url, request.method);
+      if (target) {
+        try {
+          const res = await handleRender(request, env, ctx, url, target);
+          if (res) return res;
+        } catch (error) {
+          const msg = String(error?.message || '');
+          if (msg.includes('9422')) renderPausedUntil = now() + num(env, 'RENDER_PAUSE_SECONDS') * 1000;
+          log('render_fallback', { name: error?.name || 'Error', code: /\b(9\d{3})\b/.exec(msg)?.[1] });
+        }
+      }
+      const res = await passthrough(request, env);
+      const h = new Headers(res.headers);
+      h.set('x-makaron-cache', 'MISS');
+      return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
     }
 
     const bypass = String(env.BYPASS_CONTINENTS || '').split(',').map(c => c.trim()).filter(Boolean);

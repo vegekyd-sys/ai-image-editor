@@ -106,3 +106,24 @@ R2 的 `get()` / `head()` 不带 range 时也会返回 `range` 字段，旧版 `
 ## 本地文件
 
 `.secrets` 和 `launch.local.sql` 都已 gitignore，里面保存测试和生产环境的 PURGE_SECRET，不要提交。
+
+## 2026-11-24：图片变换由 Worker 接管（测试环境已验收，生产未部署）
+
+- 背景：Supabase 按“本期被变换过的不同源图数”收费（100 张以后 $5/1000），本期 17 天 4,504 张、$25，是 Supabase 账单最大的单项。
+- 做法：新增路由 `cdn.makaron.app/storage/v1/render/image/public/*`，URL 和参数不变。Worker 从 R2 取原图（没有时先走现有 `fill()` 补进 R2），用 Cloudflare Images 绑定（`env.IMAGES`）变换。结果放进边缘缓存，键里带源图 etag，TTL 1 天。
+- 行为对齐 Supabase（2026-11-24 实测）：
+  - 不放大；
+  - `resize=cover`（默认）只给一边时，另一边按原图尺寸居中裁切，例如 736×1207 的图 `width=200` 得到 200×1207 的竖条；
+  - `contain` 等比缩放进框内；
+  - 浏览器支持 WebP 就输出 WebP，否则输出原格式；`format=origin` 保持原格式；`format=webp` 强制 WebP；
+  - 除 `format=origin` 外都带 `Vary: Accept`；
+  - etag 和 cache-control 用源图的。
+- 回退到 Supabase 原样转发的情况：其他参数、`resize=fill`、gif/svg、HEAD、原图超过 20 MB、绑定报错。报错码 9422（Images 免费档当月 5,000 个不同变换用完）会让该实例暂停尝试 10 分钟。开关是 `RENDER_DISABLED=1`。
+- 响应头 `x-makaron-cache`：`IMAGE` 表示这次现做的变换，`HIT-IMAGE-EDGE` 表示命中边缘缓存，`MISS` 表示回退到了 Supabase。
+- 计费：Cloudflare 按“当月不同的（源图 + 尺寸参数）”计费，`format` 和 `quality` 不算。免费档每月 5,000 个，超出后新变换报错，不会扣费，Worker 会回退给 Supabase。Images Paid 档是超出部分 $0.50/1000。
+- 验收：测试环境 `makaron-media-r2-cache-test`（版本 `33f70e2a`）。对 5 张图（png、jpg，含 1080×2880 和 1624×1444 的大图）、10 组参数、2 种 Accept 做了逐一对比：
+  - 尺寸一致（`contain` 在少数情况下差 1px，是取整方式不同）；
+  - content-type、etag、cache-control、vary 全部一致；
+  - 像素差异来自重采样算法，并排目视看不出差别；
+  - 不存在的源图、gif、HEAD 都和 Supabase 一样返回。
+  - 单测见 `test/render.test.mjs`。
