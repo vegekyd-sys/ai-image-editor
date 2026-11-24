@@ -171,7 +171,7 @@ async function poll() {
         });
         sent = direction.version;
         setStatus('下一幕正在准备');
-        tell('direction', {state:'sent'});
+        tell('direction', {state:'sent', version: direction.version});
       }
     const held = configured && (data.directions.length || performance.now() - asked > 300);
     timer = setTimeout(poll, held ? 0 : 600);
