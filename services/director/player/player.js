@@ -26,12 +26,13 @@ const url = (op) => {
   u.searchParams.set('id', id);
   return u.href;
 };
-async function post(op, body = {}, type = 'application/json') {
+async function post(op, body = {}, type = 'application/json', signal) {
   const response = await fetch(url(op), {
     method: 'POST',
     headers: { 'x-director-player': token, 'content-type': type },
     body: type === 'application/json' ? JSON.stringify(body) : body,
     redirect: 'error',
+    signal,
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
@@ -61,14 +62,21 @@ function startRecording() {
   }
 }
 async function uploadRecording(blob) {
-  try {
-    await post('recording', blob, blob.type);
-  } catch (error) {
-    if (!(error instanceof TypeError || error.status >= 500)) throw error;
-    // The first upload may have committed before its response was lost.
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    const show = await post('poll').catch(() => null);
-    if (!show?.recorded) await post('recording', blob, blob.type);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await post('recording', blob, blob.type);
+      return;
+    } catch (error) {
+      if (!(error instanceof TypeError || error.status >= 500)) throw error;
+      // A relay timeout may arrive while the worker is still writing the last bytes.
+      // Consult the durable receipt before retrying and before declaring failure.
+      for (const delay of [0, 2000, 4000, 8000]) {
+        if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+        const show = await post('poll', {}, 'application/json', AbortSignal.timeout(3500)).catch(() => null);
+        if (show?.recorded) return;
+      }
+      if (attempt === 1) throw error;
+    }
   }
 }
 function record(stream) {
