@@ -2323,11 +2323,11 @@ Commands:
   usage [--run <id>] [--project <id>] Credit usage history (chat prints per-run usage)
   list (ls)                          List all projects
   project media <projectId> --json    List timeline media for a project
-  director --help                      Start, steer, watch and record a live show
   project media add <projectId> --type image --source-url <url>
                                      Add an external image without uploading it
   project media add <projectId> --type video --source-url <url> --start <n> --end <n>
                                      Add an external video range without uploading it
+  director --help                    Start, steer, watch and record a live show
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   create --title "name"              Create empty project (text-to-image)
