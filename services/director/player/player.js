@@ -31,17 +31,17 @@ const url = (op) => {
   u.searchParams.set('id', id);
   return u.href;
 };
-async function post(op, body = {}, type = 'application/json', signal) {
+async function post(op, body = {}, type = 'application/json', signal, extra = {}) {
   const response = await fetch(url(op), {
     method: 'POST',
-    headers: { 'x-director-player': token, 'content-type': type },
+    headers: { 'x-director-player': token, 'content-type': type, ...extra },
     body: type === 'application/json' ? JSON.stringify(body) : body,
     redirect: 'error',
     signal,
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw Object.assign(Error(data.error || '直播连接失败'), {status: response.status});
+    throw Object.assign(Error(data.error || '直播连接失败'), {status: response.status, size: data.size});
   }
   return response.json();
 }
@@ -70,35 +70,61 @@ function startRecording() {
     setStatus('当前浏览器无法录制');
   }
 }
-async function uploadRecording(blob) {
-  for (let attempt = 0; attempt < 2; attempt++) {
+// The recording leaves in parts while the show runs, so after the end only the last
+// part is left, and no single request is long enough for a relay to cut it off.
+const PART_BYTES = 512 * 1024;
+const recording = {chunks: [], bytes: 0, sent: 0, type: '', sending: null, failed: false, closing: false};
+const pending = () => new Blob(recording.chunks, {type: recording.type}).slice(recording.sent);
+async function sendPart(final) {
+  const blob = pending(), part = blob.slice(0, Math.min(blob.size, PART_BYTES));
+  const last = final && part.size === blob.size;
+  for (let attempt = 0; ; attempt++) {
     try {
-      await post('recording', blob, blob.type);
-      return;
+      const answer = await post('recording', part, recording.type, AbortSignal.timeout(90000), {
+        'x-recording-offset': String(recording.sent),
+        ...(last ? {'x-recording-final': String(recording.bytes)} : {}),
+      });
+      if (Number.isInteger(answer.size)) recording.sent = answer.size;
+      return answer;
     } catch (error) {
-      if (!(error instanceof TypeError || error.status >= 500)) throw error;
-      // A relay timeout may arrive while the worker is still writing the last bytes.
-      // Consult the durable receipt before retrying and before declaring failure.
-      for (const delay of [0, 2000, 4000, 8000]) {
-        if (delay) await new Promise(resolve => setTimeout(resolve, delay));
-        const show = await post('poll', {}, 'application/json', AbortSignal.timeout(3500)).catch(() => null);
-        if (show?.recorded) return;
-      }
-      if (attempt === 1) throw error;
+      // A gap or a cut-off part: the service says how much it holds; continue from there.
+      if (error.status === 409 && Number.isInteger(error.size)) { recording.sent = error.size; return {}; }
+      if (attempt >= 5 || !(error instanceof TypeError || error.status >= 500 || error.name === 'TimeoutError')) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** Math.min(attempt, 4)));
     }
   }
+}
+function pump() {
+  if (recording.closing || recording.sending || recording.failed || recording.bytes - recording.sent < PART_BYTES) return;
+  recording.sending = sendPart(false).catch(() => { recording.failed = true; }).finally(() => { recording.sending = null; pump(); });
+}
+async function uploadRecording() {
+  // One part at a time: the closing parts wait for the part already on its way.
+  recording.closing = true;
+  recording.failed = false;
+  while (recording.sending) await recording.sending;
+  for (let guard = 0; guard < 4096; guard++) {
+    // Full parts until the rest fits in one; that last part carries the total and closes it.
+    if ((await sendPart(true)).saved) return;
+  }
+  throw Error('录像上传未完成');
 }
 function record(stream) {
   if (recorder || !window.MediaRecorder) return;
   const mimeType = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp8,opus', 'video/webm'].find((t) =>
     MediaRecorder.isTypeSupported(t),
   );
-  // A bounded bitrate keeps the upload small: the recording leaves the viewer's browser after
-  // the show over whatever uplink the page has, often well under 1 MB/s.
+  // A bounded bitrate keeps the upload small: the recording leaves the viewer's browser in
+  // parts over whatever uplink the page has, often well under 1 MB/s.
   recorder = new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 900_000, audioBitsPerSecond: 64_000 });
-  const chunks = [];
+  recording.type = recorder.mimeType.split(';')[0] || mimeType?.split(';')[0] || '';
+  const chunks = recording.chunks;
   recorder.ondataavailable = (e) => {
-    if (e.data.size) chunks.push(e.data);
+    if (!e.data.size) return;
+    if (!recording.type && e.data.type) recording.type = e.data.type.split(';')[0];
+    chunks.push(e.data);
+    recording.bytes += e.data.size;
+    pump();
   };
   recorder.onstop = async () => {
     const type = recorder.mimeType.split(';')[0],
@@ -113,7 +139,7 @@ function record(stream) {
     a.download = id + (type === 'video/mp4' ? '.mp4' : '.webm');
     a.hidden = false;
     try {
-      await uploadRecording(blob);
+      await uploadRecording();
       setStatus('已收播，录像已保存');
       tell('stage', {stage: 'recorded'});
     } catch (error) {
