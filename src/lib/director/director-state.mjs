@@ -1,6 +1,6 @@
 // Shared Director protocol from Makaron TV e29b9e9.
 export const DIRECTOR_ENDPOINT = 'minimax/h3-max/director';
-export function buildDirectorConfigure({prompt, resolution='768p', aspectRatio='16:9', memory=12, seed='', imageUrl=null}) {
+export function buildDirectorConfigure({prompt, resolution='480p', aspectRatio='16:9', memory=12, seed='', imageUrl=null}) {
   if (!prompt?.trim() || prompt.length > 50000) throw new Error('开场指令需要 1–50000 个字符');
   if (!['480p','768p'].includes(resolution) || !['16:9','9:16','1:1'].includes(aspectRatio)) throw new Error('分辨率或画幅无效');
   if (!Number.isInteger(Number(memory)) || memory < 1 || memory > 50) throw new Error('记忆范围为 1–50 段');

@@ -16,6 +16,7 @@ test('one key owns one session, repeated start is safe, player and owner grants 
   const owner = { keyId: 'a', userId: 'owner' },
     input = { requestId: 'same', prompt: '开场' };
   const s = service.start(owner, input);
+  assert.equal(JSON.parse(s.config).resolution, '480p');
   assert.equal(service.start(owner, input).id, s.id);
   assert.throws(() => service.start(owner, { ...input, requestId: 'another' }), { status: 409 });
   assert.throws(() => service.owned(s.id, { ...owner, keyId: 'b' }), { status: 404 });
@@ -26,6 +27,12 @@ test('one key owns one session, repeated start is safe, player and owner grants 
   service.connected(s.id, 'provider');
   clock += 121000;
   assert.equal(service.current(s.id).phase, 'ended');
+  const hd = { ...input, requestId: 'hd' };
+  const old = service.start(owner, { ...hd, resolution: '768p' });
+  assert.equal(JSON.parse(old.config).resolution, '768p');
+  // Retries from a previous version keep the resolution of the original request.
+  assert.equal(service.start(owner, hd).id, old.id);
+  assert.throws(() => service.start(owner, { ...hd, resolution: '480p' }), { status: 409 });
 });
 test('superseded, duplicate and ordinary turns cannot enqueue extra directions', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'director-')),

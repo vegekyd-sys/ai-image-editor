@@ -36,14 +36,14 @@ export function createDirectorServer({
   authenticate,
   activeKey,
   openingUpload,
+  stageImage,
   providerKey,
   fetcher = fetch,
   organize = organizeVoice,
 }) {
   const shows = createSessions(directory);
-  // Start only non-billable ICE discovery here. The browser still exchanges its own
-  // offer, and retrieving these short-lived TURN credentials requires its live ticket.
-  const iceByShow = new Map();
+  // Preparation belongs to one authenticated show. Only the player submits its WebRTC offer.
+  const preparationByShow = new Map();
   const providerPost = (target, body, timeout) => fetcher(target, {
     method: 'POST',
     redirect: 'error',
@@ -51,16 +51,21 @@ export function createDirectorServer({
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(timeout),
   });
-  function prepareIce(id) {
-    if (iceByShow.has(id)) return;
+  function prepare(show) {
+    if (preparationByShow.has(show.id)) return;
     const pending = providerPost(bridge + '/ice', {app_id: endpoint}, 3500)
       .then(async response => {
         if (!response.ok) { await response.body?.cancel(); return null; }
         const {ice_servers: servers} = await response.json();
         return Array.isArray(servers) && servers.length ? servers : null;
       }).catch(() => null);
-    iceByShow.set(id, pending);
-    setTimeout(() => iceByShow.delete(id), 15000).unref();
+    const prep = { ice: pending, imageUrl: null };
+    preparationByShow.set(show.id, prep);
+    setTimeout(() => preparationByShow.delete(show.id), 30000).unref();
+    const source = JSON.parse(show.config).image_url;
+    if (source && stageImage) {
+      Promise.resolve().then(() => stageImage(source)).then(url => { prep.imageUrl = url; }).catch(() => {});
+    }
   }
   const playerPath = (s) => '/director/player.html#' + s.id + '.' + s.token;
   const server = http.createServer(async (req, res) => {
@@ -122,7 +127,7 @@ export function createDirectorServer({
         const body = await jsonBody(req);
         if (body.action === 'start') {
           const s = shows.start(actor, body);
-          if (s.phase === 'waiting') prepareIce(s.id);
+          if (s.phase === 'waiting') prepare(s);
           return json(200, { ...shows.present(s), playerPath: playerPath(s) });
         }
         const s = shows.owned(body.id, actor);
@@ -197,11 +202,13 @@ export function createDirectorServer({
       if (op === 'poll') {
         if (!shows.alive(s)) return json(200, shows.present(s));
         shows.receipt(s, body);
-        const iceServers = body.prepare === true && s.phase === 'waiting' ? await iceByShow.get(s.id) : null;
+        const prep = preparationByShow.get(s.id);
+        const iceServers = body.prepare === true && s.phase === 'waiting' ? await prep?.ice : null;
         return json(200, {
           ...shows.present(shows.current(s.id)),
           config: JSON.parse(s.config),
           ...(iceServers ? {iceServers} : {}),
+          ...(prep?.imageUrl && !s.applied ? { preparedImageUrl: prep.imageUrl } : {}),
           directions: shows.changes(s, body.after ?? 0),
         });
       }

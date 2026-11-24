@@ -4,7 +4,8 @@ const [id, token] = location.hash.slice(1).split('.');
 const embedded = new URLSearchParams(location.search).has('embed');
 document.body.classList.toggle('embedded', embedded);
 const video = $('video');
-let handle,
+let preparedImageUrl,
+  handle,
   recorder,
   recordingAttempted = false,
   recognizer,
@@ -120,6 +121,7 @@ async function poll() {
     const data = await post('poll', { after: sent, applied, frames });
     pollFailures = 0;
     if (['ended', 'failed'].includes(data.phase)) return finish();
+    if (data.preparedImageUrl) preparedImageUrl = data.preparedImageUrl;
     if (configured)
       for (const direction of data.directions) {
         playout.expect(direction.version, direction.text);
@@ -150,6 +152,7 @@ async function start() {
   ]);
   if (initial.phase !== 'waiting')
     throw Error(initial.phase === 'ended' ? '直播已结束' : '本场已有播放器');
+  preparedImageUrl = initial.preparedImageUrl;
   playout.expect(1, initial.config.prompt);
   handle = await openDirector(url('signal'), token, {
     iceServers: initial.iceServers,
@@ -186,8 +189,12 @@ async function start() {
     await handle.close();
     return;
   }
-  handle.ready.catch(() => finish('直播连接失败'));
-  handle.send(initial.config);
+  // Use the copy only if it is already available when negotiation completes.
+  handle.ready.then(() => {
+    if (ended) return;
+    const config = initial.config;
+    handle.send(preparedImageUrl ? { ...config, image_url: preparedImageUrl } : config);
+  }).catch(() => finish('直播连接失败'));
   if(video.requestVideoFrameCallback) video.requestVideoFrameCallback(count);
   else video.addEventListener('timeupdate',()=>{if(video.readyState>=2 && video.videoWidth)count(0,{mediaTime:video.currentTime});});
   void poll();

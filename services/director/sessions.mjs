@@ -40,7 +40,7 @@ export function createSessions(directory, { now = Date.now } = {}) {
   }
   function start(
     actor,
-    { requestId, prompt, image, resolution = '768p', aspectRatio = '16:9', memory = 12, seed = '' },
+    { requestId, prompt, image, resolution, aspectRatio = '16:9', memory = 12, seed = '' },
   ) {
     if (
       !/^[a-z0-9-]{1,80}$/i.test(requestId ?? '') ||
@@ -58,12 +58,15 @@ export function createSessions(directory, { now = Date.now } = {}) {
       }
       if (url.protocol !== 'https:' || url.username || url.password) fail(400, '首图需要 HTTPS');
     }
+    const old = db
+      .prepare('SELECT * FROM shows WHERE key_id=? AND request_id=?')
+      .get(actor.keyId, requestId);
     let config;
     try {
       config = buildDirectorConfigure({
         prompt,
         imageUrl: image,
-        resolution,
+        resolution: resolution === undefined && old ? JSON.parse(old.config).resolution : resolution,
         aspectRatio,
         memory,
         seed,
@@ -72,9 +75,6 @@ export function createSessions(directory, { now = Date.now } = {}) {
       fail(400, '开播参数无效');
     }
     const json = JSON.stringify(config);
-    const old = db
-      .prepare('SELECT * FROM shows WHERE key_id=? AND request_id=?')
-      .get(actor.keyId, requestId);
     if (old) {
       if (old.config !== json) fail(409, '请求编号已用于另一组参数');
       return current(old.id);
