@@ -230,7 +230,7 @@ export function createDirectorServer({
         const after = Number.isSafeInteger(body.after) ? body.after : 0;
         if (s.story && showrunner?.active(s.id)) {
           if (Number.isSafeInteger(body.playing) && body.playing <= s.version) showrunner.observe(s.id, body.playing);
-          const beat = s.phase === 'connected' && showrunner.next(s.id, s.version, { busy: Boolean(s.draft) });
+          const beat = s.phase === 'connected' && showrunner.next(s.id, s.version, { busy: shows.drafting(s) });
           const version = beat && shows.append(s, { text: beat.prompt, caption: beat.caption });
           if (version) showrunner.sent(s.id, version, beat);
         }
@@ -295,9 +295,15 @@ export function createDirectorServer({
         shows.connected(s.id, result.session_id);
         // Planning starts once the provider has answered, so it shares nothing with the
         // opening's negotiation, and is ready well before the opening has held on screen.
-        if (s.story) {
+        if (s.story && showrunner) {
+          // Shows whose player never came back to end them are dropped here.
+          for (const other of showrunner.ids()) {
+            let gone = true;
+            try { gone = !shows.alive(shows.current(other)); } catch {}
+            if (gone) showrunner.end(other);
+          }
           const config = JSON.parse(s.config);
-          showrunner?.open(s.id, { premise: config.prompt, hasImage: Boolean(config.image_url) });
+          showrunner.open(s.id, { premise: config.prompt, hasImage: Boolean(config.image_url) });
         }
       }
       return json(200, result);

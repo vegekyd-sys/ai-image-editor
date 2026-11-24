@@ -10,6 +10,8 @@ export const fail = (status, message) => {
   throw Object.assign(Error(message), { status });
 };
 const MAX_MS = 120_000;
+// An unfinished spoken direction holds the showrunner only while the speaker may still finish it.
+export const DRAFT_HOLD_MS = 8000;
 
 export function createSessions(directory, { now = Date.now, maxMs = MAX_MS, onChange = () => {} } = {}) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -29,6 +31,7 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS, onCh
   try { db.exec('ALTER TABLE shows ADD COLUMN story INTEGER NOT NULL DEFAULT 0'); } catch {}
   try { db.exec('ALTER TABLE directions ADD COLUMN caption TEXT'); } catch {}
   try { db.exec("ALTER TABLE directions ADD COLUMN source TEXT NOT NULL DEFAULT 'user'"); } catch {}
+  try { db.exec('ALTER TABLE shows ADD COLUMN draft_at INTEGER NOT NULL DEFAULT 0'); } catch {}
   const read = (id) => db.prepare('SELECT * FROM shows WHERE id=?').get(id) ?? fail(404, '没有这场直播');
   const alive = (s) => s.expires > now() && !['ended', 'failed'].includes(s.phase);
   const stop = (id, phase = 'ended', reason = phase === 'failed' ? 'failed' : 'stopped') => {
@@ -130,10 +133,14 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS, onCh
       .all(s.id, after)
       .map(({ version, text, caption }) => ({ version, text, ...(caption ? { caption } : {}) }));
   }
+  // True while someone is still in the middle of a spoken direction.
+  const drafting = (s) => Boolean(s.draft) && now() - (s.draft_at || 0) < DRAFT_HOLD_MS;
   // A direction the showrunner wrote, appended behind whatever the audience already sent.
+  // A draft nobody finished within the hold is dropped, so it cannot hold the show forever.
   function append(s, { text, caption = '' }) {
     const latest = current(s.id);
-    if (!alive(latest) || latest.phase !== 'connected' || latest.draft) return null;
+    if (!alive(latest) || latest.phase !== 'connected' || drafting(latest)) return null;
+    if (latest.draft) db.prepare("UPDATE shows SET draft='' WHERE id=? AND revision=?").run(s.id, latest.revision);
     const version = latest.version + 1;
     db.prepare("INSERT INTO directions(show,version,text,caption,source) VALUES(?,?,?,?,'showrunner')").run(
       s.id, version, text, caption || null);
@@ -155,10 +162,11 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS, onCh
     if (prior) return prior.result ? JSON.parse(prior.result) : { action: 'pending' };
     s = current(s.id);
     if (!alive(s)) fail(409, '直播已结束');
-    const draft = [s.draft, text.trim()].filter(Boolean).join(' ');
+    // A ready direction is complete on its own; it replaces any unfinished spoken draft.
+    const draft = ready ? text.trim() : [s.draft, text.trim()].filter(Boolean).join(' ');
     if (draft.length > 8000) fail(400, '请缩短本次导演输入');
     db.prepare('INSERT INTO turns(show,id) VALUES(?,?)').run(s.id, turnId);
-    db.prepare('UPDATE shows SET revision=revision+1,draft=? WHERE id=?').run(draft, s.id);
+    db.prepare('UPDATE shows SET revision=revision+1,draft=?,draft_at=? WHERE id=?').run(draft, now(), s.id);
     const revision = read(s.id).revision;
     const previous = db
       .prepare('SELECT text FROM directions WHERE show=? ORDER BY version DESC LIMIT 3')
@@ -236,11 +244,12 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS, onCh
     db.prepare('UPDATE shows SET recording=? WHERE id=?').run(format, s.id);
   }
   function activity(s) {
-    db.prepare("UPDATE shows SET revision=revision+1 WHERE id=? AND draft!=''").run(s.id);
+    db.prepare("UPDATE shows SET revision=revision+1,draft_at=? WHERE id=? AND draft!=''").run(now(), s.id);
   }
   return {
     activity,
     append,
+    drafting,
     start,
     current,
     alive,

@@ -121,10 +121,12 @@ export function createShowrunner({plan = (input, options) => planStory(input, op
       kick(state);
     },
     active: (id) => shows.has(id),
+    ids: () => [...shows.keys()],
     // The audience took over: drop the old route at once and plan around what they asked for.
     user(id, {version, text}) {
       const state = shows.get(id);
-      if (!state || !Number.isInteger(version)) return;
+      // A replayed request reports a direction already counted; only a newer one takes over.
+      if (!state || !Number.isInteger(version) || version <= state.latest.version) return;
       state.history.push({source: 'audience', text: clip(text, 600)});
       state.latest = {version, source: 'user', at: now()};
       state.epoch++;
@@ -145,6 +147,9 @@ export function createShowrunner({plan = (input, options) => planStory(input, op
       if (!state || state.closed || busy || version !== state.latest.version) return null;
       const t = now();
       const hold = pace[state.latest.source] ?? pace.auto;
+      // Nothing moves until the opening is on screen; after that a direction that never
+      // reports playing (rejected, superseded) still lets the story continue.
+      if (!state.playing.version) return null;
       const due = state.playing.version >= version ? state.playing.since + hold : state.latest.at + pace.unplayed;
       // Plan the next batch while the last queued beat is still ahead, once per batch.
       if (state.beats.length <= 1 && !state.fresh) kick(state);

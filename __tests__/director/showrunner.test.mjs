@@ -109,15 +109,42 @@ test('an audience direction drops the old route and replans around it', async ()
   assert.match(runner.next('s', 2).prompt, /^new0/);
 });
 
-test('a direction that never reports playing still lets the story continue', async () => {
+test('nothing moves before the opening is on screen; an unplayed direction later still lets the story continue', async () => {
   let clock = 0;
   const runner = createShowrunner({ now: () => clock, pace, report: () => {}, plan: async () => ({ beats: beats(2) }) });
   runner.open('s', { premise: '巧克力店' });
   await settle();
-  clock = 19999;
-  assert.equal(runner.next('s', 1), null);
-  clock = 20000;
-  assert.ok(runner.next('s', 1));
+  clock = 60000;
+  assert.equal(runner.next('s', 1), null, 'a slow first frame never lets beats pile up');
+  runner.observe('s', 1);
+  runner.user('s', { version: 2, text: '下雪了' });
+  await settle();
+  clock = 79999;
+  assert.equal(runner.next('s', 2), null);
+  clock = 80000;
+  assert.ok(runner.next('s', 2), 'a direction that never reports playing still lets the story continue');
+});
+
+test('a replayed audience direction does not take the show back to an older version', async () => {
+  let clock = 0, plans = 0;
+  const runner = createShowrunner({ now: () => clock, pace, report: () => {}, plan: async () => { plans++; return { beats: beats(4) }; } });
+  runner.open('s', { premise: '巧克力店' });
+  runner.user('s', { version: 2, text: '小猫来了' });
+  await settle();
+  clock = 1000;
+  runner.observe('s', 2);
+  clock = 14000;
+  const beat = runner.next('s', 2);
+  runner.sent('s', 3, beat);
+  runner.user('s', { version: 2, text: '小猫来了' });
+  assert.equal(plans, 2, 'the replay is not planned again');
+  clock = 15000;
+  runner.observe('s', 3);
+  clock = 23000;
+  assert.ok(runner.next('s', 3), 'the story keeps following the newest version');
+  assert.deepEqual(runner.ids(), ['s']);
+  runner.end('s');
+  assert.deepEqual(runner.ids(), []);
 });
 
 test('planning failures back off and stop after three tries', async () => {
@@ -127,6 +154,7 @@ test('planning failures back off and stop after three tries', async () => {
     plan: async () => { calls++; throw Error('plan_http_500'); },
   });
   runner.open('s', { premise: '巧克力店' });
+  runner.observe('s', 1);
   await settle();
   runner.next('s', 1);
   assert.equal(calls, 1, 'no retry inside the back-off');
@@ -161,4 +189,27 @@ test('showrunner directions are appended only while live and carry their caption
   assert.equal(changed.length, 2);
   api.stop(s.id);
   assert.equal(changed.length, 3, 'stopping wakes a waiting player');
+});
+
+test('an unfinished spoken draft holds the showrunner briefly and never leaks into a ready direction', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'director-'));
+  let clock = 1000;
+  const api = createSessions(dir, { now: () => clock });
+  t.after(() => {
+    api.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const s = api.start({ keyId: 'a', userId: 'b' }, { requestId: 'r', prompt: '巧克力店', story: true });
+  api.takeOffer(s);
+  api.connected(s.id, 'provider');
+  assert.equal((await api.input(s, { text: '放了', turnId: '1' }, async () => ({ action: 'wait' }))).action, 'wait');
+  assert.equal(api.drafting(api.current(s.id)), true);
+  assert.equal(api.append(s, { text: '老板抬头微笑', caption: '老板笑了' }), null, 'the speaker may still finish it');
+  const ready = await api.input(s, { text: '小猫跳上柜台', turnId: '2', ready: true }, () => assert.fail());
+  assert.deepEqual(api.changes(s, ready.version - 1), [{ version: ready.version, text: '小猫跳上柜台' }]);
+  assert.equal((await api.input(s, { text: '变成一个', turnId: '3' }, async () => ({ action: 'wait' }))).action, 'wait');
+  clock += 8000;
+  assert.equal(api.drafting(api.current(s.id)), false);
+  assert.ok(api.append(s, { text: '老板抬头微笑', caption: '老板笑了' }), 'an abandoned draft no longer holds the show');
+  assert.equal(api.current(s.id).draft, '');
 });
