@@ -16,3 +16,14 @@ node packages/makaron-cli/bin/makaron.mjs director start --prompt '雨里的花�
 开播命令创建会话。播放器打开时才提交唯一一次 WebRTC offer，随后接收媒体并录制。当前预览每场最多两分钟，结束后可从 CLI 导出播放器实际保存的格式。服务端保存开发录像与会话状态于专用目录；播放器关闭前应先收播并等待录像保存成功。部署面向客户的版本前需接入 Makaron 正式计费与存储生命周期。此次预览由开发环境承担供应商费用。
 
 直播默认使用 480p，可通过 `--resolution 768p` 开启高清。带首图开播时，服务会在建连期间把 Makaron 公共图片临时复制到 fal（一小时过期）。需要加速 V 画布借图时，将 `MAKARON_DIRECTOR_BOARD_ORIGIN` 设为该 Candidate 的 HTTPS origin。连接就绪时若副本尚未完成，会立即用原图地址开播。
+
+## 单 key 宿主模式
+
+和一个宿主（例如同机的 V Voice）配套时，用 `start-host.mjs`。它只接受 `MAKARON_API_KEY` 这一个 key（宿主自己的 key），只监听 loopback，首图签名上传转发到公共 Makaron API，不需要 Supabase 或 Next 运行时。
+
+```sh
+cd services/director && npm ci --omit=dev
+node --env-file=/path/to/private.env start-host.mjs
+```
+
+环境文件提供 MAKARON_API_KEY、FAL_KEY、DEEPSEEK_API_KEY、MAKARON_DIRECTOR_STATE_DIR，可选 MAKARON_DIRECTOR_PORT（默认 43936）、MAKARON_DIRECTOR_MAX_SECONDS、MAKARON_DIRECTOR_BOARD_ORIGIN、MAKARON_URL 和 DIRECTOR_STORY_MODEL（默认 deepseek-v4-flash）。宿主用同一个 key 和 `MAKARON_DIRECTOR_URL` 调用 CLI。供应商费用由这个部署自己的 FAL_KEY 承担，没有接入 Makaron 积分。
