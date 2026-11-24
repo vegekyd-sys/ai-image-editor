@@ -33,11 +33,12 @@ test('a ready direction reaches a waiting player at once and the showrunner fill
   const base = 'http://127.0.0.1:' + server.address().port;
   const post = (route, data, headers = {}) => fetch(base + route, {method: 'POST', headers, body: JSON.stringify(data)}).then(r => r.json());
   const show = await post('/api/director', {action: 'start', requestId: 'story', prompt: '巧克力店', story: true});
-  assert.deepEqual(plans, ['continue'], 'the first plan starts with the show');
+  assert.deepEqual(plans, [], 'nothing is planned while the opening negotiates');
   const ticket = show.playerPath.split('.').at(-1);
   const player = (op, data, headers = {}) => post('/api/director/player/' + op + '?id=' + show.id, data, {'x-director-player': ticket, ...headers});
   await player('poll', {prepare: true});
   await player('signal', {app_id: 'minimax/h3-max/director', type: 'offer', sdp: 'v=0'}, {'x-fal-target-url': 'https://wma.fal.run/session'});
+  assert.deepEqual(plans, ['continue'], 'the first plan starts once the provider answered');
 
   // The opening is on screen; a direction posted during a held poll answers it immediately.
   await player('poll', {after: 1, playing: 1});

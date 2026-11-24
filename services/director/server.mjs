@@ -146,9 +146,6 @@ export function createDirectorServer({
         if (body.action === 'start') {
           const s = shows.start(actor, body);
           if (s.phase === 'waiting') prepare(s);
-          // Planning runs beside connection setup; the opening itself is never held for it.
-          if (s.story && s.phase === 'waiting')
-            showrunner?.open(s.id, { premise: JSON.parse(s.config).prompt, hasImage: Boolean(JSON.parse(s.config).image_url) });
           return json(200, { ...shows.present(s), playerPath: playerPath(s) });
         }
         const s = shows.owned(body.id, actor);
@@ -294,7 +291,15 @@ export function createDirectorServer({
         fail(424, 'Director 信令失败 HTTP ' + upstream.status);
       }
       const result = await upstream.json();
-      if (target === bridge + '/session') shows.connected(s.id, result.session_id);
+      if (target === bridge + '/session') {
+        shows.connected(s.id, result.session_id);
+        // Planning starts once the provider has answered, so it shares nothing with the
+        // opening's negotiation, and is ready well before the opening has held on screen.
+        if (s.story) {
+          const config = JSON.parse(s.config);
+          showrunner?.open(s.id, { premise: config.prompt, hasImage: Boolean(config.image_url) });
+        }
+      }
       return json(200, result);
     } catch (e) {
       if (!res.headersSent)
