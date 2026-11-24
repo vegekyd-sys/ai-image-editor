@@ -46,6 +46,7 @@ export function createDirectorServer({
 }) {
   // A player waiting on a poll is woken as soon as its show gains a direction or ends.
   const waiting = new Map();
+  const recordingParts = new Map();
   const wake = (id) => {
     for (const resolve of waiting.get(id) ?? []) resolve();
     waiting.delete(id);
@@ -198,6 +199,55 @@ export function createDirectorServer({
               ? 'webm'
               : null;
         if (!format) fail(415, '无效录像格式');
+        // Parts: the player sends the recording while the show runs, a small piece per
+        // request, so no single request outlives a proxy's timeout. Each part names its
+        // byte offset; a repeated part is acknowledged, a gap is refused with the size kept.
+        const offsetHeader = req.headers['x-recording-offset'];
+        if (offsetHeader !== undefined) {
+          // One part per show at a time, so two retries of one part never both append.
+          const prior = recordingParts.get(s.id) ?? Promise.resolve();
+          let release;
+          const turn = new Promise((resolve) => { release = resolve; });
+          const chain = prior.then(() => turn);
+          recordingParts.set(s.id, chain);
+          await prior;
+          try {
+            return await recordingPart();
+          } finally {
+            release();
+            if (recordingParts.get(s.id) === chain) recordingParts.delete(s.id);
+          }
+        }
+        async function recordingPart() {
+          const offset = Number(offsetHeader), total = req.headers['x-recording-final'] === undefined ? null : Number(req.headers['x-recording-final']);
+          if (!Number.isSafeInteger(offset) || offset < 0 || (total !== null && (!Number.isSafeInteger(total) || total < offset))) fail(400, '无效录像分段');
+          const target = path.join(directory, s.id + '.' + format), partial = target + '.upload';
+          const size = await stat(partial).then((info) => info.size, () => 0);
+          const drain = () => new Promise((resolve) => { req.resume(); req.once('end', resolve); req.once('error', resolve); });
+          if (offset > size) { await drain(); return json(409, { error: '录像分段不连续', size }); }
+          let received = 0;
+          if (offset === size) {
+            await pipeline(
+              req,
+              new Transform({
+                transform(chunk, enc, cb) {
+                  received += chunk.length;
+                  cb(size + received > 128 * 1024 * 1024 ? new Error('录像过大') : null, chunk);
+                },
+              }),
+              createWriteStream(partial, { mode: 0o600, flags: 'a' }),
+            );
+          } else await drain();
+          const now = size + received;
+          if (total !== null && now === total) {
+            if (!now) fail(400, '录像为空');
+            await link(partial, target).catch((error) => { if (error.code !== 'EEXIST') throw error; });
+            await unlink(partial).catch(() => {});
+            shows.recording(s, format);
+            return json(200, { saved: true, size: now });
+          }
+          return json(200, { size: now });
+        }
         const target = path.join(directory, s.id + '.' + format),
           tmp = target + '.' + randomUUID() + '.part';
         let bytes = 0;
