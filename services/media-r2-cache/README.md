@@ -106,3 +106,33 @@ R2 的 `get()` / `head()` 不带 range 时也会返回 `range` 字段，旧版 `
 ## 本地文件
 
 `.secrets` 和 `launch.local.sql` 都已 gitignore，里面保存测试和生产环境的 PURGE_SECRET，不要提交。
+
+## 2026-11-24：图片变换由 Worker 接管（测试环境已验收，生产未部署）
+
+- 背景：Supabase 按“本期被变换过的不同源图数”收费（100 张以后 $5/1000），本期 17 天 4,504 张、$25，是 Supabase 账单最大的单项。
+- 做法：新增路由 `cdn.makaron.app/storage/v1/render/image/public/*`，URL 和参数不变。原图从 R2 取；R2 没有时直接用源站字节变换，同时在后台写入 R2，不等写完。变换用 Cloudflare Images 绑定（`env.IMAGES`）。
+- 和 Supabase 对齐的行为（2026-11-24 逐项实测）：
+  - 不放大；
+  - `resize=cover`（默认）只给一边时，另一边取原图尺寸并居中裁切，上限 8192（例如 736×1207 的图 `width=200` 得到 200×1207 的竖条）；
+  - `contain` 等比缩放进框内；
+  - 格式按原图的实际字节判断，不看扩展名和 content-type；这里只变换 JPEG 和 PNG；
+  - Accept 里有 WebP 就输出 WebP，否则输出原格式；`format=origin` 保持原格式；`format=webp` 强制 WebP；
+  - 除 `format=origin` 外都带 `Vary: Accept`；
+  - etag 和 cache-control 用原图的，If-None-Match 命中时返回 304；
+  - PNG 的 gAMA/cHRM 块在变换前去掉：Supabase 忽略这两个块，Cloudflare 会按它们做 gamma 校正，ffmpeg 抽的帧会整体偏亮约 9/255。
+- 原样转交 Supabase 的情况：
+  - 其他参数、非法参数值、`resize=fill`；
+  - gif/svg 路径，以及 WebP、AVIF 等非 JPEG/PNG 的原图（第一次判断后在边缘缓存里记下“直接转交”）；
+  - HEAD、Range、非 GET 请求；
+  - 原图超过 20 MB；
+  - 绑定报错。报错码 9422 表示 Images 免费档当月 5,000 个用完，该实例会暂停尝试 10 分钟。
+  - 开关：`RENDER_DISABLED=1`。
+- 边缘缓存：
+  - 键是 `/__r2c/img/r2/<路径>?w&h&q&r&v`，其中 v 区分 webp、plain 和 format 参数；条目里记着原图 etag。
+  - 60 秒内命中直接返回，之后用一次 R2 head 确认 etag，没变就续期。
+  - 原图被覆盖后，最长约 60 秒内仍返回旧图。Supabase 自己的 CDN 实测也有约 20–70 秒，两边一致。
+  - 输出规则一变就改 `RENDER_KEY_VERSION`，避免继续用旧结果。
+- 并发：同一张新图被并发请求时，抢到锁的请求读最新原图并写入 R2；其他请求通过 Supabase CDN 读一次原图，自己完成变换，不会退回 Supabase 变换。
+- 响应头 `x-makaron-cache`：`IMAGE` 表示这次现做的变换，`HIT-IMAGE-EDGE` 表示命中边缘缓存，`MISS` 表示转交给了 Supabase。
+- 计费：Cloudflare 按“当月不同的（原图 + 尺寸参数）”计费，`format` 和 `quality` 不算。免费档每月 5,000 个，超出后新变换报错，不会扣费，Worker 会转交给 Supabase。Images Paid 档超出部分 $0.50/1000。
+- 验收：报告见 `docs/ops/render-image-takeover-verification-20261124.md`；单测见 `test/render.test.mjs`。

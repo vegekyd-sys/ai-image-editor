@@ -1091,6 +1091,11 @@ async function recoverWorkspaceMediaPath(ctx: AgentContext, filePath: string): P
   return recovered;
 }
 
+// A real MP4 needs ftyp/moov boxes plus at least one frame; anything this small is a text
+// placeholder or a failed export, and publishing it surfaces as "video link expired" in the canvas.
+const MIN_PUBLISHABLE_VIDEO_BYTES = 1024;
+const BINARY_MEDIA_PATH_PATTERN = /\.(mp4|mov|webm|m4v|jpg|jpeg|png|webp|gif|heic|mp3|wav|m4a|aac|ogg|flac)$/i;
+
 async function validatePublishableMediaUrl(output: WorkspaceMediaOutputDraft): Promise<string | null> {
   if (!output.storageUrl) return 'Missing storage URL.';
   try {
@@ -1104,6 +1109,10 @@ async function validatePublishableMediaUrl(output: WorkspaceMediaOutputDraft): P
     }
     if (isVideoContentType(output.contentType) && actualType && !actualType.startsWith('video/') && !actualType.includes('octet-stream')) {
       return `Expected video but URL returned ${actualType}: ${output.storageUrl}`;
+    }
+    const contentLength = Number(res.headers.get('content-length'));
+    if (isVideoContentType(output.contentType) && Number.isFinite(contentLength) && contentLength > 0 && contentLength < MIN_PUBLISHABLE_VIDEO_BYTES) {
+      return `Expected a video file but it is only ${contentLength} bytes, so it is not playable: ${output.storageUrl}`;
     }
   } catch (err) {
     return `URL validation failed: ${err instanceof Error ? err.message : String(err)}`;
@@ -4826,7 +4835,10 @@ Path is auto-generated from the current project and output type. Just provide a 
             return { success: false, message: error instanceof Error ? error.message : String(error), published: [] };
           }
         }
-        if (fromWorkspaceOutputs) {
+        // workspacePaths only means something for publishing existing media. Route it there instead of
+        // failing with a generic "provide a path" error that pushes the model toward path+content.
+        const publishWorkspacePaths = !fromWorkspaceOutputs && !fromLastRunCode && !filePath && !content && Boolean(workspacePaths?.length);
+        if (fromWorkspaceOutputs || publishWorkspacePaths) {
           if (shouldPublish === false) {
             return { success: false, message: 'fromWorkspaceOutputs is for publishing existing workspace media to the timeline. Omit publish:false.' };
           }
@@ -4865,6 +4877,12 @@ Path is auto-generated from the current project and output type. Just provide a 
         }
         if (!savePath) {
           return { success: false, message: 'Provide a path or use fromLastRunCode=true.' };
+        }
+        if (!fromLastRunCode && BINARY_MEDIA_PATH_PATTERN.test(savePath)) {
+          return {
+            success: false,
+            message: `write_file content is text and cannot create or replace binary media (${savePath}). Media files are saved by run_code outputs. To publish an existing workspace image/video, call write_file({ fromWorkspaceOutputs: true, workspacePaths: ["${savePath}"] }).`,
+          };
         }
         if (!fileContent) {
           return { success: false, message: 'No content to write. Provide content or set fromLastRunCode=true.' };

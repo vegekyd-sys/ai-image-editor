@@ -15,11 +15,15 @@
     "BYPASS_CONTINENTS": ""
   },
   "r2_buckets": [{ "binding": "MEDIA_R2", "bucket_name": "makaron-cdn-media" }],
+  // Cloudflare Images binding: serves /render/image from the R2 source copy.
+  "images": { "binding": "IMAGES" },
   "observability": { "enabled": true, "head_sampling_rate": 0.05 },
   // Production: attached to the existing proxied hostname (live since 2026-11-05).
   "routes": [
     { "pattern": "cdn.makaron.app/storage/v1/object/public/*", "zone_name": "makaron.app" },
-    { "pattern": "cdn.makaron.app/__r2c/*", "zone_name": "makaron.app" }
+    { "pattern": "cdn.makaron.app/__r2c/*", "zone_name": "makaron.app" },
+    // Image transformations (added 2026-11-24, see README).
+    { "pattern": "cdn.makaron.app/storage/v1/render/image/public/*", "zone_name": "makaron.app" }
   ],
   "env": {
     "test": {
@@ -33,7 +37,8 @@
     "CF_ZONE_ID": "f8509107c309261487e0bcfbcf72d704",
     "BYPASS_CONTINENTS": ""
       },
-      "r2_buckets": [{ "binding": "MEDIA_R2", "bucket_name": "makaron-cdn-media" }]
+      "r2_buckets": [{ "binding": "MEDIA_R2", "bucket_name": "makaron-cdn-media" }],
+      "images": { "binding": "IMAGES" }
     }
   }
 }
