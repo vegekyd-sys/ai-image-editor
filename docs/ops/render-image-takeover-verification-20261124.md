@@ -162,3 +162,14 @@ Accept 头有三种：
   - `npx wrangler rollback` 回到上一个版本；
   - 把 `RENDER_DISABLED` 设为 `1`；
   - 只删掉 render 这条路由。
+
+## 10. 上线记录（2026-11-24 CST）
+
+- 站长已在 Cloudflare 开通 Images 付费档：订阅 “Images Stream Basic”，$5/月，12 月 20 日续费。超出 5,000 个的不同变换按 $0.50/1000 计费。开通时本月已用 1,979 个。
+- 生产 Worker `makaron-media-r2-cache` 已部署，版本 `93e0dea9-4b5d-49b5-88ea-6b2e6f755c02`，新增路由 `cdn.makaron.app/storage/v1/render/image/public/*`。回滚命令：`npx wrangler rollback 6d75684f-d92c-4fa9-8111-45c88c90a76c`。
+- 线上冒烟测试：
+  - 图片变换：首次请求 `IMAGE`、再次请求 `HIT-IMAGE-EDGE`；`*/*` 输出原格式 JPEG；头和 Supabase 一致。
+  - 原有路径不受影响：图片对象 `HIT-R2`，mp4 Range 请求 206 `HIT-R2` 和 `HIT-EDGE`。
+  - 不存在的文件返回 400；purge 不带鉴权返回 401。
+- 和 Supabase 原站（`*.supabase.co`，不经过 Worker）对比 20 张图、200 组请求：状态码、格式、头、尺寸全部一致；只有 7 组小缩略图有已知的重采样差异。
+- 复查：第二天看 Supabase Usage 里 Storage Images Transformed 的日增量，应该接近 0，只剩 WebP、GIF、超过 20 MB 这几类转交的。Cloudflare 侧在 Images → Transformations 看用量。
