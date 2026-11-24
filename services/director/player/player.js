@@ -33,9 +33,11 @@ async function post(op, body = {}, type = 'application/json') {
     body: type === 'application/json' ? JSON.stringify(body) : body,
     redirect: 'error',
   });
-  const data = await response.json();
-  if (!response.ok) throw Object.assign(Error(data.error || '直播连接失败'), {status: response.status});
-  return data;
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw Object.assign(Error(data.error || '直播连接失败'), {status: response.status});
+  }
+  return response.json();
 }
 function tell(action, extra = {}) {
   if (embedded && window.parent !== window)
@@ -56,6 +58,17 @@ function startRecording() {
     record(video.srcObject);
   } catch {
     setStatus('当前浏览器无法录制');
+  }
+}
+async function uploadRecording(blob) {
+  try {
+    await post('recording', blob, blob.type);
+  } catch (error) {
+    if (!(error instanceof TypeError || error.status >= 500)) throw error;
+    // The first upload may have committed before its response was lost.
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    const show = await post('poll').catch(() => null);
+    if (!show?.recorded) await post('recording', blob, blob.type);
   }
 }
 function record(stream) {
@@ -81,7 +94,7 @@ function record(stream) {
     a.download = id + (type === 'video/mp4' ? '.mp4' : '.webm');
     a.hidden = false;
     try {
-      await post('recording', blob, type);
+      await uploadRecording(blob);
       setStatus('已收播，录像已保存');
     } catch {
       setStatus('录像上传失败，可在这里保存本地副本');
