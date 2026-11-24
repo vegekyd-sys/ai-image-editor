@@ -8,6 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import { createSessions, fail } from './sessions.mjs';
 import { organizeVoice } from '../../src/lib/director/organizer.mjs';
+import { createShowrunner } from '../../src/lib/director/showrunner.mjs';
 
 const endpoint = 'minimax/h3-max/director',
   bridge = 'https://wma.fal.run';
@@ -41,8 +42,24 @@ export function createDirectorServer({
   fetcher = fetch,
   organize = organizeVoice,
   maxSeconds = 120,
+  showrunner = createShowrunner(),
 }) {
-  const shows = createSessions(directory, { maxMs: maxSeconds * 1000 });
+  // A player waiting on a poll is woken as soon as its show gains a direction or ends.
+  const waiting = new Map();
+  const wake = (id) => {
+    for (const resolve of waiting.get(id) ?? []) resolve();
+    waiting.delete(id);
+  };
+  const changed = (id, ms) => new Promise((resolve) => {
+    const set = waiting.get(id) ?? new Set();
+    waiting.set(id, set.add(resolve));
+    setTimeout(() => {
+      set.delete(resolve);
+      if (!set.size && waiting.get(id) === set) waiting.delete(id);
+      resolve();
+    }, ms).unref();
+  });
+  const shows = createSessions(directory, { maxMs: maxSeconds * 1000, onChange: wake });
   // Preparation belongs to one authenticated show. Only the player submits its WebRTC offer.
   const preparationByShow = new Map();
   const providerPost = (target, body, timeout) => fetcher(target, {
@@ -129,19 +146,26 @@ export function createDirectorServer({
         if (body.action === 'start') {
           const s = shows.start(actor, body);
           if (s.phase === 'waiting') prepare(s);
+          // Planning runs beside connection setup; the opening itself is never held for it.
+          if (s.story && s.phase === 'waiting')
+            showrunner?.open(s.id, { premise: JSON.parse(s.config).prompt, hasImage: Boolean(JSON.parse(s.config).image_url) });
           return json(200, { ...shows.present(s), playerPath: playerPath(s) });
         }
         const s = shows.owned(body.id, actor);
-        if (body.action === 'direct')
-          return json(
-            200,
-            await shows.input(
-              s,
-              { text: body.text, turnId: body.turnId ?? randomUUID(), host: body.host === true },
-              organize,
-            ),
+        if (body.action === 'direct') {
+          const result = await shows.input(
+            s,
+            { text: body.text, turnId: body.turnId ?? randomUUID(), host: body.host === true, ready: body.ready === true },
+            organize,
           );
-        if (body.action === 'stop') shows.stop(s.id);
+          const sent = Number.isInteger(result.version) && shows.changes(s, result.version - 1)[0];
+          if (sent) showrunner?.user(s.id, { version: sent.version, text: sent.text });
+          return json(200, result);
+        }
+        if (body.action === 'stop') {
+          shows.stop(s.id);
+          showrunner?.end(s.id);
+        }
         if (body.action === 'export') {
           if (!s.recording) fail(409, '录像还未保存');
           const file = path.join(directory, s.id + '.' + s.recording);
@@ -201,20 +225,35 @@ export function createDirectorServer({
       }
       const body = await jsonBody(req);
       if (op === 'poll') {
-        if (!shows.alive(s)) return json(200, shows.present(s));
+        if (!shows.alive(s)) {
+          showrunner?.end(s.id);
+          return json(200, shows.present(s));
+        }
         shows.receipt(s, body);
+        const after = Number.isSafeInteger(body.after) ? body.after : 0;
+        if (s.story && showrunner?.active(s.id)) {
+          if (Number.isSafeInteger(body.playing) && body.playing <= s.version) showrunner.observe(s.id, body.playing);
+          const beat = s.phase === 'connected' && showrunner.next(s.id, s.version, { busy: Boolean(s.draft) });
+          const version = beat && shows.append(s, { text: beat.prompt, caption: beat.caption });
+          if (version) showrunner.sent(s.id, version, beat);
+        }
+        // Once the picture is live the player keeps one poll open, so a new direction goes out at once.
+        if (s.phase === 'connected' && Number.isSafeInteger(body.wait) && body.wait > 0 && !shows.changes(s, after).length)
+          await changed(s.id, Math.min(body.wait, 2000));
+        const latest = shows.current(s.id);
         const prep = preparationByShow.get(s.id);
-        const iceServers = body.prepare === true && s.phase === 'waiting' ? await prep?.ice : null;
+        const iceServers = body.prepare === true && latest.phase === 'waiting' ? await prep?.ice : null;
         return json(200, {
-          ...shows.present(shows.current(s.id)),
+          ...shows.present(latest),
           config: JSON.parse(s.config),
           ...(iceServers ? {iceServers} : {}),
-          ...(prep?.imageUrl && !s.applied ? { preparedImageUrl: prep.imageUrl } : {}),
-          directions: shows.changes(s, body.after ?? 0),
+          ...(prep?.imageUrl && !latest.applied ? { preparedImageUrl: prep.imageUrl } : {}),
+          directions: shows.alive(latest) ? shows.changes(s, after) : [],
         });
       }
       if (op === 'stop') {
         shows.stop(s.id);
+        showrunner?.end(s.id);
         return json(200, { stopped: true });
       }
       if (!shows.alive(s)) fail(409, '直播已结束');
@@ -222,11 +261,12 @@ export function createDirectorServer({
         shows.activity(s);
         return json(200, { ok: true });
       }
-      if (op === 'input')
-        return json(
-          200,
-          await shows.input(s, { text: body.text, turnId: body.turnId, host: false }, organize),
-        );
+      if (op === 'input') {
+        const result = await shows.input(s, { text: body.text, turnId: body.turnId, host: false }, organize);
+        const sent = Number.isInteger(result.version) && shows.changes(s, result.version - 1)[0];
+        if (sent) showrunner?.user(s.id, { version: sent.version, text: sent.text });
+        return json(200, result);
+      }
       if (op !== 'signal') fail(404, '没有这个接口');
       const target = req.headers['x-fal-target-url'];
       if (!signals.has(target)) fail(400, '无效信令目标');

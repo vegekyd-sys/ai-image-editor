@@ -14,11 +14,14 @@ let preparedImageUrl,
   frames = 0,
   applied = 0,
   sent = 1,
+  playing = 0,
   pollFailures = 0,
   failingSince = 0,
   endReason = '',
   timer;
 const playout = createPlayoutCues();
+// Short audience captions the showrunner wrote for its own directions.
+const captions = new Map();
 function acknowledge(version) {
   if (Number.isInteger(version)) applied = Math.max(applied, version);
 }
@@ -50,7 +53,11 @@ function count(_time, metadata) {
   if (ended) return;
   if (video.srcObject && video.videoWidth && !recordingAttempted) startRecording();
   const cue = playout.frame(metadata.mediaTime);
-  if (cue) tell('direction', {state: 'playing', ...cue, rtpTimestamp: metadata.rtpTimestamp});
+  if (cue) {
+    playing = Math.max(playing, cue.version);
+    const caption = captions.get(cue.version);
+    tell('direction', {state: 'playing', ...cue, ...(caption ? {caption} : {}), rtpTimestamp: metadata.rtpTimestamp});
+  }
   frames++;
   video.requestVideoFrameCallback?.(count);
 }
@@ -144,7 +151,9 @@ async function poll() {
   try {
     if (!video.requestVideoFrameCallback)
       frames = video.getVideoPlaybackQuality?.().totalVideoFrames || frames;
-    const data = await post('poll', { after: sent, applied, frames });
+    const asked = performance.now();
+    // While live, the service holds this poll open until there is a new direction.
+    const data = await post('poll', { after: sent, applied, frames, playing, wait: configured ? 1500 : 0 });
     pollFailures = 0;
     failingSince = 0;
     if (['ended', 'failed'].includes(data.phase))
@@ -153,6 +162,7 @@ async function poll() {
     if (configured)
       for (const direction of data.directions) {
         playout.expect(direction.version, direction.text);
+        if (typeof direction.caption === 'string') captions.set(direction.version, direction.caption.slice(0, 40));
         handle.send({
           type: 'prompt',
           prompt_version: direction.version,
@@ -163,7 +173,8 @@ async function poll() {
         setStatus('下一幕正在准备');
         tell('direction', {state:'sent'});
       }
-    timer = setTimeout(poll, 600);
+    const held = configured && (data.directions.length || performance.now() - asked > 300);
+    timer = setTimeout(poll, held ? 0 : 600);
   } catch (error) {
     // The picture arrives over WebRTC, not this poll. A slow or briefly unreachable
     // relay must not end a show that is still playing; only the service may end it.

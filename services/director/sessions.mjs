@@ -11,7 +11,7 @@ export const fail = (status, message) => {
 };
 const MAX_MS = 120_000;
 
-export function createSessions(directory, { now = Date.now, maxMs = MAX_MS } = {}) {
+export function createSessions(directory, { now = Date.now, maxMs = MAX_MS, onChange = () => {} } = {}) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(path.join(directory, 'sessions.sqlite'));
   db.exec(`PRAGMA journal_mode=WAL;
@@ -25,14 +25,21 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS } = {
   // Why a show ended, for hosts that must explain it (time limit, failed negotiation, explicit stop).
   try { db.exec('ALTER TABLE shows ADD COLUMN end_reason TEXT'); } catch {}
   try { db.exec('ALTER TABLE shows ADD COLUMN offers INTEGER NOT NULL DEFAULT 0'); } catch {}
+  // Shows that a showrunner keeps moving, and which directions it wrote.
+  try { db.exec('ALTER TABLE shows ADD COLUMN story INTEGER NOT NULL DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE directions ADD COLUMN caption TEXT'); } catch {}
+  try { db.exec("ALTER TABLE directions ADD COLUMN source TEXT NOT NULL DEFAULT 'user'"); } catch {}
   const read = (id) => db.prepare('SELECT * FROM shows WHERE id=?').get(id) ?? fail(404, '没有这场直播');
   const alive = (s) => s.expires > now() && !['ended', 'failed'].includes(s.phase);
-  const stop = (id, phase = 'ended', reason = phase === 'failed' ? 'failed' : 'stopped') =>
-    db
+  const stop = (id, phase = 'ended', reason = phase === 'failed' ? 'failed' : 'stopped') => {
+    const result = db
       .prepare(
         "UPDATE shows SET phase=?,end_reason=?,draft='',revision=revision+1 WHERE id=? AND phase NOT IN ('ended','failed')",
       )
       .run(phase, reason, id);
+    if (result.changes) onChange(id);
+    return result;
+  };
   function current(id) {
     let row = read(id);
     if (!alive(row) && !['ended', 'failed'].includes(row.phase)) {
@@ -43,7 +50,7 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS } = {
   }
   function start(
     actor,
-    { requestId, prompt, image, resolution, aspectRatio = '16:9', memory = 12, seed = '' },
+    { requestId, prompt, image, resolution, aspectRatio = '16:9', memory = 12, seed = '', story = false },
   ) {
     if (
       !/^[a-z0-9-]{1,80}$/i.test(requestId ?? '') ||
@@ -91,8 +98,8 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS } = {
     const id = randomUUID(),
       token = randomBytes(32).toString('base64url');
     db.prepare(
-      "INSERT INTO shows(id,owner,key_id,request_id,token,config,phase,expires) VALUES(?,?,?,?,?,?,'waiting',?)",
-    ).run(id, actor.userId, actor.keyId, requestId, token, json, now() + maxMs);
+      "INSERT INTO shows(id,owner,key_id,request_id,token,config,phase,expires,story) VALUES(?,?,?,?,?,?,'waiting',?,?)",
+    ).run(id, actor.userId, actor.keyId, requestId, token, json, now() + maxMs, story === true ? 1 : 0);
     return read(id);
   }
   const present = (s) => ({
@@ -119,10 +126,23 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS } = {
   }
   function changes(s, after = 0) {
     return db
-      .prepare('SELECT version,text FROM directions WHERE show=? AND version>? ORDER BY version')
-      .all(s.id, after);
+      .prepare('SELECT version,text,caption FROM directions WHERE show=? AND version>? ORDER BY version')
+      .all(s.id, after)
+      .map(({ version, text, caption }) => ({ version, text, ...(caption ? { caption } : {}) }));
   }
-  async function input(s, { text, turnId, host = false }, organize) {
+  // A direction the showrunner wrote, appended behind whatever the audience already sent.
+  function append(s, { text, caption = '' }) {
+    const latest = current(s.id);
+    if (!alive(latest) || latest.phase !== 'connected' || latest.draft) return null;
+    const version = latest.version + 1;
+    db.prepare("INSERT INTO directions(show,version,text,caption,source) VALUES(?,?,?,?,'showrunner')").run(
+      s.id, version, text, caption || null);
+    db.prepare('UPDATE shows SET version=? WHERE id=?').run(version, s.id);
+    onChange(s.id);
+    return version;
+  }
+  // ready: the host already wrote a finished direction, so it skips the organizer and goes straight out.
+  async function input(s, { text, turnId, host = false, ready = false }, organize) {
     if (
       typeof text !== 'string' ||
       !text.trim() ||
@@ -148,14 +168,16 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS } = {
     const started = now();
     let decision;
     try {
-      decision = await organize({ mode: host ? 'host' : 'director', text: draft, previous });
+      decision = ready
+        ? { action: 'send', text: draft }
+        : await organize({ mode: host ? 'host' : 'director', text: draft, previous });
     } catch (error) {
       db.prepare('DELETE FROM turns WHERE show=? AND id=?').run(s.id, turnId);
       if (read(s.id).revision === revision)
         db.prepare('UPDATE shows SET draft=? WHERE id=?').run(s.draft, s.id);
       throw error;
     }
-    if (['send', 'chat', 'end'].includes(decision.action))
+    if (!ready && ['send', 'chat', 'end'].includes(decision.action))
       await delay(Math.max(0, 650 - (now() - started)));
     const latest = current(s.id);
     let result = { action: 'superseded' };
@@ -164,9 +186,10 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS } = {
       if (decision.action === 'end') stop(s.id);
       if (decision.action === 'send') {
         const version = latest.version + 1;
-        db.prepare('INSERT INTO directions VALUES(?,?,?)').run(s.id, version, decision.text);
+        db.prepare('INSERT INTO directions(show,version,text) VALUES(?,?,?)').run(s.id, version, decision.text);
         db.prepare('UPDATE shows SET version=? WHERE id=?').run(version, s.id);
         result.version = version;
+        onChange(s.id);
       }
       if (decision.action !== 'wait') db.prepare("UPDATE shows SET draft='' WHERE id=?").run(s.id);
     }
@@ -217,6 +240,7 @@ export function createSessions(directory, { now = Date.now, maxMs = MAX_MS } = {
   }
   return {
     activity,
+    append,
     start,
     current,
     alive,

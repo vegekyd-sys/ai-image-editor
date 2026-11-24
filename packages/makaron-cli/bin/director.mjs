@@ -7,14 +7,16 @@ import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import path from 'node:path';
 
-export const directorHelp = `makaron director start --prompt <scene> [--image <file|https-url>] [--resolution 480p|768p] [--aspect-ratio 16:9|9:16|1:1] [--memory 1-50] [--seed n] [--open] [--json]
+export const directorHelp = `makaron director start --prompt <scene> [--image <file|https-url>] [--resolution 480p|768p] [--aspect-ratio 16:9|9:16|1:1] [--memory 1-50] [--seed n] [--story] [--open] [--json]
 makaron director open <session>
-makaron director direct <session> <direction>
+makaron director direct <session> [--ready] <direction>
 makaron director status <session>
 makaron director stop <session>
 makaron director export <session> --output <file>
 Use the player for live voice or text, preview and recording. The player link is private.
-Use --request-id <uuid> to recover the same start after a connection failure.`;
+Use --request-id <uuid> to recover the same start after a connection failure.
+--story keeps the story moving on its own between your directions.
+--ready sends a direction you already wrote as is, without the spoken-draft cleanup.`;
 
 export async function runDirector(argv, getAuth, uploadImage) {
   const { values, positionals } = parseArgs({
@@ -30,6 +32,8 @@ export async function runDirector(argv, getAuth, uploadImage) {
       memory: { type: 'string' },
       seed: { type: 'string' },
       host: { type: 'boolean' },
+      story: { type: 'boolean' },
+      ready: { type: 'boolean' },
       'turn-id': { type: 'string' },
       output: { type: 'string' },
       'request-id': { type: 'string' },
@@ -67,9 +71,10 @@ export async function runDirector(argv, getAuth, uploadImage) {
           aspectRatio: values['aspect-ratio'],
           memory: values.memory,
           seed: values.seed,
+          ...(values.story ? { story: true } : {}),
           requestId: values['request-id'] || randomUUID(),
         }
-      : { action, id, text: words.join(' '), turnId: values['turn-id'], host: values.host };
+      : { action, id, text: words.join(' '), turnId: values['turn-id'], host: values.host, ready: values.ready };
   if (action === 'start') process.stderr.write('Director request ID: ' + payload.requestId + '\n');
   const res = await fetch(new URL('/api/director', directorUrl), {
     method: 'POST',
