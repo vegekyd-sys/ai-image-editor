@@ -11,7 +11,7 @@ export const fail = (status, message) => {
 };
 const MAX_MS = 120_000;
 
-export function createSessions(directory, { now = Date.now } = {}) {
+export function createSessions(directory, { now = Date.now, maxMs = MAX_MS } = {}) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(path.join(directory, 'sessions.sqlite'));
   db.exec(`PRAGMA journal_mode=WAL;
@@ -22,18 +22,21 @@ export function createSessions(directory, { now = Date.now } = {}) {
       recording TEXT, UNIQUE(key_id,request_id));
     CREATE TABLE IF NOT EXISTS directions(show TEXT, version INTEGER, text TEXT NOT NULL, PRIMARY KEY(show,version));
     CREATE TABLE IF NOT EXISTS turns(show TEXT, id TEXT, result TEXT, PRIMARY KEY(show,id));`);
+  // Why a show ended, for hosts that must explain it (time limit, failed negotiation, explicit stop).
+  try { db.exec('ALTER TABLE shows ADD COLUMN end_reason TEXT'); } catch {}
+  try { db.exec('ALTER TABLE shows ADD COLUMN offers INTEGER NOT NULL DEFAULT 0'); } catch {}
   const read = (id) => db.prepare('SELECT * FROM shows WHERE id=?').get(id) ?? fail(404, '没有这场直播');
   const alive = (s) => s.expires > now() && !['ended', 'failed'].includes(s.phase);
-  const stop = (id, phase = 'ended') =>
+  const stop = (id, phase = 'ended', reason = phase === 'failed' ? 'failed' : 'stopped') =>
     db
       .prepare(
-        "UPDATE shows SET phase=?,draft='',revision=revision+1 WHERE id=? AND phase NOT IN ('ended','failed')",
+        "UPDATE shows SET phase=?,end_reason=?,draft='',revision=revision+1 WHERE id=? AND phase NOT IN ('ended','failed')",
       )
-      .run(phase, id);
+      .run(phase, reason, id);
   function current(id) {
     let row = read(id);
     if (!alive(row) && !['ended', 'failed'].includes(row.phase)) {
-      stop(id);
+      stop(id, 'ended', 'time');
       row = read(id);
     }
     return row;
@@ -89,7 +92,7 @@ export function createSessions(directory, { now = Date.now } = {}) {
       token = randomBytes(32).toString('base64url');
     db.prepare(
       "INSERT INTO shows(id,owner,key_id,request_id,token,config,phase,expires) VALUES(?,?,?,?,?,?,'waiting',?)",
-    ).run(id, actor.userId, actor.keyId, requestId, token, json, now() + MAX_MS);
+    ).run(id, actor.userId, actor.keyId, requestId, token, json, now() + maxMs);
     return read(id);
   }
   const present = (s) => ({
@@ -99,6 +102,8 @@ export function createSessions(directory, { now = Date.now } = {}) {
     appliedVersion: s.applied,
     frames: s.frames,
     recorded: Boolean(s.recording),
+    ...(['ended', 'failed'].includes(s.phase) && s.end_reason ? { reason: s.end_reason } : {}),
+    ...(s.phase === 'connected' ? { endsAt: s.expires } : {}),
   });
   function viewer(id, token) {
     const row = current(id);
@@ -176,10 +181,14 @@ export function createSessions(directory, { now = Date.now } = {}) {
     if (
       !alive(s) ||
       !db
-        .prepare("UPDATE shows SET phase='connecting', expires=? WHERE id=? AND phase='waiting'")
-        .run(now() + MAX_MS, s.id).changes
+        .prepare("UPDATE shows SET phase='connecting', offers=offers+1, expires=? WHERE id=? AND phase='waiting'")
+        .run(now() + maxMs, s.id).changes
     )
       fail(409, '本场已经提交过连接');
+  }
+  // A transient provider failure on the first offer may be retried once by the same player.
+  function reopen(s) {
+    return db.prepare("UPDATE shows SET phase='waiting' WHERE id=? AND phase='connecting' AND provider_session IS NULL AND offers<2").run(s.id).changes > 0;
   }
   function connected(id, session) {
     if (read(id).phase !== 'connecting') fail(409, '本场已关闭');
@@ -218,6 +227,7 @@ export function createSessions(directory, { now = Date.now } = {}) {
     changes,
     input,
     takeOffer,
+    reopen,
     connected,
     receipt,
     recording,

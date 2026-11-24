@@ -18,6 +18,7 @@ createDirectorServer({
   }),
   directory,
   providerKey: process.env.FAL_KEY,
+  maxSeconds: Math.min(600, Math.max(30, Number(process.env.MAKARON_DIRECTOR_MAX_SECONDS) || 120)),
   async authenticate(value?: string) {
     if (!value?.startsWith('Bearer mk_live_')) return null;
     const actor = await validateApiKey(value.slice(7));

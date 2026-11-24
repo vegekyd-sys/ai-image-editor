@@ -80,3 +80,29 @@ test('a semantic host end decision closes a pending draft and returns its receip
     assert.equal(api.current(show.id).phase, 'ended');
   }
 });
+test('a timed-out show reports why it ended, and a failed first offer can be retried once', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'director-'));
+  let clock = 0;
+  const service = createSessions(dir, { now: () => clock, maxMs: 300_000 });
+  t.after(() => {
+    service.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const owner = { keyId: 'a', userId: 'owner' };
+  const s = service.start(owner, { requestId: 'retry', prompt: '开场' });
+  service.takeOffer(s);
+  assert.equal(service.reopen(service.current(s.id)), true);
+  service.takeOffer(service.current(s.id));
+  assert.equal(service.reopen(service.current(s.id)), false, 'only one retry');
+  service.connected(s.id, 'provider');
+  assert.equal(service.present(service.current(s.id)).endsAt, 300_000);
+  clock = 200_000;
+  assert.equal(service.current(s.id).phase, 'connected', 'the configured cap applies');
+  clock = 300_001;
+  const ended = service.present(service.current(s.id));
+  assert.equal(ended.phase, 'ended');
+  assert.equal(ended.reason, 'time');
+  const other = service.start(owner, { requestId: 'stop', prompt: '开场' });
+  service.stop(other.id);
+  assert.equal(service.present(service.current(other.id)).reason, 'stopped');
+});

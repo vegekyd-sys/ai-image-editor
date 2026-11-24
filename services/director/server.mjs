@@ -40,8 +40,9 @@ export function createDirectorServer({
   providerKey,
   fetcher = fetch,
   organize = organizeVoice,
+  maxSeconds = 120,
 }) {
-  const shows = createSessions(directory);
+  const shows = createSessions(directory, { maxMs: maxSeconds * 1000 });
   // Preparation belongs to one authenticated show. Only the player submits its WebRTC offer.
   const preparationByShow = new Map();
   const providerPost = (target, body, timeout) => fetcher(target, {
@@ -247,7 +248,9 @@ export function createDirectorServer({
       const upstream = await providerPost(target, request, 90000);
       if (!upstream.ok) {
         await upstream.body?.cancel();
-        if (target === bridge + '/session') shows.stop(s.id, 'failed');
+        // One more offer is allowed after a provider-side failure; a second failure ends the show.
+        if (target === bridge + '/session' && !(upstream.status >= 500 && shows.reopen(shows.current(s.id))))
+          shows.stop(s.id, 'failed');
         fail(424, 'Director 信令失败 HTTP ' + upstream.status);
       }
       const result = await upstream.json();
