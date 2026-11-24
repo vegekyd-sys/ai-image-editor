@@ -11,6 +11,7 @@
  *   npx makaron-cli list
  */
 
+import {directorHelp,runDirector} from './director.mjs';
 import fs from 'fs';
 import { randomUUID } from 'node:crypto';
 import path from 'path';
@@ -2326,6 +2327,7 @@ Commands:
                                      Add an external image without uploading it
   project media add <projectId> --type video --source-url <url> --start <n> --end <n>
                                      Add an external video range without uploading it
+  director --help                    Start, steer, watch and record a live show
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   create --title "name"              Create empty project (text-to-image)
@@ -2425,6 +2427,7 @@ function setupMakaron(values = []) {
 }
 
 function printHelp(topic, subtopic) {
+  if (topic === 'director') { console.log(directorHelp); return; }
   if (topic === 'price') { printPriceHelp(); return; }
   if (topic === 'layerize') { printLayerizeHelp(); return; }
   if (topic === 'login') {
@@ -3442,6 +3445,13 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   }
   await analyzeVideoCli(baseUrl, headers, video, questionParts);
 
+} else if (command === 'director') {
+  try {
+    await runDirector(args.slice(1),getAuth,(base,headers,file)=>{
+      const image=validateImage(file);if(!image.ok)throw Error(image.error);
+      return uploadFileViaSignedUrl(base,headers,undefined,file,image.mime);
+    });
+  } catch(error) {console.error(error.message);process.exitCode=1;}
 } else if (command === 'video') {
   const { headers, baseUrl } = getAuth();
   const sub = args[1];

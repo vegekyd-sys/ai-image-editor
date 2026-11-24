@@ -801,3 +801,8 @@ quote stops before charging. Input video adds billable seconds; supplier credits
 are different from Makaron credits. Native 4K uses EvoLink, never Eco enhancement.
 
 Kling Image 4.0 (`--image-model kling-image-4.0`) generates or edits one native PNG at `--image-resolution 2K|4K|8K` (default 2K) on fal. You can include up to 10 ordered reference images, counting the source image. The CLI uploads local files automatically. Each input must be at most 30 MiB, at least 300 pixels on both sides, with an aspect ratio from 0.4 to 2.5. Refer to them as `@Image1`, `@Image2`. Keep the image request UUID printed by the CLI. If the response is uncertain, pass the same UUID with `--image-request-id <uuid>` to check the existing receipt without a second submission or charge. Hosted MCP requires `imageRequestId`. Pick a model with native transparency for cutouts. Kling Image 4.0 uses prompt-guided edits, so areas outside the requested edit can change.
+
+
+### Director private preview
+
+With an enrolled Makaron API key and the private service address in `MAKARON_DIRECTOR_URL`, use `makaron director start --prompt "A red train pulls into a station" --open` to open the live player. Live shows default to 480p. Pass `--resolution 768p` for higher resolution. Inside the player, use text or the microphone to direct the next scene. From another terminal use `makaron director direct <id> "A dragon arrives"`, `status <id>`, and `stop <id>` under the same `makaron director` command. Once status reports `recorded: true`, use `makaron director export <id> --output show.mp4` (WebM when requested by the CLI). `makaron director --help` lists opening image, format and composition options.

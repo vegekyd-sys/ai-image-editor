@@ -1,0 +1,15 @@
+{
+  "name": "@makaron/director-preview",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild player/transport-source.js --bundle --format=esm --minify --outfile=player/transport.mjs"
+  },
+  "dependencies": {
+    "@fal-ai/director-client": "npm:@fal-ai/client@1.11.0-alpha.2",
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}
