@@ -93,7 +93,9 @@ function record(stream) {
   const mimeType = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp8,opus', 'video/webm'].find((t) =>
     MediaRecorder.isTypeSupported(t),
   );
-  recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  // A bounded bitrate keeps the upload small: the recording leaves the viewer's browser after
+  // the show over whatever uplink the page has, often well under 1 MB/s.
+  recorder = new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 900_000, audioBitsPerSecond: 64_000 });
   const chunks = [];
   recorder.ondataavailable = (e) => {
     if (e.data.size) chunks.push(e.data);
