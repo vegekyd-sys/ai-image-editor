@@ -173,3 +173,87 @@ Accept 头有三种：
   - 不存在的文件返回 400；purge 不带鉴权返回 401。
 - 和 Supabase 原站（`*.supabase.co`，不经过 Worker）对比 20 张图、200 组请求：状态码、格式、头、尺寸全部一致；只有 7 组小缩略图有已知的重采样差异。
 - 复查：第二天看 Supabase Usage 里 Storage Images Transformed 的日增量，应该接近 0，只剩 WebP、GIF、超过 20 MB 这几类转交的。Cloudflare 侧在 Images → Transformations 看用量。
+
+## 11. 上线次日复查（2026-11-25 CST）
+
+自动复查任务，只读，2026-11-25 21:47–22:00 CST 执行。时间均为 UTC，括号内为 CST。上线时刻按 2026-11-24 04:40 UTC（12:40 CST）。
+
+### 11.1 Supabase 侧仍在做的变换
+
+来源：Management API `GET /v1/projects/sdyrtztrjgmmpnirswxt/analytics/endpoints/logs`，ClickHouse SQL，`logs` 表 `source='edge_logs'`，`log_attributes['request.path']` 以 `/storage/v1/render/image/` 开头；不同源图数按 path 去重（path 本身不含 query）。每个窗口查两次，结果一致。
+
+> 注意：原来的 `logs.all` 接口已被 Supabase 下线（返回 “The logs.all endpoint has been removed”）。新接口是 `.../analytics/endpoints/logs`，SQL 改为 ClickHouse 方言，表名统一为 `logs`，字段在 `log_attributes` 里。
+
+| 时间窗口 (UTC) | 请求数 | 不同源图 | 说明 |
+|---|---:|---:|---|
+| 11-23 全天 | 152 | 88 | 全部 `cdn.makaron.app`（经 Worker 转交），jpg 93 / png 59 |
+| 11-24 00:00–04:40（上线前） | 10,730 | 361 | 01–04 点集中是上线前的验证脚本（03 点 2,926、04 点 7,597） |
+| 11-24 04:40–24:00（上线后） | 200 | 21 | 199 条 UA `r2c-verify/1` 直连 `*.supabase.co`（§10 的 20 图 200 组对比），1 条 curl 400；**无真实用户流量** |
+| 11-25 00:00–13:50 | 2 | 2 | 见下 |
+
+11-25 剩下的 2 次（UA 均为 iOS App `MakaronIOS`）：
+- 02:08（10:08 CST）`marketplace/before/concert-lipsync.webp` —— WebP，按设计转交；
+- 02:30（10:30 CST）`marketplace/before/before-corridor.jpg` —— 扩展名是 .jpg，但文件实际是 WebP 字节（`RIFF....WEBPVP8X`），Worker 识别后转交，也是预期行为。
+
+补充：Worker 转交给 Supabase 的请求，在 edge_logs 里 host 显示为 `sdyrtztrjgmmpnirswxt.supabase.co`（11-23 之前显示 `cdn.makaron.app`），UA 保留客户端的。抽测时 before-corridor.jpg 两次请求也出现在日志里（13:57，`cf_cache_status` MISS→HIT）。
+
+结论：上线后 Supabase 的图片变换只剩 WebP 类转交，真实流量约 **2 个源图/天**。
+
+### 11.2 Supabase 账单
+
+来源：Chrome 打开 org 的 Usage 和 Billing 页，只读页面文字/图表 tooltip。
+
+- 账单期 **11-07 至 12-07**（还剩 11 天）。
+- Storage Image Transformations：本期累计 **4,844**，含 100，超出 4,744，计费 **$25.00**（按每 1,000 个 $5 向上取整，即 5 个单位）。
+- 逐日累计图（每 24 小时刷新，目前只到 11-23）：11-21 约 4.4K、11-22 约 4.4K、11-23 约 4.5K。上线后的日增量还没出现在图上。
+- Upcoming Invoice：当前 $84.95，预计 **$98.68**；其中 Storage Images Transformed $25.00、Total egress $9.69、Cached egress $3.29、Storage size $10.00、Branching $5.51、Custom Domain $6.10。
+- 按 2 个/天，本期到 12-07 约再加 25 个，累计约 4,870，不会进入下一个 1,000（超过 5,100 才会变 $30）。本期这项预计停在 $25；下个账单期每月约 60 个，在含的 100 以内，预计 **$0**。
+
+### 11.3 Cloudflare 侧
+
+来源：Cloudflare GraphQL（wrangler OAuth 令牌，`wrangler whoami` 刷新了一次过期令牌）。`httpRequestsAdaptiveGroups` 是采样估算值。
+
+zone `makaron.app`，`clientRequestPath` like `/storage/v1/render/image/%`，按小时和 `edgeResponseStatus`：
+
+| 时段 (UTC) | 请求（按状态） |
+|---|---|
+| 11-23 全天 | 200: 121，304: 29 |
+| 11-24 01–04 点（上线前验证） | 200: 19,247，400: 132，500: 38，499: 4，404: 3，206: 3，304: 6 |
+| 11-24 05–23 点（上线后） | 200: 400，304: 43，400: 1 |
+| 11-25 00–13 点 | 200: 270，304: 93，499: 1 |
+
+- 5xx：只在 11-24 03–04 点，全部是同一张图 `0df635af-…jpg`（§2 记录的 7.7 KB 损坏 JPEG，Supabase 原站也报 500），来自验证脚本，分布在 `cdn-r2-test` 和 `cdn` 两个 host。**上线后 0 个 5xx。** 11-25 的 1 个 499 是客户端中断。
+
+`wrangler tail --format json`：第一次采 70 秒，夜间（21:50 CST）没有任何事件；第二次采约 90 秒，同时做 §11.5 的抽测，共 6 个事件：`render` 2、`fill` 1（PNG 冷源从源站回填 R2），**`render_fallback` 0，无 9422，无异常**。流量太低，比例只能看出没有报错。
+
+Images 绑定用量（GraphQL 账户级数据集）：
+
+| 数据集 | 11-24 | 11-25（到 ~14:00 UTC） |
+|---|---:|---:|
+| `imagesUniqueTransformationsAccumulatedSinceStartOfMonth`（本月累计不同变换） | 2,150 | **2,311** |
+| `imagesTransformationsAdaptiveGroups`，生产 Worker `makaron-media-r2-cache`：requests / billableEventCount | 467 / 382 | 265 / 234 |
+| 同上，测试 Worker `makaron-media-r2-cache-test` | 8,859 / 7,275 | — |
+
+Cloudflare 控制台（Images → Transformations）在 Chrome 里未登录，没有读页面；以 GraphQL 累计数为准。
+
+### 11.4 Cloudflare 费用预估
+
+- 开通时 1,979 → 11-24 结束 2,150（+171，含上线后半天）→ 11-25 到 22:00 CST 为 2,311（+161）。按 **150–300 个/天**估算，到 11-30 再加 5 天多：约 **3,200–3,900**，低于 5,000 免费额度。**11 月只付订阅 $5，无超额。**
+- 12 月整月重新计数：按 150–300 个/天，约 4,500–9,000 个，超额 0–4,000 个 × $0.50/1000 = **$0–2**，加订阅约 **$5–7/月**。实际会更低一些，因为同一变换在一个月内只算一次，后半月的新增会递减。
+
+### 11.5 抽测
+
+`curl -H 'Accept: image/avif,image/webp,image/*,*/*;q=0.8'`，参数 `width=400&quality=70&height=533&resize=cover`，每张请求两次：
+
+| 源图 | 第 1 次 | 第 2 次 | 类型 / 大小 |
+|---|---|---|---|
+| `skills/rainy-kiss/rainy-kiss-before-woman.jpg` | `IMAGE` | `HIT-IMAGE-EDGE` | image/webp，13,222 B |
+| `marketplace/before/storyboard-longvideo-before1.png` | `IMAGE`（冷源，顺带回填 R2） | `HIT-IMAGE-EDGE` | image/webp，23,632 B |
+| `marketplace/before/before-corridor.jpg` | `MISS` | `MISS` | image/webp，12,204 B；源文件实为 WebP 字节，按设计转交 Supabase |
+
+### 11.6 结论
+
+- **Supabase 变换已基本停止。** 上线后真实流量只剩 WebP 源图（含扩展名写成 .jpg 的 WebP）转交，约 2 个/天。本期该项停在 $25，下期预计 $0。
+- **Cloudflare 11 月不会超出免费额度**（月底约 3,200–3,900 / 5,000），只付 $5 订阅；之后预计 $5–7/月。
+- **没有发现异常**：上线后 0 个 5xx，tail 中 0 个 `render_fallback`，无 9422，抽测正常。不需要回滚（如需回滚：在 `services/media-r2-cache` 下执行 `npx wrangler rollback 6d75684f-d92c-4fa9-8111-45c88c90a76c`）。
+- 可选的后续：marketplace 里扩展名是 .jpg 但实为 WebP 的图（如 before-corridor.jpg），以后每期会让 Supabase 各计一次；数量很少，不急，可以转成真正的 JPEG。
