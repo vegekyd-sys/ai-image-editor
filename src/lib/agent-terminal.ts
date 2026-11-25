@@ -21,7 +21,7 @@ export interface ModelTerminationObservation {
 export interface ModelTerminationAssessment {
   ok: boolean;
   retryable: boolean;
-  code?: 'context_length_exceeded' | 'stream_error' | 'missing_finish' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn' | 'attempt_budget_handoff' | 'non_retryable_tool_failure';
+  code?: 'context_length_exceeded' | 'reference_image_unavailable' | 'stream_error' | 'missing_finish' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn' | 'attempt_budget_handoff' | 'non_retryable_tool_failure';
   detail?: string;
 }
 
@@ -66,10 +66,18 @@ export function classifyModelTermination(
     const error = observation.streamError as { statusCode?: unknown; message?: unknown };
     // A definite input rejection is different from a timeout or truncated output.
     // Do not route on arbitrary tool text or an inferred token estimate.
-    if (observation.provider === 'deepseek' && error.statusCode === 400
-      && typeof error.message === 'string'
-      && /maximum context length is [\d,]+ tokens.*you requested [\d,]+ tokens/i.test(error.message)) {
-      return { ok: false, retryable: false, code: 'context_length_exceeded', detail: describeModelStreamError(error) };
+    if (observation.provider === 'deepseek' && error.statusCode === 400 && typeof error.message === 'string') {
+      if (/maximum context length is [\d,]+ tokens.*you requested [\d,]+ tokens/i.test(error.message)) {
+        return { ok: false, retryable: false, code: 'context_length_exceeded', detail: describeModelStreamError(error) };
+      }
+      if (/\bmessages\[\d+\]\.content\[\d+\]:\s*failed to download image\b/i.test(error.message)) {
+        return {
+          ok: false,
+          retryable: false,
+          code: 'reference_image_unavailable',
+          detail: 'DeepSeek could not download a reference image in the request (HTTP 400).',
+        };
+      }
     }
     return {
       ok: false,
