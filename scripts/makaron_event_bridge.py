@@ -9,6 +9,7 @@ import json
 import os
 import plistlib
 from pathlib import Path
+from types import SimpleNamespace
 import signal
 import subprocess
 import tempfile
@@ -168,6 +169,20 @@ def retry_dispatch(state, args, config, directory):
     return {'accepted': True, 'dispatch_id': batch['dispatch_id'], 'phase': batch['phase']}
 
 
+def dispatch_on_tick(state, batch, config, directory, now):
+    if batch['phase'] == 'pending':
+        enqueue(state, batch, config, directory)
+        return
+    if batch['phase'] not in {'dispatch_failed', 'handler_failed'} or not batch.get('dispatch_id'):
+        return
+    # Retry only proven pre-submission failures. retry_dispatch rechecks the
+    # active batch, model marker, claim and token under the bridge lock.
+    delay = min(3600, 120 * 2 ** min(5, len(batch.get('previous_dispatches', []))))
+    if now - batch['dispatched_at'] >= delay:
+        retry_dispatch(state, SimpleNamespace(batch=batch['id'], dispatch_id=batch['dispatch_id']),
+                       config, directory)
+
+
 @contextmanager
 def lock(directory, blocking=False):
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -324,7 +339,7 @@ def main():
             checks, errors = detect(config, state, directory)
             batch = reconcile(state, checks, errors, time.time(), config['thread_id'])
             if batch:
-                enqueue(state, batch, config, directory)
+                dispatch_on_tick(state, batch, config, directory, time.time())
         write_private(path, state)
         batch = state.get('batches', {}).get(state.get('active_batch'))
         test = state.get('batches', {}).get(state.get('selftest_batch'))

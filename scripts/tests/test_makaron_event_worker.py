@@ -370,3 +370,39 @@ def test_explicit_native_non_delivery_vs_unknown_delivery(tmp_path, monkeypatch,
     assert ('model_requested_at' not in b) == retryable
     monkeypatch.setattr(bridge, 'bounded_command', lambda *a: {'returncode': 0})
     assert bridge.retry_dispatch(state, SimpleNamespace(batch='batch', dispatch_id='first'), {}, tmp_path)['accepted'] == retryable
+
+
+def test_stale_desktop_socket_uses_cli_without_native_submission(tmp_path, monkeypatch):
+    import socket
+    monkeypatch.chdir(tmp_path)
+    path = Path('stale.sock')
+    with socket.socket(socket.AF_UNIX) as listener:
+        listener.bind(str(path))
+    facts = {}
+    assert worker.desktop_dispatch({'desktop_ipc_socket': str(path)}, '', 'attempt', facts) is False
+    assert facts == {'desktop_unavailable': 'ConnectionRefusedError'}
+
+
+@pytest.mark.parametrize(('thread', 'events', 'retryable'), [
+    ('thread', [], True),
+    ('different', [], False),
+    ('thread', [{'type': 'thread.started', 'thread_id': 'thread'}], False),
+    ('thread', [{'type': 'turn.started'}], False),
+])
+def test_cli_writer_conflict_requires_exact_pre_resume_rejection(tmp_path, thread, events, retryable):
+    isolated_state(tmp_path)
+    cli = tmp_path / 'unused'
+    rejection = f'Error: thread/resume: thread/resume failed: thread {thread} already has an active writer (code -32600)'
+    cli.write_text(f"""#!/usr/bin/python3
+import sys, json
+sys.stdin.read()
+for event in {events!r}:
+    print(json.dumps(event))
+print({rejection!r}, file=sys.stderr)
+sys.exit(1)
+""")
+    cli.chmod(0o700)
+    assert worker.run(tmp_path, 'batch', 'first') == 2
+    batch = json.loads((tmp_path / 'bridge-state.json').read_text())['batches']['batch']
+    assert ('model_requested_at' not in batch) is retryable
+    assert bool(batch['worker'].get('cli_resume_rejected')) is retryable

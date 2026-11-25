@@ -222,3 +222,20 @@ def test_failed_legacy_cleanup_preserves_enabled_monitor(tmp_path, monkeypatch):
     with pytest.raises(SystemExit, match='fixture cleanup failure'):
         installer.main()
     assert state_path.read_bytes() == before
+
+
+def test_ticks_recover_unsubmitted_batch_after_backoff_but_never_replay_submitted(tmp_path, monkeypatch):
+    batch = dict(id='incident', phase='handler_failed', dispatch_id='old', dispatched_at=100,
+                 received=False, completed=False, one_shot=True, revision=7, observations=['original'])
+    state = dict(enabled=True, active_batch='incident', batches={'incident': batch})
+    monkeypatch.setattr(bridge, 'bounded_command', lambda *a: {'returncode': 0})
+    bridge.dispatch_on_tick(state, batch, {}, tmp_path, 219)
+    assert batch['dispatch_id'] == 'old'
+    batch['model_requested_at'] = 101
+    bridge.dispatch_on_tick(state, batch, {}, tmp_path, 220)
+    assert batch['dispatch_id'] == 'old'
+    del batch['model_requested_at']
+    bridge.dispatch_on_tick(state, batch, {}, tmp_path, 220)
+    assert batch['phase'] == 'dispatched' and batch['dispatch_id'] != 'old'
+    assert batch['previous_dispatches'][0]['dispatch_id'] == 'old'
+    assert batch['revision'] == 7 and batch['observations'] == ['original']
