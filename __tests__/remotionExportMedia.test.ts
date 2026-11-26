@@ -176,6 +176,69 @@ describe('public export pipeline media contract', () => {
     expect(exportMediaCacheKey('owner',src,30)).not.toContain('private');
     expect(exportMediaCacheKey('owner',src,60)).not.toBe(exportMediaCacheKey('owner',src,30));
   });
+  it('prepares cold sources concurrently with bounded, exclusive runners; warm exports need none', async () => {
+    const urls = Array.from({length: 7}, (_, index) => `https://example.com/${index}.mp4`);
+    const design = {width: 1080, height: 1920, code: '', props: {clips: urls}};
+    const {store} = backend();
+    const gate = Promise.withResolvers<void>();
+    const seen = new Set<string>();
+    const stopped = vi.fn();
+    const createRunner = vi.fn(async () => {
+      let current: string | undefined;
+      return {
+        async prepare(url: string) {
+          expect(current).toBeUndefined();
+          current = url;
+          seen.add(url);
+          await gate.promise;
+          return manifest;
+        },
+        async upload() { expect(current).toBeDefined(); current = undefined; },
+        async stop() { expect(current).toBeUndefined(); stopped(); },
+      };
+    });
+    const cold = prepareRemotionExportMedia(design, {userId: 'owner', store, createRunner});
+    try {
+      await vi.waitFor(() => expect(seen.size).toBe(3));
+    } finally {
+      gate.resolve();
+    }
+    expect((await cold).summary).toMatchObject({prepared: 7, cacheHits: 0, workersUsed: 3});
+    expect(seen).toEqual(new Set(urls));
+    expect(stopped).toHaveBeenCalledTimes(3);
+    const warm = await prepareRemotionExportMedia(design, {userId: 'owner', store, createRunner});
+    expect(warm.summary).toMatchObject({prepared: 7, cacheHits: 7, workersUsed: 0});
+    expect(createRunner).toHaveBeenCalledTimes(3);
+  });
+  it('drains in-flight workers on failure and leaves remaining sources unclaimed', async () => {
+    const urls = Array.from({length: 5}, (_, index) => `https://example.com/${index}.mp4`);
+    const design = {width: 1080, height: 1920, code: '', props: {clips: urls}};
+    const {store} = backend();
+    const gate = Promise.withResolvers<void>();
+    const started = new Set<string>();
+    const stopped = vi.fn();
+    const createRunner = async () => ({
+      async prepare(url: string) {
+        started.add(url);
+        if (url === urls[0]) throw new Error('transcode failed');
+        await gate.promise;
+        return manifest;
+      },
+      async upload() {},
+      async stop() { stopped(); },
+    });
+    const run = prepareRemotionExportMedia(design, {userId: 'owner', store, createRunner});
+    const result = expect(run).rejects.toThrow('transcode failed');
+    try {
+      await vi.waitFor(() => expect(stopped).toHaveBeenCalledTimes(1));
+      expect(started).toEqual(new Set(urls.slice(0, 3)));
+    } finally {
+      gate.resolve();
+    }
+    await result;
+    expect(stopped).toHaveBeenCalledTimes(3);
+    expect(store.commit).toHaveBeenCalledTimes(2);
+  });
   it('does not publish a cache manifest or fall back to the broken original after upload failure', async () => {
     const b = backend(); b.runner.upload.mockRejectedValueOnce(new Error('Failed https://storage.example/?signature=secret'));
     await expect(prepareRemotionExportMedia({code:'<Video src="https://example.com/video.mp4"/>',width:1080,height:1920},{userId:'owner',...b}))
