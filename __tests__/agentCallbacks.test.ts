@@ -344,6 +344,17 @@ describe('makeAgentCallbacks', () => {
       expect(ctx.snapshotsRef.current).toHaveLength(1);
       expect(ctx.snapshotsRef.current[0].design?.props).toEqual({ _pos_layer_1: { x: 30, y: 40 } });
     });
+    it('refreshes the poster and design when a revised draft republishes the same snapshot', () => {
+      const { callbacks } = makeAgentCallbacks(ctx);
+      callbacks.onNewTurn?.('msg-saved');
+      const original = { code: 'function D(){}', width: 100, height: 100, published: true, snapshotId: 'saved', previewUrl: 'https://example.com/old.jpg' };
+      callbacks.onRender?.(original);
+      const revision = { ...original, props: { title: 'Updated' }, previewUrl: 'https://example.com/new.jpg' };
+      callbacks.onRender?.(revision);
+      expect(ctx.snapshotsRef.current).toHaveLength(1);
+      expect(ctx.snapshotsRef.current[0]).toMatchObject({ id: 'saved', image: revision.previewUrl, imageUrl: revision.previewUrl, design: revision });
+    });
+
     it('published render triggers pendingDesign with snapshotId', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onNewTurn?.('msg-1');

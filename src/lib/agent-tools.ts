@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { zImageTurboEndpoint } from './models/fal-z-image-turbo';
 import { createKlingImage4Journal } from './models/kling-image4-journal';
 import { createModelPriceTool } from './model-price-tool';
@@ -226,6 +227,9 @@ function modelFileContent(base64Data: string, mediaType: string) {
 // ---------------------------------------------------------------------------
 
 export interface AgentContext {
+  /** Poster for the render event currently being published. Review images stay on the draft. */
+  pendingDesignPosterUrl?: string;
+  reviewedOpeningFrame?: { designKey: string; url: string };
   deliverySurface?: 'app' | 'external';
   abortSignal?: AbortSignal;
   studioResumeAuthorized?: boolean;
@@ -1455,6 +1459,7 @@ function createDecomposeImageTool({ ctx }: AgentToolFactoryScope, statusOnly = f
           (ctx as any).__pendingDesignSnapshotId = result.snapshotId;
           (ctx as any).__pendingDesignSourcePath = result.designPath;
           (ctx as any).__pendingDesignAlreadyPersisted = true;
+          ctx.pendingDesignPosterUrl = result.posterUrl;
           (ctx as any).__runCodeDrafts = [{ previewUrl: result.posterUrl }];
           (ctx as any).__lastDesignPayload = result.design;
           (ctx as any).__lastSavedDraftPath = result.designPath;
@@ -3768,6 +3773,26 @@ function createEditElementTool(scope: AgentToolFactoryScope) {
   });
 }
 
+// A review can target another snapshot or an earlier revision of the same workspace path.
+function openingFrameDesignKey(design: DesignPayload): string {
+  return createHash('sha256').update(JSON.stringify(design)).digest('hex');
+}
+
+async function saveOpeningFrame(ctx: AgentContext, design: DesignPayload, userId: string): Promise<string> {
+  const key = openingFrameDesignKey(design);
+  if (ctx.reviewedOpeningFrame?.designKey === key) return ctx.reviewedOpeningFrame.url;
+  const { renderDesignFrame } = await import('./remotion-server');
+  const bytes = await renderDesignFrame(design, 0, { signal: ctx.abortSignal, sandboxScope: `${userId}:${ctx.projectId}` });
+  ctx.abortSignal?.throwIfAborted();
+  const hash = createHash('sha256').update(bytes).digest('hex');
+  const path = `${ctx.projectId}/posters/${hash}.jpg`;
+  const poster = await workspace.writeFile(path, bytes, ctx.supabase, userId, 'image/jpeg');
+  if (!poster.success || !poster.storageUrl) throw new Error('Composition poster could not be saved.');
+  const url = toPublicStorageUrl(poster.storageUrl);
+  ctx.reviewedOpeningFrame = { designKey: key, url };
+  return url;
+}
+
 function createPublishDraftTool(
   { ctx }: AgentToolFactoryScope,
 ) {
@@ -3878,13 +3903,7 @@ The same Agent Run and design_path resolve to the same Snapshot ID, so a retry o
             agentRunId: ctx.agentRunId || ctx.execution?.runId,
             designPath: design_path,
           });
-          if (design.elementEdit) {
-            const { renderDesignFrame } = await import('./remotion-server');
-            const bytes = await renderDesignFrame(design, 0, { signal: ctx.abortSignal, sandboxScope: `${ctx.userId}:${ctx.projectId}` });
-            const poster = await workspace.writeFile(`${ctx.projectId}/element-edits/${design.elementEdit.id}-poster.jpg`, bytes, ctx.supabase, ctx.userId, 'image/jpeg');
-            if (!poster.success || !poster.storageUrl) throw new Error('Element edit poster could not be saved.');
-            ((ctx as any).__runCodeDrafts ??= []).push({ previewUrl: poster.storageUrl });
-          }
+          ctx.pendingDesignPosterUrl = await saveOpeningFrame(ctx, design, ctx.userId);
           const promotedDesign = {
             ...design,
             description: name || (typeof rawDesign.description === 'string' ? rawDesign.description : '') || 'Editable Remotion composition',
@@ -4322,12 +4341,10 @@ Returns the rendered image so you can see it with your vision.`,
               }]);
             }
 
+            const openingFrameUrl = frameUrls[targetFrames.indexOf(0)];
+            if (openingFrameUrl) ctx.reviewedOpeningFrame = { designKey: openingFrameDesignKey(design), url: openingFrameUrl };
             const drafts = (ctx as any).__runCodeDrafts || [];
-            const previewBase64 = `data:image/jpeg;base64,${contactSheet.toString('base64')}`;
-            if (drafts.length > 0) {
-              drafts[drafts.length - 1].previewBase64 = previewBase64;
-              if (workspaceUrl) drafts[drafts.length - 1].previewUrl = workspaceUrl;
-            }
+            if (drafts.length > 0 && workspaceUrl) drafts[drafts.length - 1].previewUrl = workspaceUrl;
 
             console.log(`🖼️ [agent] preview_frame: contact sheet ${targetFrames.join(',')} (${(contactSheet.length / 1024).toFixed(0)} KB)`);
             const analysis = await analyzeDurablePreview(
@@ -4440,10 +4457,6 @@ Returns the rendered image so you can see it with your vision.`,
           ctx.abortSignal?.throwIfAborted();
 
           const drafts = (ctx as any).__runCodeDrafts || [];
-          const b64 = `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
-          if (drafts.length > 0) {
-            drafts[drafts.length - 1].previewBase64 = b64;
-          }
 
           let wsUrl = '';
           const snapN = ctx.snapshotImages.length;
@@ -4452,6 +4465,7 @@ Returns the rendered image so you can see it with your vision.`,
             const ws = await workspace.writeFile(wsPath, jpegBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
             if (!ws.success || !ws.storageUrl) throw new Error('Preview rendered, but screenshot persistence failed. Preserve this composition.');
             wsUrl = toPublicStorageUrl(ws.storageUrl);
+            if (targetFrame === 0) ctx.reviewedOpeningFrame = { designKey: openingFrameDesignKey(design), url: wsUrl };
             if (drafts.length > 0) drafts[drafts.length - 1].previewUrl = wsUrl;
             rememberWorkspaceMediaOutputs(ctx, [{
               path: wsPath,
@@ -4986,9 +5000,9 @@ Path is auto-generated from the current project and output type. Just provide a 
           if (lastDraft?.type === 'design') {
             // Design draft → publish via pendingDesign (renders on frontend)
             const designPayload = lastDraft.payload;
-            const preview = lastDraft.previewBase64 || '';
-
-            ctx.snapshotImages.push(preview);
+            const posterUrl = await saveOpeningFrame(ctx, designPayload, ctx.userId);
+            ctx.pendingDesignPosterUrl = posterUrl;
+            ctx.snapshotImages.push(posterUrl);
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
 
 

@@ -3,13 +3,14 @@ import ProjectEditorContainer from '@/components/ProjectEditorContainer'
 import ProjectEntryPreview from '@/components/ProjectEntryPreview'
 import { readEntryMedia, readOpeningLayers } from '@/lib/editor/project-layer-entry.server'
 import { playerLayerSources } from '@/lib/editor/layer-preview'
+import { isDesignContactSheet } from '@/lib/editor/project-snapshot'
 import { getOptimizedUrl } from '@/lib/supabase/storage'
 import { resolveNativeVideoPlaybackUrl } from '@/lib/video-playback-url'
 import type { VideoMeta } from '@/types'
 
 async function EarlyProjectMedia({ media, projectId }: { media: ReturnType<typeof readEntryMedia>; projectId: string }) {
   const data = (await media)?.row
-  const lcpUrl = data?.image_url && data.image_url !== '/video-placeholder.png'
+  const lcpUrl = data?.image_url && data.image_url !== '/video-placeholder.png' && !(data.design_path && isDesignContactSheet(data.image_url))
     ? getOptimizedUrl(data.image_url) : null
   const videoMeta = data?.video_meta as VideoMeta | null
   // Edited compositions open their persisted poster, rather than the raw source video.

@@ -1,9 +1,9 @@
 // @vitest-environment node
 import {beforeEach,describe,it,expect,vi}from'vitest';
-const s=vi.hoisted(()=>({render:vi.fn(),renderSingle:vi.fn(),extract:vi.fn(),write:vi.fn()}));
+const s=vi.hoisted(()=>({render:vi.fn(),renderSingle:vi.fn(),extract:vi.fn(),write:vi.fn(),read:vi.fn()}));
 vi.mock('@/lib/remotion-server',()=>({renderDesignFrames:s.render,renderDesignFrame:s.renderSingle}));
 vi.mock('@/lib/video-frame',()=>({extractVideoFrame:s.extract}));
-vi.mock('@/lib/workspace',()=>({writeFile:s.write}));
+vi.mock('@/lib/workspace',()=>({writeFile:s.write,readFile:s.read}));
 import {createTools}from'@/lib/agent-tools';
 let image:Buffer;
 beforeEach(async()=>{vi.resetAllMocks();image=await(await import('sharp')).default({create:{width:100,height:200,channels:3,background:'blue'}}).jpeg().toBuffer();s.render.mockResolvedValue([image,image,image]);s.renderSingle.mockResolvedValue(image);s.extract.mockResolvedValue(image);});
@@ -36,6 +36,41 @@ describe('preview screenshot persistence contract',()=>{
     expect(await(await import('sharp')).default(sheet).metadata()).toMatchObject({format:'jpeg',width:300,height:234});
     expect(ctx.__workspaceMediaOutputs).toHaveLength(4);
     expect(ctx.__runCodeDrafts[0].previewUrl).toBe(result.workspaceUrl);
+  });
+
+  it('publishes frame zero of the saved design after a multi-frame review', async () => {
+    const ctx = context();
+    const savedDesign = { ...ctx.__lastDesignPayload, code: 'function Composition(){return <AbsoluteFill />}' };
+    s.read.mockResolvedValue({ content: JSON.stringify(savedDesign) });
+    s.write.mockImplementation(async (path: string) => ({ success: true, storageUrl: 'https://example.com/' + path }));
+    const tools = createTools(ctx, { spec: { provider: 'test', supportsImageInput: true } } as any);
+    const sheet = await (tools.preview_frame.execute as any)({ frames: [36, 90, 170] });
+    const published = await (tools.publish_draft.execute as any)({ design_path: 'project/design.json' });
+
+    expect(published.success).toBe(true);
+    expect(s.renderSingle).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ code: savedDesign.code }), 0, expect.any(Object));
+    expect(ctx.pendingDesignPosterUrl).toMatch(/\/posters\/[a-f0-9]+\.jpg$/);
+    expect(ctx.__runCodeDrafts[0].previewUrl).toBe(sheet.workspaceUrl);
+    expect(s.write.mock.calls.at(-1)?.[1]).toEqual(image);
+    expect(Buffer.from(sheet.base64Data, 'base64')).not.toEqual(image);
+  });
+
+  it('reuses the matching individual zero frame and invalidates it on a design revision', async () => {
+    const ctx = context();
+    const design = { ...ctx.__lastDesignPayload, code: 'function Composition(){return <AbsoluteFill />}', editables: [] };
+    ctx.__lastDesignPayload = design;
+    s.read.mockImplementation(async () => ({ content: JSON.stringify(design) }));
+    s.write.mockImplementation(async (path: string) => ({ success: true, storageUrl: 'https://example.com/' + path }));
+    const tools = createTools(ctx, { spec: { provider: 'test', supportsImageInput: true } } as any);
+    const sheet = await (tools.preview_frame.execute as any)({ frames: [36, 0, 170] });
+    const publish = () => (tools.publish_draft.execute as any)({ design_path: 'project/design.json' });
+    expect((await publish()).success).toBe(true);
+    expect(ctx.pendingDesignPosterUrl).toBe(sheet.frameUrls[1]);
+    expect(s.renderSingle).not.toHaveBeenCalled();
+    design.props = { newTitle: 'Revision' };
+    expect((await publish()).success).toBe(true);
+    expect(ctx.pendingDesignPosterUrl).not.toBe(sheet.frameUrls[1]);
+    expect(s.renderSingle).toHaveBeenCalledOnce();
   });
 
   it.each([{success:true},{success:true,storageUrl:''},{success:false,storageUrl:'https://example.com/uncommitted.jpg'}])('rejects an incomplete contact sheet save (%j)',async(write)=>{

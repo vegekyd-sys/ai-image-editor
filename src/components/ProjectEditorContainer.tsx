@@ -2,7 +2,7 @@
 
 import { dedupeEditorMessages, videoCompletionMessageId } from '@/lib/editor/message-dedupe';
 import { preloadLayerImages } from '@/lib/editor/layer-preview'
-import type { OpeningLayerProject } from '@/lib/editor/project-snapshot'
+import { restoreDesignPoster, type OpeningLayerProject } from '@/lib/editor/project-snapshot'
 
 import { useAuth } from '@/hooks/useAuth'
 import { useProject } from '@/hooks/useProject'
@@ -165,7 +165,7 @@ export default function ProjectEditorContainer({
 
   const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
-    return sync ? dedupeVideoSnapshots(sync.snapshots as Snapshot[]) : null
+    return sync ? dedupeVideoSnapshots((sync.snapshots as Snapshot[]).map(restoreDesignPoster)) : null
   })
   const [initialMessages, setInitialMessages] = useState<Message[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
@@ -297,7 +297,7 @@ export default function ProjectEditorContainer({
   async function patchFromImageCache(snapshots: Snapshot[]): Promise<Snapshot[]> {
     const keys: string[] = []
     for (const s of snapshots) {
-      if (!s.image) keys.push(`snap:${s.id}`)
+      if (!s.image && !s.legacyContactSheetPoster) keys.push(`snap:${s.id}`)
       for (const t of s.tips) {
         if (!t.previewImage && t.editPrompt) keys.push(`tip:${s.id}:${t.editPrompt}`)
       }
@@ -307,7 +307,7 @@ export default function ProjectEditorContainer({
     if (cacheMap.size === 0) return snapshots
     return snapshots.map(s => ({
       ...s,
-      image: s.image || (cacheMap.get(`snap:${s.id}`) ?? ''),
+      image: s.image || (s.legacyContactSheetPoster ? '' : cacheMap.get(`snap:${s.id}`) ?? ''),
       tips: s.tips.map(t => {
         if (t.previewImage || !t.editPrompt) return t
         const cached = cacheMap.get(`tip:${s.id}:${t.editPrompt}`)
@@ -323,7 +323,7 @@ export default function ProjectEditorContainer({
     getCachedProjectData(projectId).then(async (cached) => {
       if (!cached || cancelled || shownRef.current) return
       if ((cached.snapshots as Snapshot[]).length === 0) return
-      const patched = await patchFromImageCache(cached.snapshots as Snapshot[])
+      const patched = await patchFromImageCache((cached.snapshots as Snapshot[]).map(restoreDesignPoster))
       if (cancelled || shownRef.current) return
       shownRef.current = true
       setInitialSnapshots(dedupeVideoSnapshots(patched))

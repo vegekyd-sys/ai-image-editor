@@ -443,8 +443,8 @@ export default function Editor({
         if (!fresh) return s;
         let updated = s;
         // Merge missing image/imageUrl (video snapshots loaded from cache before DB)
-        if (!s.image && fresh.image) {
-          updated = { ...updated, image: fresh.image, imageUrl: fresh.imageUrl };
+        if (fresh.image && (!s.image || (s.legacyContactSheetPoster && !fresh.legacyContactSheetPoster))) {
+          updated = { ...updated, image: fresh.image, imageUrl: fresh.imageUrl, legacyContactSheetPoster: fresh.legacyContactSheetPoster };
           changed = true;
         } else if (!s.imageUrl && fresh.imageUrl) {
           updated = { ...updated, imageUrl: fresh.imageUrl };
@@ -3292,14 +3292,15 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     return true;
   }, []);
 
-  const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string) => {
+  const handleDesignPoster = useCallback((messageId: string, posterDataUrl: string, snapshotId?: string) => {
     if (!posterDataUrl) return;
     // Update message image
     setMessages(prev => prev.map(m => m.id === messageId ? { ...m, image: posterDataUrl } : m));
     // Update snapshot image + trigger persistence + tips
-    const snap = snapshotsRef.current.find(s => s.messageId === messageId);
+    const snap = snapshotsRef.current.find(s => snapshotId ? s.id === snapshotId : s.messageId === messageId);
     if (snap && !snap.image) {
       setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, image: posterDataUrl } : s));
+      if (snap.legacyContactSheetPoster) return;
       onSaveSnapshot?.({ ...snap, image: posterDataUrl }, snapshotsRef.current.indexOf(snap), (url) => {
         setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
       });
@@ -3475,16 +3476,17 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   useEffect(() => {
     if (inactive) return;
     for (const snap of snapshots) {
+      if (snap.legacyContactSheetPoster && snap.id !== currentSnap?.id) continue;
       if (snap.design && !snap.image && !posterCapturedRef.current.has(snap.id)) {
         posterCapturedRef.current.add(snap.id);
         import('@/components/RemotionRenderer').then(({ captureDesignPoster }) =>
           captureDesignPoster(snap.design!).then(poster => {
-            if (poster) handleDesignPoster(snap.messageId, poster);
+            if (poster) handleDesignPoster(snap.messageId, poster, snap.id);
           })
         ).catch(() => {});
       }
     }
-  }, [snapshots, handleDesignPoster, inactive]);
+  }, [snapshots, handleDesignPoster, inactive, currentSnap?.id]);
 
   const videoStartTimeRef = useRef<number>(0);
   const handleVideoTap = useCallback((videoRect?: DOMRect, posterSrc?: string, animId?: string, startTime?: number) => {
