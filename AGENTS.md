@@ -2,6 +2,8 @@
 
 Makaron 是图片、视频、音乐与动态设计产品。用中文协作；只读取本次任务涉及的代码和资料。
 
+首次参与或从其他 Agent 接手时，从[维护与 PR 交接指南](CONTRIBUTING.md)进入。
+
 ## 开发与定位
 
 较大代码/运行时实验用独立 worktree，保留他人改动；设计换方向前保留对比版本。执行和授权沿用全局规则。媒体相关改动检查实际可查看/播放的产物，发布按已有 release 流程验收并报告实际完成阶段。
@@ -42,6 +44,6 @@ Preview 与生产发布默认使用普通文件增量上传，不加 `--archive=
 
 ## 项目记忆与历史资料
 
-长期项目上下文先查 `~/.codex/wiki/projects/makaron/index.md`，其 `memory/MEMORY.md` 是项目记忆总索引，按主题恢复架构、既有决策和踩坑。Codex 跨会话另查 `~/.codex/memories/MEMORY.md`。已有相关背景直接沿用。
+共享流程与验收依据维护在仓库文档和对应 PR 中。可用本机项目记忆的维护者进入长期项目时，优先查 `~/.codex/wiki/projects/makaron/index.md`，其 `memory/MEMORY.md` 是项目记忆总索引，按主题恢复架构、既有决策和踩坑。Codex 跨会话另查 `~/.codex/memories/MEMORY.md`。已有相关背景直接沿用。
 
 需要过去的实验依据时，定点搜索 `progress.md` 或 `docs/agent-guidance/legacy-claude.md`；旧 Codex 差异见 `docs/agent-guidance/legacy-agents.md`。其中的模型、价格、实例和实验状态不是当前事实。新功能知识更新到对应文档，不逐次堆入常驻指南。

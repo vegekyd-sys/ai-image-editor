@@ -66,6 +66,10 @@ npx makaron-cli responses get <runId> --pick first_video_url
 
 See [packages/makaron-cli/README.md](packages/makaron-cli/README.md) for the full CLI contract and [Makaron_MCP_README.md](Makaron_MCP_README.md) for MCP tools.
 
+## Contributing
+
+For repository updates and PR handoffs, start with the [maintainer guide (中文)](CONTRIBUTING.md). Target the `dev` branch for routine changes.
+
 ## Repository Map
 
 ```text
@@ -149,19 +153,9 @@ printf 'value' | npx vercel env add NAME preview --force
 
 ## Deployment
 
-Production:
+Use `pnpm run runner:preview <commit> --skip-domain` for an isolated Preview. For an authorized production release, run `pnpm run release:prod` from the clean worktree that owns `dev`. See the [release checklist](docs/makaron-release-checklist.md) for environment synchronization, user-flow acceptance, and CLI publishing.
 
-```bash
-npx vercel --prod
-```
-
-Preview:
-
-```bash
-npx vercel
-```
-
-Production and preview share the same Supabase database. Preview deployments are expected to support login.
+Production and Preview share the same Supabase database. Preview deployments are expected to support login.
 
 ## Current Product Highlights
 
