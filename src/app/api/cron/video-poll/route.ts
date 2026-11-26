@@ -92,6 +92,7 @@ export async function GET(req: NextRequest) {
       if (changed) processed++
       continue
     }
+    const isMagi2 = vm.model === 'magi-2'
     const createdAt = vm.createdAt || snap.created_at
     const createdAtMs = new Date(createdAt).getTime()
     const age = Number.isFinite(createdAtMs) ? Date.now() - createdAtMs : 0
@@ -142,9 +143,24 @@ export async function GET(req: NextRequest) {
         else if (await tryHandleVideoFailure(snap.id, result.error)) processed++
       } else if (result.status === 'completed' && result.videoUrl) {
         const updatedMeta = { ...vm, status: 'completed' as const, videoUrl: result.videoUrl, providerUrl: result.videoUrl, ...(result.stage ? { pipelineStage: result.stage, baseVideoUrl: result.baseVideoUrl, enhancementStatus: result.enhancementStatus, requestedResolution: result.requestedResolution, resolution: result.actualResolution ?? vm.resolution } : {}) }
-        await admin.from('snapshots').update({
-          video_meta: updatedMeta,
-        }).eq('id', snap.id)
+        if (isMagi2 && ownerUserId) {
+          const { uploadVideo } = await import('@/lib/supabase/storage')
+          const response = await fetch(result.videoUrl, { signal: AbortSignal.timeout(90_000) })
+          if (!response.ok) throw new Error(`MAGI-2 output download failed (HTTP ${response.status}).`)
+          const buffer = new Uint8Array(await response.arrayBuffer())
+          const { probeMP4Dimensions } = await import('@/lib/mp4-probe')
+          const dimensions = probeMP4Dimensions(buffer)
+          if (!dimensions) throw new Error('MAGI-2 result is not a readable MP4.')
+          const permanentUrl = await uploadVideo(admin, ownerUserId, snap.project_id, snap.id, buffer)
+          if (!permanentUrl) throw new Error('Could not save the MAGI-2 original.')
+          Object.assign(updatedMeta, dimensions, {
+            videoUrl: permanentUrl,
+            videoPath: `${ownerUserId}/${snap.project_id}/videos/${snap.id}.mp4`,
+          })
+        }
+        const update = admin.from('snapshots').update({ video_meta: updatedMeta }).eq('id', snap.id)
+        if (isMagi2) update.eq('video_meta->>taskId', vm.taskId).eq('video_meta->>status', 'processing')
+        await update
         if (ownerUserId) {
           const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair')
           await ensureVideoPosterForSnapshot({
@@ -152,19 +168,19 @@ export async function GET(req: NextRequest) {
             ownerUserId,
             projectId: snap.project_id,
             snapshotId: snap.id,
-            videoUrl: result.videoUrl,
+            videoUrl: updatedMeta.videoUrl,
             currentImageUrl: snap.image_url,
           })
         }
         processed++
       }
       // still processing after 30min → mark timeout
-      if (result.status !== 'completed' && result.status !== 'failed' && !vm.taskId.startsWith('video-retake-') && !vm.taskId.startsWith('video-pipeline-') && age > 30 * 60 * 1000) {
+      if (!isMagi2 && result.status !== 'completed' && result.status !== 'failed' && !vm.taskId.startsWith('video-retake-') && !vm.taskId.startsWith('video-pipeline-') && age > 30 * 60 * 1000) {
         if (await tryHandleVideoFailure(snap.id, 'Timed out after 30 minutes')) processed++
       }
     } catch (e) {
       console.error(`[cron/video-poll] Error polling ${snap.id}:`, e)
-      if (!vm.taskId.startsWith('video-retake-') && !vm.taskId.startsWith('video-pipeline-') && age > 30 * 60 * 1000) {
+      if (!isMagi2 && !vm.taskId.startsWith('video-retake-') && !vm.taskId.startsWith('video-pipeline-') && age > 30 * 60 * 1000) {
         if (await tryHandleVideoFailure(snap.id, 'Provider polling failed after 30 minutes')) processed++
       }
     }

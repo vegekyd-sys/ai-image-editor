@@ -1,5 +1,5 @@
 {
-  "routingFingerprint": "4c24e2e7d887b80157e0b62d9ae10c2a8c082d14c5c00f82a79ae047d36f41ec",
+  "routingFingerprint": "fae42bb1eeaad40db411badd0979ade9101cee9da1650d871a316a21e4fc93a5",
   "catalogRevision": "f3fbcf20c5b25e758751f2cb3183c09303f7243012c2fb591534ab72f710e7a4",
   "kind": "controlled-live-natural-language-routing",
   "model": "deepseek-flash",
@@ -34,28 +34,23 @@
           "name": "read_file",
           "path": "skills/long-video-storyboard/SKILL.md",
           "executed": true
-        },
-        {
-          "name": "read_file",
-          "path": "prompts/animate.md",
-          "executed": true
         }
       ],
-      "text": "我先读取这次需要用到的 Skill 文件，确认分别适用哪三个（长视频导演、人物和场景锚点、逐段分镜），再给出计划。已读完 `long-video-director`、`long-video-anchor`、`long-video-storyboard` 和 `prompts/animate.md`。本轮不做任何生成、分析或写项目，只给选型和计划。\n\n## 选定 Skill 与理由\n\n- **long-video-director**（主编排）：60 秒超过单次生成上限，必须切成 4×15 秒独立片段；它掌握「故事方向 → 锚点 → 分段大纲 → 导演节拍板 → 分镜 → 脚本」的审批链，正好对应你要的完整导演规划与逐段分镜。\n- **anchor**（人物、场景和道具锚点）：你要求跨段保持人物与造型一致；它负责从 `<<<media_1>>>`、`<<<media_2>>>` 生成角色卡（正/侧/背视图＋表情），并保证所有卡属于同一渲染风格。\n- **storyboard**（逐段分镜）：每段一张 6 格以上的分镜图，带时长/景别/运镜/衔接标注，是锚点与最终脚本之间唯一可审的视觉检查点。\n- **prompts/animate.md**（脚本与提交规范）：只在最后写 15 秒分段脚本时使用，台词、音乐、音效全部写进 `story_prompt`，不另做音频。\n\n不选：`video-edit`（无源视频可改）、Studio/Remotion（你未要求可编辑时间线）、`photo-to-video`（不是单图渐进故事）、`cinematic-video`（其制作流程偏 Studio 评估，而分段锚点一致性由 long-video-director 负责）。\n\n## 简短制作计划\n\n- 第 1 步｜故事方向：给 2–3 个方向（概念、调性、4 段结构、最小锚点集），你选定或修改。\n- 第 2 步｜资产清单：锁定不可漂移的视觉事实（脸型、发型、服装、年龄、体态、场景地标），列出所需角色卡×2、场景卡、道具卡，以及每段用哪些资产、哪些道具/手势是跨段接缝关键点。\n- 第 3 步｜生成并自查锚点：以两张参考图作为真实图片输入（不是只写文字），逐张生成、逐张核对身份与风格族，不合格只重做那一张。\n- 第 4 步｜分段大纲与接缝：S1–S4 各 15 秒，标注用途、引用资产、起始状态/结束状态、与相邻段的画面交接（如 S1 结尾手停在门把上 → S2 开场同一构图推进）。\n- 第 5 步｜导演节拍板：每段写情绪曲线、秒数节奏、视觉爆点帧、镜头功能、运镜语法、接缝方式、风险点，用段落短句呈现，不做表格。\n- 第 6 步｜逐段分镜：按段落顺序单独生成 4 张分镜（一张一段，不并行），人物锚点作为主参考、场景/道具卡作为附加参考，比例与成片一致。\n- 第 7 步｜分段脚本：每段 ≤15 秒，",
+      "text": "我先读取长视频导演、人物锚点和分镜三个 Skill，确认流程规范后再给出适合的方案。已读取三个 Skill：**long-video-director**（主流程，负责八个闸门编排）、**long-video-anchor**（人物、场景、道具锚点卡）、**long-video-storyboard**（每段一张 6+ 格分镜图）。\n\n选择理由：你要的是 60 秒、分段一致、带完整导演规划与逐段分镜的**生成式**短片，不是可编辑合成，所以走 long-video-director；它强制每段 ≤15s、每段自包含（模型不知道上一段发生了什么），一致性靠锚点卡加逐段分镜锁定，正好对应你的诉求。\n\n制作计划（闸门制，每步停下等你确认）：\n- 闸门1 故事方向三选一（本轮）\n- 闸门2 资产清单与锚点计划：固定不漂移的视觉事实\n- 闸门3 生成并自检锚点卡（人物×2、场景×1、道具×1，共约 4 张）\n- 闸门4 分段大纲与接缝设计：60s → 4×15s\n- 闸门5 导演节拍板：情绪曲线、秒级节奏、记忆帧、镜头语法、接缝、风险\n- 闸门6 每段一张 6+ 格分镜图，逐段串行生成\n- 闸门7 逐段成稿脚本 + 预检（每段内嵌锚点与分镜引用）\n- 闸门8 你确认具体脚本后才逐段提交渲染\n\n三个故事方向（都只用人物甲、乙这张两张参考图，无需新增素材）：\n- **方向 A《末班车》**：末班地铁上两个陌生人因一件遗留物被迫同行，一夜之后各自放下心结。—— 调性：温柔写实、城市夜景；4×15s；最小锚点：甲角色卡、乙角色卡、末班车厢场景卡、遗留物道具卡。\n- **方向 B《寻物启事》**：一张旧照片被贴满街角，两人从互相怀疑到共同追查同一个失主。—— 调性：轻悬念加治愈；4×15s；锚点：甲、乙、街角场景卡、旧照片道具卡。\n- **方向 C《替身》**：两人被迫假扮一对情侣完成一场面试，越演越像真的。—— 调性：反差喜剧、节奏快；4×15s；锚点：甲、乙、面试房间场景卡、证件道具卡。\n\n请回一句选哪个方向，并告诉我画面比例（竖屏 9:16 还是横屏 16:9；不指定我按 9:16 走）。选定后我进入闸门2，先给资产清单与锚点计划，不动任何生成。",
       "usage": {
-        "inputTokens": 89506,
+        "inputTokens": 74904,
         "inputTokenDetails": {
-          "noCacheTokens": 20130,
-          "cacheReadTokens": 69376
+          "noCacheTokens": 27544,
+          "cacheReadTokens": 47360
         },
-        "outputTokens": 2012,
+        "outputTokens": 1557,
         "outputTokenDetails": {
-          "textTokens": 901,
-          "reasoningTokens": 1111
+          "textTokens": 753,
+          "reasoningTokens": 804
         },
-        "totalTokens": 91518
+        "totalTokens": 76461
       },
-      "durationMs": 12567
+      "durationMs": 10268
     },
     {
       "id": "natural-reference-replication",
@@ -77,21 +72,21 @@
           "executed": true
         }
       ],
-      "text": "**选用的 Skill：`video-edit` → replication 档案（已读 `skills/video-edit/SKILL.md` 与 `references/replication-protocol.md`）**\n\n理由：<<<media_1>>> 是 12 秒的**结构性权威**，并不只是风格参考；你需要锁死镜头顺序、时长、构图、运镜、动作和节拍，并把人物换成 <<<media_2>>>。这属于“保留镜头语法、替换内容”，既不是 source-edit（源像素不作底片），也不是 reference-video-studio（不要求可量化复刻），同时不需要 `long-video-director` —— 12 秒落在单次生成能力内（Wan 3.0 Prime 2–30s）。\n\n**制作计划（本轮到此为止）**\n1. **探测文件真实信息**：读取时长、比例、帧率、音轨，作为复制契约的基准时钟。\n2. **完整理解片段**：按 4–6 个时间点抽帧，查看人物、构图、动作阶段和转场，并分析音频节奏；如果存在人声，就补做转写。\n3. **锁定 Video DNA**：用简洁的 Shot Blueprint 记录分镜区间、镜头与主体运动、替换字段、保留字段，以及验收优先级。\n4. **路由**：`wan-3.0-prime` 720p 直连参考复刻（一次调用完成整段），设置 `video_intent=\"replicate\"`；契约里把人物锚点映射到 <<<media_2>>>，节拍和动作节拍写进按时间分段的 story_prompt。\n5. **生成前确认费用与次数上限**，并只做一次付费尝试；QA 后如果发现可测量的缺陷，只允许修正一次。\n6. **验收**：逐项比对边界、顺序、时长、构图、运镜、节拍、身份一致性和解码完整性，并明确列出动作轨迹或遮挡处的偏差残差。\n\n确认后我再开始探测与抽帧。",
+      "text": "**选用 Skill：`video-edit`（replication / 复刻档）**\n理由：原片的镜头顺序、时长、构图、运镜、动作和节拍就是必须遵循的硬性结构，人物只是要替换的内容层，这属于“以原片为结构基础、重新生成内容”，所以走 replication，而不是 source-edit 的局部重绘；也因为有可测量的结构要求，不走 `reference-video-studio`（只参考情绪和风格）。\n\n**简短制作计划**\n1. **勘察（本地完成）**：读取 <<<media_1>>> 的真实时长、宽高、帧率、音频轨道和节拍；按镜头边界抽取关键帧（开头/动作/转折/结尾）；需要对齐口播节奏时再转写台词。<<<media_2>>> 只作为人物身份和外观的参考，不改动原片结构。\n2. **确定镜头结构（Video DNA）**：按 `shot-blueprint.md` 写一份精简版镜头结构记录，包含每个镜头的时间范围、构图、运镜、动作阶段、转场、画面文字，以及哪些必须保留、哪些需要替换，作为唯一的节拍基准，并作为验收依据。\n3. **选择执行路线**：12 秒可以放进单次生成，因此走“整片直接参考复刻”——用 `generate_animation`，`video_intent=\"replicate\"`，`replication_contract` 填写已经量过的时长，以及人物锚点和替换身份之间的映射；时间相位与原生音效和音乐写进 `story_prompt`。默认候选是 Wan 3.0 Prime 720p（也可以按你的指定换成 Seedance 2.5 参考生成）；不采用逐段拼接，也不做 Retake 局部替换。\n4. **确认后生成**：生成前先把镜头结构记录和完整脚本给你确认（新视频生成需要你点确认），确认后才提交；生成完成后，按结构记录逐项核对镜头顺序和时长、构图和运镜、动作相位、人物一致性和节拍对齐，可解码性也要检查。只允许针对具体问题做一次基于证据的修正。\n\n现在停在规划阶段，没有做任何分析、上传、生成或写入。",
       "usage": {
-        "inputTokens": 109554,
+        "inputTokens": 109708,
         "inputTokenDetails": {
-          "noCacheTokens": 3314,
+          "noCacheTokens": 3468,
           "cacheReadTokens": 106240
         },
-        "outputTokens": 1104,
+        "outputTokens": 1019,
         "outputTokenDetails": {
-          "textTokens": 533,
-          "reasoningTokens": 571
+          "textTokens": 571,
+          "reasoningTokens": 448
         },
-        "totalTokens": 110658
+        "totalTokens": 110727
       },
-      "durationMs": 10134
+      "durationMs": 8577
     },
     {
       "id": "natural-product-explainer",
@@ -108,21 +103,21 @@
           "executed": true
         }
       ],
-      "text": "我先读取适用的 Skill 文件，确认工作流后再给计划。**选定 Skill：`explainer-video`**（已读取 `skills/explainer-video/SKILL.md`）。理由：请求是\"30 秒中文产品讲解 + 旁白 + 字幕\"，正是它的触发范围；而它明确写明——讲解标签或超过 15 秒都不等于需要 Remotion，生成式场景在单次模型上限内应走原生音视频合生成。30 秒正好落在 Seedance 2.5 单次 4–30s 上限内，所以不启用 Studio Run / Remotion 组合链，也就无需再读 Remotion 导演契约。\n\n**简短制作计划**\n1. 确认产品信息（见下），定 16:9 或 9:16。\n2. 写 30 秒中文脚本：约 90–115 字旁白，四段结构（0–5s 痛点钩子 / 5–13s 它是什么 / 13–24s 怎么工作 / 24–30s 首次使用收尾），每段标一屏视觉与一句字幕。\n3. 交你确认可见脚本（脚本门禁），确认后单次 `generate_animation`：`seedance-2.5-eco`，30s，原生普通话旁白 + 配乐 + 简体中文字幕，一次成像，不另调独立配音。\n4. 交付即预览；若字幕字准要求极高，再加一步仅叠加可编辑字幕（画面与声音不动）。\n\n需要你补一个信息才能开工：**具体是什么产品、它最核心的工作原理一句话是什么？**（有产品图或落地页也可以给我，画面会贴得多。）",
+      "text": "我先读取最匹配的 Skill 文件，再给出选择理由和制作计划。**选用 Skill：`explainer-video`，也就是 Studio Run 的 `explainer-video` / `generated-explainer` 路线**\n\n理由：30 秒、面向新用户、要讲清“产品如何工作”，核心是把工作过程和工作原理呈现出来，单纯用一次生成难以准确呈现。这条 Skill 默认包含旁白、连续配乐、音效和字幕，并要求用实测 ASR 时间码对齐分镜和字幕，最适合这种需要带字幕的机制讲解，不需要做成纯幻灯片。\n\n**制作计划（30 秒，16:9，暂定 1080p 30fps）**\n1. 先确认产品名称和三个要点：它做什么、给谁用、怎么运转。\n2. 写 30 秒中文脚本：0–4s 用一句话点题；4–12s 呈现用户原来的痛点和场景；12–24s 用分层动画讲清工作流程，这是主线；24–30s 用一个结果镜头和一句收尾；旁白控制在约 90–115 字。\n3. 一次性生成声音：用一次 `generate_audio({kind:\"mixed\"})` 生成旁白、轻快的器乐底乐、界面提示音和转场，不拆成多个音轨。\n4. 用 `transcribe_audio` 取得按句子的实测时间码，根据真实语速确定分镜边界，再写 Remotion 构图：主视觉用流程、层级、时间轴动画；需要真实产品质感时，只加 1–2 个生成镜头或贴片；字幕在底部安全区域，每屏不超过两行，并避开主体和图表。\n5. 检查关键帧（开头、机制展开、结尾），确认字幕和画面、旁白三者对应后发布草稿，再导出 MP4。\n\n现在已停在生成之前，没有分析媒体、没有上传或写入项目。请告诉我产品是什么（一句话就行：叫什么、给谁解决什么问题），我就能给出可确认的脚本。",
       "usage": {
-        "inputTokens": 75441,
+        "inputTokens": 75639,
         "inputTokenDetails": {
-          "noCacheTokens": 6193,
+          "noCacheTokens": 6391,
           "cacheReadTokens": 69248
         },
-        "outputTokens": 1167,
+        "outputTokens": 1515,
         "outputTokenDetails": {
-          "textTokens": 417,
-          "reasoningTokens": 750
+          "textTokens": 496,
+          "reasoningTokens": 1019
         },
-        "totalTokens": 76608
+        "totalTokens": 77154
       },
-      "durationMs": 9771
+      "durationMs": 11075
     },
     {
       "id": "natural-spatial-explainer",
@@ -139,21 +134,21 @@
           "executed": true
         }
       ],
-      "text": "我先读讲解片这条 Skill，确认它的适用边界与工作流。## 选用的 Skill\n\n**`explainer-video`（唯一主 Skill）**\n\n理由：\n\n- 这正是讲解片场景：30 秒、要给初中生讲清楚一个概念、并且要**可编辑**交付。Skill 的默认交付就是发布一条 Remotion composition，而不是一段无法再改的生成视频。\n- 它的「Explain with 3D」小节直接命中这次的关键约束：**空间关系本身承载知识点时（原文就点名了月相 moon phases），走 authored composition + 帧驱动的 ThreeCanvas**。你的「同一套真实 3D 日地月模型、先太空后地球」只有在同一个场景图、同一时间轴里换机位才能保证——生成式视频每次都是重新画一遍，无法承诺「同一颗月球」。所以这里不走 `generate_animation`。\n- 文字/字幕/标注必须留在 canvas 之外，才能保持可编辑，这也是该 Skill 明确写的。\n\n排除项及理由：\n\n- `motion-design-video`：字体动效与图表为主，撑不起真 3D 光照关系。\n- `long-video-director`：其用途是多段 provider 生成与跨片段锚点一致性，30 秒单片不需要，也会失去可编辑性。\n- `beat-sync-video` / `reference-video-studio`：没有音乐卡点或参考片复刻的诉求。\n- `native-audiovisual` 全生成路线：会让「同一模型、两个视角」的物理一致性无法保证。\n\n## 简短制作计划\n\n1. **Studio Run**：recipe `explainer-video`，锁定 30s / 16:9 / 1080p / 30fps / Remotion / 可编辑 / 需要旁白 / 需要字幕。\n2. **创意包**：一句定位（「月相不是地球的影子，是我们看被照亮那一半的角度」）+ 两个不同概念（A：视角翻转对比；B：公转一周渐次揭示）+ 选定一个 + 完整定时中文旁白（约 95–110 字，30 秒语速）。\n3. **音频**：按 Skill 只做**一次** `mixed` 生成（旁白＋持续配乐＋关键音效），再用 `transcribe_audio` + `expected_sections` 拿到实测时间轴，用它决定分镜边界，而不是靠估算。\n4. **分镜（约 3 段）**：太空机位看平行太阳光与半个被照",
+      "text": "**选定 Skill：`explainer-video`**（仅此一个）\n\n理由：它的 “Explain with 3D” 分支明确指向这类需求——空间关系承载概念（月相、机构、剖面）时，走本地 authored composition，用帧驱动的 `ThreeCanvas` 搭一套真实 3D 场景，多视角复用同一场景，标签类文字留在画布外保持可编辑。这正好满足“同一套日地月模型、先太空后地球视角、可编辑交付”三个硬要求；而原生视频生成做不到同一几何体跨镜头一致、也谈不上可编辑。\n\n**制作计划（30s，16:9，可编辑 Remotion，阶段门控）**\n\n1. **Studio Run 开跑**：recipe `explainer-video`，`delivery_promise` 锁 30s / 1920×1080 / 30fps / remotion / editable / 有旁白 / 有字幕。\n2. **创意包**：先读 Shared Remotion Director 契约与视觉方向，给出两个差异方向并选一，写完整中文分段脚本（按 30s、约 180–230 字/分钟控制，约 95–110 字；4 段：钩子 → 太空看光照 → 地球看同一颗月亮 → 一句话收束），每段附 `onScreenText`。\n3. **3D 场景架构（一条时间轴，两台相机）**：\n   - 单一场景图：太阳（平行光方向）、地球、月球，固定轨道半径与 29.5 天周期比例，月球不自转（潮汐锁定）；全部由 `frame` 纯函数推出角度，无随机。\n   - 第一视角：俯视黄道面近侧光，突出“月球永远一半亮一半暗”＋地球阴影暗面。\n   - 第二视角：切到地球观察位，看**同一月球**在轨道不同位置呈现的月相（新月→上弦→满月→下弦）。\n   - 画布外做可编辑文字层：月相名称、太阳光方向箭头、进度刻度。\n4. **音频**：一次 `generate_audio({ kind: \"mixed\" })`（旁白＋连续配乐＋少量转场音效），随后 `transcribe_audio` 拿真实时间码对齐分镜，字幕在 Composition 内自写、跟随 ASR 拍点。\n5. **QA 与交付**：`preview_frame` 抽查四段边界与结尾帧（重点看同一月球在各视角下角度是否连续、字幕不压主体），`publish_draft` 出可编辑草稿，`materialize_media` 出 MP4。\n\n**现在停在此处**：未做任何图片/视频/音频生成，未上传、未导出、未运行代码、未写项目文件。你确认方向（尤其“太空俯视 vs 地球视角”的切换时机、是否要中文旁白）后，我再进入第 1–2 步。",
       "usage": {
-        "inputTokens": 75502,
+        "inputTokens": 75901,
         "inputTokenDetails": {
-          "noCacheTokens": 6254,
-          "cacheReadTokens": 69248
+          "noCacheTokens": 6397,
+          "cacheReadTokens": 69504
         },
-        "outputTokens": 1878,
+        "outputTokens": 1533,
         "outputTokenDetails": {
-          "textTokens": 594,
-          "reasoningTokens": 1284
+          "textTokens": 699,
+          "reasoningTokens": 834
         },
-        "totalTokens": 77380
+        "totalTokens": 77434
       },
-      "durationMs": 12732
+      "durationMs": 10022
     },
     {
       "id": "natural-beat-sync-product",
@@ -175,21 +170,21 @@
           "executed": true
         }
       ],
-      "text": "先读两个匹配的 Skill，再给出选型理由和计划。**选用的 Skill（2 个）**\n\n1. **beat-sync-video** — 核心流程。需求是“卡点”，音乐决定切点与动作落点；三条素材是现成的实拍片段，正好走它的“先把故事拆成镜头表 → 再从素材里找可用片段 → 按音频重音锁定时间轴”的做法（15 秒抖音带货同类商品蒙太奇属它的标准场景）。\n2. **tiktok-video** — 交付包装。它是平台交付层而非生产引擎，负责 1080×1920 竖屏全屏、安全区文字排版、hook/body/close 结构与最终导出 QA。两个 Skill 的推荐顺序也正是 beat-sync → tiktok。\n\n**不需要的**：`video-edit`（不是改画面内容，只是重剪+卡点）、`generate_animation`（无新生成画面需求）、`source-video-studio`（无口播/访谈主线）。\n\n**制作计划（15 秒，暂不执行）**\n\n- 节拍基准：默认 120–128 BPM，一小节约 1.9 秒，15 秒约 7–8 个可用落点；先建 cue sheet（正片后半段同样分配重音，不只做前 4 秒）。\n- 叙事顺序（结果先行，再回看过程）：`<<<media_3>>>` 扣合微距做开场“咔”的钩子 → `<<<media_2>>>` 俯拍手装盖，动作落在重音上 → `<<<media_1>>>` 侧面成品作为 proof / 收尾。素材只有 3 条，因此靠同角度变焦、微距→全貌的景别变化和动作中切（cut on action）补足节奏，而不是重复正拍。\n- 音频：目前三素材无音轨。默认走 beat-sync 的音乐路线——若无上传曲目，则生成一条原创器乐 BGM（可按 15 秒定长），另可选一句短 VO；素材原声静音。\n- 文字：仅用 hook + 收尾 CTA 两处，遵守抖音安全区；不套用通用黑底字幕模板。\n- 交付：可编辑 Remotion Composition（1080×1920，15 秒），preview_frame 审开场/中段/结尾 → publish_draft → materialize 导出 MP4，并复看有声、正常速度下的后半段卡点。\n\n执行前需要你确认一件事：**BGM 用我生成的原创器乐，还是你上传一首指定歌曲？** 另外三条素材的实拍内容我目前只按元信息理解，正式开工时会先看画面再定具体切点。",
+      "text": "我先读两个最相关的 Skill：音乐卡点剪辑（beat-sync-video）和抖音带货交付（tiktok-video）。**选定 Skill（仅两个，均已读完）**\n\n| Skill | 用途 | 理由 |\n|---|---|---|\n| `beat-sync-video` | 主控 | 需求本质是\"音乐定节拍\"的剪辑：卡点/踩点、产品 montage 正是它的覆盖范围。它负责先写故事→shot list→按音频重音建 cue sheet→卡点与字幕同轨。 |\n| `tiktok-video` | 交付包装 | 抖音是投放目的地，需要 9:16 竖屏、1080×1920、安全区、文字角色分工（hook／beat label／close）与导出 QA。它引用 beat-sync 而不替代它，顺序为 beat-sync → tiktok-video。 |\n\n**不选的路线及原因**\n- 不走 `generate_animation`：素材是真实产品实拍（杯身／装盖／扣合微距），画面本身就是证据，重生成会丢掉真实质感与产品一致性。\n- 不走 `video-edit` 的 retake/local edit：没有要修的镜头，只需重排与卡点。\n- 不走 `video-ffmpeg-lab`：卡点需要可编辑、可复盘的确定性时间轴，不是一次性 FFmpeg 拼接。\n- 不走 `source-video-studio`／`talking-head`：无口播、无 A-roll 清理需求。\n\n**制作计划（15s，9:16 竖屏 1080×1920，可编辑 Remotion）**\n\n1. **音源决策**（当前唯一阻塞项）：`beat-sync-video` 要求先有可播放的曲目才能建节拍表。请二选一——你上传一首歌／MP3，或我按\"紧凑脉冲、重低音落点、结尾收束\"生成一首约 15.4s 的原创 BGM（留 0.4s 尾淡出）。\n2. **故事重排**（不是素材顺序）：结果先行 → 反向还原 → 证据收束。建议骨架：扣合微距的\"咔哒\"特写做冷开场钩子 → 俯拍装盖的手部动作做过程 → 侧面杯身稳态做产品收束（bookend 前后呼应）。\n3. **shot list**：为每步写明可见证据、动作相位、景别与可用时长。三支素材量偏薄，预计靠裁切景别（微距／中景）、动作相位截取与速率变化扩展覆盖，而不是重复放同一段。\n4. **读条件引用**——锁定时间轴前必读：`beat-sync-video/references/timing-and-review.md`（重音、源偏移、尾淡出）、`music-led-captions.md`（字幕方向）、`tiktok-video/references/platform-layout.md`（安全区）、`delivery-qa.md`（尺寸与导出校验）。\n5. **cue sheet 与卡点**：从实际会播出的音频取重音，覆盖后半段；每个重要 hit 对应一个可观察的变化（切点、景别跳变、揭晓，或动作内部的瞬间），避免\"只换字幕不换画面\"的伪卡点。\n6. **文字**：hook 一句（前 2 秒内说清卖点／悬念）、可选 2–3 个 beat label、一句 close/CTA。单一主张优先，不做 hook＋caption＋label＋badge 堆叠。\n7. **音频**：素材原声默认静音（微距扣合声如需保留，作为单独一次刻意例外处理），成品轨为音乐（＋可选极短 VO）。\n8. **QA 与交付**：`preview_frame` 看开头／中段／结尾，确认主体与扣合点在竖屏安全区内；`publish_draft` 出可编辑草稿，`materialize_media` 出 MP4 后再带声复核主卡点与结尾半秒是否完整。\n\n**已在此停止**：未分析媒体、未上传／导出、未运行代码、未写项目文件；除读取上述两个 SKILL.md 外无其他工具调用。\n\n请回复音源选择（上传曲目／我生成 BGM），我再进入 cue sheet 与 Storyboard。",
       "usage": {
-        "inputTokens": 73489,
+        "inputTokens": 73613,
         "inputTokenDetails": {
-          "noCacheTokens": 4241,
+          "noCacheTokens": 4365,
           "cacheReadTokens": 69248
         },
-        "outputTokens": 1144,
+        "outputTokens": 1458,
         "outputTokenDetails": {
-          "textTokens": 692,
-          "reasoningTokens": 452
+          "textTokens": 1036,
+          "reasoningTokens": 422
         },
-        "totalTokens": 74633
+        "totalTokens": 75071
       },
-      "durationMs": 10928
+      "durationMs": 10022
     },
     {
       "id": "natural-beat-sync-uploaded-mp3",
@@ -211,21 +206,21 @@
           "executed": true
         }
       ],
-      "text": "我先读一下卡点与抖音这两个 Skill 的规则，再给你选型理由和计划。**选定的 Skill**\n\n- **主：`beat-sync-video`（已读）** — 你上传的 MP3 是时间权威，切点、动作、揭示都落在可听重音上，这正是它的适用范围（卡点/踩点 + 上传音轨）。\n- **交付层：`tiktok-video`（已读）** — 抖音是交付目的地而非生产引擎：9:16 `1080×1920`、安全区、钩子/正文/收尾、文字与字幕走可编辑 Remotion。\n- **不走**：`generate_animation`（不需要新生成画面，素材是真实现场）、`video-edit`（无修复/替换需求）、`photo-to-video`、`video-ffmpeg-lab`（不做文件级拼接，切点在 Composition 里可编辑）。\n\n**简短制作计划**\n\n1. 音轨：从 42s 里选一个 30s 可用窗口（优先保留最干净的 drop/重拍段），做节拍与重音 cue sheet；片尾在最后一个重音后留淡出余量。\n2. 故事线：以 `<<<media_1>>>` 脱模瞬间做开场结果/悬念，`<<<media_2>>>` 检查作为中段证据，收在成品的确定感上（书挡式回扣）。\n3. 分镜：把重音绑到脱模动作峰值、夹具/工件位移、检查特写；强弱拍交替，避免全程同一景别。\n4. 声音：素材原声默认静音，仅用你上传的这首歌；不做额外配乐。\n5. 画面：竖屏全屏满版，按动作中心裁切并逐镜确认工件/手部/接触点不出画。\n6. 文字：钩子 + 少量节拍标签 + 收尾短句，同一时间线驱动；字体与动效按这条片子的气质定，不用套用模板化黑底字幕。\n7. 交付：可编辑 Composition → 预览首/中/尾帧 → 发布草稿 → 导出 MP4，再带声音复看后半段卡点。\n\n生产阶段我会再补读 `beat-sync-video/references/timing-and-review.md`、`music-led-captions.md`、`tiktok-video/references/platform-layout.md` 与 `delivery-qa.md`。\n\n现在停在这里：没有分析媒体、没有上传/导出/跑代码/写项目文件，等你确认这个方向（或告诉我要用的 30s 段落偏好）再开工。",
+      "text": "先读取两个匹配的 Skill 说明，然后再给你选型理由和制作计划。**选用的内部 Skill**\n\n1. **`beat-sync-video`** — 主控。你的核心诉求是「跟着这首歌卡点」，也就是音乐决定画面何时切换、动作何时发生；这个 Skill 负责音乐驱动叙事、镜头表、切点设计和剪辑节奏。\n2. **`tiktok-video`** — 交付包装。抖音是交付目的地，需要竖屏 1080×1920、前几秒钩子、安全区文字和平台原生收尾，所以按 Skill 要求叠在 beat-sync 之上。\n\n没有选 `video-edit`（不需要改动源画面内容）、`music-to-video`（那是纯音频主导的动画片，你这里有实拍素材作为证据）、`source-video-studio`（不以口播或记录为主）。\n\n**制作计划（30 秒，音乐 42 秒，选一段 30 秒可用窗口）**\n\n- **故事线**：先给结果钩子（成型件脱出的一瞬或已脱出的成品特写）→ 回tracing到 `<<<media_1>>>` 的脱模动作本身 → 接 `<<<media_2>>>` 操作员检查 → 收尾落在“检验通过”的确认动作上。只有两段素材，主要靠景别变化（全幅 / 裁切特写 / 速度微调）来制造层次，不靠新拍。\n- **卡点**：先对 `<<<audio_1>>>` 做节拍与重音分析，锁定 cue-in 窗口，生成 cue sheet；把重音对齐到脱模分离、检查抬手、收尾定格这几个可观察变化，弱拍内用动作内的切换而不是硬切。\n- **文字**：按抖音安全区做一条克制的节拍文案（钩子 + 2–3 个短标注 + 收尾），字体和动效服从“工业、干脆”的调性，不使用通用字幕条。\n- **交付**：可编辑 Remotion 合成，1080×1920 全屏，`<<<media_1>>>`、`<<<media_2>>>` 与 `<<<audio_1>>>` 绑定到同一时间轴；预览开头、中段、结尾，发布草稿后导出 MP4。\n\n现在停在这里，没有分析媒体、没有生成或导出任何东西。你说“开始”，我就按此执行。",
       "usage": {
-        "inputTokens": 73522,
+        "inputTokens": 73662,
         "inputTokenDetails": {
-          "noCacheTokens": 4274,
+          "noCacheTokens": 4414,
           "cacheReadTokens": 69248
         },
-        "outputTokens": 1158,
+        "outputTokens": 943,
         "outputTokenDetails": {
-          "textTokens": 665,
-          "reasoningTokens": 493
+          "textTokens": 620,
+          "reasoningTokens": 323
         },
-        "totalTokens": 74680
+        "totalTokens": 74605
       },
-      "durationMs": 9935
+      "durationMs": 6798
     }
   ]
 }

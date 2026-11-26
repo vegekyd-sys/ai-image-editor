@@ -894,6 +894,8 @@ const zh = {
   'model.openai.desc': '文字渲染和创意生成能力突出。',
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': '文生与图/视频参考，3–30 秒；视频编辑保留原声。',
+  'model.magi2.name': 'MAGI-2',
+  'model.magi2.desc': 'Sand AI 经 EvoLink 提供的原生有声视频。支持文生、首尾帧和多模态参考，1080p，4–30 秒。',
   'model.kling4Flash.name': 'Kling 4.0 Flash',
   'model.kling4Flash.desc': '默认视频模型。更快的 Kling 4.0：文字或图片/视频参考，3–20 秒 720p；视频编辑保留原声。',
   'model.kling.name': 'Kling O3',

@@ -85,6 +85,7 @@ const VIDEO_MODEL_LABELS = {
   'google-omni': 'Gemini Omni 1.2 Flash',
   'kling-4': 'Kling 4.0',
   'kling-4-flash': 'Kling 4.0 Flash',
+  'magi-2': 'MAGI-2 (EvoLink)',
   'fal-h3-max': 'FAL H3 Max',
   'minimax-h3-max': 'H3 Max Turbo',
   'grok': 'Grok Imagine Video 1.5',
@@ -2158,7 +2159,7 @@ Inputs:
 Generation options:
   --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5-flash, seedance-2.5,
                             seedance-2.5-eco (upscaled), seedance-2.5-native (high-cost native 4k: quote before submission),
-                            wan-3.0, wan-3.0-prime, kling-4, kling-4-flash, grok, google-omni,
+                            wan-3.0, wan-3.0-prime, kling-4, kling-4-flash, magi-2, grok, google-omni,
                             minimax-h3, minimax-h3-max, fal-h3-max, or sync-lipsync-v3.
   --duration <seconds>      Output duration supported by the selected model.
   --video-resolution <res> auto, 480p, 720p, 768p, 1080p, 2k, or 4k.
@@ -2167,6 +2168,7 @@ Generation options:
   --extend-direction <dir> forward or backward.
   --output-format <format>  mp4 or mov.
   --generated-audio        Ask the provider to generate audio.
+  --seed <integer>         MAGI-2 seed (0–4294967295).
   --no-generated-audio     Disable provider-generated audio.
   --keep-original-sound    Preserve source-video sound where supported.
   --web-search             Enable Seedance 2.5 web search.
@@ -2178,6 +2180,9 @@ Recent model choices:
                  Native edit preserves source audio; default for video retake.
   kling-4-flash  Kling 4.0 Flash (default): faster Kling 4.0 with the same inputs and edit route;
                  3–20s, 720p only, video inputs <=20s total, script <=2500 characters.
+  magi-2        Sand AI MAGI-2 via EvoLink: 1080p, 4–30s; text, first/last frames, or up to
+                 10 images, 5 videos, 5 WAV/MP3
+                 audio references. Videos and audio are 2–30s each, at most 30s per media kind.
   google-omni    Gemini Omni 1.2 Flash: 3–15s text/image/video with native audio, multi-speaker
                  dialogue and lip-sync; edit (source <=15s) or extend (+3–10s, up to 30s);
                  360p/720p, upscaled 1080p/4k.
@@ -2188,7 +2193,7 @@ Recent model choices:
   wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
   wan-3.0         Wan standard tier with the same public duration/resolution range.
   seedance-2.5-flash  4-30s; 480p/720p;10 images/5 videos/5 audios; edit follows source.
-  --image-workflow <id> Flash: reference-to-video (default) or image-to-video (1-2 first/last frames).
+  --image-workflow <id> Flash/MAGI-2: reference-to-video (default) or image-to-video (1-2 first/last frames).
   --request-id <uuid> Reuse this ID with identical arguments to recover the original billed task.
   --max-credits <integer> Native 4K spending ceiling; omit for a quote with no generation.
   seedance-2.5-native Native 480p/720p/1080p/4k; 4k is high-cost, explicit opt-in only.
@@ -3521,7 +3526,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const referenceVoices = [];
     let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, videoResolution = undefined, imageWorkflow = undefined, wait = false;
     let keepOriginalSound = false, videoOperation = undefined, extendDirection = undefined, outputFormat = undefined;
-    let generateAudio = undefined, contentFilter = undefined, webSearch = false, billingRequestId = undefined, maxCredits = undefined;
+    let generateAudio = undefined, videoSeed = undefined, contentFilter = undefined, webSearch = false, billingRequestId = undefined, maxCredits = undefined;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
       else if (args[i] === '--video' && args[i + 1]) videos.push(args[++i]);
@@ -3545,6 +3550,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--video-operation' && args[i + 1]) videoOperation = args[++i];
       else if (args[i] === '--extend-direction' && args[i + 1]) extendDirection = args[++i];
       else if (args[i] === '--output-format' && args[i + 1]) outputFormat = args[++i];
+      else if (args[i] === '--seed' && args[i + 1] != null) videoSeed = Number(args[++i]);
       else if (args[i] === '--no-generated-audio') generateAudio = false;
       else if (args[i] === '--generated-audio') generateAudio = true;
       else if (args[i] === '--relaxed-content-filter') contentFilter = false;
@@ -3571,6 +3577,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
     if (maxCredits != null && (!Number.isSafeInteger(maxCredits) || maxCredits <= 0)) { console.error('--max-credits must be a positive integer.'); process.exit(1); }
     const isFlash = selectedVideoModel === 'seedance-2.5-flash';
+    const isMagi2 = selectedVideoModel === 'magi-2';
     const isSeedance25 = ['seedance-2.5', 'seedance-2.5-eco', 'seedance-2.5-native'].includes(selectedVideoModel);
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25 || isFlash;
@@ -3585,10 +3592,17 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const isKling4 = selectedVideoModel === 'kling-4' || isKling4Flash;
     const kling4Label = isKling4Flash ? 'Kling 4.0 Flash' : 'Kling 4.0';
     const kling4MaxSeconds = isKling4Flash ? 20 : 30;
-    const supportsNativeTextToVideo = isKling4 || isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
-    if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
-      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|kling-4|kling-4-flash|minimax-h3|minimax-h3-max]');
+    const supportsNativeTextToVideo = isMagi2 || isKling4 || isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
+    if ((!script && !(isMagi2 && (images.length || videos.length || audios.length))) || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
+      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|kling-4|kling-4-flash|magi-2|minimax-h3|minimax-h3-max]');
       process.exit(1);
+    }
+    if (videoSeed != null && (!isMagi2 || !Number.isSafeInteger(videoSeed) || videoSeed < 0 || videoSeed > 4294967295)) { console.error('--seed for MAGI-2 must be an integer from 0 to 4294967295.'); process.exit(1); }
+    if (isMagi2) {
+      if (images.length > 10 || videos.length > 5 || audios.length > 5) { console.error('MAGI-2 accepts up to 10 images, 5 videos and 5 audio references.'); process.exit(1); }
+      if (duration != null && (!Number.isInteger(duration) || duration < 4 || duration > 30)) { console.error('MAGI-2 duration must be an integer from 4 to 30 seconds.'); process.exit(1); }
+      if (videoResolution && !['auto', '1080p'].includes(videoResolution)) { console.error('MAGI-2 supports 1080p only.'); process.exit(1); }
+      if ((videoOperation && videoOperation !== 'generate') || extendDirection || outputFormat === 'mov' || keepOriginalSound || webSearch) { console.error('MAGI-2 supports generate with feature references and optional native audio.'); process.exit(1); }
     }
     if (isKling4 && (images.length > 10 || videos.length > 5 || audios.length)) { console.error(`${kling4Label} accepts at most 10 images and 5 videos, with no audio references.`); process.exit(1); }
     if (isKling4 && duration != null && (!Number.isInteger(duration) || duration < 3 || duration > kling4MaxSeconds)) { console.error(`${kling4Label} output duration must be an integer from 3 to ${kling4MaxSeconds} seconds.`); process.exit(1); }
@@ -3600,8 +3614,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (isFlash && duration != null && (!Number.isInteger(duration) || duration < 4 || duration > 30)) { console.error('Seedance 2.5 Flash duration must be an integer 4–30 seconds.'); process.exit(1); }
     if (isFlash && videoResolution && !['auto', '480p', '720p'].includes(videoResolution)) { console.error('Seedance 2.5 Flash supports only 480p/720p.'); process.exit(1); }
     if (isFlash && (videoOperation === 'extend' || extendDirection || outputFormat === 'mov' || webSearch || contentFilter === false)) { console.error('Flash has no extend, draft, MOV, web search or relaxed-filter mode.'); process.exit(1); }
-    if (imageWorkflow && (!isFlash || !['reference-to-video', 'image-to-video'].includes(imageWorkflow))) { console.error('--image-workflow is supported for Flash reference-to-video or image-to-video only.'); process.exit(1); }
-    if (isFlash && imageWorkflow === 'image-to-video' && (!images.length || images.length > 2 || videos.length || audios.length)) { console.error('Flash first/last frames need1–2 images only.'); process.exit(1); }
+    if (imageWorkflow && (!(isFlash || isMagi2) || !['reference-to-video', 'image-to-video'].includes(imageWorkflow))) { console.error('--image-workflow is supported for Flash and MAGI-2.'); process.exit(1); }
+    if ((isFlash || isMagi2) && imageWorkflow === 'image-to-video' && (!images.length || images.length > 2 || videos.length || audios.length)) { console.error('First/last frames need one or two images only.'); process.exit(1); }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
     if (isSeedance25 && videos.length > 10) { console.error('Seedance 2.5 supports at most 10 video references.'); process.exit(1); }
     if (isSeedance25 && audios.length > 10) { console.error('Seedance 2.5 supports at most 10 audio references.'); process.exit(1); }
@@ -3635,11 +3649,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
 
     const inferredOperation = videoOperation || ((isSeedance25 || isFlash || isGrok) && videos.length ? 'edit' : 'generate');
-    let providerMaxDuration = isSeedance25 || isFlash ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION;
+    let providerMaxDuration = isMagi2 ? 30 : isSeedance25 || isFlash ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION;
     if (isGrok) providerMaxDuration = inferredOperation === 'edit' ? 8.7 : 15;
     if (isSyncLipsync) providerMaxDuration = 60;
     if (isKling4) providerMaxDuration = kling4MaxSeconds;
-    const providerMaxPixels = isSyncLipsync || isMinimaxH3 || isWan30 || isKling4 ? Infinity : isSeedance25 || isFlash ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
+    const providerMaxPixels = isMagi2 || isSyncLipsync || isMinimaxH3 || isWan30 || isKling4 ? Infinity : isSeedance25 || isFlash ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
     const localImages = images.filter(image => !isHttpUrl(image));
     if (localImages.length) {
       const uploadedImages = await uploadImageFilesViaSignedUrl(baseUrl, headers, undefined, localImages);
@@ -3652,11 +3666,13 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       if (isHttpUrl(video)) { videoUrls.push(video); continue; }
       const valid = validateVideoFile(video, {
         maxDuration: providerMaxDuration,
-        durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
+        durationTolerance: isMagi2 ? 0 : MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
         maxFramePixels: providerMaxPixels,
-        maxFileSize: isWan30 ? MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE : isSeedance25 || isFlash || isSyncLipsync || isKling4 ? 200 * 1024 * 1024 : MAX_VIDEO_PROVIDER_REFERENCE_FILE_SIZE,
+        maxFileSize: isMagi2 ? 200_000_000 : isWan30 ? MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE : isSeedance25 || isFlash || isSyncLipsync || isKling4 ? 200 * 1024 * 1024 : MAX_VIDEO_PROVIDER_REFERENCE_FILE_SIZE,
         ...(isKling4 ? {
           allowedExtensions: ['mp4', 'mov'], minSide: 720, maxSide: 2160,
+        } : isMagi2 ? {
+          allowedExtensions: ['mp4', 'mov'],
         } : isGrok ? {
           allowedExtensions: ['mp4'],
         } : selectedVideoModel === 'minimax-h3' ? {
@@ -3680,6 +3696,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         } : {}),
       });
       if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
+      if (isMagi2 && valid.meta.duration < 2) { console.error('MAGI-2 reference videos must each be at least 2 seconds.'); process.exit(1); }
       inputVideoMeta ||= valid.meta;
       process.stderr.write(`📹 Uploading ${path.basename(video)} (${(fs.statSync(video).size/1024/1024).toFixed(1)}MB)...\n`);
       const uploaded = await uploadFileViaSignedUrl(baseUrl, headers, undefined, video, valid.mime);
@@ -3690,8 +3707,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const audioUrls = [];
     for (const audio of audios) {
       if (isHttpUrl(audio)) { audioUrls.push(audio); continue; }
-      const valid = validateAudioReferenceFile(audio, { maxDuration: isSyncLipsync ? 60 : isSeedance25 || isFlash ? 30 : MAX_AUDIO_REFERENCE_DURATION });
+      const valid = validateAudioReferenceFile(audio, { maxDuration: isSyncLipsync ? 60 : isMagi2 || isSeedance25 || isFlash ? 30 : MAX_AUDIO_REFERENCE_DURATION });
       if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
+      if (isMagi2 && (valid.meta.duration < 2 || valid.meta.duration > 30 || valid.meta.fileSizeBytes > 15_000_000)) { console.error('MAGI-2 audio references must be 2–30 seconds and at most 15 MB each.'); process.exit(1); }
       process.stderr.write(`🎵 Uploading ${path.basename(audio)}...\n`);
       const uploaded = await uploadFileViaSignedUrl(baseUrl, headers, undefined, audio, valid.mime, { uploadKind: 'audio' });
       if (!uploaded) process.exit(1);
@@ -3702,7 +3720,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const resolvedOperation = inferredOperation;
     const vArgs = isSyncLipsync
       ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
-      : isSeedance25 || isFlash || isWan30 || isGrok
+      : isMagi2 || isSeedance25 || isFlash || isWan30 || isGrok
       ? { script, images, videoUrls, audioUrls, referenceVoiceIds: referenceVoices, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
       : isMinimaxH3 || isFalReference
         ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
@@ -3712,10 +3730,14 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
         : { script, images, videoModel: selectedVideoModel, videoResolution };
     if (maxCredits != null) vArgs.maxCredits = maxCredits;
+    if (videoSeed != null) vArgs.videoSeed = videoSeed;
     if (imageWorkflow) vArgs.imageWorkflow = imageWorkflow;
-    if (billingRequestId) vArgs.billingRequestId = billingRequestId;
+    if (isMagi2) {
+      vArgs.billingRequestId = billingRequestId || randomUUID();
+      process.stderr.write(`Billing request: ${vArgs.billingRequestId}\n`);
+    } else if (billingRequestId) vArgs.billingRequestId = billingRequestId;
     if (inputVideoMeta?.duration) vArgs.referenceVideoDuration = inputVideoMeta.duration;
-    const effectiveDuration = resolvedOperation === 'edit' ? undefined : duration || (inputVideoMeta?.duration ? Math.min(providerMaxDuration, Math.round(inputVideoMeta.duration)) : undefined);
+    const effectiveDuration = resolvedOperation === 'edit' ? undefined : duration || (!isMagi2 && inputVideoMeta?.duration ? Math.min(providerMaxDuration, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
     if (keepOriginalSound && videoUrls.length && !isSeedance25) vArgs.keepOriginalSound = true;
@@ -3742,7 +3764,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         process.exit(1);
       }
     }
-    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isFlash && !isWan30 && !isGrok && !isMinimaxH3 && !isFalReference && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
+    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isMagi2 && !isSeedance25 && !isFlash && !isWan30 && !isGrok && !isMinimaxH3 && !isFalReference && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) {
       console.log(text);

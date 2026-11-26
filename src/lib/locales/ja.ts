@@ -1122,6 +1122,8 @@ const ja = {
   'model.openai.desc': '文字の描画とクリエイティブ生成に優れています。',
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': 'テキスト・画像/動画参照、3〜30秒。動画編集では元の音声を保持。',
+  'model.magi2.name': 'MAGI-2',
+  'model.magi2.desc': 'EvoLink 経由の Sand AI 音声付き動画。テキスト、最初・最後のフレーム、マルチモーダル参照に対応し、1080p で 4〜30 秒。',
   'model.kling4Flash.name': 'Kling 4.0 Flash',
   'model.kling4Flash.desc': 'デフォルトの動画モデル。高速な Kling 4.0：テキストまたは画像/動画参照、3〜20秒・720p。動画編集は元の音声を保持します。',
   'model.kling.name': 'Kling O3',

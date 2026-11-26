@@ -54,7 +54,12 @@ export function seededMediaPrices(): MediaPrice[] {
       const [id, kind, model_id, resolution, operation, output_usd_per_second, video_reference_usd_per_second, unfiltered_multiplier] = JSON.parse(`[${line.slice(1, line.lastIndexOf(')')).replaceAll("'", '"')}]`)
       return { id, kind, model_id, resolution, operation, output_usd_per_second, video_reference_usd_per_second, unfiltered_multiplier, input_usd_per_second: 0, input_usd_per_image: 0, free_image_references: 0, markup: 2, is_active: true, updated_at: '2026-11-17T00:00:00Z' }
     })
-  return [...existing, ...additions, ...kling4, ...upscale, ...suno, ...flash, ...native4k, { ...upscale[0], id: 'video:bytedance-video-upscale:720p:generate', resolution: '720p', output_usd_per_second: .0072 }, { ...existing.find(p => p.id === 'video:seedance-2.5:480p:generate')!, id: 'video:seedance-2.5-eco:480p:generate', model_id: 'seedance-2.5-eco' }]
+  const magi = readFileSync('supabase/migrations/20261125170000_magi2_pricing.sql', 'utf8')
+    .split('VALUES')[1].split('ON CONFLICT')[0].trim()
+  const [id, kind, model_id, resolution, operation, output_usd_per_second] = JSON.parse(`[${magi.slice(1, -1).replaceAll("'", '"')}]`)
+  const magi2 = { id, kind, model_id, resolution, operation, output_usd_per_second, input_usd_per_second: 0, input_usd_per_image: 0,
+    free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true, updated_at: '2026-11-25T17:00:00Z' } satisfies MediaPrice
+  return [...existing, ...additions, ...kling4, magi2, ...upscale, ...suno, ...flash, ...native4k, { ...upscale[0], id: 'video:bytedance-video-upscale:720p:generate', resolution: '720p', output_usd_per_second: .0072 }, { ...existing.find(p => p.id === 'video:seedance-2.5:480p:generate')!, id: 'video:seedance-2.5-eco:480p:generate', model_id: 'seedance-2.5-eco' }]
 }
 
 export function seededTokenRates(): TokenRate[] {

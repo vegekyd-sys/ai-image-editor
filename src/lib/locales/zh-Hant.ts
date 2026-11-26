@@ -67,6 +67,8 @@ const zhHant = {
 
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': '文字生成與圖/影片參考，3–30 秒；影片編輯保留原聲。',
+  'model.magi2.name': 'MAGI-2',
+  'model.magi2.desc': 'Sand AI 經 EvoLink 提供的原生有聲影片。支援文字生成、首尾影格和多模態參考，1080p，4–30 秒。',
   'model.kling4Flash.name': 'Kling 4.0 Flash',
   'model.kling4Flash.desc': '預設影片模型。更快的 Kling 4.0：文字或圖片/影片參考，3–20 秒 720p；影片編輯保留原聲。',
   "mjLab.back": "返回 Makaron",

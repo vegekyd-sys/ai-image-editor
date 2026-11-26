@@ -1758,20 +1758,21 @@ function createGenerateAnimationTool(
 ) {
   const invalidRequest = createVideoValidationReporter();
   const native4kDisclosures = new Set<string>();
-  const native4kReceipts = new Map<string, Record<string, unknown>>();
+  const protectedVideoReceipts = new Map<string, Record<string, unknown>>();
   return tool({
       description: "Submit one complete video script for rendering. Before writing the script or calling this tool, read prompts/animate.md once; it returns the full workflow, creative guide, and submission contract. Submit only after visible script confirmation, explicit direct-submit authorization in the current request, or a trusted Skill template launch supplied by the system. A skill name alone is not authorization. Native audio belongs in story_prompt, not separate audio calls. Timeline images/videos use <<<media_N>>>; external workspace assets use URL parameters. Ordinary generation/edits/extensions omit replication_contract; exact source-led replication reads skills/video-edit/SKILL.md and supplies video_intent=\"replicate\" plus measured mappings. Use the schema for arguments and the loaded submission contract for model-specific preparation, full-script submission, reference limits, variants, and continuation.",
       inputSchema: z.object({
         max_credits: z.number().int().positive().optional().describe('Seedance native 4K only: first omit this field to obtain the complete no-charge quote. Show the returned total Makaron credits before submitting the same request with this ceiling. Use only if the user explicitly requested native 4K or explicitly selected Native + 4K. Never infer authorization from ordinary/HD/high-quality requests or a failed job. A higher fresh quote stops before charging.'),
         story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers. Gemini Omni 1.2, Kling 4.0 / Flash and H3 Max text-to-video follow the same no-marker rule; fal H3 Turbo image-to-video uses exactly one media marker; FAL H3 Max accepts image/video/audio references. Kling 4.0 / Flash story_prompt must be 2500 characters or fewer, markers included. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
         video_intent: z.enum(['generate', 'replicate']).nullish().describe('Default generate: ordinary new videos, photo animation, lookbooks, loose references, edits and extensions. Set replicate ONLY when the user wants to reproduce a supplied video\'s measured timing, action and camera with replaced content; requires replication_contract and an actual source video. Never select replicate merely to preserve a face.'),
-        image_workflow: z.enum(['reference-to-video', 'image-to-video']).optional().describe('Flash only: default feature-reference semantics; image-to-video explicitly locks1–2 first/last frames. Omit aspect_ratio for first/last frames or edit.'),
+        video_seed: z.number().int().min(0).max(4294967295).optional().describe('Optional MAGI-2 seed for repeatability. Set only when requested.'),
+        image_workflow: z.enum(['reference-to-video', 'image-to-video']).optional().describe('Flash and MAGI-2 default to feature references. Select image-to-video for 1–2 explicit first/last frames. For MAGI-2 use a matching aspect ratio to avoid a center crop.'),
         duration: z.number().optional().describe('Seedance2.5Flash generation uses4–30s integers; edit follows source duration and ignores output duration. Duration in seconds. Sync Lipsync v3 follows a 2-60s source; fal H3 Turbo accepts exactly 5, 10, or 15 seconds; FAL H3 Max accepts integer 5–15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling 4.0 accepts integer 3-30s in one call; Kling 4.0 Flash accepts integer 3-20s; Grok accepts 1-15s; Google Omni accepts 3-15s (extend adds 3-10s).'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can honor it. Kling 4.0 / Flash support 16:9/9:16/1:1/21:9; when omitted they follow the first reference image, or 16:9 for text-only. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive. Grok reference-to-video accepts supported fixed ratios.'),
-        model: z.string().optional().describe('Video model/provider id. Defaults to kling-4-flash (Kling 4.0 Flash, 720p, 3-20s). Supported ids include seedance-2.5-flash (EvoLink; 4–30s integers at480p/720p, default720p; up to10images/5videos/5audios; reference or explicit first/last frame generation; edit follows4–30s source; no extend/draft/MOV/web search; no fallback), seedance-fast, seedance-mini, seedance, seedance-2.5-eco (the default for Seedance 2.5), seedance-2.5-native (explicit native only:480p/720p/1080p/4k; 4K is high-cost supplier generation, not Eco enhancement; only explicit native 4K requests or explicit Native + 4K selection qualify. Ordinary/HD/high-quality requests and failures never upgrade to native 4K. First omit max_credits for a complete quote, disclose it, then submit with the quoted ceiling), wan-3.0, wan-3.0-prime, kling-4 (Kling 4.0; 3–30s, 720p/1080p; text/image/video references; edit preserves source audio), kling-4-flash (Kling 4.0 Flash, the default; faster/lower-cost, same inputs, 3–20s, 720p only, video inputs <=20s total), grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Never substitute kling-4-flash and kling-4 for each other; an explicit choice stays on that model. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Only when no model is explicitly selected, default to seedance-2.5-eco for non-NSFW direct 21-30s requests, kling-4 for requests that need 1080p, and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref. For google-omni, write story_prompt in English even when the user writes another language (Google validates English only); keep only quoted spoken lines in the language to be heard.'),
+        model: z.string().optional().describe('Video model/provider id. Defaults to kling-4-flash (Kling 4.0 Flash, 720p, 3-20s). Use magi-2 only when explicitly selected (Sand AI via EvoLink; 1080p, integer 4–30s; text, first/last frames or up to 10 image, 5 video and 5 audio feature references; generate only). Supported ids include seedance-2.5-flash (EvoLink; 4–30s integers at480p/720p, default720p; up to10images/5videos/5audios; reference or explicit first/last frame generation; edit follows4–30s source; no extend/draft/MOV/web search; no fallback), seedance-fast, seedance-mini, seedance, seedance-2.5-eco (the default for Seedance 2.5), seedance-2.5-native (explicit native only:480p/720p/1080p/4k; 4K is high-cost supplier generation, not Eco enhancement; only explicit native 4K requests or explicit Native + 4K selection qualify. Ordinary/HD/high-quality requests and failures never upgrade to native 4K. First omit max_credits for a complete quote, disclose it, then submit with the quoted ceiling), wan-3.0, wan-3.0-prime, kling-4 (Kling 4.0; 3–30s, 720p/1080p; text/image/video references; edit preserves source audio), kling-4-flash (Kling 4.0 Flash, the default; faster/lower-cost, same inputs, 3–20s, 720p only, video inputs <=20s total), grok, google-omni, minimax-h3, minimax-h3-max, fal-h3-max, and sync-lipsync-v3. Never substitute kling-4-flash and kling-4 for each other; an explicit choice stays on that model. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Only when no model is explicitly selected, default to seedance-2.5-eco for non-NSFW direct 21-30s requests, kling-4 for requests that need 1080p, and wan-3.0-prime for the NSFW semantic route. fal H3 Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref. For google-omni, write story_prompt in English even when the user writes another language (Google validates English only); keep only quoted spoken lines in the language to be heard.'),
         video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Seedance2.5 Native supports480p/720p/1080p/4k; select seedance-2.5-native explicitly for native4K, while seedance-2.5/Eco remains480p plus enhancement. Native1080p/4k MP4 is10bit HEVC; playback depends on codec support. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. Kling 4.0 Flash is 720p only; Kling 4.0 supports 720p/1080p. fal H3 Max supports 480p/768p/1080p (1080p uses latent refinement from 768p), default 768p. fal H3 Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.2 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
-        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, MiniMax H3, and FAL H3 Max.'),
+        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, MiniMax H3, FAL H3 Max, and MAGI-2.'),
         reference_voice_ids: z.array(z.string()).max(3).optional().describe('Grok Imagine Video 1.5 preset xAI voice ids, e.g. ["eve"] or ["eve","leo"]. Reference them as <AUDIO_0>, <AUDIO_1> in story_prompt. Do not use Audio Index labels or uploaded URLs here.'),
         video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance 2.0 video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Seedance 2.5 accepts .mp4/.mov <=200MB, width/height 300-6000px, frame pixels 409,600-8,295,044, 4-30s each and <=30s total. MiniMax H3 video references must be <=50MB, width/height 256-5760px, aspect ratio 0.4-2.5, with at most 3 videos totaling <=15s. Kling 4.0 video references: each >=3s, <=30s combined (Flash <=20s), <=200MB each, 720-2160px per side, 24-60fps; max 5 videos for generation or exactly one for editing. Google Omni accepts one reference video in Makaron. Grok edit accepts one MP4 up to 8.7 seconds; Grok extend accepts one MP4 from 2 to 15 seconds.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use an external reference video. feature (default): reference motion/style. base: direct edit. For Gemini Omni or Seedance 2.5 continuation, also set video_operation="extend". Timeline videos are auto-routed from <<<media_N>>>.'),
@@ -1810,7 +1811,7 @@ function createGenerateAnimationTool(
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ max_credits, story_prompt, video_intent, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, video_operation, extend_direction, generate_audio, image_workflow, content_filter, output_format, web_search, replication_contract: suppliedReplicationContract, completion_actions }) => serializeVideoSubmission(async () => {
+      execute: async ({ max_credits, story_prompt, video_intent, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, video_operation, extend_direction, generate_audio, video_seed, image_workflow, content_filter, output_format, web_search, replication_contract: suppliedReplicationContract, completion_actions }) => serializeVideoSubmission(async () => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1916,8 +1917,10 @@ function createGenerateAnimationTool(
           : selectedVideoRoute;
         const videoModel = videoSelection.model;
         const native4k = isSeedance25Native4k(videoModel, videoSelection.resolution);
-        const native4kRequestKey = JSON.stringify({ story_prompt, model: videoModel, resolution: videoSelection.resolution, duration, aspect_ratio, media_refs, audio_refs, video_ref_url, video_ref_type, video_operation, extend_direction, generate_audio, image_workflow, content_filter, output_format, web_search, snapshots: ctx.snapshotImages });
-        if (native4k && native4kReceipts.has(native4kRequestKey)) return native4kReceipts.get(native4kRequestKey)!;
+        const isMagi2 = videoModel === 'magi-2';
+        const protectedSubmission = native4k || isMagi2;
+        const protectedVideoRequestKey = JSON.stringify({ story_prompt, model: videoModel, resolution: videoSelection.resolution, duration, aspect_ratio, media_refs, audio_refs, video_ref_url, video_ref_type, video_operation, extend_direction, generate_audio, video_seed, image_workflow, content_filter, output_format, web_search, snapshots: ctx.snapshotImages });
+        if (protectedSubmission && protectedVideoReceipts.has(protectedVideoRequestKey)) return protectedVideoReceipts.get(protectedVideoRequestKey)!;
         if (native4k && !ctx.userId) return invalidRequest(videoModel, 'Native 4K requires an authenticated workspace for complete cost disclosure and billing.');
         let disclosureQuote: Awaited<ReturnType<typeof quoteVideo>> | undefined;
         const retirementError = getVideoModelRetirementError(videoModel);
@@ -1942,12 +1945,12 @@ function createGenerateAnimationTool(
           if (resolvedAudioRefs.error) {
             return { success: false as const, message: resolvedAudioRefs.error };
           }
-          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'mulerouter' && videoRoute.provider !== 'minimax' && videoRoute.provider !== 'fal-sync' && videoModel !== 'fal-h3-max') {
+          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'mulerouter' && videoRoute.provider !== 'minimax' && videoRoute.provider !== 'fal-sync' && videoModel !== 'fal-h3-max' && !isMagi2) {
             return {
               success: false as const,
               message: videoRoute.provider === 'google-omni'
                 ? 'Google Omni can generate native audio from the prompt, but uploaded audio_refs are not enabled in the current API. Choose seedance-fast, seedance-mini, or seedance for audio_refs, or remove audio_refs and describe the soundtrack for Omni.'
-                : 'Reference audio is only supported by Seedance video models, Wan 3.0, MiniMax H3, or FAL H3 Max, except exact replacement audio with Sync Lipsync v3. Choose a compatible model or remove audio_refs.',
+                : 'Reference audio is only supported by Seedance video models, Wan 3.0, MiniMax H3, FAL H3 Max, or MAGI-2, except exact replacement audio with Sync Lipsync v3. Choose a compatible model or remove audio_refs.',
             };
           }
 
@@ -2047,7 +2050,7 @@ function createGenerateAnimationTool(
             };
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
-          if (video_ref_url && autoVideoUrls.length > 0 && videoModel !== 'seedance-2.5' && videoModel !== 'seedance-2.5-eco' && videoModel !== 'seedance-2.5-flash' && videoModel !== 'wan-3.0' && videoModel !== 'wan-3.0-prime') {
+          if (video_ref_url && autoVideoUrls.length > 0 && videoModel !== 'seedance-2.5' && videoModel !== 'seedance-2.5-eco' && videoModel !== 'seedance-2.5-flash' && videoModel !== 'wan-3.0' && videoModel !== 'wan-3.0-prime' && !isMagi2) {
             return {
               success: false as const,
               message: 'Do not mix video_ref_url with timeline video markers in one generation. For a local segment edit, pass only the extracted segment as video_ref_url and remove any <<<media_N>>> markers that point to timeline videos.',
@@ -2164,7 +2167,7 @@ function createGenerateAnimationTool(
             videoReferType: video_ref_type,
             videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
             referenceVideoDuration,
-            referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
+            referenceVideoMetas: isMagi2 && providerVideoRefUrl ? [{}, ...referenceVideoMetas] : referenceVideoMetas.length ? referenceVideoMetas : undefined,
             keepOriginalSound: keep_original_sound,
             audioUrls: resolvedAudioRefs.audioUrls.length ? resolvedAudioRefs.audioUrls : undefined,
             referenceVoiceIds: reference_voice_ids,
@@ -2173,6 +2176,7 @@ function createGenerateAnimationTool(
             previousInteractionId: isGoogleOmniStateful ? googleOmniPreviousInteractionId : undefined,
             videoExtendDirection: extend_direction,
             generateAudio: generate_audio,
+            videoSeed: isMagi2 ? video_seed : undefined,
             contentFilter: content_filter,
             outputFormat: output_format,
             webSearch: web_search,
@@ -2229,11 +2233,11 @@ function createGenerateAnimationTool(
             && await isGrokSubscriptionAllowedUser(ctx.userId);
           if (grokSubscriptionPreferred) {
             createVideoInput.onBeforeGrokApiFallback = reserveGrokApiCredits;
-          } else if ((videoRoute.provider === 'fal-h3-max' || videoModel === 'seedance-2.5-flash' || native4k || forceUpscale) && ctx.userId) {
+          } else if ((videoRoute.provider === 'fal-h3-max' || videoModel === 'seedance-2.5-flash' || protectedSubmission || forceUpscale) && ctx.userId) {
             createVideoInput.onBeforeProviderSubmit = async usage => {
               billingQuote = await quoteVideo(usage);
               creditsRequired = billingQuote.credits;
-              if (native4k && (!native4kDisclosures.has(native4kRequestKey) || native4kNeedsDisclosure(billingQuote, max_credits))) {
+              if (native4k && (!native4kDisclosures.has(protectedVideoRequestKey) || native4kNeedsDisclosure(billingQuote, max_credits))) {
                 disclosureQuote = billingQuote;
                 throw new Error('Native 4K cost disclosure required before submission.');
               }
@@ -2261,18 +2265,18 @@ function createGenerateAnimationTool(
             : await createVideo(createVideoInput);
 
           if (disclosureQuote) {
-            native4kDisclosures.add(native4kRequestKey);
+            native4kDisclosures.add(protectedVideoRequestKey);
             return native4kQuoteResult(disclosureQuote);
           }
           if (!skillResult.success || !skillResult.taskId) {
             console.error('[generate_animation] createVideo failed:', skillResult.message);
-            if ((videoModel === 'seedance-2.5-flash' || native4k) && skillResult.submissionUncertain) {
+            if ((videoModel === 'seedance-2.5-flash' || protectedSubmission) && skillResult.submissionUncertain) {
               // A timeout is not a rejected POST. The durable Agent tool result
               // and usage row retain the original run and reservation for review.
               const receipt = { ...skillResult, success: false as const, retryable: false as const,
                 errorCode: 'SUBMISSION_UNCERTAIN',
                 message: `${skillResult.message}\nVideo submission is unconfirmed; credits remain reserved. Do not create another paid task. Reconcile this original Agent run before retrying.` };
-              if (native4k) native4kReceipts.set(native4kRequestKey, receipt);
+              if (protectedSubmission) protectedVideoReceipts.set(protectedVideoRequestKey, receipt);
               return receipt;
             }
             if (reservedVideoCredits > 0 && ctx.userId) {
@@ -2298,7 +2302,7 @@ function createGenerateAnimationTool(
           }
 
           const taskId = skillResult.taskId;
-          if (videoModel === 'seedance-2.5-flash' || native4k) acceptedProtectedTaskId = taskId;
+          if (videoModel === 'seedance-2.5-flash' || protectedSubmission) acceptedProtectedTaskId = taskId;
           const actualVideoModel = (skillResult.videoModel || videoModel) as string;
           const actualVideoRoute = resolveVideoGenerationRoute({
             model: actualVideoModel,
@@ -2324,7 +2328,7 @@ function createGenerateAnimationTool(
             duration: resolvePersistedVideoDuration({
               model: actualVideoModel,
               operation: video_operation,
-              outputDuration: effectiveDuration === -1 ? referenceVideoDuration : effectiveDuration,
+              outputDuration: skillResult.outputDuration ?? (effectiveDuration === -1 ? referenceVideoDuration : effectiveDuration),
               referenceVideoDuration,
             }) || null,
             model: actualVideoModel as import('@/types').VideoModel,
@@ -2429,17 +2433,17 @@ function createGenerateAnimationTool(
                   : 'fal H3 Max usually finishes in tens of seconds. Queue and saving time can vary.')
                 : actualVideoModel === 'minimax-h3-max'
                   ? 'fal H3 Turbo usually finishes in tens of seconds. Queue and saving time can vary.'
-                  : 'Rendering usually takes 3-5 minutes.';
+                  : isMagi2 ? 'The rendering time depends on the EvoLink queue.' : 'Rendering usually takes 3-5 minutes.';
           const receipt = {
             success: true as const,
             taskId,
             message: `Video generation task created with ${actualVideoRoute.label} ${actualVideoRoute.resolution.toUpperCase()}. ${renderTimeMessage} The result will appear here when done.`,
           };
-          if (native4k) native4kReceipts.set(native4kRequestKey, receipt);
+          if (protectedSubmission) protectedVideoReceipts.set(protectedVideoRequestKey, receipt);
           return receipt;
         } catch (e) {
           if (disclosureQuote) {
-            native4kDisclosures.add(native4kRequestKey);
+            native4kDisclosures.add(protectedVideoRequestKey);
             return native4kQuoteResult(disclosureQuote);
           }
           if (acceptedProtectedTaskId) {
@@ -2448,7 +2452,7 @@ function createGenerateAnimationTool(
             const receipt = { success: false as const, taskId: acceptedProtectedTaskId, retryable: false as const,
               errorCode: 'PERSISTENCE_RECONCILIATION_REQUIRED',
               message: `Video task ${acceptedProtectedTaskId} was accepted but saving failed: ${String(e)}. Query this task and restore its project result; do not submit another paid job.` };
-            if (native4k) native4kReceipts.set(native4kRequestKey, receipt);
+            if (protectedSubmission) protectedVideoReceipts.set(protectedVideoRequestKey, receipt);
             return receipt;
           }
           if (reservedVideoCredits > 0 && ctx.userId) {

@@ -314,7 +314,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('MiniMax H3 reference videos must each be .mp4/.mov, <=50MB, width and height each 256-5760px')
     expect(agentTs).toContain('MiniMax H3 accepts up to 9 reference images')
     expect(agentTs).toContain('Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers')
-    expect(agentTs).toContain('Reference audio is only supported by Seedance video models, Wan 3.0, MiniMax H3, or FAL H3 Max')
+    expect(agentTs).toContain('Reference audio is only supported by Seedance video models, Wan 3.0, MiniMax H3, FAL H3 Max, or MAGI-2')
     expect(agentTs).toContain('Seedance 2.5 is 4-30 seconds; Wan 3.0 is 2-30 seconds')
     expect(agentTs).toContain('An NSFW/adult-explicit video request defaults to Wan 3.0 Prime')
     expect(agentTs).toContain('analogous to choosing Qwen for NSFW image requests')

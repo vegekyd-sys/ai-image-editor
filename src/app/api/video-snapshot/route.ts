@@ -57,6 +57,9 @@ export async function POST(req: NextRequest) {
       videoOperation,
       videoExtendDirection,
       generateAudio,
+      imageWorkflow,
+      videoSeed,
+      audioUrls,
       contentFilter,
       outputFormat,
       webSearch,
@@ -66,8 +69,9 @@ export async function POST(req: NextRequest) {
     const videoCapability = getVideoModelCapability(selectedVideoModel)
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const native4k = isSeedance25Native4k(selectedVideoModel, videoRoute.resolution)
+    const isMagi2 = selectedVideoModel === 'magi-2'
     let disclosureQuote: Awaited<ReturnType<typeof quoteVideo>> | undefined
-    let acceptedNativeTaskId: string | undefined
+    let acceptedProtectedTaskId: string | undefined
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
     const inputVideoUrl = typeof videoUrl === 'string' && videoUrl.startsWith('http') ? videoUrl : undefined
 
@@ -180,7 +184,7 @@ export async function POST(req: NextRequest) {
       reservedCredits = reservation.charged
     }
     const grokSubscriptionPreferred = selectedVideoModel === 'grok' && await isGrokSubscriptionAllowedUser(userId)
-    if (!grokSubscriptionPreferred && !native4k) {
+    if (!grokSubscriptionPreferred && !native4k && !isMagi2) {
       try {
         const billingStartedAt = performance.now()
         await reserveApiCredits()
@@ -209,9 +213,13 @@ export async function POST(req: NextRequest) {
         videoReferType,
         videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
         referenceVideoDuration,
-        referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
+        referenceVideoMetas: isMagi2 && providerInputVideoUrl ? [{}, ...referenceVideoMetas] : referenceVideoMetas.length ? referenceVideoMetas : undefined,
         keepOriginalSound,
         videoOperation,
+        ...(isMagi2 ? {
+          imageWorkflow, videoSeed,
+          audioUrls: Array.isArray(audioUrls) ? audioUrls : undefined,
+        } : {}),
         videoExtendDirection,
         generateAudio,
         contentFilter,
@@ -219,10 +227,10 @@ export async function POST(req: NextRequest) {
         webSearch,
         userId,
         onBeforeGrokApiFallback: grokSubscriptionPreferred ? reserveApiCredits : undefined,
-        onBeforeProviderSubmit: native4k ? async usage => {
+        onBeforeProviderSubmit: isMagi2 || native4k ? async usage => {
           billingQuote = await quoteVideo(usage)
           creditsRequired = billingQuote.credits
-          if (native4kNeedsDisclosure(billingQuote, maxCredits)) {
+          if (native4k && native4kNeedsDisclosure(billingQuote, maxCredits)) {
             disclosureQuote = billingQuote
             throw new Error('Native 4K cost disclosure required.')
           }
@@ -236,7 +244,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ...quote, error: quote.message }, { status: 409 })
       }
       if (!skillResult.success || !skillResult.taskId) {
-        if (native4k && skillResult.submissionUncertain) return NextResponse.json({
+        if ((native4k || isMagi2) && skillResult.submissionUncertain) return NextResponse.json({
           error: skillResult.message, code: 'SUBMISSION_UNCERTAIN', retryable: false,
           message: 'Credits remain reserved. Reconcile the original request; do not submit another paid job.',
         }, { status: 409 })
@@ -257,7 +265,7 @@ export async function POST(req: NextRequest) {
       }
 
       const taskId = skillResult.taskId
-      if (native4k) acceptedNativeTaskId = taskId
+      if (native4k || isMagi2) acceptedProtectedTaskId = taskId
       const actualVideoModel = skillResult.videoModel || selectedVideoModel
       const actualVideoRoute = resolveVideoGenerationRoute({ model: actualVideoModel, resolution: videoRoute.resolution })
       const snapshotId = crypto.randomUUID()
@@ -280,7 +288,7 @@ export async function POST(req: NextRequest) {
         duration: resolvePersistedVideoDuration({
           model: actualVideoModel,
           operation: videoOperation,
-          outputDuration: effectiveDuration,
+          outputDuration: skillResult.outputDuration ?? effectiveDuration,
           referenceVideoDuration,
         }) || null,
         model: actualVideoModel,
@@ -358,9 +366,9 @@ export async function POST(req: NextRequest) {
       }))
       return response
     } catch (error) {
-      if (acceptedNativeTaskId) return NextResponse.json({
+      if (acceptedProtectedTaskId) return NextResponse.json({
         error: 'Native 4K was accepted but saving failed. Restore this task; do not resubmit.',
-        code: 'PERSISTENCE_RECONCILIATION_REQUIRED', taskId: acceptedNativeTaskId, retryable: false,
+        code: 'PERSISTENCE_RECONCILIATION_REQUIRED', taskId: acceptedProtectedTaskId, retryable: false,
       }, { status: 409 })
       if (reservedCredits > 0) {
         await refundCredits(userId, reservedCredits, toolName)

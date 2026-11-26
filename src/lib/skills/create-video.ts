@@ -38,6 +38,7 @@ export interface CreateVideoInput {
   previousInteractionId?: string;            // Google Omni stateful extension lineage
   videoExtendDirection?: 'forward' | 'backward';
   generateAudio?: boolean;
+  videoSeed?: number; // Explicit MAGI-2 seed.
   contentFilter?: boolean;
   outputFormat?: 'mp4' | 'mov';
   webSearch?: boolean;
@@ -58,6 +59,7 @@ export interface CreateVideoInput {
 export interface CreateVideoResult {
   snapshotId?: string;
   sourceDuration?: number;
+  outputDuration?: number;
   costQuote?: ReturnType<typeof import('../billing/seedance25-native4k').native4kQuoteResult>['costQuote'];
   success: boolean;
   taskId?: string;
@@ -79,8 +81,14 @@ export interface CreateVideoResult {
   submissionUncertain?: boolean;
 }
 
-async function probeReferenceVideoMeta(url: string): Promise<VideoReferenceMeta | null> {
+async function probeReferenceVideoMeta(url: string, isMagi2 = false): Promise<VideoReferenceMeta | null> {
   try {
+    if (isMagi2) {
+      const { readProviderImage } = await import('../provider-image-preflight');
+      const buffer = await readProviderImage(url, 200_000_000, { mediaType: 'video', evolinkAsset: true });
+      const { probeMP4Dimensions, probeMP4Duration } = await import('../mp4-probe');
+      return { ...(probeMP4Dimensions(buffer) || {}), durationSec: probeMP4Duration(buffer), fileSizeBytes: buffer.length };
+    }
     const res = await fetch(url);
     if (!res.ok) return null;
     const contentLength = Number(res.headers.get('content-length') || 0);
@@ -99,7 +107,7 @@ async function probeReferenceVideoMeta(url: string): Promise<VideoReferenceMeta 
   }
 }
 
-async function fillReferenceVideoMetas(urls: string[], metas?: VideoReferenceMeta[], requireDuration = false): Promise<VideoReferenceMeta[] | undefined> {
+async function fillReferenceVideoMetas(urls: string[], metas?: VideoReferenceMeta[], requireDuration = false, isMagi2 = false): Promise<VideoReferenceMeta[] | undefined> {
   if (!urls.length && !metas?.length) return metas;
   const next = [...(metas || [])];
   for (let i = 0; i < urls.length; i++) {
@@ -107,7 +115,7 @@ async function fillReferenceVideoMetas(urls: string[], metas?: VideoReferenceMet
     const hasDimensions = Number(current.width) > 0 && Number(current.height) > 0;
     const hasSize = Number(current.fileSizeBytes) > 0;
     if (hasDimensions && hasSize && (!requireDuration || Number(current.durationSec) > 0)) continue;
-    const probed = await probeReferenceVideoMeta(urls[i]);
+    const probed = await probeReferenceVideoMeta(urls[i], isMagi2);
     next[i] = probed ? { ...current, ...probed } : current;
   }
   return next.length ? next : undefined;
@@ -340,12 +348,13 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     const { createVideoPipeline } = await import('../video-upscale-pipeline');
     return createVideoPipeline(input);
   }
-  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, videoOperation = 'generate', imageWorkflow, previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, videoOperation = 'generate', imageWorkflow, previousInteractionId, videoExtendDirection, generateAudio, videoSeed, contentFilter, outputFormat, webSearch } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length || !!previousInteractionId;
   const hasAudioReference = !!audioUrls?.length;
   const hasVoiceReference = !!referenceVoiceIds?.length;
   const provider = normalizeVideoModelId(videoModel);
   const isFlash = provider === 'seedance-2.5-flash';
+  const isMagi2 = provider === 'magi-2';
   const isWan30 = provider === 'wan-3.0' || provider === 'wan-3.0-prime';
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
   const native4k = isSeedance25Native4k(provider, route.resolution);
@@ -379,6 +388,20 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   });
 
   if (modelError) return { success: false, message: modelError };
+  const magi = isMagi2 ? await import('../magi2') : undefined;
+  if (magi) {
+    if (videoExtendDirection || outputFormat === 'mov' || webSearch || contentFilter === false || previousInteractionId || keepOriginalSound) {
+      return { success: false, retryable: false, message: 'MAGI-2 supports 1080p generation with optional feature references and native audio.' };
+    }
+    if ([...providerVideoUrls, ...(audioUrls || [])].some(url => !magi.isMagi2MediaUrl(url))) {
+      return { success: false, retryable: false, message: 'MAGI-2 reference audio and video require public HTTPS download URLs.' };
+    }
+    try {
+      (await import('../evolink')).getEvolinkVideoApiKey();
+    } catch (error) {
+      return { success: false, retryable: false, submissionUncertain: false, message: (error as Error).message };
+    }
+  }
   // Agent runtimes may serialize optional booleans as either true or false even
   // when the selected model does not own that option. Wan has no Makaron
   // content-filter toggle, and its MuleRouter request builder never forwards
@@ -402,12 +425,12 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: `Google Omni stateful extension supports a maximum cumulative duration of ${GOOGLE_OMNI_MAX_CUMULATIVE_SECONDS} seconds.`,
     };
   }
-  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'mulerouter' && route.provider !== 'minimax' && route.provider !== 'fal-sync' && provider !== 'fal-h3-max') {
+  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'mulerouter' && route.provider !== 'minimax' && route.provider !== 'fal-sync' && provider !== 'fal-h3-max' && !isMagi2) {
     return {
       success: false,
       message: route.provider === 'google-omni'
         ? 'Google Omni generates native audio from the prompt, but uploaded reference audio is not enabled in the current API. Use Seedance for audio_refs, or describe the soundtrack in the prompt for Omni.'
-        : 'Reference audio is only supported by Seedance, Wan 3.0, MiniMax H3, and Sync Lipsync v3.',
+        : 'Reference audio is only supported by Seedance, Wan 3.0, MiniMax H3, MAGI-2, and Sync Lipsync v3.',
     };
   }
   if (hasVoiceReference && route.provider !== 'grok') {
@@ -428,10 +451,10 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: `${capability.label} supports at most ${capability.maxAudioReferences ?? 3} reference audio files per generation.`,
     };
   }
-  const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas, Boolean(input.onBeforeProviderSubmit) || isFlash);
+  const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas, Boolean(input.onBeforeProviderSubmit) || isFlash || isMagi2, isMagi2);
 
   if (images.length === 0 && !hasVideoReference) {
-    if (hasAudioReference && provider !== 'seedance-2.5' && !isFlash && !isWan30) {
+    if (hasAudioReference && provider !== 'seedance-2.5' && !isFlash && !isWan30 && !isMagi2) {
       return {
         success: false,
         message: 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.',
@@ -480,6 +503,14 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       });
       filteredImages = prepared.images;
       finalPrompt = prepared.prompt;
+    } else if (magi) {
+      try {
+        const prepared = magi.prepareMagi2References(script, images, providerVideoUrls, audioUrls?.length ?? 0, Boolean(videoUrl));
+        finalPrompt = prepared.prompt;
+        filteredImages = prepared.images;
+      } catch (error) {
+        return { success: false, retryable: false, message: error instanceof Error ? error.message : 'Invalid MAGI-2 references.' };
+      }
     } else if (isWan30 || provider === 'fal-h3-max') {
       const prepared = prepareWan30References({
         prompt: script,
@@ -497,7 +528,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       finalPrompt = script;
     }
 
-    if (hasAudioReference) {
+    if (hasAudioReference && !isMagi2) {
       const audioMarkers = findAudioMarkers(script);
       const missing = (audioUrls || [])
         .map((_, index) => index + 1)
@@ -537,6 +568,14 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       model: provider,
       operation: videoOperation,
     }) ?? parseTotalDuration(finalPrompt);
+
+    if (isMagi2) resolvedDuration ??= 5;
+    const measuredVideoSeconds = resolvedReferenceVideoMetas?.slice(0, providerVideoUrls.length).map(meta => meta.durationSec) ?? [];
+    if (isMagi2 && (measuredVideoSeconds.length !== providerVideoUrls.length
+      || measuredVideoSeconds.some(seconds => seconds == null || !Number.isFinite(seconds) || seconds < 2 || seconds > 30)
+      || measuredVideoSeconds.reduce<number>((sum, seconds) => sum + (seconds ?? 0), 0) > 30)) {
+      return { success: false, retryable: false, message: 'MAGI-2 needs readable 2–30 second MP4/MOV references, up to 30 seconds combined.' };
+    }
 
     const h3References = provider === 'fal-h3-max'
       ? await (await import('../h3-reference-preflight')).prepareH3ReferenceMedia(filteredImages, providerVideoUrls, audioUrls || [])
@@ -639,6 +678,27 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         });
       } catch (error) { return { success: false, submissionUncertain: false, message: error instanceof Error ? error.message : 'Invalid Flash input.' }; }
     }
+    let magiRequest: import('../evolink').EvolinkTaskInput | undefined;
+    if (magi) {
+      try {
+        const providerModel = resolveVideoProviderModel({
+          model: provider, imageReferenceCount: filteredImages.length, hasVideoReference, hasAudioReference,
+          imageWorkflow: resolvedImageWorkflow,
+        })!;
+        magiRequest = {
+          model: providerModel, prompt: finalPrompt, images: filteredImages, videoUrls: providerVideoUrls,
+          audioUrls, duration: resolvedDuration, quality: route.resolution, aspectRatio: providerAspectRatio ?? '16:9',
+          generateAudio, seed: videoSeed,
+        };
+        magi.buildMagi2Payload({ ...magiRequest, model: providerModel });
+        if (audioUrls?.length) {
+          const { validateVideoAudioReferences } = await import('../video-audio-reference-preflight');
+          await validateVideoAudioReferences(audioUrls, { model: 'MAGI-2', maxBytes: 15_000_000, minSeconds: 2, evolinkAsset: true, formats: ['wav', 'mp3'] });
+        }
+      } catch (error) {
+        return { success: false, retryable: false, submissionUncertain: false, message: error instanceof Error ? error.message : 'Invalid MAGI-2 input.' };
+      }
+    }
     // H3 validates the actual first-frame bytes before reserving credits.
     if (billingUsage && route.provider !== 'fal-h3-max') {
       try {
@@ -654,7 +714,13 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       }
     }
 
-    if (route.provider === 'evolink-kling4') {
+    if (magiRequest) {
+      const { createEvolinkTask } = await import('../evolink');
+      taskId = await createEvolinkTask(magiRequest);
+      return { success: true, taskId, videoModel: provider, providerModel: magiRequest.model, provider: route.provider,
+        outputDuration: resolvedDuration,
+        message: `MAGI-2 task accepted by EvoLink. Task ID: ${taskId}. Poll the existing task for the result.` };
+    } else if (route.provider === 'evolink-kling4') {
       const { createKling4Task } = await import('../kling4');
       taskId = await createKling4Task({ model: provider as 'kling-4' | 'kling-4-flash', prompt: finalPrompt, images: filteredImages, videos: providerVideoUrls,
         duration: resolvedDuration, resolution: route.resolution as '720p' | '1080p',
@@ -920,6 +986,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       success: false,
       message: `Video creation error: ${msg}`,
       submissionUncertain: true,
+      ...(isMagi2 ? { retryable: false, errorCode: 'SUBMISSION_UNCERTAIN' } : {}),
     };
   }
 }

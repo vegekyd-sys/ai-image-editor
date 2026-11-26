@@ -72,7 +72,10 @@ function persistProviderVideoAfterResponse(options: {
       if (!buffer) return
 
       const { probeMP4Dimensions } = await import('@/lib/mp4-probe')
-      const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 }
+      const isMagi2 = options.videoMeta.model === 'magi-2'
+      const measured = probeMP4Dimensions(buffer)
+      if (isMagi2 && !measured) return
+      const dims = measured || { width: 1080, height: 1920 }
 
       const permanentUrl = await uploadVideo(options.admin, options.ownerUserId, options.projectId, options.snapshotId, buffer)
       if (permanentUrl) {
@@ -81,14 +84,18 @@ function persistProviderVideoAfterResponse(options: {
           status: 'completed',
           videoUrl: permanentUrl,
           providerUrl: options.providerVideoUrl,
-          videoPath: `${options.ownerUserId}/projects/${options.projectId}/animation/${options.snapshotId}.mp4`,
+          videoPath: isMagi2
+            ? `${options.ownerUserId}/${options.projectId}/videos/${options.snapshotId}.mp4`
+            : `${options.ownerUserId}/projects/${options.projectId}/animation/${options.snapshotId}.mp4`,
           width: dims.width,
           height: dims.height,
         }
-        await options.admin
+        const update = options.admin
           .from('snapshots')
           .update({ video_meta: finalMeta })
           .eq('id', options.snapshotId)
+        if (isMagi2) update.eq('video_meta->>taskId', options.videoMeta.taskId)
+        await update
         console.log(`Video snapshot ${options.snapshotId} persisted (${dims.width}x${dims.height})`)
 
         const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair')
@@ -143,7 +150,8 @@ export async function GET(
     const videoMeta = snap.video_meta as VideoMeta
 
     // If already completed with permanent URL, return immediately (no provider call)
-    if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
+    const isMagi2 = videoMeta.model === 'magi-2'
+    if (videoMeta.status === 'completed' && videoMeta.videoUrl && (!isMagi2 || isPermanentUrl(videoMeta.videoUrl))) {
       const isPermanent = isPermanentUrl(videoMeta.videoUrl)
       const isRemotionExport = videoMeta.taskId?.startsWith('remotion-export-') === true
       if (isPermanent || isRemotionExport) {
@@ -320,10 +328,11 @@ export async function GET(
     if (result.status === 'completed' && result.videoUrl) {
       const updatedMeta: VideoMeta = { ...videoMeta, status: 'completed', videoUrl: result.videoUrl, providerUrl: result.videoUrl, ...(result.stage ? { pipelineStage: result.stage, baseVideoUrl: result.baseVideoUrl, enhancementStatus: result.enhancementStatus, requestedResolution: result.requestedResolution, resolution: result.actualResolution ?? videoMeta.resolution } : {}) }
 
-      await admin
-        .from('snapshots')
-        .update({ video_meta: updatedMeta })
-        .eq('id', snapshotId)
+      // Keep the MAGI-2 snapshot eligible for background polling while its
+      // provider URL is copied to permanent project storage.
+      if (!isMagi2) {
+        await admin.from('snapshots').update({ video_meta: updatedMeta }).eq('id', snapshotId)
+      }
 
       persistProviderVideoAfterResponse({
         admin,

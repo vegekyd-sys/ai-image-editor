@@ -36,7 +36,7 @@ export interface VideoModelCapability {
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
-  provider?: 'evolink-kling4' | 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-h3-max' | 'fal-sync' | 'piapi'
+  provider?: 'evolink-kling4' | 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-h3-max' | 'fal-sync' | 'piapi' | 'evolink'
   providerModel?: string
   /** Selection policy is exposed with capabilities; live totals still come from quoteVideo. */
   highCostResolutions?: VideoResolution[]
@@ -124,6 +124,18 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportedAspectRatios: ['16:9', '9:16', '1:1', '21:9'],
     estimatedCostPerSecondUsd: .094, estimatedCostPerSecondUsdByResolution: { '720p': .094 },
     provider: 'evolink-kling4', providerModel: 'kling-v4-flash-reference-to-video',
+  },
+  'magi-2': {
+    id: 'magi-2', label: 'MAGI-2', minOutputDuration: 4, maxOutputDuration: 30,
+    maxReferenceVideoDuration: 30, supportsVideoReference: true, supportsBaseVideoEdit: false,
+    referenceVideoSize: { maxFileSizeMb: 200_000_000 / 1024 ** 2, description: 'MP4/MOV, H.264/H.265, 2–30s per clip, ≤30s combined, ≤200 MB per clip' },
+    defaultImageWorkflow: 'reference-to-video', longVideoChunkSeconds: 30,
+    maxImageReferences: 10, maxVideoReferences: 5, maxAudioReferences: 5, maxTotalReferences: 20,
+    supportedResolutions: ['1080p'], defaultResolution: '1080p',
+    supportedAspectRatios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+    estimatedCostPerSecondUsd: 0.08,
+    supportsExplicitImageToVideo: true,
+    provider: 'evolink', providerModel: 'magi-2-reference-to-video',
   },
   kling: {
     id: 'kling',
@@ -857,7 +869,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
   const id = normalizeVideoModelId(model)
-  return isKling4FamilyModel(id) || getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'minimax-h3-max' || id === 'fal-h3-max' || id === 'google-omni' || id === 'grok'
+  return id === 'magi-2' || isKling4FamilyModel(id) || getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'minimax-h3-max' || id === 'fal-h3-max' || id === 'google-omni' || id === 'grok'
 }
 
 export function resolveVideoProviderModel(options: {
@@ -878,6 +890,11 @@ export function resolveVideoProviderModel(options: {
     (options.imageReferenceCount ?? 0) > 0 ||
     options.hasVideoReference === true ||
     options.hasAudioReference === true
+
+  if (route.model === 'magi-2') {
+    if (options.imageWorkflow === 'image-to-video') return 'magi-2-image-to-video'
+    return hasReferenceMedia ? route.providerModel : 'magi-2-text-to-video'
+  }
 
   if (route.model === 'grok') {
     if (options.operation === 'edit' || options.operation === 'extend') return 'grok-imagine-video'
@@ -1136,6 +1153,7 @@ export function resolveVideoOutputDuration(options: {
     return options.requestedDuration ?? 6
   }
   if (options.requestedDuration != null) return options.requestedDuration
+  if (normalizedModel === 'magi-2') return undefined
   if (normalizedModel === 'minimax-h3-max') return 5
   if (options.operation === 'extend' && normalizeVideoModelId(options.model) === 'google-omni') {
     return GOOGLE_OMNI_MAX_EXTEND_SECONDS
@@ -1188,6 +1206,18 @@ export function validateVideoModelRequest(options: {
   const normalizedModel = normalizeVideoModelId(options.model)
   const retirementError = getVideoModelRetirementError(normalizedModel)
   if (retirementError) return retirementError
+  if (normalizedModel === 'magi-2') {
+    if (options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 4 || options.outputDuration > 30)) {
+      return 'MAGI-2 output duration must be a whole number from 4 to 30 seconds.'
+    }
+    if (options.referenceVideoMetas?.some(meta => meta.durationSec != null && (meta.durationSec < 2 || meta.durationSec > 30))) {
+      return 'MAGI-2 reference videos must each be 2–30 seconds.'
+    }
+    if (options.imageWorkflow === 'image-to-video' && (
+      (options.imageReferenceCount != null && options.imageReferenceCount < 1) || (options.imageReferenceCount ?? 0) > 2 ||
+      options.hasVideoReference || (options.audioReferenceCount ?? 0) > 0
+    )) return 'MAGI-2 first/last frame mode accepts one or two images only.'
+  }
   if (normalizedModel === 'seedance-2.5-flash') {
     if (options.operation === 'extend') return 'Seedance 2.5 Flash does not support extension.'
     if (options.operation !== 'edit' && options.outputDuration != null && (!Number.isInteger(options.outputDuration) || options.outputDuration < 4 || options.outputDuration > 30)) return 'Seedance 2.5 Flash duration must be an integer 4–30 seconds.'

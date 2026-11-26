@@ -895,6 +895,8 @@ const en = {
   'model.openai.desc': 'Superior text rendering and creative generation.',
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': 'Text or image/video references, 3–30s; video editing preserves source audio.',
+  'model.magi2.name': 'MAGI-2',
+  'model.magi2.desc': 'Sand AI via EvoLink with synchronized audio. Text, first/last frames, or multimodal references at 1080p, 4–30 seconds.',
   'model.kling4Flash.name': 'Kling 4.0 Flash',
   'model.kling4Flash.desc': 'Default video model. Faster Kling 4.0: text or image/video references, 3–20s at 720p; editing preserves source audio.',
   'model.kling.name': 'Kling O3',
