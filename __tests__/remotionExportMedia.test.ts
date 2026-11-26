@@ -177,6 +177,7 @@ describe('public export pipeline media contract', () => {
     expect(exportMediaCacheKey('owner',src,60)).not.toBe(exportMediaCacheKey('owner',src,30));
   });
   it('prepares cold sources concurrently with bounded, exclusive runners; warm exports need none', async () => {
+    vi.stubEnv('MEDIA_SANDBOX_EXECUTOR', 'vercel');
     const urls = Array.from({length: 7}, (_, index) => `https://example.com/${index}.mp4`);
     const design = {width: 1080, height: 1920, code: '', props: {clips: urls}};
     const {store} = backend();
@@ -212,6 +213,7 @@ describe('public export pipeline media contract', () => {
     expect(createRunner).toHaveBeenCalledTimes(3);
   });
   it('drains in-flight workers on failure and leaves remaining sources unclaimed', async () => {
+    vi.stubEnv('MEDIA_SANDBOX_EXECUTOR', 'vercel');
     const urls = Array.from({length: 5}, (_, index) => `https://example.com/${index}.mp4`);
     const design = {width: 1080, height: 1920, code: '', props: {clips: urls}};
     const {store} = backend();
@@ -240,6 +242,15 @@ describe('public export pipeline media contract', () => {
     await result;
     expect(stopped).toHaveBeenCalledTimes(3);
     expect(store.commit).toHaveBeenCalledTimes(2);
+  });
+  it('uses a single runner on the local host even when cloud credentials exist', async () => {
+    vi.stubEnv('MEDIA_SANDBOX_EXECUTOR', 'local');
+    vi.stubEnv('MEDIA_SANDBOX_SNAPSHOT_ID', 'configured');
+    const b = backend();
+    const design = {width: 1080, height: 1920, code: '', props: {clips: ['https://example.com/a.mp4', 'https://example.com/b.mp4']}};
+    const result = await prepareRemotionExportMedia(design, {userId: 'owner', ...b});
+    expect(result.summary).toMatchObject({prepared: 2, workersUsed: 1});
+    expect(b.createRunner).toHaveBeenCalledTimes(1);
   });
   it('does not publish a cache manifest or fall back to the broken original after upload failure', async () => {
     const b = backend(); b.runner.upload.mockRejectedValueOnce(new Error('Failed https://storage.example/?signature=secret'));

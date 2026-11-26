@@ -43,6 +43,10 @@ export interface ExportMediaStore {
 function env(name: string): string | undefined {
   return process.env[name]?.replace(/\\[rn]|[\u0000-\u001F\u007F]/g, '').trim() || undefined;
 }
+function usesMediaSandbox(): boolean {
+  const executor = env('MEDIA_SANDBOX_EXECUTOR');
+  return executor !== 'local' && (executor === 'vercel' || Boolean(env('VERCEL') || env('MEDIA_SANDBOX_SNAPSHOT_ID')));
+}
 export function exportMediaCacheKey(userId: string, sourceUrl: string, fps: number): string {
   // Include the complete authorized source URL and owner; never share private media across accounts.
   const hash = createHash('sha256').update(JSON.stringify([userId, sourceUrl, fps, EXPORT_MEDIA_RECIPE])).digest('hex');
@@ -95,9 +99,7 @@ function mediaStore(): ExportMediaStore {
 
 /** A runner handles one source at a time in its own VM or local temporary directory. */
 export async function createExportMediaRunner(signal: AbortSignal): Promise<ExportMediaRunner> {
-  const useSandbox = (env('MEDIA_SANDBOX_EXECUTOR') === 'vercel' || Boolean(env('VERCEL') || env('MEDIA_SANDBOX_SNAPSHOT_ID')))
-    && env('MEDIA_SANDBOX_EXECUTOR') !== 'local';
-  if (!useSandbox) {
+  if (!usesMediaSandbox()) {
     const root = await mkdtemp(path.join(tmpdir(), 'makaron-export-media-'));
     const script = path.join(root, 'prepare.cjs');
     await writeFile(script, EXPORT_MEDIA_PREPARATION_SCRIPT);
@@ -211,7 +213,8 @@ export async function prepareRemotionExportMedia(design: DesignPayload, options:
     await options.onHeartbeat?.();
     // Separate scratch spaces keep prepare + upload atomic per runner. Drain active
     // sources on error: another export may already be awaiting their shared promise.
-    const results = await Promise.allSettled(Array.from({length: Math.min(MAX_PREPARATION_WORKERS, sources.length)}, work));
+    const concurrency = usesMediaSandbox() ? Math.min(MAX_PREPARATION_WORKERS, sources.length) : 1;
+    const results = await Promise.allSettled(Array.from({length: concurrency}, work));
     for (const result of results) if (result.status === 'rejected') throw result.reason;
     return {design: localizePreviewMedia(design, replacements), summary};
   } catch (error) {
