@@ -1,6 +1,6 @@
 # Makaron Release Checklist
 
-Use this for Makaron app releases, model launches, production deploys, and CLI publishes. The goal is to keep code, Vercel, production health, npm, changelog, and memory in one release loop instead of treating them as separate tasks.
+Use this for Makaron app releases, model launches, production deploys, and CLI publishes. The goal is to keep code, Vercel, production health, npm, changelog, and release evidence in one release loop instead of treating them as separate tasks.
 
 For model, provider, capability, or pricing changes, follow the [shared model update workflow](model-release-workflow.md).
 
@@ -171,12 +171,6 @@ Release copy should be short and product-facing:
 
 Avoid implementation-only wording in changelog and README updates.
 
-## Memory Writeback
+## Release Handoff
 
-After an important release, update the smallest matching memory surface:
-
-- Makaron project facts: `~/.codex/wiki/projects/makaron/memory/`.
-- Cross-project Codex behavior: `~/.codex/memories/extensions/ad_hoc/notes/`.
-- Do not update global index/log files unless the structure or routing changed.
-
-The release is not closed until code, production, CLI surface if applicable, user-facing copy, and durable memory are consistent.
+Record the shipped SHA, deployment IDs, user-flow checks, CLI/npm outcome, and rollback baseline in the PR or release record so the next maintainer can verify the release. Keep credentials, signed URLs, and private customer data out of shared records. Update personal or team memory only when that writeback is part of the authorized task.
