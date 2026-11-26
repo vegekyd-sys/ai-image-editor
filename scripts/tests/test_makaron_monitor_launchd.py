@@ -14,6 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[2] / 'scripts'))
 import makaron_event_bridge as bridge
+from makaron_export_watch import observe
 
 
 def send(conn, **frame):
@@ -27,7 +28,8 @@ def read(stream):
 
 
 @pytest.mark.skipif(sys.platform != 'darwin', reason='requires a macOS GUI launchd domain')
-def test_error_starts_one_owner_turn_through_launchd_and_completes_latest_revision(monkeypatch):
+@pytest.mark.parametrize('export_replay', [False, True], ids=['runtime', '29-project-export'])
+def test_error_starts_one_owner_turn_through_launchd_and_completes_latest_revision(monkeypatch, export_replay):
     domain = subprocess.run(['/bin/launchctl', 'print', f'gui/{os.getuid()}'],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if domain.returncode:
@@ -36,7 +38,8 @@ def test_error_starts_one_owner_turn_through_launchd_and_completes_latest_revisi
     # the temporary state and this Unix socket; there is no real Codex CLI.
     with tempfile.TemporaryDirectory(prefix='makaron-test-', dir='/tmp') as tmp, socket.socket(socket.AF_UNIX) as server:
         directory = Path(tmp)
-        for name in ('makaron_event_worker.py', 'makaron_event_bridge.py', 'makaron_desktop_ipc.py', 'monitor_makaron.py'):
+        for name in ('makaron_event_worker.py', 'makaron_event_bridge.py', 'makaron_desktop_ipc.py', 'monitor_makaron.py',
+                     'makaron_export_watch.py'):
             shutil.copyfile(Path(bridge.__file__).with_name(name), directory / name)
         sock = str(directory / 'ipc.sock')
         server.bind(sock)
@@ -46,12 +49,26 @@ def test_error_starts_one_owner_turn_through_launchd_and_completes_latest_revisi
         (directory / 'bridge-config.json').write_text(json.dumps(config))
         path = directory / 'bridge-state.json'
         path.write_text(json.dumps({'enabled': True}))
-        errors = [dict(request_id='request-1', fingerprint='test-error')]
+        tick = 0
+        errors = [] if export_replay else [dict(request_id='request-1', fingerprint='test-error')]
+        fixture = json.loads(Path(__file__).with_name('fixtures').joinpath('makaron-export-validation-replay.json').read_text())
+        def export_poll(config, state, now):
+            if export_replay:
+                rows = [dict(at=t/1000, id=str(i), project_id=str(project), family='media_validation')
+                        for i, (t, project) in enumerate(fixture['failed_jobs']) if tick-240 <= t/1000 <= tick]
+                observe(state, rows, tick, 'fixture')
+            return {'name': 'export_jobs', 'ok': True}
+        monkeypatch.setattr(bridge, 'poll_exports', export_poll)
         monkeypatch.setattr(bridge, 'detect', lambda *a: ([], errors))
         monkeypatch.setattr(sys, 'argv', ['bridge', '--directory', tmp, 'tick'])
+        if export_replay:
+            for tick in range(0, 2640, 120):
+                assert bridge.main() == 0
+                assert not json.loads(path.read_text()).get('export_alert_batches')
+            tick = 2640
         assert bridge.main() == 0
         s = json.loads(path.read_text())
-        bid = s['active_batch']
+        bid = s['export_alert_batches'][0] if export_replay else s['active_batch']
         b = s['batches'][bid]
         token = b['dispatch_id']
         assert b['dispatch_result']['returncode'] == 0
@@ -91,6 +108,8 @@ def test_error_starts_one_owner_turn_through_launchd_and_completes_latest_revisi
                 assert start['method'] == 'thread-follower-start-turn' and start['targetClientId'] == 'owner'
                 assert request['threadId'] == 'fixture' and request['clientUserMessageId'] == token
                 assert request['input'][0]['text'].startswith(f'[Makaron Monitor batch={bid}]')
+                if export_replay:
+                    assert '3 个不同项目' in request['input'][0]['text']
                 send(conn, type='response', requestId=start['requestId'], resultType='success',
                      result={'turn': {'id': 'incident-turn'}})
                 assert stream.read(1) == b''
@@ -104,23 +123,28 @@ def test_error_starts_one_owner_turn_through_launchd_and_completes_latest_revisi
             b = json.loads(path.read_text())['batches'][bid]
             assert b['phase'] == 'working' and b['worker']['finished_at'] and not b['completed']
             assert b['worker']['native_turn_id'] == 'incident-turn'
-            errors.append(dict(request_id='request-2', fingerprint='test-error'))
-            bridge.main()
             outcome = directory / 'outcome.json'
             outcome.write_text(json.dumps(dict(summary='done', evidence=[], unresolved=[], next_action='none')))
-            stale = receipt('complete', '--result', str(outcome), '--revision', '1')
-            assert not stale['accepted'] and stale['revision'] == 2
-            assert receipt('claim', '--renew')['batch']['first_receipt_at'] == claim['batch']['first_receipt_at']
-            assert receipt('complete', '--result', str(outcome), '--revision', '2')['accepted']
+            if export_replay:
+                assert receipt('complete', '--result', str(outcome), '--revision', '1')['accepted']
+                for tick in range(2760, 20000, 120):
+                    bridge.main()
+            else:
+                errors.append(dict(request_id='request-2', fingerprint='test-error'))
+                bridge.main()
+                stale = receipt('complete', '--result', str(outcome), '--revision', '1')
+                assert not stale['accepted'] and stale['revision'] == 2
+                assert receipt('claim', '--renew')['batch']['first_receipt_at'] == claim['batch']['first_receipt_at']
+                assert receipt('complete', '--result', str(outcome), '--revision', '2')['accepted']
+                bridge.main()  # same error
+                errors.clear()
+                bridge.main()  # recovery
+                errors.append(dict(request_id='request-3', fingerprint='test-error'))
+                bridge.main()  # recurrence within cooldown
             assert receipt('claim')['reason'] == 'completed'
-            bridge.main()  # same error
-            errors.clear()
-            bridge.main()  # recovery
-            errors.append(dict(request_id='request-3', fingerprint='test-error'))
-            bridge.main()  # recurrence within cooldown
             s = json.loads(path.read_text())
-            assert s['active_batch'] is None and list(s['batches']) == [bid]
-            assert len(s['seen_error_keys']) == 3 and s['batches'][bid]['phase'] == 'completed'
+            assert not s.get('active_batch') and not s.get('export_alert_batches') and list(s['batches']) == [bid]
+            assert s['batches'][bid]['phase'] == 'completed'
             server.setblocking(False)
             with pytest.raises(BlockingIOError):
                 server.accept()

@@ -60,7 +60,7 @@ def main():
             raise SystemExit('Existing monitor belongs to another chat; do not replace it')
         state_path = directory / 'bridge-state.json'
         state = json.loads(state_path.read_text()) if state_path.exists() else {'installed_at': time.time()}
-        if state.get('active_batch') or state.get('selftest_batch'):
+        if state.get('active_batch') or state.get('selftest_batch') or state.get('export_alert_batches'):
             raise SystemExit('Finish the active batch before reinstalling')
         ensure_handler_idle(directory)
         domain = 'gui/' + str(os.getuid())
@@ -68,7 +68,8 @@ def main():
         state['enabled'] = False
         write_private(state_path, state)
         source = Path(__file__).resolve().parent
-        for name in ['monitor_makaron.py', 'makaron_event_bridge.py', 'makaron_event_worker.py', 'makaron_desktop_ipc.py']:
+        for name in ['monitor_makaron.py', 'makaron_event_bridge.py', 'makaron_event_worker.py', 'makaron_desktop_ipc.py',
+                     'makaron_export_watch.py', 'export-watch.mjs']:
             shutil.copyfile(source / name, directory / name)
             (directory / name).chmod(0o700)
         shutil.copyfile(source.parent / 'docs/ops/makaron-incident-instructions.md', directory / 'incident-instructions.md')

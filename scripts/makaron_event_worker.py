@@ -16,7 +16,7 @@ import threading
 import time
 
 from monitor_makaron import utc_now, write_private
-from makaron_event_bridge import handler_message
+from makaron_event_bridge import handler_message, is_current_batch
 from makaron_desktop_ipc import DesktopIPC
 
 
@@ -42,7 +42,7 @@ def edit_batch(directory, bid, token, change, when=None):
 def executable_batch(state, batch):
     return (state.get('enabled', False) and not batch.get('completed')
             and not batch.get('received')
-            and batch['id'] in {state.get('active_batch'), state.get('selftest_batch')})
+            and is_current_batch(state, batch['id']))
 
 
 def command(config, directory):
@@ -311,7 +311,7 @@ def run(directory, bid, token):
                 stop_process(process)
             facts['finished_at'] = utc_now()
             if process is not None:
-                facts['cli_exit_code'] = exit_code
+                facts['cli_exit_code'] = process.returncode
             def finish(_, batch):
                 batch['worker'] = dict(facts)
                 not_delivered = any(facts.get(key) for key in

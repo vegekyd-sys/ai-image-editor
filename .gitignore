@@ -174,3 +174,9 @@ infra/
 !/scripts/tests/test_makaron_event_worker.py
 !/scripts/tests/test_makaron_desktop_ipc.py
 !/scripts/tests/test_makaron_monitor_launchd.py
+!/scripts/export-watch.mjs
+!/scripts/makaron_export_watch.py
+!/scripts/tests/test_makaron_export_watch.py
+!/scripts/tests/fixtures/
+/scripts/tests/fixtures/*
+!/scripts/tests/fixtures/makaron-export-validation-replay.json
