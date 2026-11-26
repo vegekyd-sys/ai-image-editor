@@ -180,7 +180,8 @@ describe('public export pipeline media contract', () => {
     const urls = Array.from({length: 7}, (_, index) => `https://example.com/${index}.mp4`);
     const design = {width: 1080, height: 1920, code: '', props: {clips: urls}};
     const {store} = backend();
-    const gate = Promise.withResolvers<void>();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
     const seen = new Set<string>();
     const stopped = vi.fn();
     const createRunner = vi.fn(async () => {
@@ -190,7 +191,7 @@ describe('public export pipeline media contract', () => {
           expect(current).toBeUndefined();
           current = url;
           seen.add(url);
-          await gate.promise;
+          await gate;
           return manifest;
         },
         async upload() { expect(current).toBeDefined(); current = undefined; },
@@ -201,7 +202,7 @@ describe('public export pipeline media contract', () => {
     try {
       await vi.waitFor(() => expect(seen.size).toBe(3));
     } finally {
-      gate.resolve();
+      release();
     }
     expect((await cold).summary).toMatchObject({prepared: 7, cacheHits: 0, workersUsed: 3});
     expect(seen).toEqual(new Set(urls));
@@ -214,14 +215,15 @@ describe('public export pipeline media contract', () => {
     const urls = Array.from({length: 5}, (_, index) => `https://example.com/${index}.mp4`);
     const design = {width: 1080, height: 1920, code: '', props: {clips: urls}};
     const {store} = backend();
-    const gate = Promise.withResolvers<void>();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
     const started = new Set<string>();
     const stopped = vi.fn();
     const createRunner = async () => ({
       async prepare(url: string) {
         started.add(url);
         if (url === urls[0]) throw new Error('transcode failed');
-        await gate.promise;
+        await gate;
         return manifest;
       },
       async upload() {},
@@ -233,7 +235,7 @@ describe('public export pipeline media contract', () => {
       await vi.waitFor(() => expect(stopped).toHaveBeenCalledTimes(1));
       expect(started).toEqual(new Set(urls.slice(0, 3)));
     } finally {
-      gate.resolve();
+      release();
     }
     await result;
     expect(stopped).toHaveBeenCalledTimes(3);
