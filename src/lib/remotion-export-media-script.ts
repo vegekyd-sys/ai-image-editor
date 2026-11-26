@@ -36,7 +36,7 @@ async function probe(file, remote = false) {
   const rate = String(v.avg_frame_rate || v.r_frame_rate || '0/1').split('/').map(Number);
   const rotation = Number((v.side_data_list || []).find(s => s.rotation !== undefined)?.rotation || v.tags?.rotate || 0);
   const rotated = Math.abs(rotation % 180) === 90;
-  return {codec:v.codec_name,pixelFormat:v.pix_fmt,width:rotated?v.height:v.width,height:rotated?v.width:v.height,
+  return {codec:v.codec_name,pixelFormat:v.pix_fmt,colorRange:v.color_range,width:rotated?v.height:v.width,height:rotated?v.width:v.height,
     fps:rate[1] ? rate[0]/rate[1] : rate[0],duration:Number(result.format?.duration || v.duration),
     // iPhone files carry undecodable tracks (APAC spatial audio, mebx metadata); map only decodable audio by index.
     videoIndex:v.index,audioIndexes:streams.filter(s=>s.codec_type==='audio' && s.codec_name && s.codec_name!=='unknown' && s.codec_name!=='none').map(s=>s.index),
@@ -97,7 +97,14 @@ try {
       if (needsPreparation) {
         const filters = [];
         if (original.hdr) filters.push('zscale=t=linear:npl=100','format=gbrpf32le','tonemap=tonemap=hable:desat=0','zscale=p=bt709:t=bt709:m=bt709:r=tv');
-        filters.push('fps='+targetFps,'pad=ceil(iw/2)*2:ceil(ih/2)*2','format=yuv420p');
+        filters.push('fps='+targetFps);
+        // format=yuv420p alone can retain full-range samples and produce yuvj420p on FFmpeg 7.
+        // HDR already sets TV range in the tone-mapping filter above.
+        if (!original.hdr && local.colorRange === 'pc') {
+          filters.push('scale=in_range=full:out_range=tv','format=yuv420p');
+          args.push('-color_range','tv');
+        }
+        filters.push('pad=ceil(iw/2)*2:ceil(ih/2)*2','format=yuv420p');
         args.push('-vf',filters.join(','),'-c:v','libx264','-preset','veryfast','-crf','18',
           '-g',String(Math.max(1,Math.round(targetFps))),'-keyint_min','1','-sc_threshold','0','-threads','4',
           '-c:a','aac','-b:a','192k','-map_metadata','-1');
@@ -112,11 +119,18 @@ try {
       const bytes = (await fs.stat(output)).size;
       const width = needsPreparation ? Math.ceil(original.width/2)*2 : original.width;
       const height = needsPreparation ? Math.ceil(original.height/2)*2 : original.height;
-      if (!bytes || bytes > outputBudget || prepared.codec !== 'h264' || prepared.pixelFormat !== 'yuv420p'
-        || prepared.width !== width || prepared.height !== height
-        || prepared.audioStreams !== original.audioStreams || Math.abs(prepared.duration-original.duration) > Math.max(0.15,2/targetFps)) {
-        throw new Error('Prepared media failed dimensions, audio or duration validation');
+      const failures = [];
+      if (!bytes || bytes > outputBudget) failures.push('bytes '+bytes+' outside 1..'+outputBudget);
+      if (prepared.codec !== 'h264') failures.push('codec '+prepared.codec+' expected h264');
+      if (prepared.pixelFormat !== 'yuv420p') failures.push('pixel format '+prepared.pixelFormat+' expected yuv420p');
+      if (prepared.width !== width || prepared.height !== height) {
+        failures.push('dimensions '+prepared.width+'x'+prepared.height+' expected '+width+'x'+height);
       }
+      if (prepared.audioStreams !== original.audioStreams) failures.push('audio streams '+prepared.audioStreams+' expected '+original.audioStreams);
+      if (!Number.isFinite(prepared.duration) || Math.abs(prepared.duration-original.duration) > Math.max(0.15,2/targetFps)) {
+        failures.push('duration '+prepared.duration+'s expected '+original.duration+'s');
+      }
+      if (failures.length) throw new Error('Prepared media failed validation: '+failures.join(', '));
       // Validate the complete file, not just its first packet / metadata.
       await exec(ffmpeg,['-v','error','-xerror','-protocol_whitelist','file,pipe','-i',output,'-f','null','-'],
         {signal,timeout:config.timeoutMs||240000,maxBuffer:1024**2});
