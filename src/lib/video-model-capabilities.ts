@@ -35,6 +35,7 @@ export interface VideoModelCapability {
   supportedResolutions?: VideoResolution[]
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
+  supportedImageToVideoAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
   provider?: 'evolink-kling4' | 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-h3-max' | 'fal-sync' | 'piapi' | 'evolink'
   providerModel?: string
@@ -133,6 +134,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxImageReferences: 10, maxVideoReferences: 5, maxAudioReferences: 5, maxTotalReferences: 20,
     supportedResolutions: ['1080p'], defaultResolution: '1080p',
     supportedAspectRatios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+    supportedImageToVideoAspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16'],
     estimatedCostPerSecondUsd: 0.08,
     supportsExplicitImageToVideo: true,
     provider: 'evolink', providerModel: 'magi-2-reference-to-video',
@@ -952,12 +954,15 @@ export function validateVideoResolutionRequest(options: {
 
 export function validateVideoAspectRatioRequest(options: {
   model?: string | null
-  aspectRatio?: VideoAspectRatioInput
+  aspectRatio?: string | null
+  imageWorkflow?: VideoImageWorkflow
 }): string | null {
   if (!options.aspectRatio || options.aspectRatio === 'auto') return null
   const capability = getVideoModelCapability(options.model)
-  if (capability.supportedAspectRatios?.length && !capability.supportedAspectRatios.includes(options.aspectRatio)) {
-    return `${capability.label} does not support ${options.aspectRatio}. Supported aspect ratios: ${capability.supportedAspectRatios.join(', ')}.`
+  const frameRatios = options.imageWorkflow === 'image-to-video' && capability.supportedImageToVideoAspectRatios
+  const supported = frameRatios || capability.supportedAspectRatios
+  if (supported?.length && !supported.some(ratio => ratio === options.aspectRatio)) {
+    return `${capability.label}${frameRatios ? ' first/last frame mode' : ''} does not support ${options.aspectRatio}. Supported aspect ratios: ${frameRatios ? 'auto, ' : ''}${supported.join(', ')}.`
   }
   return null
 }
@@ -1241,6 +1246,7 @@ export function validateVideoModelRequest(options: {
   const aspectRatioError = validateVideoAspectRatioRequest({
     model: options.model,
     aspectRatio: options.aspectRatio,
+    imageWorkflow: options.imageWorkflow,
   })
   if (aspectRatioError) return aspectRatioError
   const imageWorkflowError = validateVideoImageWorkflowRequest({

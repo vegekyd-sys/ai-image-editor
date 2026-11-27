@@ -1,4 +1,11 @@
-import { getVideoModelCapability } from './video-model-capabilities'
+import { getVideoModelCapability, validateVideoAspectRatioRequest } from './video-model-capabilities'
+
+export function validateMagi2Prompt(prompt: unknown): string | null {
+  if (typeof prompt !== 'string' || !prompt.trim() || Array.from(prompt.trim()).length > 15_000) {
+    return 'MAGI-2 requires a non-blank prompt of at most 15,000 characters for every mode.'
+  }
+  return null
+}
 
 export function isMagi2MediaUrl(raw: string): boolean {
   try {
@@ -10,9 +17,14 @@ export function isMagi2MediaUrl(raw: string): boolean {
 }
 
 /** Preserve timeline marker identity while compacting the selected images. */
-export function prepareMagi2References(prompt: string, images: string[], videos: string[], audioCount: number, explicitVideo: boolean) {
+export function prepareMagi2References(prompt: string, images: string[], videos: string[], audioCount: number, explicitVideo: boolean, orderedFrames = false) {
   const selectedImages: string[] = []
   const mapped = new Map<number, string>()
+  if (orderedFrames) {
+    images.forEach((url, index) => {
+      if (url) mapped.set(index + 1, `Image ${selectedImages.push(url)}`)
+    })
+  }
   let nextTimelineVideo = explicitVideo ? 1 : 0
   const text = prompt.replace(/<<<(?:image|media)_(\d+)>>>/gi, (_marker, rawIndex) => {
     const index = Number(rawIndex)
@@ -40,8 +52,6 @@ export function prepareMagi2References(prompt: string, images: string[], videos:
     if (index < 1 || index > videos.length) throw new Error(`MAGI-2 video reference ${index} has no corresponding input.`)
     return `Video ${index}`
   })
-  // Standalone callers can supply an ordered image list with an ordinary
-  // prompt (or no prompt on an image/reference route).
   return { prompt: text, images: mapped.size ? selectedImages : images.filter(Boolean) }
 }
 
@@ -55,26 +65,22 @@ export function buildMagi2Payload(input: {
   quality?: string
   aspectRatio?: string
   generateAudio?: boolean
-  seed?: number
 }) {
   const {
     model, images, videoUrls = [], audioUrls = [], duration = 5, quality = '1080p',
-    aspectRatio = '16:9', generateAudio = true, seed,
+    generateAudio = true,
   } = input
-  const prompt = input.prompt.trim()
+  const isFrameMode = model === 'magi-2-image-to-video'
+  const aspectRatio = input.aspectRatio ?? (isFrameMode ? 'auto' : '16:9')
   const capability = getVideoModelCapability('magi-2')
   if (!Number.isInteger(duration) || duration < capability.minOutputDuration || duration > capability.maxOutputDuration) {
     throw new Error('MAGI-2 requires a whole-second output duration between 4 and 30 seconds.')
   }
-  if (quality !== '1080p' || !capability.supportedAspectRatios?.some(ratio => ratio === aspectRatio)) {
-    throw new Error('MAGI-2 requires 1080p and a supported fixed aspect ratio.')
-  }
-  if (Array.from(prompt).length > 15_000 || (!prompt && model === 'magi-2-text-to-video')) {
-    throw new Error('MAGI-2 text prompts must contain 1–15,000 Unicode characters.')
-  }
-  if (seed != null && (!Number.isSafeInteger(seed) || seed < 0 || seed > 4_294_967_295)) {
-    throw new Error('MAGI-2 seed must be an integer between 0 and 4294967295.')
-  }
+  if (quality !== '1080p') throw new Error('MAGI-2 supports 1080p only.')
+  const ratioError = validateVideoAspectRatioRequest({ model: 'magi-2', aspectRatio, imageWorkflow: isFrameMode ? 'image-to-video' : undefined })
+  if (ratioError) throw new Error(ratioError)
+  const promptError = validateMagi2Prompt(input.prompt)
+  if (promptError) throw new Error(promptError)
   const inputs = [...images, ...videoUrls, ...audioUrls]
   if (inputs.some(url => !isMagi2MediaUrl(url))) throw new Error('MAGI-2 references require public HTTPS download URLs.')
   switch (model) {
@@ -95,11 +101,10 @@ export function buildMagi2Payload(input: {
       throw new Error('Unknown EvoLink MAGI-2 route.')
   }
   return {
-    model, duration, quality, aspect_ratio: aspectRatio, generate_audio: generateAudio,
-    ...(prompt ? { prompt } : {}),
+    model, duration, quality, aspect_ratio: aspectRatio === 'auto' && !isFrameMode ? '16:9' : aspectRatio,
+    generate_audio: generateAudio, prompt: input.prompt.trim(),
     ...(images.length ? { image_urls: images } : {}),
     ...(videoUrls.length ? { video_urls: videoUrls } : {}),
     ...(audioUrls.length ? { audio_urls: audioUrls } : {}),
-    ...(seed != null ? { seed } : {}),
   }
 }

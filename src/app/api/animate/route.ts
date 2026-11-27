@@ -14,6 +14,7 @@ import { getVideoModelRetirementError, getVideoModelCapability, resolveProductVi
 import { native4kQuoteResult, native4kNeedsDisclosure } from '@/lib/billing/seedance25-native4k'
 import { isSeedance25Native4k } from '@/lib/video-model-capabilities'
 import { quoteVideo } from '@/lib/billing/media-pricing'
+import { validateMagi2Prompt } from '@/lib/magi2'
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 
 export const maxDuration = 1800
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     const user = session?.user
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution, videoOperation, videoExtendDirection, imageWorkflow, generateAudio, videoSeed, audioUrls, maxCredits } = await req.json()
+    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution, videoOperation, videoExtendDirection, imageWorkflow, generateAudio, audioUrls, maxCredits } = await req.json()
     const selectedVideoModel = resolveProductVideoModelId(videoModel)
     const retirementError = getVideoModelRetirementError(selectedVideoModel)
     if (retirementError) return NextResponse.json({ error: retirementError }, { status: 400 })
@@ -33,6 +34,10 @@ export async function POST(req: NextRequest) {
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const native4k = isSeedance25Native4k(selectedVideoModel, videoRoute.resolution)
     const isMagi2 = selectedVideoModel === 'magi-2'
+    if (isMagi2) {
+      const promptError = validateMagi2Prompt(prompt)
+      if (promptError) return NextResponse.json({ error: promptError }, { status: 400 })
+    }
     let disclosureQuote: Awaited<ReturnType<typeof quoteVideo>> | undefined
     let acceptedProtectedTaskId: string | undefined
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
@@ -155,7 +160,7 @@ export async function POST(req: NextRequest) {
         referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
         videoOperation,
         ...(isMagi2 ? {
-          imageWorkflow, generateAudio, videoSeed,
+          imageWorkflow, generateAudio,
           audioUrls: Array.isArray(audioUrls) ? audioUrls : undefined,
         } : {}),
         videoExtendDirection,

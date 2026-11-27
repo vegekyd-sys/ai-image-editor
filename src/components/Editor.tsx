@@ -4283,6 +4283,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                       videoModel: currentSnap.videoMeta.model,
                       videoResolution: currentSnap.videoMeta.resolution,
                       videoAspectRatio: currentSnap.videoMeta.aspectRatio,
+                      videoImageWorkflow: currentSnap.videoMeta.providerModel === 'magi-2-image-to-video' ? 'image-to-video' : undefined,
                       error: currentSnap.videoMeta.error,
                     }] : animations}
                     selectedVideoId={isViewingVideoV2 ? currentSnap?.id ?? null : selectedVideoId}
@@ -4305,7 +4306,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                         const res = await fetch('/api/video-snapshot', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId(), videoResolution: anim.videoResolution || 'auto', aspectRatio: anim.videoAspectRatio }),
+                          body: JSON.stringify({ projectId, imageUrls: images, prompt: anim.prompt, duration: anim.duration, videoModel: anim.videoModel || getDefaultVideoModelId(), videoResolution: anim.videoResolution || 'auto', aspectRatio: anim.videoAspectRatio, imageWorkflow: anim.videoImageWorkflow }),
                         });
                         const json = await res.json();
                         if (!res.ok) throw new Error(json.error || 'Retry failed');

@@ -366,7 +366,7 @@ Tips:
 IMPORTANT:
 - SeeDance, Wan 3.0, Gemini Omni 1.2, MiniMax H3, and MiniMax H3 Max support native text-to-video with no images. fal H3 Turbo (minimax-h3-max) accepts at most one start image for image-to-video. fal H3 Max (fal-h3-max) uses reference-to-video for any image/video/audio input: up to 9 images + 3 videos + 3 audios, 12 total; audio-only input is not supported.
 - EvoLink Seedance reference images must be JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB each. Input errors distinguish too_small, too_large, invalid_aspect_ratio, unsupported_format, and unreadable. NON_RETRYABLE means the same URL must not be resubmitted; prepare a new compliant URL or replace the source first.
-- Explicit magi-2 uses Sand AI via EvoLink at 1080p, integer 4–30s (default 5s). Supports text, first/last frame mode (one or two images), and up to 10 images, 5 videos, 5 audio clips as feature references. Videos and WAV/MP3 audio are 2–30s each and ≤30s combined per media kind. Use <<<audio_N>>> to assign audio references. Use generate. On MAGI-2 image or reference routes the script may be empty.
+- Explicit magi-2 uses Sand AI via EvoLink at 1080p, integer 4–30s (default 5s). Supports text, first/last frame mode (one or two images), and up to 10 images, 5 videos, 5 audio clips as feature references. Videos and WAV/MP3 audio are 2–30s each and ≤30s combined per media kind. Use <<<audio_N>>> to assign audio references. Use generate and always provide a non-blank script of at most 15,000 characters. First/last frame mode defaults to auto (follow first frame) and excludes 21:9. Text/reference routes support 21:9.
 - When images are provided, script should use <<<media_N>>> format (from makaron_write_video_script output). Text-to-video scripts should not invent media markers.
 - Default model is kling-4-flash (Kling 4.0 Flash, 720p, integer 3-20s). Kling 4.0 / Flash scripts must be 2500 characters or fewer, markers included; reference videos may be written as <<<video_N>>>. Without an explicit model, use seedance-2.5 for 21-30s and kling-4 for 1080p.
 - Video timing depends on the selected model: Kling 4.0 Flash usually finishes in about 1-2 minutes; fal H3 Turbo and fal H3 Max usually finish in tens of seconds; Max with video references may take around 1-2 minutes. Queue and saving time can vary; other providers may take 3-5 minutes; Grok is optimized for substantially faster generation; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll and measure the actual elapsed time.
@@ -397,7 +397,7 @@ Shot 1 (2s): Wide shot, <<<media_1>>> ...
 Shot 2 (3s): Close-up, <<<media_2>>> ...
 Style: Cinematic, warm golden light.`,
     {
-      script: z.string().describe('Video script using <<<media_N>>> markers. For MAGI-2 images/references, an empty script is allowed.'),
+      script: z.string().describe('Video script using <<<media_N>>> markers. Required and non-blank on every MAGI-2 route.'),
       maxCredits: z.number().int().positive().optional().describe('Native 4K only: omit first for a no-charge total quote. Disclose the total Makaron credits before setting this ceiling. Only explicit native 4K or explicit Native + 4K selection qualifies, never ordinary/HD requests or automatic failure recovery.'),
       billingRequestId: z.string().uuid().optional().describe('Optional stable request UUID. Reuse when retrying the same billed submission to avoid duplicate charges/jobs.'),
       images: z.array(z.string().url()).max(30).default([]).describe('Optional public image URLs. Seedance 2.5 accepts up to 30; older routes may accept fewer.'),
@@ -412,7 +412,6 @@ Style: Cinematic, warm golden light.`,
       operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require videoUrls. Grok and Omni extend forward only.'),
       imageWorkflow: z.enum(['reference-to-video', 'image-to-video']).optional().describe('Flash and MAGI-2 images default to feature references. Explicitly select image-to-video for 1–2 first/last frames.'),
       extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction. Omit or use forward for Gemini Omni.'),
-      videoSeed: z.number().int().min(0).max(4294967295).optional().describe('Optional MAGI-2 seed for repeatability.'),
       generateAudio: z.boolean().optional().describe('Generate synchronized model-native audio. Supported providers default to true. Set false only when the user explicitly requests a silent video; otherwise describe the desired sound naturally in the script.'),
       contentFilter: z.boolean().optional().describe('Seedance 2.5-only output content filter. Omit it for every other model. Seedance 2.5 defaults to true; false enables Mature Mode and costs 10% more, so use it only after explicit user confirmation, including the recovery action.'),
       outputFormat: z.enum(['mp4', 'mov']).optional().describe('MP4 for playback (Seedance2.5 native1080p/4k is10bit HEVC; lower resolutions H264), or MOV for grading.'),
@@ -442,7 +441,6 @@ Style: Cinematic, warm golden light.`,
           imageWorkflow: params.imageWorkflow,
           videoExtendDirection: params.extendDirection,
           generateAudio: params.generateAudio,
-          videoSeed: params.videoSeed,
           contentFilter: params.contentFilter,
           outputFormat: params.outputFormat,
           webSearch: params.webSearch,

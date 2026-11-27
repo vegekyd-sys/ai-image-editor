@@ -13,6 +13,7 @@ import { getVideoModelCapability, resolveProductVideoModelId, resolvePersistedVi
 import { native4kQuoteResult, native4kNeedsDisclosure } from '@/lib/billing/seedance25-native4k'
 import { isSeedance25Native4k } from '@/lib/video-model-capabilities'
 import { quoteVideo } from '@/lib/billing/media-pricing'
+import { validateMagi2Prompt } from '@/lib/magi2'
 import type { VideoMeta } from '@/types'
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 
@@ -58,7 +59,6 @@ export async function POST(req: NextRequest) {
       videoExtendDirection,
       generateAudio,
       imageWorkflow,
-      videoSeed,
       audioUrls,
       contentFilter,
       outputFormat,
@@ -70,6 +70,10 @@ export async function POST(req: NextRequest) {
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const native4k = isSeedance25Native4k(selectedVideoModel, videoRoute.resolution)
     const isMagi2 = selectedVideoModel === 'magi-2'
+    if (isMagi2) {
+      const promptError = validateMagi2Prompt(prompt)
+      if (promptError) return NextResponse.json({ error: promptError }, { status: 400 })
+    }
     let disclosureQuote: Awaited<ReturnType<typeof quoteVideo>> | undefined
     let acceptedProtectedTaskId: string | undefined
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
@@ -217,7 +221,7 @@ export async function POST(req: NextRequest) {
         keepOriginalSound,
         videoOperation,
         ...(isMagi2 ? {
-          imageWorkflow, videoSeed,
+          imageWorkflow,
           audioUrls: Array.isArray(audioUrls) ? audioUrls : undefined,
         } : {}),
         videoExtendDirection,
@@ -273,7 +277,9 @@ export async function POST(req: NextRequest) {
         .filter(ref => !videoRefIndices.has(ref))
         .map(ref => originalImageUrlsByIndex[ref - 1])
         .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'))
-      const sourceUrls = [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
+      const sourceUrls = isMagi2 && imageWorkflow === 'image-to-video'
+        ? inputImageUrls.filter(Boolean)
+        : [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
       const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote.supplierCostUsd
 
       const videoMeta: VideoMeta = {

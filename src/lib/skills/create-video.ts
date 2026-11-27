@@ -38,7 +38,6 @@ export interface CreateVideoInput {
   previousInteractionId?: string;            // Google Omni stateful extension lineage
   videoExtendDirection?: 'forward' | 'backward';
   generateAudio?: boolean;
-  videoSeed?: number; // Explicit MAGI-2 seed.
   contentFilter?: boolean;
   outputFormat?: 'mp4' | 'mov';
   webSearch?: boolean;
@@ -348,7 +347,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     const { createVideoPipeline } = await import('../video-upscale-pipeline');
     return createVideoPipeline(input);
   }
-  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, videoOperation = 'generate', imageWorkflow, previousInteractionId, videoExtendDirection, generateAudio, videoSeed, contentFilter, outputFormat, webSearch } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, videoOperation = 'generate', imageWorkflow, previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length || !!previousInteractionId;
   const hasAudioReference = !!audioUrls?.length;
   const hasVoiceReference = !!referenceVoiceIds?.length;
@@ -387,9 +386,11 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     operation: videoOperation,
   });
 
-  if (modelError) return { success: false, message: modelError };
+  if (modelError) return { success: false, message: modelError, ...(isMagi2 ? { retryable: false, submissionUncertain: false } : {}) };
   const magi = isMagi2 ? await import('../magi2') : undefined;
   if (magi) {
+    const promptError = magi.validateMagi2Prompt(script);
+    if (promptError) return { success: false, retryable: false, submissionUncertain: false, message: promptError };
     if (videoExtendDirection || outputFormat === 'mov' || webSearch || contentFilter === false || previousInteractionId || keepOriginalSound) {
       return { success: false, retryable: false, message: 'MAGI-2 supports 1080p generation with optional feature references and native audio.' };
     }
@@ -505,7 +506,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       finalPrompt = prepared.prompt;
     } else if (magi) {
       try {
-        const prepared = magi.prepareMagi2References(script, images, providerVideoUrls, audioUrls?.length ?? 0, Boolean(videoUrl));
+        const prepared = magi.prepareMagi2References(script, images, providerVideoUrls, audioUrls?.length ?? 0, Boolean(videoUrl), imageWorkflow === 'image-to-video');
         finalPrompt = prepared.prompt;
         filteredImages = prepared.images;
       } catch (error) {
@@ -620,7 +621,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       imageWorkflow,
       operation: videoOperation,
     });
-    if (filteredModelError) return { success: false, message: filteredModelError };
+    if (filteredModelError) return { success: false, message: filteredModelError, ...(isMagi2 ? { retryable: false, submissionUncertain: false } : {}) };
 
     const resolvedImageWorkflow = resolveVideoImageWorkflow({
       model: provider,
@@ -687,8 +688,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         })!;
         magiRequest = {
           model: providerModel, prompt: finalPrompt, images: filteredImages, videoUrls: providerVideoUrls,
-          audioUrls, duration: resolvedDuration, quality: route.resolution, aspectRatio: providerAspectRatio ?? '16:9',
-          generateAudio, seed: videoSeed,
+          audioUrls, duration: resolvedDuration, quality: route.resolution, aspectRatio: providerAspectRatio,
+          generateAudio,
         };
         magi.buildMagi2Payload({ ...magiRequest, model: providerModel });
         if (audioUrls?.length) {

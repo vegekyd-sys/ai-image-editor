@@ -7,7 +7,7 @@ import { useLocale } from '@/lib/i18n';
 import MediaRefText from '@/components/MediaRefText';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { getModelInfo, getVideoModels } from '@/lib/model-registry';
-import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
+import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution, type VideoImageWorkflow } from '@/lib/video-model-capabilities';
 
 interface AnimateSheetProps {
   snapshots: Snapshot[];
@@ -68,6 +68,9 @@ export default function AnimateSheet({
   const activeSnapshots = allSnapshots.filter((_, i) => !excludedIndices.has(i));
   const activeUrls = activeSnapshots.map(s => s.imageUrl!);
   const imageCount = activeUrls.length;
+  const imageWorkflow = videoModel === 'magi-2' ? (animationState.imageWorkflow ?? 'reference-to-video') : undefined;
+  const maxImages = imageWorkflow === 'image-to-video' ? 2 : imageWorkflow ? videoCapability.maxImageReferences ?? 10 : Infinity;
+  const validImageCount = imageCount >= 1 && imageCount <= maxImages;
   const [quote, setQuote] = useState<{ key: string; credits: number } | null>(null);
   const quoteKey = JSON.stringify({ model: videoModel, resolution: videoResolution, durationSec: duration, imageCount, ...(videoModel === 'fal-h3-max' ? { imageUrls: activeUrls } : {}) });
   useEffect(() => {
@@ -130,7 +133,7 @@ export default function AnimateSheet({
 
   const handleGenerateScript = useCallback(() => {
     if (activeUrls.length < 1) return;
-    const urls = activeUrls.length <= 7
+    const urls = imageWorkflow || activeUrls.length <= 7
       ? activeUrls
       : [0, 1, 2, Math.floor(activeUrls.length / 2), activeUrls.length - 3, activeUrls.length - 2, activeUrls.length - 1]
         .map(i => activeUrls[Math.min(i, activeUrls.length - 1)]);
@@ -139,8 +142,8 @@ export default function AnimateSheet({
   }, [activeUrls, onStateChange, onGeneratePrompt]);
 
   const handleGenerate = useCallback(async () => {
-    if (!prompt.trim() || activeUrls.length < 1) return;
-    const urls = activeUrls.length <= 7
+    if (!prompt.trim() || !validImageCount) return;
+    const urls = imageWorkflow || activeUrls.length <= 7
       ? activeUrls
       : [0, 1, 2, Math.floor(activeUrls.length / 2), activeUrls.length - 3, activeUrls.length - 2, activeUrls.length - 1]
         .map(i => activeUrls[Math.min(i, activeUrls.length - 1)]);
@@ -149,7 +152,7 @@ export default function AnimateSheet({
       const res = await fetch('/api/video-snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration, videoModel, videoResolution }),
+        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration, videoModel, videoResolution, imageWorkflow }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to create task');
@@ -161,10 +164,10 @@ export default function AnimateSheet({
         : raw.replace(/Error:\s*/g, '').replace(/<[^>]+>/g, '').slice(0, 100);
       onStateChange({ error: friendly, status: 'error' });
     }
-  }, [prompt, projectId, activeUrls, duration, videoModel, videoResolution, onStateChange, t]);
+  }, [prompt, projectId, activeUrls, duration, videoModel, videoResolution, imageWorkflow, validImageCount, onStateChange, t]);
 
-  const canGenerate = prompt.trim().length > 0 && status === 'ready' && activeUrls.length >= 1;
-  const canGenerateScript = activeUrls.length >= 1 && (status === 'idle' || status === 'error' || status === 'ready');
+  const canGenerate = prompt.trim().length > 0 && status === 'ready' && validImageCount;
+  const canGenerateScript = validImageCount && (status === 'idle' || status === 'error' || status === 'ready');
 
   // Detail filmstrip: use ALL snapshots (unfiltered) so @N matches Agent's Media Index
   const detailUrls = snapshots.length > 0
@@ -643,7 +646,7 @@ export default function AnimateSheet({
                   }}>{t('animate.model')}</div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {videoModels.map(m => (
-                      <button key={m.id} onClick={() => onStateChange({ videoModel: m.id, videoResolution: 'auto' })}
+                      <button key={m.id} onClick={() => onStateChange({ videoModel: m.id, videoResolution: 'auto', imageWorkflow: undefined })}
                         style={{
                           flex: '1 1 120px', padding: '8px 12px', borderRadius: 10,
                           border: `1px solid ${videoModel === m.id ? 'rgba(232,121,249,0.5)' : 'rgba(255,255,255,0.08)'}`,
@@ -655,6 +658,28 @@ export default function AnimateSheet({
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {status !== 'submitting' && imageWorkflow && (
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: '0.82rem', color: '#fff' }}>
+                    {t('animate.magi2.inputMode')}
+                    <select value={imageWorkflow} onChange={e => onStateChange({ imageWorkflow: e.currentTarget.value as VideoImageWorkflow })}
+                      aria-describedby={imageWorkflow === 'image-to-video' ? 'magi2-frame-hint' : undefined}
+                      style={{ color: '#fff', background: '#252327', padding: '6px 8px', borderRadius: 8 }}>
+                      <option value="reference-to-video">{t('animate.magi2.reference')}</option>
+                      <option value="image-to-video">{t('animate.magi2.frames')}</option>
+                    </select>
+                  </label>
+                  {imageWorkflow === 'reference-to-video' && imageCount > maxImages && (
+                    <p role="status" style={{ color: '#f5a0a0', fontSize: '0.74rem', margin: '5px 0 0' }}>{t('animate.magi2.referenceLimit')}</p>
+                  )}
+                  {imageWorkflow === 'image-to-video' && (
+                    <p id="magi2-frame-hint" style={{ color: validImageCount ? '#b7b2ba' : '#f5a0a0', fontSize: '0.74rem', margin: '5px 0 0' }}>
+                      {t('animate.magi2.frameHint')}
+                    </p>
+                  )}
                 </div>
               )}
 

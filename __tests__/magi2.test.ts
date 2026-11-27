@@ -11,7 +11,7 @@ const video = 'https://media.example.com/motion.mp4'
 const audio = 'https://media.example.com/line.wav'
 const endpoint = 'https://api.evolink.ai/v1/videos/generations'
 const request = { script: 'A paper robot turns toward the camera.', images: [], videoModel: 'magi-2' }
-const payload = { images: [], duration: 4, aspectRatio: '21:9', generateAudio: false, seed: 42 }
+const payload = { images: [], duration: 4, generateAudio: false }
 const id = 'task-unified-1774857405-abc123'
 
 afterEach(() => {
@@ -35,7 +35,8 @@ describe('MAGI-2 via EvoLink', () => {
       { referenceVideoMetas: [{ durationSec: 1.99 }] }, { referenceVideoDuration: 30.1 },
       { imageWorkflow: 'image-to-video', imageReferenceCount: 0 },
       { imageWorkflow: 'image-to-video', imageReferenceCount: 2, audioReferenceCount: 1 },
-      { resolution: '720p' }, { aspectRatio: '3:2' }, { operation: 'edit' }, { operation: 'extend' },
+      { resolution: '720p' }, { aspectRatio: '3:2' },
+      { aspectRatio: '21:9', imageWorkflow: 'image-to-video', imageReferenceCount: 1 }, { operation: 'edit' }, { operation: 'extend' },
     ]
     for (const invalid of invalidRequests) expect(validateVideoModelRequest({ model: 'magi-2', ...invalid })).toBeTruthy()
     const migration = readFileSync('supabase/migrations/20261125170000_magi2_pricing.sql', 'utf8')
@@ -50,21 +51,49 @@ describe('MAGI-2 via EvoLink', () => {
       .toMatchObject({ supplierCostUsd: 2.4, credits: 480, durationSec: 30 })
   })
 
-  it('builds each documented request and leaves an optional blank prompt out', () => {
-    expect(buildMagi2Payload({ ...payload, model: 'magi-2-text-to-video', prompt: request.script })).toEqual({
-      model: 'magi-2-text-to-video', prompt: request.script, duration: 4, quality: '1080p', aspect_ratio: '21:9', generate_audio: false, seed: 42,
+  it('requires a prompt everywhere and uses EvoLink’s workflow-specific aspect ratios', () => {
+    const textModel = 'magi-2-text-to-video'
+    const frameModel = 'magi-2-image-to-video'
+    const images = [image, 'https://media.example.com/end.png']
+    const frames = { ...payload, model: frameModel, prompt: '  Dolly forward slowly.  ', images }
+    expect(buildMagi2Payload({ ...payload, model: textModel, prompt: request.script, aspectRatio: '21:9' })).toEqual({
+      model: textModel, prompt: request.script, duration: 4, quality: '1080p', aspect_ratio: '21:9', generate_audio: false,
     })
-    expect(buildMagi2Payload({ ...payload, model: 'magi-2-image-to-video', prompt: '', images: [image, 'https://media.example.com/end.png'] })).toEqual({
-      model: 'magi-2-image-to-video', duration: 4, quality: '1080p', aspect_ratio: '21:9', generate_audio: false, seed: 42,
-      image_urls: [image, 'https://media.example.com/end.png'],
+    expect(buildMagi2Payload(frames)).toEqual({
+      model: frameModel, prompt: 'Dolly forward slowly.', duration: 4, quality: '1080p', aspect_ratio: 'auto',
+      generate_audio: false, image_urls: images,
     })
+    expect(buildMagi2Payload({ ...frames, aspectRatio: 'auto' })).toHaveProperty('aspect_ratio', 'auto')
+    expect(buildMagi2Payload({ ...frames, aspectRatio: '4:3' })).toHaveProperty('aspect_ratio', '4:3')
+    expect(() => buildMagi2Payload({ ...frames, aspectRatio: '21:9' })).toThrow(/first\/last frame mode/)
     const reference = { ...payload, model: 'magi-2-reference-to-video', prompt: '🌱'.repeat(15_000), images: [image], videoUrls: [video], audioUrls: [audio] }
-    expect(buildMagi2Payload(reference)).toMatchObject({
-      model: 'magi-2-reference-to-video', prompt: reference.prompt, image_urls: [image], video_urls: [video], audio_urls: [audio],
+    expect(buildMagi2Payload({ ...reference, aspectRatio: '21:9' })).toMatchObject({
+      model: 'magi-2-reference-to-video', prompt: reference.prompt, image_urls: [image], video_urls: [video], audio_urls: [audio], aspect_ratio: '21:9',
     })
+    for (const input of [{ ...payload, model: textModel }, frames, reference]) {
+      expect(() => buildMagi2Payload({ ...input, prompt: ' \n ' })).toThrow(/non-blank/)
+    }
     expect(() => buildMagi2Payload({ ...reference, prompt: reference.prompt + 'a' })).toThrow(/15,000/)
     expect(() => buildMagi2Payload({ ...reference, images: ['http://media.example.com/hero.png'] })).toThrow(/HTTPS/)
-    expect(() => buildMagi2Payload({ ...reference, seed: -1 })).toThrow(/seed/)
+  })
+
+  it('preflights invalid frame requests before reservation and preserves frame order', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(Response.json({ id, model: 'magi-2-image-to-video' }))
+    vi.stubGlobal('fetch', fetch)
+    vi.stubEnv('EVOLINK_API_KEY', 'unit-test-key')
+    const reserve = vi.fn(async () => { expect(fetch).not.toHaveBeenCalled() })
+    const frames = [image, 'https://media.example.com/end.png']
+    const input = { ...request, images: frames, imageWorkflow: 'image-to-video' as const, onBeforeProviderSubmit: reserve }
+    await expect(createVideo({ ...input, script: ' ' })).resolves.toMatchObject({ success: false, retryable: false, submissionUncertain: false })
+    await expect(createVideo({ ...input, aspectRatio: '21:9' })).resolves.toMatchObject({ success: false, retryable: false, submissionUncertain: false })
+    expect(reserve).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+    await expect(createVideo({ ...input, script: 'End on <<<media_2>>> after starting at <<<media_1>>>.' })).resolves.toMatchObject({ success: true })
+    expect(reserve).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toMatchObject({
+      model: 'magi-2-image-to-video', aspect_ratio: 'auto', image_urls: frames,
+      prompt: 'End on Image 2 after starting at Image 1.',
+    })
   })
 
   it('preflights references before reservation, posts once, and delivers the original video URL', async () => {

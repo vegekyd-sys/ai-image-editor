@@ -2168,7 +2168,6 @@ Generation options:
   --extend-direction <dir> forward or backward.
   --output-format <format>  mp4 or mov.
   --generated-audio        Ask the provider to generate audio.
-  --seed <integer>         MAGI-2 seed (0–4294967295).
   --no-generated-audio     Disable provider-generated audio.
   --keep-original-sound    Preserve source-video sound where supported.
   --web-search             Enable Seedance 2.5 web search.
@@ -2181,8 +2180,8 @@ Recent model choices:
   kling-4-flash  Kling 4.0 Flash (default): faster Kling 4.0 with the same inputs and edit route;
                  3–20s, 720p only, video inputs <=20s total, script <=2500 characters.
   magi-2        Sand AI MAGI-2 via EvoLink: 1080p, 4–30s; text, first/last frames, or up to
-                 10 images, 5 videos, 5 WAV/MP3
-                 audio references. Videos and audio are 2–30s each, at most 30s per media kind.
+                 10 images, 5 videos and 5 WAV/MP3 audio references (2–30s each, 30s total per kind).
+                 Non-blank script required. First/last frames default to --aspect auto and exclude 21:9.
   google-omni    Gemini Omni 1.2 Flash: 3–15s text/image/video with native audio, multi-speaker
                  dialogue and lip-sync; edit (source <=15s) or extend (+3–10s, up to 30s);
                  360p/720p, upscaled 1080p/4k.
@@ -3526,7 +3525,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const referenceVoices = [];
     let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, videoResolution = undefined, imageWorkflow = undefined, wait = false;
     let keepOriginalSound = false, videoOperation = undefined, extendDirection = undefined, outputFormat = undefined;
-    let generateAudio = undefined, videoSeed = undefined, contentFilter = undefined, webSearch = false, billingRequestId = undefined, maxCredits = undefined;
+    let generateAudio = undefined, legacySeed = undefined, contentFilter = undefined, webSearch = false, billingRequestId = undefined, maxCredits = undefined;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
       else if (args[i] === '--video' && args[i + 1]) videos.push(args[++i]);
@@ -3550,7 +3549,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--video-operation' && args[i + 1]) videoOperation = args[++i];
       else if (args[i] === '--extend-direction' && args[i + 1]) extendDirection = args[++i];
       else if (args[i] === '--output-format' && args[i + 1]) outputFormat = args[++i];
-      else if (args[i] === '--seed' && args[i + 1] != null) videoSeed = Number(args[++i]);
+      else if (args[i] === '--seed') legacySeed = args[i + 1] != null && !args[i + 1].startsWith('--') ? args[++i] : '';
       else if (args[i] === '--no-generated-audio') generateAudio = false;
       else if (args[i] === '--generated-audio') generateAudio = true;
       else if (args[i] === '--relaxed-content-filter') contentFilter = false;
@@ -3593,12 +3592,18 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const kling4Label = isKling4Flash ? 'Kling 4.0 Flash' : 'Kling 4.0';
     const kling4MaxSeconds = isKling4Flash ? 20 : 30;
     const supportsNativeTextToVideo = isMagi2 || isKling4 || isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
-    if ((!script && !(isMagi2 && (images.length || videos.length || audios.length))) || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
+    if ((!isMagi2 && !script) || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
       console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|kling-4|kling-4-flash|magi-2|minimax-h3|minimax-h3-max]');
       process.exit(1);
     }
-    if (videoSeed != null && (!isMagi2 || !Number.isSafeInteger(videoSeed) || videoSeed < 0 || videoSeed > 4294967295)) { console.error('--seed for MAGI-2 must be an integer from 0 to 4294967295.'); process.exit(1); }
+    if (legacySeed != null && (!isMagi2 || !legacySeed)) { console.error('--seed is unavailable.'); process.exit(1); }
     if (isMagi2) {
+      script = script.trim();
+      if (!script || Array.from(script).length > 15_000) { console.error('MAGI-2 requires a non-blank --script or --script-file of at most 15,000 characters.'); process.exit(1); }
+      if (legacySeed != null) console.error('Warning: EvoLink MAGI-2 ignores --seed.');
+      const ratios = ['auto', '16:9', '9:16', '1:1', '4:3', '3:4'];
+      if (imageWorkflow !== 'image-to-video') ratios.push('21:9');
+      if (aspectRatio && !ratios.includes(aspectRatio)) { console.error('MAGI-2 supports these --aspect values in this mode: ' + ratios.join(', ') + '.'); process.exit(1); }
       if (images.length > 10 || videos.length > 5 || audios.length > 5) { console.error('MAGI-2 accepts up to 10 images, 5 videos and 5 audio references.'); process.exit(1); }
       if (duration != null && (!Number.isInteger(duration) || duration < 4 || duration > 30)) { console.error('MAGI-2 duration must be an integer from 4 to 30 seconds.'); process.exit(1); }
       if (videoResolution && !['auto', '1080p'].includes(videoResolution)) { console.error('MAGI-2 supports 1080p only.'); process.exit(1); }
@@ -3730,7 +3735,6 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
         : { script, images, videoModel: selectedVideoModel, videoResolution };
     if (maxCredits != null) vArgs.maxCredits = maxCredits;
-    if (videoSeed != null) vArgs.videoSeed = videoSeed;
     if (imageWorkflow) vArgs.imageWorkflow = imageWorkflow;
     if (isMagi2) {
       vArgs.billingRequestId = billingRequestId || randomUUID();

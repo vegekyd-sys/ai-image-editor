@@ -3,7 +3,8 @@
  * Returns null if OK, or an error string to send back to the Agent for retry.
  */
 
-import { getVideoModelRetirementError, RETIRED_KLING_MESSAGE, getVideoModelCapability, normalizeVideoModelId, validateVideoAspectRatioRequest, validateVideoResolutionRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelRetirementError, RETIRED_KLING_MESSAGE, getVideoModelCapability, normalizeVideoModelId, validateVideoAspectRatioRequest, validateVideoResolutionRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoImageWorkflow, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { validateMagi2Prompt } from './magi2';
 import { parseTotalDuration } from './kling';
 
 function urlMatch(a: string, b: string): boolean {
@@ -30,6 +31,7 @@ export function validateVideoScript(opts: {
   motionControl?: boolean
   duration?: number
   operation?: VideoGenerationOperation
+  imageWorkflow?: VideoImageWorkflow
 }): string | null {
   const { prompt, imageCount, videoRefUrl, videoRefType, model, resolution, aspectRatio, motionControl, duration } = opts
   const availableMediaIndices = opts.availableMediaIndices
@@ -39,11 +41,15 @@ export function validateVideoScript(opts: {
   if (retirementError || motionControl) return retirementError || RETIRED_KLING_MESSAGE
 
   const capability = getVideoModelCapability(model)
+  if (capability.id === 'magi-2') {
+    const promptError = validateMagi2Prompt(prompt)
+    if (promptError) return promptError
+  }
   const providerManagedAdaptiveDuration = ['seedance-2.5', 'seedance-2.5-eco'].includes(normalizeVideoModelId(model))
     && (opts.operation === 'edit' || duration === -1)
   const resolutionError = validateVideoResolutionRequest({ model, resolution })
   if (resolutionError) return resolutionError
-  const aspectRatioError = validateVideoAspectRatioRequest({ model, aspectRatio })
+  const aspectRatioError = validateVideoAspectRatioRequest({ model, aspectRatio, imageWorkflow: opts.imageWorkflow })
   if (aspectRatioError) return aspectRatioError
   if (capability.maxPromptCharacters && prompt.length > capability.maxPromptCharacters) {
     return `${capability.label} prompts are limited to ${capability.maxPromptCharacters} characters, but this story_prompt has ${prompt.length}. Rewrite it once to ${capability.maxPromptCharacters} characters or fewer: keep the title, every shot with its timing, all spoken lines and every media marker; remove repeated style notes and adjective lists. Keep the same model.`

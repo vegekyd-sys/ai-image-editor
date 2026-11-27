@@ -67,6 +67,11 @@ const zhHant = {
 
   'model.kling4.name': 'Kling 4.0',
   'model.kling4.desc': '文字生成與圖/影片參考，3–30 秒；影片編輯保留原聲。',
+  'animate.magi2.inputMode': '圖片用途',
+  'animate.magi2.reference': '特徵參考',
+  'animate.magi2.frames': '首幀 / 尾幀',
+  'animate.magi2.referenceLimit': '最多選擇 10 張參考圖片。',
+  'animate.magi2.frameHint': '按時間軸順序選一到兩張圖，影片比例跟隨首幀。',
   'model.magi2.name': 'MAGI-2',
   'model.magi2.desc': 'Sand AI 經 EvoLink 提供的原生有聲影片。支援文字生成、首尾影格和多模態參考，1080p，4–30 秒。',
   'model.kling4Flash.name': 'Kling 4.0 Flash',
