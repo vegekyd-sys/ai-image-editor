@@ -1576,6 +1576,7 @@ export async function* runMakaronAgent(
 
       if (
         !nonRetryableToolFailure && assessment.code !== 'context_length_exceeded'
+        && assessment.code !== 'reference_image_unavailable'
         && (attemptBudgetReached || stepBudgetReached)
       ) {
         assessment = {
@@ -1731,6 +1732,10 @@ export async function* runMakaronAgent(
             || checkpoint.studioRunId
             || options?.execution,
           );
+      const errorMessageKey = recoverable ? 'agent.error.recoverable'
+        : contextOverflow ? 'agent.error.contextLength'
+        : assessment.code === 'reference_image_unavailable' ? 'agent.error.referenceImageUnavailable'
+        : 'agent.error.fatal';
       const usageEvent = buildUsageEvent();
       if (usageEvent) yield usageEvent;
       yield {
@@ -1738,9 +1743,7 @@ export async function* runMakaronAgent(
         code: assessment.code || 'incomplete_agent_step',
         recoverable,
         checkpoint,
-        message: recoverable
-          ? translate(responseLocale, 'agent.error.recoverable')
-          : translate(responseLocale, contextOverflow ? 'agent.error.contextLength' : 'agent.error.fatal'),
+        message: translate(responseLocale, errorMessageKey),
       };
       return;
     }

@@ -42,6 +42,26 @@ describe('agent terminal semantics', () => {
     })).toMatchObject({ ok: false, retryable: true, code: 'stream_error', detail });
   });
 
+  it.each([
+    ['deepseek', 400, 'reference_image_unavailable', false],
+    ['deepseek', 503, 'stream_error', true],
+    ['openrouter', 400, 'stream_error', true],
+  ])('handles %s image download error with status %i', (provider, statusCode, code, retryable) => {
+    const streamError = Object.assign(new Error(
+      'messages[2].content[1]: Failed to download image from https://example.com/image?token=private',
+    ), { statusCode });
+    const assessment = classifyModelTermination({
+      sawFinish: false,
+      finalStepTextChars: 0,
+      finalStepToolCalls: 0,
+      finalStepDeliveredArtifact: false,
+      provider,
+      streamError,
+    });
+    expect(assessment).toMatchObject({ ok: false, retryable, code });
+    if (!retryable) expect(assessment.detail).not.toContain('token=private');
+  });
+
   it('accepts a clean model final reply without consulting workflow state', () => {
     expect(classifyModelTermination({
       sawFinish: true,
