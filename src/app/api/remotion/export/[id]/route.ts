@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { remotionExportLookupId } from '@/lib/remotion-export-flags'
 import { authenticateRequest } from '@/lib/api-auth'
 import { getRemotionExportJob, resolveRemotionExportDownloadUrl } from '@/lib/remotion-export'
 
@@ -54,7 +55,8 @@ export async function GET(
     const { userId } = authResult.auth
     const { id } = await params
 
-    const job = await getRemotionExportJob(id)
+    const jobId = remotionExportLookupId(id)
+    const job = jobId ? await getRemotionExportJob(jobId) : null
     if (!job) return NextResponse.json({ error: 'Export job not found' }, { status: 404 })
     if (job.user_id !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
