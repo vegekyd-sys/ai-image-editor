@@ -16,7 +16,7 @@ import threading
 import time
 
 from monitor_makaron import utc_now, write_private
-from makaron_event_bridge import handler_message
+from makaron_event_bridge import handler_message, is_current_batch
 from makaron_desktop_ipc import DesktopIPC
 
 
@@ -42,7 +42,7 @@ def edit_batch(directory, bid, token, change, when=None):
 def executable_batch(state, batch):
     return (state.get('enabled', False) and not batch.get('completed')
             and not batch.get('received')
-            and batch['id'] in {state.get('active_batch'), state.get('selftest_batch')})
+            and is_current_batch(state, batch['id']))
 
 
 def command(config, directory):
@@ -57,7 +57,12 @@ def desktop_dispatch(config, message, token, facts, cancelled=None, notify=lambd
     path = Path(config.get('desktop_ipc_socket', str(Path.home() / '.codex/ipc/ipc.sock')))
     if not path.exists():
         return False
-    client = DesktopIPC(path)
+    try:
+        client = DesktopIPC(path)
+    except (ConnectionRefusedError, FileNotFoundError) as error:
+        # Only the connection/initialization has been attempted, never turn/start.
+        facts['desktop_unavailable'] = type(error).__name__
+        return False
     try:
         owner = client.owner(config['thread_id'])
         if owner is None:
@@ -292,6 +297,13 @@ def run(directory, bid, token):
             exit_code = process.wait()
             for reader in readers:
                 reader.join(timeout=3)
+            writer_error = (f"Error: thread/resume: thread/resume failed: thread {config['thread_id']} "
+                            "already has an active writer (code -32600)")
+            if (exit_code == 1 and not any(reader.is_alive() for reader in readers)
+                    and not any(key in facts for key in ('thread_id', 'turn_started_at', 'turn_completed_at',
+                                                        'assistant_message_bytes', 'stopped_reason'))
+                    and facts.get('startup_diagnostics', [])[-1:] == [writer_error]):
+                facts['cli_resume_rejected'] = True
         except Exception as error:
             facts['launch_error_type'] = type(error).__name__
         finally:
@@ -299,10 +311,11 @@ def run(directory, bid, token):
                 stop_process(process)
             facts['finished_at'] = utc_now()
             if process is not None:
-                facts['cli_exit_code'] = exit_code
+                facts['cli_exit_code'] = process.returncode
             def finish(_, batch):
                 batch['worker'] = dict(facts)
-                not_delivered = facts.get('cli_not_started') or facts.get('native_not_delivered')
+                not_delivered = any(facts.get(key) for key in
+                                    ('cli_not_started', 'native_not_delivered', 'cli_resume_rejected'))
                 if not_delivered and not batch.get('received') and not batch.get('completed'):
                     batch.pop('model_requested_at', None)
                 if not handed_off and not batch.get('completed') and (process is not None or not batch.get('received')):
