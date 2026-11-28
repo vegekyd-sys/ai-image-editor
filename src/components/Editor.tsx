@@ -207,7 +207,7 @@ export default function Editor({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<{ key: object; text: string } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<{ key: object; text: string; autoDismiss?: boolean } | null>(null);
   const saveInFlight = useRef(false);
   const warmSave = useRef<{
     key: object;
@@ -3053,9 +3053,16 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   ]);
   const { file: readyToShare, showActions: showShareActions, status: shareStatus, warm: warmShare, offer: offerShare, share: shareFile,
     isCurrent: isCurrentSave } = usePreparedMediaShare(saveKey);
-  const setCurrentSaveStatus = useCallback((text: string) => {
-    if (isCurrentSave()) setSaveStatus({ key: saveKey, text });
+  const setCurrentSaveStatus = useCallback<DownloadAssetParams['setSaveStatus']>((text, options) => {
+    if (isCurrentSave()) setSaveStatus({ key: saveKey, text, autoDismiss: options?.autoDismiss });
   }, [isCurrentSave, saveKey]);
+  useEffect(() => {
+    if (!saveStatus?.autoDismiss || saveStatus.key !== saveKey) return;
+    const timer = setTimeout(() => {
+      setSaveStatus(current => current === saveStatus ? null : current);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [saveStatus, saveKey]);
 
   const downloadParams = useCallback(() => {
     const video = isViewingVideo ? canvasAreaRef.current?.querySelector('video') : undefined;
@@ -4728,7 +4735,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       {saveRequest && <SaveMediaDialog prepare={prepareSave} preview={savePreview} onClose={closeSaveDialog}
         onSaved={destination => {
           if (destination === 'photos') showSaveToast();
-          else setCurrentSaveStatus(t('editor.downloadStarted'));
+          else setCurrentSaveStatus(t('editor.downloadStarted'), { autoDismiss: true });
         }} suspended={creditPopupOpen} returningFromCheckout={returningToSave} watermarkRequired={saveNeedsWatermark}
         onUpgrade={() => {
           const index = snapFromTimeline(saveRequest.viewIndex, saveRequest.draftParentIndex) ?? saveRequest.draftParentIndex;

@@ -83,7 +83,7 @@ describe('downloadAsset animated Remotion Save', () => {
     expect(setIsSaving).toHaveBeenLastCalledWith(false)
     expect(setSaveStatus).toHaveBeenCalledWith('editor.saveRendering')
     expect(setSaveStatus).toHaveBeenCalledWith('editor.saveRenderingProgress')
-    expect(setSaveStatus).toHaveBeenCalledWith('editor.downloadStarted')
+    expect(setSaveStatus).toHaveBeenCalledWith('editor.downloadStarted', { autoDismiss: true })
     expect(showSaveToast).not.toHaveBeenCalled()
   })
 

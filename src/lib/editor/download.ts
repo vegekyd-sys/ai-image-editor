@@ -67,7 +67,7 @@ export interface DownloadAssetParams {
   preparedOriginal?: Promise<PreparedDownload>;
   isCurrent?: () => boolean;
   setIsSaving: (v: boolean) => void;
-  setSaveStatus: (msg: string) => void;
+  setSaveStatus: (msg: string, options?: { autoDismiss: boolean }) => void;
   showSaveToast: () => void;
   t: LocaleContextValue['t'];
   projectTitle?: string;
@@ -164,7 +164,7 @@ export async function deliverPreparedDownload(params: DownloadAssetParams, asset
     params.setSaveStatus(params.t('editor.done'));
     params.showSaveToast();
   } else {
-    params.setSaveStatus(params.t('editor.downloadStarted'));
+    params.setSaveStatus(params.t('editor.downloadStarted'), { autoDismiss: true });
   }
 }
 
@@ -249,7 +249,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     const direct = managedDownloadUrl(currentVideoUrl, attachmentName);
     if (direct) {
       startFileDownload(direct, attachmentName);
-      setSaveStatus(t('editor.downloadStarted'));
+      setSaveStatus(t('editor.downloadStarted'), { autoDismiss: true });
       return;
     }
   }
