@@ -35,7 +35,6 @@ export interface VideoModelCapability {
   supportedResolutions?: VideoResolution[]
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
-  supportedImageToVideoAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
   provider?: 'evolink-kling4' | 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-h3-max' | 'fal-sync' | 'piapi' | 'evolink'
   providerModel?: string
@@ -134,9 +133,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxImageReferences: 10, maxVideoReferences: 5, maxAudioReferences: 5, maxTotalReferences: 20,
     supportedResolutions: ['1080p'], defaultResolution: '1080p',
     supportedAspectRatios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
-    supportedImageToVideoAspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16'],
     estimatedCostPerSecondUsd: 0.08,
-    supportsExplicitImageToVideo: true,
     provider: 'evolink', providerModel: 'magi-2-reference-to-video',
   },
   kling: {
@@ -894,7 +891,6 @@ export function resolveVideoProviderModel(options: {
     options.hasAudioReference === true
 
   if (route.model === 'magi-2') {
-    if (options.imageWorkflow === 'image-to-video') return 'magi-2-image-to-video'
     return hasReferenceMedia ? route.providerModel : 'magi-2-text-to-video'
   }
 
@@ -955,14 +951,12 @@ export function validateVideoResolutionRequest(options: {
 export function validateVideoAspectRatioRequest(options: {
   model?: string | null
   aspectRatio?: string | null
-  imageWorkflow?: VideoImageWorkflow
 }): string | null {
   if (!options.aspectRatio || options.aspectRatio === 'auto') return null
   const capability = getVideoModelCapability(options.model)
-  const frameRatios = options.imageWorkflow === 'image-to-video' && capability.supportedImageToVideoAspectRatios
-  const supported = frameRatios || capability.supportedAspectRatios
+  const supported = capability.supportedAspectRatios
   if (supported?.length && !supported.some(ratio => ratio === options.aspectRatio)) {
-    return `${capability.label}${frameRatios ? ' first/last frame mode' : ''} does not support ${options.aspectRatio}. Supported aspect ratios: ${frameRatios ? 'auto, ' : ''}${supported.join(', ')}.`
+    return `${capability.label} does not support ${options.aspectRatio}. Supported aspect ratios: ${supported.join(', ')}.`
   }
   return null
 }
@@ -1218,10 +1212,7 @@ export function validateVideoModelRequest(options: {
     if (options.referenceVideoMetas?.some(meta => meta.durationSec != null && (meta.durationSec < 2 || meta.durationSec > 30))) {
       return 'MAGI-2 reference videos must each be 2–30 seconds.'
     }
-    if (options.imageWorkflow === 'image-to-video' && (
-      (options.imageReferenceCount != null && options.imageReferenceCount < 1) || (options.imageReferenceCount ?? 0) > 2 ||
-      options.hasVideoReference || (options.audioReferenceCount ?? 0) > 0
-    )) return 'MAGI-2 first/last frame mode accepts one or two images only.'
+    if (options.imageWorkflow === 'image-to-video') return 'MAGI-2 accepts text or multimodal references. Use reference-to-video for image references.'
   }
   if (normalizedModel === 'seedance-2.5-flash') {
     if (options.operation === 'extend') return 'Seedance 2.5 Flash does not support extension.'
@@ -1246,7 +1237,6 @@ export function validateVideoModelRequest(options: {
   const aspectRatioError = validateVideoAspectRatioRequest({
     model: options.model,
     aspectRatio: options.aspectRatio,
-    imageWorkflow: options.imageWorkflow,
   })
   if (aspectRatioError) return aspectRatioError
   const imageWorkflowError = validateVideoImageWorkflowRequest({

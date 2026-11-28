@@ -75,13 +75,22 @@ export class PricingUnavailableError extends Error {
   }
 }
 
-/** No cross-request cache: Admin edits affect the next quote on every instance.
- * A missing migration, disabled row or failed read never falls back to a guessed price.
- */
+/** No cross-request cache: Admin edits affect the next quote on every instance. */
 export async function getMediaPrices(): Promise<MediaPrice[]> {
   const { data, error } = await getSupabaseAdmin().from('media_pricing').select('*').order('id')
   if (error || !data?.length) throw new PricingUnavailableError('Media pricing unavailable. Please retry after pricing is configured.')
-  return data as MediaPrice[]
+  const prices = data as MediaPrice[]
+  // A single deployment can test MAGI-2 before its migration reaches the shared database.
+  // Existing rows (including disabled rows) always take precedence.
+  const previewRate = process.env.VERCEL_ENV === 'preview' ? Number(process.env.MAKARON_PREVIEW_MAGI2_USD_PER_SECOND) : NaN
+  const id = videoPriceId({ model: 'magi-2', resolution: '1080p', operation: 'generate' })
+  if (!Number.isFinite(previewRate) || previewRate <= 0 || prices.some(price => price.id === id)) return prices
+  return [...prices, {
+    id, kind: 'video', model_id: 'magi-2', resolution: '1080p', operation: 'generate',
+    output_usd_per_second: previewRate, input_usd_per_second: 0, input_usd_per_image: 0,
+    free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true,
+    updated_at: `preview:${previewRate}`,
+  }]
 }
 
 function nonNegative(value: number, name: string): number {

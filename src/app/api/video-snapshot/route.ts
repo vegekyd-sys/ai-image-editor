@@ -277,9 +277,7 @@ export async function POST(req: NextRequest) {
         .filter(ref => !videoRefIndices.has(ref))
         .map(ref => originalImageUrlsByIndex[ref - 1])
         .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'))
-      const sourceUrls = isMagi2 && imageWorkflow === 'image-to-video'
-        ? inputImageUrls.filter(Boolean)
-        : [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
+      const sourceUrls = [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
       const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote.supplierCostUsd
 
       const videoMeta: VideoMeta = {

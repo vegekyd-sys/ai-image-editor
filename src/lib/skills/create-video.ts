@@ -506,7 +506,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       finalPrompt = prepared.prompt;
     } else if (magi) {
       try {
-        const prepared = magi.prepareMagi2References(script, images, providerVideoUrls, audioUrls?.length ?? 0, Boolean(videoUrl), imageWorkflow === 'image-to-video');
+        const prepared = magi.prepareMagi2References(script, images, providerVideoUrls, audioUrls?.length ?? 0, Boolean(videoUrl));
         finalPrompt = prepared.prompt;
         filteredImages = prepared.images;
       } catch (error) {

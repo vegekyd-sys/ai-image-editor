@@ -285,6 +285,5 @@ export interface ProjectAnimation {
   videoModel?: VideoModel;
   videoResolution?: VideoResolution;
   videoAspectRatio?: VideoAspectRatio;
-  videoImageWorkflow?: import('@/lib/video-model-capabilities').VideoImageWorkflow;
   error?: string;
 }

@@ -17,14 +17,9 @@ export function isMagi2MediaUrl(raw: string): boolean {
 }
 
 /** Preserve timeline marker identity while compacting the selected images. */
-export function prepareMagi2References(prompt: string, images: string[], videos: string[], audioCount: number, explicitVideo: boolean, orderedFrames = false) {
+export function prepareMagi2References(prompt: string, images: string[], videos: string[], audioCount: number, explicitVideo: boolean) {
   const selectedImages: string[] = []
   const mapped = new Map<number, string>()
-  if (orderedFrames) {
-    images.forEach((url, index) => {
-      if (url) mapped.set(index + 1, `Image ${selectedImages.push(url)}`)
-    })
-  }
   let nextTimelineVideo = explicitVideo ? 1 : 0
   const text = prompt.replace(/<<<(?:image|media)_(\d+)>>>/gi, (_marker, rawIndex) => {
     const index = Number(rawIndex)
@@ -68,16 +63,14 @@ export function buildMagi2Payload(input: {
 }) {
   const {
     model, images, videoUrls = [], audioUrls = [], duration = 5, quality = '1080p',
-    generateAudio = true,
+    aspectRatio = '16:9', generateAudio = true,
   } = input
-  const isFrameMode = model === 'magi-2-image-to-video'
-  const aspectRatio = input.aspectRatio ?? (isFrameMode ? 'auto' : '16:9')
   const capability = getVideoModelCapability('magi-2')
   if (!Number.isInteger(duration) || duration < capability.minOutputDuration || duration > capability.maxOutputDuration) {
     throw new Error('MAGI-2 requires a whole-second output duration between 4 and 30 seconds.')
   }
   if (quality !== '1080p') throw new Error('MAGI-2 supports 1080p only.')
-  const ratioError = validateVideoAspectRatioRequest({ model: 'magi-2', aspectRatio, imageWorkflow: isFrameMode ? 'image-to-video' : undefined })
+  const ratioError = validateVideoAspectRatioRequest({ model: 'magi-2', aspectRatio })
   if (ratioError) throw new Error(ratioError)
   const promptError = validateMagi2Prompt(input.prompt)
   if (promptError) throw new Error(promptError)
@@ -86,11 +79,6 @@ export function buildMagi2Payload(input: {
   switch (model) {
     case 'magi-2-text-to-video':
       if (inputs.length) throw new Error('MAGI-2 text-to-video accepts only text.')
-      break
-    case 'magi-2-image-to-video':
-      if (images.length < 1 || images.length > 2 || videoUrls.length || audioUrls.length) {
-        throw new Error('MAGI-2 first/last frame mode accepts one or two images.')
-      }
       break
     case 'magi-2-reference-to-video':
       if (!inputs.length || images.length > 10 || videoUrls.length > 5 || audioUrls.length > 5) {
@@ -101,7 +89,7 @@ export function buildMagi2Payload(input: {
       throw new Error('Unknown EvoLink MAGI-2 route.')
   }
   return {
-    model, duration, quality, aspect_ratio: aspectRatio === 'auto' && !isFrameMode ? '16:9' : aspectRatio,
+    model, duration, quality, aspect_ratio: aspectRatio === 'auto' ? '16:9' : aspectRatio,
     generate_audio: generateAudio, prompt: input.prompt.trim(),
     ...(images.length ? { image_urls: images } : {}),
     ...(videoUrls.length ? { video_urls: videoUrls } : {}),

@@ -2179,9 +2179,9 @@ Recent model choices:
                  Native edit preserves source audio; default for video retake.
   kling-4-flash  Kling 4.0 Flash (default): faster Kling 4.0 with the same inputs and edit route;
                  3–20s, 720p only, video inputs <=20s total, script <=2500 characters.
-  magi-2        Sand AI MAGI-2 via EvoLink: 1080p, 4–30s; text, first/last frames, or up to
-                 10 images, 5 videos and 5 WAV/MP3 audio references (2–30s each, 30s total per kind).
-                 Non-blank script required. First/last frames default to --aspect auto and exclude 21:9.
+  magi-2        Sand AI MAGI-2 via EvoLink: 1080p, 4–30s; text-to-video or up to
+                 10 images, 5 videos and 5 WAV/MP3 audio references in one request.
+                 Video and audio: 2–30s each, 30s total per kind. Non-blank script required.
   google-omni    Gemini Omni 1.2 Flash: 3–15s text/image/video with native audio, multi-speaker
                  dialogue and lip-sync; edit (source <=15s) or extend (+3–10s, up to 30s);
                  360p/720p, upscaled 1080p/4k.
@@ -2192,7 +2192,7 @@ Recent model choices:
   wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
   wan-3.0         Wan standard tier with the same public duration/resolution range.
   seedance-2.5-flash  4-30s; 480p/720p;10 images/5 videos/5 audios; edit follows source.
-  --image-workflow <id> Flash/MAGI-2: reference-to-video (default) or image-to-video (1-2 first/last frames).
+  --image-workflow <id> Seedance 2.5 Flash: reference-to-video (default) or image-to-video (1-2 first/last frames).
   --request-id <uuid> Reuse this ID with identical arguments to recover the original billed task.
   --max-credits <integer> Native 4K spending ceiling; omit for a quote with no generation.
   seedance-2.5-native Native 480p/720p/1080p/4k; 4k is high-cost, explicit opt-in only.
@@ -3601,9 +3601,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       script = script.trim();
       if (!script || Array.from(script).length > 15_000) { console.error('MAGI-2 requires a non-blank --script or --script-file of at most 15,000 characters.'); process.exit(1); }
       if (legacySeed != null) console.error('Warning: EvoLink MAGI-2 ignores --seed.');
-      const ratios = ['auto', '16:9', '9:16', '1:1', '4:3', '3:4'];
-      if (imageWorkflow !== 'image-to-video') ratios.push('21:9');
-      if (aspectRatio && !ratios.includes(aspectRatio)) { console.error('MAGI-2 supports these --aspect values in this mode: ' + ratios.join(', ') + '.'); process.exit(1); }
+      const ratios = ['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9'];
+      if (aspectRatio && !ratios.includes(aspectRatio)) { console.error('MAGI-2 supports these --aspect values: ' + ratios.join(', ') + '.'); process.exit(1); }
+      if (imageWorkflow && imageWorkflow !== 'reference-to-video') { console.error('MAGI-2 accepts text or multimodal references. Pass reference media directly.'); process.exit(1); }
       if (images.length > 10 || videos.length > 5 || audios.length > 5) { console.error('MAGI-2 accepts up to 10 images, 5 videos and 5 audio references.'); process.exit(1); }
       if (duration != null && (!Number.isInteger(duration) || duration < 4 || duration > 30)) { console.error('MAGI-2 duration must be an integer from 4 to 30 seconds.'); process.exit(1); }
       if (videoResolution && !['auto', '1080p'].includes(videoResolution)) { console.error('MAGI-2 supports 1080p only.'); process.exit(1); }
@@ -3619,8 +3619,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (isFlash && duration != null && (!Number.isInteger(duration) || duration < 4 || duration > 30)) { console.error('Seedance 2.5 Flash duration must be an integer 4–30 seconds.'); process.exit(1); }
     if (isFlash && videoResolution && !['auto', '480p', '720p'].includes(videoResolution)) { console.error('Seedance 2.5 Flash supports only 480p/720p.'); process.exit(1); }
     if (isFlash && (videoOperation === 'extend' || extendDirection || outputFormat === 'mov' || webSearch || contentFilter === false)) { console.error('Flash has no extend, draft, MOV, web search or relaxed-filter mode.'); process.exit(1); }
-    if (imageWorkflow && (!(isFlash || isMagi2) || !['reference-to-video', 'image-to-video'].includes(imageWorkflow))) { console.error('--image-workflow is supported for Flash and MAGI-2.'); process.exit(1); }
-    if ((isFlash || isMagi2) && imageWorkflow === 'image-to-video' && (!images.length || images.length > 2 || videos.length || audios.length)) { console.error('First/last frames need one or two images only.'); process.exit(1); }
+    if (imageWorkflow && !isMagi2 && (!isFlash || !['reference-to-video', 'image-to-video'].includes(imageWorkflow))) { console.error('--image-workflow is supported for Seedance 2.5 Flash.'); process.exit(1); }
+    if (isFlash && imageWorkflow === 'image-to-video' && (!images.length || images.length > 2 || videos.length || audios.length)) { console.error('First/last frames need one or two images only.'); process.exit(1); }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
     if (isSeedance25 && videos.length > 10) { console.error('Seedance 2.5 supports at most 10 video references.'); process.exit(1); }
     if (isSeedance25 && audios.length > 10) { console.error('Seedance 2.5 supports at most 10 audio references.'); process.exit(1); }

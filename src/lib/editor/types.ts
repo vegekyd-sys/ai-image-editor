@@ -1,5 +1,4 @@
 import type { VideoModel, VideoResolution } from '@/types'
-import type { VideoImageWorkflow } from '@/lib/video-model-capabilities'
 
 export interface AnimationState {
   imageUrls: string[]
@@ -14,7 +13,6 @@ export interface AnimationState {
   pollSeconds: number
   videoModel: VideoModel
   videoResolution?: VideoResolution
-  imageWorkflow?: VideoImageWorkflow
 }
 
 export interface HeroAnim {
