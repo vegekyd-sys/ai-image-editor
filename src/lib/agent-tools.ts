@@ -5730,7 +5730,15 @@ function createRunCodeTool(
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
           const msg = e instanceof Error ? e.message : String(e);
           console.error(`❌ [run_code] failed in ${elapsed}s:`, msg);
-          return { type: 'text' as const, content: `Code execution error: ${msg}` };
+          // VM errors can come from another realm; keep the original error in logs and feedback.
+          const moduleLoadFailed = !resolvedComposition && (
+            /^(?:ReferenceError: )?require is not defined$/.test(msg)
+            || (e as NodeJS.ErrnoException | null)?.code === 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING'
+          );
+          const hint = moduleLoadFailed
+            ? '\nThis composition executable body has no require() or dynamic import(). Use injected helpers such as sharp, JSZip and Buffer directly. Keep editable Remotion work in composition; use runtime:"node" for file operations that need Node modules.'
+            : '';
+          return { type: 'text' as const, content: `Code execution error: ${msg}${hint}` };
         }
       },
 
