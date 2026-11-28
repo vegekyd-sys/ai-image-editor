@@ -12,6 +12,7 @@ import {EXPORT_MEDIA_PREPARATION_SCRIPT} from './remotion-export-media-script';
 import {awaitPreviewOperation, runPreviewCommand} from './remotion-preview-command';
 
 export const EXPORT_MEDIA_RECIPE = 'h264-source-size-crf18-aac-v1';
+const MAX_PREPARATION_WORKERS = 3;
 const MAX_MANIFEST_AGE_MS = 6 * 24 * 60 * 60 * 1000;
 const exec = promisify(execFile);
 interface Probe {
@@ -23,7 +24,10 @@ export interface ExportMediaManifest {
   prepared: boolean; original: Probe; output?: Probe; bytes?: number; reason?: string;
 }
 interface CacheManifest extends ExportMediaManifest {recipe: string; createdAt: number}
-export interface ExportMediaSummary {sources: number; prepared: number; cacheHits: number; recipe: string}
+export interface ExportMediaSummary {
+  sources: number; prepared: number; cacheHits: number; recipe: string;
+  workersUsed: number; slowestSourceMs: number;
+}
 export interface ExportMediaRunner {
   prepare(url: string, fps: number): Promise<ExportMediaManifest>;
   upload(url: string): Promise<void>;
@@ -38,6 +42,10 @@ export interface ExportMediaStore {
 
 function env(name: string): string | undefined {
   return process.env[name]?.replace(/\\[rn]|[\u0000-\u001F\u007F]/g, '').trim() || undefined;
+}
+function usesMediaSandbox(): boolean {
+  const executor = env('MEDIA_SANDBOX_EXECUTOR');
+  return executor !== 'local' && (executor === 'vercel' || Boolean(env('VERCEL') || env('MEDIA_SANDBOX_SNAPSHOT_ID')));
 }
 export function exportMediaCacheKey(userId: string, sourceUrl: string, fps: number): string {
   // Include the complete authorized source URL and owner; never share private media across accounts.
@@ -89,11 +97,9 @@ function mediaStore(): ExportMediaStore {
   };
 }
 
-/** One VM per export, serial bounded preparation; large files never pass through the app heap. */
+/** A runner handles one source at a time in its own VM or local temporary directory. */
 export async function createExportMediaRunner(signal: AbortSignal): Promise<ExportMediaRunner> {
-  const useSandbox = (env('MEDIA_SANDBOX_EXECUTOR') === 'vercel' || Boolean(env('VERCEL') || env('MEDIA_SANDBOX_SNAPSHOT_ID')))
-    && env('MEDIA_SANDBOX_EXECUTOR') !== 'local';
-  if (!useSandbox) {
+  if (!usesMediaSandbox()) {
     const root = await mkdtemp(path.join(tmpdir(), 'makaron-export-media-'));
     const script = path.join(root, 'prepare.cjs');
     await writeFile(script, EXPORT_MEDIA_PREPARATION_SCRIPT);
@@ -150,42 +156,66 @@ export async function prepareRemotionExportMedia(design: DesignPayload, options:
   createRunner?: (signal: AbortSignal) => Promise<ExportMediaRunner>;
 }): Promise<{design: DesignPayload; summary: ExportMediaSummary}> {
   const sources = collectPreviewMediaSources(design);
-  const summary = {sources: sources.length, prepared: 0, cacheHits: 0, recipe: EXPORT_MEDIA_RECIPE};
+  const summary = {sources: sources.length, prepared: 0, cacheHits: 0, recipe: EXPORT_MEDIA_RECIPE, workersUsed: 0, slowestSourceMs: 0};
   if (!sources.length || env('REMOTION_EXPORT_PREPARE_MEDIA') === 'false') return {design, summary};
   const fps = design.animation?.fps || 30;
   const store = options.store || mediaStore();
   const signal = AbortSignal.timeout(12 * 60_000);
-  let runner: ExportMediaRunner | undefined;
   let stoppedHeartbeat = false;
   const heartbeat = setInterval(() => { if (!stoppedHeartbeat) void options.onHeartbeat?.().catch(() => undefined); }, 15_000);
   heartbeat.unref?.();
   const replacements: Array<{url: string; path: string}> = [];
+  const queue = sources.values();
+  let failed = false;
+  async function work() {
+    let runner: ExportMediaRunner | undefined;
+    try {
+      while (!failed) {
+        const next = queue.next();
+        if (next.done) break;
+        const source = next.value;
+        const startedAt = Date.now();
+        const key = exportMediaCacheKey(options.userId, source.url, fps);
+        let manifest = await store.read(key);
+        if (manifest) summary.cacheHits++;
+        else {
+          let preparation = pending.get(key);
+          if (!preparation) {
+            preparation = (async () => {
+              if (!runner) {
+                runner = await (options.createRunner || createExportMediaRunner)(signal);
+                summary.workersUsed++;
+              }
+              const value = await runner.prepare(source.url, fps);
+              if (value.prepared) await runner.upload(await store.uploadUrl(key));
+              await store.commit(key, value);
+              return value;
+            })();
+            pending.set(key, preparation);
+            void preparation.finally(() => pending.delete(key)).catch(() => undefined);
+          } else summary.cacheHits++;
+          manifest = await preparation;
+        }
+        if (manifest.prepared) {
+          summary.prepared++;
+          replacements.push({url: source.url, path: await store.renderUrl(key)});
+        }
+        summary.slowestSourceMs = Math.max(summary.slowestSourceMs, Date.now() - startedAt);
+      }
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      await runner?.stop().catch(() => undefined);
+    }
+  }
   try {
     await options.onHeartbeat?.();
-    for (const source of sources) {
-      const key = exportMediaCacheKey(options.userId, source.url, fps);
-      let manifest = await store.read(key);
-      if (manifest) summary.cacheHits++;
-      else {
-        let preparation = pending.get(key);
-        if (!preparation) {
-          preparation = (async () => {
-            runner ||= await (options.createRunner || createExportMediaRunner)(signal);
-            const value = await runner.prepare(source.url, fps);
-            if (value.prepared) await runner.upload(await store.uploadUrl(key));
-            await store.commit(key, value);
-            return value;
-          })();
-          pending.set(key, preparation);
-          void preparation.finally(() => pending.delete(key)).catch(() => undefined);
-        } else summary.cacheHits++;
-        manifest = await preparation;
-      }
-      if (manifest.prepared) {
-        summary.prepared++;
-        replacements.push({url: source.url, path: await store.renderUrl(key)});
-      }
-    }
+    // Separate scratch spaces keep prepare + upload atomic per runner. Drain active
+    // sources on error: another export may already be awaiting their shared promise.
+    const concurrency = usesMediaSandbox() ? Math.min(MAX_PREPARATION_WORKERS, sources.length) : 1;
+    const results = await Promise.allSettled(Array.from({length: concurrency}, work));
+    for (const result of results) if (result.status === 'rejected') throw result.reason;
     return {design: localizePreviewMedia(design, replacements), summary};
   } catch (error) {
     // Keep credentials and signed source/upload URLs out of persisted errors and progress.
@@ -193,6 +223,5 @@ export async function prepareRemotionExportMedia(design: DesignPayload, options:
     throw new Error(`Export media preparation failed: ${message.replace(/https?:\/\/[^\s"'<>]+/g, '[URL]').slice(0, 1000)}`);
   } finally {
     stoppedHeartbeat = true; clearInterval(heartbeat);
-    await runner?.stop().catch(() => undefined);
   }
 }
