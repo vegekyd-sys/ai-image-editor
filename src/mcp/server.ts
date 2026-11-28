@@ -79,6 +79,7 @@ function formatResult(image: string, message: string, prefix: string, saveToDisk
 }
 
 export interface McpServerOptions {
+  saveVoiceImage?: (image: string) => Promise<string>;
   /** Store large original PNGs before billing; HTTP returns a link instead of base64. */
   publishKlingImage4Result?: (image: string, taskId: string) => Promise<string>;
   /** HTTP user workspace receipt; saved before polling an accepted Seedream task. */
@@ -224,7 +225,7 @@ Generation timing varies; report actual completion. Unknown submissions are neve
         const receiptInfo = result.usedModel === 'z-image-turbo' && result.taskId
           ? ` Provider: fal; provider model: ${zImageTurboEndpoint(imageInputCount)}; request: ${result.taskId}.`
           : result.usedModel === 'kling-image-4.0' && result.taskId ? ` Provider: fal; provider model: kling/v4/${imageInputCount ? 'image-to-image' : 'text-to-image'}; task: ${result.taskId}.` : result.usedModel === 'seedream-5.5' && result.taskId ? ` Provider: evolink; provider model: doubao-seedream-5.5; task: ${result.taskId}.` : '';
-        const msg = (result.usedModel
+        let msg = (result.usedModel
           ? `${result.message} (model: ${result.usedModel})`
           : result.message) + receiptInfo;
         if (publishedKlingUrl) return { content: [
@@ -232,6 +233,15 @@ Generation timing varies; report actual completion. Unknown submissions are neve
           { type: 'resource_link' as const, name: `kling-image4-${result.taskId}.png`, uri: publishedKlingUrl, mimeType: 'image/png' },
         ] };
         const images = result.images ?? [result.image];
+        if (params.model === 'gemini-2.1' && result.usedModel === 'gemini-2.1' && images.length === 1 && options?.saveVoiceImage) {
+          try {
+            const url = await options.saveVoiceImage(result.image);
+            msg += '\nImage URL: ' + url;
+          } catch {
+            // Billing already settled. The same original bytes let Voice perform its usual save.
+            console.warn('[MCP edit_image] Voice project save unavailable; returning the generated image.');
+          }
+        }
         if (images.length === 1) return formatResult(result.image, msg, 'edit', !options?.returnImageContent);
         // Preserve every candidate; one onToolComplete call bills the whole batch once.
         return { content: images.flatMap((image, index) => formatResult(image, `${msg} Candidate ${index + 1}/${images.length}.`, `edit-${index + 1}`, !options?.returnImageContent).content) };
