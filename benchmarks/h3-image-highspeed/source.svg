@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#f5eedf"/>
+  <circle cx="840" cy="156" r="58" fill="#eda746"/>
+  <path d="M0 594L270 431 507 579 729 477 1024 641V730H0Z" fill="#a9bcb0"/>
+  <path d="M0 664Q275 522 517 648T1024 641V755H0Z" fill="#64877d"/>
+  <rect y="755" width="1024" height="269" fill="#173d44"/>
+  <g stroke="#183e46" stroke-width="16" stroke-linejoin="round">
+    <path d="M385 649l-32 61h57l21-50m165-11 30 61h-57l-20-50" fill="#dc8050"/>
+    <rect x="312" y="320" width="400" height="340" rx="90" fill="#df7950"/>
+    <rect x="345" y="365" width="334" height="190" rx="36" fill="#f9f1d8"/>
+    <rect x="415" y="257" width="194" height="66" rx="30" fill="#3676bd"/>
+  </g>
+  <text x="512" y="499" text-anchor="middle" font-family="Arial,sans-serif" font-weight="700" font-size="90" fill="#183e46">07:30</text>
+  <g fill="#183e46"><circle cx="469" cy="600" r="9"/><circle cx="512" cy="600" r="9"/><circle cx="555" cy="600" r="9"/></g>
+  <text x="512" y="906" text-anchor="middle" font-family="Arial,sans-serif" font-size="99" font-weight="700" letter-spacing="3" fill="#f9f1d8">EARLY BIRD</text>
+</svg>

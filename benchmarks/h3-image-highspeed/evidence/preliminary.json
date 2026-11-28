@@ -1,0 +1,720 @@
+[
+  {
+    "name": "1-edit-h3",
+    "model": "h3",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/highspeed/edit",
+        "startMs": 0,
+        "http": 200,
+        "headersMs": 1860,
+        "bodyMs": 1860,
+        "queueStatus": "IN_QUEUE",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 1862,
+        "http": 202,
+        "headersMs": 2867,
+        "bodyMs": 2868,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3120,
+        "http": 202,
+        "headersMs": 3449,
+        "bodyMs": 3450,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3701,
+        "http": 202,
+        "headersMs": 4011,
+        "bodyMs": 4011,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4264,
+        "http": 202,
+        "headersMs": 4577,
+        "bodyMs": 4578,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4830,
+        "http": 202,
+        "headersMs": 5180,
+        "bodyMs": 5180,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5432,
+        "http": 202,
+        "headersMs": 5970,
+        "bodyMs": 5970,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6221,
+        "http": 202,
+        "headersMs": 6542,
+        "bodyMs": 6542,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6794,
+        "http": 202,
+        "headersMs": 7108,
+        "bodyMs": 7108,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 7358,
+        "http": 202,
+        "headersMs": 8230,
+        "bodyMs": 8230,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 8482,
+        "http": 202,
+        "headersMs": 8847,
+        "bodyMs": 8847,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 9100,
+        "http": 202,
+        "headersMs": 9964,
+        "bodyMs": 9964,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 10217,
+        "http": 202,
+        "headersMs": 10549,
+        "bodyMs": 10549,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 10800,
+        "http": 200,
+        "headersMs": 11154,
+        "bodyMs": 11154,
+        "queueStatus": "COMPLETED",
+        "metrics": {
+          "inference_time": 8.611999988555908
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}",
+        "startMs": 11155,
+        "http": 200,
+        "headersMs": 12140,
+        "units": 45.2376,
+        "bodyMs": 12141,
+        "timings": {
+          "inference": 8.050736896999979
+        },
+        "usage": {
+          "generated_images": 1,
+          "total_tokens": 9606,
+          "input_tokens": 5510,
+          "output_tokens": 4096,
+          "input_tokens_details": {
+            "image_tokens": 2050,
+            "text_tokens": 3460
+          },
+          "output_tokens_details": {
+            "image_tokens": 4096
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "fal CDN",
+        "startMs": 12142,
+        "http": 200,
+        "headersMs": 13660,
+        "bodyMs": 14774
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:31:44.455Z",
+    "h3": {
+      "units": "45.2376",
+      "costUsd": 0.0452376,
+      "usage": {
+        "generated_images": 1,
+        "total_tokens": 9606,
+        "input_tokens": 5510,
+        "output_tokens": 4096,
+        "input_tokens_details": {
+          "image_tokens": 2050,
+          "text_tokens": 3460
+        },
+        "output_tokens_details": {
+          "image_tokens": 4096
+        }
+      },
+      "inferenceSeconds": 8.050736896999979,
+      "flags": [
+        false
+      ]
+    },
+    "costUsd": 0.0452376,
+    "serverResultMs": 14775,
+    "file": "1-edit-h3.png",
+    "sha256": "c09f1b61edb7117877efb2bb001db0cdeceff9bc8d178953a9bac523f88f1140",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 512044,
+    "format": "png",
+    "firstPaintMs": 14825,
+    "persistedMs": 17834,
+    "verifiedMs": 19496
+  },
+  {
+    "name": "2-edit-h3",
+    "model": "h3",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/highspeed/edit",
+        "startMs": 0,
+        "http": 200,
+        "headersMs": 1664,
+        "bodyMs": 1664,
+        "queueStatus": "IN_QUEUE",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 1665,
+        "http": 202,
+        "headersMs": 2606,
+        "bodyMs": 2606,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 2857,
+        "http": 202,
+        "headersMs": 3154,
+        "bodyMs": 3155,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3407,
+        "http": 202,
+        "headersMs": 3704,
+        "bodyMs": 3704,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3957,
+        "http": 202,
+        "headersMs": 4257,
+        "bodyMs": 4257,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 4509,
+        "http": 202,
+        "headersMs": 4805,
+        "bodyMs": 4805,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5057,
+        "http": 202,
+        "headersMs": 5355,
+        "bodyMs": 5355,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5606,
+        "http": 202,
+        "headersMs": 5948,
+        "bodyMs": 5948,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6199,
+        "http": 202,
+        "headersMs": 6561,
+        "bodyMs": 6561,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6812,
+        "http": 202,
+        "headersMs": 7125,
+        "bodyMs": 7125,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 7377,
+        "http": 202,
+        "headersMs": 7676,
+        "bodyMs": 7676,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 7928,
+        "http": 202,
+        "headersMs": 8224,
+        "bodyMs": 8224,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 8476,
+        "http": 202,
+        "headersMs": 8775,
+        "bodyMs": 8775,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 9027,
+        "http": 202,
+        "headersMs": 9325,
+        "bodyMs": 9325,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 9576,
+        "http": 202,
+        "headersMs": 9940,
+        "bodyMs": 9940,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 10192,
+        "http": 202,
+        "headersMs": 10494,
+        "bodyMs": 10494,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 10746,
+        "http": 202,
+        "headersMs": 11064,
+        "bodyMs": 11064,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 11315,
+        "http": 202,
+        "headersMs": 11617,
+        "bodyMs": 11617,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 11868,
+        "http": 202,
+        "headersMs": 12218,
+        "bodyMs": 12218,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 12469,
+        "http": 200,
+        "headersMs": 12768,
+        "bodyMs": 12768,
+        "queueStatus": "COMPLETED",
+        "metrics": {
+          "inference_time": 10.6489999294281
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}",
+        "startMs": 12769,
+        "http": 200,
+        "headersMs": 13685,
+        "units": 45.0582,
+        "bodyMs": 13686,
+        "timings": {
+          "inference": 9.270422975999963
+        },
+        "usage": {
+          "generated_images": 1,
+          "total_tokens": 9528,
+          "input_tokens": 5432,
+          "output_tokens": 4096,
+          "input_tokens_details": {
+            "image_tokens": 2050,
+            "text_tokens": 3382
+          },
+          "output_tokens_details": {
+            "image_tokens": 4096
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "fal CDN",
+        "startMs": 13687,
+        "http": 200,
+        "headersMs": 15108,
+        "bodyMs": 16344
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:34:04.397Z",
+    "h3": {
+      "units": "45.0582",
+      "costUsd": 0.0450582,
+      "usage": {
+        "generated_images": 1,
+        "total_tokens": 9528,
+        "input_tokens": 5432,
+        "output_tokens": 4096,
+        "input_tokens_details": {
+          "image_tokens": 2050,
+          "text_tokens": 3382
+        },
+        "output_tokens_details": {
+          "image_tokens": 4096
+        }
+      },
+      "inferenceSeconds": 9.270422975999963,
+      "flags": [
+        false
+      ]
+    },
+    "costUsd": 0.0450582,
+    "serverResultMs": 16345,
+    "file": "2-edit-h3.png",
+    "sha256": "bae90a88cec11b2442e24403219fe5d3991f697ee1352a61a99ab049170a2984",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 508747,
+    "format": "png",
+    "firstPaintMs": 16377,
+    "persistedMs": 19020,
+    "verifiedMs": 20949
+  },
+  {
+    "name": "3-edit-h3",
+    "model": "h3",
+    "op": "edit",
+    "calls": [
+      {
+        "method": "POST",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/highspeed/edit",
+        "startMs": 0,
+        "http": 200,
+        "headersMs": 3893,
+        "bodyMs": 3893,
+        "queueStatus": "IN_QUEUE",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 3894,
+        "http": 202,
+        "headersMs": 4949,
+        "bodyMs": 4950,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 5201,
+        "http": 202,
+        "headersMs": 6237,
+        "bodyMs": 6237,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 6489,
+        "http": 202,
+        "headersMs": 6871,
+        "bodyMs": 6871,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 7122,
+        "http": 202,
+        "headersMs": 7426,
+        "bodyMs": 7426,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 7677,
+        "http": 202,
+        "headersMs": 8228,
+        "bodyMs": 8228,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 8480,
+        "http": 202,
+        "headersMs": 8798,
+        "bodyMs": 8798,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 9051,
+        "http": 202,
+        "headersMs": 9921,
+        "bodyMs": 9921,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 10173,
+        "http": 202,
+        "headersMs": 10497,
+        "bodyMs": 10497,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 10748,
+        "http": 202,
+        "headersMs": 11059,
+        "bodyMs": 11059,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 11312,
+        "http": 202,
+        "headersMs": 11640,
+        "bodyMs": 11640,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 11892,
+        "http": 202,
+        "headersMs": 12207,
+        "bodyMs": 12207,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 12460,
+        "http": 202,
+        "headersMs": 12805,
+        "bodyMs": 12805,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 13056,
+        "http": 202,
+        "headersMs": 13360,
+        "bodyMs": 13360,
+        "queueStatus": "IN_PROGRESS",
+        "metrics": {}
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}/status",
+        "startMs": 13611,
+        "http": 200,
+        "headersMs": 13930,
+        "bodyMs": 13930,
+        "queueStatus": "COMPLETED",
+        "metrics": {
+          "inference_time": 9.878999948501587
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "https://queue.fal.run/minimax/h3-image/requests/{id}",
+        "startMs": 13931,
+        "http": 200,
+        "headersMs": 14903,
+        "units": 42.7628,
+        "bodyMs": 14903,
+        "timings": {
+          "inference": 8.933402020999893
+        },
+        "usage": {
+          "generated_images": 1,
+          "total_tokens": 8530,
+          "input_tokens": 4434,
+          "output_tokens": 4096,
+          "input_tokens_details": {
+            "image_tokens": 2050,
+            "text_tokens": 2384
+          },
+          "output_tokens_details": {
+            "image_tokens": 4096
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "endpoint": "fal CDN",
+        "startMs": 14904,
+        "http": 200,
+        "headersMs": 16239,
+        "bodyMs": 17567
+      }
+    ],
+    "state": "verified",
+    "startedAt": "2026-11-20T01:35:39.573Z",
+    "h3": {
+      "units": "42.7628",
+      "costUsd": 0.0427628,
+      "usage": {
+        "generated_images": 1,
+        "total_tokens": 8530,
+        "input_tokens": 4434,
+        "output_tokens": 4096,
+        "input_tokens_details": {
+          "image_tokens": 2050,
+          "text_tokens": 2384
+        },
+        "output_tokens_details": {
+          "image_tokens": 4096
+        }
+      },
+      "inferenceSeconds": 8.933402020999893,
+      "flags": [
+        false
+      ]
+    },
+    "costUsd": 0.0427628,
+    "serverResultMs": 17569,
+    "file": "3-edit-h3.png",
+    "sha256": "4bd3c6d411ae4b44ebc9a69b9d54bcaaf19a665540f90c56c896804945527719",
+    "width": 1024,
+    "height": 1024,
+    "bytes": 517964,
+    "format": "png",
+    "firstPaintMs": 17614,
+    "persistedMs": 20543,
+    "verifiedMs": 22612
+  }
+]
