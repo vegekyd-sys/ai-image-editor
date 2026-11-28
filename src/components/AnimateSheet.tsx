@@ -70,6 +70,9 @@ export default function AnimateSheet({
   const activeSnapshots = allSnapshots.filter((_, i) => !excludedIndices.has(i));
   const activeUrls = activeSnapshots.map(s => s.imageUrl!);
   const imageCount = activeUrls.length;
+  const isMagi2 = videoModel === 'magi-2';
+  const tooManyImages = isMagi2 && imageCount > (videoCapability.maxImageReferences ?? 10);
+  const validImageCount = !tooManyImages && (isMagi2 || imageCount > 0);
   const [quote, setQuote] = useState<{ key: string; credits: number } | null>(null);
   const quoteKey = JSON.stringify({ model: videoModel, resolution: videoResolution, durationSec: duration, imageCount, ...(videoModel === 'fal-h3-max' ? { imageUrls: activeUrls } : {}) });
   useEffect(() => {
@@ -131,18 +134,18 @@ export default function AnimateSheet({
   }, [prompt]);
 
   const handleGenerateScript = useCallback(() => {
-    if (activeUrls.length < 1) return;
-    const urls = activeUrls.length <= 7
+    if (!validImageCount || activeUrls.length < 1) return;
+    const urls = isMagi2 || activeUrls.length <= 7
       ? activeUrls
       : [0, 1, 2, Math.floor(activeUrls.length / 2), activeUrls.length - 3, activeUrls.length - 2, activeUrls.length - 1]
         .map(i => activeUrls[Math.min(i, activeUrls.length - 1)]);
     onStateChange({ imageUrls: urls, error: null, prompt: '' });
     onGeneratePrompt?.(urls);
-  }, [activeUrls, onStateChange, onGeneratePrompt]);
+  }, [activeUrls, isMagi2, validImageCount, onStateChange, onGeneratePrompt]);
 
   const handleGenerate = useCallback(async () => {
-    if (!prompt.trim() || activeUrls.length < 1) return;
-    const urls = activeUrls.length <= 7
+    if (!prompt.trim() || !validImageCount) return;
+    const urls = isMagi2 || activeUrls.length <= 7
       ? activeUrls
       : [0, 1, 2, Math.floor(activeUrls.length / 2), activeUrls.length - 3, activeUrls.length - 2, activeUrls.length - 1]
         .map(i => activeUrls[Math.min(i, activeUrls.length - 1)]);
@@ -163,10 +166,10 @@ export default function AnimateSheet({
         : raw.replace(/Error:\s*/g, '').replace(/<[^>]+>/g, '').slice(0, 100);
       onStateChange({ error: friendly, status: 'error' });
     }
-  }, [prompt, projectId, activeUrls, duration, videoModel, videoResolution, onStateChange, t]);
+  }, [prompt, projectId, activeUrls, duration, videoModel, videoResolution, isMagi2, validImageCount, onStateChange, t]);
 
-  const canGenerate = prompt.trim().length > 0 && status === 'ready' && activeUrls.length >= 1;
-  const canGenerateScript = activeUrls.length >= 1 && (status === 'idle' || status === 'error' || status === 'ready');
+  const canGenerate = prompt.trim().length > 0 && status === 'ready' && validImageCount;
+  const canGenerateScript = validImageCount && imageCount > 0 && (status === 'idle' || status === 'error' || status === 'ready');
 
   // Detail filmstrip: use ALL snapshots (unfiltered) so @N matches Agent's Media Index
   const detailUrls = snapshots.length > 0
@@ -660,6 +663,10 @@ export default function AnimateSheet({
                     ))}
                   </div>
                 </div>
+              )}
+
+              {status !== 'submitting' && tooManyImages && (
+                <p role="status" style={{ color: '#f5a0a0', fontSize: '0.74rem', margin: '5px 0 0' }}>{t('animate.magi2.referenceLimit')}</p>
               )}
 
               {/* Resolution selector */}

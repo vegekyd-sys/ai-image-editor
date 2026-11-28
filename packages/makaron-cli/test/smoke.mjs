@@ -1444,6 +1444,42 @@ try {
   }
 
   {
+    const requestId = '2ec9ff1b-106c-486a-bb3e-d9c4e732f562';
+    const referenceImage = 'https://cdn.example/robot.jpg';
+    const text = await expectSuccess(['video', 'create', '--video-model', 'magi-2',
+      '--script', 'A paper robot turns toward the camera.', '--duration', '4',
+      '--aspect', 'auto', '--seed', '42', '--no-generated-audio', '--request-id', requestId]);
+    assert.match(text.stderr, /MAGI-2 ignores --seed/);
+    const mcp = requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params;
+    assert.equal(mcp.name, 'makaron_create_video');
+    assert.equal(mcp.arguments.videoModel, 'magi-2');
+    assert.equal(mcp.arguments.imageWorkflow, undefined);
+    assert.deepEqual(mcp.arguments.images, []);
+    assert.equal(mcp.arguments.script, 'A paper robot turns toward the camera.');
+    assert.equal(mcp.arguments.aspectRatio, 'auto');
+    assert.equal(mcp.arguments.videoSeed, undefined);
+    assert.equal(mcp.arguments.generateAudio, false);
+    assert.equal(mcp.arguments.billingRequestId, requestId);
+
+    await expectSuccess(['video', 'create', '--video-model', 'magi-2', '--script', 'Use <<<media_1>>>, <<<video_1>>> and <<<audio_1>>>.',
+      '--image', referenceImage, '--video', 'https://cdn.example/ref.mp4', '--audio', 'https://cdn.example/voice.wav']);
+    const references = requests.filter(req => req.pathname === '/api/mcp').at(-1).body.params;
+    assert.equal(references.name, 'makaron_create_video');
+    assert.deepEqual(references.arguments.images, [referenceImage]);
+    assert.deepEqual(references.arguments.videoUrls, ['https://cdn.example/ref.mp4']);
+    assert.deepEqual(references.arguments.audioUrls, ['https://cdn.example/voice.wav']);
+
+    const beforeInvalid = requests.length;
+    await expectFailure(['video', 'create', '--video-model', 'magi-2', '--script', 'Invalid 720p', '--resolution', '720p']);
+    await expectFailure(['video', 'create', '--video-model', 'magi-2', '--image-workflow', 'image-to-video',
+      '--script', 'A shot', '--image', referenceImage]);
+    await expectFailure(['video', 'create', '--video-model', 'magi-2', '--image-workflow', 'image-to-video',
+      '--script', 'A shot']);
+    await expectFailure(['video', 'create', '--video-model', 'magi-2', '--image', referenceImage, '--script', ' ']);
+    assert.equal(requests.length, beforeInvalid, 'Invalid MAGI-2 input should stop before MCP');
+  }
+
+  {
     await expectSuccess(['video','create','--script','Native4K candidate','--duration','4','--video-model','seedance-2.5-native','--video-resolution','4k','--request-id','2ec9ff1b-106c-486a-bb3e-d9c4e732f561']);
     const native4kRequest=requests.filter(req=>req.pathname==='/api/mcp').at(-1).body.params.arguments;
     assert.equal(native4kRequest.videoModel,'seedance-2.5-native');

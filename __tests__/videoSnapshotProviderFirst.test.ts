@@ -32,6 +32,10 @@ describe('provider-first video snapshot playback', () => {
       .toBe(DEFAULT_VIDEO_SNAPSHOT_POLL_INTERVAL_MS)
   })
 
+  it('uses EvoLink’s polling cadence for MAGI-2 snapshots', () => {
+    expect(getVideoSnapshotPollIntervalMs([{ videoMeta: { taskId: 'task-unified-1', model: 'magi-2' } }])).toBe(10_000)
+  })
+
   it('keeps the existing four-second cadence for other providers', () => {
     expect(getVideoSnapshotPollIntervalMs([{
       videoMeta: { taskId: 'xai-task-123', createdAt: new Date().toISOString() },

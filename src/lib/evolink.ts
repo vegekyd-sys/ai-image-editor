@@ -1,3 +1,4 @@
+import { buildMagi2Payload } from './magi2'
 import { buildSeedance25FlashPayload } from './seedance25-flash'
 /**
  * Evolink Seedance 2.0 / 2.5 Video API Client
@@ -7,7 +8,11 @@ import { buildSeedance25FlashPayload } from './seedance25-flash'
  */
 
 const BASE_URL = 'https://api.evolink.ai'
-const API_KEY = process.env.EVOLINK_API_KEY
+export function getEvolinkVideoApiKey(): string {
+  const key = process.env.EVOLINK_API_KEY?.trim()
+  if (!key) throw new Error('EVOLINK_API_KEY not configured')
+  return key
+}
 
 export interface EvolinkTaskInput {
   prompt: string
@@ -75,9 +80,7 @@ export class EvolinkInputError extends Error {
 
 /** Create a SeeDance video generation task via Evolink. Returns taskId. */
 export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string> {
-  if (!API_KEY) {
-    throw new Error('EVOLINK_API_KEY not configured')
-  }
+  const apiKey = getEvolinkVideoApiKey()
 
   const { prompt, images, duration, aspectRatio, quality, model: requestedModel, generateAudio, videoUrls, audioUrls, contentFilter, outputFormat, webSearch } = input
 
@@ -85,6 +88,8 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
   const model = requestedModel || (hasReferenceMedia
     ? 'seedance-2.0-fast-reference-to-video'
     : 'seedance-2.0-fast-text-to-video')
+  const isMagi2 = model.startsWith('magi-2-')
+  const magiPayload = isMagi2 ? buildMagi2Payload({ ...input, model }) : undefined
   const isFlash = model.startsWith('seedance-2.5-flash-')
   const isSeedance25 = model.startsWith('seedance-2.5-') && !isFlash
   // Validate before fetching images or submitting any paid request.
@@ -106,7 +111,7 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
     if (failure) throw new EvolinkInputError(failure)
   }
 
-  const payload: Record<string, unknown> = flashPayload ?? {
+  const payload: Record<string, unknown> = magiPayload ?? flashPayload ?? {
     model,
     prompt,
     generate_audio: generateAudio ?? true,
@@ -118,7 +123,7 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
     if (webSearch) payload.model_params = { web_search: true }
   }
 
-  if (!isFlash) {
+  if (!isFlash && !isMagi2) {
     if (images.length > 0) payload.image_urls = images
     if (videoUrls?.length) payload.video_urls = videoUrls
     if (audioUrls?.length) payload.audio_urls = audioUrls
@@ -133,16 +138,18 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
   const response = await fetch(`${BASE_URL}/v1/videos/generations`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${API_KEY}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(payload),
+    ...(isMagi2 ? { redirect: 'error' as const, signal: AbortSignal.timeout(25_000) } : {}),
   })
 
   if (!response.ok) {
     if ([400, 401, 402, 403, 404, 413, 415, 422, 429].includes(response.status)) {
       throw new EvolinkSubmissionError(response.status)
     }
+    if (isMagi2) throw new Error(`EvoLink MAGI-2 submission HTTP ${response.status}; outcome unknown. Keep the original request for reconciliation.`)
     const errorText = await response.text()
     console.error(`[evolink] ${response.status}: ${errorText.slice(0, 300)}`)
     throw new Error(`Evolink API error ${response.status}: ${errorText}`)
@@ -151,6 +158,9 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
   const data = await response.json()
   const taskId = data.id
 
+  if (isMagi2 && (typeof taskId !== 'string' || !/^task-unified-[\w-]+$/.test(taskId))) {
+    throw new Error('EvoLink MAGI-2 task receipt missing; outcome unknown. Keep the original request for reconciliation.')
+  }
   if (!taskId) {
     throw new Error(`Evolink API did not return task id: ${JSON.stringify(data)}`)
   }
@@ -161,13 +171,13 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
 
 /** Query an Evolink task for status + result. */
 export async function getEvolinkTask(taskId: string): Promise<EvolinkTaskResult> {
-  if (!API_KEY) {
-    throw new Error('EVOLINK_API_KEY not configured')
-  }
+  const apiKey = getEvolinkVideoApiKey()
 
-  const response = await fetch(`${BASE_URL}/v1/tasks/${taskId}`, {
+  const response = await fetch(`${BASE_URL}/v1/tasks/${encodeURIComponent(taskId)}`, {
+    cache: 'no-store',
+    signal: AbortSignal.timeout(15_000),
     headers: {
-      'Authorization': `Bearer ${API_KEY}`,
+      'Authorization': `Bearer ${apiKey}`,
     },
   })
 
@@ -178,9 +188,13 @@ export async function getEvolinkTask(taskId: string): Promise<EvolinkTaskResult>
 
   const data = await response.json()
 
+  if (typeof data.model === 'string' && data.model.startsWith('magi-2-') && data.status === 'completed'
+    && (typeof data.results?.[0] !== 'string' || !data.results[0].startsWith('https://'))) {
+    throw new Error('EvoLink MAGI-2 completed without a playable video URL.')
+  }
   const status: EvolinkTaskResult['status'] =
     data.status === 'completed' ? 'completed'
-    : data.status === 'failed' ? 'failed'
+    : ['failed', 'cancelled', 'canceled'].includes(data.status) ? 'failed'
     : data.status === 'processing' ? 'processing'
     : 'pending'
 

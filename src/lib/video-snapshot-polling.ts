@@ -5,7 +5,7 @@ export const H3_MAX_FAST_POLL_INTERVAL_MS = 500
 export const H3_MAX_FAST_POLL_WINDOW_MS = 10_000
 
 type ProcessingVideoSnapshot = {
-  videoMeta?: Pick<VideoMeta, 'taskId' | 'createdAt'>
+  videoMeta?: Pick<VideoMeta, 'taskId' | 'createdAt'> & Partial<Pick<VideoMeta, 'model'>>
 }
 
 export function getVideoSnapshotPollIntervalMs(
@@ -20,6 +20,9 @@ export function getVideoSnapshotPollIntervalMs(
     return nowMs - createdAtMs < H3_MAX_FAST_POLL_WINDOW_MS
   })
 
+  if (snapshots.length > 0 && snapshots.every(({ videoMeta }) => videoMeta?.model === 'magi-2')) {
+    return 10_000
+  }
   return hasFreshH3MaxTask
     ? H3_MAX_FAST_POLL_INTERVAL_MS
     : DEFAULT_VIDEO_SNAPSHOT_POLL_INTERVAL_MS

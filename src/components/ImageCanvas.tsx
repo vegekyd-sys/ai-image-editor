@@ -865,9 +865,10 @@ export default function ImageCanvas({
 
   const videoFrameLoaded = Boolean(videoUrl) && videoFrameLoadedUrl === videoUrl;
   const usesNativeVideo = isVideoEntry && videoUrl && !(currentDesign && !isSimpleVideoWrapper(currentDesign.code));
-  const canvasReady = usesNativeVideo
+  const showsVideoStatus = isVideoEntry && !videoUrl && (videoProcessing || videoFailed);
+  const canvasReady = showsVideoStatus || (usesNativeVideo
     ? videoFrameLoaded
-    : currentDesign ? readyDesignIdentity === designIdentity && Boolean(remotionPlayer) && !remotionLoading : imageLoaded;
+    : currentDesign ? readyDesignIdentity === designIdentity && Boolean(remotionPlayer) && !remotionLoading : imageLoaded);
   const lastReadyWasDesign = useRef(false);
   const layerPhase = useLayerReveal(designIdentity, layerEntry, !!currentDesign && canvasReady, designContainerEl, editableFields);
   const rendererFailed = layerEntry && currentDesign && !remotionLoading && readyDesignIdentity === designIdentity && !remotionPlayer;
@@ -1350,7 +1351,7 @@ export default function ImageCanvas({
         </div>
       )}
 
-      {!rendererFailed && !usesNativeVideo && displayImage && displayImage !== VIDEO_SENTINEL && !isComparing && (
+      {!rendererFailed && !usesNativeVideo && !showsVideoStatus && displayImage && displayImage !== VIDEO_SENTINEL && !isComparing && (
         <CanvasPreviewBridge source={displayImage} contentReady={layerEntry && currentDesign && !rendererFailed ? layerPhase === 'revealing' || layersEditable : canvasReady} revealLayers={layerEntry && (layerPhase === 'revealing' || layerPhase === 'ready')} navigating={animDir !== null} longContent={isLongContent} preserveLiveContent={Boolean(currentDesign) && lastReadyWasDesign.current} />
       )}
 
@@ -1591,10 +1592,9 @@ export default function ImageCanvas({
               </div>
             )}
           </div>
-        ) : isVideoEntry && !videoUrl && (videoProcessing || videoFailed) ? (
+        ) : showsVideoStatus ? (
           /* Video processing/failed state: show placeholder + overlay */
           <div className="relative w-full h-full">
-            { }
             <img
               src={videoPosterImage || VIDEO_PLACEHOLDER_IMAGE}
               alt="preview"

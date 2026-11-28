@@ -4,6 +4,7 @@
  */
 
 import { getVideoModelRetirementError, RETIRED_KLING_MESSAGE, getVideoModelCapability, normalizeVideoModelId, validateVideoAspectRatioRequest, validateVideoResolutionRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { validateMagi2Prompt } from './magi2';
 import { parseTotalDuration } from './kling';
 
 function urlMatch(a: string, b: string): boolean {
@@ -39,6 +40,10 @@ export function validateVideoScript(opts: {
   if (retirementError || motionControl) return retirementError || RETIRED_KLING_MESSAGE
 
   const capability = getVideoModelCapability(model)
+  if (capability.id === 'magi-2') {
+    const promptError = validateMagi2Prompt(prompt)
+    if (promptError) return promptError
+  }
   const providerManagedAdaptiveDuration = ['seedance-2.5', 'seedance-2.5-eco'].includes(normalizeVideoModelId(model))
     && (opts.operation === 'edit' || duration === -1)
   const resolutionError = validateVideoResolutionRequest({ model, resolution })

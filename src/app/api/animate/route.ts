@@ -14,6 +14,7 @@ import { getVideoModelRetirementError, getVideoModelCapability, resolveProductVi
 import { native4kQuoteResult, native4kNeedsDisclosure } from '@/lib/billing/seedance25-native4k'
 import { isSeedance25Native4k } from '@/lib/video-model-capabilities'
 import { quoteVideo } from '@/lib/billing/media-pricing'
+import { validateMagi2Prompt } from '@/lib/magi2'
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 
 export const maxDuration = 1800
@@ -25,15 +26,20 @@ export async function POST(req: NextRequest) {
     const user = session?.user
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution, videoOperation, videoExtendDirection, maxCredits } = await req.json()
+    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution, videoOperation, videoExtendDirection, imageWorkflow, generateAudio, audioUrls, maxCredits } = await req.json()
     const selectedVideoModel = resolveProductVideoModelId(videoModel)
     const retirementError = getVideoModelRetirementError(selectedVideoModel)
     if (retirementError) return NextResponse.json({ error: retirementError }, { status: 400 })
     const videoCapability = getVideoModelCapability(selectedVideoModel)
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const native4k = isSeedance25Native4k(selectedVideoModel, videoRoute.resolution)
+    const isMagi2 = selectedVideoModel === 'magi-2'
+    if (isMagi2) {
+      const promptError = validateMagi2Prompt(prompt)
+      if (promptError) return NextResponse.json({ error: promptError }, { status: 400 })
+    }
     let disclosureQuote: Awaited<ReturnType<typeof quoteVideo>> | undefined
-    let acceptedNativeTaskId: string | undefined
+    let acceptedProtectedTaskId: string | undefined
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
 
     if (!projectId || !prompt || (inputImageUrls.length === 0 && !supportsNativeTextToVideo(selectedVideoModel))) {
@@ -127,7 +133,7 @@ export async function POST(req: NextRequest) {
       reservedCredits = reservation.charged
     }
     const grokSubscriptionPreferred = selectedVideoModel === 'grok' && await isGrokSubscriptionAllowedUser(user.id)
-    if (!grokSubscriptionPreferred && !native4k && videoRoute.provider !== 'fal-h3-max') {
+    if (!grokSubscriptionPreferred && !native4k && !isMagi2 && videoRoute.provider !== 'fal-h3-max') {
       try {
         await reserveApiCredits()
       } catch (error) {
@@ -153,10 +159,14 @@ export async function POST(req: NextRequest) {
         referenceVideoDuration,
         referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
         videoOperation,
+        ...(isMagi2 ? {
+          imageWorkflow, generateAudio,
+          audioUrls: Array.isArray(audioUrls) ? audioUrls : undefined,
+        } : {}),
         videoExtendDirection,
         userId: user.id,
         onBeforeGrokApiFallback: grokSubscriptionPreferred ? reserveApiCredits : undefined,
-        onBeforeProviderSubmit: native4k || videoRoute.provider === 'fal-h3-max' ? async usage => {
+        onBeforeProviderSubmit: isMagi2 || native4k || videoRoute.provider === 'fal-h3-max' ? async usage => {
           billingQuote = await quoteVideo(usage)
           creditsRequired = billingQuote.credits
           if (native4k && native4kNeedsDisclosure(billingQuote, maxCredits)) {
@@ -172,7 +182,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ...quote, error: quote.message }, { status: 409 })
       }
       if (!skillResult.success || !skillResult.taskId) {
-        if (native4k && skillResult.submissionUncertain) return NextResponse.json({
+        if ((native4k || isMagi2) && skillResult.submissionUncertain) return NextResponse.json({
           error: skillResult.message, code: 'SUBMISSION_UNCERTAIN', retryable: false,
           message: 'Credits remain reserved. Reconcile the original request; do not submit another paid job.',
         }, { status: 409 })
@@ -193,7 +203,7 @@ export async function POST(req: NextRequest) {
       }
 
       const taskId = skillResult.taskId
-      if (native4k) acceptedNativeTaskId = taskId
+      if (native4k || isMagi2) acceptedProtectedTaskId = taskId
       const { data: animation, error } = await supabase
         .from('project_animations')
         .insert({
@@ -225,9 +235,9 @@ export async function POST(req: NextRequest) {
       reservedCredits = 0
       return NextResponse.json({ animationId: animation.id, taskId, provider: skillResult.provider })
     } catch (error) {
-      if (acceptedNativeTaskId) return NextResponse.json({
+      if (acceptedProtectedTaskId) return NextResponse.json({
         error: 'Native 4K was accepted but saving failed. Restore this task; do not resubmit.',
-        code: 'PERSISTENCE_RECONCILIATION_REQUIRED', taskId: acceptedNativeTaskId, retryable: false,
+        code: 'PERSISTENCE_RECONCILIATION_REQUIRED', taskId: acceptedProtectedTaskId, retryable: false,
       }, { status: 409 })
       if (reservedCredits > 0) {
         await refundCredits(user.id, reservedCredits, toolName)
