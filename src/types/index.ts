@@ -142,6 +142,8 @@ export interface Snapshot {
   design?: DesignPayload;
   designPath?: string;
   designLoadFailed?: boolean;
+  /** Restored QA sheet. Capture a local opening frame without rewriting the historical design. */
+  legacyContactSheetPoster?: true;
   videoMeta?: VideoMeta;
 }
 

@@ -1451,9 +1451,7 @@ export async function* runMakaronAgent(
             const published = (ctx as any).__pendingDesignPublished ?? false;
             const snapshotId = (ctx as any).__pendingDesignSnapshotId as string | undefined;
             const sourceDesignPath = (ctx as any).__pendingDesignSourcePath as string | undefined;
-            // Get preview URL from latest draft (if available)
-            const drafts = (ctx as any).__runCodeDrafts as { previewUrl?: string }[] | undefined;
-            const previewUrl = drafts?.[drafts.length - 1]?.previewUrl || undefined;
+            const previewUrl = ctx.pendingDesignPosterUrl;
             console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
             yield {
               type: 'render',
@@ -1478,6 +1476,7 @@ export async function* runMakaronAgent(
               attemptDeliveredArtifact = true;
             }
             (ctx as any).__pendingDesign = null;
+            ctx.pendingDesignPosterUrl = undefined;
             (ctx as any).__pendingDesignAlreadyPersisted = undefined;
             (ctx as any).__pendingDesignPublished = undefined;
             (ctx as any).__pendingDesignSnapshotId = undefined;

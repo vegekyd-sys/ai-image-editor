@@ -278,7 +278,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
         id: 'agent-design-poster',
         calculateMetadata: null, defaultProps: {},
       },
-      frame: Math.min(30, durationInFrames - 1),
+      frame: 0,
       inputProps: resolvedProps,
       delayRenderTimeoutInMilliseconds: 30000,
     });

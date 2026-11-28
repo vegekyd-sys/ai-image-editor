@@ -563,14 +563,16 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         const snapshotId = (design as Record<string, unknown>).snapshotId as string | undefined;
         if (snapshotId && previewUrl) {
           const existing = ctx.snapshotsRef.current.find(snapshot => snapshot.id === snapshotId);
-          const saved: Snapshot = existing ? { ...existing, design: design.elementEdit ? design : existing.design || design } : {
-            id: snapshotId, image: previewUrl, imageUrl: previewUrl, tips: [], messageId: currentMsgId,
-            design, designPath: (design as Record<string, unknown>).sourceDesignPath as string | undefined,
-            description: (design as Record<string, unknown>).description as string || '[composition]',
+          const changedPoster = existing && !design.prePublished && existing.imageUrl !== previewUrl;
+          const saved: Snapshot = {
+            ...(existing || { id: snapshotId, tips: [], messageId: currentMsgId,
+              designPath: design.sourceDesignPath, description: (design as Record<string, unknown>).description as string || '[composition]' }),
+            image: previewUrl, imageUrl: previewUrl,
+            design: changedPoster || design.elementEdit ? design : existing?.design || design,
           };
-          if (!existing || !existing.design || design.elementEdit) {
+          if (!existing || !existing.design || changedPoster || design.elementEdit) {
             const merge = (prev: Snapshot[]) => prev.some(item => item.id === snapshotId)
-              ? prev.map(item => item.id === snapshotId && (!item.design || design.elementEdit) ? { ...item, design } : item)
+              ? prev.map(item => item.id === snapshotId ? { ...item, image: saved.image, imageUrl: saved.imageUrl, design: saved.design } : item)
               : [...prev, saved];
             ctx.snapshotsRef.current = merge(ctx.snapshotsRef.current);
             ctx.setSnapshots(merge);
