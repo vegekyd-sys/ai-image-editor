@@ -39,13 +39,13 @@ class FakeImages {
   constructor() { this.calls = []; this.error = null; }
   async info(stream) { const { w, h } = await dims(stream); return { width: w, height: h, format: 'image/png' }; }
   input(stream) {
-    const self = this; let transform;
+    let transform;
     return {
       transform(t) { transform = t; return this; },
-      async output(o) {
-        if (self.error) throw new Error(self.error);
+      output: async (o) => {
+        if (this.error) throw new Error(this.error);
         await new Response(stream).arrayBuffer();
-        self.calls.push({ transform, output: o });
+        this.calls.push({ transform, output: o });
         const body = new TextEncoder().encode(JSON.stringify({ transform, output: o }));
         return { response: () => new Response(body), contentType: () => o.format };
       },

@@ -69,6 +69,41 @@ describe('AnimateSheet inline image preview', () => {
     expect(screen.queryByTestId('image-ref-preview-1')).toBeNull();
   });
 
+  it('resolves repeated Retake image slots to the current timeline and previews the submitted image', () => {
+    const timeline = Array.from({ length: 7 }, (_, i) => ({
+      ...snapshots[0], id: String(i + 1), imageUrl: `https://example.com/${i + 1}.png`,
+    }));
+    const sourceUrl = 'https://example.com/source.mp4';
+    const referenceUrl = timeline[6].imageUrl;
+    const edit: ProjectAnimation = {
+      ...detailAnimation, videoModel: 'seedance-2.5',
+      prompt: 'Use <<<image_1>>> then <<<image_2>>> and repeat <<<image_1>>>',
+      snapshotUrls: [sourceUrl, referenceUrl, timeline[2].imageUrl],
+      retake: { start: 7, end: 20, sourceUrl },
+    };
+    const detail = (items: Snapshot[]) => (
+      <LocaleProvider>
+        <AnimateSheet snapshots={items} projectId="project-1" onClose={vi.fn()} animationState={animationState}
+          onStateChange={vi.fn()} mode="detail" detailAnimation={edit} />
+      </LocaleProvider>
+    );
+    const { rerender } = render(detail(timeline));
+    const chips = screen.getAllByTestId('image-ref-chip-7');
+    expect(chips).toHaveLength(2);
+    expect(screen.getByTestId('image-ref-chip-3')).toBeTruthy();
+    expect(screen.queryByTestId('image-ref-chip-1')).toBeNull();
+    fireEvent.click(chips[1]);
+    expect(screen.getByTestId('animate-inline-image-preview').querySelector('img')?.src).toBe(referenceUrl + '?w=400');
+
+    rerender(detail(timeline.slice(1)));
+    expect(screen.queryByTestId('animate-inline-image-preview')).toBeNull();
+    expect(screen.getAllByTestId('image-ref-chip-6')).toHaveLength(2);
+    rerender(detail(timeline.slice(0, 6)));
+    expect(screen.queryByTestId('image-ref-chip-1')).toBeNull();
+    expect(screen.queryByTestId('image-ref-chip-7')).toBeNull();
+    expect(screen.getByTestId('image-ref-chip-3')).toBeTruthy();
+  });
+
   it('shows the provider error for a failed Grok video', () => {
     render(
       <LocaleProvider>

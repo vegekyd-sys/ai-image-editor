@@ -1,3 +1,4 @@
+import type { ProjectAnimation, Snapshot } from '@/types';
 import type { RetakeModel } from './video-retake-contract';
 
 /** Timeline indices are not the provider's image/video positions. */
@@ -35,5 +36,21 @@ export function bindRetakeReferences(input: {
     return input.model === 'fal-h3-max'
       ? `Image ${position + (input.middleIndex ? 4 : 3)}`
       : `<<<image_${position + 1}>>>`;
+  });
+}
+
+/** Retake receipts store the source video first, followed by the submitted image references. */
+export function resolveRetakeDetailPrompt(animation: ProjectAnimation, snapshots: Snapshot[], referenceLabel: string): string {
+  return animation.prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (_marker, slot: string) => {
+    const position = Number(slot);
+    const url = animation.snapshotUrls[position];
+    // H3 native frame controls have their own ordering. Its bound agent prompts
+    // use plain "Image N" text, not these compact reference markers.
+    if (!position || !url || animation.videoModel === 'fal-h3-max'
+      || animation.snapshotUrls[0] !== animation.retake?.sourceUrl) return referenceLabel;
+    const matches = snapshots.flatMap((snapshot, index) =>
+      snapshot.type !== 'video' && !snapshot.videoMeta && (snapshot.imageUrl || snapshot.image) === url ? [index + 1] : [],
+    );
+    return matches.length === 1 ? `<<<media_${matches[0]}>>>` : referenceLabel;
   });
 }

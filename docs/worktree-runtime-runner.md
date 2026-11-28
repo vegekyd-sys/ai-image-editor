@@ -18,11 +18,11 @@ local environment links, and Vercel project identity.
 ## Create A Feature Worktree
 
 ```bash
-pnpm run worktree:create -- my-feature --branch codex/my-feature --base dev
+pnpm run worktree:create my-feature --branch codex/my-feature --base origin/dev --fetch
 ```
 
-Creation uses the local base ref and does not fetch by default. Add `--fetch`
-only when the worktree must start from freshly updated remote refs.
+This example fetches before branching from `origin/dev`. Omit `--fetch` when
+the local base ref is already current.
 
 Feature worktrees are intended for editing, diff review, commits, and lightweight
 checks. Do not start Next.js or create `.next` in them.
@@ -40,8 +40,8 @@ pnpm run runner:setup
 pnpm run runner:status
 ```
 
-The default runner lives beside the main repository at
-`/Users/tianyicai/ai-image-editor-runner`.
+The default runner is a sibling of the canonical `dev` checkout. Its directory
+name adds a `-runner` suffix to the checkout name.
 
 The runner:
 
@@ -89,10 +89,10 @@ gate.
 
 ## Deploy Production
 
-Production has one exit:
+From the clean checkout that owns the local `dev` branch (listed by
+`git worktree list`), run:
 
 ```bash
-cd /Users/tianyicai/ai-image-editor
 pnpm run release:prod
 ```
 

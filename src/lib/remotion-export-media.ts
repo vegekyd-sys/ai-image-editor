@@ -16,6 +16,7 @@ const MAX_MANIFEST_AGE_MS = 6 * 24 * 60 * 60 * 1000;
 const exec = promisify(execFile);
 interface Probe {
   codec: string; width: number; height: number; fps: number; duration: number;
+  pixelFormat?: string; colorRange?: string;
   audioStreams: number; hdr: boolean; alpha: boolean;
 }
 export interface ExportMediaManifest {

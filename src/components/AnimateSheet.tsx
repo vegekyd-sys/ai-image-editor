@@ -5,6 +5,7 @@ import { Snapshot, ProjectAnimation, type VideoResolution } from '@/types';
 import type { AnimationState } from '@/components/Editor';
 import { useLocale } from '@/lib/i18n';
 import MediaRefText from '@/components/MediaRefText';
+import { resolveRetakeDetailPrompt } from '@/lib/video-retake-references';
 import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { getModelInfo, getVideoModels } from '@/lib/model-registry';
 import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
@@ -35,7 +36,8 @@ export default function AnimateSheet({
   const detailAnimation = initialDetailAnimation && liveMeta
     ? { ...initialDetailAnimation, status: liveMeta.status, duration: liveMeta.duration,
         retake: liveMeta.retake, videoModel: liveMeta.model, videoResolution: liveMeta.resolution,
-        prompt: liveMeta.prompt, error: liveMeta.error, videoUrl: liveMeta.videoUrl }
+        prompt: liveMeta.prompt, snapshotUrls: liveMeta.sourceUrls ?? initialDetailAnimation.snapshotUrls,
+        error: liveMeta.error, videoUrl: liveMeta.videoUrl }
     : initialDetailAnimation;
   const isDetail = mode === 'detail' && !!detailAnimation;
   const { prompt, userHint, status, error, duration, videoModel = getDefaultVideoModelId(), videoResolution = 'auto' } = animationState;
@@ -173,7 +175,9 @@ export default function AnimateSheet({
   const detailUrls = snapshots.length > 0
     ? snapshots.map(s => s.imageUrl || s.image || '')
     : (detailAnimation?.snapshotUrls ?? []);
-  const detailPrompt = detailAnimation?.prompt ?? '';
+  const detailPrompt = detailAnimation?.retake
+    ? resolveRetakeDetailPrompt(detailAnimation, snapshots, t('chat.referenceImage'))
+    : detailAnimation?.prompt ?? '';
   const detailDuration = detailAnimation?.duration;
   const editRange = detailAnimation?.retake;
   const seconds = (value: number) => Number(value.toFixed(2));
@@ -820,7 +824,7 @@ export default function AnimateSheet({
           </div>
         )}
 
-        {inlineImagePreview && (() => {
+        {inlineImagePreview && detailUrls[inlineImagePreview.snapIdx - 1] === inlineImagePreview.src && (() => {
           const previewUrl = inlineImagePreview.src.startsWith('http')
             ? getThumbnailUrl(inlineImagePreview.src, 400, 90, 400, 'cover')
             : inlineImagePreview.src;

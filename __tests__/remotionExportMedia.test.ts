@@ -13,7 +13,7 @@ const exec = promisify(execFile);
 const cleanups: Array<() => Promise<unknown>> = [];
 afterEach(async () => {vi.unstubAllEnvs(); await Promise.all(cleanups.splice(0).map(fn => fn()));});
 
-async function fixture(options: {hevc?: boolean; rotate4k?: boolean; fps?: number; undecodableAudio?: boolean; rejectRange?: boolean} = {}) {
+async function fixture(options: {hevc?: boolean; fullRange?: boolean; rotate4k?: boolean; fps?: number; undecodableAudio?: boolean; rejectRange?: boolean} = {}) {
   const root = await mkdtemp(path.join(tmpdir(), 'export-media-test-'));
   cleanups.push(() => rm(root, {recursive: true, force: true}));
   const ffmpeg = await findFfmpeg(), ffprobe = await findFfprobe();
@@ -21,12 +21,13 @@ async function fixture(options: {hevc?: boolean; rotate4k?: boolean; fps?: numbe
   const size = options.rotate4k ? '3840x2160' : '320x180';
   const rate = options.fps || 60;
   const duration = options.rotate4k ? '0.2' : '1';
-  await exec(ffmpeg, ['-v','error','-f','lavfi','-i',`color=c=red:s=${size}:r=${rate}:d=${duration}`,
+  await exec(ffmpeg, ['-v','error','-f','lavfi','-i',`color=c=${options.fullRange?'white':'red'}:s=${size}:r=${rate}:d=${duration}`,
     '-f','lavfi','-i',`sine=frequency=440:duration=${duration}`,
     ...(options.undecodableAudio?['-f','lavfi','-i',`sine=frequency=880:duration=${duration}`,'-map','0:v','-map','1:a','-map','2:a']:[]),
     '-c:v',options.hevc?'libx265':'libx264','-preset','ultrafast',
     ...(options.hevc?['-x265-params','pools=1:frame-threads=1:log-level=error']:[]),
-    '-threads','2','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart',encoded]);
+    '-threads','2','-pix_fmt',options.fullRange?'yuv422p10le':'yuv420p',
+    ...(options.fullRange?['-vf','scale=out_range=full','-color_range','pc','-color_primaries','bt709','-colorspace','bt709']:[]),'-c:a','aac','-movflags','+faststart',encoded]);
   const modernRotation = options.rotate4k && (await exec(ffmpeg,['-h','full'],{maxBuffer:8*1024**2})).stdout.includes('-display_rotation');
   await exec(ffmpeg, ['-v','error',...(modernRotation?['-display_rotation','90']:[]),'-i',encoded,'-map','0','-c','copy',
     ...(options.rotate4k && !modernRotation?['-metadata:s:v:0','rotate=90']:[]),source]);
@@ -83,6 +84,17 @@ describe('export media preparation runtime', () => {
     expect(m.output).toMatchObject({codec:'h264',width:320,height:180,fps:30,audioStreams:1});
     expect(Math.abs(m.output!.duration-m.original.duration)).toBeLessThan(0.15);
     expect(await readdir(f.work)).not.toContain('source.bin');
+  },30000);
+  it('converts full-range 10-bit 4:2:2 footage to limited-range H.264', async () => {
+    const f = await fixture({hevc:true, fullRange:true, fps:50});
+    await f.run();
+    const manifest = await f.manifest();
+    expect(manifest.original).toMatchObject({pixelFormat:'yuv422p10le', colorRange:'pc', fps:50});
+    expect(manifest.output).toMatchObject({codec:'h264', pixelFormat:'yuv420p', colorRange:'tv', fps:30, audioStreams:1});
+    // White must be rescaled to TV white (235), even if an encoder would accept only changing the range tag.
+    const {stdout} = await exec(await findFfmpeg(), ['-v','error','-i',path.join(f.work,'prepared.mp4'),
+      '-vf','extractplanes=y,crop=1:1','-frames:v','1','-f','rawvideo','-'], {encoding:'buffer'});
+    expect(Math.abs(stdout[0] - 235)).toBeLessThanOrEqual(2);
   },30000);
   it('bakes rotation into the prepared file without reducing original 4K resolution', async () => {
     const f = await fixture({rotate4k:true}); await f.run(); const m = await f.manifest();
